@@ -30,8 +30,6 @@ from lib.systemd_timer import timer_settings
 MERGE = "a" * 40
 PARENT = "b" * 40
 LINK = "root/usr/lib/systemd/system/timers.target.wants/homelab-updater.timer"
-# The 15-minute schedule with two gaps that the Pi ran before H3.13, kept by the container
-# fixture. The gap and deadline cases below read it; the Pi's own daily drop-in has one case.
 QUARTER_HOUR_DROPIN = (
     REPO / "hosts/lib/tests/container/fixture/units/updater-timer.conf"
 ).read_text()
@@ -471,8 +469,6 @@ def test_a_merge_in_the_pi_quiet_hours_ends_deferred_naming_the_next_fire():
 
 
 def test_a_mid_day_merge_on_the_pi_daily_schedule_ends_deferred_naming_the_next_fire():
-    # H3.13's daily drop-in: the next fire after a 12:00 merge is 03:05 the next day, past the
-    # 45-minute rule, so the first query settles it and the operator starts the updater by hand.
     fetch, _ = _prom(_series(sha="c" * 12))
     outcome, sleeps = _wait(_pi(dropin=PI_DROPIN), fetch, [_at(12, 0)])
     assert (outcome.verdict, outcome.rc) == ("deferred", 75)
@@ -501,8 +497,6 @@ def test_a_mid_day_merge_on_the_pi_with_its_poll_armed_waits_until_the_host_appl
 
 
 def test_a_host_unsettled_past_its_deadline_ends_deferred_with_its_last_success():
-    # A 12:00 merge fires at 12:05 and 12:20, so with the 60s delay and 10 minutes of slack
-    # the deadline is 12:31.
     fetch, _ = _prom(_series(sha="c" * 12, success=str(int(_at(9, 35)))))
     outcome, sleeps = _wait(_pi(), fetch, [_at(12, 0), _at(12, 30), _at(12, 32)])
     assert (outcome.verdict, outcome.rc) == ("deferred", 75)
@@ -512,10 +506,6 @@ def test_a_host_unsettled_past_its_deadline_ends_deferred_with_its_last_success(
 
 
 def test_the_deadline_counts_fires_from_the_first_query_not_from_the_merge():
-    # The landing reaches the wait at 12:00, once master CI is green; host-package CI ran the
-    # half hour before it. Fires at 12:05 and 12:20 put the deadline at 12:31, so a host still
-    # stale at 12:25 is waited on and settles at 12:30. Counted from an 11:30 merge, the
-    # deadline was 12:01 and the 12:25 poll deferred.
     stale, _ = _prom(_series(sha="c" * 12))
     fresh, _ = _prom(_series())
     answers = iter([stale] * 6 + [fresh] * 3)

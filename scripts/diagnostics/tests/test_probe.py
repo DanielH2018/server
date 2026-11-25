@@ -69,10 +69,6 @@ def test_k8s_service_ip_args_target_the_service():
     assert "homelab" in argv
 
 
-# The reshape lives in the allow-listed script, so `probe.py metric … | python3
-# -c "…reshape JSON…"` one-liners are not needed.
-
-
 def test_format_metric_vector_prints_labels_and_value_per_series():
     data = {
         "data": {
@@ -135,8 +131,6 @@ def test_format_metric_empty_is_no_data():
 
 
 def test_pi_subcommand_accepts_only_containers():
-    # `pi fs`/`pi mem` do not exist; a stale habit must fail at the parser rather
-    # than reach a curl that no longer exists.
     p = cli_parser._build_parser()
     assert p.parse_args(["pi", "containers"]).subpath == "containers"
     with pytest.raises(SystemExit):
@@ -219,9 +213,6 @@ def test_arr_request_never_puts_key_in_argv():
 
 
 def test_resolve_arr_ip_uses_kubectl_not_docker(monkeypatch):
-    # Regression guard for the dead command: sonarr/radarr/prowlarr run as k8s
-    # Deployments and have no Docker container to `docker inspect` an IP from —
-    # resolve_arr_ip must reach the app's ClusterIP via kubectl instead.
     monkeypatch.setattr(core, "k8s_namespace", lambda: "homelab")
 
     class FakeResult:

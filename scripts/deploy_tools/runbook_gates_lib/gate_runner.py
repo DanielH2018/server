@@ -38,8 +38,6 @@ from lib import host_modules  # noqa: F401
 from longhorn_robustness import unsafe_volumes as _unsafe_states
 
 EX_UNAVAILABLE = 69
-# The repo-wide 64, not a second definition of it: `lib.exit_codes` is the one scheme every
-# entry point here takes its usage code from.
 EX_USAGE = USAGE_ERROR
 
 LONGHORN_NS = "longhorn-system"

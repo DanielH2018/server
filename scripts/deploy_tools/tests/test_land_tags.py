@@ -15,9 +15,7 @@ import pytest
 
 from deploy_tools.land_lib import land_tags
 
-# A fixture, not live inventory. These tests pin the DERIVATION, and reading containers_list
-# would make them fail whenever a service is retired. The live set is checked once,
-# separately, by test_the_shared_roles_are_still_undeclared.
+# A fixture, not live inventory, so retiring a service does not fail these derivation tests.
 _DECLARED = frozenset(
     {
         "artifacts",
@@ -272,11 +270,6 @@ def test_a_check_table_change_lands_with_its_own_role_alone():
     assert source == "pr"
     assert tags == ["monitor-bridge"]
 
-
-# --- a k8s role's defaults whose change is comments only -------------------------
-#
-# A comment-only edit to a k8s role's `defaults/` renders the same manifests, so the
-# landing derives no tag for it and gates no workload that did not change.
 
 _SONARR_DEFAULTS = "k8s/roles/sonarr/defaults/main.yml"
 

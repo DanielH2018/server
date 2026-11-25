@@ -37,8 +37,8 @@ def volume_shard_labels(cluster=DEFAULT_CLUSTER, _run=None):
     shards = {}
     for item in json.loads(out.stdout).get("items", []):
         for key in item.get("metadata", {}).get("labels", {}):
-            # Exact group comparison, not a `<group>/` prefix test: see the same rewrite in
-            # scripts/infra_map/live.py for why the prefix form is read as URL sanitization.
+            # Exact group comparison, not a `<group>/` prefix test, which reads as URL sanitization
+            # (see infra_map/live.py).
             group, sep, name = key.partition("/")
             if sep and group + sep == longhorn_backups.GROUP_LABEL_PREFIX:
                 shards[item["metadata"]["name"]] = name
@@ -79,13 +79,8 @@ def pvc_names(cluster=DEFAULT_CLUSTER, _run=None):
 
 # --- which BackupTarget is B2 -----------------------------------------------------------------
 
-# The cluster holds two BackupTargets and only one of them is B2: `default` carries the B2 URL
-# (`longhorn-backuptarget-default.yaml.j2` renders it with `k3s_longhorn_b2_bucket`), `r2` carries
-# Cloudflare's (`longhorn-backuptarget-r2.yaml.j2`). R2's caps are monthly and vast, so charging an R2
-# deletion against B2's 2,500/day Class C cap would inflate the ledger against a cap that does
-# not apply to it. The deletion log line names the target URL, not the target NAME, so the
-# mapping has to come from the CRs — inferring B2 from the `us-east-005` region component would
-# be exactly the guess `docs/adr/0014` and the tiering memory warn against.
+# Only `default` is B2 (`r2` is Cloudflare, with vast monthly caps). The deletion line names the
+# URL, not the target, so map via the CRs and never infer from the region.
 B2_BACKUP_TARGET_NAME = longhorn_backups.B2_TARGET
 
 

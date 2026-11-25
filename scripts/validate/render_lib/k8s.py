@@ -131,41 +131,28 @@ def run(ok: Callable[[str], None], render: Callable | None = None) -> tuple[int,
 
     roles = role_names(K8S_ROLES)
     checked = failures = 0
-    # Built up alongside the existing per-template loop below (one render pass, not two): every
-    # declared PVC name (from a rendered PersistentVolumeClaim), and every (rel, docs) this run successfully parsed. The
-    # claimName cross-reference check runs once, after the loop, once the PVC index is complete
-    # — a reference in role A can legitimately name a PVC role B declares (media_volume_claim,
-    # ~7 consumers), so it can't be checked role-by-role as the loop goes.
+    # The claimName cross-reference runs once after the loop: a reference in role A can name a PVC
+    # role B declares.
     pvc_names: set[str] = set()
     parsed_templates: list[tuple[str, list]] = []
     for role in roles:
-        # Not every .j2 in a k8s role's templates/ is a manifest — a role may also ship a
-        # helper script (registry's registry-gc.sh.j2) or a Dockerfile for
-        # image-builder (homelab-mcp). Shell is rendered and linted by
-        # validate/render_lib/shell.py; a Dockerfile is consumed by buildctl. Parsing
-        # either here reports a comment line as malformed YAML.
-        #
-        # The glob is deliberately non-recursive, which is what makes templates/config/
-        # work: an app config a manifest embeds via lookup() (CouchDB's local.ini,
-        # Home Assistant's configuration.yaml) is usually not YAML at all and must not be
-        # parsed as a manifest. Those live one level down, in templates/config/, and are
-        # validated by whatever tool understands their format, not by this script.
+        # Not every .j2 in templates/ is a manifest (helper scripts, Dockerfiles); the glob is
+        # non-recursive so app configs in templates/config/ are not parsed as manifests.
         templates = sorted(
             p
             for p in (K8S_ROLES / role / "templates").glob("*.j2")
             if is_manifest_template(p)
         )
         if not templates:
-            # A role that only delegates — it calls image-builder and owns no manifests of its
-            # own. Not a failure, but it must still have an inventory entry, so the check below
-            # is deliberately not skipped with it.
+            # A role that only delegates to image-builder owns no manifests; it still needs an
+            # inventory entry, so the check below is not skipped.
             if role in entries:
                 continue
             print(f"  [FAIL] {role}: no manifest templates found", file=sys.stderr)
             failures += 1
             continue
         # A k8s role with no inventory entry would render every port and hostname as STUB and
-        # quietly pass, so treat the mismatch as the failure it is.
+        # quietly pass.
         if role not in entries:
             print(
                 f"  [FAIL] {role}: no entry in {K8S_SERVICES.name}",
@@ -174,9 +161,9 @@ def run(ok: Callable[[str], None], render: Callable | None = None) -> tuple[int,
             failures += 1
             continue
 
-        # Placement, read off the source: an embedded app config that sits at templates/ top
-        # level is parsed as a manifest below and checked as nothing, since the schema pass
-        # skips a document with no `kind`.
+        # Placement, read off the source: an embedded app config at templates/ top level would be
+        # parsed as a manifest and checked as nothing, since the schema pass skips a document with
+        # no `kind`.
         for tpl in [*templates, *shared_default_templates(role)]:
             for target in misplaced_template_lookups(tpl.read_text()):
                 failures += 1
@@ -204,9 +191,8 @@ def run(ok: Callable[[str], None], render: Callable | None = None) -> tuple[int,
             docs = parse_docs(text)
             kindless = non_manifest_documents(docs)
             if kindless:
-                # The other half of the same placement rule, for a config nothing embeds by
-                # a literal path: a top-level template that renders to a document with no
-                # `kind` is not a manifest, and nothing downstream would look at it.
+                # A top-level template rendering to a document with no `kind` is not a manifest, and
+                # nothing downstream would look at it.
                 failures += 1
                 print(
                     f"  [FAIL] {rel}: renders {len(kindless)} document(s) with no `kind` — "
@@ -219,11 +205,8 @@ def run(ok: Callable[[str], None], render: Callable | None = None) -> tuple[int,
             parsed_templates.append((rel, docs))
             ok(f"  [ok]   {rel}")
 
-    # WARNING ONLY, deliberately — not folded into `failures`. This is new and unproven against
-    # the real tree; a false positive here must not be able to block a deploy the way a `[FAIL]`
-    # does. Promote to a hard failure once it's run clean for a while (see the module docstring
-    # note below this function). PVC binding itself is still a scheduling concern this can't see
-    # — this only proves the referenced NAME exists somewhere in what got rendered.
+    # WARNING ONLY, deliberately: a false positive must not block a deploy. This proves only that
+    # the referenced NAME exists in what got rendered; PVC binding is a scheduling concern.
     unresolved = 0
     for rel, docs in parsed_templates:
         for doc in docs:
@@ -243,10 +226,8 @@ def run(ok: Callable[[str], None], render: Callable | None = None) -> tuple[int,
             file=sys.stderr,
         )
 
-    # Two semantic rules the schema check structurally cannot make. IngressRoute is a CRD, so
-    # its schema lives in the cluster and `schema_error` skips it entirely; a NetworkPolicy's
-    # port passes any schema whatever number it holds. Both failures are silent in the same
-    # way — the object applies cleanly and then matches nothing.
+    # IngressRoute is a CRD, so `schema_error` skips it, and a NetworkPolicy port passes any schema
+    # whatever number it holds; both apply cleanly and then match nothing.
     for rel, docs in parsed_templates:
         for doc in docs:
             if not isinstance(doc, dict):
@@ -256,9 +237,8 @@ def run(ok: Callable[[str], None], render: Callable | None = None) -> tuple[int,
                 failures += 1
                 print(f"  [FAIL] {rel}: {err}", file=sys.stderr)
 
-    # WARNING ONLY, on the same reasoning as the claimName check above: this is new and
-    # unproven against the real tree, and a false positive on the network plane must not be
-    # able to block a deploy. Promote to a hard failure once it has run clean for a while.
+    # WARNING ONLY, as the claimName check: a false positive on the network plane must not block a
+    # deploy.
     all_docs = [
         doc for _, docs in parsed_templates for doc in docs if isinstance(doc, dict)
     ]
@@ -271,10 +251,8 @@ def run(ok: Callable[[str], None], render: Callable | None = None) -> tuple[int,
             for problem in netpol_port_mismatches(doc, by_labels, translations):
                 print(f"  [WARN] {rel}: {problem}", file=sys.stderr)
 
-    # Schema validation, over the objects the loop already parsed. A hard failure, not a
-    # warning: an error here is exactly what `kubectl apply --dry-run=server` would reject, so
-    # letting it through would put a manifest on the cluster that the API server refuses
-    # partway through an apply — some objects applied, some not.
+    # A hard failure: an error here is what `kubectl apply --dry-run=server` would reject, leaving
+    # an apply half done.
     schema_failures = 0
     skipped_kinds: dict[str, int] = {}
     for rel, docs in parsed_templates:
@@ -294,12 +272,9 @@ def run(ok: Callable[[str], None], render: Callable | None = None) -> tuple[int,
                 )
     failures += schema_failures
 
-    # Printed rather than silent: an unschema'd kind is unvalidated, and the only honest way to
-    # report coverage is to name what was not covered. A CRD count that jumps means a new
-    # custom resource arrived with nothing checking its shape. This should read 0 — a CRD kind
-    # reaching here means no vendored schema matched it, which the
-    # `rendered-kinds-have-vendored-schemas` row of tests/k8s/test_rendered_properties.py
-    # fails on.
+    # Printed rather than silent: an unschema'd kind is unvalidated. This should read 0; a CRD kind
+    # here means no vendored schema matched it, which tests/k8s/test_rendered_properties.py fails
+    # on.
     if skipped_kinds:
         total = sum(skipped_kinds.values())
         detail = ", ".join(f"{k} x{v}" for k, v in sorted(skipped_kinds.items()))

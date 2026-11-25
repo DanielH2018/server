@@ -47,13 +47,10 @@ from validate.validate_lib.shell_lint import (
     shellcheck_check,
 )
 
-# The host components whose templates this gate also lints (H3.8b).
 COMPONENTS = REPO / "hosts" / "components"
 
-# Shell-specific overrides: values a lint pass needs to be shell-plausible rather than the bare
-# "STUB" literal StubUndefined fills in elsewhere. No linted template needs one. `hosts` needs
-# no stub: `render_context` builds it from each host's literal `server_ip`, and a stub here would
-# replace that whole map.
+# `hosts` needs no stub: `render_context` builds it from each host's literal `server_ip`, and a stub
+# here would replace that whole map.
 SHELL_STUB_OVERRIDES: dict[str, str] = {}
 
 

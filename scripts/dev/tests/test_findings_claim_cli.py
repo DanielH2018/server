@@ -19,9 +19,6 @@ from lib.worktrees import Worktree
 
 WT = "worktree-issue-1132"
 
-# No worktrees at all, so every claim reads stale. Git itself worked (`ok=True`).
-# `LIVE` is the counterpart cmd_claim needs: WT itself checked out and held by a live
-# session, so the stale-at-birth guard lets the claim through.
 STALE = facts()
 LIVE = live_worktree(WT)
 
@@ -189,8 +186,6 @@ def test_claim_loses_a_race_and_reports_who_won(capsys):
     )
     assert main(["claim", "1132", "--worktree", WT], tools) == 3
     assert f"lost the race to `{rival}`" in capsys.readouterr().out
-    # The comment was posted before the race was discovered lost — cmd_claim writes first,
-    # then reads back to check who actually holds it.
     assert any(c[:3] == ["issue", "comment", "1132"] for c in calls.gh)
 
 

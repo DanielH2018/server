@@ -25,23 +25,21 @@ from urllib.parse import urlencode
 import sys as _sys
 
 
-# `core.<name>` for anything the tests monkeypatch -- binding those into this module's
-# globals with a `from core import ...` would take a snapshot the patch never reaches.
+# Use `core.<name>` for anything tests monkeypatch: a `from core import` binds a snapshot the patch
+# never reaches.
 from diagnostics.probe_lib import core, metrics, pi_plane
 from diagnostics.probe_lib.core import PI_HOST, prom_endpoint
 from lib.exit_codes import PROBE_UNREADABLE
 from lib.progress import count_line
 
 QUERY = 'ALERTS{alertstate="firing",alertname!="Watchdog"}'
-# Prometheus refuses a range query over 11,000 points per series, so the step widens with
-# the window: 60s up to ~6.9 days, then whatever keeps the count under this.
+# Prometheus refuses over 11,000 points per series, so the step widens with the window.
 MAX_POINTS = 10_000
 MIN_STEP_S = 60
 # Two missed steps split an episode, so one skipped rule evaluation does not.
 _GAP_STEPS = 2
 
-# A Pi job is one whose static target names the Pi: the scrape jobs `pi_plane` derives, and
-# `blackbox-pi-ports`, whose targets are the Pi's published container ports (PiPortDead).
+# A Pi job is one whose static target names the Pi, including `blackbox-pi-ports`.
 _JOB_NAME_RE = re.compile(r"^\s*-\s*job_name:\s*(\S+)")
 _PI_PORTS_MARKER = "hosts['daniel-pi']"
 
@@ -150,8 +148,6 @@ def history_shortfall_warning(days, held_s):
     )
 
 
-# UTC, and said to be UTC in the header: daniel-box runs UTC, so every incident timestamp an
-# operator compares against is UTC.
 def _fmt_utc(s):
     return datetime.fromtimestamp(s, UTC).strftime("%Y-%m-%d %H:%M")
 

@@ -149,8 +149,8 @@ out["logs"] = logs(*plan["logs"]) if plan.get("logs") else None
 print(json.dumps(out))
 """
 
-# journalctl prints one of these to stderr, and exits 0 with nothing, for a user who may not
-# read the system journal.
+# journalctl prints one of these to stderr and exits 0 with nothing for a user who may not read the
+# system journal.
 _NO_JOURNAL_ACCESS = (
     "not seeing messages from other users",
     "insufficient permissions",

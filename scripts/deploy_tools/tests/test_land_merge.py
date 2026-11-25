@@ -133,8 +133,6 @@ def test_a_closing_keyword_inside_a_sentence_is_stray(body):
         "**Fixes #12**",
         "Filed for later: #2509",
         "See #2509 for the follow-up.",
-        # The three shapes the corpus of merged PR bodies contains. A rule keyed on the
-        # LINE rather than the clause flagged all of them.
         "Closes #2428, closes #2429.",
         "Three test-tree issues from one fan-out batch. Closes #2379. Closes #2404.",
         "**`Closes #2413` — the SSH directory task hardened root's `.ssh`.**",
@@ -160,8 +158,7 @@ def test_arm_merge_refuses_a_body_that_would_close_an_unfixed_issue(landing):
     with pytest.raises(Outcome) as exc:
         merge.arm_merge(ln)
     assert exc.value.rc == 1 and "Filed and not fixed: #2509" in exc.value.error
-    # The refusal is worth nothing unless it happens BEFORE the merge call: the damage is
-    # done at merge time and reopening the issue is a hand step.
+    # The refusal must happen BEFORE the merge call: reopening the issue is a hand step.
     assert not [c for c in calls if c[0] == "gh"]
 
 

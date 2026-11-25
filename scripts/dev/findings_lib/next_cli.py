@@ -9,9 +9,6 @@ import argparse
 import json
 import sys
 
-# Reach the sibling package directories: a directly-invoked script gets only its own
-# directory on sys.path, and pyproject's `pythonpath` is a pytest setting.
-
 
 from dev.findings_lib.boundaries import FindingsTools
 from dev.findings_lib.claim import free_issues
@@ -61,9 +58,7 @@ def cmd_next(args: argparse.Namespace, tools: FindingsTools) -> int:
         milestone=args.milestone,
     )
     rows = rows[: args.limit]
-    # Named, not hidden: withheld silently, a waiting issue reads as a closed one. Under
-    # `--json` the note goes to stderr, because the array IS the free set an orchestrator
-    # claims (`issue-fanout`), and a waiting row inside it would be claimed.
+    # Under `--json` the note goes to stderr: a waiting row inside the array would be claimed.
     held_rows = waiting(issues, today=today, tracked=tools.tracked())
     held_back = (
         [waiting_line(r, today) for r in held_rows]
@@ -78,8 +73,6 @@ def cmd_next(args: argparse.Namespace, tools: FindingsTools) -> int:
     for line in held_back:
         print(line)
     for r in rows:
-        # A stale claim does not withhold the issue, so say who holds it and what clears it.
-        # `claim` reaps it on the way past; `reap` is how the operator clears the register.
         held = (
             f"  [stale claim by `{stale[r['number']]}`]" if r["number"] in stale else ""
         )

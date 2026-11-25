@@ -16,10 +16,6 @@ from dev.fanout_lib.target import Target
 from dev.fanout_lib.place import main
 from _fanout_fakes import HOST_KEY, fake_tools, labelled_issue, ok
 
-# Fleet current, fleet cap, login-plane current, login-plane cap, live agents, signing key.
-# The plane side is as roomy as the fleet side on purpose: these tests measure call counts,
-# placement order and the ssh budget, so the plane must not become the binding cap. The key is
-# one the fake registered set holds, so a test that says nothing about signing passes the gate.
 HEADROOM = f"1\n12884901888\n1\n12884901888\n0\n{HOST_KEY}\n"
 
 
@@ -112,8 +108,6 @@ def test_two_batches_pinned_to_one_host_cost_exactly_four_calls_there(tmp_path):
 def test_an_unpinned_launch_reads_both_hosts_and_places_on_the_emptier_one(tmp_path):
     tools, run = fake_tools(
         answers={
-            # ~4.5 GiB headroom on daniel-box, ~9.5 GiB on daniel-server — both are
-            # candidates, daniel-server wins on room alone.
             "daniel-box": ok(
                 f"5368709120\n12884901888\n5368709120\n12884901888\n1\n{HOST_KEY}\n"
             ),
@@ -315,9 +309,8 @@ def test_an_unpinned_launch_places_on_the_only_host_github_verifies(tmp_path):
     box_key = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB"
     tools, run = fake_tools(
         answers={
-            # Roomy on BOTH planes, so the only thing that can move this batch is the key.
-            # A five-line reading here would be dropped as unparseable instead, and the
-            # test would pass without the signing gate ever running.
+            # Roomy on both planes so only the key moves the batch; a five-line reading would be
+            # dropped as unparseable.
             "daniel-box": ok(f"1\n99999999999\n1\n99999999999\n0\n{box_key}\n"),
             "daniel-server": ok(HEADROOM),
         },
@@ -417,8 +410,6 @@ def test_a_within_spec_duplicate_issue_gets_its_own_message(tmp_path, capsys):
 
 
 def test_the_briefs_worktree_path_matches_the_one_launch_creates():
-    # brief duplicates the path rather than importing launch, which would cycle; this is
-    # the check that keeps the duplicate honest.
     dotfiles = Target("DanielH2018/dotfiles", "/c", "origin/main")
     for batch in ("1345-1386", "b"):
         assert brief_mod._worktree_path(batch) == launch_mod.worktree_path(batch)

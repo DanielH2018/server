@@ -118,13 +118,11 @@ DIGESTS_FILE = "digests.json"
 KUSTOMIZATION_API = "kustomize.toolkit.fluxcd.io/v1"
 _SHA = re.compile(r"[0-9a-f]{40}")
 
-# How far before `--moved-at` a status on T still counts, for clock skew between the runner
-# that stamped the move and GitHub. A status left by an earlier promotion of T is older than
-# that by a whole failed run: a verify timeout, a settle, an operator's clear and a new render.
+# Tolerance for clock skew between the runner that stamped the move and GitHub; a status from an
+# earlier promotion of T is older by a whole failed run.
 MOVED_AT_SKEW_S = 60
 
-# Seconds between two status reads. Each is one GITHUB_TOKEN call, so a 15-minute wait spends
-# 30 of the token's 1,000 an hour.
+# Each read is one GITHUB_TOKEN call: a 15-minute wait spends 30 of the token's 1,000 an hour.
 POLL_S = 30
 
 
@@ -160,8 +158,6 @@ IN_FLIGHT_POLL_S = 30
 # listing that lags a live run cannot end a wait on a verification still in flight.
 LOST_SETTLE_S = 10 * 60
 
-# The commit status promote.yml's `verdict-status` job posts on T, which `reconcile` reads
-# when a run ended without its `settle`.
 VERDICT_STATUS_CONTEXT = "homelab/promote-verdict"
 
 # A wait that runs the full IN_FLIGHT_WAIT_S reads DEPLOY_HOLD about 700 times and the

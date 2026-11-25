@@ -36,15 +36,10 @@ REAP_ENTRY = BACKUP_DIR / "longhorn_reap.py"
 BACKUPS_ENTRY = (REAP_ENTRY, "backups")
 SNAPSHOTS_ENTRY = (REAP_ENTRY, "snapshots")
 
-# The epoch a dated fixture is measured from when a test passes `now=` to `_run`. Same value as
-# the reader suites' `_longhorn_reader_stubs.NOW`.
 NOW = 1_800_000_000.0
 
-# Runs the entry point with main(argv, now=NOW) instead of `python <entry> <args>`,
-# still as a subprocess: the import root, the stub `k3s` on
-# PATH and the env parsing are the real ones. `-P` keeps the cwd off sys.path, so the installed
-# root and `lib.host_modules` make the imports resolve, as for an operator; `run_name` is not `__main__`, so
-# the file's own entry line does not fire a second, clock-reading run.
+# Runs main(argv, now=NOW) as a subprocess. `-P` keeps the cwd off sys.path; `run_name` is not
+# `__main__`, so the file's own entry line does not fire a second run.
 _MAIN_WITH_NOW = (
     "import runpy, sys; "
     "g = runpy.run_path(sys.argv[1], run_name='longhorn_reap_entry'); "
@@ -160,9 +155,6 @@ def _run(
     env["LONGHORN_REAP_READONLY_KUBECONFIG"] = (
         str(tmp_path / "readonly.yaml") if readonly_kubeconfig_set else ""
     )
-    # The real admin kubeconfig is root-only at a fixed path; both entry points read this
-    # override (falling back to the real path when unset) purely so a test can supply a
-    # fixture instead of needing root.
     if admin_readable:
         admin_path = tmp_path / "admin.yaml"
         admin_path.write_text("stub-admin-kubeconfig\n")

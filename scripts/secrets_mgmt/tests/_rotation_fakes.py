@@ -9,9 +9,8 @@ from dataclasses import dataclass, field
 
 import yaml
 
-# Package-qualified, as `_land_fakes.py` reaches `land_lib.tools`: a bare `import
-# rotation_tools` binds a SECOND module object in a pytest session, since the module under
-# test reaches the same file as `secrets_mgmt.rotation_tools`.
+# Package-qualified: a bare `import rotation_tools` binds a SECOND module object in a pytest
+# session.
 from secrets_mgmt.rotation_tools import RotationTools
 from secrets_mgmt.secrets_lib.registry_model import (
     Registry,
@@ -26,13 +25,11 @@ TODAY = dt.date(2026, 9, 1)
 class Fakes:
     """What each fake answers; every field is a per-test override."""
 
-    # The registry file's plain shape; the fake loader parses it and the fake saver records
-    # the dump, as the real pair reads and writes the file.
     registry: dict = field(default_factory=lambda: {"entries": {}})
     names: list[str] = field(default_factory=list)
     today: dt.date = TODAY
-    # Newest-first (sha, "YYYY-MM-DD", {name: ciphertext}) — one entry per commit that
-    # touched the encrypted store.
+    # Newest-first (sha, "YYYY-MM-DD", {name: ciphertext}), one per commit touching the encrypted
+    # store.
     history: list[tuple[str, str, dict[str, str]]] = field(default_factory=list)
     git_error: BaseException | None = None
 
@@ -69,8 +66,7 @@ def build_tools(f: Fakes) -> tuple[RotationTools, list]:
         calls.append(("sops_names", (), {}))
         return list(f.names)
 
-    # `tier_days` is left at its default: every test wants the real table, and the default
-    # is a literal in `rotation_tools`.
+    # `tier_days` stays at its default: every test wants the real table.
     return RotationTools(
         git=git,
         today=lambda: f.today,

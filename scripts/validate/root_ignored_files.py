@@ -28,8 +28,6 @@ from lib.cli_help import ArgumentParser
 from lib.git import git
 from lib.repo_paths import REPO
 
-# Root entries that are local by design. Each is a tool's cache or output, or a per-machine
-# file nobody commits.
 LOCAL_ONLY = frozenset(
     {
         ".venv",
@@ -43,8 +41,6 @@ LOCAL_ONLY = frozenset(
         ".fanout",
         # A worktree's own label, from `scripts/dev/label_worktree.py`.
         ".claim",
-        # The tree ADR 0030 renamed. A checkout from before the rename keeps its gitignored
-        # leftovers (collections/, a stale tests/setup/) here after the tracked files move.
         "ansible",
     }
 )

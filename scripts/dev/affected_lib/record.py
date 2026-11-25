@@ -22,7 +22,6 @@ from dev.affected_lib import trace, traced_pytest
 from dev.affected_lib.table import Row, Table, parent_dirs, tracked_blobs
 from lib.git import git
 
-# A module's run under the trace. The heaviest module takes about 90s untraced on a CI runner.
 # The docs-refresh cron's `timeout` is its `--budget` plus this.
 MODULE_TIMEOUT_SECONDS = 300
 _PYTEST_NO_TESTS_COLLECTED = 5

@@ -12,17 +12,15 @@ control: prove the tool works before reading anything into what it refuses, the 
 control-first pattern the netpol probe Jobs use.
 """
 
-# `core.<name>` for anything the tests monkeypatch — binding those into this module's
-# globals with a `from core import ...` would take a snapshot the patch never reaches.
+# Use `core.<name>` for anything tests monkeypatch: a `from core import` binds a snapshot the patch
+# never reaches.
 from diagnostics.probe_lib import core
 
 from lib.exit_codes import PROBE_UNREADABLE
 from lib.kubectl import DEFAULT_CLUSTER, kubectl, kubectl_argv
 
-# What plain `kubectl` must NEVER be able to do here. Ansible is the only write path to this
-# cluster, and every agent session's kubectl authenticates as
-# system:serviceaccount:kube-system:homelab-readonly. If that widens, the guarantee every
-# session relies on is gone and nothing says so.
+# What plain `kubectl` must NEVER be able to do: every session's kubectl is `homelab-readonly`, so a
+# widening silently breaks the guarantee.
 READONLY_DENIED = (
     ("get", "secrets"),
     ("list", "secrets"),
@@ -30,10 +28,7 @@ READONLY_DENIED = (
     ("delete", "pods"),
 )
 
-# The positive control. A probe that only checks DENIALS passes when kubectl is broken
-# outright — no kubeconfig, no cluster, wrong context — because every call fails then too.
-# This is the control-first pattern the netpol probe Jobs use: prove the tool works before
-# reading anything into what it refuses.
+# Positive control: a probe checking only denials passes when kubectl is broken outright.
 READONLY_ALLOWED = (("get", "pods"), ("list", "deployments"))
 
 

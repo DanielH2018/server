@@ -66,8 +66,6 @@ from deploy_tools.land_lib.serial_lock import (
 )
 from lib.progress import OnChange
 
-# /run/lock is a tmpfs every user can create a file in, and one file there serves every
-# landing on the host, whichever user runs it.
 LOCK = LOCK_DIR / "homelab-land-turn.lock"
 
 
@@ -136,9 +134,6 @@ def lock_below(paths: list[str], cap: int) -> int | None:
     return keep
 
 
-# What a landing on another host runs on `TURN_HOST`: lock one of its files while fewer than
-# its cap are held, say which way it went, and hold it until stdin closes, which is when the
-# landing's ssh session ends. The arguments are the cap, then the files.
 _HOLD = f"""import fcntl, os, sys
 {inspect.getsource(_lock)}
 {inspect.getsource(lock_below)}
@@ -336,8 +331,8 @@ def _wait(ln: Landing, draft: str) -> tuple[Callable[[], None] | None, int]:
                 )
                 return None, waited
             if release:
-                # The holder may have answered after this landing's last poll of its place,
-                # and it frees the turn just after it writes `merged`.
+                # The holder may have answered after this landing's last poll, and frees the turn
+                # just after writing `merged`.
                 answer = place.answer()
                 if answer == line.MERGED:
                     release()

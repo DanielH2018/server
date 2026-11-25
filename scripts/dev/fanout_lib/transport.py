@@ -12,8 +12,6 @@ import dataclasses
 from collections.abc import Callable, Collection, Sequence
 from dataclasses import dataclass
 
-# Reach the sibling package: a directly-invoked script gets only its own directory on
-# sys.path, and pyproject's `pythonpath` is a pytest setting.
 from pathlib import Path as _Path
 
 
@@ -36,32 +34,25 @@ from lib.gh import gh
 
 HOSTS = ("daniel-box", "daniel-server")
 REPO = SERVER_CHECKOUT
-# This checkout's own `findings.py`, which `launch` runs to claim a batch in another repo's
-# register. Resolved from this file rather than from REPO: the orchestrator runs the dispatcher
-# from its own worktree, and that worktree's copy is the one whose `--repo` it just used.
+# Resolved from this file, not REPO: the orchestrator runs from its own worktree, whose copy is the
+# one whose `--repo` it just used.
 FINDINGS = str(_Path(__file__).resolve().parents[1] / "findings.py")
 SSH_OPTS = ["-o", "BatchMode=yes", "-o", "ConnectTimeout=8"]
-# Every ssh call to one host rides one connection. `ufw limit ssh`
-# rejects a sixth NEW connection within 30s and counts nothing that reuses one, so with
-# a master open a run's reads and launches cost one connection however many batches it
-# places. No call waits on the backgrounded master's pipes. ServerAlive bounds a master
-# whose network went away, which every call riding it would otherwise wait on. ssh falls
-# back to a fresh connection when the socket is dead, as after a reboot. The master outlives
-# the longest cc-wait poll that reads a host, or every poll opens a new sshd login.
+# `ufw limit ssh` rejects a sixth NEW connection in 30s and counts none that reuse one, so one
+# master connection serves all of a run's reads and launches. ServerAlive bounds a master whose
+# network went away. The master must outlive the longest cc-wait poll, or every poll opens a new
+# sshd login.
 MUX_PERSIST_S = 180
 CONTROL_DIR_NAME = "fanout-ssh"
 READ_TIMEOUT_S = 20.0
 GH_TIMEOUT_S = 30.0
 # Above any count of PRs this repo has had open at once; `gh pr list` stops at 30 unasked.
 OPEN_PR_LIMIT = "1000"
-# The one read every host gets: READ_COMMAND's four memory lines and live-agent count, plus
-# the signing-key line the launch gate needs, folded into the same connection because the ssh
-# budget (2 reads plus MAX_BATCHES_PER_REMOTE_HOST launches = the 5 `ufw limit ssh` allows
-# per 30s) has none spare. The key goes last; parse_reading documents the full line order.
+# The signing-key line rides the same connection because the ssh budget has none spare; it goes last
+# (`parse_reading` documents the order).
 HOST_READ_COMMAND = f"{READ_COMMAND}; {signing.signing_key_read_command(REPO)}"
-# What `parse_issue` requires; it raises KeyError on any that is missing. A field dropped from
-# this list would otherwise read as its empty value: no `labels` refuses every issue at the
-# launch gate, and no `comments` drops every operator decision posted as a comment.
+# A field dropped from this list would read as empty: no `labels` refuses every issue, no `comments`
+# drops every operator decision.
 ISSUE_FIELDS = "number,title,state,body,labels,comments,blockedBy"
 
 
@@ -452,9 +443,8 @@ def read_host(
         )
     except subprocess.TimeoutExpired:
         return "%s: headroom read timed out" % host
-    # The signing-key read runs last and always exits 0, so a non-zero status is the
-    # transport's own: ssh's 255 for a host this user cannot reach. A missing or unreadable
-    # key prints an empty line, which the parse refuses rather than this check.
+    # The signing-key read always exits 0, so a non-zero status is the transport's own (ssh's 255);
+    # a missing key prints an empty line, which the parse refuses.
     if proc.returncode not in (0, 1):
         return "%s: headroom read failed (%d): %s" % (
             host,
@@ -471,9 +461,8 @@ def read_host(
 
 def error_text(exc: BaseException) -> str:
     """The readable text of a subprocess failure on one line, from either exception shape."""
-    # CalledProcessError.stderr is text under `text=True`; TimeoutExpired.stderr is bytes
-    # or None. Printing either straight would raise inside the handler that exists to make
-    # the failure clean.
+    # CalledProcessError.stderr is text, TimeoutExpired.stderr is bytes or None; printing either raw
+    # would raise inside the handler.
     err = getattr(exc, "stderr", None)
     if isinstance(err, bytes):
         err = err.decode("utf-8", "replace")

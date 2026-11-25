@@ -111,9 +111,8 @@ BEGIN = begin_marker(
     "k8s/roles/longhorn-reconcile/defaults/main.yml"
 )
 END = "<!-- /generated_from -->"
-# Where promote's `images` job pushes each built image. `renderer_lib/images.py` holds the same
-# prefix, and importing it would pull the whole renderer into this hook's `files` closure, so
-# it is repeated here and `test_gen_role_glance.py` holds the two equal.
+# Repeated from `renderer_lib/images.py`: importing it would pull the renderer into this hook's
+# `files` closure; a test holds them equal.
 GHCR = "ghcr.io/danielh2018"
 WIDTH = 95
 
@@ -227,8 +226,6 @@ def glance_lines(
         lines.append(f"- **{label}:** {pins}")
 
     route = k8s_route(entry, k8s_roles, all_vars)
-    # `k8s_route` resolves the shared default too, so this branch is reached only by a
-    # role that declares no `ingressroute.yaml` at all — for which the wording still holds.
     if route.startswith("no route"):
         lines.append("- **Route:** none (no `templates/ingressroute.yaml.j2`)")
     else:
@@ -250,10 +247,8 @@ def glance_lines(
         claim_classes=claim_classes,
     )
     if claims:
-        # A claim named by a template loop variable (pihole's `{{ inst.claim }}`) is a real
-        # claim the parser cannot name; say so rather than print the expression as a name.
-        # The tier labels are the catalogue's own, verbatim: a reader who greps
-        # `docs/reference/services.md` for one finds the same string here.
+        # A claim named by a template loop variable cannot be named by the parser; say so rather
+        # than print the expression.
         named = [(c, tier) for c, tier in claims if "{{" not in c]
         looped = [c for c, _ in claims if "{{" in c]
         cells = ", ".join(f"`{claim}` ({tier})" for claim, tier in named)

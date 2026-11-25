@@ -177,8 +177,6 @@ def test_a_hand_off_whose_checkout_failed_ends_refused_and_records_it(
     assert "refused" in verdict_record.read_text()
 
 
-# Answers `log`/`diff` with the one path master changed, filtered by the pathspec it is given,
-# so a path the comparison leaves out of its pathspec is never reported stale.
 _GIT_REPORTING_A_MASTER_CHANGE = """#!{python}
 import sys
 args = sys.argv[1:]

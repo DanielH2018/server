@@ -7,9 +7,8 @@ import shutil
 import pytest
 from validate.render_lib import units as v
 
-# Applied only to the tests that actually shell out to systemd-analyze — a module-wide skip
-# would also hide test_run_fails_closed_when_systemd_analyze_missing (which monkeypatches
-# `which` and needs no real binary) and every pure discovery/render test below.
+# A module-wide skip would also hide the fails-closed test (which needs no real binary) and every
+# pure discovery/render test.
 requires_systemd_analyze = pytest.mark.skipif(
     shutil.which("systemd-analyze") is None,
     reason="systemd-analyze not on PATH",
@@ -46,8 +45,8 @@ def test_systemd_verify_is_clean_for_a_well_formed_service(tmp_path):
 
 @requires_systemd_analyze
 def test_systemd_verify_is_flagged_for_a_typo_d_key(tmp_path):
-    # A typo'd directive key that systemd itself ignores
-    # with a warning and continues loading — the class no exit-status check can see.
+    # A typo'd directive key that systemd ignores with a warning: the class no exit-status check can
+    # see.
     unit = _write_unit(
         tmp_path,
         "typo.service",
@@ -60,10 +59,8 @@ def test_systemd_verify_is_flagged_for_a_typo_d_key(tmp_path):
     assert "SuccessExitStatuss" in err
 
 
-# systemd v257 reworded the unknown-key diagnostic, so the wording a runner image prints
-# depends on which systemd it ships: 255 on ubuntu-24.04, 259 on ubuntu-26.04. This is the
-# half of the red proof that runs on every image — the test above shells out to whichever
-# systemd-analyze is on PATH and can only ever exercise one wording per host.
+# The unknown-key wording depends on the systemd the runner ships (255 vs 259); this half of the red
+# proof runs on every image.
 @pytest.mark.parametrize(
     ("line", "flagged"),
     [
@@ -106,9 +103,9 @@ def test_systemd_verify_is_flagged_for_a_bad_oncalendar(tmp_path):
 
 @requires_systemd_analyze
 def test_systemd_verify_ignores_a_missing_execstart_binary(tmp_path):
-    # A structural check only: this must not flag an ExecStart binary that doesn't exist on
-    # the render host — that line ("Command ... is not executable") carries no "path:line:"
-    # prefix, so it never matches the attribution check.
+    # A structural check only: an ExecStart binary missing on the render host carries no
+    # `path:line:`
+    # prefix, so it never matches.
     unit = _write_unit(
         tmp_path,
         "notreal.service",
@@ -120,8 +117,7 @@ def test_systemd_verify_ignores_a_missing_execstart_binary(tmp_path):
 
 @requires_systemd_analyze
 def test_systemd_verify_ignores_bare_invalid_without_a_line_attribution(tmp_path):
-    # CLAUDE.md's own rule for this guard family: no bare "Invalid" substring match — it is
-    # never produced by systemd-analyze here and is the broadest possible false-positive net.
+    # No bare "Invalid" substring match: it is the broadest possible false-positive net.
     unit = _write_unit(
         tmp_path,
         "clean2.service",
@@ -131,9 +127,8 @@ def test_systemd_verify_ignores_bare_invalid_without_a_line_attribution(tmp_path
 
 
 def test_systemd_verify_ignores_the_exit_status(tmp_path):
-    # Uses `false`, not systemd-analyze itself, so it needs no real binary on PATH: `false`
-    # always exits 1 and prints nothing systemd-analyze-shaped — if systemd_verify() read the
-    # exit code it would flag every clean unit run through this stand-in. It must not.
+    # Uses `false`, which always exits 1 and prints nothing systemd-analyze-shaped; if
+    # systemd_verify() read the exit code it would flag every clean unit.
     unit = _write_unit(
         tmp_path,
         "clean3.service",
@@ -143,8 +138,7 @@ def test_systemd_verify_ignores_the_exit_status(tmp_path):
 
 
 def test_discover_templates_finds_the_known_set():
-    # Pin the expected corpus so a template silently going missing (typo'd rename, moved role)
-    # is caught rather than "fewer templates checked" sliding by unnoticed.
+    # Pin the expected corpus so a template silently going missing is caught.
     names = frozenset(p.name for p in v.discover_templates())
     assert {
         "deploy-ui.service.j2",
@@ -230,16 +224,12 @@ def test_run_fails_closed_when_systemd_analyze_missing(monkeypatch):
     assert v.run(print) == (0, 1)
 
 
-# ── sibling gap: the polkit rules (*.rules.j2, JavaScript) are content-checked by their roles'
-# tests, but nothing else checks their JavaScript syntax.
-
-
 requires_node = pytest.mark.skipif(
     shutil.which("node") is None, reason="node not on PATH"
 )
 
-# Every rule a host runs. A rule renamed or moved out of a role's templates/ drops out of the
-# glob, and the check would pass over the rules that remain.
+# A rule renamed or moved out of templates/ drops out of the glob, and the check would pass over the
+# rest.
 KNOWN_RULES = frozenset(
     {
         "50-renovate-agent-land.rules.j2",
@@ -261,8 +251,8 @@ def test_check_polkit_rule_passes_each_real_rule(tmp_path, name):
 
 
 def _broken_rule(tmp_path):
-    # A stray brace that survives Jinja (no `{{`/`{%`/`{#`) but leaves the
-    # rendered JS structurally broken — the class `node --check` exists to catch.
+    # A stray brace that survives Jinja but leaves the rendered JS structurally broken: the class
+    # `node --check` catches.
     role = tmp_path / "roles" / "setup" / "fixture"
     (role / "templates").mkdir(parents=True)
     broken = role / "templates" / "50-fixture.rules.j2"

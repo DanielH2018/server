@@ -14,10 +14,8 @@ above them before moving them here: `resolve_service_ip` runs a subprocess, whic
 above rules out for this module.
 """
 
-# The kinds a rollout gate can actually check, and kubectl's spelling for each. Deployment
-# first because the fleet is overwhelmingly Deployments. StatefulSet is here with no live
-# instance today on purpose: resolving a kind the lookup below cannot ask for would make the
-# first StatefulSet added to this repo read as MISSING.
+# StatefulSet is listed with no live instance on purpose: a kind the lookup cannot ask for would
+# make the first one read MISSING.
 WORKLOAD_KINDS = {
     "Deployment": "deploy",
     "DaemonSet": "daemonset",

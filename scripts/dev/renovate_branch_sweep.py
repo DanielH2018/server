@@ -127,9 +127,7 @@ def census(gh: Gh = _gh) -> list[str]:
             ".[].headRefName",
         )
     )
-    # A server-side title search, not a recency-bounded list: the dashboard is issue #3, the
-    # oldest open issue here, and `gh issue list --limit N` drops it first once open issues
-    # outnumber N.
+    # Search by title: the dashboard is the oldest open issue, which `--limit N` drops first.
     issues = gh(
         "issue",
         "list",
@@ -189,8 +187,7 @@ def main(
         )
         print(f"{PRUNE_COMMAND} {' '.join(found)}", file=out)
         return 0
-    # Delete only what the operator named AND the census just listed: a branch orphaned since
-    # the report was never classified, and one that gained a PR or entry is no longer an orphan.
+    # Delete only branches the operator named and the census just listed.
     for branch in dict.fromkeys(args.prune):
         if branch not in found:
             print(

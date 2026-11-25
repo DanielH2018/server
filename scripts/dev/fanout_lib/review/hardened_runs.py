@@ -15,12 +15,10 @@ from pathlib import Path
 
 from dev.fanout_lib.review.processes import Runner
 
-# Settings in the worktree's own git config that would run a command or change what a call
-# reads, each pinned to git's Linux default for every call below. A hook can fire on any
-# index write or HEAD update; a sparse checkout sets skip-worktree bits; an edit of the same
-# size with its mtime restored is stat-clean unless ctime counts; with `fileMode` off a
-# cleared exec bit is no change; `autocrlf` and `symlinks` change the bytes or the kind of
-# file a checkout writes.
+# Git config settings in the worktree that would run a command or change what a call reads, each
+# pinned to git's Linux default: hooks fire on index writes, sparse checkout sets skip-worktree
+# bits, an edit with restored mtime is stat-clean unless ctime counts, `fileMode` off hides a
+# cleared exec bit, and `autocrlf`/`symlinks` change what a checkout writes.
 _PINNED = (
     ("core.hooksPath", "/dev/null"),
     ("core.fsmonitor", "false"),
@@ -32,8 +30,8 @@ _PINNED = (
     ("core.autocrlf", "false"),
     ("core.symlinks", "true"),
     ("core.untrackedCache", "false"),
-    # `ignoreCase` hides a planted case variant, `recurse` reaches into a submodule's own
-    # config, and a split index is a second file an index read takes.
+    # `ignoreCase` hides a planted case variant, `recurse` reaches into a submodule's config, and a
+    # split index is a second file an index read takes.
     ("core.ignoreCase", "false"),
     ("submodule.recurse", "false"),
     ("core.splitIndex", "false"),
@@ -90,8 +88,8 @@ def worktree_git(
     return run([*hardened(run, worktree), "-C", str(worktree), *args], None)
 
 
-# One line of pytest's `-rA` short summary. SKIPPED lines carry a location, not a node id, so
-# a skipped node is simply absent and reads as not failed.
+# SKIPPED lines carry a location, not a node id, so a skipped node is absent and reads as not
+# failed.
 _OUTCOME = re.compile(r"^(PASSED|FAILED|ERROR|XFAIL|XPASS) (.+?)(?: - .*)?$", re.M)
 
 
@@ -108,10 +106,8 @@ def pytest_argv(worktree: Path, *args: str) -> list[str]:
     ]  # fmt: skip
 
 
-# git with no configuration the implementer can write: no global or system file, which a
-# clone's own fresh config leaves as the only other sources, and no user attributes file. The
-# base check checks HEAD out this way, so no filter, `info/attributes` line or config value
-# from the worktree's repo can rewrite a file on its way to pytest.
+# Git with no configuration the implementer can write, so no filter, `info/attributes` line or
+# config value from the worktree can rewrite a file on its way to pytest.
 BARE_GIT = (
     "env", "GIT_CONFIG_GLOBAL=/dev/null", "GIT_CONFIG_NOSYSTEM=1",
     "git", "-c", "core.attributesFile=/dev/null",

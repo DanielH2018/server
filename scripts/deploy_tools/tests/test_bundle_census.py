@@ -208,9 +208,6 @@ def test_check_bundle_fails_an_empty_service_list_on_the_floor(tmp_path, capsys)
     ]
 
 
-# -- the per-file rule (D4.3) ----------------------------------------------------------------
-
-
 def test_a_deferring_tags_file_holding_its_deferred_document_is_clean(tmp_path):
     out = _bundle(tmp_path, ["pihole"], deferring=["pihole"])
     assert bundle_census.census(out, ["pihole"], deferring=["pihole"]) == []
@@ -278,12 +275,6 @@ def test_a_deferred_files_value_that_is_not_a_literal_list_is_a_problem(tmp_path
         "could not tell whether x defers files: its manifests_deferred_files is "
         "'{{ files }}', not a literal list"
     ]
-
-
-# -- the per-tag kinds and the reserved names (D5.1a1) ----------------------------------------
-# The red fixtures of an unknown extra document and an unknown extra file are
-# test_a_third_document_in_a_deferring_tags_file_is_flagged and
-# test_an_extra_file_in_flux_is_flagged above.
 
 
 def test_a_snapshot_tags_file_holding_its_snapshot_document_is_clean(tmp_path):
@@ -414,8 +405,6 @@ def test_a_rendered_verify_directory_passes_check_bundle_only_for_its_role(
     assert bundle_census.report(out, ["littlelink"]) == FAILED
     assert "not exactly the Kustomization littlelink" in capsys.readouterr().err
 
-
-# -- the per-tag object census (H1.1c) ---------------------------------------------------------
 
 CLUSTER_BASE = (
     "kind: PriorityClass\nmetadata:\n  name: homelab-critical\n---\n"

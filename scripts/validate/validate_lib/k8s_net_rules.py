@@ -15,8 +15,7 @@ __all__ = [
     "workload_container_ports",
 ]
 
-# Traefik's TLS entrypoint in this cluster. `websecure` is upstream's conventional name and is
-# not used here — see the traefik role's static-config.yaml.j2.
+# `websecure` is upstream's conventional name and is not used here.
 HTTPS_ENTRYPOINT = "https"
 
 

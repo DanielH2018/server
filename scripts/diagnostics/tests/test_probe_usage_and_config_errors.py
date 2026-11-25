@@ -53,8 +53,6 @@ def test_bad_since_exits_usage_error(capsys):
 
 
 def test_group_vars_key_missing_stays_a_failure(monkeypatch, capsys):
-    # The group_vars read is the repo config under test, served here with the domain but
-    # without `k3s_metallb_ingress_vip`; every other open is real.
     real_open = builtins.open
 
     def open_without_vip(path, *args, **kwargs):

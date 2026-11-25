@@ -15,8 +15,8 @@ SETTLED = frozenset({"landed", "cleaned"})
 
 
 def one_line(text: str, limit: int = 300) -> str:
-    # Collapse the whitespace before truncating: a cut that lands mid-line would put a
-    # newline inside a status line that is meant to be one line per batch.
+    # Collapse whitespace before truncating, so a cut mid-line cannot put a newline in a one-line
+    # status.
     return " ".join(text.split())[:limit]
 
 

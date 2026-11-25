@@ -101,8 +101,6 @@ from deploy_tools.promote_lib import reboot_window
 from deploy_tools.flux_host import KubectlSetupError
 
 HOLD_VARIABLE = forge.HOLD_VARIABLE
-# The annotation `flux push artifact --revision` writes on a bundle's manifest. promote.py
-# reads `prod`'s commit from it too, through this name.
 REVISION_ANNOTATION = "org.opencontainers.image.revision"
 
 
@@ -113,24 +111,18 @@ class WaitReadError(RuntimeError):
 # Both mean "this fact could not be read".
 READ_ERRORS = (WaitReadError, forge.ForgeError)
 
-# Seconds between polls. A poll makes one authenticated GitHub call, two while it awaits the
-# soak's verdict: at most 240 an hour, well inside a token's 5,000.
+# At most 240 GitHub calls an hour, well inside a token's 5,000.
 POLL_S = 30
 
-# The promote timeout as D4.3's chained derivation gives it for a one-tag bundle that
-# substitutes, when a rotation changes `cluster-vars` too (d4-ordering.md, *What `promote`
-# reads*). `_TAGS_S` is the tags' share: `cluster-vars`'s 10m, one requeue hop and the tag's
-# 10m on the path, one 10m queueing round, the 1m OCIRepository interval and the 2m
-# `retryInterval`. `verify` expects `soak` too (D5.3b3), whose `timeout` the renderer sets to
-# `_TAGS_S` plus W (below) and two 1m margins; that term is the longest, so the total adds the
-# interval and the `retryInterval` again. test_promote_land_wait_deadline.py pins this to
-# `chained_timeout.promote_timeout`. `land-wait` gives up at twice it
-# (contract C6): the second half covers `promote.yml`'s `render` and `publish`, 10m each.
-# The soak's chain counts every Kustomization in the bundle, so `land_wait` raises the deadline
-# from the live `soak` Kustomization's `timeout` too (`soak_deadline_s`).
+# The promote timeout from the chained derivation for a one-tag bundle that substitutes when a
+# rotation changes `cluster-vars` too. `_TAGS_S` is the tags' share: cluster-vars 10m, one requeue
+# hop, the tag's 10m, one 10m queueing round, the 1m OCIRepository interval and the 2m
+# `retryInterval`.
+# `land-wait` gives up at twice it, the second half covering `promote.yml`'s `render` and `publish`;
+# test_promote_land_wait_deadline.py pins it to `chained_timeout.promote_timeout`.
 _TAGS_S = 10 * 60 + 30 + 10 * 60 + 10 * 60 + 60 + 2 * 60
-# W is 4m. `IngressProbeFailedCritical` pages at `for: 2m` with no `service` label, so since M4's
-# PR 5 dropped its `shadow` it counts for every tag: W = max(stabilise, 2m) + 2m scrape-and-eval.
+# W is 4m: `IngressProbeFailedCritical` pages at `for: 2m` for every tag, so W = max(stabilise, 2m)
+# + 2m scrape-and-eval.
 PROMOTE_TIMEOUT_S = _TAGS_S + 4 * 60 + 2 * 60 + 60 + 2 * 60
 LAND_WAIT_TIMEOUT_S = 2 * PROMOTE_TIMEOUT_S
 
@@ -246,8 +238,6 @@ class WaitResult:
         object.__setattr__(self, "verdict", WaitVerdict(self.verdict))
 
 
-# The changed-set names that are no deploy tag: the root, the shared kinds, and Flux's own
-# bootstrap Kustomization, which a widened set lists beside the bundle's.
 _NOT_A_TAG = SHARED_KINDS | {ROOT, FLUX_NAMESPACE}
 
 
@@ -375,8 +365,6 @@ class _Expected:
             self._read()
         depends_on, suspended = kustomization_graph(items)
         if self._old is None:
-            # `changed_set` widens to M's names when M's file was read, else to every
-            # Kustomization listed; the reason is this wait's, not the function's.
             cs = changed_set(self._new, None, depends_on, suspended)
             return ChangedSet(cs.names, self._why)
         return changed_set(self._new, self._old, depends_on, suspended)
@@ -468,15 +456,14 @@ def land_wait(
         if items is not None:
             cs = expected.changes(items)
             tags = sorted(set(services) | changed_tags(cs.names))
-            # A widened set names every tag, so a hold's failed names are no evidence of this
-            # PR's own: the attribution reads the tags the digests decided.
+            # A widened set names every tag, so a hold's failed names are no evidence of this PR's
+            # own.
             own = tags if not cs.widened else sorted(services)
             widened, paused = cs.widened, expected.suspended(tags)
             # Every tag the wait covers is suspended, so nothing of M is left to wait on.
             all_paused = bool(paused) and set(paused) == set(tags)
-            # A suspended tag's Kustomizations never apply M, so the rest are waited on.
-            # `soak` is never waited on Ready. It reads Ready only once its Job has judged,
-            # so the wait reads R's `flux/soak` verdict instead (D5, *The soak as a Job*).
+            # `soak` reads Ready only once its Job has judged, so the wait reads R's `flux/soak`
+            # verdict instead of waiting on it.
             names = {
                 n for n in cs.names if split_kind(n)[0] not in paused and n != SOAK
             } | {ROOT}

@@ -97,8 +97,6 @@ def test_an_actionable_finding_runs_a_fix_a_delta_review_and_the_landing_in_orde
     assert (
         "The whole change, the fix included: `git diff base0...bbb`" in run.claude[3][1]
     )
-    # The pipeline lands the PR itself, under a login shell for the agent user's
-    # LAND_HANDOFF_UNIT.
     land_sh = [
         str(tmp_path / ".fanout/land-checkout-4000/scripts/deploy_tools/land.sh"),
         "--pr",
@@ -218,8 +216,6 @@ def test_a_failed_review_is_said_on_the_pr_and_the_batch_still_lands(tmp_path):
 
 
 def test_the_landing_is_skipped_when_too_little_run_time_is_left(tmp_path):
-    # The pipeline reads the clock once at start to set its deadline; every later read, the
-    # phase timings and the landing check alike, is past the cap.
     reads = []
 
     def clock():
@@ -415,8 +411,6 @@ def test_a_resumed_phase_loads_no_settings_file_the_agent_can_write(tmp_path):
             for group in groups
             for h in group["hooks"]
         ]
-        # session-health reads the tree around its own file, and the held copy has none, so a held
-        # phase registers every project hook but the SessionStart one.
         assert "SessionStart" in held["hooks"]
         assert "SessionStart" not in settings["hooks"]
         assert len(commands) == len(

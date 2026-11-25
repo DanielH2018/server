@@ -104,8 +104,7 @@ def soak_cleared(checks: list[CheckRun]) -> bool:
 
 def _edit_body(gh: Gh, number: str, body: str) -> str | None:
     """Write `body` to the PR. None on success, else `gh`'s stderr."""
-    # `--body-file` rather than `--body`: the body is markdown with backticks and newlines,
-    # and a file is the one shape no shell quoting can mangle.
+    # `--body-file`: no shell quoting can mangle markdown with backticks.
     with tempfile.TemporaryDirectory() as tmp:
         body_file = _Path(tmp) / "body.md"
         body_file.write_text(body)
@@ -120,8 +119,6 @@ def main(
     argv: list[str] | None = None, gh: Gh = _gh, out=sys.stdout, stderr=sys.stderr
 ) -> int:
     argv = sys.argv[1:] if argv is None else argv
-    # `--help` is a question; the refusal below answered it with 64 and the docstring on
-    # stderr, which is a usage error.
     answer_help(__doc__, argv)
     retick = "--retick" in argv
     positional = [a for a in argv if a != "--retick"]

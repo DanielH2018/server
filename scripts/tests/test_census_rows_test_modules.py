@@ -286,8 +286,6 @@ ROWS = (
     ),
 )
 
-# Every row here and in its sibling file reads the same census, so they judge each module in
-# one pass over one tree.
 ROWS = share(ROWS)
 
 

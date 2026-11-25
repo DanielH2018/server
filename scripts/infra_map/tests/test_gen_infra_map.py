@@ -232,12 +232,6 @@ def test_find_extra_containers_marks_a_stopped_extra_down():
     assert g.find_extra_containers(live, set(), ROLES)[0]["status"] == "down"
 
 
-#
-# The inventory declares every k8s service under daniel-box, so a host panel
-# built from `containers_list` rendered daniel-server as empty while it ran 47
-# pods. These pin the panel to placement instead.
-
-
 def test_services_on_host_lists_what_landed_there_not_what_declares_it():
     k8s = [
         {**service("sonarr", platform="k8s"), "nodes": ["daniel-server"]},
@@ -313,13 +307,6 @@ def test_build_model_counts_routed_and_sso_gated_services():
     assert pi["authelia_count"] == 1
 
 
-#
-# These guard a bug that already happened once: cron runs with PATH=/usr/bin:/bin,
-# which omits /usr/local/bin where kubectl lives. The run still exited 0 and wrote
-# a page — it just quietly reported declared-only for every k8s service while the
-# Docker half kept working. A healthy-looking, half-blind page that alerts nobody.
-
-
 def test_main_leaves_the_previous_page_untouched_when_a_tool_is_missing(
     monkeypatch, tmp_path
 ):
@@ -347,12 +334,6 @@ def test_place_on_nodes_does_not_cross_namespaces_or_names():
 
 def test_place_on_nodes_is_empty_for_a_service_with_no_workloads():
     assert g.place_on_nodes({"workloads": []}, PODS)["nodes"] == []
-
-
-#
-# What these guard: daniel-server has no Docker and an empty containers_list, so inferring
-# the plane from that list would fall through to "docker" and the map would ssh a healthy
-# k3s agent for a binary that is not there.
 
 
 def test_daniel_server_is_modelled_as_a_k3s_host_not_a_docker_one():

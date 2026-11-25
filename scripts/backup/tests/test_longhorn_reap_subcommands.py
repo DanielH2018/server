@@ -23,8 +23,6 @@ from _reap_entrypoint_harness import BACKUP_DIR, _run
 REPO = BACKUP_DIR.parents[1]
 REAP_ENTRY = BACKUP_DIR / "longhorn_reap.py"
 
-# Every flag form the backups parser (`longhorn_reap_orphan_backups._parse_args`) accepts,
-# in combinations its cross-flag checks allow. Each must parse under `backups`.
 BACKUPS_FLAG_SETS = [
     ["--apply"],
     ["--mode", "strays", "--apply-deleted-volumes"],
@@ -122,8 +120,6 @@ def test_snapshots_subcommand_keeps_the_non_integral_env_abort(tmp_path):
 
 @pytest.mark.parametrize("subcommand", ["backups", "snapshots"])
 def test_apply_refusal_names_the_new_entrypoint_and_subcommand(subcommand, tmp_path):
-    # The re-run hint is what the operator pastes under sudo; it must name a file that still
-    # exists and the subcommand that selects the reaper.
     proc, calls = _run(
         REAP_ENTRY,
         [subcommand, "--apply"],

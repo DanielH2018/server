@@ -18,9 +18,6 @@ import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath
 
-# Reach the sibling package: a directly-invoked script gets only its own directory on
-# sys.path, and pyproject's `pythonpath` is a pytest setting.
-
 
 from dev.fanout_lib.review.hardened_runs import (
     ORIGIN_MASTER,
@@ -88,8 +85,8 @@ def unproven_tests(run: Runner, worktree: Path, start: str, head: str) -> BaseCh
             bare_git(run, tree, "checkout", start, "--", *kept)
         for path in set(code) - set(kept):
             (tree / path).unlink(missing_ok=True)
-        # Modules, not node ids: pytest aborts the whole run on a node id whose module no
-        # longer imports, `--continue-on-collection-errors` notwithstanding.
+        # Modules, not node ids: pytest aborts the whole run on a node id whose module no longer
+        # imports.
         files = sorted({node.split("::")[0] for node in new})
         proc = run(
             pytest_argv(

@@ -7,15 +7,11 @@ host and puts the lines a session's model would read into the brief.
 import json
 import subprocess
 
-# Reach the sibling package: a directly-invoked script gets only its own directory on
-# sys.path, and pyproject's `pythonpath` is a pytest setting.
-
 
 from dev.fanout_lib.transport import REPO, Tools
 
-# The SessionStart hook reads `payload["source"]` from stdin, so it needs a JSON payload
-# rather than `</dev/null`; --no-python-downloads/--python match the version run-hook.sh
-# pins for session-health so this reading is taken by the same interpreter a real session would use.
+# The SessionStart hook reads `payload["source"]` from stdin, so it needs a JSON payload; the python
+# flags match run-hook.sh's pin so the same interpreter reads it.
 HEALTH_CMD = (
     f'cd {REPO} && printf \'{{"source":"startup"}}\' | '
     f"PYTHONPATH={REPO}/scripts "
@@ -25,8 +21,7 @@ HEALTH_CMD = (
 
 def health_lines(tools: Tools, host: str) -> list[str]:
     """Return `host`'s banner lines, each prefixed `[host]`, or one line saying the read failed."""
-    # A failed or timed-out read must not read as "clean" in the launched brief: it's the
-    # signal the SessionStart banner exists to surface.
+    # A failed or timed-out read must not read as "clean" in the brief.
     try:
         proc = tools.run(host, HEALTH_CMD, 40.0, None)
     except subprocess.TimeoutExpired:

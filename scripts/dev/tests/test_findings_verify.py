@@ -14,8 +14,6 @@ import pytest
 from dev.findings_lib.issue_model import parse_verify_by, trailer, verify_by_section
 from dev.findings_lib.verify import verification_instructions, verification_report
 
-# A real issue body's verify-by text. It is prose describing a deploy, which the old
-# executable verify-by could only ever report as an error.
 LIVE_PROSE = (
     "deploy traefik with a nonexistent traefik_k8s_bouncer_plugin_version and confirm the "
     "container log shows a fresh download attempt on the second and third restart"
@@ -23,8 +21,6 @@ LIVE_PROSE = (
 
 # --- the body round-trip -------------------------------------------------------------------
 
-# Each case is (body, expected). A frozenset of the names is asserted below, so a rename
-# fails naming the member rather than shrinking the census silently.
 PARSER_CASES = {
     "unfenced prose, written by the current open": (
         "details" + verify_by_section("Run the drill and read the summary."),
@@ -57,9 +53,6 @@ PARSER_CASES = {
     "no section at all": ("details\n\n---\nFingerprint: `f`\n", None),
     "an empty body": ("", None),
     "an empty section": ("details\n\n## Verify-by\n\n---\nFingerprint: `f`\n", None),
-    # The refusing half that matters most. Some issues carry a heading whose text says they
-    # have NO instructions. A heading pattern admitting a suffix would read those
-    # explanations back as instructions and report the findings as verifiable.
     "a `deliberately omitted` heading is not a verify-by": (
         "details\n\n## Verify-by, deliberately omitted\n\nAttaching a predicate here would "
         "need the guarantee this issue says nothing provides.\n",

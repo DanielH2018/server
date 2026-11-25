@@ -4,8 +4,8 @@ title: Code scanning stays on default setup, and false positives are removed in 
 status: Superseded by ADR-0024
 date: 2026-09-02
 governs:
-  - scripts/diagnostics/probe_lib/ha.py:272
-  - k8s/roles/homelab-mcp/files/safe_reads.py:289
+  - "scripts/diagnostics/probe_lib/ha.py#state the floor instead of leaving it to the platform default"
+  - "k8s/roles/homelab-mcp/files/safe_reads.py#state the floor instead of leaving it to the platform default"
 ---
 
 # ADR-0016: Code scanning stays on default setup, and false positives are removed in code
@@ -147,8 +147,8 @@ those two queries matter most.
 
 ## Governs
 
-- `scripts/diagnostics/probe_lib/ha.py:272` — the `tls_context()` marker in the probe library.
-- `k8s/roles/homelab-mcp/files/safe_reads.py:289` — the same marker in the MCP
+- `scripts/diagnostics/probe_lib/ha.py` — the `tls_context()` marker in the probe library.
+- `k8s/roles/homelab-mcp/files/safe_reads.py` — the same marker in the MCP
   server's ship list.
 
 Both markers explain why the TLS floor is stated rather than inherited. Neither enforces the

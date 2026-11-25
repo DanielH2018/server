@@ -15,21 +15,18 @@ from lib.repo_paths import PRIMARY_CHECKOUT
 from lib.worktree_owner import own_prefix
 
 SERVER = "DanielH2018/server"
-# The registers `--repo` can aim at, each with the checkout whose worktrees decide whether a
-# claim on it is live. None is this repo's own primary checkout. A repo missing here can still
-# be read and written, but `claim`, `claims`, `reap` and `next` refuse it: judged against
-# THIS repo's worktrees, every claim on it would read as stale and `reap` would release them.
+# None is this repo's own primary checkout. A repo missing here can be read and written, but
+# `claim`, `claims`, `reap` and `next` refuse it: judged against this repo's worktrees every claim
+# on it would read stale and `reap` would release them.
 REGISTER_CHECKOUTS: dict[str, str | None] = {
     SERVER: None,
     "DanielH2018/dotfiles": str(Path.home() / ".local/share/chezmoi"),
 }
 # The interpreter a unit runs repo Python with; `fanout_lib.session_banner.HEALTH_CMD` pins the same one.
 HEADLESS_PYTHON = "3.15.2"
-# The agent user cannot read /home/ubuntu, and its login profile
-# (hosts/components/claude-code/templates/agent-user-profile.j2) points RUN_HOOK_PROJECT_DIR at its
-# own clone instead. The repo's hook shim, .claude/hooks/run-hook.sh, reads the same
-# variable. Unset, the checkout is the primary one this module lives under, which is the
-# operator's /home/ubuntu/server for `ubuntu`.
+# The agent user cannot read /home/ubuntu; its login profile points RUN_HOOK_PROJECT_DIR at its own
+# clone, which .claude/hooks/run-hook.sh reads too. Unset, the checkout is the one this module lives
+# under.
 PROJECT_DIR_ENV = "RUN_HOOK_PROJECT_DIR"
 
 

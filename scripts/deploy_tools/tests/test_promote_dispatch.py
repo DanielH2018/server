@@ -21,8 +21,8 @@ DISPATCH = (
     f"gh workflow run promote.yml -R DanielH2018/server --ref master -f sha={NEWER}"
 )
 DISPATCH_STEP = "Dispatch a run for a newer green commit"
-# The job token is the one `actions: write` reaches, since `gh` prefers GH_TOKEN, and the
-# `sha` input sends the run through render's CI re-check.
+# The job token is the one `actions: write` reaches, since `gh` prefers GH_TOKEN; the `sha` input
+# sends the run through render's CI re-check.
 DISPATCH_TOKEN = "${{ github.token }}"
 DISPATCH_CALL = ('eval "$DISPATCH_FUNCTIONS"', "dispatch_newer_green ")
 DISPATCH_ARGS = ("gh workflow run promote.yml", "--ref master", "-f sha=")

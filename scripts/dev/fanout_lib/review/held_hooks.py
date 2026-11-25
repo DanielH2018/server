@@ -35,38 +35,27 @@ from pathlib import Path, PurePosixPath
 
 HOOKS_DIR = Path(".claude") / "hooks"
 RULES_DIR = Path(".claude") / "rules"
-# The hook module whose `rule_globs` parses a rule's `paths:` frontmatter, so a held phase and
-# the harness read the same globs.
 GLOB_PARSER = "_inline_budget.py"
-# Directories under `HOOKS_DIR` no hook runs from. A stale `__pycache__` copied into the
-# snapshot would also outlive the source it was compiled from.
+# A stale `__pycache__` copied into the snapshot would outlive the source it was compiled from.
 UNSNAPSHOTTED = frozenset({"tests", "__pycache__"})
 # How this repo's `.claude/settings.json` names its hooks directory in every hook command.
 PROJECT_HOOKS = '"$CLAUDE_PROJECT_DIR"/.claude/hooks/'
-# Hook events a held phase does not register. `session-health` reports on the checkout its own
-# file sits in: it imports `lib` from that tree's `scripts/` and runs git and `probe.py` there.
-# The held copy is a hooks directory with no tree around it, so a held phase's banner would read
-# "detection is broken: No module named 'lib'" three times. Pointing it at the worktree instead would import code the
-# implementer can write, which is what holding the hooks prevents. The implementer phase
-# still gets the banner from its own project settings; a resumed phase already holds it in
-# its transcript.
+# `session-health` reports on the checkout its file sits in and imports `lib` from that tree; the
+# held copy has no tree around it. Pointing it at the worktree would import code the implementer can
+# write, which is what holding the hooks prevents.
 UNHELD_EVENTS = ("SessionStart",)
-# The trees beside `HOOKS_DIR` that a hook reaches through its own `__file__`, with the files
-# held from each: `block-footguns.py` imports from `scripts/`, and the
-# inventory is data `lib.inventory_lists` reads. `block-protected-bash.py` reads the
-# agents' frontmatter for the set it holds to read-only.
+# Trees a hook reaches through its own `__file__`: `block-footguns.py` imports from `scripts/`, the
+# inventory is data `lib.inventory_lists` reads, and `block-protected-bash.py` reads the agents'
+# frontmatter.
 HELD_TREES = (
     (Path("scripts"), "*.py"),
     (Path("inventory"), "*"),
     (Path(".claude") / "agents", "*.md"),
 )
 
-# The xdist worker ceiling every phase's pytest runs under: a quarter of the host's cores,
-# between 2 and 4. The user settings pin 4 for every session, and `--settings` overrides that
-# for one phase. The guard set takes 48s at 4 workers and 80s at 2, and
-# a whole-suite run holds 2.3 GiB at 4. daniel-server has 8 cores and fits the most batches by
-# memory, so its batches run at 2; daniel-box has 16 and keeps 4. Interactive sessions keep
-# the host's `claude_code_rc_pytest_workers`, which this does not read.
+# A quarter of the host's cores, 2 to 4, overriding the user settings' 4 for one phase. The guard
+# set takes 48s at 4 workers and 80s at 2; a whole-suite run holds 2.3 GiB at 4. daniel-server (8
+# cores) fits the most batches by memory, so it runs at 2.
 PYTEST_WORKERS_ENV = "PYTEST_XDIST_AUTO_NUM_WORKERS"
 
 

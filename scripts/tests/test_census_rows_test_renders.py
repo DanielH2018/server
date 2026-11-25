@@ -157,8 +157,6 @@ ROWS = (
                 "j.py",
                 'v.K8S_ROLES.parent.parent / "hosts/components/k3s-server" / "units"\n',
             ),
-            # A path built in two steps. The first step of `l.py` is a hit on its
-            # own; `k.py`'s owns nothing, so only resolving HOSTS makes it red.
             Subject(
                 "l.py",
                 'K3S = REPO / "hosts" / "components" / "k3s-server"\n'
@@ -204,8 +202,6 @@ ROWS = (
             ),
         ),
         min_matches=MODULE_FLOOR,
-        # The classifier tests holding repo-relative inventory strings as inputs, and the
-        # converted modules are in the census the row reads.
         must_find=frozenset(
             {
                 "hosts/tests/test_host_python_invocations.py",
@@ -327,8 +323,6 @@ ROWS = (
                 "for path in discover_templates():\n    render_template(path)\n"
                 "def rendered_or_source_text(path):\n    return path.read_text()\n",
             ),
-            # Four ways a helper call is not a read: the helper reads nothing, it is imported,
-            # a test parameter shadows its name, and the argument is a `tmp_path` template.
             Subject(
                 "i.py",
                 "def _name(path):\n    return path.name\n"
@@ -418,8 +412,6 @@ ROWS = (
     ),
 )
 
-# Every row here and in its sibling file reads the same census, so they judge each module in
-# one pass over one tree.
 ROWS = share(ROWS)
 
 

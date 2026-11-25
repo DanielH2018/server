@@ -29,8 +29,8 @@ def _nav_paths(nav: object) -> list[str]:
 
 
 def _load_config() -> dict:
-    # MkDocs uses `!!python/name:` tags for extensions, which safe_load rejects.
-    # The nav needs none of them, so unknown tags are read as plain scalars.
+    # MkDocs uses `!!python/name:` tags for extensions, which safe_load rejects; unknown tags are
+    # read as plain scalars.
     class _Loader(yaml.SafeLoader):
         pass
 

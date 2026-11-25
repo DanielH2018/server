@@ -37,8 +37,7 @@ DEP_NAME = "fluxcd/flux2"
 HOMELAB_TOOLS = "hosts/packages/homelab-tools/package.yml"
 
 # Named rather than derived: a workflow that lost its pin fails here instead of shrinking the
-# census and passing. Each value counts the jobs whose fetch reads the file's one pin, inline or
-# through the pinned-tool action.
+# census.
 FLUX_PINS = {
     WORKFLOW: 5,
     ".github/workflows/ci.yml": 2,

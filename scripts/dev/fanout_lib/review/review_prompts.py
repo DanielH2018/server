@@ -7,8 +7,6 @@ wrote goes in through `_as_data`, fenced and labelled as data.
 import json
 from collections.abc import Sequence
 
-# Reach the sibling package: a directly-invoked script gets only its own directory on
-# sys.path, and pyproject's `pythonpath` is a pytest setting.
 from pathlib import Path
 
 
@@ -66,7 +64,7 @@ FINDINGS_SCHEMA = {
                         ],
                     },
                     "detail": {"type": "string"},
-                    # The delta review quotes the line it cites as the fix head holds it;
+                    # The delta review quotes the cited line as the fix head holds it;
                     # `delta_confirm` counts the finding as left only if that quote is there.
                     "evidence": {"type": "string"},
                     # Only on a `test` finding; `review_record.actionable` reads it.

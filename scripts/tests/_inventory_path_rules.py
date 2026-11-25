@@ -19,11 +19,8 @@ from _row_table import parse, parse_ahead
 
 from lib.repo_paths import REPO
 
-# The `lib.repo_paths` names a test module reads the tree through, each with the segments it
-# stands for. A chain's segments start with those, so `INVENTORY / "group_vars/all.yml"` spells
-# the same path as `REPO / "inventory/group_vars/all.yml"`. `_REPO` and `REPO_ROOT` are the
-# spellings `local_repo_roots` leaves behind. A module's aliases of these are resolved per
-# module.
+# `_REPO` and `REPO_ROOT` are the spellings `local_repo_roots` leaves behind; chains start with
+# these segments.
 _PATH_ANCHORS = {
     "REPO": (),
     "_REPO": (),
@@ -33,9 +30,7 @@ _PATH_ANCHORS = {
     "K3S_SERVER": ("hosts", "components", "k3s-server"),
     "K3S_HOST_CHECKS": ("hosts", "components", "k3s-host-checks"),
 }
-# The paths `lib.repo_paths` owns, by the segments that spell each, and the constant to import.
-# The k3s entries run most specific first, and a chain reports only its first match, so
-# `REPO / "hosts/components/k3s-server/defaults/main.yml"` is one hit naming `K3S_DEFAULTS`.
+# The k3s entries run most specific first, and a chain reports only its first match.
 _OWNED_PATHS = (
     (("group_vars", "all.yml"), "ALL_VARS"),
     (("host_vars",), "HOST_VARS"),
@@ -85,8 +80,7 @@ def _module_file(
         if importer is not None and importer.is_relative_to(REPO)
         else None
     )
-    # A file in `sources` is a candidate only under the import's last segment. The census
-    # passes its red subject's sibling to every module on disk, so this is usually no match.
+    # A file in `sources` is a candidate only under the import's last segment.
     leaf = dotted.rpartition(".")[2]
     if not any(p.stem == leaf or p.parent.name == leaf for p in sources):
         return _first_on_disk(parent, dotted)
@@ -108,9 +102,7 @@ def _search_dirs(parent: Path | None) -> tuple[Path, ...]:
     return own + _import_roots()
 
 
-# The census resolves ~22000 imports across ~1400 modules, mostly the same few helpers and
-# the standard library, which misses every root. These caches keep the static-ratchet-tests hook
-# from searching every root per import (~5s).
+# Caches keep the hook from searching every root for each of ~22000 imports.
 def _first_on_disk(parent: Path | None, dotted: str) -> Path | None:
     own = () if parent is None else (parent, parent.parent / "files")
     return next(
@@ -125,8 +117,7 @@ def _on_import_roots(dotted: str) -> Path | None:
     )
 
 
-# A module's resolved names, by its path on disk. A census reads every test module, and they
-# import the same helpers, so each file is parsed once. A module in `sources` is never cached.
+# Keyed by path on disk so each file is parsed once; a module in `sources` is never cached.
 _DISK_NAMES: dict[Path, dict[str, Segments]] = {}
 
 
@@ -288,7 +279,6 @@ def _local_anchors(
             if isinstance(node.target, ast.Name):
                 bindings.append((node.target.id, node.value))
     # A binding that extends itself (`R = R / "x"`) never settles, so the rounds are bounded.
-    # Bindings that only read each other settle within one round per binding.
     for _ in range(len(bindings) + 1):
         resolved: dict[str, set[Segments | None]] = {}
         for name, value in bindings:
@@ -340,8 +330,8 @@ def inline_inventory_paths(
         and module not in (sources or {})
         and module not in _DISK_NAMES
     ):
-        # A census module another one imports later reads these names back rather than
-        # parsing itself again. Only the text on disk is that module, not a fixture's.
+        # A census module another imports reads these names back; only the text on disk is that
+        # module, not a fixture's.
         try:
             on_disk = module.read_text() == source
         except OSError, UnicodeDecodeError:
@@ -362,8 +352,8 @@ def inline_inventory_paths(
         if chain is None:
             continue
         spelled_from, segments = chain
-        # A module binding its own `INVENTORY` hides every chain built from it, so the binding
-        # is a hit too: the two-step build is the shape a row can miss.
+        # A module binding its own `INVENTORY` hides every chain built from it, so the binding is a
+        # hit too.
         if segments == ["inventory"] and spelled_from < 2:
             found.append(f"{ast.unparse(node)} (import INVENTORY from lib.repo_paths)")
             continue

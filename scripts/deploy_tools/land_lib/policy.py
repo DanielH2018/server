@@ -58,20 +58,17 @@ from deploy_tools.land_lib.pr_json import (
 )
 from lib.json_types import JsonObject, as_list, as_object_list
 
-# GitHub's REST files endpoint returns at most 3000 files, so a PR at the cap may hide a path
-# the list names.
+# GitHub's REST files endpoint returns at most 3000 files, so a PR at the cap may hide a path.
 FILE_CAP = 3000
-# The review states that change whether a PR is approved. A COMMENTED review after an
-# approval leaves it approved, as it does for GitHub's own review rule.
+# A COMMENTED review after an approval leaves it approved, as for GitHub's own review rule.
 VERDICT_STATES = ("APPROVED", "CHANGES_REQUESTED", "DISMISSED")
 # The checkout this process runs from: the lander's, which only fast-forwards to master.
 CHECKOUT = _Path(__file__).resolve().parents[3]
 # The site module imports these from any directory on sys.path when the interpreter starts.
 STARTUP_MODULES = frozenset({"sitecustomize", "usercustomize"})
-# Module files the import system loads that are not `.py` source. A `__pycache__` pyc runs in
-# place of its unchanged source, a sourceless `.pyc` imports on its own, and an extension
-# module is tried before `.py` in the same directory. None is tracked legitimately, and none
-# shows the code it runs in a diff.
+# Non-`.py` module files the import system loads: a pyc runs in place of unchanged source, a
+# sourceless `.pyc` imports alone, an extension module is tried first. None shows the code it runs
+# in a diff.
 COMPILED_SUFFIXES = tuple(
     s for s in machinery.all_suffixes() if s not in machinery.SOURCE_SUFFIXES
 )

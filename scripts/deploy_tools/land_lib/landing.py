@@ -81,28 +81,21 @@ class Landing:
         self.named_k8s_tags: list[
             str
         ] = []  # the k8s tags the PR's paths or --tags named
-        # The merge commit, set once step 4 starts: the primary checkout may not carry it
-        # yet. The health verdict reads it to gate from a tree holding this PR.
+        # Set once step 4 starts; the health verdict reads it to gate from a tree holding this PR.
         self.deployed_at = ""
-        # Set by `merge.arm_merge` to the squash subject. `merge.await_merge` then merges the
-        # PR directly once CI is green, at the head CI checked. Empty means something else
-        # does the merge, such as an auto-merge a session armed, and this landing only polls.
+        # Set by `merge.arm_merge` to the squash subject; empty means something else (such as an
+        # armed auto-merge) merges and this landing only polls.
         self.direct_merge_subject = ""
-        # The head SHA the landing policy checked (`policy.check`), which every merge path is
-        # then pinned to. Empty when no policy is set, and the merge takes whatever head it finds.
+        # The head SHA the landing policy checked; every merge path is pinned to it. Empty when no
+        # policy is set.
         self.pinned_head = ""
-        # The head SHA whose approval let the landing policy admit a PR on its approval list.
-        # `merge.await_merge` never updates this head's branch: the update would make a head
-        # the approval does not name.
+        # `merge.await_merge` never updates this head's branch: the update would make a head the
+        # approval does not name.
         self.approved_head = ""
-        # The master commit a landing batch stacked this PR on, and the head it stacked
-        # (`batch.py`). While both still hold, the head needs no branch update and no
-        # stale-base check (`stale_base.batch_tested`). `tested_on` is empty when no batch
-        # tested the PR, and once the head or master has moved.
+        # The master commit and head a landing batch stacked this PR on; while both hold, no branch
+        # update or stale-base check is needed.
         self.tested_on = ""
         self.tested_head = ""
-        # The `batch.Member`s this landing's batch tested behind its own PR and has not
-        # merged yet, in the order they were stacked.
         self.batch: list[Any] = []
         # The seconds the run of this landing's batch took, which its merge wait counts.
         self.batched_s = 0
@@ -110,24 +103,14 @@ class Landing:
         self.merge_wait_s = 0
         # Set once a batch that tested this landing's PR was not green: it forms no batch.
         self.lands_alone = False
-        # The members of this landing's batch whose run was not green, until its own run
-        # says whether they land alone or go back to the line (`batch._settle`).
         self.split_members: list[Any] = []
-        # Frees the serial lock a landing of a serial PR keeps (`slots.py`). Held here, so the
-        # lock and its ssh session last until the landing's process ends.
         self.serial_lock: Callable[[], None] | None = None
-        # Gives the landing turn up so the next ask waits for it again (`turn.held`). Set only
-        # while this landing holds the turn, so never for a batch member, which the holder merges.
+        # Set only while this landing holds the turn, so never for a batch member.
         self.give_back_turn: Callable[[], None] | None = None
-        # Gives the turn up for the length of the wait it is handed, then takes it again
-        # (`turn.held`). Set only while this landing holds the turn, and for a batch member to
-        # the call that gives the holder's turn up and ends the batch (`batch.py`).
         self.step_out_of_turn: Callable[[Callable[[], Any], str], Any] | None = None
-        # Set once a wait stepped out of the turn, because master may have moved meanwhile;
-        # the merge wait clears it when it checks the head against master before its merge.
+        # Set once a wait stepped out of the turn, because master may have moved; the merge wait
+        # clears it.
         self.turn_interrupted = False
-        # Raises `turn.HandOver` when this landing can pass its turn to a fresh checkout's
-        # landing, and returns when it cannot; None outside the merge wait.
         self.hand_over_turn: Callable[[str], None] | None = None
         # The head `changed_paths` last read the PR's file list at, and that list.
         self._changed: tuple[str, tuple[str, ...]] | None = None

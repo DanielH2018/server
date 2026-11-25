@@ -540,8 +540,6 @@ _PASS = [_run("prek (lint + validate + tests + secrets)", "completed", "success"
 _FAIL = [_run("prek (lint + validate + tests + secrets)", "completed", "failure")]
 
 
-# A head's one CI run, from the push made while the PR was a draft, skipped every job. A skipped
-# matrix job keeps its unexpanded name.
 _DRAFT_RUN = [
     _run("prek (lint + validate + tests + secrets)", "completed", "skipped"),
     _run("prove the pushed tree was tested", "completed", "skipped"),

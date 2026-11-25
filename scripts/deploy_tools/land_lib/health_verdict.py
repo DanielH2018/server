@@ -20,8 +20,6 @@ from deploy_tools.land_lib.outcome import (
     say,
 )
 
-# How long the gate is asked again while its store is unreadable, and how often. Kept inside
-# `promotion.DEADLINE_RESERVE_S` with room for the gate's own run.
 UNREADABLE_RETRY_S = 300
 UNREADABLE_POLL_S = 30
 
@@ -92,8 +90,6 @@ def gate_from_the_deployed_tree(ln: Landing) -> GateResult:
     if not at:
         # land.sh's own checkout may predate the merge and see none of a role it adds.
         return ln.tools.gate(promotion.gated_tags(ln), cwd=ln.opts.primary)
-    # The fallback below still asks for `at`: a primary carrying what landed can answer, and
-    # the probe itself refuses a role that primary holds an older definition of.
     with ln.tools.snapshot(ln.opts.primary, _advanced_to_origin(ln, at)) as snap:
         if snap is not None:
             return ln.tools.gate(promotion.gated_tags(ln), cwd=snap)

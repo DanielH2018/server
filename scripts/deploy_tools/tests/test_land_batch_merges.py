@@ -133,8 +133,6 @@ def test_a_member_that_was_marked_ready_and_did_not_merge_gets_a_full_run(
 @pytest.mark.parametrize(
     ("poll", "merged"),
     [
-        # The run's three pending polls leave 1340 s of the two 700 s budgets: room for one
-        # member's 600 s, twice over.
         pytest.param(20, [OWN, "7"], id="room-left"),
         # They leave 1100 s, which is less than that.
         pytest.param(100, [OWN], id="budgets-spent"),

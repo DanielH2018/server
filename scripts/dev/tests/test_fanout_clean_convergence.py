@@ -67,16 +67,15 @@ def test_the_merged_test_asks_the_forge_because_this_repo_squash_merges():
         "--head worktree-fanout-1 --json headRefOid --jq '.[].headRefOid' 2>/dev/null"
         in cmd
     )
-    # Ruling 38: the merged PR's head SHA must equal this branch's tip. Branch names are
-    # reused here, so a name-only match would delete unlanded work.
+    # The merged PR's head SHA must equal this branch's tip: names are reused, so a name match would
+    # delete unlanded work.
     assert (
         "tip=$(git -C /home/ubuntu/server rev-parse refs/heads/worktree-fanout-1 "
         "2>/dev/null)" in cmd
     )
     assert '| grep -c -x "${tip:-none}")' in cmd
     assert cmd.index("tip=$(git") < cmd.index("gh pr list")
-    # A gh that is missing, unauthenticated or offline answers nothing, which must read as
-    # zero rather than as an error that skips both echoes.
+    # A gh that is missing or offline answers nothing, which must read as zero.
     assert "case \"${merged}\" in ''|*[!0-9]*) merged=0;; esac" in cmd
     assert cmd.index("merged=0;; esac") < cmd.index('if [ "${merged}" -gt 0 ]')
 
@@ -96,8 +95,7 @@ def test_the_gone_tree_branch_deregisters_only_its_own_worktree():
     )
     # Inside the gone-tree branch — not on the path that still has a tree for `clean-one`.
     assert cmd.index("worktree remove") < cmd.index("else snap=$(mktemp -d)")
-    # BEFORE the branch is touched: git refuses `branch -D` while a registration holds it,
-    # so deleting the branch first prints `kept: … not deleted` for every merged gone-tree batch.
+    # git refuses `branch -D` while a registration holds the branch, so remove the worktree first.
     assert cmd.index("worktree remove") < cmd.index("branch -D worktree-fanout-1")
 
 

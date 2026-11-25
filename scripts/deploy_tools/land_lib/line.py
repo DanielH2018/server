@@ -28,16 +28,11 @@ from pathlib import Path
 
 # Beside the turn's lock file, on the same tmpfs.
 DIR = Path("/run/lock/homelab-land-line")
-# A place older than this belongs to a landing that has stopped polling: four merge polls at
-# the default of 30 seconds. A landing that polls slower reads as gone, and lands alone.
+# A landing that polls slower than four merge polls at 30 seconds reads as gone and lands alone.
 FRESH_S = 120
 # What the holder of the turn writes into a place once it has merged that PR.
 MERGED = "merged"
-# What it writes once a batch that tested that PR was not green and the holder's own run
-# was not red: the PR lands by itself.
 ALONE = "alone"
-# What it writes once that batch was not green, until its own run decides between `alone`
-# and no answer. No other holder stacks the PR meanwhile.
 SPLIT = "split"
 _SSH_TIMEOUT_S = 30
 
@@ -86,8 +81,8 @@ def _op(directory: str, op: str, *args: str) -> str:
             return []
 
     def write(pr: str, *words: str) -> None:
-        # A reader never finds a half-written place, and a link left at the place's name is
-        # replaced, not followed.
+        # A reader never finds a half-written place, and a link at the place's name is replaced, not
+        # followed.
         scratch = f"{directory}/.{pr}.{os.getpid()}"
         with open(scratch, "x", encoding="utf-8") as handle:
             handle.write(" ".join(words) + "\n")

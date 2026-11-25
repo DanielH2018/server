@@ -208,9 +208,8 @@ def test_record_then_read_round_trips(tmp_path, monkeypatch):
     assert tools["b2-budget"]["class_c"] == 5
 
 
-# `probe.py b2-deletions`: charging a deletion that already happened. The two backup targets are
-# real — `default` is B2, `r2` is Cloudflare R2 — and only the first is capped at 2,500 Class C a
-# day, so the R2 line below is the input the filter must REJECT.
+# `default` is B2 and `r2` is Cloudflare R2; only B2 is capped, so the R2 line is the input the
+# filter must REJECT.
 B2_TARGET = "s3://daniel-server-kopia@us-east-005/longhorn"
 R2_TARGET = "s3://daniel-box@auto/longhorn"
 

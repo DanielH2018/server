@@ -13,9 +13,6 @@ on the worktree gets that case right with no timer at all: a worktree with uncom
 changes is holding work, whatever happened to the process.
 """
 
-# Reach the sibling package directories: a directly-invoked script gets only its own
-# directory on sys.path, and pyproject's `pythonpath` is a pytest setting.
-
 import subprocess
 import sys
 from collections.abc import Callable, Collection, Mapping
@@ -30,14 +27,10 @@ from dev.findings_lib.solo_only import solo_only_reasons
 from lib.worktree_owner import other_clone_owner
 from lib.worktrees import REMOVABLE, Worktree, classify
 
-# What a worktree read raises when the directory behind a registered worktree is gone.
-# `lib.git.git_dirty` runs git with `check=True`, so a missing cwd surfaces as OSError from
-# subprocess itself, and a git that ran but exited non-zero surfaces as CalledProcessError.
+# A missing worktree directory surfaces as OSError from subprocess; a failed git as
+# CalledProcessError.
 _UNREADABLE = (OSError, subprocess.SubprocessError)
 
-# `(stale issue numbers) -> {issue: BatchHold}` for the ones a running fan-out batch still works,
-# `fanout_lib.batch_holds.running_batch_holds` bound to a register. Asked only about claims the
-# worktree already calls stale, so a register with none reads no unit and opens no ssh.
 BatchHolds = Callable[[Collection[int]], Mapping[int, BatchHold]]
 
 
@@ -45,8 +38,6 @@ def _no_batch_holds(_issues: Collection[int]) -> Mapping[int, BatchHold]:
     return {}
 
 
-# `() -> worktrees` the other host's checkout registers, or None when it cannot be read: a
-# `FindingsTools.peer_trees`. Asked only when a stale claim names no local worktree.
 PeerTrees = Callable[[], list[Worktree] | None]
 
 
@@ -54,8 +45,7 @@ def _no_peer_trees() -> list[Worktree] | None:
     return []
 
 
-# The reason a claim reads held because the peer read failed. `cmd_reap` counts it, so a
-# lasting ssh or path failure reaches the sweep's output instead of reading as "0 released".
+# `cmd_reap` counts this reason so a lasting ssh or path failure shows in the sweep output.
 PEER_UNREADABLE = (
     "no worktree here, and the other host's worktrees could not be read; held"
 )
@@ -78,8 +68,6 @@ def _unregistered(branch: str, trees: list[Worktree]) -> bool:
     return not any(t.branch == branch for t in trees)
 
 
-# `(worktree path) -> bool`: whether a live process works in that tree, a
-# `FindingsTools.tree_held`. Asked only of a tree `classify` calls removable.
 TreeHeld = Callable[[str], bool]
 
 
@@ -158,9 +146,8 @@ def claim_is_live(
     a claim whose state cannot be read hands live work to a second session. The reason names
     `git worktree prune`, because nothing else in the output points at a stale registration.
     """
-    # Judged only by its own user: the other clone's worktrees are not in `trees`, so its
-    # live claims read "no worktree" here and `reap` released them. Held is the
-    # fail-safe direction; that user's own `reap` is the way to clear a stale one.
+    # Judged only by its own user: the other clone's worktrees are absent here, so held is the
+    # fail-safe.
     owner = other_clone_owner(worktree_name)
     if owner is not None:
         return True, (

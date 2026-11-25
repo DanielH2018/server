@@ -15,24 +15,16 @@ from collections.abc import Iterable
 from deploy_tools.changed_set import ROOT, SOAK
 from deploy_tools.kustomizations import kustomization_graph
 
-# The values of the two objects the bundle does not carry, from
-# k8s/roles/flux/templates/sync.yaml.j2: the OCIRepository `homelab`'s `interval`, and
-# the root Kustomization `homelab`'s `timeout` and `retryInterval`. The root is always
-# expected, so they are the floor of every derived timeout.
-# scripts/deploy_tools/tests/test_chained_timeout.py fails a drift.
+# Values of the objects the bundle does not carry, from k8s/roles/flux/templates/sync.yaml.j2;
+# test_chained_timeout.py fails a drift.
 OCI_INTERVAL_S = 60
 ROOT_TIMEOUT_S = 5 * 60
 ROOT_RETRY_S = 60
-# kustomize-controller's `--requeue-dependency` default. A Kustomization whose dependency is
-# not Ready requeues after this interval, and no watch re-enqueues it sooner, so each
-# `dependsOn` hop costs up to one interval (d4-ordering.md). The flux role sets no such flag;
-# scripts/deploy_tools/tests/test_chained_timeout.py fails one it adds.
+# kustomize-controller's `--requeue-dependency` default: each `dependsOn` hop costs up to one
+# interval. test_chained_timeout.py fails a flag the flux role adds.
 REQUEUE_DEPENDENCY_S = 30
-# The workers kustomize-controller's `--concurrent` leaves the tags: how many it reconciles at
-# once. One that waits on health holds a worker, so a changed set larger than this queues in
-# rounds. The flux role sets `--concurrent` to `k8s_rollout_batch_width` plus one, the worker
-# the soak holds from the start of a rollout (D5.1c, D5.3b2), and
-# tests/k8s/test_flux_role.py fails a drift between that width and this figure.
+# Workers kustomize-controller reconciles at once; a changed set larger than this queues in rounds.
+# tests/k8s/test_flux_role.py fails a drift from `k8s_rollout_batch_width` plus one.
 CONCURRENT = 5
 # The ceiling of every derived timeout, 5.5 hours. GitHub stops a hosted job at 6 hours, and a
 # `verify` stopped by its job limit leaves no verdict, so `settle` writes `<T> unverified`,

@@ -10,10 +10,8 @@ import subprocess
 
 from infra_map.constants import HOST_PLANE, LOCAL_TIMEOUT, SSH_TIMEOUT
 
-# Tool discovery lives with the kubectl invoker because kubectl is what cron blinds first:
-# its PATH omits /usr/local/bin (kubectl's home, as a symlink to k3s) and carries no
-# KUBECONFIG, so k3s falls back to the root-owned kubeconfig and returns nothing. The same
-# `find_tool` covers docker and ssh below.
+# cron's PATH omits /usr/local/bin and carries no KUBECONFIG, so k3s falls back to the root-owned
+# kubeconfig and returns nothing; `find_tool` covers it.
 from lib import kubectl as kubectl_lib
 from lib.k8s_conditions import ConditionStatus, parse_conditions
 from lib.kubectl import MissingKubectl, WrongCluster, cluster_for_host, find_tool
@@ -96,8 +94,7 @@ def collect_docker(host: str, local_hostname: str) -> tuple[bool, dict[str, dict
         ssh = find_tool("ssh")
         if ssh is None:
             raise MissingToolError("ssh not found on this host")
-        # One ssh invocation, not one per service: `ufw limit ssh` rejects
-        # 6+ connections per 30s and would ban an over-eager generator.
+        # One ssh invocation: `ufw limit ssh` rejects 6+ connections per 30s.
         remote = "docker ps -a --format '%s'" % DOCKER_PS_FORMAT
         cmd = [
             ssh,
@@ -115,10 +112,8 @@ def collect_docker(host: str, local_hostname: str) -> tuple[bool, dict[str, dict
     return True, parse_docker_ps(out), ""
 
 
-# The three long-running workload kinds. A DaemonSet has no spec.replicas: its
-# desired count is how many nodes the scheduler picked, which only the status
-# carries. Reading spec.replicas for every kind is how DaemonSet-backed roles
-# (node-exporter, dri-device-plugin) read as "missing" behind 2/2 ready pods.
+# A DaemonSet has no spec.replicas; its desired count is only in the status, so reading
+# spec.replicas makes DaemonSet roles read as missing.
 WORKLOAD_KINDS = ("deployments", "daemonsets", "statefulsets")
 
 
@@ -183,8 +178,7 @@ def collect_k8s(
     return True, parse_kubectl_workloads(out), ""
 
 
-# Pod placement comes from a column projection rather than `-o json`: the whole
-# pod list is megabytes, and the only fields the diagram needs are these four.
+# A column projection, not `-o json`: the whole pod list is megabytes.
 POD_COLUMNS = (
     "NAMESPACE:.metadata.namespace,NAME:.metadata.name,"
     "NODE:.spec.nodeName,PHASE:.status.phase"
@@ -203,10 +197,8 @@ def parse_kubectl_nodes(payload: str) -> dict[str, dict]:
         name = meta.get("name")
         if not name:
             continue
-        # A label key is `<group>/<name>`, so compare the group exactly rather than testing
-        # the key for a `<group>/` prefix. Identical for well-formed keys, and CodeQL reads a
-        # prefix test against a dotted string as URL-host sanitization (py/incomplete-url-
-        # substring-sanitization), which it is not.
+        # Compare the group exactly: CodeQL reads a `<group>/` prefix test on a dotted string as
+        # URL-host sanitization.
         roles = sorted(
             name
             for group, sep, name in (

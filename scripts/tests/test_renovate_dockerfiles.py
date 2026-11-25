@@ -100,8 +100,8 @@ def test_no_built_image_floats_on_an_unpinned_base(tracked: list[str]) -> None:
             # A digest is a pin in its own right, whatever the tag says.
             if "@sha256:" in ref:
                 continue
-            # Strip the registry host before looking for a tag, so the `:5000` in a
-            # `localhost:5000/foo` host:port is never mistaken for one.
+            # Strip the registry host first so the `:5000` in `localhost:5000/foo` is never read as
+            # a tag.
             tag = ref.rsplit("/", 1)[-1].partition(":")[2]
             # A tag naming a LINE (`python:3.14-slim`, `debian:bookworm-slim`) re-points at every
             # point release, and Renovate offers only a TAG change for it, so the tag reads pinned
@@ -214,8 +214,6 @@ def test_the_ledger_records_no_silent_downgrade() -> None:
     assert not flagged, "\n".join(flagged)
 
 
-# The two rules above, each on an input it must accept and an input it must reject. A guard
-# that fires on everything and one that fires on nothing look identical from the passing side.
 _CLEAN = [
     PinEntry("2.37.9", "n8nio/n8n", "sha256:" + "a" * 64, ""),
     PinEntry("2.37.10", "n8nio/n8n", "sha256:" + "b" * 64, ""),
@@ -306,9 +304,7 @@ def test_shellcheck_py_pins_in_lockstep() -> None:
     )
 
 
-# Where the CI toolchain pins live. Every workflow and local action is scanned, so a
-# copy that reappears in a workflow is compared too, but the action must hold exactly one of each:
-# that is the member a scan finding nothing would otherwise pass over.
+# The action must hold exactly one of each pin, so a scan finding nothing cannot pass.
 SETUP_ACTION = ".github/actions/setup/action.yml"
 
 

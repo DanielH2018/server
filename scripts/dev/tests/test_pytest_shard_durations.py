@@ -24,8 +24,6 @@ from dev import pytest_shard
 from dev import shard_weight_gate
 from lib.proc_testing import run
 
-# A report in the shape pytest prints: seconds, phase, nodeid. `setup` and `teardown` count
-# alongside `call`, which is what makes an expensive module-scoped fixture visible.
 REPORT = """============================== slowest durations ===============================
 21.40s call     scripts/heavy/tests/test_new_module.py::test_the_long_one
 4.10s setup    scripts/heavy/tests/test_new_module.py::test_the_long_one
@@ -128,9 +126,6 @@ def test_both_arms_report_together():
     assert "test_secret_consumer_census.py" in problems[1]
 
 
-# REPORT's new module recorded at the 0.48s that `test_guard_tests_read_renders_not_templates.py`
-# carried while it measured 45.67s on a master run: present in the table, and as good as
-# missing from it.
 UNDER_RECORDED = RECORDED | {NEW_MODULE: 0.48}
 
 
@@ -151,8 +146,6 @@ def test_a_heavy_module_inside_the_runner_scale_is_clean():
     )
 
 
-# `test_karakeep_public_bypass.py` on that master run: recorded 0.0s, measured 7.41s, every
-# second of it the k8s render charged to the first test on its worker.
 CACHE_FIRST_REPORT = f"7.41s setup    {NEW_MODULE}::test_the_long_one\n"
 
 

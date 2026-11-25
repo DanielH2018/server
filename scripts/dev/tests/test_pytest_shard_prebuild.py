@@ -14,8 +14,6 @@ from lib.repo_paths import REPO
 
 # CI's matrix in `.github/workflows/ci.yml`.
 CI_SHARDS = 6
-# What the packer resolves over more than a thousand modules: the test-seconds-only spread of
-# the committed split is about 0.3 runner seconds.
 RESOLVABLE_SPREAD_SECONDS = 4.0
 CENSUS_FILES = [
     "scripts/tests/test_census_rows_test_modules.py",

@@ -34,21 +34,16 @@ from lib.inventory_lists import LANDING_HOST
 from lib.cli_help import error, warn
 from lib.role_paths import CLUSTER_VARS_PREFIX, SECRETS_FILE
 
-# The host `fanout.py place` normally runs on; its launches go over `bash -c`, never ssh, so the
-# per-host ssh budget below doesn't apply to it. The orchestrator runs on the deploy host, which
-# is a coupling of convention: move one and this names the wrong host.
+# `fanout.py place` normally runs here over `bash -c`, never ssh, so the ssh budget does not apply;
+# moving the orchestrator makes this name the wrong host.
 LOCAL_HOST = LANDING_HOST
-# ufw limit ssh REJECTs a 6th connection to one host within 30s. Two of those five go to the
-# headroom and health reads, leaving room for at most this many batch launches — each its
-# own ssh connection — before the run risks the 6th.
+# `ufw limit ssh` REJECTs a 6th connection to one host within 30s; two of the five go to the
+# headroom and health reads, leaving this many launches.
 MAX_BATCHES_PER_REMOTE_HOST = 3
-# The memory cap, which is a DIFFERENT constraint from the ssh budget. An agent
-# reserves RESERVATION_BYTES (2 GiB) against a login plane capped at 14 to 23 GiB
-# (`claude_code_rc_memory_high`), which also holds the operator's own sessions. Unlike the ssh
-# budget above, this one stacks ACROSS runs: a second launch minutes after the first measures
-# a memory.current the first run's agents have not yet grown into, so headroom alone underprices
-# them. Counted from the run manifests, which cost no ssh to read, less the batches whose
-# unit has stopped (`still_running`).
+# A different constraint from the ssh budget: each agent reserves RESERVATION_BYTES against a login
+# plane capped at 14 to 23 GiB, and this one stacks across runs, because a second launch measures a
+# memory.current the first run's agents have not yet grown into. Counted from the run manifests,
+# less batches whose unit has stopped.
 MAX_LIVE_BATCHES_PER_HOST = 6
 # DECIDED: the operator set both caps at 6 on 2026-11-13 to leave about 8 GiB of RAM free per
 # node (`claude_code_fleet_memory_high` derives the floor). CPU on daniel-server (8 cores) is

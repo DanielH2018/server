@@ -61,8 +61,6 @@ def select(
     return {v.digest for v, _ in artifact_retention.select_prunable(facts).delete}
 
 
-# The smallest listing that prunes something of each kind: a strict ancestor's version, its
-# cosign bundle, its referrers-fallback index, and a bundle of a digest no longer listed.
 BASE = [
     version("ancestor", f"sha-{ANCESTOR}"),
     version("ancestor-bundle"),

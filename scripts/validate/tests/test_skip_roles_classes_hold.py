@@ -21,9 +21,8 @@ from pathlib import Path
 
 import pytest
 
-# Imported from the module that DEFINES them, not from validate.render_lib.k8s, which only
-# re-exports them. A guard that reads a re-export passes just as happily when the
-# definition it means to police has moved somewhere else.
+# Imported from where they are DEFINED, not the re-export: a guard reading a re-export passes when
+# the definition moved.
 from lib.k8s_roles import (
     CALLER_RENDERED_ROLES,
     K8S_ROLES,
@@ -89,9 +88,8 @@ def test_the_predicate_can_tell_a_manifest_from_a_helper(tmp_path: Path):
     assert not is_manifest_template(tmp_path / "Dockerfile.j2")
 
 
-# The two placement rules, one on the source and one on the render. Both are what lets app
-# config sit at templates/ top level unnoticed: the validator parses it as a manifest, finds no
-# `kind`, and skips it silently.
+# Both rules let app config sit at templates/ top level unnoticed: the validator parses it as a
+# manifest, finds no `kind`, and skips it silently.
 _EMBED = "{{ lookup('template', role_file('templates/%s')) | indent(4) }}"
 
 

@@ -17,10 +17,6 @@ from secrets_mgmt.consumers import FLUX_PATH, consumer_commands
 # `test_no_test_file_reads_the_live_clock` refuses the bare `today()` call it was built on.
 
 
-# ── the Flux path for a k8s consumer (D3.4) ──
-# ADR-0022 records how a value read by both planes rotates. Flux substitutes the value from the
-# cluster file, so each k8s consumer's line names the operator's `write` and the landing. The
-# fixture is a whole repo because `consumer_commands` takes `repo`.
 _FIXTURE_SECRET = "fixture_issue_4983_api_key"
 
 

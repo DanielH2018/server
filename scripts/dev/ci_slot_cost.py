@@ -59,9 +59,8 @@ CI_BRANCH = "master"
 PYTEST_PREFIX = "pytest (shard"
 SUITE_STEP = "Run the test suite"
 NO_STEP = "(no step: runner start and teardown)"
-# How many green master runs `--recent` lists to find N that ran pytest. A push whose tree a
-# landing already proved skips every leg, so most of the newest runs ran no pytest
-# and the window has to be wide.
+# A push whose tree a landing already proved skips every leg, so most recent runs ran no pytest and
+# the window has to be wide.
 RUN_WINDOW = 200
 
 _ACTION_SHA = re.compile(r"@[0-9a-f]{40}\b")

@@ -140,14 +140,6 @@ def test_no_cluster_route_carries_the_retired_k8s_suffix(fake_k8s_endpoint):
     assert not [h for h in asked if h.endswith("-k8s")]
 
 
-# --- Two Loki stores ------------------------------------------------------------------
-#
-# `{service_name="claude-code"}` lives only in observability's Loki; `loki-homelab` returns a
-# well-formed empty result for it that reads as "the OTEL stream is gone". The default store is
-# `homelab`; `--loki observability` reaches the other by its pinned ClusterIP, and the one
-# selector with a known home is refused at the wrong one.
-
-
 def _fake_cluster_ip():
     return "10.43.0.99"
 
@@ -244,14 +236,10 @@ def test_pick_loki_store_is_clean(logql):
 
 
 def test_observability_loki_ip_reads_the_role_default():
-    # The role template pins `clusterIP: {{ observability_loki_cluster_ip }}`; a parse that
-    # silently returned nothing would build `http://:3100`.
     ip = core.observability_loki_ip()
     assert ip.startswith("10.43."), ip
 
 
-# The calls below omit `plan()`'s endpoint lookups on purpose, so they go through an untyped
-# alias the type checker does not hold to the signature.
 _plan = cast(Callable[..., Any], curl_pipeline.plan)
 
 
@@ -278,8 +266,6 @@ def test_plan_routes_when_given_only_its_endpoint_lookups(fake_k8s_endpoint):
     ]
 
 
-# `loki-query --json` streams the raw Loki body, which carries Prowlarr's `apikey=` from every
-# *arr Torznab line shipped before the Alloy stage. The key is 32 hex chars of no entropy.
 _TORZNAB_JSON = (
     '{"values": [["1", "Torznab failed: http://prowlarr:9696/21/api?apikey='
     + "f" * 32

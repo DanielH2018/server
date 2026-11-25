@@ -330,9 +330,6 @@ def test_a_tag_with_no_live_object_is_unreadable_not_clean():
         )
 
 
-# A tag's vendored files reach the render under `upstream/` and `patches/`. Each of
-# these tags vendors files, and traefik-crds renders nothing else. The value is one object
-# the tag's `files/upstream/` declares, which the census must reach.
 VENDORED_TAGS = {
     "traefik-crds": ("CustomResourceDefinition", None, "ingressroutes.traefik.io"),
     "metallb": ("Deployment", "metallb-system", "controller"),

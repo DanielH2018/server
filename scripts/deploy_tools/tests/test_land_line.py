@@ -38,7 +38,6 @@ def test_an_answer_reaches_the_landing_that_stands_with_that_head(the_line):
     the_line("join", "7", HEAD)
     the_line("answer", "7", HEAD, line.MERGED)
     assert the_line("stand", "7", HEAD) == line.MERGED
-    # An answered place is no longer waiting, and a new head starts a place with no answer.
     assert _waiting(the_line) == []
     assert the_line("stand", "7", MOVED) == ""
     assert _waiting(the_line) == [f"7 {MOVED}"]

@@ -31,9 +31,6 @@ import time
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 
-# Reach the sibling package directories: a directly-invoked script gets only its own
-# directory on sys.path, and pyproject's `pythonpath` is a pytest setting.
-
 
 from dev.findings_lib.issue_model import PR_REPO, claim_of, parse_comment
 from lib.gh import gh as real_gh
@@ -44,8 +41,7 @@ TODO, IN_PROGRESS, DONE = "Todo", "In Progress", "Done"
 CHUNK = 25
 # GitHub answered HTTP 502 to one request carrying 25 adds and to one carrying 75 field writes.
 MUTATIONS_PER_CALL = 10
-# Ten writes per eight seconds stays under GitHub's secondary limit of 80 content writes a
-# minute; a backfill of ~130 writes sent unpaced locked the account's GraphQL for minutes.
+# Ten writes per 8s stays under GitHub's secondary limit of 80 content writes a minute.
 MUTATION_PAUSE_S = 8.0
 
 UNCHANGED, UPDATED, FAILED = "unchanged", "updated", "failed"
@@ -62,8 +58,8 @@ fragment I on Issue {
   }
 }"""
 
-# Fields are listed rather than fetched with `field(name:)`: that form fails the whole
-# query with NOT_FOUND when the board lacks the field.
+# Fields are listed, not fetched with `field(name:)`:
+# that form fails the whole query with NOT_FOUND when the board lacks the field.
 _BOARD = """
     owner { ... on ProjectV2Owner { projectsV2(first: 10, query: $title) { nodes {
       id title

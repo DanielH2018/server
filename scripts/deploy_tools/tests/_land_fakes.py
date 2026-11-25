@@ -37,12 +37,9 @@ LAST_GOOD = "1" * 40
 PIN_FILE = "k8s/roles/system-upgrade/defaults/main.yml"
 
 
-# A real directory, because the pipeline refuses a primary checkout that is not one. Made
-# once per session rather than per test, so `cwd=PRIMARY` assertions stay comparable.
-# TemporaryDirectory rather than mkdtemp, which leaves one behind per xdist worker. The explicit
-# atexit `.cleanup()` runs before TemporaryDirectory's own finalizer, whose `ResourceWarning`
-# `filterwarnings = ["error"]` (pyproject.toml) turns into an exception when it fires after
-# pytest restores the warning filters.
+# A real directory, because the pipeline refuses a primary checkout that is not one.
+# TemporaryDirectory with an explicit atexit `.cleanup()`: its own finalizer's `ResourceWarning`
+# becomes an exception under `filterwarnings = ["error"]`.
 _PRIMARY_TMP = tempfile.TemporaryDirectory(
     prefix="land-primary-", ignore_cleanup_errors=True
 )
@@ -73,22 +70,14 @@ class Fakes:
     gate: tuple[bool, list[str]] = field(
         default_factory=lambda: (True, ["sonarr: healthy"])
     )
-    # What `tools.snapshot` yields: a directory for a snapshot that was taken, None for one
-    # that could not be (the tree lock busy, the worktree add failed).
     gate_snapshot: Path | None = Path("/snap")
     plane: str = ""
     derived: tuple[list[str], str] = field(default_factory=lambda: (["sonarr"], "pr"))
-    # What `containers_list` declares at the merge commit. None is the read having failed,
-    # which is what every land_lib reader falls back to its own tree on.
+    # None is the read having failed, which every land_lib reader answers by falling back to its own
+    # tree.
     declared_at: set[str] | None = None
-    # `git merge-base --is-ancestor <merge_sha> <recorded apply>`: 0 means the recorded broad
-    # apply included this PR, non-zero means it ran at a commit that did not contain it.
     is_ancestor_rc: int = 0
-    # Per-ref overrides of `is_ancestor_rc`, keyed by the ref the query asks about (the last
-    # argument), for a test that needs one SHA's ancestry to differ from another's.
     is_ancestor_of: dict[str, int] = field(default_factory=dict)
-    # The same query against HEAD: whether the primary checkout already carries the merge
-    # commit, which `health_verdict` asks when a gate snapshot could not be taken.
     merge_applied_rc: int = 1
     # `tools.stale_code`: the landing's own modules that lag master; None is git failing.
     stale_code: list[str] | None = field(default_factory=list)
@@ -101,11 +90,9 @@ class Fakes:
     # `git show <ref>:<path>` text by ref. An absent ref answers as a missing file.
     show_at: dict[str, str] = field(default_factory=dict)
     hostname: str = "daniel-box"
-    # The forward-only pins `tools.pins.pins_at` answers, by SHA: pin key -> value. A SHA absent
-    # here holds neither pin, so a PR whose base and head are both absent bumps nothing.
+    # A SHA absent from `pins` holds neither pin.
     pins: dict[str, dict[str, str]] = field(default_factory=dict)
-    # DEPLOY_HOLD and `last-good`'s commit as the pin gate reads them; an Exception raises.
-    # A list of DEPLOY_HOLD values is read one per call, the last one repeating.
+    # A list of DEPLOY_HOLD values is read one per call, the last repeating.
     deploy_hold: str | None | Exception | list[str | None] = "none"
     last_good: str | None | Exception = LAST_GOOD
     # The first-parent commits in (last-good, tip], oldest first, as `git rev-list` prints them.
@@ -120,27 +107,17 @@ class Fakes:
     pr_files: list[dict[str, Any]] = field(
         default_factory=lambda: [{"status": "modified", "filename": "docs/landing.md"}]
     )
-    # `git ls-tree -r <head>`: path -> mode at the PR head the policy pinned. None answers
-    # every listed path but a removed one as a regular file, so a PR that sets no tree reads
-    # as having no symlink and no path missing from its head.
+    # None answers every listed path but a removed one as a regular file.
     head_tree: dict[str, str] | None = None
     ls_tree_rc: int = 0
     # What the REST `pulls/<n>/reviews` listing answers, as one page.
     pr_reviews: list[dict[str, Any]] = field(default_factory=list)
-    # `tools.tested_base`: the master commit a head's green CI run tested it against, by head.
-    # A head absent here is one whose run log cannot be read, so the merge base stands.
+    # A head absent here has an unreadable run log, so the merge base stands.
     tested_base: dict[str, str] = field(default_factory=dict)
-    # What `gh api compare/<head>...master` answers, one entry per call: the paths master
-    # changed since the PR's merge base. Empty is a PR already up to date with master, and an
-    # exception is raised in place of an answer.
     compare: list[list[str] | Exception] = field(default_factory=lambda: [[]])
     # What `closing_refs`' GraphQL read answers, one entry per call.
     closing_refs: list[dict | Exception] = field(default_factory=lambda: [{}])
-    # What each `tools.try_turn` call answers: True takes the landing turn, False finds another
-    # landing holding it, and an exception is raised in place of an answer.
     turn: list[bool | Exception] = field(default_factory=lambda: [True])
-    # What each `tools.try_slot` call on the landing slots answers: True takes a slot, False
-    # finds the cap held, and an exception is raised in place of an answer.
     slot: list[bool | Exception] = field(default_factory=lambda: [True])
     # The same, for each call on the serial lock.
     serial: list[bool | Exception] = field(default_factory=lambda: [True])
@@ -150,28 +127,18 @@ class Fakes:
     core_quota: tuple[int, int] = (5000, 0)
     # The stderr of a `gh` call that `gh_merge_rc` fails.
     gh_stderr: str = "boom"
-    # What each operation on the line for the turn answers (`tools.line`), one entry a call.
-    # Only `join` and `stand` return theirs. An exception is raised in place of an answer.
+    # Only `join` and `stand` return theirs.
     line: list[str | Exception] = field(default_factory=lambda: [""])
-    # What the PR head's `ci.yml` runs listing answers on every call, as `merge._ready_run_on`
-    # reads it: `{id, status, conclusion}` per run. The default is one draft run that skipped,
-    # and an exception is raised in place of an answer. A callable answers for the head SHA.
     head_runs: Any = field(
         default_factory=lambda: [
             {"id": 1, "status": "completed", "conclusion": "skipped"}
         ]
     )
-    # What the PR head's check-runs and check-suites listings answer on every call, as
-    # `stuck_checks.find` reads them: the entries of each REST listing. An exception is raised
-    # in place of an answer.
     pending_checks: Any = field(default_factory=list)
     completed_suites: Any = field(default_factory=list)
-    # `tools.k8s_tags_at`: every tag of a k8s entry at a ref, by ref. A ref absent here keeps
-    # an entry for every tag the landing derived, so a test retires a tag only by saying so.
-    # An exception is raised in place of a set.
+    # A ref absent here keeps an entry for every derived tag, so a test retires a tag only by saying
+    # so.
     k8s_tags: dict[str, set[str] | Exception] = field(default_factory=dict)
-    # The host wait's answers (`_land_host_fakes.py`): the HostTargets for the merge commit, and
-    # the (verdict, rc, detail) `wait_for_hosts` ends with, None being every target settling.
     host_targets: list[Any] = field(default_factory=list)
     host_wait_outcome: tuple[str, int, str] | None = None
     # What `tools.land_wait` returns, one entry per call.

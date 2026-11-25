@@ -55,8 +55,7 @@ def test_shellcheck_batch_blames_every_file_when_it_cannot_attribute(tmp_path):
 
 
 def test_discover_templates_finds_the_known_set():
-    # Pin the expected set so a template silently going missing (typo'd rename, moved role) is
-    # caught, not just "fewer templates checked" sliding by unnoticed.
+    # Pin the expected set so a template silently going missing is caught.
     names = {p.name for p in v.discover_templates()}
     assert names == {
         "claude-agent-browser.sh.j2",
@@ -95,8 +94,6 @@ def test_discover_templates_finds_the_known_set():
 
 
 def test_bash_syntax_check_catches_unmatched_quote(tmp_path):
-    # The kopia bug class: an apostrophe breaks bash's own quote parsing inside a single-quoted block.
-    # Reproduce the shape here — a stray unmatched single quote — and confirm bash -n rejects it.
     broken = tmp_path / "broken.sh"
     broken.write_text("#!/bin/bash\necho 'it's broken'\n")
     err = sl.bash_syntax_check(broken)
@@ -111,8 +108,7 @@ def test_bash_syntax_check_passes_valid_script(tmp_path):
 
 
 def test_render_template_stubs_undefined_vars(tmp_path):
-    # A var with no BASE_CONTEXT/SHELL_STUB_OVERRIDES/all.yml entry falls back to StubUndefined
-    # ("STUB") rather than aborting the render.
+    # A var with no entry falls back to StubUndefined ("STUB") rather than aborting the render.
     tpl = tmp_path / "sample.sh.j2"
     tpl.write_text("#!/bin/bash\necho {{ some_never_defined_var }}\n")
     rendered = render_shipped_text(tpl, {})
@@ -120,15 +116,13 @@ def test_render_template_stubs_undefined_vars(tmp_path):
 
 
 def test_check_template_catches_a_broken_render(tmp_path):
-    # End-to-end: check_template should surface the unmatched-quote bug via bash -n, the same
-    # class of bug that silently killed the kopia maintenance-check watchdog for a day.
     broken_dir = tmp_path / "roles" / "fixture" / "templates"
     broken_dir.mkdir(parents=True)
     broken = broken_dir / "broken.sh.j2"
     broken.write_text("#!/bin/bash\necho '{{ sys_user }}'s broken'\n")
 
-    # check_template resolves the template's path relative to REPO for reporting, so point
-    # REPO-relative logic at a fixture tree rooted under tmp_path.
+    # check_template resolves the template's path relative to REPO, so point it at a fixture tree
+    # under tmp_path.
     out_dir = tmp_path / "out"
     out_dir.mkdir()
     orig_repo = v.REPO
@@ -172,10 +166,8 @@ def test_run_fails_closed_when_shellcheck_missing():
 
 
 def test_role_defaults_reach_the_render_context():
-    # The gate lints what the host runs only if a role's own defaults are in the context: the
-    # artifacts sync script is almost entirely a `{% for peer in claude_code_artifacts_peer_sources %}`
-    # body, and StubUndefined iterates empty. The template sits in a component, whose
-    # own defaults/main.yml carries the list.
+    # StubUndefined iterates empty, so the gate lints the artifacts sync script (almost all a `{%
+    # for %}` body) only if the component's own defaults are in the context.
     path = v.COMPONENTS / "claude-code" / "templates" / "sync-artifacts.sh.j2"
     ctx = v.template_context(path)
     assert ctx["claude_code_artifacts_peer_sources"], ctx.get(
@@ -185,26 +177,26 @@ def test_role_defaults_reach_the_render_context():
 
 
 def test_a_host_components_templates_are_discovered():
-    # H3.8b moved the Pi heartbeats out of optimize_pi. A component glob that stopped matching
-    # would drop them from the gate with every other template still checked.
+    # A component glob that stopped matching would drop the Pi heartbeats from the gate with every
+    # other template still checked.
     component = v.COMPONENTS / "pi-heartbeats" / "templates" / "pi-sd-health.sh.j2"
     assert component in v.discover_templates()
 
 
 def test_component_defaults_and_host_reach_the_render_context():
-    # A component has no role defaults file: its defaults are component.yml's `defaults:` map,
-    # and its host is the one whose package lists it, as the host renderer reads them.
+    # A component has no role defaults file: its defaults are component.yml's `defaults:` map, and
+    # its host is the one whose package lists it.
     path = v.COMPONENTS / "pi-heartbeats" / "templates" / "pi-recovery-health.sh.j2"
     ctx = v.template_context(path)
     assert ctx["optimize_pi_recovery_restart_enabled"] is True
     # wg-easy runs only on daniel-pi, so its compose_services entry proves the host layer is the
-    # Pi's. It left containers_list in H5.9.
+    # Pi's.
     assert any(c["name"] == "wg-easy" for c in ctx["compose_services"])
 
 
 def test_hostvars_carries_every_hosts_inventory_address():
-    # A `hostvars` stub that replaced render_context's whole map would render `STUB` where
-    # daniel-box's and daniel-pi's addresses go in the etcd drill's fence.
+    # A `hostvars` stub replacing render_context's whole map would render `STUB` where the addresses
+    # go in the etcd drill's fence.
     path = v.COMPONENTS / "hypervisor" / "templates" / "etcd-restore-drill-vm.sh.j2"
     text = render_shipped_text(path, v.template_context(path))
     box, pi = (

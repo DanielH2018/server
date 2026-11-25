@@ -27,8 +27,6 @@ SUSPENDED = WaitResult(
     tags=("bento-pdf",),
 )
 
-# The way a suspended wait goes on to the health step: `wait_on_promotion` returns for a
-# changed host package.
 _REACHES_THE_GATE = [
     pytest.param(Classification(), [HostTarget("daniel-pi", armed=True)], id="host"),
 ]

@@ -73,27 +73,20 @@ import time
 from diagnostics.probe_lib import core
 from lib.cli_help import ArgumentParser
 
-# The cookie Authelia issues for the LAN cookie-domain. Mirrors
-# `authelia_k8s_cookie_name` in k8s/roles/authelia/defaults/main.yml:48 — a rename there
-# must land here too, which test_ui_login.py asserts against the role default.
+# Mirrors `authelia_k8s_cookie_name` in the authelia role defaults; test_ui_login.py asserts they
+# agree.
 COOKIE_NAME = "authelia_session_k8s"
 
-# The two_factor tier's Authelia identity. Mirrors `authelia_k8s_claude_user` in the role
-# defaults, the same way COOKIE_NAME mirrors the cookie name, and test_ui_login.py asserts
-# the pair still agree.
+# Mirrors `authelia_k8s_claude_user` in the role defaults; test_ui_login.py asserts they agree.
 CLAUDE_USER = "claude-ui"
 
-# The TOTP parameters the seeding task states explicitly when it registers CLAUDE_USER.
-# Restating them here rather than relying on either side's defaults is deliberate: a default
-# that moved in a later Authelia would desynchronise the two with nothing to show for it but
-# a login Authelia rejects.
+# Stated explicitly, not left to defaults: a default that moved would desynchronise the two and
+# Authelia would reject the login.
 TOTP_ALGORITHM = hashlib.sha1
 TOTP_DIGITS = 6
 TOTP_PERIOD = 30
 
 
-# Where the agent user's login lives. The claude_code role renders it as
-# `claude_code_homelab_ui_credentials`, and `test_ui_login.py` asserts the paths agree.
 AGENT_CREDENTIALS_PATH = os.path.expanduser("~/.config/homelab-ui/credentials.json")
 
 
@@ -154,35 +147,26 @@ def derive_totp(
     key = base64.b32decode(padded)
     counter = struct.pack(">Q", int(now) // period)
     digest = hmac.new(key, counter, algorithm).digest()
-    # Dynamic truncation: the low nibble of the last byte picks the 4-byte window, whose top
-    # bit is masked off so the result never reads as negative.
     offset = digest[-1] & 0x0F
     value = struct.unpack(">I", digest[offset : offset + 4])[0] & 0x7FFFFFFF
     return str(value % (10**digits)).zfill(digits)
 
 
-# Authelia's own view of the caller's session. Cheaper than a service route and it needs no
-# service to be up, so `--check` stays a question about the cookie rather than about whatever
-# happened to be picked as a target.
+# Authelia's own view of the session: needs no service up, so `--check` asks about the cookie alone.
 STATE_ENDPOINT_PATH = "/api/state"
 
 SECOND_FACTOR_PATH = "/api/secondfactor/totp"
 
-# Deliberately NOT $CLAUDE_JOB_DIR/tmp: that is per-job and vanishes with the job, which
-# would re-mint a session on every new one. ~/.claude survives across sessions and hosts
-# the same kind of local operator state.
+# Not $CLAUDE_JOB_DIR/tmp: that is per-job and would re-mint a session on every new one.
 STATE_DIR = os.path.expanduser("~/.claude/playwright")
 STATE_PATH = os.path.join(STATE_DIR, "authelia-state.json")
 
-# The two_factor session lives in its OWN file and never upgrades the one above.
-# `ui_mcp.sh` loads a jar unconditionally, so promoting the default would make every
-# ordinary page load carry admin-capable auth — code-server is a shell as the repo user and
-# longhorn deletes volumes and their B2 backup chain. Reaching those is opt-in per launch.
+# The two_factor session has its own file and never upgrades the default: `ui_mcp.sh` loads a jar
+# unconditionally, so promoting it would give every page load admin-capable auth.
 TWO_FACTOR_STATE_PATH = os.path.join(STATE_DIR, "authelia-state-2fa.json")
 
-# A first-factor session asks for remember_me (1M), so it is worth saving. A two_factor one
-# deliberately does not: `expiration: '1h'` and `inactivity: '5m'` are what keep an
-# admin-capable cookie from lying around, and re-minting costs one typed code.
+# A two_factor session is deliberately not remembered: `expiration: '1h'` and `inactivity: '5m'`
+# keep an admin-capable cookie from lingering.
 FIRST_FACTOR_LIFETIME = 29 * 24 * 3600
 TWO_FACTOR_LIFETIME = 3600
 
@@ -279,11 +263,9 @@ def post_json(host, path, body, cookie=None):
         ]
         stdin_text = body
         if cookie is not None:
-            # curl reads its config from stdin too, so the body moves to a file to keep
-            # both off argv.
+            # curl reads its config from stdin too, so the body moves to a file to keep both off
+            # argv.
             body_path = os.path.join(tmp, "post")
-            # 0600 rather than the umask default: the TemporaryDirectory is already 0700,
-            # so this is belt-and-braces on a file that holds a live TOTP code.
             fd = os.open(body_path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
             with os.fdopen(fd, "w") as f:
                 f.write(body)
@@ -344,13 +326,11 @@ def mint(two_factor=False, totp_code=None):
                 cookie=cookie,
             )
         )
-        # Authelia may raise the level on the existing session rather than reissue the
-        # cookie, so no new Set-Cookie is normal and the first-factor value carries on.
-        # Whether the upgrade actually took is settled by --check, not by this response.
+        # Authelia may raise the level on the existing session without a new Set-Cookie; --check
+        # settles whether the upgrade took.
         cookie = upgraded or cookie
 
-    # Expire a little early so a stale jar surfaces as a re-mint rather than as a puzzling
-    # mid-session redirect to the login portal.
+    # Expire a little early so a stale jar surfaces as a re-mint, not a mid-session redirect.
     lifetime = TWO_FACTOR_LIFETIME if two_factor else FIRST_FACTOR_LIFETIME
     state = build_storage_state(cookie, domain, int(time.time()) + lifetime)
 
@@ -375,8 +355,6 @@ def local_state_problem(state, now):
     expires = cookies[0].get("expires", 0)
     remaining = expires - now
     if remaining <= 0:
-        # Minutes, not days: a two_factor session lives an hour, so "expired 0d ago" would
-        # be the usual reading and would tell nobody anything.
         return f"expired {int(-remaining / 60)}m ago"
     return None
 

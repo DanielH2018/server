@@ -23,9 +23,6 @@ def test_load_roles_derives_ownership_from_the_role_trees():
     # Both are CronJob-only k8s roles; the classification is derived from the k8s manifests.
     assert "configarr" in roles.batch_roles
     assert "pi-peer-backup" in roles.batch_roles
-    # Roles whose templates hold no long-running workload at all: a route onto a
-    # chart-owned Deployment, a PVC, NetworkPolicies. None may read "Missing · no deployment
-    # found".
     for role in ("longhorn-ui", "media-volume", "netpol-baseline"):
         assert role in roles.batch_roles, role
     # And a DaemonSet-only role is a real workload the collector must find.

@@ -18,8 +18,6 @@ _RUNBOOK = _REPO / "docs" / "k3s-etcd-restore.md"
 NOW = 1_800_000_000.0
 DAY = 86400.0
 
-# The off-box cron's naming: `offbox-<node>-<unix-timestamp>.zip`, compressed, and the
-# `.zip` is part of the name `--cluster-reset-restore-path` takes.
 SNAPSHOT = "offbox-daniel-box-1789958702.zip"
 
 
@@ -52,8 +50,8 @@ def _snapshot_file(name: str, ready=True, location: str = "", error: str = "") -
     if error:
         status["error"] = {"message": error}
     return {
-        # k3s names the CR after the node and a hash, never after the snapshot; the name the
-        # restore flag takes is `spec.snapshotName`, which is why the gate matches on it.
+        # k3s names the CR after the node and a hash, not the snapshot; the restore flag takes
+        # `spec.snapshotName`, so the gate matches on it.
         "metadata": {"name": f"s3-{name}-9f2c1a"},
         "spec": {
             "snapshotName": name,
@@ -97,8 +95,6 @@ def test_a_stale_stamp_is_flagged_with_its_age_and_snapshot(drill_dir):
 
 
 def test_a_full_mode_stamp_does_not_prove_the_listing(drill_dir):
-    # The list-only leg and the full drill write different files; a stamp claiming the
-    # wrong mode is a future format, not a pass.
     (drill_dir / gates.DRILL_STAMP).write_text(_stamp(NOW, mode="full"))
     assert gates.unproven_listing(drill_dir, now=NOW) == [
         f"{drill_dir / gates.DRILL_STAMP} records mode=full, not list-only"
@@ -149,8 +145,6 @@ def test_a_plain_snapshot_name_is_clean():
 
 
 def test_a_path_is_refused_without_asking_the_cluster():
-    # `--cluster-reset-restore-path` takes a NAME; a path there resolves to no snapshot, and
-    # k3s only says so once it has been stopped. No document is passed: this half asks nothing.
     found = gates.unusable_snapshot_name(
         f"/var/lib/rancher/k3s/server/db/snapshots/{SNAPSHOT}"
     )
@@ -164,8 +158,6 @@ def test_a_ready_snapshot_the_cluster_records_is_clean():
 
 
 def test_an_unknown_name_is_flagged_and_lists_what_the_cluster_records():
-    # The two ways to get here need different fixes — a typo, or a bucket k3s has not
-    # reconciled into CRs — so the offender names the snapshots that DO have a record.
     doc = {"items": [_snapshot_file("etcd-daniel-box-1789958700.zip")]}
     found = gates.snapshot_not_restorable(SNAPSHOT, doc)
     assert len(found) == 1
@@ -220,8 +212,8 @@ def test_a_snapshot_the_cluster_cannot_restore_is_gate_three(drill_dir, homelab_
 
 
 def test_a_forbidden_snapshot_read_is_not_a_verdict(drill_dir, homelab_dir, tools):
-    # Until `k3s.cattle.io` is in k3s_readonly_crd_api_groups the read is Forbidden. That is
-    # "could not look", so it must exit 69 rather than pass gate 3 or fail it as gate 3.
+    # Until `k3s.cattle.io` is in k3s_readonly_crd_api_groups the read is Forbidden: "could not
+    # look", so exit 69.
     code, out = _run(
         drill_dir, homelab_dir, failing_read(tools, "etcdsnapshotfiles.k3s.cattle.io")
     )
@@ -303,8 +295,6 @@ def test_the_gate_flag_reaches_run_gates_and_a_bad_one_is_usage():
 
 
 def test_the_snapshot_name_is_required():
-    # `cli(takes=1)`: no name, a flag, and a second positional are each usage — none of them
-    # runs a gate, so neither the stamps nor the cluster are read.
     assert gates.main([]) == gates.gate_runner.EX_USAGE
     assert gates.main(["--bogus"]) == gates.gate_runner.EX_USAGE
     assert gates.main([SNAPSHOT, "extra"]) == gates.gate_runner.EX_USAGE
@@ -360,8 +350,8 @@ def test_the_runbook_calls_the_script_and_it_runs():
     proc = run(
         ["uv", "run", "python", str(_REPO / script), "etcd-restore", "--bogus"],
         cwd=_REPO,
-        # A nested `uv run` resolves the dev group before the child starts, which a cold
-        # cache makes minutes rather than seconds — longer than `DEFAULT_TIMEOUT` allows.
+        # A nested `uv run` resolves the dev group first, which a cold cache makes minutes, longer
+        # than `DEFAULT_TIMEOUT`.
         timeout=300,
     )
     assert proc.returncode == 64, proc.stderr

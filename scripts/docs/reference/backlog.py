@@ -91,10 +91,7 @@ def _open_table(rows: list[dict]) -> list[str]:
         if r["no_vetted_remediation"]:
             flags.append("*no vetted remediation*")
         title = md_cell(r["title"]) + (" — " + ", ".join(flags) if flags else "")
-        # Through `md_cell` like the title above it: a claim is a branch name, and a branch
-        # name may carry a `|`, which silently adds a column and renders the table wrong.
-        # The author check in `issue_model.claim_of` is what keeps the VALUE trustworthy;
-        # this keeps the row's shape intact whatever the value is.
+        # Through `md_cell`: a branch name may carry `|`, which would silently add a column.
         claimed = md_cell(r.get("claimed") or "-")
         verify_by = "✓" if r.get("verify_by") else "-"
         parts.append(
@@ -170,8 +167,6 @@ def _settled_section(rows: list[dict]) -> list[str]:
     by_domain: dict[str, list[dict]] = {}
     for r in rows:
         by_domain.setdefault(r["domain"] or "unlabelled", []).append(r)
-    # DOMAINS order first so a reader finds a domain where the reviewer list has it, then
-    # anything labelled outside that tuple, then the unlabelled rows last.
     order = [d for d in DOMAINS if d in by_domain]
     order += sorted(d for d in by_domain if d not in DOMAINS and d != "unlabelled")
     if "unlabelled" in by_domain:
@@ -215,15 +210,13 @@ def _unruled_section(rows: list[dict]) -> list[str]:
 
 
 def main(argv: list[str] | None = None) -> int:
-    # The FIRST NON-BLANK line, not `[1]`. Line 1 of a module docstring is the blank line
-    # after the summary, so `[1]` passed argparse an empty description and `--help` printed
-    # none at all. `findings.py`'s `main` carries the same spelling.
+    # FIRST NON-BLANK line, not `[1]`: line 1 of the docstring is blank, so `[1]` gave argparse an
+    # empty description.
     summary = next(line for line in __doc__.splitlines() if line.strip())
     parser = ArgumentParser(description=summary)
     parser.add_argument("--out", type=Path, required=True, help="output file path")
     args = parser.parse_args(argv)
-    # Not `open` alone: the settled table below the backlog reads closed rows too. The
-    # fetch that gets both without reading the whole register is `load_backlog_issues`.
+    # Not `open` alone: the settled table also reads closed rows.
     rows = issue_rows(load_backlog_issues())
     return finish_generator(
         "docs.reference.backlog", args.out, rows, render_markdown, "finding"

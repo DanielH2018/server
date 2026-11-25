@@ -27,25 +27,13 @@ Angular: nothing renders while the pod reads 1/1 with zero errors in the log.
 import re
 from dataclasses import dataclass
 
-# Grafana is asked for `/d/<uid>/` and the client rewrites the URL to `/d/<uid>/<slug>` once
-# it has the dashboard. A page still showing the bare form never got it, however much of
-# Grafana's own chrome rendered around the hole — and the chrome alone is 27 to 53 testids,
-# which is why a testid count cannot carry this on its own. Above a mid-load skeleton, well
-# below Grafana's chrome. A page caught part-way through loading carries 3 testids and can
-# already have rewritten its URL, so the slug test alone lets it through; Grafana's
-# navigation and menus alone are 27 to 53.
+# A bare `/d/<uid>/` URL means the dashboard never loaded; testid count alone cannot tell, as chrome
+# alone is 27 to 53.
 _MOUNTED_MIN_TESTIDS = 10
 _BARE_DASHBOARD_URL = re.compile(r"^/d/[^/]+/?$")
 
-# An empty panel is not a broken one. A 6h window can legitimately be quiet, so failing on
-# this would make the tier flaky — and it is what a panel shows right after a Grafana
-# restart, when the counters behind it start from nothing.
-#
-# The cost of that choice, stated rather than buried: a panel whose metric DIED reads "No
-# data" too, and this tier will not catch it. That is the gap the observability role's
-# CLAUDE.md already names — `kopia_b2_billable_bytes` went away with Kopia and three panels
-# returned nothing for two weeks behind a healthy pod. Catching it needs a per-panel
-# expectation of what the metric should return, which is a different check from this one.
+# An empty panel is not a broken one: failing on 'No data' would be flaky.
+# A panel whose metric died reads the same and is not caught here.
 _BENIGN_PANEL_MESSAGES = {"no data"}
 
 
@@ -120,11 +108,8 @@ def classify(state: dict, min_headers: int = 1) -> Verdict:
             "longer implements is still provisioned",
         )
 
-    # The MESSAGE decides, not the count. Grafana marks an empty panel with the same
-    # `Panel status error` testid it uses for a real failure, so the count alone flags every
-    # dashboard whose window happens to be quiet — 10 of `claude-code-otel`'s panels read
-    # that way minutes after a Grafana restart. Distinct texts only: one broken query
-    # repeated across ten panels should print one line, not ten.
+    # The message decides, not the count: Grafana marks an empty panel with the same testid as a
+    # real failure.
     texts = list(dict.fromkeys(state.get("errorTexts") or []))
     real = [t for t in texts if t.strip().casefold() not in _BENIGN_PANEL_MESSAGES]
     if real:
@@ -134,9 +119,8 @@ def classify(state: dict, min_headers: int = 1) -> Verdict:
             f"state: " + "; ".join(real),
         )
 
-    # Every failure below is about what the page drew, so it has to say WHICH page: a
-    # session that lapsed lands back on Grafana's login form, which mounts perfectly well
-    # and draws no panels — indistinguishable from a broken dashboard without the url.
+    # Name the page: a lapsed session lands on Grafana's login form, which mounts and draws no
+    # panels.
     where = f"(url {state.get('path')!r}, {state.get('testids')} testids)"
 
     headers = state.get("headers", 0)

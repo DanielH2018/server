@@ -34,13 +34,8 @@ __all__ = [
     "strict_schema",
 ]
 
-# Schema version the rendered manifests are validated against. Must track the cluster: a
-# manifest is judged by the API server it will actually be applied to, and validating a 1.37
-# field against 1.36 schemas reports a perfectly good manifest as invalid (and vice versa —
-# a removed field passes). test_vendored_core_schemas_match_the_cluster in
-# scripts/validate/tests/test_k8s_schema.py ties this, and the exact tag the vendored files came
-# from, to k3s_version in hosts/components/k3s-server/defaults/main.yml, so a cluster upgrade cannot leave
-# it behind silently.
+# Must track the cluster: validating a 1.37 field against 1.36 schemas reports a good manifest as
+# invalid, and a removed field passes. A test ties this and the vendored tag to k3s_version.
 K8S_SCHEMA_VERSION = "1.37"
 
 _OCTAL_LITERAL = re.compile(r"^0o[0-7]+$")

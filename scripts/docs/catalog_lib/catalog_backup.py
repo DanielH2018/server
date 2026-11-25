@@ -30,25 +30,11 @@ __all__ = [
 ]
 
 
-# Backup tier (k8s / Longhorn only — Pi's Docker volumes are not Longhorn-backed)
-#
-# A k8s role declares a PVC in one of two shapes, and each names the claim AND its
-# StorageClass — the class is what decides whether Longhorn backs the volume up at all
-# (`longhorn` asks for backups, `longhorn-nobackup` does not; see `desired_labels` in
-# k8s/roles/longhorn-reconcile/files/longhorn_reconcile.py):
-#
-#   1. an inline `kind: PersistentVolumeClaim` block carrying its own `storageClassName:` line
-#      (the shape stays read so a new one is classified);
-#   2. a `k8s_claims` entry in the role's defaults/main.yml, `{name, size, storage_class}`,
-#      which the renderer renders from the shared claim-default.yaml.j2 (every other claim).
-#
-# A `claimName:` reference in a pod spec is the third pattern. It declares nothing — it names
-# a claim one of the two shapes above declares, in this role or another (`media-data` is
-# media-volume's, mounted by seven consumers), which is why `claim_index` is built across
-# every role before any one role is classified.
+# A k8s role declares a PVC inline or as a `k8s_claims` entry; a `claimName:` reference declares
+# nothing, so `claim_index` is built across every role first.
 
-# Shape 1. The body runs to the next document or object so `storageClassName:` is read from
-# THIS claim, not a PersistentVolume that follows it in the same template.
+# Shape 1: the body runs to the next document or object, so `storageClassName:` is read from THIS
+# claim.
 _PVC_BLOCK_RE = re.compile(
     r"kind:\s*PersistentVolumeClaim.*?metadata:\s*\n\s*name:\s*(?P<name>\{\{.*?\}\}|\S+)"
     r"(?P<body>.*?)(?=\n---|\nkind:|\Z)",
@@ -60,11 +46,8 @@ _MACRO_ARG = r"'[^']*'|\"[^\"]*\"|[A-Za-z_][A-Za-z0-9_]*"
 # The third pattern — a reference, not a declaration.
 _CLAIM_NAME_RE = re.compile(r"claimName:\s*(\{\{.*?\}\}|\S+)")
 _SIMPLE_VAR_RE = re.compile(r"^\{\{\s*([A-Za-z_][A-Za-z0-9_]*)\s*\}\}$")
-# The fourth: a `claimName:` inside a SHARED macro the role's template calls, naming a macro
-# parameter the call site binds (`arr-deployment.yml.j2`, radarr's and sonarr's whole
-# Deployment). The claim is still the role's — it is mounted by its pod — but no line of the
-# role's own templates names it, so a scan that stops at `templates/` drops it silently. radarr
-# and sonarr lost `media-data` from their At-a-glance blocks exactly that way.
+# A `claimName:` inside a SHARED macro names a parameter the call site binds; no line of the role's
+# templates names it, so a scan stopping at `templates/` drops it.
 _SHARED_IMPORT_RE = re.compile(
     r"\{%-?\s*from\s*'(?P<file>[^']+)'\s*import\s+(?P<names>[^%]*?)\s*(?:with context\s*)?-?%\}"
 )
@@ -453,8 +436,7 @@ def backup_tier(
     ]
     if not tiers_out:
         return "no PVC (stateless)"
-    # Multiple PVCs on one role (e.g. pihole) can land in different tiers; report all,
-    # de-duplicated, rather than picking one and hiding the rest.
+    # Report all tiers de-duplicated rather than pick one and hide the rest.
     seen: list[str] = []
     for tier in tiers_out:
         if tier not in seen:

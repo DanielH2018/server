@@ -17,10 +17,6 @@ PROMETHEUS_TEMPLATE_TEXT = pi_plane.PROMETHEUS_TEMPLATE_PATH.read_text()
 
 
 def test_declared_pi_job_names_finds_exactly_the_known_four():
-    # node-pi and alloy-pi, plus dockerd-pi and containerd-pi (the two daemons' own Go
-    # runtime metrics, to size their GOMEMLIMITs) — glances has no Prometheus job anywhere,
-    # so forcing a bigger set here would fabricate one. A named frozenset, not a bare
-    # count, so a future rename shows up as a specific missing/extra name.
     assert pi_plane.declared_pi_job_names(PROMETHEUS_TEMPLATE_TEXT) == {
         "node-pi",
         "alloy-pi",
@@ -69,8 +65,6 @@ def test_format_pi_targets_flags_a_down_job():
 
 
 def test_format_pi_targets_flags_a_declared_job_gone_missing():
-    # The N/N-up mistake, avoided: a job that vanished from the scrape config
-    # entirely must not read as "1/1 up" just because the survivor is healthy.
     declared = {"node-pi", "alloy-pi"}
     active = [_target("node-pi")]
     text, code = pi_plane.format_pi_targets(declared, active)
@@ -79,8 +73,6 @@ def test_format_pi_targets_flags_a_declared_job_gone_missing():
 
 
 def test_from_the_landing_host_the_pi_is_one_ssh_call():
-    # Everything after the host is ONE remote command string — ssh spawns exactly once
-    # regardless of how many docker subcommands that string chains together.
     assert pi_plane.pi_containers_argv("daniel-box.lan") == [
         "ssh",
         "daniel-pi",
@@ -89,8 +81,7 @@ def test_from_the_landing_host_the_pi_is_one_ssh_call():
 
 
 def test_from_another_host_the_pi_is_reached_through_the_landing_host():
-    # daniel-pi accepts no key from daniel-server. The Pi's own shell must still be
-    # the one that expands the substitution, so daniel-box's shell gets it quoted.
+    # The Pi's own shell must expand the substitution, so daniel-box's shell gets it quoted.
     assert pi_plane.pi_containers_argv("daniel-server") == [
         "ssh",
         "daniel-box",
@@ -120,8 +111,6 @@ def test_format_pi_containers_all_clean():
 
 
 def test_format_pi_containers_flags_a_detached_running_container():
-    # The reboot-detach failure this repo has hit before: `Up (healthy)` with NO network at
-    # all — MEMORY: containers-lose-network-across-pi-reboot.md.
     containers = [_container("alloy", networks=())]
     text, code = pi_plane.format_pi_containers(containers)
     assert code == 1
@@ -136,9 +125,8 @@ def test_format_pi_containers_flags_an_unhealthy_container():
 
 
 def test_format_pi_containers_does_not_flag_a_merely_stopped_container():
-    # A stopped-but-not-detached container is not this check's job: this host runs short-
-    # lived helpers (docker-proxy-lifecycle) and gating the exit code on ANY non-running
-    # container would read red on a normal day and get ignored.
+    # A stopped-but-not-detached container is not this check's job: gating on any non-running
+    # container would read red on a normal day.
     containers = [_container("old-helper", status="exited", networks=())]
     text, code = pi_plane.format_pi_containers(containers)
     assert code == 0

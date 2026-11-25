@@ -33,14 +33,9 @@ from lib.jinja_comments import strip_jinja_comments
 from lib.k8s_roles import manifest_template
 from lib.repo_paths import ALL_VARS as GROUP_VARS
 
-# `public=false` in a role's own macro call opts the service out of the public Host rule
-# whatever k8s_public_route says. See k8s/templates/ingressroute.yml.j2. Matched against
-# comment-stripped text: three roles explain the argument in a `{# #}` above the call that
-# passes it, and `k8s/roles/docs/` explained one it does NOT pass.
+# Matched against comment-stripped text: comments may explain the argument without passing it.
 _PUBLIC_FALSE_RE = re.compile(r"public\s*=\s*false")
-# Only the `ingressroute()` macro renders the public Host rule. A role whose templates call
-# `monitoring_route()` alone (ical-proxy, loki-homelab) is LAN-only by construction, and a
-# comment saying "not ingressroute()" must not read as a call — hence the `{{` anchor.
+# Anchored on `{{`: a comment saying 'not ingressroute()' must not read as a call.
 _INGRESSROUTE_CALL_RE = re.compile(r"\{\{-?\s*ingressroute\(")
 
 LAN = "lan"
@@ -115,8 +110,6 @@ def route_cell(label: str, reach: str) -> str:
     return f"{label}.local.<domain> (LAN only)"
 
 
-# "sonarr.local.<domain>" -> host "sonarr.local". The literal ".<domain>" suffix is the
-# marker; nothing else in these pages ends that way, so this cannot match prose by accident.
 _FQDN_RE = re.compile(r"([A-Za-z0-9][A-Za-z0-9.-]*)\.<domain>")
 
 

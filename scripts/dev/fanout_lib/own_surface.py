@@ -6,9 +6,6 @@ the server lander, and a daniel-server review pipeline asks it before it lands i
 its only change is to `testpaths`, which reads the PR's diff from GitHub.
 """
 
-# Reach the sibling package: a directly-invoked script gets only its own directory on
-# sys.path, and pyproject's `pythonpath` is a pytest setting.
-
 import copy
 import functools
 import re
@@ -34,11 +31,9 @@ HEADING = re.compile(r"^\s{0,3}#{1,6}\s+(.*)")
 UNCHECKED = re.compile(r"^\s*[-*]\s*\[ \]")
 # The `gh pr view --json` fields `pr_problems` reads.
 PR_FIELDS = "headRefName,headRefOid,baseRefName,body,author,files,isCrossRepository"
-# Paths whose change widens what this command or the lander may do, or that the landing path
-# imports. A PR touching one is left for a person, the way `homelab-claude-land@`'s approval
-# list leaves it. `scripts/deploy_tools/` is the whole tree because land.sh imports await_ci.py and the rest
-# of it, not only land*. `secrets/` holds the
-# secrets and the generated cluster file, and `.claude/` holds the repo's hooks and settings.
+# Paths whose change widens what the lander may do, or that the landing path imports; a PR touching
+# one is left for a person. `scripts/deploy_tools/` is the whole tree because land.sh imports all of
+# it.
 OWN_PATHS = (
     "scripts/deploy_tools/",
     "scripts/lib/",
@@ -52,10 +47,9 @@ OWN_PATHS = (
     "uv.toml",
     ".python-version",
 )
-# One narrowing of OWN_PATHS, and no others: skills, hooks and workflows steer what
-# agents do or run as CI, so a self-landed change to one could loosen a guardrail with no
-# person in the loop. `pyproject.toml` stays held unless its only change is to
-# `[tool.pytest.ini_options].testpaths` (`testpaths_only`).
+# One narrowing of OWN_PATHS: `pyproject.toml` stays held unless its only change is
+# `[tool.pytest.ini_options].testpaths`. Skills, hooks and workflows steer agents, so a self-landed
+# change could loosen a guardrail.
 PYPROJECT = "pyproject.toml"
 
 

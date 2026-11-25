@@ -75,7 +75,6 @@ LISTED = (
     # The first set.
     "tests/repo",
     "scripts/docs/tests",
-    # The census and structure tests behind 15 failed runs in the week to 2026-11-06.
     "scripts/lib/tests/test_entry_points_answer_help.py",
     "scripts/lib/tests/test_script_classify_package_imports.py",
     "scripts/validate/tests/test_render_shell.py",
@@ -140,8 +139,6 @@ def _branch_adds(repo: Path) -> str | None:
     return added_advice(repo, NOTICE_REF)
 
 
-# What a branch gets told before its PR opens: the sections that cite code it changed, the
-# names it removed that a doc or a comment still uses, and what it adds to the tree.
 ADVICE: tuple[tuple[str, Source], ...] = (
     ("facts notice", _reread),
     ("removed names", _removed_names),

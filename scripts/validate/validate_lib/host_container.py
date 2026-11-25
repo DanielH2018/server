@@ -113,9 +113,8 @@ class Container:
             check=True,
             stdout=subprocess.DEVNULL,
         )
-        # A docker exec that lands before PID 1 has its private socket up gets no answer at
-        # all, and one before PID 1 creates /run/systemd/system gets `offline`, so the wait
-        # itself is retried until systemd answers.
+        # A docker exec before PID 1 has its private socket up gets no answer, and one before
+        # /run/systemd/system exists gets `offline`, so the wait is retried until systemd answers.
         deadline = time.monotonic() + 180
         while True:
             result = self.sh("timeout 120 systemctl is-system-running --wait")
@@ -281,8 +280,8 @@ def expect_declared_uids(c: Container) -> None:
 
 
 TOOLS_BIN = "/usr/lib/homelab/bin"
-# Whether each homelab-tools binary is on PATH. homelab-tools keeps every one off it, and the
-# host packages' sops component puts sops back as an exec of the packaged binary.
+# homelab-tools keeps every binary off PATH, and the host packages' sops component puts sops back as
+# an exec of the packaged binary.
 TOOLS_ON_PATH = {"sops": True, "chezmoi": False, "nfpm": False}
 
 

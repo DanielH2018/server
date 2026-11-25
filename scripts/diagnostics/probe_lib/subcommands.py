@@ -48,9 +48,6 @@ from diagnostics.probe_lib.usage import run_usage
 from diagnostics.probe_lib.vip_placement import run_vip_placement
 from lib.cli_registry import Registry
 
-# name, one-line description (matches the subparser's `help=`), backing `probe_lib` module
-# (None for a subcommand that only ever streams a curl pipeline through `plan()`), backing
-# `run_*` callable (None likewise).
 SUBCOMMANDS = [
     ("metric", "Prometheus instant query", "metrics", run_query),
     (
@@ -219,16 +216,12 @@ SUBCOMMANDS = [
     ),
 ]
 
-# The subcommands with a callable that `main()` routes by hand instead of through `handlers`,
-# because the callable answers only some invocations: `health` takes the container rather than
-# the namespace and prints its own `--dry-run`; `targets` without `--pi` and `metric`/
-# `loki-query` call their callable only without `--json`/`--dry-run`. Every other
-# invocation of them streams through `plan()`.
+# Routed by hand because the callable answers only some invocations; the rest stream through
+# `plan()`.
 ROUTED_IN_MAIN = frozenset({"health", "targets", "metric", "loki-query"})
 
-# The subcommands that judge something, flagged "verdict": `main()` ends their output with one
-# `PROBE-VERDICT:` line derived from the exit code. `ha` judges only through
-# `VERDICT_HA_SUBCOMMANDS`, which `probe.verdict_path` applies.
+# Flagged 'verdict': `main()` ends their output with one `PROBE-VERDICT:` line; `ha` judges only via
+# `VERDICT_HA_SUBCOMMANDS`.
 VERDICT_SUBCOMMANDS = frozenset(
     {
         "targets",

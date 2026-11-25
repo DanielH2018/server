@@ -42,8 +42,6 @@ from diagnostics.probe_lib.obs_api import prom_query_url
 from lib.k8s_conditions import ConditionStatus, parse_conditions
 
 
-# C7 *Health gate*: `shadow!="true"`, `alertname!="Watchdog"`, and `severity="critical"` or
-# `verify="true"` (the soak's set, C7 *Verify successors* shape 1).
 def note_selector(tag):
     """Every firing alert of `tag` the gate may name, gated or only noted."""
     return (
@@ -58,9 +56,8 @@ def gated_selectors(tag):
     return (base + ',severity="critical"}', base + ',verify="true"}')
 
 
-# Rules evaluate every minute (prometheus.yaml.j2 sets no evaluation_interval). An alert that
-# was already firing when Prometheus started reads an activation within one evaluation of the
-# start: the Watchdog, which fires throughout, reads one 6.4s after it.
+# Rules evaluate every minute; an alert already firing at Prometheus start reads an activation
+# within one evaluation.
 RESTART_SLACK_S = 120
 
 # One 1m scrape interval plus slack, the plan's bound on waiting for a fresh probe sample.
@@ -68,23 +65,20 @@ PROBE_WAIT_S = 90
 POLL_S = 10
 REREAD_WAIT_S = 60
 
-# The flux reference reads back this far. Prometheus retains about a week, so a revision first
-# reported before the window reads as first reported at its start. That moves the reference
-# later, which gates more alerts, never fewer.
+# Prometheus retains about a week, so an older revision reads as first reported at the window start,
+# which gates more alerts, never fewer.
 FLUX_LOOKBACK = "7d"
 
 
-# The query door's Traefik `rate-limit` is 300/min per client, and every gate on a host shares
-# one client address, so concurrent landings drain it together.
+# The query door's Traefik `rate-limit` is 300/min per client, shared by every gate on a host.
 RATE_LIMITED = 429
 RETRY_DELAYS_S = (2, 4, 8, 16)
-# `detach_notify.PROBE_TIMEOUT_S`, restated: probe_lib may not import deploy_tools. Its expiry
-# grades a tag unhealthy rather than unread, so every wait in a probe process ends before it.
+# Restates `detach_notify.PROBE_TIMEOUT_S` (probe_lib may not import deploy_tools): its expiry
+# grades a tag unhealthy, so every wait ends before it.
 PROBE_TIMEOUT_S = 300
 # Room after the last wait for the reads that follow it and the process exit.
 READ_MARGIN_S = 15
-# A 429 retry may sleep only while every wait that can still follow one (the rest of a probe
-# poll, the re-read, a second poll) fits after it.
+# A 429 retry sleeps only while every wait that can still follow it fits after it.
 RETRY_CUTOFF_S = (
     PROBE_TIMEOUT_S - (PROBE_WAIT_S + REREAD_WAIT_S + PROBE_WAIT_S) - READ_MARGIN_S
 )
@@ -216,9 +210,6 @@ def _when(ts):
     return time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(ts))
 
 
-# The C6 label carrying the digest of a tag's own rendered directory, `cluster/<tag>/`. The
-# renderer stamps it on Kustomization `<tag>` (bundle.py:CONTENT_DIGEST), so a master commit
-# that leaves the tag unchanged keeps it while `revision` moves.
 CONTENT_LABEL = "content_digest"
 
 

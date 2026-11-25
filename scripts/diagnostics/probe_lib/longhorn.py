@@ -33,8 +33,6 @@ from diagnostics.probe_lib.longhorn_budget import (
     parse_backup_budget,
 )
 from diagnostics.probe_lib.longhorn_cluster import (
-    # Re-exported only: b2_ledger reaches it as `longhorn.backup_target_url()`
-    # (b2_ledger.py:474), and nothing in this module calls it.
     backup_target_url,  # noqa: F401
     pvc_names,
     # Re-exported only: b2_ledger reaches it as `longhorn.volume_backup_targets()`, and nothing
@@ -74,11 +72,8 @@ def run_b2_budget(ns):
         note=f"{stats.get('pages', 0)} pages",
     )
     vols = parse_backup_budget(lines)
-    # Persist the per-volume prune price for `b2-deletions`, which prices a deletion that has
-    # ALREADY happened and so can no longer measure the tree it walked. This listing is the only
-    # thing in the repo that computes those directory counts, and it costs 2-3 Class C to make —
-    # so writing them down here is what turns an unrepeatable measurement into one an after-the-
-    # fact accounting pass can use.
+    # Persist the per-volume prune price: `b2-deletions` prices deletions after the fact and cannot
+    # re-measure the tree, and this listing costs 2-3 Class C.
     ledger.write_prune_snapshot(vols)
     cluster = getattr(ns, "cluster", DEFAULT_CLUSTER)
     text, code = format_backup_budget(
@@ -100,8 +95,7 @@ def run_b2_longhorn(ns):
     Costs a handful of transactions (one listing, paged at 1000 objects) — negligible
     against the daily free allowance, but not free: don't put it in a loop.
     """
-    # Ahead of the credential read: --dry-run describes the call without making it or
-    # decrypting anything.
+    # Before the credential read: --dry-run describes the call without decrypting anything.
     if ns.dry_run:
         bucket = ns.bucket or core.longhorn_b2_bucket()
         print(

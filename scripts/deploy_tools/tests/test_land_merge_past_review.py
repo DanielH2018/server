@@ -29,10 +29,7 @@ def _wait(states: list[str]):
     ]
 
 
-# Every decision takes the direct merge. Armed for auto-merge, an approved agent PR once sat
-# BLOCKED until a hand merge. An empty decision, which is every PR since the master
-# review gate was retired on 2026-10-11, takes the same path rather than the auto-merge it once
-# did. REVIEW_REQUIRED stays covered for a review rule added back.
+# Every decision takes the direct merge: an armed auto-merge once left an approved agent PR BLOCKED.
 EVERY_DECISION = pytest.mark.parametrize("review", ["", "REVIEW_REQUIRED", "APPROVED"])
 
 

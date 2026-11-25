@@ -46,9 +46,8 @@ def test_a_missing_or_unknown_runbook_is_usage(argv, capsys):
 
 
 def test_the_rest_of_argv_reaches_the_runbook(monkeypatch, tmp_path):
-    # `--gate 3` belongs to etcd-restore, so the dispatcher must hand it on untouched. Gate 3
-    # refuses a name carrying `/` before it asks the cluster, so it exits 3. Had the flag been
-    # dropped, gate 1 would run first and fail on the absent drill directory with exit 1.
+    # `--gate 3` belongs to etcd-restore, so the dispatcher must hand it on untouched; had it been
+    # dropped, gate 1 would exit 1 instead of 3.
     monkeypatch.setenv("ETCD_DRILL_STATE_DIR", str(tmp_path / "absent"))
     assert runbook_gates.main(["etcd-restore", "--gate", "3", "a/b.zip"]) == 3
 
@@ -67,8 +66,7 @@ def test_each_runbook_answers_help_from_outside_the_repo(runbook, tmp_path):
             "--help",
         ],
         cwd=tmp_path,
-        # A nested `uv run` resolves the dev group before the child starts, which a cold
-        # cache makes minutes rather than seconds.
+        # A nested `uv run` resolves the dev group first, which a cold cache makes minutes.
         timeout=300,
     )
     assert proc.returncode == 0, proc.stderr

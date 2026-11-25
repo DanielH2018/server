@@ -206,12 +206,8 @@ def test_open_pr_returns_the_first_of_several():
     assert publish_pr.open_pr("x/", rec.tools()) == "3"
 
 
-# --- A `gh` timeout is a state, not a traceback ------------------------------------------------
-#
-# lib.gh.gh bounds every call at 60s, so TimeoutExpired is reachable in normal operation: the
-# anonymous GitHub quota is 60/hour and shared per host. Both `gh` calls in publish() sit after
-# the push and after `reset --hard HEAD~1`, so a raise there exits 1 with a traceback while the
-# commit is still local and origin is untouched.
+# lib.gh.gh bounds every call at 60s, so TimeoutExpired is reachable. Both `gh` calls in publish()
+# sit after the push and reset, so a raise would exit 1 with a traceback.
 
 
 def test_a_timeout_creating_the_pr_is_exit_2_not_a_raise():
@@ -242,11 +238,8 @@ def test_a_timeout_listing_prs_fails_closed():
     assert publish_pr.OPEN_PR_UNKNOWN != ""
 
 
-# --- Transport pin ----------------------------------------------------------------------------
-#
-# The tests above never leave Python. This one runs the script the way the cron does, with a
-# stub `git` and `gh` on PATH that log their argv, so argparse, the sys.path bootstrap and the
-# real subprocess boundary are all exercised. An argparse-only test once hid a dead path here.
+# Runs the script as the cron does, with stub `git` and `gh` on PATH, so argparse, the sys.path
+# bootstrap and the subprocess boundary are exercised.
 
 
 def _stub_body(name: str, log: Path, fail_on: str = "") -> str:
@@ -295,8 +288,8 @@ def _run_cli(
         # CI's runner is a system unit, so the landing goes through systemd-run there.
         **{"systemd-run": _SYSTEMD_RUN_PASSTHROUGH},
     )
-    # The stubs above answer instead of git, but an inherited GIT_DIR from a hook or a parent
-    # worktree points at a REAL repository and one of these arguments is `reset --hard`.
+    # An inherited GIT_DIR from a hook or parent worktree points at a real repository, and one
+    # argument is `reset --hard`.
     env = scrubbed_env()
     env["PATH"] = path_with(bin_dir, env=env)
     if args[:1] == ("publish",):

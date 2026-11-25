@@ -37,10 +37,7 @@ from dataclasses import dataclass
 
 # The reserved key C1 records a path under when it counts for no name.
 UNCLASSIFIED = "_unclassified"
-# The root Kustomization. Every reader expects it beside the changed set, so it is never a
-# member of the set itself.
 ROOT = "homelab"
-# The soak's Kustomization (D5.3b2). It has no edges, so the set takes it in by rule.
 SOAK = "soak"
 
 
@@ -161,8 +158,8 @@ def changed_set(
     left_out = set(suspended) | {ROOT}
     new_prints = None if new is None else footprints(new)
     old_prints = None if old is None else footprints(old)
-    # The names a digests.json tracks. A Kustomization outside them, such as a `-deferred`,
-    # is never read as removed for its absence from the newer file.
+    # A Kustomization outside the names a digests.json tracks, such as a `-deferred`, is never read
+    # as removed.
     keyed = set(new_prints or ()) | set(old_prints or ())
     widened = ""
     if new is None:
@@ -186,8 +183,8 @@ def changed_set(
         for name, footprint in new_prints.items()
         if name != UNCLASSIFIED and old_prints.get(name) != footprint
     }
-    # A moved tag's own predecessors, `-snapshot`, `-prepull` and `-precheck`. Without them
-    # the chained timeout counted a precheck Job's wait as an unchanged ancestor's, zero.
+    # A moved tag's own predecessors (`-snapshot`, `-prepull`, `-precheck`) count as moved, or the
+    # chained timeout treats a precheck wait as zero.
     moved |= {
         dep
         for name in moved
@@ -197,8 +194,8 @@ def changed_set(
     # A dependent the newer bundle removes is not expected either.
     reached = dependents(moved, depends_on) & universe
     if SOAK in universe and (reached - left_out) & _tags(new):
-        # `direct`, because the soak judges this revision itself, so a failure it read on
-        # `prod`'s commit never excuses it as an already-failing dependent.
+        # `direct`: the soak judges this revision itself, so a failure on `prod`'s commit never
+        # excuses it.
         reached.add(SOAK)
         moved.add(SOAK)
     return ChangedSet(frozenset(reached - left_out), direct=frozenset(moved - left_out))

@@ -11,8 +11,6 @@ import ast
 
 from _row_table import parse
 
-# The shared-helper modules whose functions build the k8s render, a role template's render or
-# a host package on first call.
 RENDER_MODULES = frozenset({"_k8s_render", "_host_packages"})
 # Their functions that take a doc they are given and render nothing.
 _PURE = frozenset({"pod_spec", "pod_template"})
