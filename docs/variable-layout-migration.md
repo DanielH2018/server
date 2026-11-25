@@ -6,7 +6,6 @@ The record holds the reasons. This page holds the steps, and each one can land a
 
 ## Before step 1
 
-- The operator settles the open rulings in ADR-0042.
 - The service list's own move lands first
   ([PR 10093](https://github.com/DanielH2018/server/pull/10093) and the PR after it). It edits
   the same approval floor, and it fixes where `k8s/vars.yml` sits.
@@ -120,8 +119,7 @@ three names.
 
 The same commit moves the `renovate.json` entries, the prek regexes, the rule globs, the
 citations in docs, agents and skills, and the `# DECIDED:` markers with their keys. It adds the
-layer check with a clean and a flagged case per rule, sets ADR-0042 to Accepted, and adds its
-marker. A Renovate dry run (`scripts/validate/renovate_extract.py`) must list the same pins as
+layer check with a clean and a flagged case per rule, and the marker ADR-0042 governs. A Renovate dry run (`scripts/validate/renovate_extract.py`) must list the same pins as
 before, by name.
 
 **Done when** the cluster and host renders are byte-identical, the extracted pins match, and

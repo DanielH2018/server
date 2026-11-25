@@ -1,7 +1,7 @@
 ---
 id: "0042"
 title: Each variable lives with what it describes, and inventory/ is dissolved
-status: Proposed
+status: Accepted
 date: 2026-11-25
 governs: []
 ---
@@ -10,8 +10,8 @@ governs: []
 
 ## Status
 
-Proposed on 2026-11-25. The operator asked for the end state, and then for this record and its
-plan. The operator has not approved the open rulings listed at the end.
+Accepted on 2026-11-25. The operator asked for the end state, and then for this record and its
+plan. The same day, the operator accepted the four rulings listed at the end. Nothing is built.
 
 [ADR-0030](0030-the-ansible-tree-is-renamed-for-what-it-holds.md) named `inventory/`. Its other
 rows stay in force, so its status does not change. The order of work is in
@@ -118,22 +118,20 @@ empties.
   the key crosses a file.
 - Reversing this after the last step means a second migration of the same size.
 
-## Open rulings
+## Rulings
 
-The operator settles these before step 3 of the plan:
+The operator ruled on 2026-11-25:
 
-1. **The name `estate/`.** It matches `lib/estate.py`.
+1. **The directory is named `estate/`.** It matches `lib/estate.py`.
 2. **`k3s_agent_node_ips` moves to `k8s/vars.yml`.** Its value is Jinja that reads
    `hosts['daniel-server']`. `render_context` passes no Jinja value through `hosts`, so a role
    cannot read it from daniel-box's file. The key describes the cluster.
-3. **Whether a Renovate PR that changes `k8s/vars.yml` stays refused.** The file holds
-   `crowdsec_k8s_image`. The plan keeps the refusal that `inventory/` has.
-4. **Which directories homelab-mcp serves after the move.** It serves `k8s/`, `inventory/` and
-   `tests/`. Serving host values means serving `hosts/`, which is a wider read than
-   `inventory/` was. The plan serves `estate/` and drops host values unless the operator widens
-   it.
+3. **A Renovate PR that changes `k8s/vars.yml` is refused.** The file holds
+   `crowdsec_k8s_image`, and `inventory/` has the same refusal.
+4. **homelab-mcp serves `estate/` and stops serving host values.** Serving them means serving
+   `hosts/`, which is a wider read than `inventory/` was.
 
 ## Governs
 
 No line carries a marker, because nothing is built. The PR that adds the layer check adds the
-marker and sets this record to Accepted.
+marker.
