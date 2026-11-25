@@ -41,7 +41,7 @@ run, and fail CI. So the shim set is intersected with what is actually installed
 run a real systemd unit or a real container; handing them a stub would leave them
 passing while proving nothing, which is the failure mode this whole guard is about.
 
-**A `ui`-marked test runs with the real PATH too.** `scripts/diagnostics/tests/test_ui_smoke.py`
+**A `ui`-marked test runs with the real PATH too.** `scripts/diagnostics/tests/ui_smoke/test_ui_smoke.py`
 drives a real Chromium against this homelab's LAN routes, and its fixtures read the SOPS
 `domain` and `grafana_admin_password` before anything renders. Reaching live infrastructure is
 the test there, so a stubbed `sops` errors the whole tier in fixture setup
@@ -166,7 +166,9 @@ _LIVE_API_TESTS = frozenset(
     }
 )
 
-# Named so the non-vacuity test can assert that module still carries it.
+# The marker `scripts/diagnostics/tests/ui_smoke/test_ui_smoke.py` carries, whose tests drive a live
+# browser and read SOPS on purpose. Named here rather than spelled inline so the non-vacuity
+# test can assert that module still carries it — see the module docstring.
 _LIVE_MARKER = "ui"
 
 # These reach the Docker socket and a registry on purpose.

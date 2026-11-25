@@ -32,8 +32,6 @@ from lib.render_guard import load_yaml
 from lib.repo_paths import K8S_ROLES
 
 from _k8s_render import host_context, render_role_template, traefik_static_config
-from lib.inventory_lists import K8S_HOST
-from lib.render_guard import k8s_services
 
 _FLAGS = {
     "traefik": "traefik_k8s_manage_crowdsec",
@@ -303,39 +301,29 @@ def test_the_shared_log_volume_survives_without_crowdsec(
     assert volume in {m["name"] for m in container["volumeMounts"]}
 
 
-# Detect on RENDERED output under each host's own variables: a substring match over raw templates
-# reads True whatever the flag says, and reading only group_vars/all.yml never evaluates a host that
-# overrides it.
+# --- k8s_public_route and the bouncer must move together ---
+#
+# Detection is on RENDERED output. Detecting the bouncer by SUBSTRING over raw template text. would make
+# the guard inert: every occurrence sits inside `{% if traefik_k8s_manage_crowdsec %}`, so the
+# text is present whatever the flag says and the comparison reads True unconditionally. The
+# rejecting test below drives the False side through an override.
 
 
-def _host_render(host: str, template: str, overrides: dict | None = None) -> str:
-    return render_role_template("traefik", template, overrides, host=host)
-
-
-def _hosts_running_traefik() -> list[str]:
-    return [K8S_HOST] if any(c["name"] == "traefik" for c in k8s_services()) else []
-
-
-def test_the_edge_census_finds_daniel_box() -> None:
-    """An empty census turns the pairing test below into a skip, not a failure."""
-    assert "daniel-box" in _hosts_running_traefik()
-
-
-def has_bouncer(host: str, overrides: dict | None = None) -> bool:
-    """Whether this host's rendered Traefik both DECLARES the bouncer and ATTACHES it.
+def has_bouncer(overrides: dict | None = None) -> bool:
+    """Whether the rendered Traefik both DECLARES the bouncer and ATTACHES it.
 
     Both halves, because a declared-but-unattached middleware protects nothing, and an
     attachment naming a middleware that is gone is worse than either — Traefik disables
     plugins silently, so every request through that entrypoint fails while the pod reads
     healthy.
     """
-    dynamic = _host_render(host, "dynamic.yaml.j2", overrides)
+    dynamic = render_role_template("traefik", "dynamic.yaml.j2", overrides)
     declared = any(
         "crowdsecLapiKeyFile" in str(doc)
         for doc in yaml_fast.safe_load_all(dynamic)
         if doc is not None
     )
-    config = traefik_static_config(overrides, host=host)
+    config = traefik_static_config(overrides)
     attached = any(
         "crowdsec" in mw
         for entry in (config.get("entryPoints") or {}).values()
@@ -362,25 +350,21 @@ def public_edge_problem(public: bool, bouncer: bool) -> str:
     return ""
 
 
-@pytest.mark.parametrize("host", _hosts_running_traefik())
-def test_the_public_route_and_the_bouncer_move_together(host: str) -> None:
-    ctx = host_context(host)
-    problem = public_edge_problem(bool(ctx["k8s_public_route"]), has_bouncer(host))
-    assert not problem, f"{host}: {problem}"
+def test_the_public_route_and_the_bouncer_move_together() -> None:
+    ctx = host_context()
+    problem = public_edge_problem(bool(ctx["k8s_public_route"]), has_bouncer())
+    assert not problem, problem
 
 
 def test_the_bouncer_reading_follows_the_flag() -> None:
     """The rejecting half for the DETECTION.
 
-    Every host today is a consistent pair, so the assertion above is only ever observed passing and
-    cannot show that `has_bouncer` reads anything at all — a detector stuck on False would agree
-    with every LAN-only host.
-
-    daniel-box runs the bouncer. Turning the flag off by override gives one real True and one real False, which is what proves
+    The shipped values are a consistent pair, so the assertion above is only ever observed passing
+    and cannot show that `has_bouncer` reads anything at all. Turning the flag off by override gives one real True and one real False, which is what proves
     the reading tracks the flag rather than the template text.
     """
-    assert has_bouncer("daniel-box") is True
-    assert has_bouncer("daniel-box", {"traefik_k8s_manage_crowdsec": False}) is False
+    assert has_bouncer() is True
+    assert has_bouncer({"traefik_k8s_manage_crowdsec": False}) is False
 
 
 @pytest.mark.parametrize(

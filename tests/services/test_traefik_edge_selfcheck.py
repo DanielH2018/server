@@ -32,45 +32,44 @@ from _k8s_render import host_context, render_role_template, traefik_static_confi
 
 _ROLE = "traefik"
 # A cluster without the bouncer plugin has neither the failure mode nor the probe.
-_HOST = "daniel-box"
 _WITHOUT_CROWDSEC = {"traefik_k8s_manage_crowdsec": False}
 
 
-def _render(host: str, template: str, overrides: dict | None = None) -> str:
-    return render_role_template(_ROLE, template, overrides, host=host)
+def _render(template: str, overrides: dict | None = None) -> str:
+    return render_role_template(_ROLE, template, overrides)
 
 
-def _traefik_container(host: str, overrides: dict | None = None) -> dict:
-    doc = yaml_fast.safe_load(_render(host, "deployment.yaml.j2", overrides))
+def _traefik_container(overrides: dict | None = None) -> dict:
+    doc = yaml_fast.safe_load(_render("deployment.yaml.j2", overrides))
     containers = doc["spec"]["template"]["spec"]["containers"]
     return next(c for c in containers if c["name"] == "traefik")
 
 
-def _selfcheck_route(host: str) -> dict:
-    doc = yaml_fast.safe_load(_render(host, "edge-selfcheck-ingressroute.yaml.j2"))
+def _selfcheck_route() -> dict:
+    doc = yaml_fast.safe_load(_render("edge-selfcheck-ingressroute.yaml.j2"))
     assert doc["kind"] == "IngressRoute", doc["kind"]
     return doc
 
 
-def _crowdsec_middleware_ref(host: str) -> str:
+def _crowdsec_middleware_ref() -> str:
     """The name the entrypoint chains use for the CrowdSec Middleware."""
-    return f"{host_context(host)['k8s_namespace']}-crowdsec@kubernetescrd"
+    return f"{host_context()['k8s_namespace']}-crowdsec@kubernetescrd"
 
 
-def _entrypoint_for_port_name(host: str, port_name: str) -> str:
+def _entrypoint_for_port_name(port_name: str) -> str:
     """Resolve a container port NAME to the Traefik entrypoint listening on it.
 
     A probe names a port; an entrypoint names an address. Nothing states the mapping, so it is
     derived: the container port's number, matched against the entrypoints' `:<port>` addresses.
     """
-    ports = {p["name"]: p["containerPort"] for p in _traefik_container(host)["ports"]}
+    ports = {p["name"]: p["containerPort"] for p in _traefik_container()["ports"]}
     assert port_name in ports, (
         f"container has no port named {port_name!r}: {sorted(ports)}"
     )
     number = ports[port_name]
     matches = [
         name
-        for name, spec in traefik_static_config(host=host)["entryPoints"].items()
+        for name, spec in traefik_static_config()["entryPoints"].items()
         if spec["address"].rsplit(":", 1)[-1] == str(number)
     ]
     assert len(matches) == 1, (
@@ -115,12 +114,12 @@ def selfcheck_gaps(
 
 def test_the_probe_detects_a_missing_bouncer_plugin() -> None:
     """The coupling, on the rendered manifests: probe -> route -> crowdsec-bearing entrypoint."""
-    probe = _traefik_container(_HOST).get("startupProbe")
+    probe = _traefik_container().get("startupProbe")
     assert probe, (
         "traefik has no startupProbe — /ping alone reports 200 with zero routers (#1322)"
     )
-    route = _selfcheck_route(_HOST)
-    config = traefik_static_config(host=_HOST)
+    route = _selfcheck_route()
+    config = traefik_static_config()
     chains = {
         # `or []`, not a default: a bare `middlewares:` key parses to None and `.get(..., [])`
         # returns it, so `selfcheck_gaps` raises TypeError instead of naming the gap.
@@ -128,14 +127,14 @@ def test_the_probe_detects_a_missing_bouncer_plugin() -> None:
         for name, spec in config["entryPoints"].items()
     }
     problems = selfcheck_gaps(
-        probe_entrypoint=_entrypoint_for_port_name(_HOST, probe["httpGet"]["port"]),
+        probe_entrypoint=_entrypoint_for_port_name(probe["httpGet"]["port"]),
         probe_path=probe["httpGet"]["path"],
         route_entrypoints=route["spec"]["entryPoints"],
         route_rules=[r["match"] for r in route["spec"]["routes"]],
         entrypoint_chains=chains,
-        crowdsec_ref=_crowdsec_middleware_ref(_HOST),
+        crowdsec_ref=_crowdsec_middleware_ref(),
     )
-    assert not problems, f"{_HOST}: " + " ".join(problems)
+    assert not problems, " ".join(problems)
 
 
 @pytest.mark.parametrize(
@@ -181,7 +180,7 @@ def test_the_route_has_no_host_matcher() -> None:
     """A kubelet httpGet probe connects to the pod IP and sends no SNI, and Traefik answers a
     matched Host() router whose SNI disagrees with the Host header with 421. A probe that can only return 421
     or 404 never passes, so the edge would crashloop on the change meant to protect it."""
-    for rule in (r["match"] for r in _selfcheck_route(_HOST)["spec"]["routes"]):
+    for rule in (r["match"] for r in _selfcheck_route()["spec"]["routes"]):
         assert "Host(" not in rule, (
             f"self-check rule {rule!r} matches on Host — an SNI-less probe gets 421, not 200"
         )
@@ -191,7 +190,7 @@ def test_the_route_is_a_traefik_service_not_a_kubernetes_one() -> None:
     """`ping@internal` needs `kind: TraefikService` and no port. Give it the default kind and
     Traefik looks for a k8s Service of that name, finds nothing, and the route 404s silently —
     the trap dashboard-ingressroute.yaml.j2 records, and here it would wedge the edge."""
-    for service in _selfcheck_route(_HOST)["spec"]["routes"][0]["services"]:
+    for service in _selfcheck_route()["spec"]["routes"][0]["services"]:
         assert service["kind"] == "TraefikService", service
         assert "port" not in service, service
 
@@ -201,7 +200,7 @@ def test_the_probe_is_absent_without_crowdsec() -> None:
     has no crowdsec Middleware and no plugin failure mode, so the probe would only be a way for
     the edge to crashloop — and defaults/main.yml is explicit that a false failure there is a
     real hazard."""
-    assert _traefik_container(_HOST, _WITHOUT_CROWDSEC).get("startupProbe") is None
+    assert _traefik_container(_WITHOUT_CROWDSEC).get("startupProbe") is None
 
 
 def test_the_route_ships_only_where_the_probe_does() -> None:

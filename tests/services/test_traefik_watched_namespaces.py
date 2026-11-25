@@ -31,18 +31,17 @@ from lib import yaml_fast
 from _k8s_render import render_role_template
 
 _ROLE = "traefik"
-_HOST = "daniel-box"
 # The pair below shows both readings follow the variable rather than the template text.
 _NARROWED = {"traefik_k8s_watched_namespaces": ["homelab", "longhorn-system"]}
 
 
-def _render(host: str, template: str, overrides: dict | None = None) -> str:
-    return render_role_template(_ROLE, template, overrides, host=host)
+def _render(template: str, overrides: dict | None = None) -> str:
+    return render_role_template(_ROLE, template, overrides)
 
 
-def _role_namespaces(host: str, overrides: dict | None = None) -> list[str]:
+def _role_namespaces(overrides: dict | None = None) -> list[str]:
     """Every namespace rbac.yaml.j2 renders a Role for, in order."""
-    docs = yaml_fast.safe_load_all(_render(host, "rbac.yaml.j2", overrides))
+    docs = yaml_fast.safe_load_all(_render("rbac.yaml.j2", overrides))
     return [
         d["metadata"]["namespace"]
         for d in docs
@@ -50,14 +49,14 @@ def _role_namespaces(host: str, overrides: dict | None = None) -> list[str]:
     ]
 
 
-def _provider_namespaces(host: str, overrides: dict | None = None) -> list[str]:
+def _provider_namespaces(overrides: dict | None = None) -> list[str]:
     """The provider list, read out of the ConfigMap's embedded Traefik config.
 
     static-config.yaml.j2 is a ConfigMap whose data value is a block scalar, so the config is
     a STRING at the manifest level and has to be parsed a second time. Parsing the manifest
     alone compares comments, not configuration.
     """
-    doc = yaml_fast.safe_load(_render(host, "static-config.yaml.j2", overrides))
+    doc = yaml_fast.safe_load(_render("static-config.yaml.j2", overrides))
     config = yaml_fast.safe_load(doc["data"]["traefik.yml"])
     return config["providers"]["kubernetesCRD"]["namespaces"]
 
@@ -86,9 +85,9 @@ def disagreements(watched: list[str], granted: list[str]) -> list[str]:
 def test_the_two_namespace_lists_agree(overrides: dict | None) -> None:
     """Both halves at once, on the rendered manifests."""
     problems = disagreements(
-        _provider_namespaces(_HOST, overrides), _role_namespaces(_HOST, overrides)
+        _provider_namespaces(overrides), _role_namespaces(overrides)
     )
-    assert not problems, f"{_HOST} with {overrides}: " + " ".join(problems)
+    assert not problems, f"with {overrides}: " + " ".join(problems)
 
 
 @pytest.mark.parametrize("overrides", [None, _NARROWED], ids=["prod", "narrowed"])
@@ -100,20 +99,20 @@ def test_the_variable_renders_as_a_list_not_a_string(overrides: dict | None) -> 
     namespaces. Counting the Roles is what distinguishes the two; eyeballing the render does
     not.
     """
-    namespaces = _role_namespaces(_HOST, overrides)
-    assert namespaces, f"{_HOST} with {overrides} renders no Roles at all"
+    namespaces = _role_namespaces(overrides)
+    assert namespaces, f"with {overrides} renders no Roles at all"
     assert len(namespaces) == len(set(namespaces)), (
-        f"{_HOST} with {overrides} renders duplicate Role namespaces: {namespaces}"
+        f"with {overrides} renders duplicate Role namespaces: {namespaces}"
     )
     assert all(len(ns) > 1 for ns in namespaces), (
-        f"{_HOST} with {overrides}: single-character namespaces mean the variable is a string "
+        f"with {overrides}: single-character namespaces mean the variable is a string "
         f"being iterated character by character, not a list: {namespaces}"
     )
 
 
 def test_prod_still_watches_the_three_namespaces() -> None:
     """Pins the prod set, so narrowing it needs an explicit edit here."""
-    assert _provider_namespaces("daniel-box") == [
+    assert _provider_namespaces() == [
         "homelab",
         "observability",
         "longhorn-system",
@@ -125,10 +124,10 @@ def test_a_narrowed_list_reaches_both_readings() -> None:
     aborts the RBAC apply — and both readings have to follow the variable to say so.
 
     The narrowed list is supplied as an override. Without this pair, a reading hardcoded to prod's three
-    namespaces would agree with every host.
+    namespaces would agree with every cluster.
     """
-    assert "observability" not in _provider_namespaces(_HOST, _NARROWED)
-    assert "observability" not in _role_namespaces(_HOST, _NARROWED)
+    assert "observability" not in _provider_namespaces(_NARROWED)
+    assert "observability" not in _role_namespaces(_NARROWED)
 
 
 def test_the_comparison_accepts_a_matching_pair() -> None:
@@ -177,15 +176,15 @@ def empty_services_problem(provider: dict) -> str | None:
     return None
 
 
-def _provider(host: str, overrides: dict | None = None) -> dict:
-    doc = yaml_fast.safe_load(_render(host, "static-config.yaml.j2", overrides))
+def _provider(overrides: dict | None = None) -> dict:
+    doc = yaml_fast.safe_load(_render("static-config.yaml.j2", overrides))
     return yaml_fast.safe_load(doc["data"]["traefik.yml"])["providers"]["kubernetesCRD"]
 
 
 @pytest.mark.parametrize("overrides", [None, _NARROWED], ids=["prod", "narrowed"])
 def test_empty_services_keep_their_router_is_clean(overrides: dict | None) -> None:
     # fact: k8s/roles/traefik/CLAUDE.md#Client identity and TLS
-    assert empty_services_problem(_provider(_HOST, overrides)) is None
+    assert empty_services_problem(_provider(overrides)) is None
 
 
 @pytest.mark.parametrize("provider", [{}, {"allowEmptyServices": False}])
@@ -212,7 +211,7 @@ def test_rbac_is_exempt_from_prune(template: str, kind: str, count: int) -> None
     revert of only that move can prune a grant the edge needs."""
     docs = [
         d
-        for d in yaml_fast.safe_load_all(_render(_HOST, template))
+        for d in yaml_fast.safe_load_all(_render(template))
         if isinstance(d, dict) and d.get("kind") == kind
     ]
     assert len(docs) == count, f"{template} renders {len(docs)} {kind} documents"

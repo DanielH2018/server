@@ -135,7 +135,7 @@ move detail into topic files. Don't duplicate the role `CLAUDE.md` — record on
    restarts).
 7. **Prove it loaded** via `ha-edit-automation` step 5 — `probe.py ha verify-automations` for the whole
    set
-   (`scripts/diagnostics/tests/test_probe_ha.py::test_automation_load_errors_flags_missing_and_unavailable`), `probe.py ha automation <name>` for one (does the entity exist, did `last_triggered`
+   (`scripts/diagnostics/tests/probe_workloads/test_probe_ha.py::test_automation_load_errors_flags_missing_and_unavailable`), `probe.py ha automation <name>` for one (does the entity exist, did `last_triggered`
    advance?), `ha state` for an entity, `ha trace <name>` when it should have fired and didn't.
    **Do not verify via the recorder DB** (it goes stale after a restart and has WAL/immutable
    read traps — see `ha-edit-automation` step 5).

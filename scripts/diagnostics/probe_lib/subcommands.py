@@ -9,7 +9,7 @@ The registry carries names, descriptions, each subcommand's backing `probe_lib` 
 `cli_parser.py`. Argparse stays in `cli_parser.py`: each subcommand's arguments differ too much
 (`ha` alone nests five subparsers) for a row to describe them. A row with no callable streams a
 `curl` pipeline through `plan()` in `curl_pipeline.py`.
-`scripts/diagnostics/tests/test_probe_registry.py` checks that the registry, the parser and
+`scripts/diagnostics/tests/probe_landing/test_probe_registry.py` checks that the registry, the parser and
 the `probe_lib` modules agree.
 
 This module defines no `run_*` function of its own, so `lib.cli_registry.package_entry_points`

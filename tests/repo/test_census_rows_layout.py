@@ -258,7 +258,6 @@ UNGROUPED_SUITES = dict.fromkeys(
         "hosts/tests",
         "k8s/roles/monitor-bridge/tests",
         "scripts/deploy_tools/tests",
-        "scripts/diagnostics/tests",
         "scripts/lib/tests",
         "scripts/renderer/tests",
         "scripts/validate/tests",

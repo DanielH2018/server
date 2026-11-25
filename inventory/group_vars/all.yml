@@ -148,6 +148,10 @@ k3s_cni0_gateways:
 k3s_flannel_node_ips:
   - 10.42.0.0/32
   - 10.42.1.0/32
+# The agent nodes' LAN addresses. The k3s-server component's k3s-join-* rules admit them, and
+# registry-verify checks an agent's pull while the list holds one.
+k3s_agent_node_ips:
+  - "{{ hosts['daniel-server'].server_ip }}"
 # wg-easy v15 picks its own client pool internally (no WG_DEFAULT_ADDRESS env in this
 # deploy), so this isn't a Service/Deployment input —
 # it exists purely so the comments that describe wg-easy's client range (traefik's

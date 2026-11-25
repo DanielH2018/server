@@ -39,4 +39,5 @@ def test_the_init_container_encodes_through_vaapi_with_tdarrs_image_and_device()
     # tdarr cannot open.
     ctx = host_context()
     assert init["securityContext"]["runAsUser"] == ctx["puid"]
-    assert ctx["render_gid"] in pod["securityContext"]["supplementalGroups"]
+    render_gid = ctx["hosts"][ctx["k8s_primary_node"]]["render_gid"]
+    assert render_gid in pod["securityContext"]["supplementalGroups"]

@@ -322,7 +322,7 @@ def test_the_live_marker_is_one_the_ui_suite_actually_carries(module: str) -> No
     Both live-browser modules, not just one: the Grafana tier is the half whose fixtures
     decrypt SOPS for a second credential.
     """
-    suite = REPO / "scripts" / "diagnostics" / "tests" / module
+    suite = REPO / "scripts" / "diagnostics" / "tests" / "ui_smoke" / module
     assert f"pytestmark = pytest.mark.{leakguard._LIVE_MARKER}" in suite.read_text(), (
         f"{suite} no longer carries the `{leakguard._LIVE_MARKER}` marker the leak guard "
         "exempts, so its whole live-browser tier is back to erroring on a stubbed `sops`"

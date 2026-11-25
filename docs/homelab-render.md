@@ -184,10 +184,11 @@ on a usage error. `scripts/lib/exit_codes.py` holds the four codes as its `RENDE
 
 ### The render context
 
-A role's templates render with these variables, resolved for daniel-box:
+A role's templates render with these variables:
 
-- role defaults, `group_vars/all.yml` and daniel-box's host_vars, in that rising precedence,
-  with the stub file's variables over all of them;
+- role defaults and `group_vars/all.yml`, in that rising precedence, with the stub file's
+  variables over both. No host's host_vars merge in: a template names the host it reads, as
+  `hosts[k8s_primary_node].render_gid`;
 - `services`: every entry of `k8s/services.yml`, in the dependency order of
   `toposort_containers`. `scripts/renderer/renderer_lib/context.py` sorts it with
   `scripts/renderer/template_filters/toposort.py`, and templates read that order. An entry's position
@@ -195,8 +196,8 @@ A role's templates render with these variables, resolved for daniel-box:
   `depends_on:` on the entry;
 - `container_item`, the tag's own entry from that list;
 - `hosts`, one entry per `inventory/host_vars/` file, holding that host's literal
-  `server_ip`, `compose_services`, `claude_agent_ssh_login_enabled` and
-  `ssh_host_ed25519_key` (`scripts/lib/render_context.py:_hosts`). `group_vars`' `k8s_pi_client_ip` reads
+  `server_ip`, `compose_services`, `claude_agent_ssh_login_enabled`, `ssh_host_ed25519_key`,
+  `render_gid` and `claude_code_triage_enabled` (`scripts/lib/render_context.py:_hosts`). `group_vars`' `k8s_pi_client_ip` reads
   `hosts['daniel-pi'].server_ip`, so it is daniel-pi's address, not daniel-box's.
 
 The render is strict. A name that no layer supplies stops the render with an error naming it.

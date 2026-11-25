@@ -35,7 +35,7 @@ spec:
       # half. Same pair as jellyfin; see that role for why the GID lives in host_vars.
       securityContext:
         supplementalGroups:
-          - {{ render_gid }}
+          - {{ hosts[k8s_primary_node].render_gid }}
       # The VAAPI encode, before tdarr starts.
       # tdarr's OWN bundled ffmpeg, not jellyfin's: a different binary built against different
       # libraries, so jellyfin's encode proof does not carry over. It runs in tdarr's image with
