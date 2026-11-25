@@ -47,8 +47,8 @@ SCRIPT = "pi-recovery-health"
 UNIT_DIR = "/usr/lib/systemd/system"
 LINK = f"{UNIT_DIR}/timers.target.wants/{RECOVERY_TIMER}"
 
-# The watch set the rendered script must carry: every compose_services name on daniel-pi, plus the sub-proxy the docker-proxy service file declares beside its entry. Named rather than counted so the failure says which container the script stopped
-# watching.
+# The sub-proxy is a compose sub-service, not a compose_services entry; named rather than counted so
+# a failure says which container.
 PI_CONTAINERS = [entry["name"] for entry in pi_entries_in(PI_HOST_VARS)]
 EXPECTED_WATCH_SET = {*PI_CONTAINERS, "docker-proxy-lifecycle"}
 # A compose sub-service, not a compose_services entry, so iterating the list alone would miss it.
@@ -194,8 +194,8 @@ def test_a_multi_line_daemon_error_stays_one_health_log_record(tmp_path):
     assert "first line second line" in msg, msg
 
 
-# What dockerd's journal holds when the daemon itself fails: systemd's unit lines carry no
-# `level=`, dockerd's own carry one, and the info chatter around them is what must NOT be kept.
+# systemd's unit lines carry no `level=`, dockerd's carry one; the info chatter around them must NOT
+# be kept.
 DAEMON_JOURNAL = (
     'time="2026-09-13T07:36:30Z" level=info msg="Loading containers: start."\\n'
     'time="2026-09-13T07:36:31Z" level=warning msg="Security options with `:` as a separator are deprecated"\\n'

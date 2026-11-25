@@ -11,7 +11,6 @@ import claude_restart as broker
 import pytest
 from _setup_render import render_component_text
 
-# Friday 2026-11-20 14:00 UTC. The weekly reboot is Sunday 07:30.
 NOW = dt.datetime(2026, 11, 20, 14, 0, tzinfo=dt.UTC).timestamp()
 DAY = 86400
 

@@ -21,8 +21,7 @@ from _helpers import REPO
 from lib import yaml_fast
 
 COMPONENT = REPO / "hosts" / "components" / "ssh-firewall" / "component.yml"
-# The variable the exemption must be scoped to. Hardcoded rather than read from group_vars on
-# purpose: the point is that the rule is scoped to the LAN at all.
+# Hardcoded, not read from group_vars: the point is that the rule is scoped to the LAN at all.
 _LAN_ALLOW = re.compile(r"allow from \{\{ lan_subnet \}\} to any port 22 proto tcp")
 _LIMIT = re.compile(r"limit 22(/tcp)?")
 

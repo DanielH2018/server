@@ -104,8 +104,6 @@ def pins_for(files: dict[str, bytes], arch: str) -> dict:
     return pins
 
 
-# A stand-in for nfpm. It records the arch and the digest of each file under
-# root/usr/lib/homelab/bin, then writes the .deb the way nfpm names one.
 NFPM = """#!/bin/sh
 set -e
 arch=$(sed -n 's/^arch: //p' nfpm.yaml)

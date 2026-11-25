@@ -81,8 +81,6 @@ def test_wg_easy_gets_the_domain_at_build_time(package):
 
 
 HOME = "/home/ubuntu"
-# A data directory that a container created as root, and whose line copies the live owner.
-# Every other directory under the home is created as ubuntu.
 ROOT_OWNED_DATA = frozenset({f"{HOME}/server/containers/wg-easy/config"})
 
 

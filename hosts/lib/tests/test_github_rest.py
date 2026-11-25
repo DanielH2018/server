@@ -22,9 +22,8 @@ class _Body:
         return b'{"ok":true}'
 
 
-# One lookup for every host GitHub reader. The anonymous limit is 60/hour per source
-# IP and shared by every caller on the host, so each rule is an accept/reject pair: a resolver
-# that always returned a token and one that never did are indistinguishable from one side.
+# The anonymous limit is 60/hour per source IP, shared by every caller, so each rule is an
+# accept/reject pair.
 
 
 class _GhProc:
@@ -147,8 +146,6 @@ def test_github_get_counts_an_authenticated_read_under_the_token_it_sends(
 def test_every_sandboxed_unit_that_reads_through_github_rest_can_write_the_ledger(
     tmp_path,
 ):
-    # The unit that runs each component's GitHub reader; the builder's signer and apt-repo
-    # units ship beside it and call nothing.
     reader_units = {
         "builder": "homelab-builder.service",
         "checkout-sync": "homelab-checkout-sync.service",

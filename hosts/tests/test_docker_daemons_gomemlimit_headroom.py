@@ -41,15 +41,12 @@ def pi_package() -> host_mode.Package:
     return host_mode.render_host("daniel-pi")
 
 
-# Measured on daniel-pi over the first 4.3 h of the scrapes, both daemons on
-# go1.26.8 under the default GOGC=100. Live peak is next_gc's ceiling halved (28.0 and
-# 27.3 MB); the floors were 10.7 and 10.4 MB.
 MEASURED = {
     "dockerd": {"live_mib": 14, "non_heap_mib": 10, "alloc_kb_s": 114},
     "containerd": {"live_mib": 14, "non_heap_mib": 8, "alloc_kb_s": 97},
 }
-# The runtime's forced-cycle period (`forcegcperiod`, two minutes). Slack for fewer
-# seconds of allocation than this gives a shorter cycle than GOGC=100 on the floor.
+# Slack for fewer seconds of allocation than the runtime's two-minute forcegcperiod gives a shorter
+# cycle than GOGC=100 on the floor.
 MIN_CYCLE_SECONDS = 120
 MAX_LIMIT_MIB = 128
 

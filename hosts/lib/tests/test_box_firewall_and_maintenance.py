@@ -109,8 +109,6 @@ def test_reconcile_adopts_the_ssh_rules_and_leaves_the_rules_it_already_holds(
         for r in manifest["ufw"]["rules"]
         if r["id"].startswith(("apt-repo-", "deploy-ui-"))
     ]
-    # The live rules in `ufw status` order: the k3s join rules and coredns-host metrics allows
-    # carry no comment.
     others = builder
     node.state["ufw"] = {
         "active": True,
@@ -134,7 +132,7 @@ def test_reconcile_adopts_the_ssh_rules_and_leaves_the_rules_it_already_holds(
         )
         for r in k3s
     ] + [tuple(r) for r in others]
-    # A `ufw default` or an enable on an active k3s node reloads the ruleset under kube-router,
-    # which wipes the before chains.
+    # A `ufw default` or enable on an active k3s node reloads the ruleset under kube-router, wiping
+    # the before chains.
     ufw = [c["argv"][1:] for c in node.calls("ufw")]
     assert not [a for a in ufw if a[:1] in (["--force"], ["default"], ["delete"])]

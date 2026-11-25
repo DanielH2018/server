@@ -21,8 +21,6 @@ from lib.repo_paths import K3S_SERVER
 
 from _helpers import K8S_ROLES
 
-# etcd's own default, and the only value that is correct while k3s overrides nothing.
-# <https://etcd.io/docs/v3.5/dev-guide/limit/#storage-size-limit>
 ETCD_DEFAULT_QUOTA = 2 * 1024**3
 OVERRIDE_FLAG = "quota-backend-bytes"
 # The server's flags, `k3s_server_config`, since H6.4b.

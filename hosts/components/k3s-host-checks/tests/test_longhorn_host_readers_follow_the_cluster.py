@@ -33,8 +33,7 @@ from validate.validate_lib.shipped_render import render_shipped_text
 
 SHIM = K3S_HOST_CHECKS / "templates" / "longhorn-backup-health.sh.j2"
 
-# The shim exports that are thresholds. The rest name host paths and binaries, which a test
-# points at a temporary directory or a stub instead.
+# Shim exports that are thresholds; the rest are paths and binaries a test points at a stub.
 _THRESHOLD = re.compile(
     r"LONGHORN_(?:[A-Z_]*MAX_AGE_HOURS|DAILY_BACKUP_BUDGET|RESTORE_DRILL_(?:MAX_AGE|COVERAGE_SLACK)\w*"
     r"|CRON_EVIDENCE_WINDOW_HOURS)"

@@ -25,8 +25,7 @@ from renderer.renderer_lib import host as host_mode
 
 # Discord's own field name. Named rather than derived: the image's default is the wrong one.
 DISCORD_PAYLOAD_KEY = ("WEBHOOK_JSON_KEY", "content")
-# The keys that hand Docker a probe. `interval:` counts: with `test:` omitted, Docker runs the
-# image's own HEALTHCHECK at that cadence, which is the regression.
+# `interval:` counts: with `test:` omitted, Docker runs the image's own HEALTHCHECK at that cadence.
 PROBE_KEYS = ("test", "interval", "timeout", "retries", "start_period")
 
 

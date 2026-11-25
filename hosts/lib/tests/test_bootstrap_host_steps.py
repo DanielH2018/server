@@ -220,8 +220,6 @@ def test_the_online_local_build_asks_the_anchor_and_a_refusal_installs_nothing(
     assert "not a green first-parent commit of master" in result.stderr
     assert "bootstrap_anchor.py" in (host.root / "uv.calls").read_text()
     installs = [c for c in host.apt_calls() if c.startswith("install")]
-    # The anchor's own venv needs PyYAML's build dependencies, which come from Ubuntu's
-    # archive; nothing the unverified clone built is installed.
     assert installs == ["install -y --no-install-recommends gcc libc6-dev libyaml-dev"]
 
 
@@ -283,8 +281,8 @@ def test_a_fetch_that_stalls_is_cut_off_at_its_bound_and_requested_again(tmp_pat
     host.stock_kit()
     host.pin("FETCH_MAX_TIME=120", "FETCH_MAX_TIME=1")
     requests = tmp_path / "nfpm.requests"
-    # Stands in for curl's --max-time: without the flag the first request never returns. The
-    # absolute paths step around the fake host's `sleep`, which returns at once.
+    # Stands in for curl's --max-time; absolute paths step around the fake host's `sleep`, which
+    # returns at once.
     host._stub(
         "curl",
         'for arg; do [ "$prev" = -o ] && dest=$arg\n'

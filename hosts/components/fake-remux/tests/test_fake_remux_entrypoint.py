@@ -195,8 +195,6 @@ def test_each_service_command_runs_from_the_install_dir(service, installed, tmp_
     ids=["scan", "replace"],
 )
 def test_subcommand_runs_its_own_half(subcommand, state_file, msg, installed, tmp_path):
-    # The scan reports itself disabled on an empty API key; the reconciler reports itself off.
-    # Each message comes only from its own half, so it shows which one the subcommand reached.
     entry = installed / ENTRYPOINT
     proc = _run([str(entry), subcommand], tmp_path, _isolated_env(tmp_path))
     assert proc.returncode == 0, proc.stderr[-2000:]

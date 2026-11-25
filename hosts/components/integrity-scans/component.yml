@@ -22,11 +22,8 @@
 # package's stanza in dpkg's status, or to rkhunter's config, still refreshes in full.
 defaults:
   integrity_scans_host_lib_dir: /usr/lib/homelab
-  # rkhunter reads PermitRootLogin from the main sshd_config only and never follows its Include.
-  # A package renders before it reaches the host, so the hosts whose main file carries the line
-  # are listed: daniel-server's sshd hardening sits in /etc/ssh/sshd_config itself
-  # (`ssh_config_path`) and daniel-box's main file carries the line; the Pi's does not, and its
-  # rkhunter.conf.local reads `unset`.
+  # rkhunter reads PermitRootLogin from the main sshd_config only, never its Include; list the hosts
+  # whose main file carries the line (the Pi's does not, and its rkhunter.conf.local reads `unset`).
   integrity_scans_sshd_main_file_sets_root_login: [daniel-box, daniel-server]
   integrity_scans_rkhunter_allow_ssh_root_user: "{{ 'no' if inventory_hostname in integrity_scans_sshd_main_file_sets_root_login else 'unset' }}"
   # The hosts that run the t2-egress squid, whose shared-memory segments rkhunter warns about.
@@ -39,20 +36,18 @@ files:
   - {src: templates/rkhunter-check.sh.j2, dst: /usr/lib/homelab/rkhunter-check, mode: "0755"}
   - {src: units/homelab-rkhunter-check.service.j2, dst: /usr/lib/systemd/system/homelab-rkhunter-check.service}
   - {src: units/homelab-rkhunter-check.timer, dst: /usr/lib/systemd/system/homelab-rkhunter-check.timer}
-  # The baseline refresh after every package change. The hook starts the unit without
-  # blocking. The unit needs no enable link, because only the hook starts it.
+  # The hook starts the refresh unit without blocking; the unit needs no enable link.
   - {src: templates/91homelab-rkhunter-propupd, dst: /etc/apt/apt.conf.d/91homelab-rkhunter-propupd}
   - {src: files/rkhunter-propupd, dst: /usr/lib/homelab/rkhunter-propupd, mode: "0755"}
   - {src: units/homelab-rkhunter-propupd.service, dst: /usr/lib/systemd/system/homelab-rkhunter-propupd.service}
-  # needrestart, run by apt's hook after a library upgrade, restarts the active refresh unit and
-  # waits for it, while the unit waits for the dpkg lock that apt holds. The override stops that
-  # restart.
+  # needrestart restarts the active refresh unit and waits, while the unit waits for apt's dpkg
+  # lock;
+  # the override stops that restart.
   - {src: files/needrestart-rkhunter-propupd.conf, dst: /etc/needrestart/conf.d/homelab-rkhunter-propupd.conf}
 enable:
   homelab-rkhunter-check.timer: timers.target
 lines:
-  # The weekly scan flags only changes no package event explains, because the refresh unit above
-  # rebaselines after every dpkg run. rkhunter's own 90rkhunter hook ran that refresh inside apt
-  # and held the dpkg lock for about 2 minutes on the Pi, so APT_AUTOGEN stays off.
-  # No package owns the file.
+  # APT_AUTOGEN stays off: rkhunter's 90rkhunter hook refreshed inside apt and held the dpkg lock ~2
+  # minutes.
+  # The refresh unit rebaselines after every dpkg run instead.
   - {path: /etc/default/rkhunter, line: 'APT_AUTOGEN="false"', regexp: '^APT_AUTOGEN='}

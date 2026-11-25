@@ -64,8 +64,8 @@ def test_the_scrape_job_reads_the_group_var_rather_than_a_literal() -> None:
     other way, and a pattern that matches nothing passes.
     """
     group_vars = yaml_fast.safe_load(ALL_VARS.read_text())
-    # daniel-box's own literal, not k8s_node_client_ip: that derives from it through hostvars,
-    # and a derivation that lost the entry would render `None` here too.
+    # daniel-box's own literal: k8s_node_client_ip derives from it, and a derivation that lost the
+    # entry would render `None` too.
     box_ip = yaml_fast.safe_load((HOST_VARS / "daniel-box.yml").read_text())[
         "server_ip"
     ]

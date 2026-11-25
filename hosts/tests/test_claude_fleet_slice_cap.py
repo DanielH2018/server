@@ -39,8 +39,8 @@ DEFAULTS = ROLE_DIR / "defaults" / "main.yml"
 FLEET_CONF = "fleet-slice-caps.conf.j2"
 RC_UNIT = "claude-rc.service.j2"
 
-# The vars this module reads. Asserted present before anything is compared, so a rename that
-# empties the parse fails here rather than passing an all() over nothing.
+# Asserted present first, so a rename that empties the parse fails here rather than passing an all()
+# over nothing.
 REQUIRED_VARS = frozenset(
     {
         "claude_code_fleet_slice",
@@ -123,8 +123,8 @@ def test_parent_cap_renders_from_the_fleet_variables(
         f"MemorySwapMax must render defaults' {swap}"
     )
 
-    # Sentinels no default holds, so "followed the variable" cannot be satisfied by the
-    # inventory value already being there.
+    # Sentinels no default holds, so the inventory value already being there cannot satisfy
+    # "followed the variable".
     raised = render(
         FLEET_CONF,
         claude_code_fleet_memory_high="97G",
@@ -256,8 +256,8 @@ def test_a_global_oom_ranks_each_fleet_process_above_every_burstable_pod(
     assert oom_score_adjust(render(template, claude_code_fleet_oom_score_adjust=7)) == 7
 
 
-# daniel-box's claude_code_login_uids is empty, yet its fan-out and background jobs still run
-# as 1000, so 1000 is in the fleet on both hosts.
+# daniel-box's claude_code_login_uids is empty, yet its fan-out and background jobs run as 1000, so
+# 1000 is in the fleet on both hosts.
 @pytest.mark.parametrize("host", ["daniel-server", "daniel-box"])
 def test_each_fleet_uids_user_manager_gets_the_oom_drop_in_and_no_restart(
     host: str,

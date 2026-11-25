@@ -14,8 +14,8 @@ import re
 from _aide_check_run import SCRIPT
 from _shell_render import render_shell_script
 
-# Files an installer or snapd writes, which no task names. k3s-install.sh rewrites the unit and
-# its environment file on every args or version change; snapd adds a mount per snap revision.
+# k3s-install.sh rewrites the unit and its environment file on every args or version change;
+# snapd adds a mount per snap revision.
 INSTALLER_WRITTEN = (
     "/etc/systemd/system/k3s.service",
     "/etc/systemd/system/k3s.service.env",

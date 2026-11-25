@@ -169,8 +169,6 @@ def test_a_conffile_with_an_undeclared_line_difference_is_flagged(tmp_path, now)
     assert f"aide-check: unexplained: {DEFS} ({REASON})" in logged, logged
 
 
-# tool 0.9's copy of DEFS, and the file the arm's edits made of it, which dpkg kept under
-# --force-confold when 1.0 changed the copy.
 OLDER_SHIPPED = DEFS_SHIPPED.replace("# limits", "# login limits")
 OLDER_EDITED = DEFS_EDITED.replace("# limits", "# login limits")
 OLDER_COPY = TOOL_COPY.replace("/1.0/", "/0.9/")

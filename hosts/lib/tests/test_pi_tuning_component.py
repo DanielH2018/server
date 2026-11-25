@@ -284,9 +284,7 @@ def journal_caps(text: str) -> tuple[float, float, float]:
     return _mb(use.group(1)), int(files.group(1)) * file_mb, file_mb
 
 
-# Measured on daniel-pi: pacct grows about 28 MB a day, and savelog gzips it to about a fifth.
-# sysstat writes about 1.4 MB a day. Each budget counts today's file beside the kept ones.
-# The rest of /var/hdd.log, outside these four trees, held 3 MB.
+# Each budget counts today's file beside the kept ones.
 PACCT_MB_PER_DAY = 28
 PACCT_GZIP_RATIO = 0.2
 SYSSTAT_MB_PER_DAY = 1.4
@@ -321,8 +319,8 @@ def test_the_whole_sd_copy_fits_under_the_log2ram_boot_guard(package):
     tmpfs = _mb(_edits(package, LOG2RAM_CONF)["SIZE=128M"]["line"].split("=")[1])
     use, _, _ = journal_caps(_text(package, JOURNALD_CAP))
     assert use < tmpfs
-    # log2ram's boot guard `du`s the SD copy against SIZE and refuses to start when it is over.
-    # `--sparse` is patched out, so every archive lands there at its full size.
+    # log2ram's boot guard `du`s the SD copy against SIZE and refuses to start when over; `--sparse`
+    # is patched out.
     assert sd_copy_worst_mb(package) <= tmpfs
 
 
@@ -375,8 +373,6 @@ def test_a_drop_in_that_only_adds_a_schedule_is_flagged():
 
 # auditd's free-space thresholds.
 
-# The least free space /var/log held over 30 days, in MB, from
-# node_filesystem_avail_bytes.
 LOG_TMPFS_LOW_WATER_MB = 13
 
 
@@ -489,8 +485,8 @@ def test_tmpfiles_creates_the_textfile_directory_setgid_and_the_updater_can_writ
     root = tmp_path / "root"
     root.mkdir()
     text = _text(package, "/usr/lib/tmpfiles.d/homelab-node-exporter.conf")
-    # Unprivileged run: the owner and group become the caller's, as numbers, because `--root`
-    # resolves names in the root's own passwd file. The mode is the contract's own.
+    # Unprivileged run: owner and group become the caller's as numbers, because `--root` resolves
+    # names in the root's passwd.
     owner, group = os.getuid(), os.getgid()
     config.write_text(
         re.sub(

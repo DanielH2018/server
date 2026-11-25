@@ -20,18 +20,14 @@ from lib.proc_testing import write_exec
 from lib.repo_paths import HOST_LIB_FILES, K3S_FILES, REPO
 
 READER = K3S_FILES / "longhorn_backup_health.py"
-# On the host the reader's libraries and host_lib.py sit beside it. In the checkout they are
-# `hosts/lib/host_lib.py` and `scripts/lib/`, so the subprocess needs `hosts/lib/` and `scripts/`.
+# The checkout layout differs from the host's, so the subprocess needs `hosts/lib/` and `scripts/`.
 HOST_LIB_DIR = HOST_LIB_FILES
 SCRIPTS_ROOT = REPO / "scripts"
 
-# The epoch every dated fixture here is measured from — the same one test_longhorn_backup_health
-# pins. A fixture stamped `time.time() - age` would measure its age across the suite's own
-# runtime, which is the straddle a pinned clock avoids.
+# Pinned clock: a fixture stamped `time.time() - age` would measure its age across the suite's
+# runtime.
 NOW = 1_800_000_000.0
 
-# The drill's namespace as the shim exports it. Each stub answers the stamp-ConfigMap read only
-# under this namespace, so a reader that sent it through the longhorn-system runner fails.
 DRILL_NAMESPACE = "homelab"
 
 # The stamp-ConfigMap read as the stubs match it, after `-n <namespace>` is stripped.
@@ -99,13 +95,10 @@ def trim_cronjob_body(schedule: str = "10 6 * * *", last_s: float = NOW - 3600) 
     )
 
 
-# Runs the reader with main(now=NOW) instead of `python longhorn_backup_health.py`, still as a
-# subprocess: import-time env parsing, the sys.path bootstrap, the stub-kubectl shell-out and
-# the up/down<TAB>msg contract are all the real ones. `-P` keeps the cwd off sys.path, so the
-# bootstrap is what makes `logic` importable, as it is under the cron; `run_name` is not
-# `__main__`, so the file's own entry line does not fire a second, clock-reading run. The one
-# subprocess test that does not date a fixture (`test_reader_pins_the_transport`) keeps the
-# bare `python <reader>` form, so the `__main__` line stays exercised.
+# Runs main(now=NOW) as a subprocess: env parsing, sys.path bootstrap and the up/down contract stay
+# real.
+# `-P` keeps cwd off sys.path; a non-`__main__` run_name stops the entry line firing a clock-reading
+# run.
 _MAIN_WITH_NOW = (
     "import runpy, sys; "
     "g = runpy.run_path(sys.argv[1], run_name='longhorn_backup_health'); "
@@ -120,16 +113,8 @@ def reader_argv(now: float | None = None) -> list[str]:
     return [sys.executable, "-P", "-c", _MAIN_WITH_NOW, str(READER), repr(now)]
 
 
-# The BackupTarget and RecurringJob lists the stub kubectls answer, from env knobs so one test
-# flips the cluster while the reader and its env stay fixed. Both stubs paste this in. Knobs:
-#   STUB_DEFAULT_URL / STUB_R2_URL    the target's `spec.backupTargetURL`; "" is a disarm
-#   STUB_DEFAULT_AVAILABLE / STUB_R2_AVAILABLE   "true" (default) or "false"
-#   STUB_DROP_TARGET                  a target name left out of the list
-#   STUB_FAIL_TARGET_LIST             set to make the BackupTarget list exit 124 (a timeout)
-#   STUB_DEFAULT_ANNOTATION           set to put the break-glass annotation on `default`
-#   STUB_DAILY_CRON                   the daily RecurringJob's `spec.cron`
-#   STUB_WEEKLY_MINUTE_HOUR           the two fields each weekly job's cron starts with
-# The URLs are placeholders: nothing here names a real bucket.
+# Cluster object lists the stub kubectls answer, driven by STUB_* env knobs so one test flips the
+# cluster.
 _CLUSTER_OBJECTS_PY = r"""
 import json
 import os
@@ -189,12 +174,8 @@ def _reader_env(tmp_path, **overrides) -> dict:
     """
     env = dict(os.environ)
     env["PYTHONPATH"] = f"{HOST_LIB_DIR}:{SCRIPTS_ROOT}:{env.get('PYTHONPATH', '')}"
-    # A drill that passed an hour before NOW, and a trim CronJob that started a Job then. A test
-    # about either sets the knob to "" (absent) or to its own body.
     env["STUB_DRILL_CM"] = fresh_drill_cm()
     env["STUB_TRIM_CRONJOB"] = trim_cronjob_body()
-    # An S3 snapshot an hour before NOW, under the drop-in the package renders. A test about check
-    # 12 sets the knob to its own list, or LONGHORN_ETCD_DROP_IN to its own file.
     env["STUB_ETCD_SNAPSHOTS"] = etcd_snapshots_body(
         ("s3://b/offbox", NOW - 3600, True)
     )
@@ -219,10 +200,9 @@ def _reader_env(tmp_path, **overrides) -> dict:
             "LONGHORN_ETCD_DROP_IN": str(drop_in),
             "LONGHORN_JOURNAL_TIMEOUT_S": "10",
             "LONGHORN_CRON_EVIDENCE_WINDOW_HOURS": "26",
-            # Check 10's B2 cron, installed an hour before NOW: the reader stats this path, sees it
-            # inside the window, and grants the freshly-provisioned grace — so the empty
-            # journal above stays silent and the green path stays green. A test about check 10
-            # overrides the path with one that does not exist, or backdates its mtime further.
+            # Installed an hour before NOW: the reader grants the freshly-provisioned grace, keeping
+            # the green path green.
+            # A check 10 test overrides the path or backdates its mtime.
             "LONGHORN_B2_DELETIONS_CRON_FILE": str(
                 _touch_cron(tmp_path, "b2-deletion-accounting")
             ),

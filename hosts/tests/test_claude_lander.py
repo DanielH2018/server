@@ -124,8 +124,8 @@ def test_the_branch_prefix_is_the_one_the_fence_lets_the_agent_push(
     fence = defaults(REPO / "hosts" / "components" / "github-checks")[
         "github_fence_ruleset_exclude"
     ]
-    # Master is excluded too, so the agent's account can merge a PR; the lander still lands
-    # only the agent's own branches.
+    # Master is excluded so the agent's account can merge a PR; the lander still lands only the
+    # agent's own branches.
     assert fence == ["refs/heads/master", f"refs/heads/{prefix}**"]
     monkeypatch.setenv(
         WORKTREE_PREFIX_ENV, defaults()["claude_code_agent_worktree_prefix"]
@@ -170,8 +170,6 @@ def test_the_rule_admits_only_the_agent_user_and_only_the_start_verb() -> None:
     assert rendered.count("polkit.Result.YES") == 1
 
 
-# The agent profile's variables, which the inventory may set, and a value for each that is not
-# the agent's.
 AGENT_PROFILE_OVERRIDES = {
     "claude_code_agent_user": AGENT,
     "claude_code_agent_github_login": "lander-sentinel-login",
@@ -210,7 +208,6 @@ def test_the_pinned_lander_values_name_the_agent_profile() -> None:
     )
 
 
-# The approval floor the operator chose on 2026-10-10: the grant points and the gate itself.
 FLOOR = [
     f"hosts/components/claude-code/templates/{PATHS}",
     f"hosts/components/claude-code/templates/{UNIT}",
@@ -323,8 +320,6 @@ def test_the_inventory_cannot_override_the_approval_list(tmp_path) -> None:
     assert policy.read_approval_paths(str(listed)) == FLOOR
 
 
-# Each file that decides what the lander does, or grants the agent root-level reach directly.
-# A PR changing one must not land without the operator.
 LANDER_FILES = [
     f"hosts/components/claude-code/templates/{UNIT}",
     f"hosts/components/claude-code/templates/{RULE}",
@@ -389,7 +384,6 @@ def test_a_pr_changing_a_role_named_like_cluster_base_lands_without_the_operator
     )
 
 
-# Off the floor since 2026-10-10: the agent's own roles, the landing doc and the inventory.
 OFF_THE_FLOOR = [
     "docs/landing.md",
     "hosts/components/claude-code/defaults/main.yml",

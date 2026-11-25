@@ -217,8 +217,6 @@ def test_advance_never_deletes_before_download_complete():
 
 
 def test_advance_grabbed_not_yet_in_queue_stays_within_grab_grace():
-    # advance runs the same tick as the grab; the download isn't in Sonarr's queue yet. Within the
-    # grab grace the entry stays grabbed (not falsely reset -> which would re-grab every tick).
     led = {"13": _rec(13, "grabbed", lastAction=100, chosen={"quality": "WEBDL-1080p"})}
     new, acts = rl.advance(
         led, {}, {"13": 2213}, {}, POLICY, now=200
@@ -491,8 +489,7 @@ def test_adopt_in_flight_only_touches_detected_entries():
 
 
 def test_files_for_ledger_covers_grabbed_not_just_importing():
-    # a 'grabbed' series must be queried so advance()'s auto-import success path can
-    # see the new fileId; scoping to 'importing' only would leave that path dead.
+    # A 'grabbed' series must be queried so advance() can see the new fileId.
     led = {
         "13": _rec(13, "grabbed", seriesId=96),
         "14": _rec(14, "detected", seriesId=97),

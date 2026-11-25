@@ -27,8 +27,7 @@ from _setup_render import rendered_component_text
 
 _TEMPLATE = "netplan-dns.yaml.j2"
 
-# Every override block that can feed a resolver into systemd-resolved. `ra-overrides` is the
-# one an author is most likely to leave out, because the other two are the obvious pair.
+# `ra-overrides` is the one an author is most likely to leave out.
 _REQUIRED_OVERRIDES = ("dhcp4-overrides", "dhcp6-overrides", "ra-overrides")
 
 _COMMENT = re.compile(r"^\s*#")

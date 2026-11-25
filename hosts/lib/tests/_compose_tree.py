@@ -227,8 +227,8 @@ def project_problems(project):
     return problems
 
 
-# Docker refuses a memory limit or reservation below 6 MiB ("Minimum memory reservation allowed is
-# 6MB"), so `up` fails at the daemon on a value that the Compose model and `config -q` accept.
+# Docker refuses a memory limit or reservation below 6 MiB, so `up` fails at the daemon on a value
+# `config -q` accepts.
 MIN_MEMORY = 6 * 1024 * 1024
 _SIZE = re.compile(r"(\d+(?:\.\d+)?)\s*([kmgt]?)b?", re.IGNORECASE)
 _UNITS = {"": 1, "k": 1024, "m": 1024**2, "g": 1024**3, "t": 1024**4}

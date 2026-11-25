@@ -65,7 +65,6 @@ def verdict(
     ("state", "written_min_ago", "success", "says"),
     [
         ("active", 5, 1, "status=up"),
-        # The 2026-11-13 state: the unit active, and the log silent since the last boot.
         ("active", 90, 0, "no write for 60 minutes"),
         ("inactive", 5, 0, "auditd.service is inactive"),
         ("active", None, 0, "cannot read"),

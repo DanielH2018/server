@@ -59,8 +59,8 @@ def test_guard_skips_the_run_just_after_boot():
 
 
 def test_guard_lets_the_run_proceed_once_the_grace_has_passed():
-    # REJECT: past the grace the check must run. Without this half, a guard that always skipped
-    # would look identical from the passing side — and would silence these crons permanently.
+    # REJECT half: a guard that always skipped would look identical from the passing side and
+    # silence these crons permanently.
     assert _run_guard(f"echo {GRACE_S + 1}", GRACE_S) != 0
 
 
@@ -71,8 +71,8 @@ def test_guard_fails_open_when_the_clock_is_unreadable():
 
 
 def test_grace_is_shorter_than_the_cron_interval():
-    # THE derivation. The dead-men's graces are sized for a single missed slot, which only holds
-    # while the guard cannot span two of them — whatever minute of the hour the host boots on.
+    # The dead-men's graces are sized for a single missed slot, which holds only while the guard
+    # cannot span two.
     for key in (
         "k3s_longhorn_backup_health_cron_minute",
         "k3s_disk_health_cron_minute",
@@ -87,8 +87,7 @@ def test_grace_is_shorter_than_the_cron_interval():
 
 
 def test_grace_covers_the_worst_observed_startup():
-    # The other bound: below this the cron runs against a cluster still coming up, which is the
-    # bug. Stated as a floor so a future trim has to argue with the measurement.
+    # Below this the cron runs against a cluster still coming up.
     assert GRACE_S > WORST_BOOT_TO_READY_S
 
 
@@ -113,9 +112,8 @@ def test_the_frequent_crons_call_the_guard():
 
 
 def test_the_frequent_crons_skip_with_no_push_and_exit_clean():
-    # Neither script has a Kuma tile any more (disk-health since M3's PR 5, longhorn-backup-health
-    # since M6's B1 Cutover-2), so a skipped run has no heartbeat to keep. It must exit 0. The
-    # previous textfile stays and DEADLINE_S covers the slot.
+    # A skipped run has no heartbeat to keep, so it must exit 0; the previous textfile stays and
+    # DEADLINE_S covers the slot.
     for name in FREQUENT_SCRIPTS:
         text = rendered_shell_text("components", "k3s-host-checks", name)
         guard = text.index(f"if boot_grace_active {GRACE_S}")
@@ -124,9 +122,8 @@ def test_the_frequent_crons_skip_with_no_push_and_exit_clean():
 
 
 def test_a_skipped_run_pings_no_healthchecks_slug():
-    # The other direction, and the one that would be worse. Pinging a dead-man's success URL for
-    # a run that did not happen holds the check green on no evidence — the failure the dead-man
-    # exists to catch. Silence is correct here; the grace covers it.
+    # Pinging a dead-man's success URL for a run that did not happen would hold the check green on
+    # no evidence.
     for name in FREQUENT_SCRIPTS:
         text = rendered_shell_text("components", "k3s-host-checks", name)
         guard = text.index("if boot_grace_active")
@@ -137,8 +134,8 @@ def test_a_skipped_run_pings_no_healthchecks_slug():
 
 
 def test_the_daily_crons_do_not():
-    # Deliberate, and the reject half of the wiring pair: for a daily cron a skipped slot is a
-    # skipped DAY. Their 1-hour graces already tolerate a late run.
+    # For a daily cron a skipped slot is a skipped DAY; their 1-hour graces already tolerate a late
+    # run.
     for name in DAILY_SCRIPTS:
         text = rendered_shell_text("components", "k3s-host-checks", name)
         assert "boot_grace_active" not in text, (

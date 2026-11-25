@@ -83,8 +83,6 @@ def test_a_suffixed_directory_whose_document_substitutes_takes_flux_diff(
 
 
 def test_a_tag_whose_own_document_lacks_postbuild_takes_kubectl_diff(rig) -> None:
-    # The tag's Kustomization is found by name, so a substituting sibling ahead of it in the
-    # file does not decide the tag's diff.
     rig.tag("demo", flux="---\n".join([
         kustomization("demo-verify", substitutes=True),
         kustomization("demo", substitutes=False),

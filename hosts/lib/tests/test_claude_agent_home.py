@@ -33,8 +33,6 @@ SCRIPT = "/usr/lib/homelab/claude-agent-home"
 SETUP = "/usr/lib/homelab/claude-agent-setup"
 # The operator's checkout prefix, with a `.` a regex would read as any character.
 STRIP = "/home/op.x/server/"
-# Where homelab-secrets renders the agent's two logins: daniel-box's package.yml and the
-# claude-code component name these destinations, and the setup script links to them.
 UI_LOGIN = "/run/homelab-secrets/claude-agent/homelab-ui-credentials.json"
 GH_LOGIN = "/run/homelab-secrets/var/lib/claude/.config/gh/hosts.yml"
 RUNUSER = '#!/bin/sh\n[ "$1" = -u ] && shift 2\n[ "$1" = -- ] && shift\nexec "$@"\n'
@@ -227,9 +225,8 @@ def test_a_copy_that_fails_partway_removes_the_index_so_the_next_run_retries(
     assert not (home["agent_memory"] / "MEMORY.md").exists()
 
 
-# Root runs both scripts, and the agent owns every directory below its home. A root command that
-# names such a path follows a link the agent put there. These tests scan the rendered text for
-# one, and run claude-agent-setup over planted links.
+# Root runs both scripts and the agent owns every directory below its home: a root command naming
+# such a path follows a link the agent planted.
 ROOT_WRITES = {
     "chmod",
     "chown",
@@ -248,8 +245,6 @@ ROOT_WRITES = {
 # Commands that take their destination last; the rest take every path after their first word.
 DESTINATION_LAST = {"cp", "install", "ln", "mv", "rsync"}
 OPTIONS_WITH_A_VALUE = {"-o", "-g", "-m", "--owner", "--group", "--mode"}
-# A variable the scripts bind to a path in the agent's home, or a positional parameter a helper
-# receives such a path in.
 AGENT_PATH = re.compile(r"\$\{?(home|clone|key|peer_key|agent_memory|shared|[1-9])\b")
 # A path reached through a directory the script opened and checked.
 OPEN_HANDLE = '"$pinned'

@@ -59,20 +59,12 @@ LANDERS = {
         "renovate-agent-land@.service.j2",
     ),
 }
-# What each unit set before D5.14 counted `images`, for the red half against the same
-# render.
 BEFORE_IMAGES = {"claude-land": 10800, "renovate-agent-land": 10800}
 # What each unit set before D5.16 handed code-server to Flux with a 4500s pre-pull.
 BEFORE_CODE_SERVER = {"claude-land": 18000, "renovate-agent-land": 18000}
-# What each unit set before the snapshot and verify Kustomizations of karakeep, pi-peer-backup
-# and media-volume counted toward the soak.
 BEFORE_KARAKEEP = {"claude-land": 25200, "renovate-agent-land": 25200}
 # The promote jobs a promotion waits on, each counted at its `timeout-minutes`.
 PIPELINE = ("render", "images", "publish")
-# One `images` job that rebuilds every built image, measured on 2026-10-17. Run
-# 38992066819's job 117276493018 built all ten in 368s, but n8n-runners failed there after 19s
-# (01:49:13 to 01:49:32). Its successful build in run 39036029019 took 45s (13:19:12 to
-# 13:19:57), so 368 - 19 + 45. code-server was the longest, at 213s.
 FULL_REBUILD_S = 394
 # Every value that has to move with LAND_DEADLINE, named in the failure.
 CASCADE = (

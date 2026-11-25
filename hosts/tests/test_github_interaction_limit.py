@@ -22,8 +22,6 @@ from lib.repo_paths import REPO
 ROLE = REPO / "hosts" / "components" / "github-checks"
 TEMPLATE = ("components", "github-checks", "github-interaction-limit.sh.j2")
 CHECK_LIB = "/usr/lib/homelab/homelab-check-lib.sh"
-# The role's copy of the check library, so a runner that never ran initial_setup still sources it
-# and the textfile the script writes lands in TEXTFILE_DIR under tmp_path, never on the host.
 REAL_CHECK_LIB = REPO / "hosts/components/check-lib/files/homelab-check-lib.sh"
 CRON_PATH_LINE = "export PATH=/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
 REPOS = load_defaults(ROLE)["github_interaction_limit_repos"]
@@ -50,9 +48,6 @@ def _run(
     `curl_argv` holds every curl call's arguments in order. `failing_repo` makes only the calls
     for that repo exit 22, as a 403 does.
     """
-    # `limit` is the one value this harness has to vary across calls; every other var the
-    # template reads comes from the inventory/role defaults the shared accessor already
-    # resolves, so it is not re-declared here.
     body = render_shell_script(*TEMPLATE, overrides={"github_interaction_limit": limit})
 
     assert CHECK_LIB in body, "the script no longer sources homelab-check-lib.sh"
@@ -70,9 +65,8 @@ def _run(
 
     script = write_exec(tmp_path / "github-interaction-limit.sh", body)
 
-    # curl stub: records its argv (so a test can assert the method and body), prints curl_body,
-    # exits curl_rc. `-sf` on the real one turns an HTTP error into a non-zero rc, so a 403
-    # from a token without the scope and a transport failure both arrive here the same way.
+    # `-sf` turns an HTTP error into a non-zero rc, so a 403 from a token without the scope and a
+    # transport failure arrive alike.
     argv_out = tmp_path / "curl.argv"
     fake_bin(
         binstub,
@@ -89,9 +83,7 @@ def _run(
         ),
     )
 
-    # sudo stub: the token lookup is `sudo -n -u <user> -H gh auth token`. On the box these
-    # tests run on the real sudo is passwordless and the real gh is logged in, so without the
-    # stub a unit test would reach a live credential — and a live PUT against the real repo.
+    # Without this stub a unit test reaches a live credential and a live PUT against the real repo.
     fake_bin(
         binstub,
         sudo=(
@@ -101,8 +93,6 @@ def _run(
         ),
     )
 
-    # logger stub: the script's journal line, recorded rather than sent. The verdict is read back
-    # from it, the last `status=<up|down> <message>` line.
     journal = tmp_path / "journal.out"
     fake_bin(
         binstub,

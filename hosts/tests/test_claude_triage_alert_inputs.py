@@ -15,8 +15,6 @@ from test_claude_triage import pins
 # A session can write syslog lines with any tag, so a routed alert must not count them.
 PROMETHEUS_RULES = K8S_ROLES / "observability" / "files" / "rules"
 LOKI_RULES = K8S_ROLES / "loki-homelab" / "files" / "rules"
-# Prometheus series that count log lines or bytes: Alloy's `stage.metrics` counters and Loki's
-# own ingest volume.
 LOG_VOLUME_METRICS = (
     "loki_process_custom_",
     "loki_distributor_lines_received",

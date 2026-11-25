@@ -20,8 +20,6 @@ from lib import proc_testing, yaml_fast
 # The jobs whose write-scoped token reaches a step that runs a script from the checkout.
 TOKEN_JOBS = {"ci.yml": "prek", "promote.yml": "images"}
 _SCRIPT = re.compile(r"\bpython3? (scripts/[\w/]+\.py)")
-# Imports a script the way `python3 <script>` does, short of calling its `main`, and prints
-# each module file the checkout supplied.
 _LOADED = """
 import runpy, sys
 from pathlib import Path

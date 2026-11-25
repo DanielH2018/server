@@ -10,15 +10,13 @@
 users:
   # The homelab band 900-949 sits below the uids Ubuntu hands out from 999 down.
   - {name: renovate-agent, uid: 901, gid: 901, home: /var/lib/renovate-agent, shell: /bin/bash, comment: Unattended Renovate agent}
-  # The controller: runs the runner, owns its state and the write token, and
-  # alone may start the session and lander units. No login.
   - {name: renovate-agent-ctl, uid: 905, gid: 905, home: /var/lib/renovate-agent-ctl, shell: /usr/sbin/nologin, comment: Renovate agent controller}
 units:
   homelab-renovate-agent.service: {policy: manual}
   homelab-renovate-agent-session.service: {policy: manual}
 outputs:
-  # The controller's config, with the Discord webhook: readable by the controller, writable by
-  # root alone, and unreadable by the session user.
+  # Holds the Discord webhook: readable by the controller, writable by root, unreadable by the
+  # session.
   - src: templates/config.env.j2
     path: /etc/renovate-agent/config.env
     owner: root
@@ -62,10 +60,6 @@ files:
   - {lib: claude_config_lock.py, dst: /usr/lib/homelab/renovate-agent/claude_config_lock.py}
   - {src: templates/prompt.txt.j2, dst: /usr/lib/homelab/renovate-agent/prompt.txt}
   - {src: templates/session.conf.j2, dst: /usr/lib/homelab/renovate-agent/session.conf}
-  # The server-owned half of the session's Claude Code settings: the guard hooks, the sudo and
-  # self-edit denies, and bypass mode off. claude-code's homelab-claude-config-render merges it
-  # over the verified dotfiles tag's deny floor and publishes the file the session passes with
-  # --settings.
   - {src: files/claude-settings-overlay.json, dst: /usr/lib/homelab/claude-config-render/overlays/renovate.json}
   - {src: templates/renovate-agent-setup.sh.j2, dst: /usr/lib/homelab/renovate-agent-setup, mode: "0755", activate: "try-restart:homelab-renovate-agent-setup.service"}
   - {src: templates/homelab-renovate-agent-setup.service.j2, dst: /usr/lib/systemd/system/homelab-renovate-agent-setup.service}

@@ -28,8 +28,7 @@ from _helpers import load_yaml
 from lib.repo_paths import K3S_DEFAULTS
 
 
-# The one direction-specific port, with the reason it is legitimately one-sided. Anything else
-# appearing on only one side is a bug, not a decision.
+# Anything else on only one side is a bug, not a decision.
 SERVER_ONLY = {("6443", "tcp")}
 
 

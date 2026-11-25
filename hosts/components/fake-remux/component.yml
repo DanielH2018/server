@@ -13,8 +13,7 @@ depends:
   # mkvpropedit, which renames a font attachment in an mkv header without re-encoding.
   - mkvtoolnix
 outputs:
-  # The path stays /etc/autofix-fake-remux/config.env: both scripts fall back to it, and a wrong
-  # path reports `disabled (no Sonarr API key)` and exits 0, scanning nothing.
+  # A wrong path reports `disabled (no Sonarr API key)`, exits 0 and scans nothing.
   - src: templates/fake-remux.config.env.j2
     path: /etc/autofix-fake-remux/config.env
     owner: ubuntu

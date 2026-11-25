@@ -37,8 +37,8 @@ DROP_IN = "/etc/apt/apt.conf.d/52unattended-upgrades-local"
 VAR = "unattended_upgrades_origins_patterns"
 # `origin=gh`, `archive=${distro_codename}-updates`, `n=stable` — a matcher, `=`, a value.
 TOKEN_RE = re.compile(r"^[a-z]+=[^=,]+$")
-# The matcher names unattended-upgrade's match_whitelist_string() accepts. Anything else
-# raises UnknownMatcherError at run time, which surfaces only in the daily timer's log.
+# A matcher beyond unattended-upgrade's match_whitelist_string() raises UnknownMatcherError,
+# surfacing only in the daily timer's log.
 MATCHERS = {
     "o",
     "origin",
@@ -83,7 +83,6 @@ MATCHER_FIELDS = {
     "n": "codename",
     "codename": "codename",
 }
-# `apt-cache policy` on daniel-pi, 2026-11-07. A repository may publish no codename.
 DOCKER = {
     "origin": "Docker",
     "label": "Docker CE",

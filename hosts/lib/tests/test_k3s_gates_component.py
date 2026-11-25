@@ -48,7 +48,7 @@ def test_daniel_server_ships_the_gates_without_the_restart_unit(server):
     body, mode = server.files[GATES]
     assert body == (REPO / "hosts/lib/k3s_gates.py").read_bytes()
     assert mode == 0o755
-    # Without the unit, /run/homelab-k3s-restart/ never exists, so the agent gate's marker check
+    # Without the unit /run/homelab-k3s-restart/ never exists, so the agent gate's marker check
     # passes by construction.
     assert "/usr/lib/systemd/system/homelab-k3s-restart.service" not in server.files
 
@@ -59,8 +59,8 @@ def test_the_shipped_gates_import_from_the_package_layout_alone(server, tmp_path
             target = tmp_path / dst.removeprefix("/usr/lib/homelab/")
             target.parent.mkdir(parents=True, exist_ok=True)
             target.write_bytes(body)
-    # `-S` drops the venv's `.pth`, so only the files the package installs beside the script
-    # resolve its imports, as in the Plan's bare python image.
+    # `-S` drops the venv's `.pth`, so only the files the package installs beside the script resolve
+    # its imports.
     env = {k: v for k, v in os.environ.items() if k != "PYTHONPATH"}
     proc = subprocess.run(
         [sys.executable, "-S", str(tmp_path / "k3s_gates.py"), "--help"],
