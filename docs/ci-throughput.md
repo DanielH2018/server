@@ -129,7 +129,7 @@ dispatch runs every module. A push whose tree a pull-request run tested runs not
   gate passed. The legs select the modules the diff from that base can affect. The base is
   not always the parent. A selection against a parent whose run is red would leave out
   what the parent broke, and master would read green with that module failing
-  (`scripts/dev/tests/test_tested_tree.py::test_a_red_or_unfinished_parent_is_skipped_for_the_ancestor_behind_it`).
+  (`scripts/dev/tests/ci/test_tested_tree.py::test_a_red_or_unfinished_parent_is_skipped_for_the_ancestor_behind_it`).
   A parent whose run has not finished is skipped the same way. With no green ancestor
   within `MAX_BASE_WALK` commits, or a lookup that fails, the push runs every module.
 

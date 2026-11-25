@@ -489,6 +489,7 @@ extra-paths = [
   "k8s/roles/system-upgrade/files",
   "scripts/backup/tests",
   "scripts/deploy_tools/tests",
+  "scripts/dev/tests",
   "scripts/docs/tests",
 ]
 

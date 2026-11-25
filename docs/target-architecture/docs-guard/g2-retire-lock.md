@@ -90,7 +90,7 @@ test modules are these:
   `status_of` from `lib.facts.relations`.
 - `scripts/lib/facts/report.py` imports `LOCK_REL` and `parse_lock` from `.lock`.
 - `scripts/lib/facts/lint.py` imports `LOCK_REL` and `lock_tampered` from `.lock`.
-- `scripts/dev/tests/test_facts_cli.py` imports `read_lock`.
+- `scripts/dev/tests/repo_tools/test_facts_cli.py` imports `read_lock`.
 - `scripts/lib/tests/test_facts_lint.py` imports `LOCK_REL` and `write_lock`.
 - `scripts/lib/tests/test_facts_report.py` imports `LOCK_REL` and `verify_units`.
 - `test_facts_lock_matches_tree.py` and `test_facts_lock_units_lint_clean.py` import from
@@ -440,7 +440,7 @@ The pre-flip PR therefore takes the label PR 2b.
         - `test_facts_lock_matches_tree.py`;
         - `cmd_status`, `cmd_verify`, `cmd_reverify`, `cmd_forget` and their argparse
           entries, which span 142 lines of `fact_status.py`;
-        - their tests in `scripts/dev/tests/test_facts_cli.py`, which span 184 lines, and
+        - their tests in `scripts/dev/tests/repo_tools/test_facts_cli.py`, which span 184 lines, and
           that file's `read_lock` import.
     - `fact_status.py` drops its `lib.facts.lock` and `lib.facts.relations` imports.
     - Replace `lock-tampered` with `lock-retired` in `lint.py`, which drops its `.lock`
@@ -546,7 +546,7 @@ The first `git grep` matches these files at `70591c307`. Each match leaves in th
 | `scripts/lib/tests/test_facts_report.py` (`verify_units`) | PR 2 |
 | `test_facts_lock_matches_tree.py` | PR 3 |
 | `scripts/dev/fact_status.py` (imports and calls) | PR 3 |
-| `scripts/dev/tests/test_facts_cli.py` (`read_lock`) | PR 3 |
+| `scripts/dev/tests/repo_tools/test_facts_cli.py` (`read_lock`) | PR 3 |
 | `scripts/lib/facts/lint.py` (`lock_tampered`) | PR 3 |
 | `scripts/lib/facts/pins.py` (module docstring) | PR 3 |
 | `.claude/rules/facts.md` (*Commands*) | PR 3 |
@@ -758,7 +758,7 @@ Each risk is checked against `docs/failure-classes.md`.
           assertion and drops its zero-miss assertion;
         - the `crashed` test stays;
         - the plain-window pair from *Verification* joins the file;
-    - `test_report_json_ranks_the_sections_not_in` in `scripts/dev/tests/test_facts_cli.py`,
+    - `test_report_json_ranks_the_sections_not_in` in `scripts/dev/tests/repo_tools/test_facts_cli.py`,
       because the ranking it asserts changes;
     - a pair in `scripts/lib/tests/test_facts_citations.py` for `citations.repo_citations`:
       a tracked path citation is kept, and an untracked one is dropped. The only test that
@@ -900,7 +900,7 @@ Findings raised, all fixed except where marked:
     - PR 3's counts are restated from measured spans at `70591c307`. The four subcommands
       and their argparse entries span 142 lines of `fact_status.py`. Their CLI tests span
       184 lines of `test_facts_cli.py`.
-    - Refuted: `status` cannot leave first. In `scripts/dev/tests/test_facts_cli.py`, eight
+    - Refuted: `status` cannot leave first. In `scripts/dev/tests/repo_tools/test_facts_cli.py`, eight
       tests of `verify`, `forget` and `reverify` assert through `main(["status", ...])`.
       Examples are `test_verify_then_status_is_clean`, `test_forget_then_status_is_clean`
       and `test_reverify_folds_a_prose_edit_into_the_commit`. `cmd_verify` and

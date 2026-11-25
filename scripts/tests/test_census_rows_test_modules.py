@@ -164,7 +164,7 @@ ROWS = (
             }
         ),
         allow={
-            "scripts/dev/tests/test_gen_hook_settings.py": (
+            "scripts/dev/tests/repo_tools/test_gen_hook_settings.py": (
                 "the exec bit IS the subject: `hook_files` must read a hook committed WITHOUT "
                 "it, so the fixture writes one file with the bit and one without"
             ),

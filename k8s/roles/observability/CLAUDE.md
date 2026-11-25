@@ -204,7 +204,7 @@ workload-service join. The host table is
 its scrape job and its `HostUpdateStale` limit. To change a host-plane rule, edit its table
 entry, run the generator, and commit the table and the rule file together. The
 `gen-host-rules` prek hook and
-`scripts/dev/tests/test_gen_host_rules.py::test_the_committed_rule_files_are_the_render_of_their_tables_is_clean`
+`scripts/dev/tests/repo_tools/test_gen_host_rules.py::test_the_committed_rule_files_are_the_render_of_their_tables_is_clean`
 fail a rule file that differs from its table. The generator refuses to render while an
 inventory host has no host-table entry, so every host pages for its reconcile and its updates. `docs/host-packages.md` is the
 runbook for both pages. `WiredLinkDown` takes one copy per node whose host_vars set

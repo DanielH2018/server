@@ -49,7 +49,7 @@ ADDED_BY_5481 = {
     "scripts/lib/tests/test_exit_codes.py": "scripts/deploy.sh",
     "hosts/tests/test_lander_deadlines_cover_the_soak.py": ".github/workflows/promote.yml",
     "scripts/tests/test_prek_files_cover_entry_imports.py": "prek.toml",
-    "tests/repo/test_tracked_python_hazards.py": "scripts/dev/tests/test_findings.py",
+    "tests/repo/test_tracked_python_hazards.py": "scripts/dev/tests/findings/test_findings.py",
     "tests/k8s/test_checksum_annotations_documented.py": "k8s/roles/monitor-bridge/CLAUDE.md",
     "tests/repo/test_shell_entry_points_answer_help.py": ".claude/hooks/run-hook.sh",
     "tests/deploy/test_renovate_per_package_manual_rules_carry_the_denylist_marker.py": "renovate.json",

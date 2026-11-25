@@ -1,0 +1,570 @@
+"""Tests for findings.py's model, its label/touch/close plans and the list CLI over them.
+
+The boundaries come from the `make_tools` fixture, which answers `gh_json` by argv, so
+`load_issues`, `_existing_labels` and the label planning they feed all run for real here.
+The `open` planner and its CLI are in test_findings_open.py; everything verify-by is in
+test_findings_verify.py.
+
+Run: uv run pytest scripts/dev/tests/findings/test_findings.py
+"""
+
+import json
+import re
+
+import pytest
+from _findings_fakes import Fakes, typed
+from dev import findings
+from dev.findings_lib.gh_calls import ISSUE_LIST_CAP, load_issues, run
+from dev.findings_lib.issue_model import (
+    cited_paths,
+    LABELS,
+    _prefixed,
+    claim_comment,
+    find_by_fingerprint,
+    fingerprint,
+    issue_rows,
+    reobservations,
+    settled_reason,
+    sort_key,
+    trailer,
+    verify_by_section,
+)
+from dev.findings_lib.plans import plan_close, plan_sync_labels, plan_touch
+
+# --- fingerprint -----------------------------------------------------------------------
+
+
+def test_fingerprint_ignores_line_numbers():
+    a = fingerprint("Probe skips a role", "scripts/diagnostics/probe.py:120")
+    b = fingerprint("Probe skips a role", "scripts/diagnostics/probe.py:131-140")
+    assert a == b and len(a) == 12
+
+
+def test_fingerprint_ignores_case_and_punctuation_in_the_title():
+    a = fingerprint("Probe skips a role!", "x.py")
+    b = fingerprint("probe  skips A role", "x.py")
+    assert a == b
+
+
+def test_fingerprint_changes_with_the_file():
+    assert fingerprint("t", "a.py") != fingerprint("t", "b.py")
+
+
+def test_fingerprint_without_a_file_is_stable():
+    assert fingerprint("t", None) == fingerprint("t", "")
+
+
+# --- lookup ----------------------------------------------------------------------------
+
+
+def test_find_by_fingerprint_matches_the_trailer_only(issue):
+    hit = issue(3, fp="abc123def456")
+    miss = issue(4)
+    miss["body"] = "mentions abc123def456 in prose"
+    found = find_by_fingerprint([typed(miss), typed(hit)], "abc123def456")
+    assert found is not None, "the fingerprinted issue was not matched at all"
+    assert found.number == 3
+    assert find_by_fingerprint([typed(miss)], "abc123def456") is None
+
+
+def test_reobservations_counts_only_reobserved_comments(issue):
+    one = issue(
+        1,
+        comments=(
+            "Re-observed by review-2026-08-20",
+            "unrelated",
+            "Re-observed by review-2026-08-27",
+        ),
+    )
+    assert reobservations(typed(one)) == 2
+
+
+# --- rows and order ---------------------------------------------------------------------
+
+
+def test_issue_rows_reads_labels_into_fields(issue):
+    one = issue(9, labels=("claude", "severity/high", "kind/gap"), fp="f")
+    one["fields"] = {"Domain": "network"}
+    (row,) = issue_rows([typed(one)])
+    assert (
+        row["severity"] == "high"
+        and row["kind"] == "gap"
+        and row["domain"] == "network"
+    )
+    assert row["no_vetted_remediation"] is False
+    assert row["first_seen"] == "2026-08-15" and row["number"] == 9
+
+
+def test_issue_rows_marks_the_third_sighting_escalated_without_a_label(issue):
+    twice = issue(1, comments=("Re-observed by a", "Re-observed by b"))
+    once = issue(2, labels=("escalated",), comments=("Re-observed by a",))
+    rows = {r["number"]: r for r in issue_rows([typed(twice), typed(once)])}
+    assert rows[1]["escalated"] is True
+    assert rows[2]["escalated"] is False
+
+
+def test_sort_key_puts_escalated_high_before_plain_high_before_medium(issue):
+    seen_thrice = ("Re-observed by a", "Re-observed by b")
+    rows = issue_rows(
+        [
+            typed(issue(1, labels=("severity/medium",))),
+            typed(issue(2, labels=("severity/high",))),
+            typed(issue(3, labels=("severity/high",), comments=seen_thrice)),
+            typed(issue(4, labels=())),
+        ]
+    )
+    assert [r["number"] for r in sorted(rows, key=sort_key)] == [3, 2, 1, 4]
+
+
+def test_issue_rows_reads_verify_by_presence(issue):
+    with_it = issue(1, fp="a" * 12)
+    with_it["body"] += verify_by_section("Check the log.")
+    without = issue(2, fp="b" * 12)
+    rows = {r["number"]: r for r in issue_rows([typed(with_it), typed(without)])}
+    assert rows[1]["verify_by"] is True
+    assert rows[2]["verify_by"] is False
+
+
+def test_issue_rows_reads_a_labelless_not_planned_close_as_unruled(issue):
+    hand = issue(1, state="CLOSED", labels=("claude",))
+    ruled = issue(2, state="CLOSED", labels=("claude", "accepted"))
+    for one in (hand, ruled):
+        one.update(stateReason="NOT_PLANNED", closedAt="2026-10-03T19:50:51Z")
+    rows = {r["number"]: r for r in issue_rows([typed(hand), typed(ruled)])}
+    assert rows[1]["outcome"] == "not planned"
+    assert rows[2]["outcome"] == "accepted"
+    assert rows[1]["closed_on"] == "2026-10-03"
+
+
+# --- sync-labels -------------------------------------------------------------------------
+
+
+def test_sync_labels_with_everything_present_plans_nothing():
+    assert plan_sync_labels(set(LABELS)) == []
+
+
+def test_sync_labels_plans_exactly_the_missing_label():
+    existing = set(LABELS) - {"manual"}
+    plans = plan_sync_labels(existing)
+    assert len(plans) == 1
+    assert plans[0][:3] == ["label", "create", "manual"]
+    assert "--force" not in plans[0]
+
+
+# --- run and dry-run ----------------------------------------------------------------------
+
+
+def test_run_dry_prints_and_does_not_call_gh(capsys, make_tools):
+    tools, calls = make_tools()
+    run([["issue", "comment", "1", "--body", "x"]], True, tools)
+    assert "gh issue comment 1 --body x" in capsys.readouterr().out
+    assert calls.none()
+
+
+def test_run_wet_calls_gh_in_order(make_tools):
+    tools, calls = make_tools()
+    run([["a"], ["b"]], False, tools)
+    assert calls.gh == [["a"], ["b"]]
+
+
+# --- list CLI -------------------------------------------------------------------------------
+
+
+def test_list_json_emits_rows(capsys, issue, make_tools):
+    tools, _ = make_tools(Fakes(issues=[issue(5, labels=("severity/low",), fp="f")]))
+    assert findings.main(["list", "--json"], tools) == 0
+    rows = json.loads(capsys.readouterr().out)
+    assert rows[0]["number"] == 5 and rows[0]["severity"] == "low"
+
+
+def test_list_renders_the_manual_and_claimed_markers(capsys, issue, make_tools):
+    """The two markers the spec's `list` section requires, in the TEXT render.
+
+    Every other `list` test passes `--json` or an empty issue set, so the render loop never
+    ran and neither marker had a test that could go red. They are the only way an
+    operator reading ordinary `list` output sees that an issue is reserved or being worked.
+    """
+    reserved = issue(5, labels=("manual",), title="operator only")
+    worked = issue(
+        6, comments=[claim_comment("worktree-issue-1132", None, "t")], title="taken"
+    )
+    tools, _ = make_tools(Fakes(issues=[reserved, worked]))
+    assert findings.main(["list"], tools) == 0
+    out = capsys.readouterr().out
+    assert "[manual]" in out
+    assert "[claimed:worktree-issue-1132]" in out
+
+
+def test_list_marks_neither_on_an_ordinary_issue(capsys, issue, make_tools):
+    """The rejecting half: a flag that renders on everything is as wrong as one that never
+    renders, and the pair above cannot tell those apart on its own."""
+    tools, _ = make_tools(Fakes(issues=[issue(5, labels=("severity/low",))]))
+    assert findings.main(["list"], tools) == 0
+    out = capsys.readouterr().out
+    assert "[manual]" not in out
+    assert "[claimed:" not in out
+
+
+def test_list_reads_only_the_open_register(make_tools):
+    """`--state closed` was retired: past findings are `history`'s search, not this read."""
+    tools, calls = make_tools()
+    findings.main(["list"], tools)
+    argv = calls.gh_json[0]
+    assert argv[argv.index("--state") + 1] == "open"
+    assert argv[argv.index("--label") + 1] == "claude"
+
+
+# --- --dry-run parses on either side of the subcommand -----------------------------------
+
+
+def test_dry_run_is_accepted_after_the_subcommand(make_tools):
+    tools, calls = make_tools()
+    assert findings.main(["sync-labels", "--dry-run"], tools) == 0
+    assert not calls.gh
+
+
+def test_dry_run_is_accepted_before_the_subcommand(make_tools):
+    tools, calls = make_tools()
+    assert findings.main(["--dry-run", "sync-labels"], tools) == 0
+    assert not calls.gh
+
+
+# --- touch -----------------------------------------------------------------------------------
+
+
+def test_touch_second_sighting_does_not_escalate(issue):
+    plans = plan_touch(typed(issue(1, comments=())), "review-2026-09-02")
+    assert [p[:2] for p in plans] == [["issue", "comment"]]
+    assert "sighting 2" in plans[0][-1]
+
+
+def test_touch_names_the_sighting_this_run_makes(issue):
+    # fact: .claude/skills/homelab-review/SKILL.md#2. Prime from memory FIRST (the signal-booster — do this before dispatching)
+    seen_three_times = issue(
+        1, comments=("Re-observed by a", "Re-observed by b", "Re-observed by c")
+    )
+    plans = plan_touch(typed(seen_three_times), "d")
+    assert "sighting 5" in plans[0][-1]
+
+
+def test_touch_cli_loads_the_issue_by_number(capsys, issue, make_tools):
+    tools, calls = make_tools(Fakes(view=issue(12)))
+    assert findings.main(["touch", "12", "--source", "review-2026-09-02"], tools) == 0
+    assert calls.gh[0][:3] == ["issue", "comment", "12"]
+    assert "#12 touched" in capsys.readouterr().out
+
+
+def test_touch_refuses_a_closed_issue(capsys, issue, make_tools):
+    closed = issue(12, state="CLOSED", labels=("refuted",))
+    tools, calls = make_tools(Fakes(view=closed))
+    assert findings.main(["touch", "12"], tools) == 3
+    assert "closed (refuted)" in capsys.readouterr().err
+    assert not calls.gh
+
+
+# --- close -----------------------------------------------------------------------------------
+
+
+def test_close_fixed_with_pr_names_the_pr():
+    plans = plan_close(5, outcome="fixed", pr=700)
+    (argv,) = plans
+    assert (
+        argv[:3] == ["issue", "close", "5"]
+        and "#700" in argv[argv.index("--comment") + 1]
+    )
+    assert "refuted" not in argv
+
+
+def test_close_refuted_adds_the_label_then_closes_with_the_reason():
+    plans = plan_close(5, outcome="refuted", reason="the timer is disabled by design")
+    assert plans[0] == ["issue", "edit", "5", "--add-label", "refuted"]
+    assert plans[1][:3] == ["issue", "close", "5"]
+    comment = plans[1][plans[1].index("--comment") + 1]
+    assert comment == "Refuted: the timer is disabled by design"
+    assert plans[1][plans[1].index("--reason") + 1] == "not planned"
+
+
+def test_close_accepted_adds_the_accepted_label_and_says_accepted():
+    """The accepted close must not read as a refutation: the register would be lying."""
+    plans = plan_close(
+        5, outcome="accepted", reason="one voter is the deliberate trade-off"
+    )
+    assert plans[0] == ["issue", "edit", "5", "--add-label", "accepted"]
+    assert plans[1][plans[1].index("--reason") + 1] == "not planned"
+    comment = plans[1][plans[1].index("--comment") + 1]
+    assert comment == "Accepted: one voter is the deliberate trade-off"
+    assert "refuted" not in str(plans).lower()
+
+
+def test_close_rejects_an_outcome_that_is_not_one_of_the_three():
+    with pytest.raises(KeyError):
+        plan_close(5, outcome="wontfix", reason="r")
+
+
+def test_settled_reason_reads_back_what_plan_close_wrote(issue):
+    """The reader and the writer share `NOT_PLANNED_PREFIX`; this pins the round trip."""
+    plans = plan_close(5, outcome="accepted", reason="one voter is the trade-off")
+    comment = plans[1][plans[1].index("--comment") + 1]
+    one = issue(5, comments=("Claim: by someone", comment))
+    assert settled_reason(typed(one)) == "one voter is the trade-off"
+    (row,) = issue_rows([typed(one)])
+    assert row["reason"] == "one voter is the trade-off"
+
+
+def test_settled_reason_takes_the_last_ruling_and_only_its_first_line(issue):
+    one = issue(
+        5,
+        comments=(
+            "Refuted: the first ruling",
+            "Re-observed by review-2026-09-01",
+            "Accepted: the later ruling\nwith a second line the table cell cannot hold",
+        ),
+    )
+    assert settled_reason(typed(one)) == "the later ruling"
+
+
+def test_settled_reason_is_none_without_a_ruling_comment(issue):
+    one = issue(
+        5, comments=("Fixed by PR #700.", "prose mentioning Accepted: mid-line")
+    )
+    assert settled_reason(typed(one)) is None
+
+
+def test_close_refuted_without_a_reason_is_rejected_before_any_write(make_tools):
+    tools, calls = make_tools()
+    assert findings.main(["close", "5", "--refuted"], tools) == 64
+    assert calls.none()
+
+
+def test_close_refuted_with_a_pr_is_rejected(make_tools):
+    tools, calls = make_tools()
+    argv = ["close", "5", "--refuted", "--reason", "r", "--pr", "700"]
+    assert findings.main(argv, tools) == 64
+    assert calls.none()
+
+
+def test_close_fixed_with_a_pr_is_accepted(make_tools, issue):
+    tools, calls = make_tools(Fakes(view=issue(5)))
+    assert findings.main(["close", "5", "--fixed", "--pr", "700"], tools) == 0
+    assert calls.gh[0][:3] == ["issue", "close", "5"]
+
+
+def test_close_fixed_on_another_register_names_the_pr_with_its_repo(make_tools, issue):
+    """GitHub resolves a bare `#N` against the issue's own repo, so on the dotfiles
+    register a bare `#8879` links dotfiles PR 8879 rather than the server PR."""
+    tools, calls = make_tools(Fakes(view=issue(1395)))
+    argv = ["close", "1395", "--fixed", "--pr", "8879"]
+    assert findings.main([*argv, "--repo", "DanielH2018/dotfiles"], tools) == 0
+    (close,) = [c for c in calls.gh if c[:2] == ["issue", "close"]]
+    text = close[close.index("--comment") + 1]
+    assert re.search(r"DanielH2018/server(#|/pull/)8879", text)
+    assert not re.search(r"(?<![\w/])#8879", text)
+
+
+def test_close_accepted_without_a_reason_is_rejected_before_any_write(make_tools):
+    tools, calls = make_tools()
+    assert findings.main(["close", "5", "--accepted"], tools) == 64
+    assert calls.none()
+
+
+def test_close_accepted_with_a_pr_is_rejected(make_tools):
+    tools, calls = make_tools()
+    argv = ["close", "5", "--accepted", "--reason", "r", "--pr", "700"]
+    assert findings.main(argv, tools) == 64
+    assert calls.none()
+
+
+def test_close_accepted_creates_the_label_before_it_applies_it(
+    capsys, make_tools, issue
+):
+    """`gh issue edit --add-label` fails on a label the repo lacks, and `accepted` is new."""
+    tools, calls = make_tools(Fakes(labels=set(LABELS) - {"accepted"}, view=issue(5)))
+    argv = ["close", "5", "--accepted", "--reason", "the operator ruled"]
+    assert findings.main(argv, tools) == 0
+    assert calls.gh[0][:3] == ["label", "create", "accepted"]
+    assert calls.gh[1] == ["issue", "edit", "5", "--add-label", "accepted"]
+    assert "#5 closed as accepted" in capsys.readouterr().out
+
+
+def test_close_fixed_creates_no_label(make_tools, issue):
+    """The fixed close applies no label, so it must not pay for a label sync."""
+    tools, calls = make_tools(Fakes(labels=set(LABELS) - {"accepted"}, view=issue(5)))
+    assert findings.main(["close", "5", "--fixed"], tools) == 0
+    assert all(p[:2] != ["label", "create"] for p in calls.gh)
+
+
+# --- the fingerprint trailer across line endings -----------------------------------------------
+
+_CRLF_BODY = "details\r\n\r\n---\r\nFingerprint: `abc123def456`\r\nSource: s\r\n"
+
+
+def test_find_by_fingerprint_matches_a_crlf_body(issue):
+    crlf = issue(7)
+    crlf["body"] = _CRLF_BODY
+    found = find_by_fingerprint([typed(crlf)], "abc123def456")
+    assert found is not None, "a CRLF body hid the fingerprint"
+    assert found.number == 7
+
+
+def test_find_by_fingerprint_rejects_a_different_id_in_a_crlf_body(issue):
+    crlf = issue(7)
+    crlf["body"] = _CRLF_BODY
+    assert find_by_fingerprint([typed(crlf)], "0123456789ab") is None
+
+
+# --- label prefixes resolve deterministically ---------------------------------------------------
+
+
+def test_prefixed_picks_the_alphabetically_first_of_two():
+    for names in ({"domain/network", "domain/cicd"}, {"domain/cicd", "domain/network"}):
+        assert _prefixed(frozenset(names), "domain/") == "cicd"
+
+
+# --- the injected seam is required, not defaulted --------------------------------------------
+
+
+def test_main_requires_the_tools_seam():
+    """`main` must not read `tools or FindingsTools()`, which would reach the real `gh` on
+    this call.
+
+    The red-proof half: with the default boundaries `main(["list"])` shells out to `gh issue list`
+    from a unit test instead of failing. The `__main__` block is the only site that builds the
+    real boundaries.
+    """
+    with pytest.raises(TypeError):
+        findings.main(["list"])  # ty: ignore[missing-argument]
+
+
+def test_help_carries_the_docstring_summary(capsys, make_tools):
+    """The description came from `__doc__.splitlines()[1]`, which is the BLANK line
+    after the summary, so `--help` printed usage and then straight to `positional arguments`
+    with nothing saying what this eleven-subcommand entry point is for. Asserts the summary
+    text rather than merely "non-empty", so a description that goes blank again fails here.
+    """
+    tools, _ = make_tools()
+    with pytest.raises(SystemExit):
+        findings.main(["--help"], tools)
+    plain = " ".join(re.sub(r"\x1b\[[0-9;]*m", "", capsys.readouterr().out).split())
+    assert "close Claude's unfixed findings as GitHub Issues" in plain
+
+
+# The fan-out's file-level collision check groups by these.
+def test_cited_paths_finds_files_and_drops_line_numbers_directories_and_hosts():
+    body = (
+        f"see `{'scripts/diagnostics/probe_lib/alerts.py'}:42`, `k8s/roles/monitor-bridge/`, "
+        "`.claude/hooks/block-footguns.py`, docs.local.example.com/reference/services.md, "
+        "https://github.com/DanielH2018/server/issues/1790, and/or 1.5x"
+    )
+    assert cited_paths(body) == [
+        ".claude/hooks/block-footguns.py",
+        "scripts/diagnostics/probe_lib/alerts.py",
+    ]
+
+
+def test_cited_paths_is_empty_for_prose_that_names_no_file():
+    assert cited_paths("the deploy tick joined; nothing cited") == []
+    assert cited_paths("") == []
+
+
+def test_next_rows_carry_the_cited_paths_for_triage(issue):
+    citing = issue(1)
+    citing["body"] = f"fix {'scripts/diagnostics/probe_lib/alerts.py'} please"
+    (row,) = issue_rows([typed(citing)])
+    assert row["paths"] == ["scripts/diagnostics/probe_lib/alerts.py"]
+
+
+CI_YML = ".github/workflows/ci.yml"
+TRACKED = frozenset(
+    {
+        CI_YML,
+        "k8s/roles/sonarr/defaults/main.yml",
+        "k8s/roles/radarr/defaults/main.yml",
+    }
+)
+
+
+def test_cited_paths_resolves_a_bare_filename_only_one_tracked_file_has():
+    assert cited_paths("`ci.yml` runs the job twice", TRACKED) == [CI_YML]
+    assert cited_paths("see `ci.yml:48`", TRACKED) == [CI_YML]
+
+
+def test_cited_paths_drops_a_bare_filename_two_tracked_files_share():
+    assert cited_paths("the default in `main.yml` is wrong", TRACKED) == []
+
+
+def test_cited_paths_drops_a_bare_word_that_names_no_tracked_file():
+    body = "`args.limit` is unset in `v1.2`; `new_check.py` would hold it"
+    assert cited_paths(body, TRACKED) == []
+
+
+def test_cited_paths_counts_a_bare_filename_only_alone_in_a_code_span():
+    assert cited_paths("ci.yml and `yamllint ci.yml` both name it", TRACKED) == []
+
+
+def test_cited_paths_ignores_the_trailer_findings_py_writes():
+    body = "fix `scripts/dev/fanout_place.py`" + trailer("c0a05de5f0e9", "session")
+    assert cited_paths(body) == ["scripts/dev/fanout_place.py"]
+    assert cited_paths("nothing" + trailer("c0a05de5f0e9", "review")) == []
+
+
+def test_cited_paths_skips_a_span_quoting_program_output():
+    # A body with one real citation, then a quoted session banner line.
+    body = (
+        "Edit `.claude/hooks/session-health.py`. Example: "
+        "`• fix7828 — .claude/settings.json, .claude/skills/deploy/SKILL.md, …, +88 more`.\n"
+        "paths were `['scripts/dev/a.py', 'scripts/dev/b.py']`"
+    )
+    assert cited_paths(body) == [".claude/hooks/session-health.py"]
+
+
+def test_cited_paths_keeps_a_span_with_one_path_or_without_commas():
+    body = (
+        "`scripts/dev/a.py`, `scripts/dev/b.py, line 3` and "
+        "`uv run pytest scripts/dev/c.py scripts/dev/d.py`"
+    )
+    assert cited_paths(body) == [
+        "scripts/dev/a.py",
+        "scripts/dev/b.py",
+        "scripts/dev/c.py",
+        "scripts/dev/d.py",
+    ]
+
+
+# --- the list cap ---------------------------------------------------------------------------
+
+
+def test_load_issues_warns_when_gh_returns_exactly_its_list_cap(
+    issue, make_tools, capsys
+):
+    """gh truncates silently at --limit; the settled register reads every state, so a cut
+    there drops refuted findings from the table a reviewer reads before flagging."""
+    tools, _ = make_tools(Fakes(issues=[issue(n) for n in range(ISSUE_LIST_CAP)]))
+    assert len(load_issues("all", tools)) == ISSUE_LIST_CAP
+    assert "list cap" in capsys.readouterr().err
+
+
+def test_load_issues_is_silent_below_the_list_cap(issue, make_tools, capsys):
+    tools, _ = make_tools(Fakes(issues=[issue(n) for n in range(ISSUE_LIST_CAP - 1)]))
+    load_issues("all", tools)
+    assert capsys.readouterr().err == ""
+
+
+def test_the_list_cap_does_not_sit_above_the_ceiling_gh_enforces_itself():
+    """A cap above the 1000 a label-filtered list stops at makes the warning unreachable.
+
+    A `--label` sends `gh issue list` through GitHub's search API, which caps at 1000
+    whatever `--limit` says. An unfiltered list pages past it (1029), which is where the old
+    5000 came from, but every list `load_issues` builds carries `--label claude`. With the
+    cap at 5000 the `>=` never held, so the truncation was silent and two refuted findings
+    were missing from the rendered settled register.
+    """
+    assert ISSUE_LIST_CAP <= 1000
+
+
+def test_close_fixed_on_another_register_with_its_own_pr_stays_bare(make_tools, issue):
+    tools, calls = make_tools(Fakes(view=issue(1395)))
+    register = "DanielH2018/dotfiles"
+    argv = ["close", "1395", "--fixed", "--pr", "1400", "--repo", register]
+    assert findings.main([*argv, "--pr-repo", register], tools) == 0
+    (close,) = [c for c in calls.gh if c[:2] == ["issue", "close"]]
+    assert close[close.index("--comment") + 1] == "Fixed by PR #1400."

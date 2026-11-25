@@ -1,0 +1,253 @@
+"""The measured shard-weight check.
+
+`shard_weight_gate.durations_complaints` is what CI's `--check-durations` step runs against the
+durations report its own test step produced. Every complaint annotates; none fails the run.
+
+Its arms read that one report. `heavy_unweighted` asks whether a costly file is MISSING from the
+table; `stale_overweight` and `heavy_underweighted` ask whether a recorded number is still
+roughly what the file costs. They are exercised through `durations_complaints` with an explicit
+weights dict rather than through the CLI: a synthetic path reads as unweighted against the
+committed table, which is what lets the CLI tests below skip a monkeypatch, but no synthetic
+path can be OVER-recorded in it.
+
+`test_the_parser_reads_a_report_pytest_just_wrote` drives a real pytest subprocess on purpose:
+every other test here feeds the parser a frozen string, so a change to pytest's report format
+would leave them all green over a parser that had stopped matching anything.
+
+Run: uv run pytest scripts/dev/tests/ci/test_pytest_shard_durations.py
+"""
+
+import sys
+
+import pytest
+from dev import pytest_shard
+from dev import shard_weight_gate
+from lib.proc_testing import run
+
+REPORT = """============================== slowest durations ===============================
+21.40s call     scripts/heavy/tests/test_new_module.py::test_the_long_one
+4.10s setup    scripts/heavy/tests/test_new_module.py::test_the_long_one
+0.90s call     scripts/heavy/tests/test_new_module.py::test_the_short_one
+17.31s call     tests/k8s/test_secret_consumer_census.py::test_every_consumer
+0.01s call     scripts/dev/tests/repo_tools/test_run_as_cron.py::test_a_shell_builtin_still_runs
+
+(58 durations < 0.005s hidden.  Use -vv to show these durations.)
+"""
+
+NEW_MODULE = "scripts/heavy/tests/test_new_module.py"
+RECORDED = {
+    "tests/k8s/test_secret_consumer_census.py": 17.31,
+    "scripts/dev/tests/repo_tools/test_run_as_cron.py": 0.05,
+}
+
+
+def test_the_parser_sums_every_phase_of_a_file():
+    totals = shard_weight_gate.parse_durations(REPORT)
+    assert totals[NEW_MODULE] == 26.4
+    assert totals["tests/k8s/test_secret_consumer_census.py"] == 17.31
+    assert len(totals) == 3
+
+
+def test_a_heavy_unweighted_module_is_flagged():
+    """The reject half: a heavy file in a directory whose recorded
+    siblings say nothing about it, which the ratchet's neighbour arm cannot see."""
+    problems = shard_weight_gate.durations_complaints(REPORT, RECORDED)
+    assert len(problems) == 1
+    assert NEW_MODULE in problems[0] and "26.4s" in problems[0]
+
+
+def test_a_heavy_module_that_is_already_recorded_is_clean():
+    """The accept half. The heaviest file left in the report is 17.31s and the gate says
+    nothing, because the split already packs it at that weight."""
+    assert (
+        shard_weight_gate.durations_complaints(REPORT, RECORDED | {NEW_MODULE: 26.4})
+        == []
+    )
+
+
+def test_a_light_unweighted_module_is_clean():
+    """Every new test file is unweighted on the run that introduces it, and almost every one
+    of them is cheap. Only the cost decides."""
+    weights = {
+        NEW_MODULE: 26.4,
+        "tests/k8s/test_secret_consumer_census.py": 17.31,
+    }
+    assert shard_weight_gate.durations_complaints(REPORT, weights) == []
+
+
+def test_the_threshold_decides():
+    assert (
+        shard_weight_gate.durations_complaints(REPORT, RECORDED, threshold=30.0) == []
+    )
+    assert shard_weight_gate.durations_complaints(REPORT, RECORDED, threshold=0.5) != []
+
+
+def test_a_recorded_weight_far_above_what_it_measured_is_flagged():
+    """A stale entry: the census module recorded at 17.31s, measuring 0.09s here, which the three
+    missing-from-the-table arms cannot see."""
+    stale = "17.31s call     tests/k8s/test_secret_consumer_census.py"
+    report = REPORT.replace(stale, "0.09s call     " + stale.split()[-1])
+    problems = shard_weight_gate.durations_complaints(
+        report, RECORDED | {NEW_MODULE: 26.4}
+    )
+    assert len(problems) == 1
+    assert "17.31s" in problems[0] and "0.09s" in problems[0]
+
+
+def test_a_recorded_weight_inside_the_runner_noise_is_clean():
+    """The accept half, at the bound that decides it. A leg's hardware runs a shard 0.67x to
+    1.22x its table, so 17.31s recorded against 14.00s measured is that spread, not a stale
+    entry."""
+    stale = "17.31s call     tests/k8s/test_secret_consumer_census.py"
+    report = REPORT.replace(stale, "14.00s call     " + stale.split()[-1])
+    assert (
+        shard_weight_gate.durations_complaints(report, RECORDED | {NEW_MODULE: 26.4})
+        == []
+    )
+
+
+def test_the_floor_keeps_a_cheap_entry_out_of_it():
+    """A file recorded at 0.05s measuring 0.01s is a 5x ratio and no shard notices. Only
+    entries big enough to move the pole are compared."""
+    report = "0.01s call     scripts/dev/tests/repo_tools/test_run_as_cron.py::test_a_shell_builtin\n"
+    assert shard_weight_gate.stale_overweight(report, RECORDED) == []
+
+
+def test_both_arms_report_together():
+    """One report can carry a heavy unweighted module AND a stale entry, and a gate that
+    short-circuited on the first would hide the second until the next run."""
+    stale = "17.31s call     tests/k8s/test_secret_consumer_census.py"
+    report = REPORT.replace(stale, "0.09s call     " + stale.split()[-1])
+    problems = shard_weight_gate.durations_complaints(report, RECORDED)
+    assert len(problems) == 2
+    assert NEW_MODULE in problems[0]
+    assert "test_secret_consumer_census.py" in problems[1]
+
+
+UNDER_RECORDED = RECORDED | {NEW_MODULE: 0.48}
+
+
+def test_a_heavy_module_recorded_far_below_what_it_measured_is_flagged():
+    problems = shard_weight_gate.durations_complaints(REPORT, UNDER_RECORDED)
+    assert len(problems) == 1
+    assert NEW_MODULE in problems[0]
+    assert "recorded 0.48s" in problems[0] and "26.4s" in problems[0]
+
+
+def test_a_heavy_module_inside_the_runner_scale_is_clean():
+    """The accept half: 26.4s measured against 2.2s recorded is 12x, under
+    `UNDER_WEIGHT_RATIO`. Only the ratio decides."""
+    weights = RECORDED | {NEW_MODULE: 2.2}
+    assert shard_weight_gate.durations_complaints(REPORT, weights) == []
+    assert (
+        shard_weight_gate.durations_complaints(REPORT, weights, under_ratio=10.0) != []
+    )
+
+
+CACHE_FIRST_REPORT = f"7.41s setup    {NEW_MODULE}::test_the_long_one\n"
+
+
+def test_a_near_free_entry_measuring_over_five_seconds_annotates():
+    """Below the unweighted arm's 10s."""
+    weights = RECORDED | {NEW_MODULE: 0.0}
+    complaints = shard_weight_gate.durations_complaints(CACHE_FIRST_REPORT, weights)
+    assert len(complaints) == 1
+    assert NEW_MODULE in complaints[0] and "7.4s" in complaints[0]
+
+
+def test_an_under_recorded_module_under_five_seconds_is_clean():
+    report = CACHE_FIRST_REPORT.replace("7.41s", "4.90s")
+    weights = RECORDED | {NEW_MODULE: 0.0}
+    assert shard_weight_gate.durations_complaints(report, weights) == []
+
+
+def test_a_report_with_no_durations_is_itself_a_complaint():
+    """Non-vacuity at run time. The gate finds its subject by parsing, so a format change or a
+    test step that dropped `--durations=0` would otherwise leave it passing over nothing."""
+    problems = shard_weight_gate.durations_complaints("no durations here\n", RECORDED)
+    assert len(problems) == 1 and "parsed no durations" in problems[0]
+
+
+def test_the_parser_reads_a_report_pytest_just_wrote(tmp_path):
+    """Non-vacuity against the installed pytest, not against a string this file also wrote.
+
+    A frozen sample proves the regex matches a format someone typed out; only a real run
+    proves it matches the format pytest emits today.
+    """
+    module = tmp_path / "test_measured_sample.py"
+    module.write_text("import time\n\n\ndef test_sleeps():\n    time.sleep(0.05)\n")
+    proc = run(
+        [
+            sys.executable,
+            "-m",
+            "pytest",
+            "-n0",
+            "--durations=0",
+            "-p",
+            "no:cacheprovider",
+            str(module),
+        ],
+        cwd=tmp_path,
+        # A nested pytest session pays its own collection and plugin load.
+        timeout=300,
+    )
+    assert proc.returncode == 0, proc.stdout[-2000:]
+    totals = shard_weight_gate.parse_durations(proc.stdout)
+    assert totals, f"parsed nothing out of pytest's own report:\n{proc.stdout[-2000:]}"
+    # pytest writes nodeids relative to the rootdir it picked, which is tmp_path here.
+    assert totals[module.name] >= 0.05
+
+
+def _run_cli(tmp_path, report: str) -> int:
+    """`--check-durations` over `report`, against the table this repo actually ships.
+
+    No monkeypatch and no test-only flag: REPORT's heavy module is a path the census will
+    never hold, so the committed table reads it as unweighted whatever else is in the table.
+    """
+    log = tmp_path / "durations.log"
+    log.write_text(report)
+    return pytest_shard.main(["--check-durations", str(log)])
+
+
+def test_the_cli_annotates_a_heavy_unweighted_module_and_exits_zero(tmp_path, capsys):
+    """The contract with `ci.yml`: a bad weight reaches the run as an annotation naming what
+    repairs it, and never fails the leg."""
+    assert _run_cli(tmp_path, REPORT) == 0
+    printed = capsys.readouterr().out
+    assert printed.startswith("::warning::") and NEW_MODULE in printed
+    assert "--refresh-runner" in printed
+
+
+def _recorded_pole() -> str:
+    """A durations line for the committed table's heaviest module, measuring what it records.
+
+    The CLI reads the real table, so a report naming a real module at a made-up cost trips the
+    over- or under-recording arm on whatever that module's entry holds today.
+    """
+    weights = shard_weight_gate.load_runner_weights()
+    path = max(weights, key=weights.__getitem__)
+    return f"{weights[path]:.2f}s call     {path}::test_the_pole\n"
+
+
+def test_the_cli_exits_zero_when_every_heavy_module_is_recorded(tmp_path, capsys):
+    """A report whose only heavy module is the table's own pole, measuring its recorded cost,
+    which the split already packs at that weight."""
+    assert _run_cli(tmp_path, _recorded_pole()) == 0
+    assert "no unweighted or under-recorded module" in capsys.readouterr().out
+
+
+def test_no_mode_names_every_mode(capsys):
+    """The usage error lists all six modes."""
+    with pytest.raises(SystemExit) as exc:
+        pytest_shard.main([])
+    assert exc.value.code == 64
+    err = capsys.readouterr().err
+    for mode in (
+        "--shard",
+        "--summary",
+        "--record-runner",
+        "--refresh-runner",
+        "--leg-spread",
+        "--check-durations",
+    ):
+        assert mode in err.splitlines()[-1], mode
