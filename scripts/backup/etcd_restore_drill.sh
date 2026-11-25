@@ -167,12 +167,13 @@ stamp_success() {
   return 0
 }
 
-REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+# The weekly unit runs a packaged copy, so it names the checkout that holds the gate.
+REPO_ROOT="${ETCD_DRILL_CHECKOUT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}"
 
 # Gate 3 only: gate 1 reads this drill's own stamp, so running it here is circular. Any non-zero
 # exit fails the drill, 69 included.
-# Use the checkout's own `.venv/bin/python`: root has no uv-managed python, and the root cron must
-# not write to the .venv.
+# Use the checkout's own `.venv/bin/python`, as the checkout's owner: root must not run the
+# checkout's code or write to the .venv.
 GATE_SCRIPT="$REPO_ROOT/scripts/deploy_tools/runbook_gates.py"
 if [[ -x "$REPO_ROOT/.venv/bin/python" ]]; then
   GATE_CMD=("$REPO_ROOT/.venv/bin/python" "$GATE_SCRIPT" etcd-restore --gate 3)
@@ -181,6 +182,14 @@ else
     /usr/bin/env PYTHONPATH="$REPO_ROOT/scripts" /usr/bin/uv run --no-project --no-python-downloads
     --python "$(cat "$REPO_ROOT/.python-version" 2>/dev/null || echo 3.14)"
     "$GATE_SCRIPT" etcd-restore --gate 3
+  )
+fi
+
+if [[ "$EUID" == "0" ]]; then
+  GATE_USER="$(stat -c %U "$REPO_ROOT" 2>/dev/null || echo nobody)"
+  GATE_CMD=(
+    /usr/bin/setpriv --reuid="$GATE_USER" --regid="$GATE_USER" --init-groups --reset-env
+    "${GATE_CMD[@]}"
   )
 fi
 
