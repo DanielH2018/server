@@ -6,15 +6,31 @@ structure and prints the path of a changed field. Every other file gets a unifie
 file in one tree alone is named.
 """
 
+import dataclasses
 import difflib
 import subprocess
 from pathlib import Path
 
 YAML_SUFFIXES = {".yaml", ".yml"}
+# Its digests hash raw file bytes, so a reorder-only change moves them; `shadow_diff.py digest` reports that.
+SKIPPED = {"digests.json"}
 
 
 class DyffFailed(Exception):
     """dyff exited nonzero for a pair, which means it could not read or compare the files."""
+
+
+@dataclasses.dataclass
+class TreeDiff:
+    """What `diff_trees` found.
+
+    Attributes:
+        lines: The printed difference, empty when the trees match in structure.
+        errors: One line per YAML pair dyff could not compare.
+    """
+
+    lines: list[str] = dataclasses.field(default_factory=list)
+    errors: list[str] = dataclasses.field(default_factory=list)
 
 
 def _files(root: Path) -> dict[str, Path]:
@@ -30,7 +46,7 @@ def _dyff(base: Path, head: Path, dyff: str) -> list[str]:
     )
     # Without --set-exit-code dyff exits 0 on a difference, so a nonzero exit is an error.
     if run.returncode:
-        raise DyffFailed(f"{base}: {run.stderr.strip() or run.stdout.strip()}")
+        raise DyffFailed(run.stderr.strip() or run.stdout.strip())
     return run.stdout.splitlines()
 
 
@@ -45,30 +61,31 @@ def _text(base: Path, head: Path, name: str) -> list[str]:
     )
 
 
-def diff_trees(base: Path, head: Path, dyff: str = "dyff") -> list[str]:
-    """The printed difference of two rendered trees, empty when they match in structure.
+def diff_trees(base: Path, head: Path, dyff: str = "dyff") -> TreeDiff:
+    """Compare two rendered trees, carrying on past a YAML pair dyff cannot read.
 
     Args:
         base: The merge base's render.
         head: The PR head's render.
         dyff: The dyff binary.
-
-    Raises:
-        DyffFailed: dyff could not compare a pair of YAML files.
     """
     old, new = _files(base), _files(head)
-    lines: list[str] = []
-    for name in sorted(old.keys() | new.keys()):
+    found = TreeDiff()
+    for name in sorted((old.keys() | new.keys()) - SKIPPED):
         if name not in new:
-            lines.append(f"Only in base: {name}")
+            found.lines.append(f"Only in base: {name}")
         elif name not in old:
-            lines.append(f"Only in head: {name}")
+            found.lines.append(f"Only in head: {name}")
         elif old[name].read_bytes() == new[name].read_bytes():
             continue
         elif Path(name).suffix in YAML_SUFFIXES:
-            changed = _dyff(old[name], new[name], dyff)
+            try:
+                changed = _dyff(old[name], new[name], dyff)
+            except DyffFailed as exc:
+                found.errors.append(f"{name}: {exc}")
+                continue
             if any(line.strip() for line in changed):
-                lines += [f"=== {name}", *changed]
+                found.lines += [f"=== {name}", *changed]
         else:
-            lines += [f"=== {name}", *_text(old[name], new[name], name)]
-    return lines
+            found.lines += [f"=== {name}", *_text(old[name], new[name], name)]
+    return found

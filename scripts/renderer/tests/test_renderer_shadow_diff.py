@@ -92,8 +92,9 @@ base, head = sys.argv[-2:]
 if base.endswith("broken.yaml"):
     sys.exit("cannot load")
 old, new = (yaml.safe_load(open(f)) for f in (base, head))
-if old != new:
-    print("spec.replicas")
+for key in sorted(old):
+    if old[key] != new[key]:
+        print(f"{key}  (change)")
 """
 
 
@@ -113,31 +114,38 @@ def trees(tmp_path):
 def test_a_reordered_key_prints_no_difference(trees):
     base, head, fake = trees
     (head / "cluster/app/deploy.yaml").write_text("b: 2\na: 1\n")
-    assert tree_diff.diff_trees(base, head, str(fake)) == []
+    assert tree_diff.diff_trees(base, head, str(fake)) == tree_diff.TreeDiff()
 
 
 def test_a_changed_field_prints_its_path(trees):
     base, head, fake = trees
     (head / "cluster/app/deploy.yaml").write_text("a: 1\nb: 3\n")
-    assert tree_diff.diff_trees(base, head, str(fake)) == [
-        "=== cluster/app/deploy.yaml",
-        "spec.replicas",
-    ]
+    found = tree_diff.diff_trees(base, head, str(fake))
+    assert found.lines == ["=== cluster/app/deploy.yaml", "b  (change)"]
 
 
 def test_a_changed_dockerfile_and_an_added_file_are_reported(trees):
     base, head, fake = trees
     (head / "cluster/app/Dockerfile").write_text("FROM y\n")
     (head / "cluster/app/new.yaml").write_text("a: 1\n")
-    lines = tree_diff.diff_trees(base, head, str(fake))
+    lines = tree_diff.diff_trees(base, head, str(fake)).lines
     assert "-FROM x" in lines
     assert "+FROM y" in lines
     assert "Only in head: cluster/app/new.yaml" in lines
 
 
-def test_a_dyff_error_is_raised_not_hidden(trees):
+def test_digests_json_is_not_diffed(trees):
+    base, head, fake = trees
+    (base / "digests.json").write_text('{"own": "a"}')
+    (head / "digests.json").write_text('{"own": "b"}')
+    assert tree_diff.diff_trees(base, head, str(fake)) == tree_diff.TreeDiff()
+
+
+def test_a_dyff_error_is_reported_after_the_other_differences(trees):
     base, head, fake = trees
     for root in (base, head):
         (root / "cluster/app/broken.yaml").write_text(f"x: {root.name}\n")
-    with pytest.raises(tree_diff.DyffFailed):
-        tree_diff.diff_trees(base, head, str(fake))
+    (head / "cluster/app/deploy.yaml").write_text("a: 1\nb: 3\n")
+    found = tree_diff.diff_trees(base, head, str(fake))
+    assert found.lines == ["=== cluster/app/deploy.yaml", "b  (change)"]
+    assert found.errors == ["cluster/app/broken.yaml: cannot load"]
