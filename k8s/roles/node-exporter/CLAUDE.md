@@ -20,7 +20,7 @@ had while daniel-server's LAN-published 9100 retires.
 - **Mounts:** `/proc`, `/sys`, `/` (as `/rootfs`), all **read-only** `hostPath` — no write
   access despite `hostNetwork`/`hostPID`.
 - **Flux applies it.** Its `containers_list` entry
-  is in `cluster/services.yml`, so nothing applies it by hand, and a
+  is in `k8s/services.yml`, so nothing applies it by hand, and a
   merged change reaches the cluster when `promote` publishes and verifies the next bundle. Its
   image-bump PRs therefore draw no `land-wait` and no `probe.py health` run.
 - **Its rollout.** Its `manifests_rollout: node-exporter` default and its include's

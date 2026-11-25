@@ -34,7 +34,7 @@ _WITH = _WITHOUT + "  - name: newsvc\n"
 
 
 def _tags_repo(tmp_path: Path, *texts: str) -> list[str]:
-    """Commit each `texts` entry as ``cluster/services.yml`` in `tmp_path`; the shas, in order.
+    """Commit each `texts` entry as ``k8s/services.yml`` in `tmp_path`; the shas, in order.
 
     `lib.git_testing` scrubs every ``GIT_*`` variable: under a prek hook an inherited
     ``GIT_DIR`` beats ``cwd``, and these commits would land in the real repository.
@@ -96,7 +96,7 @@ def test_k8s_services_at_a_ref_reads_the_entries_of_that_commit(tmp_path):
     assert [e["name"] for e in k8s_services_at(shas[0], tmp_path)] == ["sonarr"]
 
 
-def test_the_service_list_is_in_cluster_services_and_no_host_vars_file():
+def test_the_service_list_is_in_k8s_services_and_no_host_vars_file():
     names = {e["name"] for e in k8s_services()}
     assert {"sonarr", "traefik", "longhorn"} <= names
     assert not [p.name for p in host_files() if "containers_list" in load_yaml(p)]

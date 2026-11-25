@@ -6,7 +6,7 @@ service carrying its own build block — that would copy the securityContext rea
 every caller, where it would drift. See repo-root `CLAUDE.md` for shared conventions.
 
 **No standalone deploy tag.** `--tags image-builder` selects nothing: it is not a
-`containers_list` entry (`cluster/services.yml`), and no render applies its Job.
+`containers_list` entry (`k8s/services.yml`), and no render applies its Job.
 
 ## At a glance
 - **Builder image:** `moby/buildkit` (`image_builder_k8s_image` in

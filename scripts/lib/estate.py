@@ -57,7 +57,7 @@ class Inventory:
         all_vars: The group_vars file every host shares.
         host_vars: The directory holding one ``<host>.yml`` per inventory host.
         plane_hosts: The host each plane renders with when the caller names none.
-        services: The k8s service list, ``cluster/services.yml``.
+        services: The k8s service list, ``k8s/services.yml``.
     """
 
     all_vars: Path = ALL_VARS
@@ -150,7 +150,7 @@ class Estate:
 
     @cached_property
     def services(self) -> tuple[ContainerEntry, ...]:
-        """Every k8s service's entry, in ``cluster/services.yml`` order."""
+        """Every k8s service's entry, in ``k8s/services.yml`` order."""
         return k8s_services(self.inventory.services)
 
     def k8s_entries(self) -> dict[str, dict]:

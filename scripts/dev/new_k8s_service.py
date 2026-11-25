@@ -7,7 +7,7 @@ Usage::
         --image ghcr.io/miniflux/miniflux:2.2.16 --port 8080 --authelia one_factor
 
 The role is a `containers_list` entry plus a Deployment template. The entry is
-appended to `cluster/services.yml`, and `templates/deployment.yaml.j2`
+appended to `k8s/services.yml`, and `templates/deployment.yaml.j2`
 is the one manifest the role ships. The role has no `tasks/`: the renderer derives the file
 lists from `templates/` and the entry, and the workload to restart from the role's name.
 Two small files sit beside the template:
@@ -34,7 +34,7 @@ WHAT IT DOES NOT WRITE, deliberately:
   bundle, and `land.sh` follows the promotion.
 
 The output is meant to pass `prek run --all-files` and the renderer's `cluster` render of the
-new tag with no hand edits; `scripts/dev/tests/test_new_k8s_service.py` renders it through
+new tag with no hand edits; `scripts/dev/tests/repo_tools/test_new_k8s_service.py` renders it through
 the repo's own manifest validator to hold that.
 """
 
@@ -177,7 +177,7 @@ See repo-root `CLAUDE.md` for shared conventions.
 
 
 def entry_lines(name, port, hostname, auth_tier, route) -> str:
-    """The service entry, as the block this script appends to cluster/services.yml.
+    """The service entry, as the block this script appends to k8s/services.yml.
 
     Position in the list does not set the deploy order: `scripts/renderer/template_filters/toposort.py`
     derives the ordering edges from the templates and the entry, and gives each

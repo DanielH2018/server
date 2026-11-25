@@ -128,7 +128,7 @@ def load_inventory(
         yaml_fast.safe_load((inventory / "group_vars" / "all.yml").read_text()) or {}
     )
     host_vars = {host: host_layer(inventory / "host_vars", host) for host in HOSTS}
-    return global_vars, host_vars, k8s_services(repo_root / "cluster" / "services.yml")
+    return global_vars, host_vars, k8s_services(repo_root / "k8s" / "services.yml")
 
 
 def declared_services(

@@ -19,7 +19,7 @@ reads for its native etcd snapshot uploads to R2.
 - **Claims:** none (no PVC)
 <!-- /generated_from -->
 
-- **Flux applies it.** Its `containers_list` entry is in `cluster/services.yml` and
+- **Flux applies it.** Its `containers_list` entry is in `k8s/services.yml` and
   `depends_on: [longhorn]`, because `longhorn`'s vendored file defines the BackupTarget and
   RecurringJob CRDs. While `longhorn` is not Ready, this tag applies nothing, so a disarm PR promotes and does
   not reach the cluster. The BackupTarget break-glass below is the lever for that state.

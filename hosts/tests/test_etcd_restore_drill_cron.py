@@ -72,6 +72,12 @@ def test_the_drill_is_scheduled(package) -> None:
     )
 
 
+def test_the_root_unit_runs_the_packaged_script(package) -> None:
+    script = _exec_start(package).removeprefix("ExecStart=").split()[0]
+    assert script in package.files
+    assert "Environment=ETCD_DRILL_CHECKOUT=/home/" in _service(package)
+
+
 def test_only_the_list_only_mode_is_scheduled(package) -> None:
     """The rejecting half, and the one that matters.
 
@@ -103,8 +109,8 @@ def test_the_drill_can_be_disarmed_without_deleting_the_entries() -> None:
     """A one-way arming switch is a bug: adding a way in means adding the way out."""
     spec = yaml_fast.safe_load((K3S_HOST_CHECKS / "component.yml").read_text())
     assert spec["enable"][TIMER]["when"] == "k3s_etcd_restore_drill_armed"
-    units = [e for e in spec["files"] if "homelab-etcd-restore-drill" in e["dst"]]
-    assert len(units) == 2
+    units = [e for e in spec["files"] if "etcd-restore-drill" in e["dst"]]
+    assert len(units) == 3
     assert {e["when"] for e in units} == {"k3s_etcd_restore_drill_armed"}
     assert load_defaults(K3S_HOST_CHECKS)["k3s_etcd_restore_drill_armed"] is True, (
         "the drill ships armed; a default-off drill is the unproven state this closes"

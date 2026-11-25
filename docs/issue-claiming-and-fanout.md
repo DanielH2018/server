@@ -522,7 +522,7 @@ fan-out commands name these fields unquoted in the shell text they run on a host
 manifest is a file on disk. `Batch` and `Manifest` in `scripts/dev/fanout_lib/manifest.py`
 raise `ValueError` for any other value, so `load` refuses that run and `all_runs` skips it:
 `status`, `clean`, the sweep and the launch gates never build a command from it
-(`scripts/dev/tests/test_fanout_runs.py::test_a_batch_field_a_command_names_must_be_a_plain_word`).
+(`scripts/dev/tests/fanout_status/test_fanout_runs.py::test_a_batch_field_a_command_names_must_be_a_plain_word`).
 A command builder therefore neither quotes nor checks a manifest field.
 
 ### One launch at a time, and files held across runs
@@ -560,7 +560,7 @@ that cites a file a live batch in another run holds. The launch's own side is th
 issues cite, because its agents have edited nothing yet. The refusal names the file, the
 run and the orchestrator branch the run was launched under, and says whether the live batch
 cites the file or has edited it
-(`scripts/dev/tests/test_fanout_launch_gates.py::test_launch_refuses_a_file_the_open_pr_of_a_batch_in_another_run_has_edited`).
+(`scripts/dev/tests/fanout/test_fanout_launch_gates.py::test_launch_refuses_a_file_the_open_pr_of_a_batch_in_another_run_has_edited`).
 Ask that coordinator to finish or release its batch. Do not clean another coordinator's
 run.
 
@@ -901,7 +901,7 @@ Four changes on master carry the tree. Launches are serialised and gated across 
 [#9310](https://github.com/DanielH2018/server/pull/9310)). A batch that another project's
 hold stopped parks (*A parked batch*,
 [#9252](https://github.com/DanielH2018/server/pull/9252)). A change to
-`cluster/services.yml` lands alone (`docs/landing.md`, *Rules that refuse a merge*,
+`k8s/services.yml` lands alone (`docs/landing.md`, *Rules that refuse a merge*,
 [#9167](https://github.com/DanielH2018/server/pull/9167) and
 [#9214](https://github.com/DanielH2018/server/pull/9214)). A milestone holds a project's
 backlog ([#9217](https://github.com/DanielH2018/server/pull/9217)).
@@ -945,7 +945,7 @@ reserves its backlog (*Decisions, with their dates*).
 **Alert noise** was milestone 21, under `claude/coord-alert-noise-d7b708`. Four batches
 closed five issues, and every PR ended `settled`:
 
-- [#9386] closed [#9201] and [#9338]. It changes `cluster/services.yml`, so it landed as a
+- [#9386] closed [#9201] and [#9338]. It changes `k8s/services.yml`, so it landed as a
   serial PR.
 - [#9450] closed [#9054].
 - [#9461] closed [#9045].
@@ -1009,7 +1009,7 @@ live batch has edited, and the gate reads them from each live batch's open PR (*
 at a time, and files held across runs*).
 
 **The serial rule's cost was two landings in a row.** [#9386] and [#9418] both change
-`cluster/services.yml`. `docs/landing.md`, *Rules that refuse a merge*, holds the timings.
+`k8s/services.yml`. `docs/landing.md`, *Rules that refuse a merge*, holds the timings.
 
 **The conflict resume ran once, outside the two projects.**
 [#9421](https://github.com/DanielH2018/server/pull/9421) merged on 2026-11-19 at 23:50
@@ -1229,7 +1229,7 @@ The page is sent on the second pass in a row that reads the project so, and once
 session's process restarts mid-session, so one pass with no process in the worktree is not
 a death. The lander forgets the project when a pass reads it live or with nothing waiting,
 so a later death pages again
-(`scripts/dev/tests/test_fanout_coordinators.py::test_a_project_that_recovers_and_is_orphaned_again_pages_again`).
+(`scripts/dev/tests/fanout/test_fanout_coordinators.py::test_a_project_that_recovers_and_is_orphaned_again_pages_again`).
 
 Three limits. Any process left in the worktree counts as a session, so a background wait
 that outlived its session delays the page until it exits. A project with no waiting batch

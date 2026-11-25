@@ -18,7 +18,7 @@ repo's first Traefik→host route. Two facts follow:
 <!-- /generated_from -->
 
 - **Flux applies it.** Its `containers_list` entry
-  is in `cluster/services.yml`, so nothing applies it by hand, and a
+  is in `k8s/services.yml`, so nothing applies it by hand, and a
   merged change reaches the cluster when `promote` publishes and verifies the next bundle.
 - **Its checks.** Its `manifests_rollout: ''` default names no workload, because the role
   renders none. The Kustomization's `wait` checks only that the Service, EndpointSlice,

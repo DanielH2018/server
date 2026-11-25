@@ -22,7 +22,7 @@ from docs.doc_values_lib.readers import (
     weekly_shard,
 )
 
-_SERVICES = "cluster/services.yml"
+_SERVICES = "k8s/services.yml"
 _PIHOLE_NETPOL = "k8s/roles/netpol-baseline/templates/networkpolicy-pihole.yaml.j2"
 _ADMIN_UI_PORT = r"# The admin UI[\s\S]*?- port: (\d+)"
 _NODE_EXPORTER = "k8s/roles/node-exporter/CLAUDE.md"

@@ -18,7 +18,7 @@ UPS state of its own; the physical UPS is USB-attached to daniel-server via the 
 - **Port:** 8080
 - **No PVC** — `/config` and `/app/config` are `emptyDir`, seeded at boot.
 - **Flux applies it.** Its
-  `containers_list` entry is in `cluster/services.yml`, so nothing applies it by hand, and a merged change reaches the cluster when `promote` publishes and
+  `containers_list` entry is in `k8s/services.yml`, so nothing applies it by hand, and a merged change reaches the cluster when `promote` publishes and
   verifies the next bundle. Its digest-bump PRs therefore draw no `land-wait` and no
   `probe.py health` run.
 - **Secrets:** `peanut_username`, `peanut_password` (web UI login), `nut_ha_password`

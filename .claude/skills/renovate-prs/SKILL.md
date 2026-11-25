@@ -291,11 +291,11 @@ uv run python scripts/dev/renovate_rebase.py <n>
 ```
 
 It is idempotent (a ticked box exits 0 and writes nothing,
-`scripts/dev/tests/test_renovate_rebase.py::test_main_is_idempotent_on_a_ticked_box`), exits 1 on a body with no
+`scripts/dev/tests/repo_tools/test_renovate_rebase.py::test_main_is_idempotent_on_a_ticked_box`), exits 1 on a body with no
 `<!-- rebase-check -->` box, which is a PR Renovate did not author
-(`scripts/dev/tests/test_renovate_rebase.py::test_main_refuses_a_body_with_no_box_without_editing`), and exits 3 on a PR still
+(`scripts/dev/tests/repo_tools/test_renovate_rebase.py::test_main_refuses_a_body_with_no_box_without_editing`), and exits 3 on a PR still
 inside its soak, naming `renovate/stability-days` and writing nothing
-(`scripts/dev/tests/test_renovate_rebase.py::test_main_refuses_to_tick_a_soaking_pr`). Renovate refreshes the
+(`scripts/dev/tests/repo_tools/test_renovate_rebase.py::test_main_refuses_to_tick_a_soaking_pr`). Renovate refreshes the
 branch within a cycle. Do not hand-edit the digest: the next Renovate
 run would rewrite it anyway.
 
@@ -311,7 +311,7 @@ PR, and that PR still reads `renovate/stability-days: pending` (§0).
 `renovate_rebase.py` now enforces that paragraph rather than relying on you to remember it: it
 reads the PR's status rollup, and on a pending `renovate/stability-days` it names the soak and
 exits 3 without ticking (#2630,
-`scripts/dev/tests/test_renovate_rebase.py::test_main_names_the_soak_on_a_pr_whose_box_is_already_ticked`). It refuses even where the box is unticked, so that exit 0
+`scripts/dev/tests/repo_tools/test_renovate_rebase.py::test_main_names_the_soak_on_a_pr_whose_box_is_already_ticked`). It refuses even where the box is unticked, so that exit 0
 never reads as "the rebase is coming" while the soak holds it.
 
 A box Renovate left ticked through the soak should still be honoured. Renovate rereads the box
@@ -323,10 +323,10 @@ uv run python scripts/dev/renovate_rebase.py --retick <n>
 ```
 
 `--retick` writes the box unticked, then ticked, as two separate edits (#2655,
-`scripts/dev/tests/test_renovate_rebase.py::test_retick_unticks_then_reticks_a_spent_box_after_the_soak`). It refuses with
+`scripts/dev/tests/repo_tools/test_renovate_rebase.py::test_retick_unticks_then_reticks_a_spent_box_after_the_soak`). It refuses with
 exit 3 unless `renovate/stability-days` reads SUCCESS, so it cannot spend a tick during the
-soak (`scripts/dev/tests/test_renovate_rebase.py::test_retick_refuses_a_pr_still_soaking`). If the second edit fails, the box is left unticked; a plain run ticks it
-(`scripts/dev/tests/test_renovate_rebase.py::test_retick_names_the_unticked_box_when_the_second_edit_fails`).
+soak (`scripts/dev/tests/repo_tools/test_renovate_rebase.py::test_retick_refuses_a_pr_still_soaking`). If the second edit fails, the box is left unticked; a plain run ticks it
+(`scripts/dev/tests/repo_tools/test_renovate_rebase.py::test_retick_names_the_unticked_box_when_the_second_edit_fails`).
 
 ## 6. Land them one at a time
 

@@ -1,0 +1,27 @@
+# Fence the Longhorn UI, which proxies the manager API and has no login of its own.
+#
+# Longhorn's own policies select no UI pod, so without this one every pod can dial it and skip the
+# Authelia middleware on the `longhorn-ui` role's route. Only Traefik has a reason to reach it.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: longhorn-ui
+  namespace: longhorn-system
+spec:
+  podSelector:
+    matchLabels:
+      app: longhorn-ui
+  policyTypes:
+    - Ingress
+  ingress:
+    # Siblings in ONE from item, which ANDs them.
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ k8s_namespace }}
+          podSelector:
+            matchLabels:
+              app: traefik
+      ports:
+        - protocol: TCP
+          port: 8000

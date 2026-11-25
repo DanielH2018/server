@@ -1,0 +1,524 @@
+"""Worktree and launch commands, and the manifest — spec §3-4.
+
+The brief `render_brief` writes is `test_fanout_brief.py`.
+
+Run: uv run pytest scripts/dev/tests/fanout/test_fanout_launch.py
+"""
+
+import json
+import subprocess
+from datetime import UTC, datetime
+
+import pytest
+
+from dev.findings_lib.issue_model import Issue, IssueState
+from dev.fanout_lib.launch import (
+    REVIEW_RUNTIME_MAX_S,
+    RUNTIME_MAX_S,
+    SYSTEM_PROMPT_FILE,
+    LaunchError,
+    create_worktree_command,
+    launch,
+    launch_command,
+    remove_worktree_command,
+    systemd_run_command,
+    unit_name,
+    unit_path,
+    venv_sync_command,
+    worktree_path,
+    write_brief_command,
+)
+from dev.fanout_lib.manifest import (
+    Batch,
+    Manifest,
+    load,
+    new_run_id,
+    save,
+    unused_run_id,
+)
+from dev.fanout_lib.sizing import DEFAULT
+from dev.fanout_lib.transport import REPO
+from _fanout_fakes import as_operator, fake_tools, ok
+
+from lib.proc_testing import fake_bin
+
+from lib.repo_paths import REPO as REPO_ROOT
+
+ISSUES = [
+    Issue(
+        1345,
+        "Traefik startupProbe has no red-proof",
+        IssueState.OPEN,
+        body="body one\nline two",
+    ),
+    Issue(1386, "Healthchecks key", IssueState.OPEN, body="second body"),
+]
+
+
+def test_argv_picks_ssh_for_a_remote_host_and_bash_for_the_local_one():
+    # Assert on the argv builder: leakguard fails the test if `ssh` is invoked, stubbed or not.
+    from dev.fanout_lib.transport import SSH_OPTS, _argv
+
+    assert _argv("daniel-server", "echo hi", "daniel-box") == [
+        "ssh",
+        *SSH_OPTS,
+        "daniel-server",
+        "echo hi",
+    ]
+    assert _argv("daniel-box", "echo hi", "daniel-box") == ["bash", "-c", "echo hi"]
+
+
+def test_the_local_leg_pins_the_user_bus_when_the_shell_has_none():
+    """FLAGGED half: an interactive session's shell exports neither variable, and
+    `systemd-run --user` then dies with "Failed to connect to bus: No medium found"."""
+    from dev.fanout_lib.transport import local_env
+
+    env = local_env({"PATH": "/usr/bin"}, 1000)
+    assert env["XDG_RUNTIME_DIR"] == "/run/user/1000"
+    assert env["DBUS_SESSION_BUS_ADDRESS"] == "unix:path=/run/user/1000/bus"
+    assert env["PATH"] == "/usr/bin"
+
+
+def test_the_local_leg_keeps_a_bus_the_shell_already_named():
+    """CLEAN half: a shell that set its own runtime dir gets a bus derived from THAT, and a
+    bus it named outright is left alone."""
+    from dev.fanout_lib.transport import local_env
+
+    derived = local_env({"XDG_RUNTIME_DIR": "/run/user/7"}, 1000)
+    assert derived["DBUS_SESSION_BUS_ADDRESS"] == "unix:path=/run/user/7/bus"
+    named = local_env({"DBUS_SESSION_BUS_ADDRESS": "unix:path=/x"}, 1000)
+    assert named["DBUS_SESSION_BUS_ADDRESS"] == "unix:path=/x"
+    assert named["XDG_RUNTIME_DIR"] == "/run/user/1000"
+
+
+def test_run_command_hands_the_pinned_bus_to_the_local_child(monkeypatch):
+    """The builder above is what the local leg actually runs under: a child started from a
+    shell with both stripped still sees both. `bash -c echo` stays inside the process tree,
+    so leakguard has nothing to object to."""
+    import os
+
+    from dev.fanout_lib.transport import run_command
+
+    monkeypatch.delenv("XDG_RUNTIME_DIR", raising=False)
+    monkeypatch.delenv("DBUS_SESSION_BUS_ADDRESS", raising=False)
+    proc = run_command(
+        "here",
+        'echo "$XDG_RUNTIME_DIR $DBUS_SESSION_BUS_ADDRESS"',
+        10.0,
+        local_host="here",
+    )
+    uid = os.getuid()
+    assert proc.stdout.strip() == f"/run/user/{uid} unix:path=/run/user/{uid}/bus"
+
+
+def test_worktree_and_unit_names_derive_from_the_batch():
+    assert (
+        as_operator(worktree_path("1345-1386"))
+        == "/home/ubuntu/server/.claude/worktrees/fanout-1345-1386"
+    )
+    assert unit_name("1345-1386") == "fanout-1345-1386"
+
+
+def test_the_existence_check_is_the_first_step_of_the_launch_command():
+    """Before `fetch`, so a relaunch never reaches the `worktree add` whose cleanup deletes."""
+    cmd = as_operator(launch_command("b"))
+    assert cmd.index("fanout-step: exists") < cmd.index(
+        "git -C /home/ubuntu/server fetch origin"
+    )
+    assert cmd.startswith(f"test ! -e {as_operator(worktree_path('b'))} && ")
+    assert "! git -C /home/ubuntu/server show-ref --verify --quiet " in cmd
+    assert "refs/heads/worktree-fanout-b" in cmd
+
+
+def test_an_existing_worktree_or_branch_is_refused_without_removing_anything():
+    tools, run = fake_tools(
+        {
+            "daniel-server": subprocess.CompletedProcess(
+                [], 1, stdout="", stderr="fanout-step: exists\n"
+            )
+        }
+    )
+    with pytest.raises(LaunchError) as excinfo:
+        launch(tools, "daniel-server", "b", "BRIEF", issues=[1])
+    message = str(excinfo.value)
+    assert "worktree-fanout-b" in message and "clean <run-id>" in message
+    assert len(run.calls) == 1
+    assert not any("worktree remove" in c[1] for c in run.calls)
+
+
+def test_the_worktree_command_fetches_before_adding_from_origin_master():
+    cmd = as_operator(create_worktree_command("b"))
+    assert cmd.index("git -C /home/ubuntu/server fetch origin") < cmd.index(
+        "worktree add"
+    )
+    assert "-b worktree-fanout-b" in cmd and "origin/master" in cmd
+    # The lock follows the add so a merged-worktree prune never sees the tree unlocked.
+    assert cmd.index("worktree add") < cmd.index("worktree lock")
+    assert f"worktree lock --reason fanout-b {as_operator(worktree_path('b'))}" in cmd
+    assert cmd.rstrip().endswith('fanout-step: worktree lock" >&2; exit 1; }')
+
+
+def test_the_systemd_run_command_is_a_transient_user_service_reading_the_brief():
+    cmd = as_operator(systemd_run_command("b"))
+    assert " systemd-run --user --unit fanout-b " in cmd
+    assert "--scope" not in cmd  # a scope would tie the agent to the launching ssh
+    assert "-p WorkingDirectory=/home/ubuntu/server/.claude/worktrees/fanout-b" in cmd
+    assert (
+        "StandardInput=file:/home/ubuntu/server/.claude/worktrees/fanout-b/.fanout/brief.md"
+        in cmd
+    )
+    assert (
+        "StandardOutput=file:/home/ubuntu/server/.claude/worktrees/fanout-b/.fanout/report.json"
+        in cmd
+    )
+    assert "claude -p --model opus --permission-mode auto --output-format json" in cmd
+
+
+def test_the_unit_finds_claude_and_uv_under_the_launching_users_home():
+    """The agent user's home is /var/lib/claude, and it cannot read /home/ubuntu."""
+    cmd = systemd_run_command("b", home="/var/lib/claude")
+    assert "-p Environment=PATH=/var/lib/claude/.local/bin:" in cmd
+    assert "-p Environment=HOME=/var/lib/claude " in cmd
+    assert "/home/ubuntu/.local" not in cmd
+
+
+def test_systemd_run_itself_finds_the_executable_under_the_launching_users_home():
+    """systemd-run resolves `claude`/`uv` in its caller's PATH, not the unit's; a non-interactive
+    ssh as the agent user has no ~/.local/bin, so every launch there failed."""
+    for review in (False, True):
+        cmd = systemd_run_command("b", home="/var/lib/claude", review=review)
+        assert f"; then env PATH={unit_path('/var/lib/claude')} systemd-run " in cmd
+
+
+def test_the_unit_is_bounded_by_a_runtime_cap_and_a_budget():
+    """Nothing bounded a headless batch's wall clock or its spend."""
+    cmd = systemd_run_command("b")
+    assert f"-p RuntimeMaxSec={RUNTIME_MAX_S} " in cmd
+    assert cmd.index("RuntimeMaxSec") < cmd.index(" claude -p")
+    assert f"--max-budget-usd {DEFAULT.budget_usd}" in cmd
+
+
+def test_a_review_unit_runs_the_pipeline_under_the_longer_cap_and_a_plain_one_does_not():
+    review = systemd_run_command("b", review=True)
+    plain = systemd_run_command("b")
+    assert f"-p RuntimeMaxSec={REVIEW_RUNTIME_MAX_S} " in review
+    assert "fanout.py review --batch b --repo DanielH2018/server" in review
+    assert " claude -p" not in review
+    assert "fanout.py review" not in plain and " claude -p" in plain
+    assert (REPO_ROOT / "scripts/dev/fanout.py").is_file()
+
+
+def test_a_server_review_unit_runs_the_worktrees_script_not_the_primary_checkouts():
+    """The primary checkout can predate the script while the worktree is at origin/master;
+    every review unit on such a host failed to spawn."""
+    cmd = systemd_run_command("b", review=True)
+    assert f"{REPO}/scripts/dev/fanout.py" not in cmd
+    assert " scripts/dev/fanout.py review --batch b " in cmd
+
+
+def test_the_appended_system_prompt_file_exists_where_the_unit_resolves_it():
+    """The path is relative to the unit's WorkingDirectory, the worktree root. A rename that
+    missed `SYSTEM_PROMPT_FILE` would make every launch fail at unit start."""
+    cmd = systemd_run_command("b")
+    assert f"--append-system-prompt-file {SYSTEM_PROMPT_FILE}" in cmd
+    prompt = REPO_ROOT / SYSTEM_PROMPT_FILE
+    assert prompt.is_file()
+    assert "needs input:" in prompt.read_text()
+
+
+def test_the_launch_command_folds_every_step_into_one_call_ending_in_systemd_run():
+    cmd = launch_command("b")
+    assert cmd == " && ".join(
+        [
+            create_worktree_command("b"),
+            venv_sync_command("b"),
+            write_brief_command("b"),
+            systemd_run_command("b"),
+        ]
+    )
+    assert (
+        cmd.index("worktree add")
+        < cmd.index("worktree lock")
+        < cmd.index(" sync --frozen")
+        < cmd.index("cat > ")
+        < cmd.index("systemd-run")
+    )
+
+
+def _fake_uv(home, exit_code: int):
+    """A `uv` under `home/.local/bin` that drains stdin, records its argv, and exits `exit_code`."""
+    fake_bin(
+        home / ".local/bin",
+        uv=f'cat >/dev/null\necho "$@" > {home}/argv\nexit {exit_code}\n',
+    )
+
+
+def _run_sync_then_cat(home):
+    """Run the sync step, then `cat`, as the launch chain does, with the brief on stdin."""
+    cmd = venv_sync_command("b", home=str(home)) + " && cat"
+    return subprocess.run(
+        ["bash", "-c", cmd], input="BRIEF", capture_output=True, text=True, timeout=30
+    )
+
+
+def test_the_venv_sync_builds_the_batch_worktrees_venv_from_the_lock(tmp_path):
+    """A fresh batch tree had no venv for run-hook.sh to fall back to."""
+    _fake_uv(tmp_path, 0)
+    proc = _run_sync_then_cat(tmp_path)
+    assert proc.returncode == 0 and proc.stdout == "BRIEF"
+    argv = (tmp_path / "argv").read_text().split()
+    assert argv == ["--directory", worktree_path("b"), "sync", "--frozen", "--quiet"]
+
+
+def test_a_failed_venv_sync_warns_and_the_launch_goes_on_with_the_brief_intact(
+    tmp_path,
+):
+    _fake_uv(tmp_path, 1)
+    proc = _run_sync_then_cat(tmp_path)
+    assert proc.returncode == 0 and proc.stdout == "BRIEF"
+    assert "uv sync in " in proc.stderr and "failed" in proc.stderr
+    assert "fanout-step:" not in proc.stderr
+
+
+def test_launch_writes_the_brief_over_stdin_then_starts_the_unit():
+    tools, run = fake_tools({"daniel-server": ok("")})
+    batch = launch(tools, "daniel-server", "b", "BRIEF", issues=[1])
+    # One ssh call per batch: add+lock, brief write and systemd-run folded into it.
+    assert len(run.calls) == 1
+    host, cmd, stdin = run.calls[0]
+    assert host == "daniel-server" and stdin == "BRIEF"
+    assert cmd.index("worktree add") < cmd.index("cat > ") < cmd.index("systemd-run")
+    assert batch.unit == "fanout-b" and batch.host == "daniel-server"
+
+
+def test_a_failed_worktree_add_removes_the_half_made_tree_and_launches_nothing():
+    tools, run = fake_tools(
+        {
+            "daniel-server": subprocess.CompletedProcess(
+                [],
+                1,
+                stdout="",
+                stderr="fatal: branch exists\nfanout-step: worktree add\n",
+            )
+        }
+    )
+    with pytest.raises(LaunchError, match="branch exists"):
+        launch(tools, "daniel-server", "b", "BRIEF", issues=[1])
+    assert len(run.calls) == 2
+    # Chained with `&&`: a bare `;` would force-delete the branch even when the tree was never
+    # created.
+    assert run.calls[1][1] == remove_worktree_command("b")
+
+
+def test_a_failed_cleanup_is_folded_into_the_launch_error():
+    tools, run = fake_tools()
+    run.answers_by_call = [
+        subprocess.CompletedProcess(
+            [], 1, stdout="", stderr="fatal: branch exists\nfanout-step: worktree add\n"
+        ),
+        subprocess.CompletedProcess(
+            [], 128, stdout="", stderr="fatal: not a working tree"
+        ),
+    ]
+    with pytest.raises(LaunchError) as excinfo:
+        launch(tools, "daniel-server", "b", "BRIEF", issues=[1])
+    assert "branch exists" in str(excinfo.value)
+    assert "not a working tree" in str(excinfo.value)
+
+
+def test_a_failed_fetch_raises_with_no_cleanup():
+    tools, run = fake_tools()
+    run.answers_by_call = [
+        subprocess.CompletedProcess(
+            [],
+            1,
+            stdout="",
+            stderr="fatal: unable to access origin\nfanout-step: fetch\n",
+        ),
+    ]
+    with pytest.raises(LaunchError, match="fetch") as excinfo:
+        launch(tools, "daniel-server", "b", "BRIEF", issues=[1])
+    assert "unable to access origin" in str(excinfo.value)
+    assert len(run.calls) == 1
+
+
+def test_a_failed_worktree_lock_still_cleans_up():
+    tools, run = fake_tools({"daniel-server": ok("")})
+    run.answers_by_call = [
+        subprocess.CompletedProcess(
+            [],
+            1,
+            stdout="",
+            stderr="fatal: already locked\nfanout-step: worktree lock\n",
+        ),
+    ]
+    with pytest.raises(LaunchError, match="worktree lock") as excinfo:
+        launch(tools, "daniel-server", "b", "BRIEF", issues=[1])
+    assert "already locked" in str(excinfo.value)
+    assert len(run.calls) == 2
+    assert run.calls[1][1] == remove_worktree_command("b")
+
+
+def test_a_launch_timeout_still_cleans_up_and_raises():
+    tools, run = fake_tools({"daniel-server": ok("")})
+    run.answers_by_call = [subprocess.TimeoutExpired(cmd="git", timeout=120.0)]
+    with pytest.raises(LaunchError, match="timed out"):
+        launch(tools, "daniel-server", "b", "BRIEF", issues=[1])
+    assert len(run.calls) == 2 and "worktree remove --force" in run.calls[1][1]
+
+
+def test_a_failed_brief_write_raises_and_skips_systemd_run():
+    tools, run = fake_tools()
+    run.answers_by_call = [
+        subprocess.CompletedProcess(
+            [],
+            1,
+            stdout="",
+            stderr=(
+                "bash: line 5: /w/.fanout/brief.md: Permission denied\n"
+                "fanout-step: brief write\n"
+            ),
+        ),
+    ]
+    with pytest.raises(LaunchError, match="brief write") as excinfo:
+        launch(tools, "daniel-server", "b", "BRIEF", issues=[1])
+    assert "Permission denied" in str(excinfo.value)
+    assert len(run.calls) == 1
+
+
+def test_a_failed_systemd_run_raises_with_its_stderr():
+    tools, run = fake_tools()
+    run.answers_by_call = [
+        subprocess.CompletedProcess(
+            [],
+            1,
+            stdout="",
+            stderr=(
+                "Failed to start transient service unit: "
+                "Unit fanout-b.service already exists.\n"
+                "fanout-step: systemd-run\n"
+            ),
+        ),
+    ]
+    with pytest.raises(LaunchError, match="systemd-run") as excinfo:
+        launch(tools, "daniel-server", "b", "BRIEF", issues=[1])
+    assert "Unit fanout-b.service already exists." in str(excinfo.value)
+    # No unit started and no manifest will name the batch, so the tree goes.
+    assert len(run.calls) == 2
+    assert run.calls[1][1] == remove_worktree_command("b")
+
+
+def test_an_unattributable_failure_reports_launch_command_failed_with_no_cleanup():
+    tools, run = fake_tools()
+    run.answers_by_call = [
+        subprocess.CompletedProcess(
+            [],
+            255,
+            stdout="",
+            stderr="ssh: connect to host daniel-server port 22: Connection refused",
+        ),
+    ]
+    with pytest.raises(LaunchError, match="launch command failed") as excinfo:
+        launch(tools, "daniel-server", "b", "BRIEF", issues=[1])
+    assert "Connection refused" in str(excinfo.value)
+    assert len(run.calls) == 1
+
+
+def test_a_failed_add_and_a_timed_out_cleanup_are_both_reported():
+    tools, run = fake_tools()
+    run.answers_by_call = [
+        subprocess.CompletedProcess(
+            [], 1, stdout="", stderr="fatal: branch exists\nfanout-step: worktree add\n"
+        ),
+        subprocess.TimeoutExpired(cmd="git", timeout=120.0),
+    ]
+    with pytest.raises(LaunchError) as excinfo:
+        launch(tools, "daniel-server", "b", "BRIEF", issues=[1])
+    assert "branch exists" in str(excinfo.value)
+    assert "timed out" in str(excinfo.value)
+
+
+def test_manifest_round_trips_outside_the_repo(tmp_path):
+    now = datetime(2026, 9, 9, 20, 30, tzinfo=UTC)
+    m = Manifest(
+        new_run_id(now),
+        "worktree-orch",
+        [
+            Batch(
+                "b",
+                "daniel-box",
+                worktree_path("b"),
+                "worktree-fanout-b",
+                "fanout-b",
+                [1],
+                now.isoformat(),
+            )
+        ],
+    )
+    path = save(m, root=tmp_path)
+    assert path == tmp_path / "20260909T203000Z.json"
+    assert load("20260909T203000Z", root=tmp_path) == m
+    assert json.loads(path.read_text())["batches"][0]["host"] == "daniel-box"
+
+
+def _one_batch_manifest(run_id="20260101T000000Z"):
+    return Manifest(run_id, "o", [Batch("b", "h", "/w", "br", "u", [1], "t")])
+
+
+def test_a_run_named_in_a_second_another_run_took_gets_the_next_free_id(tmp_path):
+    save(_one_batch_manifest("20260101T000000Z"), root=tmp_path)
+    now = datetime(2026, 1, 1, tzinfo=UTC)
+    assert unused_run_id(now, tmp_path) == "20260101T000001Z"
+
+
+def test_saving_a_manifest_leaves_no_temporary_file_behind(tmp_path):
+    save(_one_batch_manifest(), root=tmp_path)
+    assert [p.name for p in tmp_path.iterdir()] == ["20260101T000000Z.json"]
+
+
+def test_a_save_that_fails_mid_write_leaves_the_previous_manifest_intact(tmp_path):
+    """`clean` saves after every removal, so a crash mid-write is not a rare edge.
+
+    An in-place write would truncate the file: `remote_fanout_lines` then skips the run in
+    the SessionStart banner without a word, and `cmd_clean` cannot load it at all, leaving
+    the worktrees it named locked on another host with nothing pointing at them.
+    """
+
+    first = _one_batch_manifest()
+    manifest_file = save(first, root=tmp_path)
+    before = manifest_file.read_text()
+
+    def boom(_src, _dst):
+        raise OSError("disk full")
+
+    second = Manifest(first.run_id, "o", [])
+    with pytest.raises(OSError, match="disk full"):
+        save(second, root=tmp_path, replace=boom)
+    assert manifest_file.read_text() == before
+    assert load(first.run_id, root=tmp_path) == first
+    # The failed attempt cleans up after itself rather than leaving a stray .tmp.
+    assert [p.name for p in tmp_path.iterdir()] == [manifest_file.name]
+
+
+def test_a_manifest_written_before_repo_existed_loads_as_this_repo(tmp_path):
+    batch = {
+        "batch": "b",
+        "host": "daniel-box",
+        "worktree": "/w",
+        "branch": "worktree-fanout-b",
+        "unit": "fanout-b",
+        "issues": [1],
+        "launched_at": "t",
+    }
+    (tmp_path / "20260101T000000Z.json").write_text(
+        json.dumps(
+            {
+                "run_id": "20260101T000000Z",
+                "orchestrator_branch": "o",
+                "batches": [batch],
+            }
+        )
+    )
+    assert (
+        load("20260101T000000Z", root=tmp_path).batches[0].repo == "DanielH2018/server"
+    )

@@ -23,7 +23,7 @@ challenges for the indexers by rendering attacker-supplied pages in a headless b
 - **Secrets:** `prowlarr_api_key` (also reused as the exportarr sidecar's credential —
   Prowlarr has no scoped read-only key to mint instead).
 - **Flux applies it.** Its `containers_list`
-  entry is in `cluster/services.yml`, so nothing applies it by hand, and a merged change reaches the cluster
+  entry is in `k8s/services.yml`, so nothing applies it by hand, and a merged change reaches the cluster
   when `promote` publishes and verifies the next bundle. authelia and traefik are flux-owned too,
   so the Kustomization lists them in `dependsOn`, and Flux applies this tag only after their
   Kustomizations are Ready.
@@ -129,7 +129,7 @@ The `prowlarr-app-keys` CronJob writes Prowlarr's database with no human in the 
 ## Editing
 - Manifest: `k8s/roles/prowlarr/templates/deployment.yaml.j2`,
   `k8s/roles/prowlarr/templates/deployment-flaresolverr.yaml.j2`
-- **The route is LAN-only.** The entry in `cluster/services.yml` sets `public_route: false`,
+- **The route is LAN-only.** The entry in `k8s/services.yml` sets `public_route: false`,
   and the shared `k8s/templates/ingressroute-default.yaml.j2` renders no public name from it
   whatever `k8s_public_route` says. The operator ruled it on 2026-11-15 (#8514): WireGuard
   covers remote use.

@@ -14,7 +14,7 @@ A bad apply here detaches volumes under every stateful service while host probes
 - **Claims:** none (no PVC)
 <!-- /generated_from -->
 
-- **Flux applies it.** Its `containers_list` entry is in `cluster/services.yml`. A rebuilt cluster
+- **Flux applies it.** Its `containers_list` entry is in `k8s/services.yml`. A rebuilt cluster
   gets it from the `longhorn` Kustomization at step 6 of `docs/flux-deploy-plane.md`'s
   *Bootstrapping Flux on a rebuilt cluster*. The `longhorn-backup` Kustomization depends on it and
   creates the backup targets once it reads `Ready`.
@@ -80,6 +80,7 @@ A bad apply here detaches volumes under every stateful service while host probes
       an immutable parameter changes.
     - `templates/networkpolicy-metrics.yaml.j2` renders the policy that admits Prometheus to
       the manager's metrics port.
+    - `templates/networkpolicy-ui.yaml.j2` renders the policy that admits only Traefik to the UI.
 - **A DataEngineSpecific Setting's value is a JSON map serialised as a string.**
   `default-replica-count` and both `snapshot-data-integrity` Settings render
   `{"v1":"...","v2":"..."}` in the compact form the manager stores, so the render equals the

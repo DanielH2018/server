@@ -126,4 +126,4 @@ cap while batches nearly doubled.
 
 The per-batch limits are set in `systemd_run_command` in `scripts/dev/fanout_lib/launch.py`.
 The `# DECIDED:` marker there opens "each batch gets its own runaway limits" and cites this
-record. `scripts/dev/tests/test_fanout_batch_caps.py` holds the limits on every launch shape.
+record. `scripts/dev/tests/fanout/test_fanout_batch_caps.py` holds the limits on every launch shape.
