@@ -238,9 +238,13 @@ def test_the_inotify_key_ships_in_sysctl_d_and_the_zshenv_block_uses_the_line_ar
     inotify = "/etc/sysctl.d/90-homelab-k3s-node.conf"
     assert package.files[inotify][0] == b"fs.inotify.max_user_instances=1024\n"
     assert package.activations[inotify] == "sysctl"
-    (block,) = [e for e in package.lines if e["path"] == "/etc/zsh/zshenv"]
     # The Ansible task's marker, so the first run adopts its block and adds no second copy.
-    assert block["marker"] == "# {mark} ANSIBLE MANAGED — k3s kubeconfig"
+    (block,) = [
+        e
+        for e in package.lines
+        if e.get("marker") == "# {mark} ANSIBLE MANAGED — k3s kubeconfig"
+    ]
+    assert block["path"] == "/etc/zsh/zshenv"
     assert ". /etc/profile.d/k3s-kubeconfig.sh" in block["block"]
     # The arm creates a missing /etc/zsh 0700, so zsh has to install the file first.
     assert "zsh" in package.depends

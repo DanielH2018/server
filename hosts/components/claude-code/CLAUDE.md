@@ -189,8 +189,9 @@ start**, so the deploy that changes it drops the RC host's sessions.
 pod. A slice cannot carry `OOMScoreAdjust=`, so the two fleet units set it, a
 `templates/fleet-user-manager-oom.conf.j2` drop-in sets it on each fleet uid's
 `user@<uid>.service`, and the agent's login profile writes it to `/proc/self/oom_score_adj`.
-A `lines:` block in `/etc/zsh/zprofile` writes it for the operator's zsh login, which is why
-the component depends on `zsh`.
+A `lines:` block in `/etc/zsh/zshenv` writes it for every zsh of the operator's, which is why
+the component depends on `zsh`. `zprofile` would miss the desktop app's sessions: they start
+from `ssh host cmd`, which is no login shell.
 That drop-in must not be named `50-homelab.conf`: reconcile restarts a unit whose
 `50-homelab.conf` changes, and restarting a user manager ends that user's sessions.
 ENFORCED: `hosts/tests/test_claude_fleet_slice_cap.py`.

@@ -303,9 +303,11 @@ legacy:
   - path: /var/lib/node-exporter-textfile/claude-weekly-summary.prom
     when: not claude_code_weekly_summary_enabled
 lines:
-  # The operator's ssh login is a zsh login shell, which inherits sshd's oom_score_adj of 0,
-  # below every pod's. Raising it needs no privilege, and what the shell starts inherits it.
-  - path: /etc/zsh/zprofile
+  # Every ssh session of the operator starts in zsh, which inherits sshd's oom_score_adj of 0,
+  # below every pod's. The desktop app's sessions start from a non-login `ssh host cmd`, which
+  # reads zshenv and not zprofile. Raising the value needs no privilege, and what the shell
+  # starts inherits it.
+  - path: /etc/zsh/zshenv
     marker: "# {mark} homelab claude-code — fleet oom_score_adj"
     block: |
       echo {{ claude_code_fleet_oom_score_adjust }} 2>/dev/null > /proc/self/oom_score_adj
