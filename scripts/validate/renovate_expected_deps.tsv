@@ -28,6 +28,7 @@ regex	.github/workflows/ci.yml	goreleaser/nfpm	github-release-attachments	digest
 regex	.github/workflows/ci.yml	kindest/node	docker	digest	-
 regex	.github/workflows/ci.yml	kubernetes-sigs/kind	github-release-attachments	digest	-
 regex	.github/workflows/ci.yml	vale-cli/vale	github-release-attachments	digest	-
+regex	.github/workflows/render-diff.yml	homeport/dyff	github-release-attachments	digest	-
 regex	.github/workflows/flux-deletion-drill.yml	fluxcd/flux2	github-release-attachments	digest	-
 regex	.github/workflows/flux-deletion-drill.yml	sigstore/cosign	github-release-attachments	digest	-
 regex	.github/workflows/promote.yml	fluxcd/flux2	github-release-attachments	digest	-

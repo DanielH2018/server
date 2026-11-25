@@ -12,6 +12,9 @@ Stub values are never secrets, so a stub render needs no age key.
 - `digest DIR` prints one sha256 line per directory under `DIR/cluster/`, then a `total` line.
   R1's determinism tests write the same lines in CI with `renderer_lib/shadow.py`'s
   functions.
+- `diff BASE HEAD` prints the difference of two rendered trees: `dyff` per YAML file pair, so a
+  reordered key prints nothing and a changed field prints its path, and a text diff for every
+  other file. It needs `dyff` on `PATH`. Its library is `renderer_lib/tree_diff.py`.
 - `roundtrip --out DIR` (target slice R2) renders each tag in placeholder mode and in stub
   mode, builds every directory of both with `flux build kustomization`, substituting each
   key's stub where a directory substitutes, and compares the outputs byte for byte. A second
@@ -68,6 +71,7 @@ from renderer.renderer_lib.roundtrip import (
     stub_passes,
 )
 from renderer.renderer_lib.shadow import TreeRefused, digest_lines
+from renderer.renderer_lib.tree_diff import DyffFailed, diff_trees
 
 
 from renderer.template_filters.secret_stubs import (
@@ -126,6 +130,15 @@ def _digest(root: Path) -> int:
         lines = digest_lines(root)
     except TreeRefused as exc:
         return _refused("digest", str(exc))
+    print("\n".join(lines))
+    return SHADOW_OK
+
+
+def _diff(base: Path, head: Path) -> int:
+    try:
+        lines = diff_trees(base, head)
+    except (DyffFailed, OSError) as exc:
+        return _refused("diff", str(exc))
     print("\n".join(lines))
     return SHADOW_OK
 
@@ -222,6 +235,11 @@ def main(
         "digest", help="print a sha256 per directory under DIR/cluster/, then a total"
     )
     dig.add_argument("dir", type=Path, metavar="DIR", help="a C1 tree")
+    tdiff = commands.add_parser(
+        "diff", help="print the difference of two rendered trees, YAML compared by dyff"
+    )
+    tdiff.add_argument("base", type=Path, metavar="BASE", help="the base render")
+    tdiff.add_argument("head", type=Path, metavar="HEAD", help="the head render")
     trip = commands.add_parser(
         "roundtrip",
         help="build the placeholder and stub renders with flux build and compare them",
@@ -266,6 +284,8 @@ def main(
 
     if args.command == "digest":
         return _digest(args.dir)
+    if args.command == "diff":
+        return _diff(args.base, args.head)
     if args.command == "roundtrip":
         return _roundtrip(args.out, args.roles, args.red_proof, args.guard_map, render)
     if args.command == "fluxprobe":

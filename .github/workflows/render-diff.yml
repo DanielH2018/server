@@ -82,7 +82,5 @@ jobs:
 
       - name: Print the difference and the head's tree digest
         run: |
-          # dyff compares by structure, so a reordered key prints nothing and a changed field
-          # prints its path. It exits 1 on a difference, which this advisory step ignores.
-          dyff between --omit-header "$RUNNER_TEMP/base-out" "$RUNNER_TEMP/head-out" || true
           uv run --frozen python scripts/renderer/shadow_diff.py digest "$RUNNER_TEMP/head-out"
+          uv run --frozen python scripts/renderer/shadow_diff.py diff "$RUNNER_TEMP/base-out" "$RUNNER_TEMP/head-out"
