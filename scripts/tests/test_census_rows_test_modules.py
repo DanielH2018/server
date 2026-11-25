@@ -80,7 +80,7 @@ ROWS = (
         must_find=frozenset(
             {
                 "tests/repo/test_ci_empty_pr_merge_fails.py",
-                ".claude/hooks/tests/test_rules_globs_match_a_tracked_file.py",
+                ".claude/hooks/tests/instructions/test_rules_globs_match_a_tracked_file.py",
                 "scripts/deploy_tools/tests/test_land_tools.py",
                 "scripts/lib/tests/test_render_guard.py",
             }
@@ -230,7 +230,7 @@ ROWS = (
         min_matches=MODULE_FLOOR,
         must_find=frozenset(
             {
-                ".claude/hooks/tests/test_hook_scripts_executable.py",
+                ".claude/hooks/tests/hook_contract/test_hook_scripts_executable.py",
                 "tests/_helpers.py",
                 "tests/repo/test_testpaths_covers_every_test_file.py",
                 "scripts/deploy_tools/tests/test_land_tools.py",

@@ -254,7 +254,6 @@ SUITE_CAP = 40
 _TO_GROUP = "the Test suite organization milestone groups it"
 UNGROUPED_SUITES = dict.fromkeys(
     (
-        ".claude/hooks/tests",
         "hosts/lib/tests",
         "hosts/tests",
         "k8s/roles/monitor-bridge/tests",

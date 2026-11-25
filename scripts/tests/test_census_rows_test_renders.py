@@ -56,7 +56,7 @@ ROWS = (
         min_matches=MODULE_FLOOR,
         must_find=frozenset(
             {
-                ".claude/hooks/tests/test_hook_scripts_executable.py",
+                ".claude/hooks/tests/hook_contract/test_hook_scripts_executable.py",
                 "k8s/roles/monitor-bridge/tests/test_check_ha.py",
                 "tests/k8s/_manifest_guards.py",
                 "tests/longhorn/_restore_drill.py",

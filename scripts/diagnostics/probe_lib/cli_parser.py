@@ -42,7 +42,7 @@ def _verdict_help(summary, ok, fail):
     """`add_parser` keywords that end a verdict subcommand's `help` and `--help` with `exits`.
 
     Spread into a literal `add_parser("<name>", ...)` call rather than wrapping it, because
-    `.claude/hooks/tests/test_setup_wiring.py` finds the subcommand names by that text.
+    `.claude/hooks/tests/hook_contract/test_setup_wiring.py` finds the subcommand names by that text.
     """
     text = f"{summary} ({exits(ok, fail)})"
     return {"help": text, "description": text}

@@ -29,8 +29,8 @@ SAMPLE = 60
 # second the imported module's turn comes first.
 IMPORT_PAIRS = (
     (
-        ".claude/hooks/tests/test_hook_shim_fail_open.py",
-        ".claude/hooks/tests/test_run_hook.py",
+        ".claude/hooks/tests/hook_contract/test_hook_shim_fail_open.py",
+        ".claude/hooks/tests/hook_contract/test_run_hook.py",
     ),
     (
         "k8s/roles/registry/tests/test_registry_verify.py",
