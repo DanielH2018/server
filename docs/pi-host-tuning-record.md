@@ -141,8 +141,9 @@ board when the 1, 5 or 15-minute load passes 24.
 **All three load limits are declared, because the daemon derives an unset one from
 `max-load-1`.** `watchdog.conf(5)` gives the defaults: three quarters of it for `max-load-5` and
 half for `max-load-15`. Until 2026-11-25 only `max-load-1 = 24` was set, so the daemon also
-rebooted the Pi at a 5-minute load of 18 or a 15-minute load of 12 (#10087). The daemon compares
-whole numbers, so a limit of 12 trips at 13. Prometheus holds the 15-minute load before each
+rebooted the Pi at a 5-minute load of 18 or a 15-minute load of 12 (#10087). The
+daemon's log format prints the loads as integers, and the reboots below fit a trip at 13 rather
+than 12. Prometheus holds the 15-minute load before each
 unscheduled reboot from 2026-11-09 to 2026-11-25 that happened while the daemon ran:
 
 | Reboot (UTC) | Last `node_load15` before it | Highest `node_load1` before it | Work in progress |
@@ -163,11 +164,10 @@ On 2026-11-25 the file times on the card show the sequence. `apt-daily-upgrade` 
 Only root can read that mail, and nobody has read it. To read it on the Pi, run
 `sudo tail -20 /var/mail/root`.
 
-A watchdog reboot in the middle of a kernel install can leave the Pi unable to boot. On 2026-11-24 the
-install wrote the initial RAM disk image at 05:45 and the boot firmware at 05:46-05:47, 15 minutes before the
-reboot. The Pi was still writing files at 05:49 on 2026-11-24 and at 05:53 on 2026-11-25, so a hang is
-unlikely.
-Why the same kind of work drives a higher load than it did on Ubuntu 24.04 is open as #10141.
+A watchdog reboot in the middle of a kernel install can leave the Pi unable to boot. On
+2026-11-24 the install wrote the initial RAM disk image at 05:45 and the boot firmware at
+05:46-05:47, 15 minutes before the reboot. The Pi was still writing files at 05:49 on 2026-11-24
+and at 05:53 on 2026-11-25, so a hang is unlikely. Why the same kind of work drives a higher load than it did on Ubuntu 24.04 is open as #10141.
 
 A stopped daemon looks healthy from outside, because `wd_keepalive` takes over the device and
 only the load test goes away. `homelab-pi-watchdog-health.timer` reads the unit's state every 5
