@@ -2,7 +2,7 @@
 """claude-pipeline-timeline snapshots the PR timeline daily, before its journal inputs rotate (#5661).
 
 The joiner is `scripts/dev/pipeline_timeline.py`, tested in
-`scripts/dev/tests/test_pipeline_timeline.py`. This module pins what that test cannot see
+`scripts/dev/tests/ci/test_pipeline_timeline.py`. This module pins what that test cannot see
 about the unit:
 
 1. The command. A window of days and the daniel-server pull, because a bare run reads seven

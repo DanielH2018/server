@@ -733,7 +733,7 @@ server batch runs as `ubuntu` on `worktree-fanout-<batch>`.
   or that this lander will not land. A project with such a batch pages the operator once,
   on the second pass in a row that reads it so, through
   `fanout-alert@fanout-coordinator-<worktree>:no-coordinator.service`
-  (`scripts/dev/tests/test_fanout_coordinators.py::test_an_orphaned_project_pages_once_on_its_second_pass`).
+  (`scripts/dev/tests/fanout/test_fanout_coordinators.py::test_an_orphaned_project_pages_once_on_its_second_pass`).
   It starts no session and changes no worktree, lock, claim or PR. The record of what it
   paged is `~/.local/state/fanout-server-lander/coordinator-pages.json`. A failed read logs a
   line and never changes the exit status. `--dry-run` logs the page it would send.

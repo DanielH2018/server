@@ -34,7 +34,7 @@ WHAT IT DOES NOT WRITE, deliberately:
   bundle, and `land.sh` follows the promotion.
 
 The output is meant to pass `prek run --all-files` and the renderer's `cluster` render of the
-new tag with no hand edits; `scripts/dev/tests/test_new_k8s_service.py` renders it through
+new tag with no hand edits; `scripts/dev/tests/repo_tools/test_new_k8s_service.py` renders it through
 the repo's own manifest validator to hold that.
 """
 
