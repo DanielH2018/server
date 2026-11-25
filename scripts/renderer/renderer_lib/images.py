@@ -32,7 +32,6 @@ import jinja2
 import yaml
 
 from lib import yaml_fast
-from lib.inventory_lists import K8S_HOST
 from lib.repo_paths import K8S_ROLES
 from renderer.renderer_lib.bundle import CLUSTER_DIR, FLUX_DIR, KUSTOMIZATION
 from renderer.renderer_lib.cluster import RenderedTag, RenderRefused, tag_context
@@ -78,13 +77,12 @@ def builder_roles(roles: Path = K8S_ROLES) -> list[str]:
 
 
 def render_images(
-    overrides: dict, host: str = K8S_HOST, tags: Iterable[str] | None = None
+    overrides: dict, tags: Iterable[str] | None = None
 ) -> dict[str, BuiltImage]:
     """Each built image's context and tag, rendered with `overrides` over its role's context.
 
     Args:
         overrides: The extra vars that outrank every other layer.
-        host: The inventory host whose context each role renders in.
         tags: The deploy tags whose roles' images to build, or None for every builder role.
 
     Raises:
@@ -96,7 +94,7 @@ def render_images(
         if wanted is not None and role not in wanted:
             continue
         try:
-            ctx = tag_context(K8S_ROLES / role, role, overrides, host)
+            ctx = tag_context(K8S_ROLES / role, role, overrides)
             built = image_contexts(K8S_ROLES / role, ctx)
         except (ValueError, jinja2.TemplateError) as exc:
             raise RenderError(f"{role}'s image context: {exc}") from exc

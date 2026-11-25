@@ -48,7 +48,7 @@ artifacts_agent_dir: /var/lib/claude/.claude/artifacts
 # nor redirect one. The index lists it as `<artifacts_k8s_node>-claude-triage`. Empty means no
 # mount. It equals report_dir in hosts/components/claude-code/templates/claude-triage-pins.j2,
 # whose tmpfiles entry creates it (2750 claude-triage-ctl:ubuntu); this role does not.
-artifacts_triage_dir: "{{ '/var/lib/claude-triage-ctl/reports' if (claude_code_triage_enabled | default(false) | bool) else '' }}"
+artifacts_triage_dir: "{{ '/var/lib/claude-triage-ctl/reports' if hosts[artifacts_k8s_node].claude_code_triage_enabled else '' }}"
 # Where daniel-box holds the other hosts' copies: one subdirectory per host, which becomes
 # the /a/<host>/ path segment the index and the GUI filter on. hosts/components/claude-code/'s
 # peer sync writes them, from its twin claude_code_artifacts_peer_dir.

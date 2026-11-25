@@ -47,7 +47,6 @@ from pathlib import Path
 import yaml
 
 from lib import yaml_fast
-from lib.inventory_lists import K8S_HOST
 from lib.repo_paths import JOB_FILES, K8S_ROLES
 from renderer.renderer_lib.cluster import (
     KUSTOMIZATION,
@@ -341,11 +340,8 @@ def apply_placeholders(
 def render_placeholders(
     tags: list[str],
     keys: list[str],
-    host: str = K8S_HOST,
     entries: Callable[[str], list[str]] = sops_manifests,
-    contexts: Callable[
-        [dict, str, list[str] | None], dict[str, BuiltImage]
-    ] = render_images,
+    contexts: Callable[[dict, list[str] | None], dict[str, BuiltImage]] = render_images,
     roles: Path = K8S_ROLES,
     all_images: bool = False,
 ) -> PlaceholderRender:
@@ -363,7 +359,7 @@ def render_placeholders(
             sentinel. CI builds a context in the open, so no context may read a secret.
     """
     overrides = placeholder_vars(keys)
-    images = contexts(overrides, host, None if all_images else list(tags))
+    images = contexts(overrides, None if all_images else list(tags))
     leaked = Sentinels(keys).key_set(image_files(images))
     if leaked:
         raise RenderError(
@@ -373,7 +369,7 @@ def render_placeholders(
     rendered, sops = [], {}
     for tag in tags:
         kept, dropped = exclude_sops_manifests(
-            render_tag(tag, overrides, host, role_tags(images, tag), roles),
+            render_tag(tag, overrides, role_tags(images, tag), roles),
             entries(tag),
         )
         rendered.append(kept)

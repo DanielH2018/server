@@ -57,9 +57,13 @@ def _triage(pod: dict) -> tuple[list[dict], list[dict]]:
 
 
 def test_the_triage_report_tree_is_mounted_read_only_while_triage_is_enabled() -> None:
-    volumes, mounts = _triage(_pod({"claude_code_triage_enabled": True}))
+    volumes, mounts = _triage(
+        _pod({"hosts": {"daniel-box": {"claude_code_triage_enabled": True}}})
+    )
     assert len(volumes) == 1 and len(mounts) == 1
     assert volumes[0]["hostPath"]["type"] == "Directory"
     assert mounts[0]["readOnly"] is True
     assert mounts[0]["name"] == volumes[0]["name"]
-    assert _triage(_pod({"claude_code_triage_enabled": False})) == ([], [])
+    assert _triage(
+        _pod({"hosts": {"daniel-box": {"claude_code_triage_enabled": False}}})
+    ) == ([], [])

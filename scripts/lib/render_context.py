@@ -30,7 +30,6 @@ from lib.cli_help import warn
 from lib.container_entry import parse_containers_list
 from lib.inventory_lists import PI_LIST_KEY
 from lib.estate import (
-    PLANE_HOSTS,
     REPO_INVENTORY,
     Inventory,
     inventory_layers,
@@ -47,7 +46,6 @@ from lib.render_guard import (
 )
 
 __all__ = [
-    "PLANE_HOSTS",
     "REPO_INVENTORY",
     "Inventory",
     "UnresolvedVarsError",
@@ -89,10 +87,9 @@ def render_context(
     Args:
         path: A role template, laid out ``roles/<plane>/<role>/templates/<name>``, or the
             role directory itself. The role's ``defaults/main.yml`` is the weakest real
-            layer, and its plane picks the host from `PLANE_HOSTS` when `host` is None. None
-            for a render with no role, which then has no role defaults layer.
-        host: The inventory host whose host_vars go over ``all.yml``. None takes the plane's
-            host, or no host_vars layer for a plane without one.
+            layer. None for a render with no role, which then has no role defaults layer.
+        host: The inventory host whose host_vars go over ``all.yml``. None renders with no
+            host_vars layer. A k8s role takes none, and reads a host's value through ``hosts``.
         overrides: Values laid over every file layer. They go in before anything resolves as
             well as on top after, so a default aliasing an overridden name (``x: "{{ secret
             }}"``) expands to the override rather than to the name's stub.
@@ -125,7 +122,6 @@ def render_context(
     role_dir = None
     if path is not None:
         role_dir = path.parents[1] if path.parent.name == "templates" else path
-        host = host or inventory.plane_hosts.get(role_dir.parent.name)
     overrides = overrides or {}
     raw = {
         **base,
@@ -170,6 +166,8 @@ _HOSTS_KEYS = (
     "compose_services",
     "claude_agent_ssh_login_enabled",
     "ssh_host_ed25519_key",
+    "render_gid",
+    "claude_code_triage_enabled",
 )
 
 
