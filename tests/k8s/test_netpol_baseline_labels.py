@@ -61,22 +61,22 @@ BORN_FENCED_ROLES = {
     # are the BROWSER's fetches, not the pod's, so the container itself dials nothing.
     "texbrain",
     # Music server over its own Longhorn volume. Traefik is its only caller. It dials
-    # ListenBrainz and Deezer, which is egress and unenforced here, as nut-exporter's is.
+    # ListenBrainz and Deezer, which is egress and unfenced here, as nut-exporter's is.
     "navidrome",
     # UPS metrics. The only entry here whose sole caller is PROMETHEUS rather than Traefik —
     # it has no IngressRoute at all — but the baseline admits prometheus on every port, so the
     # label alone fences it correctly and nothing bespoke is needed. Unlike its neighbours it
-    # does dial out, to upsd on the nut pod; that is egress, which kube-router does not enforce,
+    # does dial out, to upsd on the nut pod; that is egress, which the baseline does not fence,
     # and the inbound half is admitted by the app=nut-exporter podSelector in
     # netpol-baseline/templates/networkpolicy-nut.yaml.j2.
     "nut-exporter",
     # Pi-hole's DNS statistics. Same shape as nut-exporter: Prometheus is its only caller, which
     # the baseline already admits, and its own outbound poll of both Pi-holes' admin API is
-    # egress (unenforced here) plus an `app: pihole-exporter` podSelector in
+    # egress (unfenced here) plus an `app: pihole-exporter` podSelector in
     # netpol-baseline/templates/networkpolicy-pihole.yaml.j2.
     "pihole-exporter",
     # The alert UI. Traefik is its only caller. It dials Alertmanager in the observability
-    # namespace, which is egress (unenforced here) plus the `app: karma` podSelector in
+    # namespace, which is egress (unfenced here) plus the `app: karma` podSelector in
     # netpol-baseline/templates/networkpolicy-alertmanager.yaml.j2.
     "karma",
     # GPU utilization from DRM sysfs. The simplest shape in this set: Prometheus is its only
@@ -96,14 +96,14 @@ BORN_FENCED_ROLES = {
     "blackbox-exporter",
     # The music library manager. Its own NetworkPolicy admits traefik and prowlarr, whose
     # Application Sync writes indexers in. It dials prowlarr, qBittorrent and MusicBrainz, which
-    # is egress and unenforced here, so the label fences only its ingress.
+    # is egress and unfenced here, so the label fences only its ingress.
     "lidarr",
     # The Soulseek client. Traefik is its only caller; Soularr shares its pod and talks over
     # localhost. It dials Soulseek peers through its tunnel and Lidarr in-cluster, which is
-    # egress and unenforced here.
+    # egress and unfenced here.
     "slskd",
     # The password store. Traefik is its only caller; its outbound calls (favicon fetches, push
-    # relay) are egress and unenforced here.
+    # relay) are egress and unfenced here.
     "vaultwarden",
 }
 

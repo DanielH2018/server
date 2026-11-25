@@ -49,7 +49,7 @@ All measured on this cluster, not assumed.
 | Fact | Evidence |
 |---|---|
 | **Ingress policies are enforced**; kube-router's netpol controller runs (k3s default, `--disable-network-policy` not passed) | `n8n/templates/networkpolicy.yaml.j2` header; four live policies |
-| **Egress policies select pods and block nothing** | measured 2026-08-07, recorded in `sonarr/tasks/main.yml` (probe retired 2026-08-17; prose is the only record) |
+| **Egress policies are enforced, except in the first seconds of a pod's life** | measured 2026-11-25 on both nodes; [ADR-0009](adr/0009-networkpolicy-default-deny-ingress.md) has the result |
 | **Kubelet probe traffic needs no ingress rule** | `flaresolverr` admits :8191 only from prowlarr, yet is probed on :8191 and runs 1/1. Corroborated by `headlamp` (:4466 from traefik only, 1/1 for 28h) |
 | **hostNetwork pods cannot be policed by podSelector** | `node-exporter` (both nodes), `metallb` `speaker` — pod IP *is* the node IP |
 | **hostPort traffic arrives with a node IP**, needing an `ipBlock` | `registry`'s policy carries `ipBlock` entries for exactly this |
@@ -66,11 +66,11 @@ The LoadBalancer Services, read from the role templates:
 
 Two consequences worth stating so nobody "fixes" a non-problem later:
 
-- **Ingress-only.** Writing egress policies here produces something that reads like a
-  control in the repo and does nothing in the cluster — worse than no policy, because it
-  invites trust.
-- **No pod loses cluster DNS.** Because egress is unenforced and CoreDNS is reached
-  outbound, an ingress-only policy cannot break name resolution for the pod it selects.
+- **Ingress-only.** The baseline declares no egress rule, so it restricts no outbound call.
+  An egress policy does, and it leaves a gap at pod start.
+- **No pod loses cluster DNS.** CoreDNS is reached outbound, so an ingress-only policy cannot
+  break name resolution for the pod it selects. An egress policy breaks it unless it admits
+  CoreDNS.
 
 ### Correction carried into this design
 
@@ -262,13 +262,13 @@ app reaches jsDelivr for on-demand TeX packages and a CORS proxy for git. Those 
 browser's fetches, made from the reader's machine, not the pod's — the container serves files
 and opens no connection of its own. **navidrome** (2026-09-02), the music server, dials out
 since 2026-11-13: it scrobbles to ListenBrainz and fetches artist images from Deezer. Traefik is
-still its only caller, and the outbound calls are egress, which kube-router does not enforce
-here, so it stays in this set on the same terms as nut-exporter below.
+still its only caller, and the outbound calls are egress, which the baseline does not
+fence, so it stays in this set on the same terms as nut-exporter below.
 **nut-exporter** (2026-09-10), the UPS metrics exporter, stretches the shape in the other
 direction and is listed here anyway. Traefik is not its caller — it has no IngressRoute, and
 Prometheus is the only thing that reaches it — but the baseline admits Prometheus on every port,
 so the label alone fences it exactly as intended. It also dials out, to `upsd` on the nut pod,
-which the other four do not. That is egress, which kube-router does not enforce on this cluster;
+which the other four do not. That is egress, which the baseline does not fence;
 the inbound half of that call is admitted by an `app: nut-exporter` podSelector added to
 `networkpolicy-nut.yaml.j2`.
 **pihole-exporter** (2026-09-10) is the same shape again, one layer out: no IngressRoute,
