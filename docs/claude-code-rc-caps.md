@@ -192,6 +192,47 @@ daniel-box or daniel-server. If it fires during an episode in which a pod was ev
 OOM-killed, the next step is systemd-oomd on `user.slice`
 ([#10000](https://github.com/DanielH2018/server/issues/10000)).
 
+To verify a deploy, read the configured value and the kernel's value. Read
+`kubepods.slice` again after the next k3s start, which is when kubelet resets it:
+
+```bash
+systemctl is-active homelab-kubepods-memory-low.path
+systemctl show -p MemoryLow -p DropInPaths kubepods.slice system.slice
+systemctl show -p MemoryLow k3s.service   # k3s-agent.service on daniel-server
+cat /sys/fs/cgroup/kubepods.slice/memory.low /sys/fs/cgroup/system.slice/memory.low
+```
+
+### The OOM killer's victim
+
+Every fleet process runs at `oom_score_adj` 1000, the kernel's maximum, so a global OOM picks
+a fleet process before a pod. `claude_code_fleet_oom_score_adjust` in the component's
+`defaults/main.yml` holds the value. `OOMScoreAdjust=` is an exec option that a slice drop-in
+cannot carry, so the value reaches the fleet by four paths:
+
+- `homelab-claude-rc.service` and `homelab-claude-bg-resume.service` set `OOMScoreAdjust=`, and
+  the sessions they start inherit it.
+- A drop-in on `user@<uid>.service` sets the user manager's value for the agent's uid 900 and
+  the operator's uid 1000. Its units, among them every fan-out batch `systemd-run --user`
+  starts, inherit it. uid 1000 gets it on daniel-box too: its login caps leave
+  `user-1000.slice`, but fan-out and background jobs still run there as uid 1000.
+- The agent's login profile writes the value to `/proc/self/oom_score_adj`, because an ssh
+  login inherits sshd's 0. Raising the value needs no privilege.
+- The component's `lines:` block in `/etc/zsh/zshenv` writes the same value for every zsh the
+  operator starts. The operator is the only zsh user on either host, and the operator's own
+  profile belongs to the dotfiles repo. zsh reads `zshenv` for a command passed to
+  `ssh host cmd` too. The desktop app starts its remote server that way. Only a login shell
+  reads `zprofile`, so a block there left every desktop session at sshd's 0.
+
+The bias is small. The kernel's badness score adds `adj * totalpages / 1000` to a process's
+RSS, so 1000 against a burstable pod's 999 is worth about 30 MiB on these hosts. A pod
+process with a far larger RSS than any fleet process can still be the victim.
+
+Each value takes effect at the next start of what carries it. Reconcile restarts neither unit
+nor any user manager, so read the live value after the next reboot. To check, run
+`systemctl show -p MainPID homelab-claude-rc.service user@900.service`, then read
+`/proc/<pid>/oom_score_adj` for each process ID it prints. A desktop session takes the value
+when the app's remote server next starts.
+
 ### What the caps did not cover on 2026-11-25
 
 k3s on daniel-box exited at 15:08:10, 15:21:13 and 15:24:35 UTC
@@ -233,49 +274,10 @@ come from Prometheus, and the pressure and fault rows are two-minute rates:
 - **The worker cap does not reach these sessions.** `PYTEST_XDIST_AUTO_NUM_WORKERS` is unset in
   an `ssh host cmd` shell, and `pytest -n 8` sets its own count anyway.
 
-Every change that keeps k3s in memory contradicts one of the rulings above, so the operator
-decides it. [#10126](https://github.com/DanielH2018/server/issues/10126) holds the options.
-
-To verify a deploy, read the configured value and the kernel's value. Read
-`kubepods.slice` again after the next k3s start, which is when kubelet resets it:
-
-```bash
-systemctl is-active homelab-kubepods-memory-low.path
-systemctl show -p MemoryLow -p DropInPaths kubepods.slice system.slice
-systemctl show -p MemoryLow k3s.service   # k3s-agent.service on daniel-server
-cat /sys/fs/cgroup/kubepods.slice/memory.low /sys/fs/cgroup/system.slice/memory.low
-```
-
-### The OOM killer's victim
-
-Every fleet process runs at `oom_score_adj` 1000, the kernel's maximum, so a global OOM picks
-a fleet process before a pod. `claude_code_fleet_oom_score_adjust` in the component's
-`defaults/main.yml` holds the value. `OOMScoreAdjust=` is an exec option that a slice drop-in
-cannot carry, so the value reaches the fleet by four paths:
-
-- `homelab-claude-rc.service` and `homelab-claude-bg-resume.service` set `OOMScoreAdjust=`, and
-  the sessions they start inherit it.
-- A drop-in on `user@<uid>.service` sets the user manager's value for the agent's uid 900 and
-  the operator's uid 1000. Its units, among them every fan-out batch `systemd-run --user`
-  starts, inherit it. uid 1000 gets it on daniel-box too: its login caps leave
-  `user-1000.slice`, but fan-out and background jobs still run there as uid 1000.
-- The agent's login profile writes the value to `/proc/self/oom_score_adj`, because an ssh
-  login inherits sshd's 0. Raising the value needs no privilege.
-- The component's `lines:` block in `/etc/zsh/zshenv` writes the same value for every zsh the
-  operator starts. The operator is the only zsh user on either host, and the operator's own
-  profile belongs to the dotfiles repo. zsh reads `zshenv` for a command passed to
-  `ssh host cmd` too. The desktop app starts its remote server that way. Only a login shell
-  reads `zprofile`, so a block there left every desktop session at sshd's 0.
-
-The bias is small. The kernel's badness score adds `adj * totalpages / 1000` to a process's
-RSS, so 1000 against a burstable pod's 999 is worth about 30 MiB on these hosts. A pod
-process with a far larger RSS than any fleet process can still be the victim.
-
-Each value takes effect at the next start of what carries it. Reconcile restarts neither unit
-nor any user manager, so read the live value after the next reboot. To check, run
-`systemctl show -p MainPID homelab-claude-rc.service user@900.service`, then read
-`/proc/<pid>/oom_score_adj` for each process ID it prints. A desktop session takes the value
-when the app's remote server next starts.
+The operator decides what keeps k3s in memory
+([#10126](https://github.com/DanielH2018/server/issues/10126)). A lower fleet cap, `MemoryMin` and
+systemd-oomd each contradict a ruling above. `MemorySwapMax=0` on k3s has none, but it takes k3s's
+last outlet for reclaim, which is the trade the *No `MemoryMin`* bullet rejects.
 
 ## The fleet's CPU weight
 
