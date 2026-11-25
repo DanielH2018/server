@@ -1,6 +1,6 @@
-"""A restart of daniel-pi's watchdog daemon leaves the daemon running (the `pi-tuning` drop-in).
+"""daniel-pi's watchdog daemon: a restart leaves it running, and its load limits are the declared ones.
 
-The test starts, stops and kills two stand-in units in the systemd user manager, because only
+The restart test starts, stops and kills two stand-in units in the systemd user manager, because only
 systemd's job queue decides what a restart does to the daemon. The leak guard lists it in
 `_LIVE_API_TESTS`, and it skips where no user manager answers. docs/pi-host-tuning-record.md has
 the stop behind it.
@@ -9,6 +9,7 @@ Run: uv run pytest hosts/lib/tests/test_pi_watchdog_dropin.py
 """
 
 import os
+import re
 import shutil
 import subprocess
 import time
@@ -17,8 +18,10 @@ from pathlib import Path
 
 import pytest
 
+from reconcile_lib import lines
 from renderer.renderer_lib import host as host_mode
 
+WATCHDOG_CONF = "/etc/watchdog.conf"
 WATCHDOG_DROPIN = "/usr/lib/systemd/system/watchdog.service.d/50-homelab.conf"
 
 
@@ -123,3 +126,30 @@ def test_a_restart_leaves_the_watchdog_daemon_running_and_a_stop_or_a_crash_star
     }
     # The packaged pair alone: a restart ends with the daemon down behind the keepalive.
     assert _device_holders(None) == {"restart": "keepalive", **handover}
+
+
+# The load lines of daniel-pi's /etc/watchdog.conf: watchdog 5.16's stock conffile and the line
+# an earlier edit appended.
+LIVE_WATCHDOG_LOAD = (
+    "#max-load-1\t\t= 24\n#max-load-5\t\t= 18\n#max-load-15\t\t= 12\nmax-load-1 = 24\n"
+)
+
+
+def load_limits(text: str) -> tuple[int, int, int]:
+    """The 1, 5 and 15-minute limits watchdog 5.16 reads, with its defaults for an unset one."""
+    declared = {
+        int(span): int(limit)
+        for span, limit in re.findall(r"^max-load-(\d+)\s*=\s*(\d+)", text, re.M)
+    }
+    one = declared[1]
+    return one, declared.get(5, one * 3 // 4), declared.get(15, one // 2)
+
+
+def test_no_longer_load_average_reboots_the_pi_below_the_one_minute_limit(package):
+    text = LIVE_WATCHDOG_LOAD
+    assert load_limits(text) == (24, 18, 12)
+    for edit in package.lines:
+        if edit["path"] == WATCHDOG_CONF:
+            text = lines.with_line(text, edit)
+    one, five, fifteen = load_limits(text)
+    assert min(five, fifteen) >= one
