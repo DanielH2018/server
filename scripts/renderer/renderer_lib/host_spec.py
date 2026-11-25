@@ -18,10 +18,10 @@ import pydantic
 
 from lib import yaml_fast
 from renderer.renderer_lib.cluster import RenderRefused
+from renderer.renderer_lib.host_arms import ARM_KEYS
 
 
-# The keys a package and a component share: what one directory installs. The last four are
-# `host_arms.ARM_KEYS`.
+# The keys a package and a component share: what one directory installs.
 _UNIT_KEYS = (
     "component",
     "credentials",
@@ -32,10 +32,7 @@ _UNIT_KEYS = (
     "legacy",
     "outputs",
     "units",
-    "ufw",
-    "libvirt",
-    "users",
-    "lines",
+    *sorted(ARM_KEYS),
 )
 _PACKAGE_KEYS = ("components", "description", "maintainer_scripts", "tools", "tools_on")
 
