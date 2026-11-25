@@ -31,8 +31,6 @@ from validate.validate_lib.host_container import CaseFailed, Container, expect
 from validate.validate_lib.host_fixtures import HOST_PKG, build, render_fixture
 
 NAME = "install the apt-source components over the files the roles wrote"
-# The text `ansible.builtin.deb822_repository` wrote for each source, with the lines the
-# components' own copies leave out.
 ROLE_SOURCES = {
     "/etc/apt/sources.list.d/docker.sources": (
         "Architectures: arm64\nComponents: stable\nX-Repolib-Name: docker\n"

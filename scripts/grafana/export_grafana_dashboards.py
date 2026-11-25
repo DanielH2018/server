@@ -44,8 +44,6 @@ SKIP_UIDS = {
     # pre-deploy export can't resurrect the deleted board as a new custom file.
 }
 
-# Stale/foreign datasource uids found in hand-imported boards, remapped onto the canonical
-# Prometheus datasource so every panel resolves.
 DS_UID_REMAP = {"IH0jqv6nz": PROM_UID}
 
 # Title slug -> filename would collide with a community file; force a distinct name.
@@ -61,9 +59,8 @@ def gapi(path):
     (the grafana-admin Secret). Run on daniel-box; `privileged` because the plain
     kubeconfig is the readonly SA, which cannot exec.
     """
-    # Imported here, not at module scope: `lib.kubectl` resolves a kubeconfig on import and
-    # raises `MissingKubectl` where there is none, so a module-level import made `--help` die
-    # on every host but the cluster's.
+    # Imported here: `lib.kubectl` raises `MissingKubectl` on import where there is no kubeconfig,
+    # which broke `--help` off the cluster.
     from lib.kubectl import DEFAULT_CLUSTER, kubectl
 
     out = kubectl(
@@ -161,8 +158,8 @@ def main(argv: Sequence[str] = ()) -> None:
         d = gapi("/api/dashboards/uid/%s" % uid)["dashboard"]
         normalize(d)
         d["id"] = None  # let Grafana assign a local id; the stable `uid` is the key
-        # DB save-counter, not config — provisioning reloads bump it, so leaving it in
-        # makes every later drift-check dirty even when no panel changed.
+        # DB save-counter, not config: provisioning reloads bump it and would make every later
+        # drift-check dirty.
         d["version"] = 1
 
         name = FILENAME_OVERRIDE.get(uid, slug(title))

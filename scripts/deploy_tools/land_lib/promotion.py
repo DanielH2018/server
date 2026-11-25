@@ -134,8 +134,6 @@ def _flux_owned(ln: Landing, tags) -> list[str]:
     return [tag for tag in tags if tag in declared]
 
 
-# What a landing keeps back from `LAND_DEADLINE` after the promotion wait: the health gate and
-# the verdict and ledger lines written after it.
 DEADLINE_RESERVE_S = 600
 
 

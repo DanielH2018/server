@@ -155,8 +155,8 @@ def test_disabling_currentvalue_rule_scoped_to_its_files() -> None:
         )
         is not None
     )
-    # Out of scope: the same currentValue in a k8s role default must NOT be caught by a rule
-    # scoped to the compose plane — this is precisely what the un-scoped rule got wrong.
+    # Out of scope: the same currentValue in a k8s role default must NOT be caught by a rule scoped
+    # to the compose plane.
     assert (
         _is_disabled_by_packagerule(
             "latest", "k8s/roles/littlelink/defaults/main.yml", fake_rules
@@ -174,12 +174,9 @@ def test_disabling_currentvalue_rule_scoped_to_its_files() -> None:
     )
 
 
-# Every `image:` line in a k8s deployment template must come from a Jinja variable: a literal
-# bypasses the k8s-defaults customManager (it only scans defaults/main.yml, never templates/*.j2)
-# and ages with no update signal. Add an entry only as a deliberate, reviewed exception.
-# `rancher/k3s-upgrade` is the one exception: a SUC Plan's `upgrade.image` names the repository
-# alone, and SUC appends the Plan's `version` as the tag, so the pin that ages is `k3s_version`,
-# which an annotation tracks (ADR-0025).
+# A literal `image:` bypasses the k8s-defaults customManager (it scans only defaults/main.yml)
+# and ages with no update signal. `rancher/k3s-upgrade` is the one exception: SUC appends the Plan's
+# `version` as the tag, so `k3s_version` is the pin that ages.
 IMAGE_LITERAL_ALLOWLIST: frozenset[str] = frozenset({"rancher/k3s-upgrade"})
 
 

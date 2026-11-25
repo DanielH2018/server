@@ -32,6 +32,7 @@ files:
   # Imports reconcile_lib from its own directory, which the reconcile component ships in every
   # host package.
   - {src: files/aide_originals.py, dst: /usr/lib/homelab/aide-originals, mode: "0755"}
+  - {src: tmpfiles.d/homelab-aide-scan.conf, dst: /usr/lib/tmpfiles.d/homelab-aide-scan.conf}
   - {src: units/homelab-aide-check.service.j2, dst: /usr/lib/systemd/system/homelab-aide-check.service}
   - {src: units/homelab-aide-check.timer, dst: /usr/lib/systemd/system/homelab-aide-check.timer}
 enable:

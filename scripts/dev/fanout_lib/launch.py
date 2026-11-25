@@ -7,8 +7,6 @@ import subprocess
 from datetime import UTC, datetime
 from enum import Enum
 
-# Reach the sibling package: a directly-invoked script gets only its own directory on
-# sys.path, and pyproject's `pythonpath` is a pytest setting.
 from pathlib import Path as _Path
 
 
@@ -66,12 +64,10 @@ def stop_hook_settings(root: str) -> dict:
 # the verdict `status` should print. Five hours covers the longest fan-out session measured
 # (286 minutes; the next longest was 104) and bounds one that waits on something forever.
 RUNTIME_MAX_S = 5 * 3600
-# A `--review` batch runs up to six sessions under one unit (`fanout_lib.review.review`): the
-# implementer, a review, a fix, a delta review, a CI fix and the landing. The reviews and the
-# fixes are far shorter than the implementer. On a host that does not land, the CI wait adds at
-# most two `review_ci.CI_WAIT_MAX_S`, and on the deploy host a red run adds a second landing,
-# so three and a half hours on top of its five covers them. `review_land.LAND_MARGIN_S` skips
-# a landing rather than start it too close to this cap.
+# A `--review` batch runs up to six sessions under one unit. The CI wait adds at most two
+# `review_ci.CI_WAIT_MAX_S` on a non-landing host, and a red run adds a second landing on the deploy
+# host, so three and a half hours over five covers them. `review_land.LAND_MARGIN_S` skips a landing
+# started too close to this cap.
 REVIEW_RUNTIME_MAX_S = 8 * 3600 + 30 * 60
 # DECIDED: each batch gets its own runaway limits, on its host's cgroups rather than in a k8s
 # pod (ADR-0027). They bound a runaway and never a normal batch: the
@@ -80,21 +76,17 @@ REVIEW_RUNTIME_MAX_S = 8 * 3600 + 30 * 60
 # reclaims cache before it OOM-kills. The swap bound keeps one batch from taking the swap that
 # stalls the host. `io` is not delegated to user managers, so no IOWeight.
 BATCH_MEMORY_MAX = 3 * RESERVATION_BYTES
-# Above this the kernel reclaims the batch's own page cache (p95 about 6 GiB) before the
-# fleet slice's MemoryHigh has to throttle every batch on the host.
+# Above this the kernel reclaims the batch's own page cache before the fleet slice's MemoryHigh
+# throttles every batch.
 BATCH_MEMORY_HIGH = 2 * RESERVATION_BYTES
 BATCH_SWAP_MAX = "512M"
 BATCH_TASKS_MAX = 1024
 # The script a `--review` unit runs as `<it> review`, relative to a checkout; see `review_script`.
 REVIEW_SCRIPT = "scripts/dev/fanout.py"
-# Another repo's batch runs this repo's code from a snapshot of `origin/master` inside its own
-# worktree, never from the host's primary checkout, which can lag it. The
-# snapshot holds what such a batch reads: the review pipeline and everything it imports under
-# `scripts/` and `hosts/lib`, the headless system prompt beside it, and the `fanout-stop` hook. It also holds
-# the uv project files, so the brief's `findings.py` command can `uv run --project` the
-# snapshot rather than the primary checkout. It lives under `.fanout/`, which
-# `exclude_fanout_command` keeps out of git, so `clean` reads the tree as clean and removes the
-# snapshot with the tree.
+# Another repo's batch runs this repo's code from a snapshot of `origin/master` under `.fanout/`,
+# never from the primary checkout, which can lag. `exclude_fanout_command` keeps it out of git, so
+# `clean` reads the tree as clean and removes the snapshot with it. It holds the uv project files so
+# `findings.py` can `uv run --project` it.
 SNAPSHOT_DIR = ".fanout/server"
 SNAPSHOT_PATHS = (
     "scripts",
@@ -109,14 +101,11 @@ SNAPSHOT_PATHS = (
 )
 
 
-# The user manager's PATH lacks ~/.local/bin (claude, uv) and repo hooks need uv. The fnm
-# default alias is where `node` lives: the dotfiles repo's `bin/gate` runs `node --test`, and an
-# interactive shell finds node only through fnm's per-shell directory, which a unit never gets.
-# Both sit under the launching user's HOME, which is /var/lib/claude for the agent user.
-# systemd-run resolves `claude`/`uv` in its caller's PATH, so it runs under this one too.
+# The user manager's PATH lacks ~/.local/bin (claude, uv); `node` lives under the fnm default alias,
+# which a unit's shell never gets. Both sit under the launching user's HOME.
 RESUME_FLAG = "--resume-conflict"
-# Where `resume.resume_command` writes the PR and the landing's `VERDICT:` line for the unit it
-# starts, relative to the worktree. Not `conflict.json`, which is the `conflict` phase's report.
+# Where `resume.resume_command` writes the PR and the landing's `VERDICT:` line, relative to the
+# worktree; not `conflict.json`.
 RESUME_REQUEST = ".fanout/resume.json"
 
 
@@ -260,10 +249,9 @@ def create_worktree_command(
     target: Target = SERVER_TARGET,
     origin: OriginBranch = OriginBranch.ABSENT,
 ) -> str:
-    # The lock keeps the worktree pruner off this tree while the batch's unit runs: its
-    # `--reason` is the unit name, which lib.fanout_lock.REASON matches and the pruner
-    # judges by the unit's state. Without it a merged, clean, unlocked tree is removable the
-    # moment the PR lands — even while the unit is still running.
+    # The lock keeps the worktree pruner off this tree while the unit runs: its `--reason` is the
+    # unit name, which lib.fanout_lock.REASON matches. Without it a merged, clean tree is removable
+    # while the unit still runs.
     wt = worktree_path(batch, target)
     adopt = origin is OriginBranch.OPEN_PR
     steps = [
@@ -284,13 +272,9 @@ def create_worktree_command(
 
 
 def remove_worktree_command(batch: str, target: Target = SERVER_TARGET) -> str:
-    # `git worktree remove` refuses a locked tree, so unlock first. A bare `;` here is
-    # correct: on a tree that was never locked (or never fully created) the unlock fails
-    # harmlessly, and the `&&` that follows still decides whether the branch dies —
-    # `worktree add -b` fails precisely when the branch already exists, so a `;` there
-    # would force-delete a branch this launch did not create whenever the add failed for
-    # that reason. Chaining remove and branch -D on success means the branch survives
-    # when no tree was created, and goes with the tree when the add did half-create it.
+    # Unlock with a bare `;` (it fails harmlessly on a never-locked tree), but chain remove and
+    # `branch -D` with `&&`: `worktree add -b` fails when the branch already exists, and `;` would
+    # force-delete a branch this launch did not create.
     wt, repo = worktree_path(batch, target), target.checkout
     return (
         f"git -C {repo} worktree unlock {wt}; "
@@ -508,14 +492,10 @@ def launch_command(
 
 _STEP_SENTINEL_RE = re.compile(r"^fanout-step: (.+)$", re.MULTILINE)
 
-# Cleanup removes the worktree and its branch, so it only runs for a step that could have left
-# one half-made: `worktree add`/`worktree lock` do; a `fetch` failure precedes both and created
-# nothing (its cleanup would fail `worktree remove` with "not a working tree"). A refused
-# `systemd-run` started no unit and no manifest names its tree, so it goes too; `brief
-# write` leaves it. `exists` must never be here: it fails BECAUSE a tree is there, and that
-# tree belongs to an earlier batch, not this launch. The snapshot step runs inside a tree this
-# launch just made, before the claim, so a failed fetch or archive removes that tree too:
-# nothing has started in it. A missing claude-guard shim fails the `systemd-run` step.
+# Cleanup removes the worktree and its branch, so it runs only for a step that could have left one
+# half-made. `exists` must never be here: it fails because a tree is there that belongs to an
+# earlier batch. A fetch failure created nothing; the snapshot step runs in a tree this launch just
+# made, before the claim.
 _SNAPSHOT_STEP = "server snapshot"
 _CLEANUP_STEPS = frozenset(
     {"worktree add", "worktree lock", "systemd-run", _SNAPSHOT_STEP}
@@ -675,8 +655,8 @@ def _launch_elsewhere(
     if refused:
         cleanup = _cleanup_worktree(tools, host, batch, target) or ""
         raise LaunchError(f"claim: {refused}{cleanup}")
-    # From here the claim is held, and a failure must give it back. A refused `systemd-run`
-    # removes the tree too (`_CLEANUP_STEPS`); a timeout keeps it, as the unit may be live.
+    # From here the claim is held and a failure must give it back. A refused `systemd-run` removes
+    # the tree (`_CLEANUP_STEPS`); a timeout keeps it, as the unit may be live.
     try:
         proc = _run(
             tools,

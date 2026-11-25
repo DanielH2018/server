@@ -16,9 +16,10 @@
 #   system units and writes the `systemd-units` textfile the SystemdUnitsFailed and
 #   SystemdUnitsNotReporting rules read, so a unit with no OnFailure= hook and no verdict
 #   of its own still pages when it fails.
-# - homelab-ucf-dist runs files/ucf-dist-check.sh every hour. It counts the *.ucf-dist copies under
-#   /etc older than a day, which ucf leaves when an upgrade meets a locally edited config file,
-#   and writes the `ucf-dist` textfile the UcfDistPending and UcfDistNotReporting rules read.
+# - homelab-ucf-dist runs files/ucf-dist-check.sh every hour. It counts the *.ucf-dist and
+#   *.dpkg-dist copies under /etc older than a day, which ucf and dpkg leave when an upgrade meets
+#   a locally edited config file, and writes the `ucf-dist` textfile the UcfDistPending and
+#   UcfDistNotReporting rules read.
 #
 # The Docker prune is the pi-docker component's, because only a Docker host runs it.
 #

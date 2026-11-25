@@ -8,21 +8,19 @@ lander ran, so the rule lives outside both. Every decision here comes from the f
 import re
 from collections.abc import Mapping
 
-# The verdicts after which the PR is merged and nothing more is owed. `deferred` is one: a host's
-# updater applies its package, and cc-wait ends it with exit 4, not 0.
+# `deferred` is finished: a host's updater applies its package, and cc-wait ends it with exit 4, not
+# 0.
 FINISHED_VERDICTS = frozenset({"settled", "nothing-to-deploy", "deferred"})
 VERDICT_LINE = re.compile(r"(?m)^VERDICT: (\S+).*$")
 _VERDICT_DETAIL = re.compile(r"^VERDICT: \S+ \((.*)\)$")
 # land.sh's exit code for a stop that a re-run completes, as `LAND-RESULT:` prints it.
 _GAVE_UP = "75"
-# `promote_lib.wait.HOLD_OWN` and `HOLD_OTHER`, and `land_lib.outcome.Cause.PROMOTE_HELD`,
-# restated because a batch's unit runs without the project's dependencies, which those import.
+# Restated from `promote_lib.wait` and `land_lib.outcome` because a batch's unit runs without the
+# project's dependencies those import.
 HOLD_OWN = "own"
 HOLD_OTHER = "other"
 PROMOTE_HELD = "promote-held"
 LANDING_LIVE = "landing-live"
-# What a batch's final line opens with when its landing waits on a hold or a rule that is
-# not its own. `status.PARKED_LINE` matches it.
 PARKED = "parked:"
 
 

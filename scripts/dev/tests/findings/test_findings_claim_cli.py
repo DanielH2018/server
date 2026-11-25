@@ -1,0 +1,582 @@
+"""The claim, release, claims and reap subcommands, driven through main()."""
+
+import json
+
+
+import pytest
+from _findings_fakes import (
+    Fakes,
+    build_tools,
+    facts,
+    live_worktree,
+    make_issue,
+)
+
+from dev.findings import main
+from dev.findings_lib.issue_model import claim_comment
+from dev.findings_lib.milestone import description_for
+from lib.worktrees import Worktree
+
+WT = "worktree-issue-1132"
+
+STALE = facts()
+LIVE = live_worktree(WT)
+
+
+def test_claim_files_the_issue_under_the_branch_milestone():
+    issue = make_issue(1132)
+    tools, calls = build_tools(
+        Fakes(
+            issues=[issue],
+            view=issue,
+            worktree_facts=LIVE,
+            milestone_titles={WT: "Opt-in milestones"},
+        )
+    )
+    assert main(["claim", "1132", "--worktree", WT], tools) == 0
+    assert calls.milestones == [(WT, "DanielH2018/server")]
+    assert calls.gh[-1][-2:] == ["--milestone", "Opt-in milestones"]
+
+
+def test_reap_closes_the_milestone_of_a_gone_worktree_and_keeps_a_live_ones():
+    tools, calls = build_tools(
+        Fakes(worktree_facts=LIVE, open_milestones=[WT, "worktree-gone"])
+    )
+    assert main(["reap"], tools) == 0
+    assert calls.milestone_closes == [
+        ("DanielH2018/server", {WT: True, "worktree-gone": False})
+    ]
+
+
+def _released(calls, number: str) -> bool:
+    return any(
+        c[:3] == ["issue", "comment", number] and "Released: `" in c[4]
+        for c in calls.gh
+    )
+
+
+def test_claim_refuses_a_manual_issue_and_exits_3(capsys):
+    issue = make_issue(1132, labels=["manual"])
+    tools, calls = build_tools(Fakes(issues=[issue], view=issue, worktree_facts=LIVE))
+    assert main(["claim", "1132", "--worktree", WT], tools) == 3
+    assert not any(c[:2] == ["issue", "comment"] for c in calls.gh)
+    assert "manual" in capsys.readouterr().err
+
+
+def test_claim_takes_every_issue_it_can_and_still_exits_3_on_a_refusal():
+    good, bad = make_issue(1132), make_issue(1140, labels=["manual"])
+    tools, calls = build_tools(
+        Fakes(issues=[good, bad], view={1132: good, 1140: bad}, worktree_facts=LIVE)
+    )
+    assert main(["claim", "1132", "1140", "--worktree", WT], tools) == 3
+    assert any(c[:3] == ["issue", "comment", "1132"] for c in calls.gh)
+    assert not any(c[:3] == ["issue", "comment", "1140"] for c in calls.gh)
+
+
+def test_claim_refuses_a_closed_issue():
+    issue = make_issue(1132, state="CLOSED")
+    tools, calls = build_tools(Fakes(issues=[issue], view=issue, worktree_facts=LIVE))
+    assert main(["claim", "1132", "--worktree", WT], tools) == 3
+    assert not any(c[:2] == ["issue", "comment"] for c in calls.gh)
+
+
+def test_dry_run_writes_nothing():
+    issue = make_issue(1132)
+    tools, calls = build_tools(Fakes(issues=[issue], view=issue, worktree_facts=LIVE))
+    assert main(["claim", "1132", "--worktree", WT, "--dry-run"], tools) == 0
+    assert calls.gh == []
+
+
+def test_release_posts_the_release_comment():
+    issue = make_issue(1132, comments=[claim_comment(WT, None, "t")])
+    tools, calls = build_tools(Fakes(issues=[issue], view=issue))
+    assert main(["release", "1132", "--worktree", WT], tools) == 0
+    assert _released(calls, "1132")
+
+
+def test_release_refuses_another_worktrees_claim_and_exits_3(capsys):
+    """Pairs with `test_release_posts_the_release_comment` above, which exits 0.
+
+    Only the plan-level refusal was covered, so nothing proved `cmd_release` turns a
+    `ClaimRefused` into exit 3 rather than a traceback.
+    """
+    issue = make_issue(
+        1132,
+        comments=[claim_comment("worktree-someone-else", None, "t")],
+    )
+    tools, calls = build_tools(Fakes(issues=[issue], view=issue))
+    assert main(["release", "1132", "--worktree", WT], tools) == 3
+    assert "claimed by `worktree-someone-else`" in capsys.readouterr().err
+    assert not any(c[:2] == ["issue", "comment"] for c in calls.gh)
+
+
+def test_release_refuses_an_unclaimed_issue_and_exits_3(capsys):
+    tools, calls = build_tools(Fakes(issues=[make_issue(1132)], view=make_issue(1132)))
+    assert main(["release", "1132", "--worktree", WT], tools) == 3
+    assert "not claimed" in capsys.readouterr().err
+    assert calls.gh == []
+
+
+def test_claims_prints_one_row_per_claimed_issue(capsys):
+    held = make_issue(1132, comments=[claim_comment(WT, None, "t")])
+    tools, _ = build_tools(Fakes(issues=[held, make_issue(1140)], worktree_facts=STALE))
+    assert main(["claims"], tools) == 0
+    out = capsys.readouterr().out
+    assert "1132" in out
+    assert "1140" not in out
+
+
+def test_claims_json_carries_every_field_of_a_row(capsys):
+    """`claims --json` had no test at all, so nothing pinned the field names a
+    consumer reads — `live` and `reason` above all, since they carry the verdict."""
+    held = make_issue(1132, comments=[claim_comment(WT, None, "t")])
+    tools, _ = build_tools(Fakes(issues=[held], worktree_facts=STALE))
+    assert main(["claims", "--json"], tools) == 0
+    rows = json.loads(capsys.readouterr().out)
+    assert [r["number"] for r in rows] == [1132]
+    assert rows[0]["worktree"] == WT
+    assert rows[0]["live"] is False
+    assert "no worktree" in rows[0]["reason"]
+    assert rows[0]["age_days"] is None
+
+
+def test_claims_says_so_when_nothing_is_claimed(capsys):
+    tools, _ = build_tools(Fakes(issues=[make_issue(1132)], worktree_facts=STALE))
+    assert main(["claims"], tools) == 0
+    assert "no open claims" in capsys.readouterr().out
+
+
+def test_reap_releases_a_stale_claim_and_leaves_a_live_one():
+    """The pair.
+
+    A reap that releases everything and a reap that releases nothing are indistinguishable
+    from a fixture where every claim is stale.
+    """
+    # fact: .claude/skills/issue-fanout/SKILL.md#5. Report
+    live_wt = "worktree-issue-1140"
+    tree = Worktree(
+        path="/w/1140", head="abc", branch=live_wt, locked=False, lock_reason=""
+    )
+    stale = make_issue(1132, comments=[claim_comment(WT, None, "t")])
+    live = make_issue(1140, comments=[claim_comment(live_wt, None, "t")])
+    tools, calls = build_tools(
+        Fakes(issues=[stale, live], worktree_facts=facts([tree], dirty=True))
+    )
+    assert main(["reap"], tools) == 0
+    assert _released(calls, "1132")
+    assert not _released(calls, "1140")
+
+
+def test_claim_loses_a_race_and_reports_who_won(capsys):
+    """The read-back's SECOND `issue view` sees a rival's claim land first.
+
+    The rival's `Claim:` comment must not be visible on the FIRST read: `plan_claim` would
+    refuse outright before ever posting, and the race this guards against — a rival winning
+    between our own read and our own write — would never be exercised.
+    """
+    rival = "worktree-issue-9999"
+    before = make_issue(1132)
+    after_rival_won = make_issue(1132, comments=[claim_comment(rival, None, "t")])
+    tools, calls = build_tools(
+        Fakes(
+            issues=[before],
+            view={1132: [before, after_rival_won]},
+            worktree_facts=LIVE,
+        )
+    )
+    assert main(["claim", "1132", "--worktree", WT], tools) == 3
+    assert f"lost the race to `{rival}`" in capsys.readouterr().out
+    assert any(c[:3] == ["issue", "comment", "1132"] for c in calls.gh)
+
+
+def test_release_dry_run_writes_nothing_and_says_so(capsys):
+    issue = make_issue(1132, comments=[claim_comment(WT, None, "t")])
+    tools, calls = build_tools(Fakes(issues=[issue], view=issue))
+    assert main(["release", "1132", "--worktree", WT, "--dry-run"], tools) == 0
+    assert calls.gh == []
+    assert "would be released" in capsys.readouterr().out
+
+
+def test_reap_dry_run_writes_nothing_and_says_so(capsys):
+    stale = make_issue(1132, comments=[claim_comment(WT, None, "t")])
+    tools, calls = build_tools(Fakes(issues=[stale], worktree_facts=STALE))
+    assert main(["reap", "--dry-run"], tools) == 0
+    assert calls.gh == []
+    assert "would" in capsys.readouterr().out
+
+
+def test_reap_refuses_to_release_anything_when_git_fails():
+    """A transient git failure must not read as "every worktree is gone".
+
+    `worktree_facts` returns `ok=False` on a git failure, not merely an empty worktree
+    list — without that distinction `reap` cannot tell a real git error from a register
+    where nothing is claimed, and would release every live claim in it.
+    """
+    stale = make_issue(1132, comments=[claim_comment(WT, None, "t")])
+    tools, calls = build_tools(Fakes(issues=[stale], worktree_facts=facts(ok=False)))
+    assert main(["reap"], tools) != 0
+    assert not _released(calls, "1132")
+
+
+def test_reap_releases_when_the_worktree_list_is_genuinely_empty():
+    """The other half of the pair above: `ok=True` with zero worktrees still reaps.
+
+    Distinguishes "git failed" from "git succeeded and found nothing" — a fixture that
+    conflated the two would pass on a reap that never fires as readily as one that always
+    does.
+    """
+    stale = make_issue(1132, comments=[claim_comment(WT, None, "t")])
+    tools, calls = build_tools(Fakes(issues=[stale], worktree_facts=STALE))
+    assert main(["reap"], tools) == 0
+    assert _released(calls, "1132")
+
+
+def test_claims_warns_but_still_renders_when_git_fails(capsys):
+    """A read can afford to render on a stale guess; it just has to say so.
+
+    Silently showing STALE rows during a git outage reads as fact rather than a guess an
+    operator could act on — releasing a claim by hand that was never actually stale.
+    """
+    held = make_issue(1132, comments=[claim_comment(WT, None, "t")])
+    tools, _ = build_tools(Fakes(issues=[held], worktree_facts=facts(ok=False)))
+    assert main(["claims"], tools) == 0
+    captured = capsys.readouterr()
+    assert "1132" in captured.out
+    assert "read failed" in captured.err
+
+
+def test_reap_dry_run_still_refuses_when_git_fails():
+    """The git-failure refusal runs before any dry-run branching."""
+    stale = make_issue(1132, comments=[claim_comment(WT, None, "t")])
+    tools, calls = build_tools(Fakes(issues=[stale], worktree_facts=facts(ok=False)))
+    assert main(["reap", "--dry-run"], tools) != 0
+    assert calls.gh == []
+
+
+def test_closing_a_claimed_issue_releases_the_claim():
+    issue = make_issue(1132, comments=[claim_comment(WT, None, "t")])
+    tools, calls = build_tools(Fakes(issues=[issue], view=issue))
+    assert main(["close", "1132", "--fixed", "--pr", "1270"], tools) == 0
+    assert _released(calls, "1132")
+    assert any(f"Released: `{WT}`" in a for c in calls.gh for a in c)
+
+
+def test_closing_an_unclaimed_issue_writes_no_release():
+    issue = make_issue(1132)
+    tools, calls = build_tools(Fakes(issues=[issue], view=issue))
+    assert main(["close", "1132", "--fixed"], tools) == 0
+    assert not any("Released: `" in a for c in calls.gh for a in c)
+
+
+def test_closing_a_claimed_issue_as_refuted_releases_before_it_closes():
+    """The `if held:` branch is outcome-agnostic; --fixed alone doesn't prove that."""
+    issue = make_issue(1132, comments=[claim_comment(WT, None, "t")])
+    tools, calls = build_tools(Fakes(issues=[issue], view=issue))
+    argv = ["close", "1132", "--refuted", "--reason", "disproved"]
+    assert main(argv, tools) == 0
+    released = next(
+        i for i, c in enumerate(calls.gh) if any(f"Released: `{WT}`" in a for a in c)
+    )
+    add_refuted = calls.gh.index(["issue", "edit", "1132", "--add-label", "refuted"])
+    closed = next(i for i, c in enumerate(calls.gh) if c[:2] == ["issue", "close"])
+    assert released < add_refuted < closed
+
+
+# --- the stale-at-birth guard ---------------------------------
+
+
+def test_claim_is_clean_when_the_worktree_is_live():
+    """The accepting half. `WT` is checked out and held, so the claim will read live."""
+    issue = make_issue(1132)
+    tools, calls = build_tools(Fakes(issues=[issue], view=issue, worktree_facts=LIVE))
+    assert main(["claim", "1132", "--worktree", WT], tools) == 0
+    assert any(f"Claim: `{WT}`" in a for c in calls.gh for a in c)
+
+
+def test_claim_is_flagged_when_the_worktree_name_matches_no_branch(capsys):
+    """The spec's own table puts worktree `issue-1132` beside branch
+    `worktree-issue-1132`, and `claim_is_live` matches on the BRANCH. So the wrong one of two
+    adjacent names wrote a claim that `claim_states` immediately called stale — `reap`
+    released it and `next` re-offered the issue while the session was still working it.
+    """
+    issue = make_issue(1132)
+    tools, calls = build_tools(
+        Fakes(issues=[issue], view=issue, worktree_facts=live_worktree(WT))
+    )
+    assert main(["claim", "1132", "--worktree", "issue-1132"], tools) == 3
+    assert "no worktree" in capsys.readouterr().err
+    assert calls.none()
+
+
+def test_claim_is_flagged_when_the_worktree_state_makes_the_claim_stale(capsys):
+    """The name matches a real branch, but `classify` calls it REMOVABLE.
+
+    Merged, clean and unlocked is what the primary checkout looks like (`--worktree master`)
+    and what a crashed-and-resumed orchestrator looks like — the lock names a pid and a
+    process start time, and a container restart brings worktrees back without theirs.
+    Distinct from the test above: there the name matches nothing at all.
+    """
+    tree = Worktree(path="/w/wt", head="abc", branch=WT, locked=False, lock_reason="")
+    issue = make_issue(1132)
+    tools, calls = build_tools(
+        Fakes(issues=[issue], view=issue, worktree_facts=facts([tree], merged=True))
+    )
+    assert main(["claim", "1132", "--worktree", WT], tools) == 3
+    assert "merged, clean, unlocked" in capsys.readouterr().err
+    assert calls.none()
+
+
+def test_claim_from_an_unlocked_tree_its_session_works_in_needs_no_force():
+    # A desktop-app session: its tree is unlocked and, between commits, merged and clean.
+    branch = "claude/priceless-wright-db36f0"
+    tree = Worktree(
+        path="/w/pw", head="abc", branch=branch, locked=False, lock_reason=""
+    )
+    issue = make_issue(1132)
+    tools, calls = build_tools(
+        Fakes(
+            issues=[issue],
+            view=issue,
+            worktree_facts=facts([tree], merged=True),
+            held_paths={"/w/pw"},
+        )
+    )
+    assert main(["claim", "1132", "--worktree", branch], tools) == 0
+    assert any(f"Claim: `{branch}`" in a for c in calls.gh for a in c)
+
+
+def test_claim_on_master_is_refused_while_sessions_work_in_and_under_it(
+    capsys, tmp_path
+):
+    (tmp_path / ".git").mkdir()
+    session_path = f"{tmp_path}/.claude/worktrees/s"
+    primary = Worktree(path=str(tmp_path), head="abc", branch="master", locked=False)
+    session = Worktree(path=session_path, head="abc", branch=WT, locked=False)
+    issue = make_issue(1132)
+    tools, calls = build_tools(
+        Fakes(
+            issues=[issue],
+            view=issue,
+            worktree_facts=facts([primary, session], merged=True),
+            held_paths={str(tmp_path), session_path},
+        )
+    )
+    assert main(["claim", "1132", "--worktree", "master"], tools) == 3
+    assert "merged, clean, unlocked" in capsys.readouterr().err
+    assert calls.none()
+
+
+def test_reap_keeps_a_claim_on_an_unlocked_tree_a_live_process_works_in():
+    tree = Worktree(path="/w/wt", head="abc", branch=WT, locked=False, lock_reason="")
+    issue = make_issue(1132, comments=[claim_comment(WT, None, "t")])
+    tools, calls = build_tools(
+        Fakes(
+            issues=[issue],
+            worktree_facts=facts([tree], merged=True),
+            held_paths={"/w/wt"},
+        )
+    )
+    assert main(["reap"], tools) == 0
+    assert not _released(calls, "1132")
+
+
+def test_claim_force_overrides_the_stale_at_birth_refusal():
+    """The way out. A resumed orchestrator legitimately re-claims without its lock, so the
+    guard is a door and not a wall — and the refusal message names this flag."""
+    issue = make_issue(1132)
+    tools, calls = build_tools(Fakes(issues=[issue], view=issue, worktree_facts=STALE))
+    assert main(["claim", "1132", "--worktree", WT, "--force"], tools) == 0
+    assert any(f"Claim: `{WT}`" in a for c in calls.gh for a in c)
+
+
+def test_claim_proceeds_when_the_worktree_read_fails(capsys):
+    """The guard fails OPEN, the opposite direction from `reap` and for the opposite reason.
+
+    `reap` WRITES on a bad read, so it refuses. This guard only declines to warn, and a
+    transient git error must not stop a session claiming work at all.
+    """
+    issue = make_issue(1132)
+    tools, calls = build_tools(
+        Fakes(issues=[issue], view=issue, worktree_facts=facts(ok=False))
+    )
+    assert main(["claim", "1132", "--worktree", WT], tools) == 0
+    assert "read failed" in capsys.readouterr().err
+    assert any(f"Claim: `{WT}`" in a for c in calls.gh for a in c)
+
+
+# --- every path that closes or reopens releases the claim ---------------------------
+
+
+def test_close_releases_the_claim_it_closes():
+    """A close ends the work, so it releases whoever holds the issue — not just the caller.
+
+    `claims`, `reap` and `next` all read OPEN issues, so a claim left on a closed issue is
+    invisible to every view at once — and a later `open` reopening that issue brings it back
+    LIVE, blocking `claim` for as long as the claiming worktree exists.
+
+    `close` and `open`'s reopen path are the two callers of this helper.
+    """
+    issue = make_issue(
+        1132,
+        comments=[claim_comment(WT, None, "t")],
+    )
+    tools, calls = build_tools(Fakes(issues=[issue], view=issue))
+    assert main(["close", "1132", "--fixed"], tools) == 0
+    assert any(f"Released: `{WT}`" in a for c in calls.gh for a in c)
+    assert _released(calls, "1132")
+
+
+def test_close_keeps_the_issue_in_its_session_milestone():
+    issue = make_issue(
+        1132,
+        comments=[claim_comment(WT, None, "t")],
+    )
+    issue["milestone"] = {"title": "Focus", "description": description_for(WT)}
+    tools, calls = build_tools(Fakes(issues=[issue], view=issue))
+    assert main(["close", "1132", "--fixed"], tools) == 0
+    assert _released(calls, "1132")
+    assert not any("--remove-milestone" in c for c in calls.gh)
+
+
+def test_close_writes_no_release_for_an_unclaimed_issue():
+    """The rejecting half: nothing to release, so nothing is posted."""
+    issue = make_issue(1132)
+    tools, calls = build_tools(Fakes(issues=[issue], view=issue))
+    assert main(["close", "1132", "--fixed"], tools) == 0
+    assert not any("Released: `" in a for c in calls.gh for a in c)
+    assert any(c[:2] == ["issue", "close"] for c in calls.gh)
+
+
+# --- the CLI half of the hardening -------------------------------------------------
+
+
+def test_claim_refuses_a_worktree_name_the_trailer_cannot_carry(capsys):
+    """The rejecting half: nothing is written, and the exit says bad argument.
+
+    A name the trailer cannot carry must not write the comment AND the label, then fail to
+    parse its own trailer on read-back and report a lost race against `None` — a rival that
+    does not exist, with the claim already posted.
+    """
+    issue = make_issue(1132)
+    tools, calls = build_tools(Fakes(issues=[issue], view=issue))
+    with pytest.raises(SystemExit) as exc:
+        main(["claim", "1132", "--worktree", "worktree-`bad"], tools)
+    assert exc.value.code == 64
+    assert calls.none()
+    err = capsys.readouterr().err
+    assert "argument --worktree" in err and "backtick" in err
+
+
+def test_release_refuses_the_same_name(capsys):
+    """The same trailer, so the same refusal — a release must name a parseable worktree."""
+    issue = make_issue(1132)
+    tools, calls = build_tools(Fakes(issues=[issue], view=issue))
+    with pytest.raises(SystemExit) as exc:
+        main(["release", "1132", "--worktree", "worktree-`bad"], tools)
+    assert exc.value.code == 64
+    assert calls.none()
+
+
+def test_a_read_back_that_finds_no_claim_does_not_report_a_race(capsys):
+    """The rejecting half of the message: an empty read-back is not a rival.
+
+    The second `issue view` comes back with no claim at all, which is what an unparseable
+    trailer or a comment past gh's page cap looks like. Saying `lost the race to \\`None\\``
+    told the operator a rival took the issue.
+    """
+    before = make_issue(1132)
+    tools, _ = build_tools(
+        Fakes(
+            issues=[before],
+            view={1132: [before, make_issue(1132)]},
+            worktree_facts=LIVE,
+        )
+    )
+    assert main(["claim", "1132", "--worktree", WT], tools) == 3
+    out = capsys.readouterr().out
+    assert "read-back found no claim" in out
+    assert "lost the race" not in out
+
+
+def test_release_all_releases_only_the_claims_that_worktree_holds(capsys):
+    mine = [
+        make_issue(n, comments=[claim_comment(WT, None, "t")]) for n in (1132, 1133)
+    ]
+    other = make_issue(1134, comments=[claim_comment("worktree-other", None, "t")])
+    tools, calls = build_tools(Fakes(issues=[*mine, other]))
+    assert main(["release", "--all", "--worktree", WT], tools) == 0
+    assert [n for n in ("1132", "1133", "1134") if _released(calls, n)] == [
+        "1132",
+        "1133",
+    ]
+
+
+def test_release_all_with_nothing_held_says_so_and_writes_nothing(capsys):
+    tools, calls = build_tools(Fakes(issues=[make_issue(1132)]))
+    assert main(["release", "--all", "--worktree", WT], tools) == 0
+    assert f"`{WT}` holds no open claims" in capsys.readouterr().out
+    assert not [
+        c for c in calls.gh if c[:2] in (["issue", "edit"], ["issue", "comment"])
+    ]
+
+
+def test_release_refuses_numbers_and_all_together(capsys):
+    tools, calls = build_tools(Fakes(issues=[make_issue(1132)]))
+    assert main(["release", "1132", "--all", "--worktree", WT], tools) == 64
+    assert "not both or neither" in capsys.readouterr().err
+    assert calls.gh == []
+
+
+LEAD = "worktree-backup-lead"
+MILESTONES = "repos/DanielH2018/server/milestones"
+
+
+def _project(branch=LEAD, state="open"):
+    return {
+        "title": "Backups",
+        "number": 9,
+        "state": state,
+        "description": description_for(branch, project=True),
+    }
+
+
+def _claim_from(held_in, capsys):
+    """`claim 1132 --worktree WT` on an issue the milestone ``held_in`` holds."""
+    issue = {**make_issue(1132), "milestone": held_in}
+    tools, _ = build_tools(
+        Fakes(
+            issues=[issue],
+            view=issue,
+            worktree_facts=LIVE,
+            api={MILESTONES: [[held_in]]},
+        )
+    )
+    code = main(["claim", "1132", "--worktree", WT, "--dry-run"], tools)
+    return code, capsys.readouterr()
+
+
+def test_claim_refuses_an_issue_another_branch_open_project_reserves(capsys):
+    code, captured = _claim_from(_project(), capsys)
+    assert code == 3
+    assert captured.out == ""
+    assert f"#1132 refused: reserved by project `Backups` of `{LEAD}`" in captured.err
+    assert f"`milestone remove 1132 --worktree {LEAD}` takes it out" in captured.err
+
+
+@pytest.mark.parametrize(
+    "held_in",
+    [
+        _project(branch=WT),
+        _project(state="closed"),
+        {**_project(), "description": description_for(LEAD)},
+    ],
+    ids=[
+        "the-branch-its-batches-claim-under",
+        "a-closed-project",
+        "a-session-milestone",
+    ],
+)
+def test_claim_takes_an_issue_no_project_reserves_against_the_branch(held_in, capsys):
+    code, captured = _claim_from(held_in, capsys)
+    assert code == 0
+    assert f"#1132 would be claimed by `{WT}`" in captured.out

@@ -144,8 +144,8 @@ def diagram_svg_fragment(model: dict) -> str:
         )
     )
 
-    # k8s_public_route decides whether IngressRoutes *match* the public hostname,
-    # not whether the router forwards 80/443 here. Say only the first.
+    # `k8s_public_route` decides whether IngressRoutes match the public hostname, not whether the
+    # router forwards 80/443 here.
     public_label = (
         f"routes match *.{domain}" if ep["public_routes"] else "LAN-only routes"
     )
@@ -161,8 +161,6 @@ def diagram_svg_fragment(model: dict) -> str:
         _svg_edge("570,430 570,470", "proxies to ClusterIP Services", (578, 454))
     )
 
-    # The LoadBalancer VIPs that never touch Traefik — raw TCP, and the reason a
-    # Traefik outage does not take Jellyfin or MQTT with it.
     parts.append(_svg_edge("690,50 1120,50 1120,540 1100,540", css="bypass"))
     parts.append(
         '<text class="t-edge bypass" x="704" y="38">LoadBalancer VIPs — bypass Traefik</text>'
@@ -199,10 +197,8 @@ def diagram_svg_fragment(model: dict) -> str:
     ]
     for index, node in enumerate(node_boxes[:2]):
         roles = ", ".join(node["roles"]) or "agent"
-        # Only claim NotReady when the query actually answered. An uncollected
-        # cluster and a failed node look identical in this dict, and painting the
-        # second when it was the first is the false alarm that teaches a reader
-        # to stop believing red.
+        # Claim NotReady only when the query answered: an uncollected cluster and a failed node look
+        # identical here.
         if not cluster["ok"]:
             state = "unknown"
         else:
@@ -223,11 +219,8 @@ def diagram_svg_fragment(model: dict) -> str:
             )
         )
 
-    # Storage and the backup chain. Tinted by whether the volumes could be read,
-    # not by the longhorn-ui service: that entry declares only an IngressRoute,
-    # its Deployment belongs to the Longhorn chart in longhorn-system, and the
-    # inventory classifies it as a role with no workload of its own. A healthy
-    # storage plane must not read as anything but what the volumes say.
+    # Tinted by whether volumes could be read, not by longhorn-ui, which declares only an
+    # IngressRoute.
     parts.append(
         _svg_box(
             40,
@@ -240,9 +233,8 @@ def diagram_svg_fragment(model: dict) -> str:
             "healthy" if volumes is not None else "unknown",
         )
     )
-    # Same rule as the nodes, and it matters more here: "disarmed" is a real and
-    # deliberate state in this repo, so a failed query must not be able to
-    # announce it. No targets collected means unknown, not unarmed.
+    # 'Disarmed' is deliberate here, so a failed query must not announce it: no targets collected
+    # means unknown.
     targets = cluster["backup_targets"] or [
         {"name": "default", "url": "", "armed": False, "available": False}
     ]
@@ -282,8 +274,6 @@ def diagram_svg_fragment(model: dict) -> str:
     parts.append(
         '<text class="t-sub" x="812" y="766">WireGuard peers → wg-easy :51820/udp</text>'
     )
-    # Four lines is what fits inside the plane; a longer list is elided rather
-    # than drawn past the edge, and the host panel below carries all of it.
     lines = _wrap(pi_services, 34)
     if len(lines) > 4:
         lines = lines[:3] + [f"… +{len(lines) - 3} more lines"]

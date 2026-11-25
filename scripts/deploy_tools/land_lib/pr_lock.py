@@ -90,9 +90,6 @@ def _write(fd: int, record: str) -> None:
     os.pwrite(fd, record.strip().encode(), 0)
 
 
-# What a landing on another host runs on `TURN_HOST`: lock the file, say which way it went,
-# and write each line of stdin as the record until stdin closes, which is when the landing's
-# last copy of the session's pipe does.
 _HOLD = f"""import fcntl, os, sys
 {inspect.getsource(_lock)}
 {inspect.getsource(_write)}
@@ -205,8 +202,6 @@ class Held:
         self._end = lambda: None
 
 
-# The descriptors a fork keeps, then the calls that write the record, give the lock up, and
-# close this process's copies of the descriptors without giving it up.
 _Taken = tuple[
     tuple[int, ...], Callable[[str], None], Callable[[], None], Callable[[], None]
 ]

@@ -19,7 +19,7 @@ loop to auto-tag bookmarks
 <!-- /generated_from -->
 
 - **Flux applies it.** Its `containers_list` entry is
-  in `cluster/services.yml`, so nothing applies it by hand. A merged change
+  in `k8s/services.yml`, so nothing applies it by hand. A merged change
   reaches the cluster when `promote` publishes and verifies the next bundle. `k8s_autodeploy: false`
   still stops Renovate's
   automerge of a pin bump.

@@ -30,8 +30,6 @@ from pathlib import Path
 from lib import yaml_fast
 from validate.validate_lib.host_specs import load_nfpm
 
-# The named set. Add a package here when it joins the scans. daniel-server joined in H4.2 and
-# daniel-box in H6.2.
 NAMED = (
     "homelab-updater",
     "homelab-daniel-pi",
@@ -42,8 +40,8 @@ NAMED = (
 SOPS_DIR = "usr/lib/homelab/secrets"
 TEMPLATES = "usr/lib/homelab/secret-templates"
 COMPOSE = "usr/lib/homelab/compose"
-# homelab-secrets' own single pass: `$$` first, so `$${key}` leaves literal text, then `${name}`.
-# A `${` that does not close as `${name}` is an error in a template, which the script refuses.
+# `$$` first, so `$${key}` leaves literal text, then `${name}`; a `${` that does not close as
+# `${name}` is refused.
 TOKEN = re.compile(r"\$\$|\$\{([A-Za-z0-9_]+)\}|\$\{")
 
 

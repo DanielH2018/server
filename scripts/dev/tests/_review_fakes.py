@@ -67,13 +67,9 @@ class FakeRunner:
         self.claude = []  # (argv, stdin, phase file at call time)
         self.comments = []
         self.git = []
-        # What `git show <rev>:<path>` answers: the file at the fix head, by path. A path
-        # absent from it has no such file there.
         self.tree = {"scripts/x.py": "a\nb\nboom = 1\nd\n"}
         # What `git diff --name-only -z` answers: the paths the batch's range changed.
         self.changed_paths = []
-        # The landing the pipeline runs: each `bash -l` command, the VERDICT line land.sh's
-        # log ends on ("" for none), land.sh's exit code, and cc-wait's exit codes in order.
         self.lands = []
         # What `gh pr list --head` answers for the batch's branch, and each such call.
         self.branch_prs = [{"url": PR, "number": 4000}]
@@ -84,33 +80,21 @@ class FakeRunner:
         # The VERDICT lines of the first landings, in order; `verdict` answers the rest.
         self.verdicts = []
         self.land_rc = 0
-        # What a land.sh that refused to start printed on stdout.
         self.land_out = ""
         self.waits = [0]
-        # The CI wait a batch that does not land runs: each `cc-wait gh-ci` command, the
-        # (exit code, output) it answers with in order (the last repeats), the PR's
-        # `statusCheckRollup`, and each failed job's log by job id.
         self.ci_calls = []
         self.ci = [(0, "WAIT: passed abcd1234: 20 check runs passed\n")]
         self.rollup = []
         self.job_logs = {}
-        # The draft step: whether `gh pr view` reports a draft, each `gh pr ready` call, and
-        # the `ci.yml` run ids each `gh api .../runs` read answers with in order (the last
-        # repeats).
         self.draft = False
         self.readied = []
         self.ci_runs = [[1]]
-        # The re-run step: whether the `ci-fix` resume moves the PR's head, the failed
-        # `ci.yml` runs on the head as [id, attempt] pairs, each `gh run rerun` call, and the
-        # attempt each run read answers with in order (the last repeats).
         self.fix_pushes = False
         self.failed_runs = []
         self.reruns = []
         self.attempts = [2]
         # Every `gh pr ready`, run-id read and `cc-wait gh-ci` call, in the order they ran.
         self.log = []
-        # The PR fields `own_surface.pr_problems` reads, and the ones after a `ci-fix` or
-        # `conflict` resume when it changes them. Empty, a daniel-server PR fails that rule.
         self.pr_fields = {}
         self.pr_fields_fixed = None
         # The files `git merge-tree` names as conflicting with the base; none merges clean.

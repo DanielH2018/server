@@ -45,8 +45,6 @@ def b2_longhorn_lines(
         session = B2Session(
             key_id, app_key, timeout=DEFAULT_TIMEOUT, transport=_transport
         )
-        # A bucket-scoped application key already names its bucket; an account-wide one does
-        # not and has to be looked up.
         if not session.bucket_id:
             session.lookup_bucket(bucket)
         files = session.list_files(strip)
@@ -59,9 +57,7 @@ def b2_longhorn_lines(
         if name.startswith(strip):
             name = name[len(strip) :]
         lines.append(f"{name};{entry.get('contentLength', 0)}")
-    # Each page is one b2_list_file_names, and the authorize that preceded them is itself
-    # billable — both Class C. Reported through an out-param so the existing callers and their
-    # tests keep the plain list return.
+    # Reported through an out-param so existing callers keep the plain list return.
     if _stats is not None:
         _stats["class_c"] = session.class_c
         _stats["pages"] = session.list_calls

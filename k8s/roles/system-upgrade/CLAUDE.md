@@ -14,7 +14,7 @@ nothing else upgrades k3s. The decision is
 - **Claims:** none (no PVC)
 <!-- /generated_from -->
 
-- **Flux applies it.** Its `containers_list` entry is in `cluster/services.yml`, so
+- **Flux applies it.** Its `containers_list` entry is in `k8s/services.yml`, so
   nothing applies it by hand.
 - **The Plans select the nodes in `system_upgrade_nodes`.** The list in `defaults/main.yml` holds
   `daniel-box` and `daniel-server`. A node joins the list only after its

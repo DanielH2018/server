@@ -1,7 +1,8 @@
 ---
-sonarr_k8s_image: lscr.io/linuxserver/sonarr:4.0.20.3014-ls329@sha256:44b06045a98bc1f237b9ffefc4b28dab64cb29305e4a2a94875ae93b5224e4cc
+sonarr_k8s_image: lscr.io/linuxserver/sonarr:develop-5.0.0.3041-ls212@sha256:c8c4a3dcb49e1bd3ee19cf33e128837fdd6615e7a6b69cf02326133e193e4c29
 
 # Renovate stance: whether an image bump here may automerge. `promote` deploys what merges.
+# The Sonarr image itself takes no automerge: renovate.json has a rule for the v5 beta channel.
 # Migrating state — strategy is Recreate and the config volume comes from
 # k8s_claims below (hardcoded ReadWriteOnce), so a bad image swap can migrate the library
 # database + root-folder paths before the gate observes a fault, then fail the rollback
@@ -94,9 +95,9 @@ k8s_claims:
 
 # ── the air-date guard (templates/air-date-guard-cronjob.yaml.j2) ───────────────────────────
 # Removes and blocklists a queued grab whose release was published before its episode aired,
-# Sonarr v5's Release Profile rule applied after the grab on v4. files/sonarr_air_date_guard.py
-# holds the rule and what it leaves alone. Retire this CronJob once Sonarr v5 stable ships and
-# a Release Profile's "do not download before air date" replaces it.
+# the rule Sonarr v5 carries as a Release Profile's air-date restriction, applied after the
+# grab. files/sonarr_air_date_guard.py holds the rule and what it leaves alone. Retire it once
+# a Release Profile carries the rule.
 sonarr_k8s_air_date_guard_image: python:3.15-alpine@sha256:0f9552bb28711333da16915ec146f5e6bb44a7fdac9ced15dc17c2e0206346dd
 # Every 5 minutes, matching monitor-bridge's Arr Queue Warnings cycle, so a fake is usually
 # removed before the warning it causes pages.

@@ -798,7 +798,7 @@ the reader:
     - `..._github_format_escapes_properties_and_messages`: a heading that holds `%` and `,`
       reads `%25` and `%2C` in the notice's `title`, and a message that holds a line feed
       reads `%0A`.
-- A CLI test in `scripts/dev/tests/test_facts_cli.py` asserts that `notice` exits 0 with
+- A CLI test in `scripts/dev/tests/repo_tools/test_facts_cli.py` asserts that `notice` exits 0 with
   rows present, exits 0 with an `unparsable` row, and exits 2 when `resolve_base` cannot
   resolve the ref.
 - Replay tests in `scripts/lib/tests/test_facts_report.py`:
@@ -975,7 +975,7 @@ Each risk is checked against `docs/failure-classes.md`.
       `scripts/lib/tests/`.
 - **PR 3:**
     - the emitter tests in `scripts/lib/tests/`;
-    - the CLI test in `scripts/dev/tests/test_facts_cli.py`;
+    - the CLI test in `scripts/dev/tests/repo_tools/test_facts_cli.py`;
     - the `notice` bullet in `.claude/rules/facts.md`;
     - `scripts/dev/fact_status.py`'s module docstring.
 - **PR 4:**

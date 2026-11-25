@@ -90,12 +90,9 @@ def save_registry(reg: Registry, path: str = REGISTRY_FILE) -> None:
         fh.write(body)
 
 
-# The rotation cadence per tier, and the default `secret_registry.py` seeds, syncs and audits with.
-# `secret_rotation.py` assigns the same table AS A LITERAL, because
-# `scripts/docs/gen_doc_fragments.py` reads it out of THAT file with `ast.literal_eval` and a
-# leaf may not import its own facade. The two copies are held equal by
-# `test_the_default_tier_table_is_the_one_secret_rotation_assigns`. A MappingProxyType rather
-# than a dict, because a dataclass rejects a mutable default and this object is frozen.
+# `secret_rotation.py` assigns the same table AS A LITERAL because gen_doc_fragments.py reads it
+# with `ast.literal_eval`; a test holds them equal. MappingProxyType because a frozen dataclass
+# rejects a mutable default.
 DEFAULT_TIER_DAYS = MappingProxyType(
     {
         "assisted": 365,

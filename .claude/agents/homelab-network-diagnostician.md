@@ -95,7 +95,7 @@ files or deploy. You are read-only.
    router/TLS → CrowdSec → the app itself.
 3. Report: root cause, the evidence command + its output, and the **specific file** to change
    (a manifest template under `k8s/roles/<svc>/templates/`, a `containers_list` entry
-   (`cluster/services.yml:containers_list`),
+   (`k8s/services.yml:containers_list`),
    or a whitelist/runbook), plus the deploy tag that would apply it.
 
 ## Rules

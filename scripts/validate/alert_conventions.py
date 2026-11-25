@@ -51,18 +51,15 @@ ROLE_DIR = K8S_ROLES / "observability"
 RULES_DIR = ROLE_DIR / "files" / "rules"
 RULE_TESTS_DIR = ROLE_DIR / "tests" / "rules"
 
-# The ConfigMap that carries the rule files, and the rule groups a run must find. The other
-# member a run must find is the one `Watchdog`, which `watchdog_problems` requires.
+# The other member a run must find is the one `Watchdog`, which `watchdog_problems` requires.
 RULES_CONFIGMAP = "prometheus-rules"
 GROUP_FLOOR = frozenset({"alerting-meta"})
 RULE_TEST_SUFFIX = ".test.yaml"
 
 SEVERITIES = frozenset({"critical", "warning", "info"})
 
-# M2's join shape, from docs/archive/monitoring/m2-first-bridge-family.md, "The
-# rules": the join that takes `service` from a workload-service recording rule, and the
-# fallback that keeps an alert whose workload the join misses. A join with no fallback drops
-# the alert whenever its mapping is missing.
+# The join takes `service` from a workload-service recording rule, with a fallback for an alert
+# whose workload the join misses; without it the alert is dropped.
 SERVICE_JOIN = re.compile(
     r"group_left\s*\(\s*service\s*\)\s*homelab:(?:deployment|daemonset|pod)_service:info\b"
 )
@@ -71,13 +68,11 @@ WATCHDOG = "Watchdog"
 WATCHDOG_GROUP = "alerting-meta"
 WATCHDOG_EXPR = "vector(1)"
 
-# The source files that must hold no `${`: Flux's substitution would rewrite one, so the
-# rendered ConfigMap would differ from the file promtool checked.
+# These files must hold no `${`: Flux's substitution would rewrite it, so the rendered ConfigMap
+# would differ from what promtool checked.
 TEMPLATES_FILE = ROLE_DIR / "files" / "alertmanager" / "homelab.tmpl"
 FLUX_PLACEHOLDER = "${"
 
-# What `names_a_metric` strips before it looks for a metric name: string literals, label
-# matchers, range and subquery selectors, and the label lists of grouping and matching clauses.
 PROMQL_STRING = re.compile(r'"(?:[^"\\]|\\.)*"|\'(?:[^\'\\]|\\.)*\'|`[^`]*`')
 PROMQL_BRACES = re.compile(r"\{[^}]*\}")
 PROMQL_RANGE = re.compile(r"\[[^\]]*\]")
@@ -140,9 +135,8 @@ def service_from_mapping(expr: str) -> str | None:
     return None
 
 
-# What `expression_jobs` reads: the vector selectors of an expression, after its grouping and
-# matching label lists are gone. A string literal is matched whole so its text never reads as
-# a selector; a `{...}` block is kept, because it holds the `job` matcher.
+# A string literal is matched whole so its text never reads as a selector; a `{...}` block is kept
+# because it holds the `job` matcher.
 PROMQL_SELECTOR = re.compile(
     r'(?P<string>"(?:[^"\\]|\\.)*"|\'(?:[^\'\\]|\\.)*\'|`[^`]*`)'
     r"|(?P<range>\[[^\]]*\])"
@@ -170,8 +164,6 @@ def expression_jobs(expr: str) -> list[list[tuple[str, str]]]:
     return selectors
 
 
-# The labels the third `service` source reads from a job's series: `service` itself, and
-# `job`, which the expression's matcher compares with the job's name.
 JOB_SERVICE_LABELS = ("service", "job")
 RELABEL_SECTIONS = ("relabel_configs", "metric_relabel_configs")
 

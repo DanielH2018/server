@@ -67,8 +67,6 @@ def test_the_promote_timeout_constant_is_verifys_substituting_wait():
     assert promote_wait.PROMOTE_TIMEOUT_S == substituting_promote_timeout()
 
 
-# -- the soak's timeout, which grows with the bundle (D5.3b3) -------------------------------
-
 # M changes bento-pdf, so its changed set holds `soak`.
 _SOAK_DIGESTS = {
     M: digests(bento_pdf="b", soak="k"),
@@ -76,8 +74,6 @@ _SOAK_DIGESTS = {
 }
 for _found in _SOAK_DIGESTS.values():
     _found["bento-pdf"]["suspended"] = False
-# The soak's `timeout` two queueing rounds past a nine-tag bundle that rendered 2910s. The
-# constant, derived from a one-tag bundle, does not cover it.
 _GROWN_SOAK = "4110s"
 
 

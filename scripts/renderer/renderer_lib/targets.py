@@ -1,4 +1,4 @@
-"""The k8s services the cluster renders, derived from `cluster/services.yml` and the role files.
+"""The k8s services the cluster renders, derived from `k8s/services.yml` and the role files.
 
 A service renders when its role has something to render: its own manifest template, a shared
 default its entry earns, or a vendored manifest. `render_targets` keeps a tag Flux owns,

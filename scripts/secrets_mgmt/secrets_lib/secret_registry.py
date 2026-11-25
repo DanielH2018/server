@@ -88,8 +88,8 @@ def due_date(
     days = tier_days.get(entry.tier)
     if not days or entry.last_rotated is None:
         return None
-    # A salted hash domain: the seed offset is drawn from the same name, and reusing it
-    # unsalted would correlate the two subtractions instead of compounding the spread.
+    # A salted hash domain: reusing the seed offset unsalted would correlate the two subtractions
+    # instead of compounding the spread.
     offset = _stable_offset("due:" + name, stagger_span(days))
     return entry.last_rotated + dt.timedelta(days=days - offset)
 
@@ -138,10 +138,8 @@ def registry_drift(registered: set, present: set) -> tuple[list, list]:
     return sorted(present - registered), sorted(registered - present)
 
 
-# The registry value that marks a key SOPS only records: the app holds the credential, nothing
-# in the tree writes it there, and `sops set` alone rotates nothing. `sync` never touches an
-# existing entry, so the field survives it.
-# docs/secret-rotation.md names each key's mechanism.
+# A key SOPS only records: the app holds the credential and `sops set` alone rotates nothing.
+# `sync` never touches an existing entry, so the field survives.
 RECORD_SOURCE = "record"
 
 

@@ -65,8 +65,7 @@ from lib.longhorn_lib import longhorn_backups
 CLUSTER = "prod"
 RUNBOOK = "docs/longhorn-disaster-recovery.md"
 
-# The two targets the k3s role renders, B2 and R2. Both must hold what they hold for a full
-# recovery, so both are required here where the upgrade runbook needs only B2.
+# Both targets must hold what they hold for a full recovery; the upgrade runbook needs only B2.
 REQUIRED_TARGETS = (longhorn_backups.B2_TARGET, longhorn_backups.R2_TARGET)
 
 BACKUP_VOLUMES_ARGS = (

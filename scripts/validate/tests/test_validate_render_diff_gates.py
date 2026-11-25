@@ -68,7 +68,7 @@ def test_a_tag_the_pr_adds_with_its_edges_is_clean():
 
 # The real-render pairs. One HEAD copy per test, rendered for the two roles the edits reach.
 ROLES = ("bento-pdf", "authelia")
-SERVICES = "cluster/services.yml"
+SERVICES = "k8s/services.yml"
 SHELL = "k8s/templates/workload-shell.yml.j2"
 # The macro body's line, not the header comment's mention of the same field.
 SHELL_EDIT = (
@@ -111,6 +111,19 @@ def _bento_entry_edit(tree: Path, field: str, value: str, new: str) -> tuple[str
     return entry, entry.replace(f"{field}: {value}", f"{field}: {new}")
 
 
+def test_a_base_from_before_the_move_is_read_at_its_own_path(tmp_path, head_tree):
+    shutil.copytree(head_tree, tmp_path, symlinks=True, dirs_exist_ok=True)
+    (tmp_path / "cluster").mkdir()
+    (tmp_path / SERVICES).rename(tmp_path / gate.PRE_MOVE_SERVICES)
+    paths = tmp_path / "scripts" / "lib" / "repo_paths.py"
+    old = 'REPO / "k8s" / "services.yml"'
+    assert old in paths.read_text()
+    paths.write_text(
+        paths.read_text().replace(old, 'REPO / "cluster" / "services.yml"')
+    )
+    assert set(gate.snapshot(tmp_path, ROLES).renders) == set(ROLES)
+
+
 def test_an_inventory_edit_counts_both_roles_it_moves(
     tmp_path, head_tree, head_snapshot
 ):
@@ -132,7 +145,6 @@ def test_a_shared_template_change_counts_every_importer(
     assert gate.counted(head_snapshot, head) == {"bento-pdf", "authelia"}
 
 
-# Arms 3 and 4 (D5.1f), the removal gates. bento-pdf is flux-owned in the fixtures.
 NETPOL = "NetworkPolicy/homelab/bento-pdf"
 CLUSTER_ROLE = "ClusterRole//bento-pdf-reader"
 BENTO = {"Deployment/homelab/bento-pdf", NETPOL, CLUSTER_ROLE}

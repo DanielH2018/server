@@ -49,8 +49,6 @@ def test_a_landing_waits_for_a_slot_only_as_long_as_its_merge_budgets_leave(
     with slots.held(ln):
         pass
     slept = sum(c[1][0] for c in calls if c[0] == "sleep")
-    # The budgets leave 2 * 60 - 51 seconds, as the fake clock ticks once more; a third poll
-    # would pass them.
     assert slept == 60
     assert "going on without one" in capsys.readouterr().out
 
@@ -119,7 +117,7 @@ def test_a_slot_file_that_cannot_be_opened_leaves_the_others_free(tmp_path):
 
 _K8S = ["k8s/roles/sonarr/defaults/main.yml"]
 _SERIAL = ["k8s/roles/longhorn/defaults/main.yml"]
-_SERVICES = ["cluster/services.yml"]
+_SERVICES = ["k8s/services.yml"]
 _DOCS = ["docs/landing.md"]
 # The record of `Landing.changed_paths` reading the PR's file list.
 _FILES = "gh:files,headRefOid"
@@ -306,8 +304,6 @@ def test_the_checks_leave_the_lock_files_free(landing):
 def test_a_serial_pr_whose_turn_a_rate_limit_wait_lost_is_refused_without_waiting(
     landing, capsys
 ):
-    # The compare inside the draft's turn is refused, and the ask for the turn after the
-    # wait finds another landing holding it until merge_timeout.
     limited = subprocess.CalledProcessError(
         1, "gh", stderr="gh: You have exceeded a secondary rate limit. (HTTP 403)"
     )

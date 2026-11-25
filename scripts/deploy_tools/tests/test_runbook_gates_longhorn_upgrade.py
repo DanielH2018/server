@@ -288,8 +288,8 @@ def test_the_runbook_calls_the_script_and_it_runs():
     proc = run(
         ["uv", "run", "python", str(_REPO / script), "longhorn-upgrade", "--bogus"],
         cwd=_REPO,
-        # A nested `uv run` resolves the dev group before the child starts, which a cold
-        # cache makes minutes rather than seconds — longer than `DEFAULT_TIMEOUT` allows.
+        # A nested `uv run` resolves the dev group first, which a cold cache makes minutes, longer
+        # than `DEFAULT_TIMEOUT`.
         timeout=300,
     )
     assert proc.returncode == 64, proc.stderr

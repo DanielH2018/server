@@ -9,9 +9,6 @@ import dataclasses
 from dataclasses import dataclass
 from functools import partial
 
-# Reach the sibling package and `lib` (scripts/): a directly-invoked script gets only its own
-# directory on sys.path, and pyproject's `pythonpath` is a pytest setting.
-
 
 from lib.exit_codes import (
     FANOUT_PLACE_BATCH_FAILED,
@@ -30,12 +27,10 @@ from dev.fanout_lib.target import SERVER
 from dev.fanout_lib.unit_state import unit_props_command
 
 STATUS_TIMEOUT_S = 30.0
-# The line a session ends with when it cannot finish: the brief's *Finishing* section names
-# both prefixes. `.claude/hooks/fanout-stop.py` lets a session stop on either this or a PR URL,
-# and copies both patterns because the hooks stay stdlib-only; a test holds the copies equal.
+# The brief's *Finishing* section names both prefixes. `.claude/hooks/fanout-stop.py` copies both
+# patterns (hooks stay stdlib-only); a test holds the copies equal.
 BLOCKER = re.compile(r"(?im)^(?:needs input|failed):")
-# The line `land.sh` prints when the landing reaches a verdict. A batch on the landing host
-# owes one: a PR URL alone says the PR was opened, never that it merged and deployed.
+# A batch on the landing host owes a VERDICT line: a PR URL alone never says it merged and deployed.
 # `.claude/hooks/fanout-stop.py` copies this pattern too.
 VERDICT = re.compile(r"(?m)^VERDICT:")
 RESULT_TYPE = "result"
@@ -43,36 +38,26 @@ RESULT_TYPE = "result"
 NO_REPORT = "no-report"
 # A clean finish whose final text names a blocker line instead of a PR.
 NEEDS_INPUT = "needs-input"
-# A clean finish whose final text names neither a PR nor a blocker: a progress report that
-# ended the turn, left after the Stop hook's continuations ran out.
 NO_PR = "no-pr"
-# A batch on the landing host that opened its PR and ended its turn before `land.sh` printed a
-# verdict. The PR exists; the landing it owes did not finish.
 NO_VERDICT = "no-verdict"
-# A batch whose landing waits on a hold or a rule that is not its own: `land_result.park_line`
-# wrote its final line. Its sub-coordinator re-lands it, so it needs attention and no page.
+# `land_result.park_line` wrote its final line; its sub-coordinator re-lands it, so it needs
+# attention and no page.
 PARKED = "parked"
 PARKED_LINE = re.compile(r"(?im)^parked:")
-# Where the server lander keeps its landing logs on the landing host, for the user who runs
-# it: `autoland.STATE_DIR / "logs"`, spelled for a shell.
 LANDER_LOGS = "$HOME/.local/state/fanout-server-lander/logs"
 AWAITING_LANDER = "awaiting the server lander"
-# How long a batch may await the lander with no landing of its PR started: three lander
-# passes (`claude_code_fanout_server_lander_interval`). Past it the lander is not going to
-# take the PR, and the batch reads `needs-input`.
+# Three lander passes (`claude_code_fanout_server_lander_interval`); past it the lander is not going
+# to take the PR, and the batch reads `needs-input`.
 AWAIT_LANDER_S = 30 * 60
 # The line `lander_command` prints for a PR whose newest lander log exists.
 LANDER_LOG = "LANDER-LOG:"
-# The unit whose journal holds the lander's ruling on each candidate PR, one line a pass
-# (`autoland.run`). `probe_lib/lander.py:UNIT` names the same unit.
+# `probe_lib/lander.py:UNIT` names the same unit.
 LANDER_UNIT = "homelab-claude-fanout-server-lander.service"
 RULINGS = "lander-rulings"
 # Journal lines read back. A pass prints one per open candidate PR, and two passes are needed.
 RULING_LINES = 200
 _RULING = re.compile(r"^#(\d+) batch \S+: (.+)$")
 INELIGIBLE = "ineligible, "
-# What the batch's coordinator does about a PR the lander holds, by the reason
-# `operator_waits.reason_of` gives the lander's ruling.
 NEXT_STEP = {
     "lander-surface": "land it with land.sh after probe.py lander",
     "operator-step": "pass its operator step to the operator",
@@ -136,9 +121,8 @@ def _one(b: Batch) -> str:
         f"echo '--- stderr'; tail -c 2000 {b.worktree}/.fanout/stderr.log 2>/dev/null; "
         f"echo; echo '--- report'; cat {b.worktree}/.fanout/report.json 2>/dev/null; "
         f"echo; echo '--- ended'; stat -c %Y {b.worktree}/.fanout/report.json 2>/dev/null; "
-        # The landing's own record, read because a batch can land correctly and still not
-        # echo the verdict into its final message. Only the last line is needed, and
-        # `land.sh` prints one verdict per run.
+        # A batch can land correctly and not echo the verdict into its final message, so read the
+        # landing's own record.
         f"echo; echo '--- verdict'; "
         f"grep -h '^VERDICT:' {b.worktree}/.fanout/land*.log 2>/dev/null | tail -n 1"
     )
@@ -156,9 +140,8 @@ _SECTION_NAMES = ("stderr", "report", "ended", "verdict")
 
 
 def _section(block: str, name: str) -> str:
-    # Bound the section only at a KNOWN marker ("--- stderr" / "--- report"), never at
-    # any line starting "--- " — the section's own content (a stderr line, report prose)
-    # can start that way without ending the section early.
+    # Bound the section only at a known marker, never at any line starting "--- ": the section's own
+    # content can start that way.
     marker = f"--- {name}\n"
     if marker not in block:
         return ""
@@ -208,10 +191,8 @@ def parse_status(batches: Sequence[Batch], stdout: str) -> list[BatchStatus]:
     known = {b.batch for b in batches}
     blocks: dict[str, str] = {}
     order: list[str] = []
-    # Split only at a genuine block header (start of line). A block's own content — a
-    # report's result prose, a stderr line — can still start with "=== "; when the header
-    # name that produces isn't one of ours, it's not a new block, so fold it back into the
-    # block already open.
+    # Split only at a genuine block header; content starting with "=== " whose name is not one of
+    # ours folds back into the open block.
     for chunk in re.split(r"(?m)^=== ", stdout)[1:]:
         name, _, body = chunk.partition("\n")
         name = name.strip()
@@ -223,9 +204,8 @@ def parse_status(batches: Sequence[Batch], stdout: str) -> list[BatchStatus]:
     out = []
     for b in batches:
         body = blocks.get(b.batch, "")
-        # Anchor the props/sections boundary at the start of a line, like _section does: a
-        # property VALUE carrying "--- " mid-line (e.g. Description=fanout --- stderr sink)
-        # would otherwise truncate the props block at that "--- ", not at the real marker.
+        # Anchor the boundary at the start of a line, like `_section`: a property value carrying
+        # "--- " mid-line would truncate the props block.
         props = dict(
             ln.split("=", 1)
             for ln in re.split(r"(?m)^--- ", body, maxsplit=1)[0].splitlines()
@@ -234,34 +214,32 @@ def parse_status(batches: Sequence[Batch], stdout: str) -> list[BatchStatus]:
         stderr_tail = _section(body, "stderr").strip()
         result = _result(_section(body, "report"))
         final = str(result.get("result") or "")
-        # A session that failed still exits 0 through systemd — the failure is in the result
-        # object, not the unit, which is why `Result=success` alone cannot mean done.
+        # A failed session still exits 0 through systemd, so `Result=success` alone cannot mean
+        # done.
         is_error = bool(result.get("is_error"))
         code_text = props.get("ExecMainStatus", "")
         code = int(code_text) if code_text.isdigit() else None
         ended = _section(body, "ended").strip()
         m = PR_URL.search(final)
-        # Either the agent echoed the verdict or the land log holds it; the log is what keeps
-        # a batch that landed correctly but reported tersely out of `no-verdict`.
+        # Either the agent echoed the verdict or the land log holds it; the log keeps a
+        # tersely-reporting batch out of `no-verdict`.
         landed = bool(
             VERDICT.search(final) or VERDICT.search(_section(body, "verdict"))
         )
         if props.get("ActiveState") in ("active", "activating"):
             state = "running"
         elif props.get("Result") == "success" and final and not is_error:
-            # A non-empty final text is not a finish: a turn that ends on "Next I will open
-            # the PR" exits the process just as cleanly as one that opened it.
+            # A non-empty final text is not a finish: a turn ending on "Next I will open the PR"
+            # exits as cleanly as one that opened it.
             named = final_state(_section(body, "report"))
             if named:
-                # Tested first, so a blocker line wins whatever URL follows it: the review
-                # hold (`held_for_findings`) ends on the full PR URL, and
-                # reads as `done` on daniel-server, where the URL alone is the finish.
-                # `m` still fills the line's PR url below, which the orchestrator needs.
+                # Tested first, so a blocker line wins whatever URL follows it: the review hold ends
+                # on the full PR URL, which reads as `done` on daniel-server. `m` still fills the PR
+                # url below.
                 state = named
             elif m and lands(b.host, b.repo) and not landed:
-                # The brief tells a landing-host batch to wait for `land.sh`'s VERDICT line.
-                # Without that, a PR URL only means `gh pr create` returned. Another repo's
-                # batch stops at the PR on every host, so its PR URL is the finish.
+                # Another repo's batch stops at the PR on every host, so its PR URL is the finish;
+                # elsewhere a PR URL only means `gh pr create` returned.
                 state = NO_VERDICT
             elif m:
                 state = "done"
@@ -274,20 +252,11 @@ def parse_status(batches: Sequence[Batch], stdout: str) -> list[BatchStatus]:
             and not final
             and code in (0, None)
         ):
-            # The unit ended cleanly and left no report. An agent that removes its own
-            # worktree on exit takes .fanout/report.json with it, so this is what a
-            # FINISHED batch looks like once it has tidied up — indistinguishable here
-            # from one that died before writing anything. Only the forge can tell them
-            # apart, which is why this is its own state rather than `failed`: the caller
-            # reconciles it against a merged PR for the batch's branch.
-            #
-            # `props` must be non-empty: a batch whose block never appeared in the reply at
-            # all — a mangled read, a host that answered nothing for it — parses to the same
-            # empty fields, and there the absence is the defect rather than a tidied-up
-            # worktree. That case stays `failed`.
-            #
-            # `Result` must be `success` for the same reason: a unit that `RuntimeMaxSec=`
-            # stopped records `Result=timeout`, and its claude process wrote no report either.
+            # The unit ended cleanly and left no report: an agent that removes its worktree on exit
+            # takes .fanout/report.json with it, so a finished batch looks like one that died. Its
+            # own state, not `failed`; the caller reconciles it against a merged PR.
+            # `props` must be non-empty (a mangled read parses to empty fields and stays `failed`),
+            # and `Result` must be `success` (a `RuntimeMaxSec=` stop records `timeout`).
             state = NO_REPORT
         else:
             state = (
@@ -422,8 +391,8 @@ def status_line(
     if state in ("failed", NO_REPORT):
         exit_text = "unknown" if s.exit_code is None else str(s.exit_code)
         line += f" (exit {exit_text})"
-        # The page carries only the state, and polkit admits a fixed set of state names, so
-        # an OOM kill or a runtime-cap stop is named here rather than as a state of its own.
+        # The page carries only the state and polkit admits a fixed set of names, so an OOM kill or
+        # runtime-cap stop is named here.
         if s.unit_result and s.unit_result != "success":
             line += f" result={s.unit_result}"
         if s.terminal_reason:
@@ -435,19 +404,15 @@ def status_line(
         # that a finished batch has already deleted along with its worktree.
         return line + f" no merged PR for {branch}", FANOUT_PLACE_FAILED
     if state in (NEEDS_INPUT, NO_PR, PARKED):
-        # Tier 1, not 5: the session ended cleanly and its final text is the thing to read,
-        # not a stderr log. Not 0 either: no PR exists to land, or a landing is owed again,
-        # so someone has to act.
+        # Tier 1, not 5: the session ended cleanly and its final text is the thing to read. Not 0:
+        # someone has to act.
         return line, FANOUT_PLACE_FAILED
     if state == NO_VERDICT:
-        # Tier 1 for the same reason, and the PR url stays on the line: the work to do is to
-        # land that PR, which nothing here says has merged or deployed.
         return line + " — land.sh printed no VERDICT", FANOUT_PLACE_FAILED
     return line, FANOUT_PLACE_BATCH_FAILED if state == "failed" else FANOUT_PLACE_OK
 
 
-# Worst first. A batch to act on outranks a host to read again, so a timed-out read (75)
-# never hides a failed batch behind "try later"; numeric `max` would rank 75 above 5.
+# Worst first: numeric `max` would rank a timed-out read (75) above a failed batch (5).
 _TIER_RANK = (
     FANOUT_PLACE_BATCH_FAILED,
     FANOUT_PLACE_FAILED,

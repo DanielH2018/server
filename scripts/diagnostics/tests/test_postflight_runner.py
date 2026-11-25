@@ -26,9 +26,7 @@ def stub_secret(monkeypatch):
     monkeypatch.setattr(postflight, "secret", lambda name: (f"<{name}>", ""))
 
 
-# The three tests below pass `main([])` rather than `main()`: with no argument argparse falls
-# back to `sys.argv[1:]`, which under pytest is PYTEST'S OWN flags, and a flag postflight does
-# not define exits 2 before the check under test runs.
+# `main([])`, not `main()`: argparse would read pytest's own flags from `sys.argv` and exit 2.
 def test_a_workload_with_no_service_skips_not_fails(monkeypatch):
     def absent(name):
         raise postflight.Skip(f"{name} has no ClusterIP (does the Service exist?)")
@@ -73,19 +71,9 @@ def test_an_ok_check_prints_only_in_the_count(monkeypatch, capsys):
     assert "1 of 2 §9 checks OK." in out
 
 
-# ── `--help` must not run the sweep ──────────────────────────────────────────
-# The rejecting half of the pair: before the parser existed, `--help` ran every check —
-# several SOPS decrypts and ~15 authenticated requests to production — and exited 0, which
-# reads as a passing `--help`. The accepting half is below it: the no-argument invocation is
-# still what the parser accepts, so it cannot have swallowed the interface.
-
-
 def test_help_exits_zero_without_running_a_single_check(capsys, monkeypatch):
-    # Pin the colour setting rather than inheriting it. Python 3.14's argparse colourises help
-    # when FORCE_COLOR is set, TTY or not, and it wraps `usage: ` and the program name in
-    # SEPARATE escape runs — so the phrase below survives in CI (which sets neither variable)
-    # and is split on any host whose shell exports FORCE_COLOR. Stating the dependency here is
-    # what stops this passing remotely and failing locally.
+    # Pin the colour setting: Python 3.14's argparse colourises help when FORCE_COLOR is set and
+    # splits `usage: ` into separate escape runs.
     monkeypatch.delenv("FORCE_COLOR", raising=False)
     monkeypatch.setenv("NO_COLOR", "1")
     with pytest.raises(SystemExit) as exc:
@@ -93,8 +81,6 @@ def test_help_exits_zero_without_running_a_single_check(capsys, monkeypatch):
     assert exc.value.code == 0
     out = capsys.readouterr().out
     assert "usage: postflight.py" in out
-    # A check that ran would have printed its own `[OK  ] §9.x ...` report line first. The
-    # help text itself cites §9, so the status bracket is what distinguishes them.
     assert not [status for status in ("[OK", "[FAIL", "[SKIP") if status in out]
 
 

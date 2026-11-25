@@ -7,7 +7,7 @@ Usage::
         --image ghcr.io/miniflux/miniflux:2.2.16 --port 8080 --authelia one_factor
 
 The role is a `containers_list` entry plus a Deployment template. The entry is
-appended to `cluster/services.yml`, and `templates/deployment.yaml.j2`
+appended to `k8s/services.yml`, and `templates/deployment.yaml.j2`
 is the one manifest the role ships. The role has no `tasks/`: the renderer derives the file
 lists from `templates/` and the entry, and the workload to restart from the role's name.
 Two small files sit beside the template:
@@ -34,7 +34,7 @@ WHAT IT DOES NOT WRITE, deliberately:
   bundle, and `land.sh` follows the promotion.
 
 The output is meant to pass `prek run --all-files` and the renderer's `cluster` render of the
-new tag with no hand edits; `scripts/dev/tests/test_new_k8s_service.py` renders it through
+new tag with no hand edits; `scripts/dev/tests/repo_tools/test_new_k8s_service.py` renders it through
 the repo's own manifest validator to hold that.
 """
 
@@ -53,8 +53,6 @@ from renderer.template_filters.toposort import K8S_APPLIES_LAST
 AUTH_TIERS = ("one_factor", "two_factor")
 STRATEGIES = ("RollingUpdate", "Recreate")
 
-# The tiers `k8s/roles/cluster-base/templates/priorityclass.yaml.j2` declares. Named here so a
-# typo fails at the command line rather than at admission, hours later.
 PRIORITY_CLASSES = (
     "homelab-critical",
     "homelab-standard",
@@ -179,7 +177,7 @@ See repo-root `CLAUDE.md` for shared conventions.
 
 
 def entry_lines(name, port, hostname, auth_tier, route) -> str:
-    """The service entry, as the block this script appends to cluster/services.yml.
+    """The service entry, as the block this script appends to k8s/services.yml.
 
     Position in the list does not set the deploy order: `scripts/renderer/template_filters/toposort.py`
     derives the ordering edges from the templates and the entry, and gives each
@@ -226,8 +224,6 @@ def append_entry(services: Path, entry: str) -> None:
     except StopIteration:
         raise ValueError(f"{services} declares no containers_list") from None
 
-    # The list ends at the first non-blank line indented no deeper than the key itself: the
-    # next top-level key, or the comment block above it.
     end = len(lines)
     for i in range(start + 1, len(lines)):
         if lines[i].strip() and not lines[i].startswith((" ", "\t")):
@@ -350,8 +346,6 @@ def next_steps(args, role: Path) -> str:
         if args.route
         else ""
     )
-    # The route's blackbox target renders in observability, and until Flux applies that render
-    # `probe.py health` skips the probe half.
     probe_step = (
         f"Once Flux has applied `observability`, which loads {args.name}'s ingress probe, "
         f"gate it with `probe.py health {args.name}`.\n"

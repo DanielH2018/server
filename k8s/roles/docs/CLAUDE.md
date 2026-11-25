@@ -25,7 +25,7 @@ and generated reference pages are readable in a browser.
 - **Built by:** `scripts/docs/build_docs.py`, run by `homelab-docs-refresh.service`. **Not by this role** —
   a deploy renders manifests, it does not rebuild the site.
 - **Flux applies it.** Its `containers_list` entry is
-  in `cluster/services.yml`, so nothing applies it by hand, and a merged change reaches the cluster when
+  in `k8s/services.yml`, so nothing applies it by hand, and a merged change reaches the cluster when
   `promote` publishes and verifies the next bundle. authelia and traefik are flux-owned too, so
   the Kustomization lists them in `dependsOn`, and Flux applies this tag only after their
   Kustomizations are Ready. The Deployment is `RollingUpdate` with one replica, so a roll keeps

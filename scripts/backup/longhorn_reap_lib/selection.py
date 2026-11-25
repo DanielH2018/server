@@ -41,8 +41,6 @@ from lib.longhorn_lib.longhorn_backups import Backup
 
 
 SEED_NAME_PREFIX = "seed-"
-# The shard jobs' `retain`, which is the state a volume's rotation reaches on its own. A seed
-# below it is still that volume's coverage.
 SEED_FLOOR_DEFAULT = 2
 
 

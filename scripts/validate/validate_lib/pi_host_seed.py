@@ -36,8 +36,8 @@ EXPORTER_DROPIN = "[Service]\\nExecStart=\\nExecStart=/bin/sleep infinity\\n"
 MODULES_UNIT = "/etc/systemd/system/systemd-modules-load.service"
 UFW_STUB = "/usr/local/sbin/ufw"
 IPTABLES_STUB = "/usr/local/sbin/iptables"
-# The stand-in ufw. Appending an existing spec relabels it, `insert` of an existing spec skips
-# it, and `delete` with a comment matches only that comment.
+# Appending an existing spec relabels it, `insert` of an existing spec skips it, and `delete`
+# with a comment matches only that comment.
 UFW_STUB_SOURCE = """#!/usr/bin/python3
 import json, os, pathlib, sys
 

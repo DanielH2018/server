@@ -217,10 +217,13 @@ cannot carry, so the value reaches the fleet by four paths:
   `user-1000.slice`, but fan-out and background jobs still run there as uid 1000.
 - The agent's login profile writes the value to `/proc/self/oom_score_adj`, because an ssh
   login inherits sshd's 0. Raising the value needs no privilege.
-- The component's `lines:` block in `/etc/zsh/zprofile` writes the same value for the
-  operator's ssh login. The operator is the only zsh user on either host, and the
-  operator's own profile belongs to the dotfiles repo. `zprofile` runs only in a login
-  shell, so a command passed to `ssh host cmd` keeps sshd's 0.
+- The component's `lines:` block in `/etc/zsh/zshenv` writes the same value for every zsh the
+  operator starts. The operator is the only zsh user on either host, and the operator's own
+  profile belongs to the dotfiles repo. zsh reads `zshenv` for a command passed to
+  `ssh host cmd` too. The desktop app starts its remote server that way. Only a login shell
+  reads `zprofile`, so a block there left every desktop session at sshd's 0. The component
+  declares a comment-only block in `zprofile`, because the lines arm never removes the block
+  the hosts already hold.
 
 The bias is small. The kernel's badness score adds `adj * totalpages / 1000` to a process's
 RSS, so 1000 against a burstable pod's 999 is worth about 30 MiB on these hosts. A pod
@@ -229,7 +232,55 @@ process with a far larger RSS than any fleet process can still be the victim.
 Each value takes effect at the next start of what carries it. Reconcile restarts neither unit
 nor any user manager, so read the live value after the next reboot. To check, run
 `systemctl show -p MainPID homelab-claude-rc.service user@900.service`, then read
-`/proc/<pid>/oom_score_adj` for each process ID it prints.
+`/proc/<pid>/oom_score_adj` for each process ID it prints. A desktop session takes the value
+when the app's remote server next starts.
+
+### What the caps did not cover on 2026-11-25
+
+k3s on daniel-box exited at 15:08:10, 15:21:13 and 15:24:35 UTC
+([#10119](https://github.com/DanielH2018/server/issues/10119)). Each exit followed a lost
+leader lease. The process that exited at 15:21:13 logged `leaderelection lost/stopped` at
+15:17:29 and nothing after it, so it took nearly four minutes to stop. CPU was not the
+shortage: CPU pressure stayed at or below 0.36, and the weights in *The fleet's CPU weight*
+were live (`user.slice` 20, `system.slice` and k3s 1000). Memory was the shortage. The figures
+come from Prometheus, and the pressure and fault rows are two-minute rates:
+
+| | 15:00 | 15:06 | 15:14 | 15:20 |
+|---|---|---|---|---|
+| Fleet anon (GiB) | 5.3 | 11.2 | 13.3 | 14.6 |
+| Fleet `memory.current` (GiB), against its 20 GiB `MemoryHigh` | 9.8 | 15.4 | 17.5 | 17.8 |
+| Fleet swap (GiB), against its 2 GiB cap | 1.95 | 2.00 | 2.00 | 2.00 |
+| `system.slice` anon (GiB) | 1.9 | 1.0 | 0.06 | 0.09 |
+| `kubepods.slice` anon (GiB) | 6.6 | 6.6 | 6.2 | 5.9 |
+| Host `MemAvailable` (GiB) | 10.8 | 2.9 | 1.9 | 1.9 |
+| Memory pressure, full | 0.00 | 0.17 | 0.90 | 0.79 |
+| Major faults per second | 1 | 51,600 | 35,000 | 32,500 |
+
+- **The fleet's `MemoryHigh` never acted.** The fleet's `memory.events` `high` counter did not
+  move. The shortage came below the cap.
+- **k3s was the plane that gave up its anon.** Its working set fell from 2.2 GiB at 15:00 to
+  0.27 GiB at 15:06, and its swap rose from 0.4 to 1.9 GiB, under a `MemoryLow` of 2.5 GiB.
+  The fleet's swap was at its cap, so the fleet's anon could not leave RAM. kubelet gives a pod
+  no swap, so a pod's anon could not either. `system.slice` has no swap limit, which left it
+  as the only slice with anon the kernel could move. `MemoryLow` is best effort and did not
+  stop that.
+- **k3s's lease requests timed out while it faulted its pages back in.** At the 15:24 exit,
+  which came after the tests had ended, the host still took 11,700 major faults a second.
+- **The OOM killer ran four times, between 15:09:42 and 15:20:54.** It killed Sonarr, a
+  Longhorn instance-manager, a `next-server` and one 58 MB `claude` process. Two fleet paths
+  ran below every burstable pod. The desktop sessions ran at 0 because `zprofile` held the
+  block. uid 1000's user manager ran at 100 because it started before its drop-in shipped.
+- **`HostMemoryAvailableLow` fired from 15:13 to 15:21, and a pod was OOM-killed inside it.**
+  That is the condition the ruling above set for systemd-oomd on `user.slice`
+  ([#10000](https://github.com/DanielH2018/server/issues/10000)).
+- **The worker cap does not reach these sessions.** `PYTEST_XDIST_AUTO_NUM_WORKERS` is unset in
+  an `ssh host cmd` shell, and `pytest -n 8` sets its own count anyway.
+
+The OOM bias alone cannot keep k3s running. The first exit came 92 seconds before the first OOM
+kill. The operator decides what keeps k3s in memory
+([#10126](https://github.com/DanielH2018/server/issues/10126)). A lower fleet cap, `MemoryMin` and
+systemd-oomd each contradict a ruling above. `MemorySwapMax=0` on k3s has none, but it takes k3s's
+last outlet for reclaim, which is the trade the *No `MemoryMin`* bullet rejects.
 
 ## The fleet's CPU weight
 

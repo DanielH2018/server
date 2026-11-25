@@ -182,7 +182,7 @@ is waited out first, as the bullets below say. A refused landing exits 75 with
   which PR is serial. A serial PR changes the `longhorn` or `metallb` role, which hold the
   forward-only pins, the `flux` role, the cluster-vars file, or a path in
   `live_limit.SERIAL_PATHS`.
-- `SERIAL_PATHS` holds `cluster/services.yml`, the service list. Every tag promotes with
+- `SERIAL_PATHS` holds `k8s/services.yml`, the service list. Every tag promotes with
   the bundle that list declares. One crashlooping new service fails the whole promotion and
   sets `DEPLOY_HOLD`, which reports `deploy-failed` to every landing that shared it. So
   every edit to the file lands alone, a field change on one service included: the operator
@@ -662,7 +662,7 @@ still running no longer holds your PR. Waiting on the tip cost six landings in t
 
 ## The promotion wait
 
-Every `containers_list` entry is in `cluster/services.yml`, so `promote`
+Every `containers_list` entry is in `k8s/services.yml`, so `promote`
 and Flux apply every tag, and a change to a host's package waits for that host
 (`scripts/deploy_tools/land_lib/host_wait.py:wait_for_hosts`). A `--tags` value that names no k8s
 entry at the merge commit ends the landing `deploy-failed` with the cause `tag-miss`, because

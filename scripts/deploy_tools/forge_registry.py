@@ -23,8 +23,7 @@ from deploy_tools.forge_transport import (
 REGISTRY = "ghcr.io"
 ARTIFACT = "danielh2018/homelab-manifests"
 
-# The manifest types `flux push artifact` writes, plus the index and Docker types, so a HEAD
-# answers with the digest of whatever the tag names rather than a 404 for an unlisted type.
+# Includes the index and Docker types so a HEAD returns the tag's digest rather than a 404.
 MANIFEST_ACCEPT = ", ".join(
     (
         "application/vnd.oci.image.manifest.v1+json",

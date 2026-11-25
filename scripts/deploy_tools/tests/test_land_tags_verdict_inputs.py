@@ -24,14 +24,10 @@ from lib.git_testing import git_out, init_repo
 from lib.repo_paths import REPO
 from deploy_tools.land_lib import tools
 
-# THE RETIREMENT CONVENTION: a retired role is DELETED, and the same PR names its tag here, as
-# a RENAME does for its old tag. A deleted role is indistinguishable from the reader dropping
-# an entry, so an explicit list is the only honest signal. An entry lasts one PR: once the
-# retiring commit is HEAD, the tag is gone from both sides and the line can go.
-#
-# Empty is the resting state, and it stays hand-written. Deriving it as `at_head - in_tree`
-# would make the census assert `lost <= lost`, which no dropped entry can fail. A test that
-# every entry is still declared at HEAD would fail the retiring PR on its own push.
+# A retired role is DELETED and the same PR names its tag here, as a RENAME does for its old tag; an
+# entry lasts one PR.
+# Keep it hand-written: deriving it as `at_head - in_tree` would make the census assert `lost <=
+# lost`.
 RETIRED_TAGS: frozenset[str] = frozenset()
 
 
@@ -48,8 +44,8 @@ def two_commit_repo(tmp_path):
     repo = tmp_path / "repo"
     inventory = repo / "inventory" / "host_vars"
     inventory.mkdir(parents=True)
-    (repo / "cluster").mkdir()
-    box = repo / "cluster" / "services.yml"
+    (repo / "k8s").mkdir()
+    box = repo / "k8s" / "services.yml"
     (inventory / "daniel-pi.yml").write_text("containers_list:\n  - name: not-a-host\n")
     init_repo(repo)
     box.write_text("containers_list:\n  - name: sonarr\n")
@@ -74,7 +70,7 @@ def test_the_same_tag_is_not_declared_at_the_earlier_ref(two_commit_repo):
 
 
 def test_a_host_vars_file_is_not_a_source_of_tags_at_a_ref(two_commit_repo):
-    """Only `cluster/services.yml` declares tags; a service list in a host file declares none."""
+    """Only `k8s/services.yml` declares tags; a service list in a host file declares none."""
     repo, _first, second = two_commit_repo
     assert "not-a-host" not in land_tags.service_tags_at(second, repo)
 

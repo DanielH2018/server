@@ -50,8 +50,7 @@ from lib.cli_help import ArgumentParser, refuse_help_under_describe
 # land.sh's exit code -> the state that ends the wait. Every code land.sh documents is here.
 _STATE_BY_RC = {0: "landed", 1: "failed", 64: "bad-arguments", 75: "gave-up"}
 
-# Each terminal state -> the exit code cc-wait ends with. `gave-up` is land.sh's 75, remapped;
-# `deferred` is the one 75 that is not a resume point (see the module docstring).
+# `gave-up` is land.sh's 75, remapped; `deferred` is the one 75 that is not a resume point.
 TERMINAL = {
     "landed": 0,
     "failed": 1,
@@ -110,8 +109,7 @@ def read(log: Path, now: float | None = None) -> dict:
     code = detach.recorded_code(log)
     if code is None:
         pid = detach.recorded_pid(log)
-        # The landing writes its code and then exits, so the code is read again after a pid
-        # that is gone: only a landing killed mid-run leaves neither.
+        # Only a landing killed mid-run leaves neither a live pid nor a recorded code.
         if pid is not None and not detach.alive(pid):
             code = detach.recorded_code(log)
             if code is None:
@@ -128,8 +126,7 @@ def read(log: Path, now: float | None = None) -> dict:
                 f"not changed for {detach.START_GRACE_S}s: it never started; read {log}",
             }
     if code is not None:
-        # A stop that names no verdict (bad arguments, 64) leaves its reason only on the
-        # `land:` line, so that line is the detail before the bare fallback.
+        # A stop that names no verdict (64) leaves its reason only on the `land:` line.
         error = detach.error_in(log)
         verdict = (
             detach.verdict_in(log)

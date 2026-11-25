@@ -147,22 +147,13 @@ def run_b2_spend(ns):
 
 # --- b2-deletions: charge a deletion that already happened -------------------------------------
 
-# Longhorn logs a pair per deleted backup — `Start deleting backup` (backups.go:302) and
-# `Complete deleting backup` (:310) — both naming the target URL, the backup ID and the volume:
-#
-#   msg="Complete deleting backup s3://bucket@region/longhorn?backup=backup-0ab05217dd5a4501
-#        &volume=pvc-c2ca0afb-74f0-4507-a29a-3cf40aac175d"
-#
-# Anchor on Complete, never Start. Counting both doubles every deletion, the pair straddles a
-# window edge routinely (one pair can span 03:30:52 to 03:33:39), and Complete is the line that
-# means the block-tree walk actually spent the transactions.
+# Anchor on Complete, never Start: counting both doubles every deletion, and Complete is the line
+# that spent the transactions.
 DELETE_COMPLETE_RE = re.compile(
     r"Complete deleting backup (?P<target>s3://[^\s?\"]+)\?"
     r"backup=(?P<backup>[A-Za-z0-9_-]+)&volume=(?P<volume>pvc-[0-9a-f-]{36})"
 )
 DELETIONS_LOGQL = '{namespace="longhorn-system"} |= "Complete deleting backup"'
-# Written by `b2-budget`, read here. Lives beside the ledger so a test that patches
-# B2_LEDGER_DIR relocates both.
 PRUNE_SNAPSHOT_NAME = "prune-costs.json"
 
 
@@ -214,8 +205,8 @@ def parse_backup_deletions(rows, target_url):
         if not m or m.group("target") != target_url:
             continue
         backup = m.group("backup")
-        # Loki can return the same line twice across overlapping chunks; a backup ID is deleted
-        # exactly once, so the ID is a safe key within one window as well as across runs.
+        # Loki can return a line twice across overlapping chunks; a backup ID is deleted once, so it
+        # is a safe key.
         if backup in seen:
             continue
         seen.add(backup)
@@ -417,16 +408,15 @@ def run_b2_deletions(ns):
         cluster=getattr(ns, "cluster", DEFAULT_CLUSTER)
     )
     if not target:
-        # Disarmed or absent. Declining beats matching everything: the R2 deletions in the same
-        # log stream would be charged to B2's cap.
+        # Disarmed or absent: decline, since the R2 deletions in the same log stream would be
+        # charged to B2's cap.
         print(format_declined_deletions())
         return 0
 
     rows = _rows_from_loki(core.fetch_parsed(url, resolve=pin))
     deletions = parse_backup_deletions(rows, target)
-    # Every ledger day the window can have written into. A deletion is charged to the UTC day it
-    # happened on, so a `--since` reaching back past midnight has already recorded into an
-    # earlier file — reading only today's would re-charge everything from before 00:00 UTC.
+    # A deletion is charged to its UTC day, so read every ledger day the window spans or
+    # pre-midnight deletions are re-charged.
     already = recorded_deletion_ids(ledger_days_spanning(seconds))
     fresh = [d for d in deletions if d["backup"] not in already]
     measured_at, prices = read_prune_snapshot()
@@ -441,12 +431,8 @@ def run_b2_deletions(ns):
                 % (d["backup"], d["volume"], measured_at or "unknown"),
                 day=deletion_utc_day(d["stamp"]),
             )
-        # An unpriced deletion gets a line too, at zero, with UNPRICED in the note. The zero
-        # understates the day's spend, which this module otherwise treats as the failure mode
-        # that matters — but the alternative understates it by exactly as much AND leaves no
-        # trace that a deletion happened at all, which is the gap this whole command closes.
-        # Recording it also stops a later run charging it against a snapshot taken after the
-        # fact, which would be a fabricated number rather than a missing one.
+        # An unpriced deletion is recorded at zero with UNPRICED: the zero understates spend, but
+        # omitting it leaves no trace, and a later snapshot would price it wrongly.
         for d in unpriced:
             record_b2_spend(
                 LEDGER_DELETIONS_TOOL,

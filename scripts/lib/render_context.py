@@ -12,7 +12,7 @@ The layers, weakest first::
 Role defaults are Ansible's weakest real layer, so an inventory key of the same name wins.
 ``homelab-render host`` renders a component of a host package, which has no role, and passes
 its ``component.yml`` ``defaults:`` map as ``component_defaults``, at the role defaults' place.
-``services`` is ``cluster/services.yml``'s entries, every k8s service, whichever host renders.
+``services`` is ``k8s/services.yml``'s entries, every k8s service, whichever host renders.
 ``hosts`` maps each host to its literal host_vars values (`_hosts`). ``overrides`` is what a
 caller supplies that no file holds: a stub a linter needs to be plausible, a value a caller
 role passes to a shared template, a ``container_item``.

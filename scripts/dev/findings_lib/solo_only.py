@@ -6,18 +6,11 @@ pipeline's own vocabulary. Kept out of `issue_model.py`, which sits at its
 module-length cap.
 """
 
-# Reach the sibling package directories: a directly-invoked script gets only its own
-# directory on sys.path, and pyproject's `pythonpath` is a pytest setting.
-
 import re
 
 from dev.findings_lib.issue_model import _TRAILER_RE, PR_REPO
 
-# The fan-out pipeline's own code, as an issue body names it: any `fanout*.py` (the
-# `fanout.py` entry point, the `fanout-stop.py` hook) or any file
-# under `fanout_lib/` at any depth, `fanout_lib/review/` included, with or without its directory. Bare names count because most of these
-# issues cite a file such as `fanout_place.py` with no path, which `cited_paths` never captures. The
-# lookbehind keeps `test_fanout_review.py` out: a test of the tooling does not run a batch.
+# The lookbehind keeps `test_fanout_review.py` out: a test of the tooling does not run a batch.
 _FANOUT_TOOLING_RE = re.compile(
     r"(?<![\w-])(?:[\w.-]+/)*(?:fanout[\w-]*\.py|fanout_lib/(?:[\w.-]+/)*[\w.-]+\.\w+)(?![\w/])"
 )

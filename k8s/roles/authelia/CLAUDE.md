@@ -138,7 +138,7 @@ the container in `templates/deployment.yaml.j2`. ENFORCED:
   only when the placeholder render places it, which
   `tests/services/test_authelia_claude_ui_user.py` holds to the manage flags.
 - **Flux applies authelia.** Its `containers_list`
-  entry is in `cluster/services.yml`, so nothing applies it by hand, and
+  entry is in `k8s/services.yml`, so nothing applies it by hand, and
   a merged change reaches the cluster when `promote` publishes and verifies the next bundle.
   A rotation
   lands without `--tags`, as

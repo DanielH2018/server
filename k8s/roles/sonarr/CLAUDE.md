@@ -19,7 +19,7 @@ conventions.
 - **`sonarr-config`** (2Gi, `longhorn`, backed up) holds the library DB and absolute
   root-folder paths; `media-data` is the shared claim (mounted, not owned).
 - **Flux applies it.** Its
-  `containers_list` entry is in `cluster/services.yml`, so nothing applies it by hand, and a merged change
+  `containers_list` entry is in `k8s/services.yml`, so nothing applies it by hand, and a merged change
   reaches the cluster when `promote` publishes and verifies the next bundle. Its image-bump PRs
   therefore draw no `land-wait` and no `probe.py health` run. authelia, media-volume and traefik
   are flux-owned too, so the Kustomization lists them in `dependsOn`, and Flux applies this tag
@@ -31,8 +31,11 @@ conventions.
   revision that changes sonarr writes the stateful hold, and `promote` does not reset `prod`,
   because the failed image may already have migrated the database. Nothing reverts the claim
   on its own: the operator follows the revert runbook in `docs/volume-snapshot-drills.md`.
-  `k8s_autodeploy: true` still lets Renovate automerge the image bump, which is safe for the
-  same reason: a bad swap can be reverted to the snapshot.
+- **The Sonarr pin is the v5 beta, and its bumps are never automerged.** LinuxServer publishes
+  v5 as `develop-5.0.0.N-lsNN`. A renovate.json rule matches only that channel and major, so a
+  v4 tag is never offered, and a bump waits for a tick on the dependency dashboard.
+  `k8s_autodeploy: true` governs the role's other pins. *Rolling back Sonarr* below has the way
+  back to v4, which needs the volume as well as the image.
 - **`media-data` is neither snapshotted nor reverted** (`k8s_autodeploy_unreverted_claims`). A
   revert can desync import/rename history from files left in place, recoverable by a library
   rescan.
@@ -78,8 +81,8 @@ conventions.
   `sonarr_k8s_air_date_guard_grace_hours` before its episode airs is removed from qBittorrent
   and blocklisted. Anime series, series tagged `allow-early` and episodes with no air date
   are skipped. `files/sonarr_air_date_guard.py` has the rule and the backtest behind each
-  exception. It is a stopgap: retire it once Sonarr v5 stable ships and a Release Profile
-  carries the same setting.
+  exception. It is a stopgap for #6292. Sonarr 5.0.0.3041 has the rule as a Release Profile's
+  air-date restriction, whose grace period is in hours and matches by tag, not by series type.
   - **Its gate Job runs a real pass on every sonarr revision.** `flux_cronjob_gates` copies
     it into `sonarr-verify` as a mutation gate, so Renovate's image bumps run it too. A
     second run removes nothing
@@ -96,3 +99,34 @@ conventions.
   `timeout` only from one (#5464). The template's `progressDeadlineSeconds` reads it through
   `sonarr_k8s_rollout_timeout`. The deadline has to move with the budget, or the rollout fails
   at the 600s Kubernetes default whatever the wait allows (#2370).
+
+## Rolling back Sonarr
+
+Sonarr v5 migrates the database one way: migration 207 moves the size limits into the quality
+profiles and drops their old columns. A rollback to v4 therefore puts back the volume and the
+image together. Every step is operator-only.
+
+1. Suspend `sonarr-snapshot`, then `sonarr`, with the command in step 1 of
+   `docs/volume-snapshot-drills.md`, *Branch 1*. On a stateful hold, follow that runbook
+   instead of the steps below.
+2. Take the digest8 from the pre-v5 snapshot's name. The move to v5 applied on 2026-11-25
+   (PR #10143) behind `autodeploy-sonarr-978c1de9-config-20261125215041`, so its digest8 is
+   `978c1de9`. List the names with
+   `kubectl -n longhorn-system get snapshots.longhorn.io | grep autodeploy-sonarr`. The Job
+   keeps the newest three, so three later sonarr revisions prune it.
+3. Revert the volume. Drop `--apply` first to see which snapshot the run names:
+
+    ```bash
+    sudo .venv/bin/python -B scripts/backup/volume_revert.py --service sonarr --namespace homelab \
+      --sha <digest8> --claim sonarr-config --apply
+    ```
+
+4. Land a revert of the pin to `4.0.20.3014-ls329`
+   (`sha256:44b06045a98bc1f237b9ffefc4b28dab64cb29305e4a2a94875ae93b5224e4cc`), with the
+   renovate.json rule reverted too.
+5. Once `homelab` holds that revision, resume `sonarr-snapshot`, then `sonarr`.
+
+If the snapshot is gone, restore the last B2 weekly backup taken before v5
+(`backup-656b27f018934d75`, 2026-11-21) instead; its age is the data lost. Sonarr's own
+zips under `/config/Backups` sit on the same volume, so they cover a bad database but not a
+lost volume. A v4 zip there restores through Sonarr's UI only on a v4 image.

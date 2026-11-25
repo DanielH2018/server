@@ -45,8 +45,6 @@ def test_a_holder_stacks_its_batch_only_once_it_holds_the_turn_again(batch_of):
 
 def test_a_holder_whose_turn_a_rate_limit_wait_lost_forms_no_batch(batch_of, capsys):
     ln, hub, _ = batch_of(drafts=("7",), fakes=Fakes(turn=[True, False]))
-    # The read before the turn fails for good, so the turn's rule reads the files again;
-    # GitHub refuses that read too, and after its wait another landing holds the turn.
     refusals = iter(range(gh_read.RATE_LIMIT_WAITS + 2))
 
     def gh_json(*args, **kwargs):
@@ -119,8 +117,6 @@ def test_a_holder_whose_own_wait_lost_the_turn_stacks_no_batch(batch_of, capsys)
     refused = []
 
     def gh_json(*args, **kwargs):
-        # GitHub refuses the holder's read of master's tip once; after that wait another
-        # landing holds the turn.
         if "repos/{owner}/{repo}/git/ref/heads/master" in args and not refused:
             refused.append(args)
             raise LIMITED
@@ -214,8 +210,6 @@ def test_a_holder_whose_own_wait_lost_the_turn_merges_no_member(batch_of, capsys
     refused = []
 
     def gh_json(*args, **kwargs):
-        # GitHub refuses the holder's read of its own merge commit once; after that wait
-        # another landing holds the turn.
         if "{merged, sha: .merge_commit_sha}" in args and not refused:
             refused.append(args)
             raise LIMITED

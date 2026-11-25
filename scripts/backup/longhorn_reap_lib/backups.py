@@ -104,8 +104,8 @@ from lib.k8s_objects import LonghornVolume
 
 NAMESPACE = "longhorn-system"
 KUBECTL_BIN = os.environ.get("LONGHORN_REAP_KUBECTL", "k3s kubectl")
-# Measured 2026-08-17: seven strays came to ~3,640 Class C, about 520 per deletion, against a
-# 2,500/day free tier. Four deletions is ~2,080 -- the most that fits in one day's cap.
+# Each deletion costs ~520 Class C against a 2,500/day free tier, so four is the most that fits in a
+# day.
 MAX_DELETIONS_DEFAULT = 4
 CLASS_C_PER_DELETION = 520
 
@@ -113,17 +113,14 @@ STRAYS_MODE = "strays"
 MIGRATED_CHAIN_MODE = "migrated-chain"
 SEEDS_MODE = "seeds"
 MODES = (STRAYS_MODE, MIGRATED_CHAIN_MODE, SEEDS_MODE)
-# The namespace whose PVCs the migrated-chain mode resolves a --claim against. Every workload
-# claim in this homelab lives here; overridable by env so a test needs no second flag.
 CLAIM_NAMESPACE = os.environ.get("LONGHORN_REAP_CLAIM_NAMESPACE", "homelab")
 
-# The admin kubeconfig is the same absolute path on every k3s host. Overridable via env purely
-# so a test can point this at a fixture instead of the real root-only file.
+# Env override so a test can point at a fixture.
 ADMIN_KUBECONFIG = os.environ.get(
     "LONGHORN_REAP_ADMIN_KUBECONFIG", "/etc/rancher/k3s/k3s.yaml"
 )
-# No fallback default. Left unset, a dry run must refuse rather than let KUBECONFIG stay whatever
-# the caller's shell happens to have -- which, run as root, is the admin one. See main().
+# No default: unset, a dry run must refuse rather than inherit the caller's KUBECONFIG, which as
+# root is the admin one.
 READONLY_KUBECONFIG = os.environ.get("LONGHORN_REAP_READONLY_KUBECONFIG", "")
 SUDO_HINT = logic.sudo_hint(logic.ENTRY_POINT, "backups")
 
@@ -392,11 +389,7 @@ def main(argv: list[str]) -> int:
         try:
             result = logic.classify_backups(backups, owner, existing)
         except logic.ReapAbort as e:
-            # classify_backups owns the empty-volume-list refusal because it is the first place
-            # the backup count is known. Uncaught it would reach the operator as a traceback,
-            # which is not the shape every other refusal in this function prints. `abort_reason`
-            # already writes the `ABORT: ` prefix into the message, so this prints it as it
-            # stands.
+            # `abort_reason` already writes the `ABORT: ` prefix, so print the message as it stands.
             print(str(e), file=sys.stderr)
             return 1
 
@@ -410,9 +403,8 @@ def main(argv: list[str]) -> int:
         selection_refusal = None
 
     elif args.mode == MIGRATED_CHAIN_MODE:
-        # Read the PVC collection for one namespace, not `get pvc <name>`: the collection comes
-        # back as the same `{"items": [...]}` body every other read here parses, so a claim that
-        # does not exist is an empty selection rather than an exit code to interpret.
+        # Read the PVC collection, not `get pvc <name>`: a missing claim is then an empty selection,
+        # not an exit code.
         claims = host_lib.kubectl_runner(
             KUBECTL_BIN, CLAIM_NAMESPACE, config.kubectl_timeout_s
         )
@@ -457,8 +449,7 @@ def main(argv: list[str]) -> int:
         buckets = [("superseded seed(s)", seeds.superseded, args.apply)]
         selection_refusal = seeds.refusal
 
-    # A floor refuses in a dry run too, after the plan is printed, so the dry run says whether
-    # an apply would be allowed instead of making the operator discover it under --apply.
+    # A floor refuses in a dry run too, so the dry run says whether an apply would be allowed.
     if selection_refusal:
         print(selection_refusal, file=sys.stderr)
         return 1

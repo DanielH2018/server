@@ -40,8 +40,8 @@ def test_no_command_or_healthcheck_is_clean():
 
 
 def test_environment_interpolation_is_not_flagged():
-    # the deliberate Compose ${GID-...} interpolation (crowdsec/traefik) lives in
-    # environment:, which the check intentionally does NOT inspect.
+    # The deliberate Compose `${GID-...}` interpolation lives in environment:, which the check
+    # intentionally does NOT inspect.
     docs = _docs({"environment": {"GID": "${GID-1000}"}, "command": "run --port 8080"})
     assert vct.find_dollar_escape_bugs(docs) == []
 
@@ -87,9 +87,8 @@ def test_tolerates_non_service_docs():
     )
 
 
-# Docker splits a LIST-form label on the first `=` only. A `:`-separated watchtower
-# label (e.g. `...depends-on:docker-proxy`) parses as a key with an EMPTY value, so the
-# directive silently no-ops. Renders cleanly + passes YAML lint, so nothing else caught it.
+# Docker splits a LIST-form label on the first `=` only; a `:`-separated watchtower label parses as
+# a key with an EMPTY value, so the directive silently no-ops.
 
 
 def test_watchtower_labels_with_equals_are_clean():
@@ -128,8 +127,8 @@ def test_non_watchtower_label_without_equals_is_ignored():
     assert vct.find_watchtower_label_bugs(docs) == []
 
 
-# The Pi package's services (H5.2b): `wg-easy` and `autoheal` are the named members, so a scan
-# that stopped reading the component fails here.
+# `wg-easy` and `autoheal` are the named members, so a scan that stopped reading the component fails
+# here.
 
 
 def test_run_passes_each_clean_packaged_service_to_ok(capsys):
@@ -178,11 +177,6 @@ def test_a_packaged_service_with_no_template_is_flagged(tmp_path):
     assert err and "no hosts/components/pi-compose/services/gone/" in err
 
 
-# Every service should drop ALL capabilities (defense in depth), adding back only what it
-# proves it needs. New services kept silently drifting out of this (n8n-runners/nut/unbound
-# post-dated the hardening sprints), so enforce it; documented exceptions go in CAP_DROP_EXEMPT.
-
-
 def test_cap_drop_all_is_clean():
     assert vct.find_missing_cap_drop(_docs({"cap_drop": ["ALL"]})) == []
 
@@ -207,10 +201,6 @@ def test_cap_drop_exempt_service_is_skipped():
 def test_cap_drop_walks_all_services():
     docs = [{"services": {"a": {"cap_drop": ["ALL"]}, "b": {"image": "x"}}}]
     assert vct.find_missing_cap_drop(docs) == ["b"]
-
-
-# The companion of cap_drop: [ALL]. Enforced symmetrically so a new service (or a copy-paste that
-# silently drops the security_opt line) can't omit it; documented exceptions go in NO_NEW_PRIV_EXEMPT.
 
 
 def test_no_new_privileges_is_clean():
@@ -251,19 +241,14 @@ def test_no_new_privileges_walks_all_services():
     assert vct.find_missing_no_new_privileges(docs) == ["b"]
 
 
-# ── image digest pinning ────────────────────────────────────────────────────────────────────
-# Paired ..._is_clean / ..._is_flagged, per CLAUDE.md: a guard seen only from the passing side
-# is indistinguishable from one that fires on nothing.
-
-
 def test_digest_pinned_image_is_clean():
     docs = _docs({"image": "nicolargo/glances:latest@sha256:" + "8e" * 32})
     assert vct.find_undigested_images(docs) == []
 
 
 def test_versioned_tag_without_digest_is_flagged():
-    # A real version tag is still a moving name, and still records nothing about which bytes
-    # ran. Being versioned is not being pinned — this is the case a laxer rule would miss.
+    # A version tag is still a moving name and records nothing about which bytes ran; versioned is
+    # not pinned.
     docs = _docs({"image": "quay.io/prometheus/node-exporter:v1.12.1"})
     assert vct.find_undigested_images(docs) == [
         ("svc", "quay.io/prometheus/node-exporter:v1.12.1")

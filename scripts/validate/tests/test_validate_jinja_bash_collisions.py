@@ -6,9 +6,8 @@ matching fails its own test rather than reading green on an empty result.
 
 from validate import jinja_bash_collisions as v
 
-# Two templates the census must contain, one per tree the scan has to reach. A glob that stops
-# matching returns an empty set, and an `all(...)` over nothing passes — so the floor below is
-# paired with names whose absence the failure can print.
+# A glob that stops matching returns an empty set and `all(...)` over nothing passes, so the floor
+# is paired with names whose absence the failure can print.
 CENSUS_MEMBERS = frozenset(
     {
         "k8s/roles/pihole/templates/configmap.yaml.j2",
@@ -40,8 +39,8 @@ def test_a_whitespace_controlled_raw_block_is_clean():
 
 
 def test_an_unterminated_raw_block_covers_to_end_of_file():
-    # Jinja's lexer swallows the rest of the file, so re-arming the rule here would report a
-    # collision in text that never reaches the comment lexer.
+    # Jinja's lexer swallows the rest of the file, so re-arming the rule would report a collision in
+    # text that never reaches the comment lexer.
     assert v.find_collisions("{% raw %}\necho ${#a}\necho ${#b}\n") == []
 
 

@@ -1,7 +1,7 @@
 """CI's pytest legs run a pull request's selection, and every other event's whole census.
 
 `scripts/dev/pytest_shard.py --changed-since` picks the modules and
-`scripts/dev/tests/test_pytest_shard_selection.py` covers it. This module holds the workflow
+`scripts/dev/tests/ci/test_pytest_shard_selection.py` covers it. This module holds the workflow
 to the things the script cannot see: which events hand it a base, that the plan diffs against
 the base its legs do on every event, that the matrix starts the legs `pytest_plan` planned and
 each leg hands the plan back, that a leg with an empty list skips every later step rather than

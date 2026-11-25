@@ -189,8 +189,10 @@ start**, so the deploy that changes it drops the RC host's sessions.
 pod. A slice cannot carry `OOMScoreAdjust=`, so the two fleet units set it, a
 `templates/fleet-user-manager-oom.conf.j2` drop-in sets it on each fleet uid's
 `user@<uid>.service`, and the agent's login profile writes it to `/proc/self/oom_score_adj`.
-A `lines:` block in `/etc/zsh/zprofile` writes it for the operator's zsh login, which is why
-the component depends on `zsh`.
+A `lines:` block in `/etc/zsh/zshenv` writes it for every zsh of the operator's, which is why
+the component depends on `zsh`. `zprofile` would miss the desktop app's sessions: they start
+from `ssh host cmd`, which is no login shell. Keep the comment-only `zprofile` block declared:
+the lines arm never removes a block, and aide-check explains only a declared one.
 That drop-in must not be named `50-homelab.conf`: reconcile restarts a unit whose
 `50-homelab.conf` changes, and restarting a user manager ends that user's sessions.
 ENFORCED: `hosts/tests/test_claude_fleet_slice_cap.py`.
@@ -731,7 +733,7 @@ server batch runs as `ubuntu` on `worktree-fanout-<batch>`.
   or that this lander will not land. A project with such a batch pages the operator once,
   on the second pass in a row that reads it so, through
   `fanout-alert@fanout-coordinator-<worktree>:no-coordinator.service`
-  (`scripts/dev/tests/test_fanout_coordinators.py::test_an_orphaned_project_pages_once_on_its_second_pass`).
+  (`scripts/dev/tests/fanout/test_fanout_coordinators.py::test_an_orphaned_project_pages_once_on_its_second_pass`).
   It starts no session and changes no worktree, lock, claim or PR. The record of what it
   paged is `~/.local/state/fanout-server-lander/coordinator-pages.json`. A failed read logs a
   line and never changes the exit status. `--dry-run` logs the page it would send.

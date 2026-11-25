@@ -20,9 +20,6 @@ OLD, NEW = "a" * 40, "b" * 40
 # The master commit OLD's green CI run tested it against, newer than OLD's merge base.
 TESTED = "c" * 40
 PREFIX = "worktree-claude+"
-# What master changed between the PR's merge base and the commit before its merge, as GitHub's
-# compare endpoint lists it, cut to the path that turned master red: a role CLAUDE.md the PR's
-# new size test read, in a directory the PR never touched.
 INCIDENT_2922 = [
     ".claude/hooks/session-health.py",
     "k8s/roles/claude-otel/CLAUDE.md",

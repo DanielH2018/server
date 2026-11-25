@@ -26,7 +26,6 @@ _ALLOW = {
     "scripts/deploy_tools/chained_timeout.py": (
         "test_chained_timeout.py parses the `#5868: <n>s` measurement out of this comment"
     ),
-    "scripts/dev/findings_lib/issue_model.py": "the issue-URL closing syntax is the example",
     "tests/_ratchet.py": "the `#NNNN` issue-reference syntax is the example",
     "tests/repo/test_role_claude_md.py": "its DECIDED paragraph cites the operator ruling",
 }

@@ -5,8 +5,6 @@ reopen, refuse, close — is a pure function of the issue it was handed. `--dry-
 prints what these return; `gh_calls.run` is the only thing that executes them.
 """
 
-# Reach the sibling package directories: a directly-invoked script gets only its own
-# directory on sys.path, and pyproject's `pythonpath` is a pytest setting.
 from datetime import date
 
 
@@ -299,10 +297,7 @@ def plan_claim(
     if not issue.is_open:
         raise ClaimRefused("closed — nothing to work")
     names = issue.labels
-    # An issue outside the register is invisible to `claims`, `reap` and `next` alike: all
-    # three read `load_issues`, which filters `--label claude`, while `_load_issue` does not.
-    # So a claim on one could only ever be cleared by a hand-typed `release`, and nothing
-    # would tell anyone it was there.
+    # Outside the register, `claims`, `reap` and `next` cannot see the claim, so refuse it.
     if "claude" not in names:
         raise ClaimRefused(
             "not in the register — no `claude` label, so `claims`, `reap` and `next` "
@@ -314,8 +309,6 @@ def plan_claim(
         )
     day = issue.not_before
     if day is not None and today < day:
-        # The date is the issue's own precondition, so a claim before it is a wasted
-        # dispatch. The way out is named, unlike `manual`'s.
         raise ClaimRefused(
             f"deferred until {day.isoformat()} — `defer {issue.number} --clear` lifts it"
         )
@@ -504,12 +497,7 @@ def plan_open(
     names = existing.labels
     terminal = sorted(NO_REOPEN & names)
     if not existing.is_open and terminal:
-        # Refuted means the finding was disproved; accepted means it is true and the operator
-        # chose to live with it. Either way re-filing it would reopen a decision already made,
-        # so the caller gets exit 3 and no writes are planned.
         return terminal[0], 3, []
-    # A review leftover is usually re-filed against the fix round's own issue, so it lands
-    # here rather than on the create path, and `next` would rank it as fresh.
     leftover = "review-leftover" in labels and "review-leftover" not in names
     relabel = (
         [["issue", "edit", n, "--add-label", "review-leftover"]] if leftover else []

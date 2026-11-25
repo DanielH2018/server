@@ -16,9 +16,8 @@ from lib.cli_help import ArgumentParser
 from lib.repo_paths import PRIMARY_CHECKOUT
 
 MERGE_POLL_S = 30
-# The master CI wait: ci.yml's longest `timeout-minutes` chain into the `prek` gate, 82 min
-# through host_packages, plus 10 min of runner queueing. A shorter budget times out
-# while CI can still go green. test_land_ci_budget.py holds it to the workflow.
+# ci.yml's longest `timeout-minutes` chain into the `prek` gate (82 min) plus 10 min of runner
+# queueing; test_land_ci_budget.py holds it to the workflow.
 CI_TIMEOUT_S = 5520
 
 PRIMARY_ENV = "LAND_PRIMARY"
@@ -34,16 +33,13 @@ REQUIRE_HEAD_ENV = "LAND_REQUIRE_HEAD"
 REQUIRE_APPROVAL_ENV = "LAND_REQUIRE_APPROVAL"
 # A user that cannot land a PR itself hands it to this lander unit (`handoff.py`).
 HANDOFF_ENV = "LAND_HANDOFF_UNIT"
-# Seconds after land.sh starts by which the landing must print its verdict. A lander whose
-# caller kills it at a fixed time sets it, so a long promotion wait ends `deferred` rather than
-# in a kill that writes no verdict.
+# Seconds after land.sh starts by which the landing must print its verdict, so a long promotion wait
+# ends `deferred` rather than in a kill.
 DEADLINE_ENV = "LAND_DEADLINE"
-# Seconds the weekly reboot's no-promotion window may add to LAND_DEADLINE's promotion wait,
-# so a landing that merges into the window waits out the deferral. A lander sets it
-# only when its caller's kill leaves that much room past LAND_DEADLINE.
+# Seconds the weekly reboot's no-promotion window may add to LAND_DEADLINE's promotion wait; set
+# only when the caller's kill leaves that room.
 WINDOW_GRACE_ENV = "LAND_WINDOW_GRACE"
-# A landing that takes the turn with a draft tests the drafts in the line with its own
-# (`batch.py`); `0` turns that off.
+# `0` turns off testing the drafts in the line with the turn holder's own PR.
 BATCH_ENV = "LAND_BATCH"
 _SHA = re.compile(r"[0-9a-f]{40}")
 
@@ -131,21 +127,17 @@ class Options:
     window_grace: int = 0
     # Where to write PENDING, then the landing's one-line result, for a unit to hand on.
     verdict_file: str = ""
-    # A PR's own CI runs the same `ci.yml` chain as master's, so a shorter wait can give up while
-    # that CI can still go green. A PR still open after this is not being merged, and the session
-    # should look at why.
+    # A PR's CI runs the same `ci.yml` chain as master's, so a shorter wait gives up while CI can
+    # still go green.
     merge_timeout: int = CI_TIMEOUT_S
     merge_poll: int = MERGE_POLL_S
     # `LAND_BATCH`: form a landing batch from the drafts in the line for the turn.
     batch: bool = True
     primary: Path = PRIMARY_CHECKOUT
-    # `--detach` forks the landing into a logfile this script names and returns; `cc-wait land
-    # <pr>` is the wait. It defaults off, so an invocation that omits it reaches the same code
-    # path as a plain landing.
+    # `--detach` forks the landing into a logfile and returns; `cc-wait land <pr>` is the wait.
     detach: bool = False
-    # Where `--detach` writes. Empty means `$CLAUDE_JOB_DIR/tmp`, or `detach.FALLBACK_LOG_DIR`
-    # outside a Claude session. The fan-out passes its worktree's `.fanout/`, which is where
-    # `fanout_lib/status.py` greps for the verdict.
+    # Empty means `$CLAUDE_JOB_DIR/tmp`, or `detach.FALLBACK_LOG_DIR` outside a Claude session. The
+    # fan-out passes `.fanout/`, which `fanout_lib/status.py` greps.
     log_dir: str = ""
     # `--regate <pr>`: re-run a merged pin bump's gates and re-post its status, no landing.
     regate: bool = False
@@ -169,9 +161,8 @@ def parse_args(argv: list[str] | None, description: str) -> Options:
         prog="land.sh",
         description=description,
         formatter_class=argparse.RawDescriptionHelpFormatter,
-        # Bash's `case` rejected any argument it didn't name outright, so `--su "text"`
-        # was `land: unknown argument '--su'`. argparse's default abbreviation matching
-        # would instead silently resolve it to `--subject` (or `--sin` to `--since`).
+        # `allow_abbrev=False`: argparse would otherwise resolve `--su` to `--subject` instead of
+        # rejecting it.
         allow_abbrev=False,
     )
     which = parser.add_mutually_exclusive_group(required=True)

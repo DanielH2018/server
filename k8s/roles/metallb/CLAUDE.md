@@ -14,7 +14,7 @@ probes stay green.
 - **Claims:** none (no PVC)
 <!-- /generated_from -->
 
-- **Flux applies it.** Its `containers_list` entry is in `cluster/services.yml`.
+- **Flux applies it.** Its `containers_list` entry is in `k8s/services.yml`.
   A rebuilt cluster gets it from the `metallb` Kustomization at step 6 of
   `docs/flux-deploy-plane.md`'s *Bootstrapping Flux on a rebuilt cluster*.
 - **The workloads are `files/upstream/metallb-native.yaml`**, upstream's file byte for byte,

@@ -69,11 +69,8 @@ from lib.detach_fork import (  # noqa: F401 -- the record readers are this modul
     recorded_pid,
 )
 
-# Where a detached landing writes. `$CLAUDE_JOB_DIR/tmp` is what the skill told sessions to
-# use, and it is per-session and cleaned up; this falls back to /tmp so the flag works from a
-# plain shell and from a systemd unit. The fallback is one directory per user, suffixed with
-# the user's name: the first landing creates it under its own umask, and the operator's 0007
-# made a shared one 0770, which shut the `claude` agent user out.
+# Fallback /tmp dir is per user, suffixed with the user's name: a shared one created under the
+# operator's 0007 umask shut the `claude` user out.
 LOG_DIR_ENV = "CLAUDE_JOB_DIR"
 FALLBACK_LOG_DIR = Path("/tmp/homelab-landings")
 
@@ -214,8 +211,8 @@ def _run_landing(
         os.dup2(out, 1)
         os.dup2(out, 2)
         close_inherited(keep)
-        # Before `landing` starts anything: a child started while the move is pending stays
-        # in the unit's cgroup.
+        # Before `landing` starts anything: a child started while the move is pending stays in the
+        # unit's cgroup.
         moved = leave_unit_cgroup(scope_prefix)
         if moved:
             print(moved, flush=True)

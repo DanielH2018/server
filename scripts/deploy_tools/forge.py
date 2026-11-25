@@ -63,30 +63,26 @@ REPOSITORY = "DanielH2018/server"
 # The repository variable that holds promotion: `none`, or why it is held (contract C2).
 HOLD_VARIABLE = "DEPLOY_HOLD"
 
-# The artifact as the Packages API names it: a container package owned by the user account,
-# not by the repository, so its path starts at /users.
+# A container package owned by the user account, not the repository, so the path starts at /users.
 PACKAGE_VERSIONS_URL = "https://api.github.com/users/DanielH2018/packages/container/homelab-manifests/versions"
-# The API's largest page. A listing longer than VERSION_PAGES_MAX pages is an error rather than
-# a truncation, because `prune` reads a digest missing from the listing as deleted.
+# A listing longer than VERSION_PAGES_MAX pages is an error, not a truncation: `prune` reads a
+# digest missing from the listing as deleted.
 VERSIONS_PER_PAGE = 100
 VERSION_PAGES_MAX = 300
 # A commit's statuses, 100 to a page: one page hid 13 of 113 and hung verify.
 STATUS_PAGE_SIZE, STATUS_PAGES_MAX = 100, 20
 # A commit's check-runs, 100 to a page, the same shape as its statuses.
 CHECK_RUN_PAGE_SIZE, CHECK_RUN_PAGES_MAX = 100, 20
-# Seconds between two deletes. GitHub's REST best practices ask for at least one second between
-# mutating requests, and a burst trips the secondary rate limit as a 403 that reads like a
-# permission error.
+# GitHub asks for at least one second between mutating requests; a burst trips a secondary-limit 403
+# that reads like a permission error.
 DELETE_PAUSE_S = 1.0
-# A delete answered with a 5xx is sent again, DELETE_TRIES in all, after DELETE_RETRY_PAUSE_S.
 # A retry of a delete that did land answers 404, which reads as already gone.
 DELETE_TRIES = 3
 DELETE_RETRY_PAUSE_S = 10.0
 # The rate-limit waits `variable` sits through before it reports the failure.
 RATE_LIMIT_WAITS = 3
 
-# The keyless identity the `promote` workflow signs under, and the one the OCIRepository
-# `homelab` checks. A signature from any other workflow or ref does not verify.
+# The keyless identity the `promote` workflow signs under, which the OCIRepository `homelab` checks.
 SIGNER_IDENTITY = "https://github.com/DanielH2018/server/.github/workflows/promote.yml@refs/heads/master"
 SIGNER_ISSUER = "https://token.actions.githubusercontent.com"
 
@@ -193,8 +189,8 @@ class GitHub:
                 raise ForgeError(f"check-runs for {sha}: the body has no total_count")
             runs.extend(found)
             if len(found) < CHECK_RUN_PAGE_SIZE or len(runs) >= total:
-                # A run created between two page reads can push the count past total_count;
-                # only a shortfall means a page went missing.
+                # A run created between page reads can push the count past total_count; only a
+                # shortfall means a page went missing.
                 if len(runs) < total:
                     raise ForgeError(
                         f"check-runs for {sha}: read {len(runs)} of {total} runs"

@@ -83,9 +83,7 @@ from diagnostics.probe_lib.promote_state import (
 from lib import host_modules  # noqa: F401
 from ci_verdict import WorkflowRun
 
-# deploy-ui's daemon on daniel-box: `deploy_ui_port` in
-# `hosts/components/deploy-ui/defaults/main.yml`. Its ufw rules admit every node IP, which
-# is what lets a session on daniel-server read it.
+# Its ufw rules admit every node IP, so a session on daniel-server can read it.
 DEPLOY_UI_PORT = 8790
 HTTP_TIMEOUT_S = 5
 SUBPROCESS_TIMEOUT_S = 30
@@ -144,8 +142,8 @@ def parse_worktrees(porcelain: str) -> list[dict]:
     return trees
 
 
-# An agent reads the blocker lines as instructions, so a line interpolates only a value
-# checked against a closed shape, such as a GitHub Actions run URL.
+# An agent reads blocker lines as instructions, so a line interpolates only a value checked against
+# a closed shape.
 _RUN_URL = re.compile(
     r"https://github\.com/[\w.-]{1,100}/[\w.-]{1,100}/actions/runs/\d{1,20}"
     r"(/attempts/\d{1,5})?",

@@ -21,7 +21,7 @@ steps, and this page describes each piece once its PR has merged.
   rules (*The file rules*), and renders every k8s render target of daniel-box.
 - `scripts/renderer/renderer_lib/context.py` builds the variables a role's templates see,
   and `renderer_lib/cluster.py` renders each tag and writes its directories.
-- `scripts/lib/container_entry.py:parse_containers_list` parses `cluster/services.yml`'s
+- `scripts/lib/container_entry.py:parse_containers_list` parses `k8s/services.yml`'s
   entries once, before any template reads `services`. It refuses a malformed entry, so a
   template filter never sees one.
 - `scripts/renderer/renderer_lib/task_inputs.py:include_vars` reads each role's render
@@ -188,7 +188,7 @@ A role's templates render with these variables, resolved for daniel-box:
 
 - role defaults, `group_vars/all.yml` and daniel-box's host_vars, in that rising precedence,
   with the stub file's variables over all of them;
-- `services`: every entry of `cluster/services.yml`, in the dependency order of
+- `services`: every entry of `k8s/services.yml`, in the dependency order of
   `toposort_containers`. `scripts/renderer/renderer_lib/context.py` sorts it with
   `scripts/renderer/template_filters/toposort.py`, and templates read that order. An entry's position
   in the list therefore does not matter: an ordering no template carries goes in

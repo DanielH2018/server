@@ -57,13 +57,9 @@ from lib.exit_codes import (
 from lib.b2 import B2Error, B2Session
 
 BACKUPSTORE_PREFIX = "longhorn/backupstore/volumes/"
-# A listing still unfinished after this many pages (200,000 versions) is refused rather than
-# acted on: a drain that deleted from a partial view could not verify it had finished.
+# A listing unfinished after this many pages is refused: a drain acting on a partial view cannot
+# verify it finished.
 MAX_PAGES = 200
-# How old a saved listing may be before an apply lists afresh. An hour covers an operator reading
-# the dry run, checking `probe.py b2-spend` and re-running, while bounding how far the store can
-# drift from what the listing shows. Drift is safe either way (see the reuse site in main), so
-# this is a cost/staleness trade, not a correctness gate.
 LISTING_MAX_AGE_SECONDS = 60 * 60
 LISTING_FORMAT = 1
 # B2's error code for deleting a version that is already gone.
@@ -251,9 +247,6 @@ def main(
         "--volumes",
         help="comma-separated Longhorn volume names whose prefixes to drain",
     )
-    # Twenty volume names is 820 characters, which no shell pastes reliably on one line. The
-    # allow-list is still explicit — the operator names and can read the file — only the way it
-    # arrives changes.
     source.add_argument(
         "--volumes-file",
         help="file of volume names, one per line or comma-separated",
@@ -311,11 +304,9 @@ def main(
 
         everything = None
         if args.apply and args.listing_file and not args.fresh_listing:
-            # Reusing the dry run's listing is safe when the store has moved since, because both
-            # kinds of drift fail closed. A version deleted since is reported by B2 as
-            # file_not_present, which the delete loop treats as already gone. A version created
-            # since is absent from the listing, so the verification re-read of the volume's own
-            # prefix finds it and raises DrainError. The re-read is never skipped.
+            # Reusing the dry run's listing is safe: deleted-since versions report file_not_present
+            # (treated as gone), created-since versions are caught by the verification re-read,
+            # which is never skipped.
             everything, why = load_listing(
                 args.listing_file, BACKUPSTORE_PREFIX, b2.bucket_id, b2.account_id
             )
@@ -360,15 +351,11 @@ def main(
                 try:
                     b2.delete(version["fileName"], version["fileId"])
                 except B2Error as exc:
-                    # Already gone is the state the delete was after, so it is not a failure.
-                    # Any other B2 error still stops the run.
                     if exc.code != FILE_NOT_PRESENT:
                         raise
                     print(f"  already gone: {version['fileId']}")
             deleted_any = True
-            # Verify by re-reading rather than by counting our own deletes: a drain that trusts
-            # its own tally already reported "1,676/1,676 deleted" here while leaving five
-            # volumes over retention.
+            # Verify by re-reading, not by counting our own deletes.
             still = b2.list_files(own_prefix, versions=True, max_pages=MAX_PAGES)
             if still:
                 raise DrainError(
@@ -385,8 +372,6 @@ def main(
         print(f"error: {exc}", file=sys.stderr)
         return B2_DRAIN_ERRORED
     finally:
-        # A listing that has driven deletes no longer describes the store, so the next apply
-        # must follow a new dry run rather than replay deletes of versions already gone.
         if args.apply and args.listing_file and deleted_any:
             _Path(args.listing_file).unlink(missing_ok=True)
 

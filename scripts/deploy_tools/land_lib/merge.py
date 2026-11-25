@@ -85,12 +85,9 @@ from lib import host_modules  # noqa: F401
 from ci_verdict import WorkflowRun
 
 
-# How long a head whose every CI run skipped as a draft waits for a ready run before the PR is
-# read for its draft state. GitHub registers the ready run seconds after the flip, and the
-# push-delivery grace await_ci allows is far wider.
+# GitHub registers the ready run seconds after the flip; the push-delivery grace await_ci allows is
+# far wider.
 DRAFT_SKIPPED_GRACE_S = await_ci.DROPPED_PUSH_GRACE_S
-# Takes the landing turn (`turn.held`), given the head of a draft that has had no CI run or
-# "": whether the landing holds it, and the seconds the call waited in line.
 type TakeTurn = Callable[[str], tuple[bool, int]]
 
 
@@ -404,8 +401,6 @@ def _start_run(
         head = view.get("headRefOid") or ""
         if view.get("state") != "OPEN" or not head:
             return "", in_turn, queued
-        # A rejoined head was made by its update while the PR was a draft, so every run on it
-        # skips, though the first may still be running.
         untested = rejoined or not _ready_run_on(ln, head)
         if not untested or in_turn or queued:
             break
@@ -432,15 +427,15 @@ def _start_run(
     except Outcome as exc:
         say(f"{exc.error}; going on with the run the PR has")
         moved = []
-    # Marked ready only after the update, so its one run starts on the updated head: a flip
-    # before it started a run on the stale head that the update's push cancelled.
+    # Marked ready only after the update, so the one run starts on the updated head, not one the
+    # update's push cancels.
     if draft:
         _mark_ready(ln)
     return (head if moved else ""), in_turn, queued
 
 
-# How long a draft's landing waits for GitHub to apply its branch update before it marks the
-# PR ready anyway; GitHub applies an update asynchronously, usually within seconds.
+# GitHub applies a branch update asynchronously, usually within seconds; wait this long before
+# marking the PR ready anyway.
 NEW_HEAD_WAIT_S = 60
 NEW_HEAD_POLL_S = 3
 
@@ -529,8 +524,6 @@ def await_merge(ln: Landing, take_turn: TakeTurn = _no_turn) -> None:
     rate_limited = OnChange(say)
     # await_ci's last answer when it was `pending`, for the merge-timeout message; else empty.
     ci_pending = ""
-    # The head this landing updated the branch from; empty until it does. `_start_run` can
-    # do so before the first poll.
     updated_from = ""
     # Whether this landing has asked for the turn, which `turn.held` answers only once.
     asked = False
@@ -560,16 +553,14 @@ def await_merge(ln: Landing, take_turn: TakeTurn = _no_turn) -> None:
     wait_ends_at = waited + o.merge_timeout
     if ln.batched_s:
         wait_ends_at = min(wait_ends_at, wait_cap)
-    # The head the pin gate last passed, so a merge GitHub refuses and the wait retries runs
-    # the gate and posts the status again only for a new head.
+    # The head the pin gate last passed, so a retried merge reruns the gate only for a new head.
     gated_head = ""
     # The forward-only pins that head bumps, whose land rule is read again before each retry.
     gated_pins: list[str] = []
     # The head await_ci last read as skipped in a draft, and the `waited` it was first read at.
     draft_head = ""
     draft_since = 0
-    # The head this landing converted to draft and back, once; a second draft-skip on
-    # it ends the wait, because another conversion would loop.
+    # A second draft-skip on this head ends the wait, because another conversion would loop.
     retriggered_head = ""
     # The head whose checks `stuck_checks` reads, and the `waited` of its next read.
     stuck_head = ""
@@ -589,8 +580,8 @@ def await_merge(ln: Landing, take_turn: TakeTurn = _no_turn) -> None:
                 Verdict.MERGE_CONFLICT,
             )
         head = view.get("headRefOid") or ""
-        # GitHub applies a branch update asynchronously. Until the head moves, the head on
-        # the PR is the stale one, and its green CI is what the update exists to discard.
+        # GitHub applies a branch update asynchronously: until the head moves, the stale head's
+        # green CI is what the update discards.
         if updated_from and head == updated_from:
             head = ""
         if ln.pinned_head and head and head != ln.pinned_head:
@@ -600,8 +591,6 @@ def await_merge(ln: Landing, take_turn: TakeTurn = _no_turn) -> None:
                     "the landing policy checked it; re-run so the new head is checked",
                     1,
                 )
-            # The move is this landing's own update, so the policy checks the new head and
-            # the merge is pinned to it.
             say(f"checking the landing policy again on the updated head {head[:8]}")
             ln.pinned_head = policy.check(ln)
             continue
@@ -613,8 +602,6 @@ def await_merge(ln: Landing, take_turn: TakeTurn = _no_turn) -> None:
             waited += in_line
             wait_ends_at = min(waited + o.merge_timeout, wait_cap)
             continue
-        # Seconds until GitHub's quota frees, when it refused this poll's CI read; else 0.
-        # `spent` names the quota that refusal spent, "" for a secondary limit.
         pause, spent = 0, ""
         if head:
             try:
@@ -660,8 +647,8 @@ def await_merge(ln: Landing, take_turn: TakeTurn = _no_turn) -> None:
                     1,
                     Verdict.PR_CI_RED,
                 )
-            # Only this landing's direct merge waits on await_ci's green, so only it can
-            # never fire on a disarmed gate; a merge made some other way keeps the wait.
+            # Only this landing's direct merge waits on await_ci's green, so only it can never fire
+            # on a disarmed gate.
             if rc == CI_DISARMED and ln.direct_merge_subject:
                 ln.die(disarmed(f" at {head[:8]}", f"PR #{o.pr} not merged"), 1)
             if rc == CI_GREEN and ln.direct_merge_subject and not in_turn:
@@ -720,9 +707,8 @@ def await_merge(ln: Landing, take_turn: TakeTurn = _no_turn) -> None:
                         Verdict.MERGE_TIMEOUT,
                     )
         if waited >= wait_ends_at:
-            # A run cancelled on the head never supplies a verdict on its own. A run
-            # skipped as a draft names its own remedy in await_ci's line, because a re-run of
-            # it skips again.
+            # A run skipped as a draft names its own remedy in await_ci's line, because a re-run
+            # skips again.
             if pause:
                 why = f"GitHub refused its CI read for the rate; the quota frees in {pause}s"
             elif draft_head:

@@ -31,8 +31,6 @@ def test_claims_line_carries_each_claims_tier_and_moves_with_the_tier_lists(tmp_
     (role / "defaults").mkdir()
     (role / "defaults" / "main.yml").write_text("---\n")
     (role / "tasks").mkdir()
-    # The three declaration shapes: inline PVC, a volume-claim include, a `claimName:`
-    # reference to a claim another role declares off Longhorn.
     (role / "templates" / "pvc.yaml.j2").write_text(
         "apiVersion: v1\nkind: PersistentVolumeClaim\nmetadata:\n  name: svc-cache\n"
         "spec:\n  storageClassName: longhorn-nobackup\n"

@@ -99,8 +99,6 @@ def checkout(tmp_path):
             "k8s/roles/loki-homelab/defaults/main.yml": LOKI_DEFAULTS,
         },
     )
-    # Prometheus's projects nest the binary under a versioned directory and list sums in
-    # sha256sums.txt. pint's tarball holds `pint-linux-<arch>` at its root, beside checksums.txt.
     releases = [
         (
             project,
@@ -128,8 +126,7 @@ def checkout(tmp_path):
         (served / sums).write_text(
             f"{hashlib.sha256(data).hexdigest()}  {base}.tar.gz\n"
         )
-    # Loki ships lokitool as a zip holding `lokitool-linux-<arch>` at its root, beside
-    # SHA256SUMS. The zip records no mode, so the script's install sets the executable bit.
+    # The zip records no mode, so the script's install sets the executable bit.
     served = tmp_path / "releases" / "loki"
     served.mkdir(parents=True)
     buf = io.BytesIO()

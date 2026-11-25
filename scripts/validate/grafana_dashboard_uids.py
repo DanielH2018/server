@@ -23,8 +23,6 @@ from lib.repo_paths import K8S_ROLES, REPO
 
 GRAFANA_ROLE = K8S_ROLES / "observability"
 DASHBOARDS_DIR = GRAFANA_ROLE / "files/dashboards"
-# Every template that provisions a datasource: the provisioning ConfigMap, and the Secret
-# that carries the warehouse datasource's password.
 DATASOURCES_TEMPLATES = (
     GRAFANA_ROLE / "templates/grafana.yaml.j2",
     GRAFANA_ROLE / "templates/grafana-warehouse-datasource-secret.yaml.j2",

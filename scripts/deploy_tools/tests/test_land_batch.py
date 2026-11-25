@@ -44,8 +44,6 @@ def test_the_drafts_in_the_line_are_tested_in_one_run_and_merged_in_order(
 def test_a_head_the_batch_tested_gets_no_branch_update_and_no_stale_base_check(
     batch_of,
 ):
-    # Master moved on a path every PR here changes. Without a batch, the turn updates the
-    # holder's branch before its run, and the merge wait updates a member's as stale.
     moved = Fakes(
         compare=[["docs/notes.md"]],
         pr_files=[{"filename": "docs/notes.md", "status": "modified"}],

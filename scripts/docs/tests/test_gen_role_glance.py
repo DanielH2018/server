@@ -140,8 +140,6 @@ def _copy_role(name: str, roles: Path) -> Path:
         if not (src / sub).is_dir():
             continue
         (dst / sub).mkdir(parents=True)
-        # Files only: a subdirectory such as sonarr's `templates/verify-inert/` is no input
-        # the glance reads.
         for path in (src / sub).glob("*"):
             if path.is_file():
                 (dst / sub / path.name).write_text(path.read_text())
@@ -154,8 +152,6 @@ def test_a_hand_edited_block_is_flagged(tmp_path):
     """The gate's rejecting half: a copy of sonarr is clean, and one changed value makes it stale."""
     entry = g.Estate().k8s_entries()["sonarr"]
     dst = _copy_role("sonarr", tmp_path / "roles")
-    # sonarr's claims resolve through two other roles: volume-claim's default StorageClass
-    # names `sonarr-config`'s class, and media-volume declares the `media-data` it mounts.
     _copy_role("volume-claim", tmp_path / "roles")
     _copy_role("media-volume", tmp_path / "roles")
     services = tmp_path / "services.yml"

@@ -25,10 +25,7 @@ from diagnostics.probe_lib.core import (
 
 from lib.repo_paths import REPO
 
-# Git-managed automation source (repo-root relative to this file) — the "expected" set for the
-# verify-automations post-deploy gate. The deployed config is copied from here verbatim, one file
-# per topic, merged by `!include_dir_merge_list` in configuration.yaml. `k8s`, not `containers`: HA
-# runs on the cluster. test_verify_automations_path_exists pins the path itself.
+# Under `k8s`, not `containers`: HA runs on the cluster.
 AUTOMATIONS_DIR = os.path.join(
     REPO,
     "k8s",
@@ -55,12 +52,9 @@ def automations_source_text(directory: str = AUTOMATIONS_DIR) -> str:
     return "\n".join(parts)
 
 
-# Top-level automation list items only: `- id: <slug>` anchored at column 0. A trigger/condition
-# `id:` is always indented, so it can never be mistaken for an automation id.
+# Anchored at column 0: a trigger or condition `id:` is always indented.
 _AUTOMATION_ID_RE = re.compile(r"^- id:\s*(\S+)", re.MULTILINE)
 
-# The generated snapshot of integration-provided entities that validate_ha_config.py resolves
-# config references against — the "expected" set for the verify-entities gate.
 EXTERNAL_ENTITIES_YAML = os.path.join(
     REPO,
     "k8s",
@@ -70,8 +64,7 @@ EXTERNAL_ENTITIES_YAML = os.path.join(
     "external_entities.yml",
 )
 
-# `  - domain.object_id` list items. Matched by regex rather than a YAML parse to keep probe.py
-# dependency-free, consistent with expected_automation_ids above.
+# Regex, not a YAML parse, to keep probe.py dependency-free.
 _SNAPSHOT_ENTITY_RE = re.compile(r"^\s*-\s+([a-z_]+\.[A-Za-z0-9_]+)\s*$", re.MULTILINE)
 
 
@@ -99,10 +92,7 @@ def ha_curl_config(token):
     return f'header = "Authorization: Bearer {token}"\n'
 
 
-# Minimal synchronous WebSocket client (stdlib only — no `websockets` dep)
-# Used ONLY for the read-only automation-trace API (Task: ha trace/why). A client text frame MUST
-# be masked (RFC 6455); server frames are unmasked. We assume one JSON message per unfragmented
-# frame, which is how HA sends WS responses.
+# A client text frame MUST be masked (RFC 6455); assumes one JSON message per unfragmented frame.
 
 
 def _ws_encode(payload: str) -> bytes:

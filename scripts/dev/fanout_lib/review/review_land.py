@@ -40,19 +40,13 @@ from dev.fanout_lib.land_result import (
 from dev.fanout_lib.review.processes import Runner
 
 LAND_SH = Path("scripts") / "deploy_tools" / "land.sh"
-# The verdicts after which an apply is owed or the deploy needs a look. The landing is
-# finished for every other verdict, or gave up at a resume point an operator re-runs.
 RESUME_VERDICTS = frozenset({"unhealthy", "deploy-failed", "needs-manual-apply"})
-# The verdict of a landing whose PR failed its own CI run. `review_ci.land_draft` resumes the
-# implementer for it.
 PR_CI_RED = "pr-ci-red"
-# The verdict of a landing whose PR conflicts with its base, which merged nothing.
-# `conflict_resume.land_resolving` resumes the implementer for it.
 MERGE_CONFLICT = "merge-conflict"
 # cc-wait's "still running, re-run this wait". land.sh's own give-up reaches it as 3.
 STILL_WAITING = 75
-# `land.sh` waits up to about an hour for CI and the promotion. A landing started with less than
-# this left on the unit's `RuntimeMaxSec` would outlive the wait on it, so it is skipped.
+# `land.sh` waits up to about an hour; a landing started with less than this left on `RuntimeMaxSec`
+# would outlive the wait, so it is skipped.
 LAND_MARGIN_S = 90 * 60
 # A wait started with less than this left on the unit's run time could be cut off mid-wait.
 WAIT_MARGIN_S = 600

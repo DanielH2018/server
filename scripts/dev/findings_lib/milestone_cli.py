@@ -17,9 +17,6 @@ import sys
 from collections.abc import Callable
 from functools import partial
 
-# Reach the sibling package directories: a directly-invoked script gets only its own
-# directory on sys.path, and pyproject's `pythonpath` is a pytest setting.
-
 
 from lib.exit_codes import FINDINGS_BAD_ARGS
 from lib.json_types import as_object_list

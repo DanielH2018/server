@@ -142,8 +142,6 @@ def header(sources: list[str]) -> str:
 
 def _longhorn() -> tuple[str, list[str]]:
     estate = Estate()
-    # The arm flags and schedules are `longhorn-backup`'s since H1.7b, the host check keys
-    # the k3s-host-checks component's.
     merged = {
         **estate.role_vars(K3S_SERVER),
         **estate.role_vars(K3S_HOST_CHECKS),
@@ -298,8 +296,6 @@ FRAGMENTS: dict[str, Callable[[], tuple[str, list[str]]]] = {
     "lan-addresses": _lan,
 }
 
-# The fragments built in the domain modules under fragments_lib/. A name may appear in only one table, so a
-# domain module cannot silently replace a fragment defined here or in another module.
 for _domain in (fragments_bridge, fragments_deploy, fragments_hosts, fragments_storage):
     _clash = set(FRAGMENTS) & set(_domain.FRAGMENTS)
     if _clash:

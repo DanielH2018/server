@@ -22,8 +22,6 @@ from collections.abc import Sequence
 
 from lib.cli_help import answer_help
 
-# An added or removed line (a single '+' or '-', not a '+++' or '---' header), an `image:` key,
-# capture a ref with a tag or digest.
 _IMAGE_RE = re.compile(
     r'^(?P<sign>\+(?!\+\+)|-(?!--))\s*image:\s*["\']?(?P<ref>[^\s"\':]+:[^\s"\']+)["\']?\s*$'
 )
@@ -57,8 +55,7 @@ def extract_changed_images(diff_text: str) -> list[str]:
 
 def main(argv: Sequence[str] = ()) -> None:
     """Print every image ref the diff on stdin adds and does not remove, one per line."""
-    # Before the read: the diff arrives on stdin, so `--help` would hang on a terminal
-    # rather than answer.
+    # Before the read: the diff arrives on stdin, so `--help` would hang on a terminal.
     answer_help(__doc__, list(argv))
     for img in extract_changed_images(sys.stdin.read()):
         print(img)

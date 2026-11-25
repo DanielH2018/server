@@ -163,8 +163,6 @@ def build(
     children = {
         "cluster-vars": _kustomization("cluster-vars", []),
         PLUMBING: _kustomization(PLUMBING, ["cluster-vars"]),
-        # A claim on kind's default StorageClass stays Pending until a pod mounts it, so the
-        # Kustomization cannot wait on its health.
         STATEFUL: _kustomization(STATEFUL, [PLUMBING], wait=False),
     }
     claim = _object(

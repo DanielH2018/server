@@ -26,8 +26,6 @@ from pathlib import Path
 
 # Not `*.json`: `manifest.all_runs` globs the root for run manifests.
 LOCK_NAME = "launch.lock"
-# How long a launch waits for another to finish. A launch holds the lock through its whole
-# placement loop, which a three-batch run finishes well inside this.
 WAIT_S = 120.0
 POLL_S = 0.2
 

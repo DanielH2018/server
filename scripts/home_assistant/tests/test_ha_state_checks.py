@@ -24,11 +24,7 @@ def test_override_writer_errors_clean_when_match():
     assert hsm.override_writer_errors(writes, expected) == []
 
 
-# The real bedroom_threshold_alert groups each category's sensors into ONE bad + ONE ok trigger
-# with a LIST entity_id (verified against files/automations/), so the tests model lists.
 def _threshold_config(declared, triggers, cfg=None):
-    # cfg=None -> no variables/cfg block (action: []), so the cfg-coverage check is skipped and the
-    # pre-existing pairing tests are unaffected. Pass a string to exercise threshold_cfg_coverage_errors.
     action = [{"variables": {"cfg": cfg}}] if cfg is not None else []
     return {
         "binary_sensor": declared,
@@ -219,7 +215,6 @@ def test_single_writer_errors_clean_when_all_sanctioned():
 
 
 def test_single_writer_flags_stale_sanctioned_entry():
-    # A sanctioned entry (module or exemption) that no longer writes the actuator is stale.
     writes = {"light.x": ["script.live_writer"]}
     sanctioned = {
         "light.x": {

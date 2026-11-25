@@ -82,7 +82,6 @@ from deploy_tools.promote_lib.verify_promotion import VerifyVerdict
 from renderer.renderer_lib.ordering import split_kind
 
 STATEFUL_FILE = "stateful.json"
-# What follows R's SHA in the DEPLOY_HOLD value `decide` writes for a suspended tag (D5.1d).
 SUSPENDED = "suspended-changed="
 # The environment variable the `post` job sets from the repository secret of the same name.
 WEBHOOK_ENV = "DEPLOY_DISCORD_WEBHOOK"
@@ -90,8 +89,6 @@ SOAK = "soak"
 RUNBOOK = "docs/volume-snapshot-drills.md"
 # The revert entry point each block runs. The post says when the checkout lacks it.
 REVERT_SCRIPT = "scripts/backup/volume_revert.py"
-# The longest line a header listing takes, so a list of every tag splits across lines that
-# each fit a message beside the marker.
 _LISTING_MAX = 1500
 _SNAPSHOT_JOB = re.compile(r"cluster/([a-z0-9][a-z0-9-]*)-snapshot/job\.yaml")
 _SOAK_DIR = f"cluster/{SOAK}/"
@@ -483,8 +480,8 @@ def messages(
         if len(whole) <= forge.DISCORD_MAX:
             posts.append(whole)
         else:
-            # A role with many claims splits between its prefixes and its block, never inside
-            # the block. A block still over the limit fails its send, so the run reads red.
+            # A role with many claims splits between its prefixes and its block, never inside the
+            # block.
             posts += [
                 "\n".join(info),
                 f"{marker} {tag}'s commands:\n" + block(tag, role, found.digest),

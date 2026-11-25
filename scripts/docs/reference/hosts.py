@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Generate docs/reference/hosts.md — the three hosts and what each one is.
 
-STATIC PARSING ONLY. Reads inventory/host_vars/*.yml, cluster/services.yml and each
+STATIC PARSING ONLY. Reads inventory/host_vars/*.yml, k8s/services.yml and each
 hosts/<host>/package.yml with yaml.safe_load and plain text parsing, never `ansible` or
 `kubectl`. A fresh worktree has
 no Ansible collections installed, and the inventory contains SOPS lookups that do not
@@ -27,9 +27,7 @@ from lib.repo_paths import HOST_VARS, K8S_SERVICES, REPO
 UNKNOWN = "unknown"
 HOSTS = REPO / "hosts"
 
-# What each host is for. Not derivable: the inventory records connection details and
-# feature flags, never a host's purpose. Kept here so the page states it, with the
-# derived facts alongside carrying whether it is still true.
+# Not derivable: the inventory records connection details and flags, never a host's purpose.
 ROLES = {
     "daniel-box": "k3s server / control-plane node. The host-package builder, the docs build, "
     "landings and most workloads run here.",

@@ -11,8 +11,6 @@ import re
 
 from lib.k8s_conditions import NO_CONDITION, ConditionStatus, parse_conditions
 
-# The `lastAppliedOriginRevision` form that names a commit: the `--revision` that `flux push
-# artifact` writes (contract C6). promote.py reads the same form off `prod`'s manifest.
 REVISION = re.compile(r"master@sha1:([0-9a-f]{40})")
 
 

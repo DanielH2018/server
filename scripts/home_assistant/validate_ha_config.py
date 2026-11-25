@@ -49,10 +49,8 @@ from lib.repo_paths import K8S_ROLES
 
 ROLE_DIR = K8S_ROLES / "home-assistant"
 
-# files/*.yaml copied as-is into the config dir root: configuration.yaml and the files it
-# pulls in by name. The deployed set is `home_assistant_root_files` in defaults/main.yml
-# (checked against the directory by shipped_dir_list_errors); this is the fallback for a
-# fixture role with no defaults file.
+# Fallback for a fixture role with no defaults file; the deployed set is
+# `home_assistant_root_files`, checked by shipped_dir_list_errors.
 _ROOT_FILES = [
     "configuration.yaml",
     "customize.yaml",
@@ -61,20 +59,12 @@ _ROOT_FILES = [
     "templates.yaml",
     "rest.yaml",
 ]
-# The root files an operator would reach for an Ansible var in (the domain, the LAN host).
-# Every shipped file is copied verbatim with lookup('file'), so a `{{ domain }}` here ships
-# literally, and HA renders an unknown name to an empty string without an error. A marker in
-# one of these is therefore rejected outright. The other root files carry HA Jinja by design
-# (templates.yaml, rest.yaml) and are syntax-checked instead.
+# Files are copied verbatim, so a `{{ domain }}` ships literally and HA renders it empty;
+# a marker here is rejected. Other root files carry HA Jinja by design and are syntax-checked.
 _NO_JINJA_FILES = ["configuration.yaml", "customize.yaml", "ui-lovelace.yaml"]
-# files/<dir>/ copied as-is as a directory. automations/ is pulled in by
-# `automation: !include_dir_merge_list automations/`, scripts/ by
-# `script: !include_dir_merge_named scripts/`; custom_templates/ holds the Jinja macros.
 _STATIC_DIRS = ["automations", "scripts", "custom_templates"]
 _ANSIBLE_MARKERS = ("{{", "{%")
-# Entry files to structurally load. configuration.yaml pulls in customize/automations/scenes/
-# scripts/templates/rest via !include; ui-lovelace.yaml is referenced by filename (not !include),
-# so it is loaded explicitly.
+# ui-lovelace.yaml is referenced by filename, not !include, so it is loaded explicitly.
 _ENTRY_FILES = ["configuration.yaml", "ui-lovelace.yaml"]
 
 
@@ -103,9 +93,8 @@ class HAConfigLoader(yaml.SafeLoader):
 
         HA rejects a genuine duplicate key; stock PyYAML silently keeps the last one.
         """
-        # Check the EXPLICIT keys only — skip YAML merge keys (`<<`) so a legal merge-override (an
-        # explicit key overriding a merged one) is not mis-flagged — then delegate to
-        # SafeConstructor, which processes the merge and builds the dict.
+        # Check EXPLICIT keys only, skipping merge keys (`<<`) so a legal merge-override is not
+        # mis-flagged.
         seen = set()
         for key_node, _ in node.value:
             if key_node.tag == "tag:yaml.org,2002:merge":
@@ -120,14 +109,11 @@ class HAConfigLoader(yaml.SafeLoader):
         return super().construct_mapping(node, deep=deep)
 
 
-# The !include targets the repo holds no copy of: the init container installs each at run time
-# from a Secret, as it does secrets.yaml. The Google service account is a multi-line credential
-# with a Secret of its own (templates/google-sa-secret.yaml.j2), so like a `!secret` value it
-# loads as a placeholder here. Any other missing target is still an error.
+# The init container installs these from a Secret at run time; they load as a placeholder here.
+# Any other missing target is an error.
 RUNTIME_INCLUDES = frozenset({"google_service_account.json"})
 
-# Tracks the !include files currently being loaded, so a cyclic include (a -> b -> a) raises a
-# clear error instead of blowing the stack with an uncaught RecursionError.
+# Detects a cyclic include (a -> b -> a) instead of an uncaught RecursionError.
 _INCLUDE_STACK: set[Path] = set()
 
 
@@ -406,11 +392,8 @@ def macro_bool_coercion_errors(trees: list, custom_templates_dir: Path) -> list[
     return errs
 
 
-# files/<dir> -> the defaults/main.yml variable listing the files the ConfigMap ships from
-# it ("" is files/ itself, the root of /config). HA merges whatever is in the directory, but
-# the pod sees only what the list names, so a file in the directory and not the list
-# validates clean and never reaches the pod. The check below makes that disagreement an
-# error.
+# HA merges whatever is in the directory but the pod sees only what the list names, so a file in the
+# directory and not the list validates clean and never reaches the pod.
 _SHIPPED_DIR_LISTS = {
     "": ("home_assistant_root_files", ("*.yaml", "*.py")),
     "automations": ("home_assistant_automation_files", ("*.yaml",)),
@@ -465,8 +448,6 @@ def validate(role_dir: Path = ROLE_DIR) -> list[str]:
             return [str(exc)]
         errors, trees = load_config(dest)
         errors += shipped_dir_list_errors(role_dir)
-        # Jinja-check whatever loaded (a structural failure drops that tree but the macro files
-        # are checked independently).
         errors += jinja_errors(trees, dest / "custom_templates")
         errors += macro_bool_coercion_errors(trees, dest / "custom_templates")
         # State-model guardrails (freshness, entity-resolution, override tripwire, structural).

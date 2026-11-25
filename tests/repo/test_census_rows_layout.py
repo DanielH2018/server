@@ -3,15 +3,15 @@
 `test_census_rows_python.py` holds the rows that judge what a module says. A row here judges
 which siblings a module sits beside, so its subject is a group of files rather than one, and
 its selector returns `Family` subjects rather than paths. The next row judges which import
-root a module reaches its siblings through. The last judges which module owns the review
-pipeline's `Runner` alias.
+root a module reaches its siblings through. One row judges how the test modules are grouped. The last
+judges which module owns the review pipeline's `Runner` alias.
 
 Run: uv run pytest tests/repo/test_census_rows_layout.py
 """
 
 import ast
 import re
-from collections import defaultdict
+from collections import Counter, defaultdict
 from collections.abc import Iterable
 from functools import cache
 from pathlib import PurePosixPath
@@ -248,6 +248,60 @@ def _bare_sibling_offence(subject: Subject) -> list[str]:
     return hits
 
 
+# ── Test modules grouped by subject ──────────────────────────────────────────────────
+
+SUITE_CAP = 40
+_TO_GROUP = "the Test suite organization milestone groups it"
+UNGROUPED_SUITES = dict.fromkeys(
+    (
+        ".claude/hooks/tests",
+        "hosts/lib/tests",
+        "hosts/tests",
+        "k8s/roles/monitor-bridge/tests",
+        "scripts/deploy_tools/tests",
+        "scripts/diagnostics/tests",
+        "scripts/lib/tests",
+        "scripts/renderer/tests",
+        "scripts/validate/tests",
+        "tests/k8s",
+        "tests/repo",
+        "tests/services",
+    ),
+    _TO_GROUP,
+)
+
+
+class Suite(Subject):
+    """One directory that holds test modules, with the test directories nested under it."""
+
+    def __init__(self, rel: str, modules: int, groups: Iterable[str] = ()):
+        super().__init__(rel, text="")
+        self.modules = modules
+        self.groups = tuple(groups)
+
+
+@cache
+def _suites() -> tuple[Suite, ...]:
+    """Every directory holding a test module directly, as one `Suite` each."""
+    counts = Counter(
+        str(PurePosixPath(rel).parent) for rel in tracked("test_*.py", "*/test_*.py")
+    )
+    return tuple(
+        Suite(rel, n, [d for d in sorted(counts) if d.startswith(f"{rel}/")])
+        for rel, n in sorted(counts.items())
+    )
+
+
+def _suite_offence(subject: Subject) -> list[str]:
+    assert isinstance(subject, Suite), subject.rel
+    if subject.groups:
+        names = ", ".join(PurePosixPath(g).name for g in subject.groups)
+        return [f"{subject.modules} test modules beside the groups {names}"]
+    if subject.modules > SUITE_CAP:
+        return [f"{subject.modules} test modules in one directory, cap {SUITE_CAP}"]
+    return []
+
+
 def _fixture(key: str, **members: str) -> Family:
     parent = key.rsplit("/", 1)[0]
     return Family(
@@ -356,6 +410,29 @@ ROWS = (
         ),
         min_matches=450,
         must_find=frozenset({"scripts/dev/fanout.py", "scripts/lib/host_modules.py"}),
+    ),
+    Census(
+        name="test-modules-are-grouped-by-subject",
+        reason=(
+            f"A directory holding more than {SUITE_CAP} test modules is grouped into subject "
+            "directories, and a grouped suite holds no test module beside its groups "
+            "(.claude/rules/python-layout.md). Move the new module into the group for its "
+            "subject, or split the directory. Shared `_*.py` helpers and `conftest.py` stay "
+            "at the suite's root."
+        ),
+        files=_suites,
+        offence=_suite_offence,
+        allow=UNGROUPED_SUITES,
+        red=(
+            Suite("scripts/x/tests", SUITE_CAP + 1),
+            Suite("scripts/x/tests", 1, ["scripts/x/tests/land"]),
+        ),
+        green=(
+            Suite("scripts/x/tests", SUITE_CAP),
+            Suite("scripts/x/tests/land", SUITE_CAP),
+        ),
+        min_matches=60,
+        must_find=frozenset({"scripts/dev/tests/fanout", "tests/deploy"}),
     ),
     Census(
         name="review-runner-is-defined-once",

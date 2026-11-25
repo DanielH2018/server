@@ -11,9 +11,6 @@ from datetime import date
 from pathlib import Path
 from typing import NewType
 
-# Reach the sibling package directories: a directly-invoked script gets only its own
-# directory on sys.path, and pyproject's `pythonpath` is a pytest setting.
-
 
 from dev.findings_lib.issue_model import DOMAINS, KINDS, SEVERITIES
 from lib.cli_help import ArgumentParser
@@ -498,10 +495,7 @@ def _parser(description: str) -> argparse.ArgumentParser:
     nx = sub.add_parser("next", help="issues a session may pick up, best first")
     _add_dry_run(nx, suppress=True)
     _add_repo(nx)
-    # No default bound. A default of 10 would truncate silently: an orchestrator reading
-    # `next --json` would take 10 rows for the whole free set while more sat invisible. A
-    # view blind to real state that does not announce it is a silent failure.
-    # `rows[:None]` returns every row, so the slice in `cmd_next` needs no branch.
+    # No default bound: a default limit would silently truncate the free set `next --json` returns.
     nx.add_argument(
         "--limit",
         type=int,

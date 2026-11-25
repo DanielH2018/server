@@ -21,7 +21,7 @@ gone, and only git history has it; `containers/n8n/data` is on disk.
 <!-- /generated_from -->
 
 - **Flux applies it.** Its `containers_list` entry is
-  in `cluster/services.yml`, so nothing applies it by hand. A merged change
+  in `k8s/services.yml`, so nothing applies it by hand. A merged change
   reaches the cluster when `promote` publishes and verifies the next bundle. `k8s_autodeploy: false`
   still stops Renovate's
   automerge of a base-digest bump.
@@ -60,7 +60,7 @@ gone, and only git history has it; `containers/n8n/data` is on disk.
   `n8n` reads Ready. `n8n_runner_auth_token` is the second layer, not the only one.
   `job.yaml.j2` carries the Job's caller census.
 - **Config in:** `defaults/main.yml` — images, sizing, claims and the automerge stance. The
-  `containers_list` entry in `cluster/services.yml` selects the role, and
+  `containers_list` entry in `k8s/services.yml` selects the role, and
   carries deploy metadata only.
 
 ## Notable

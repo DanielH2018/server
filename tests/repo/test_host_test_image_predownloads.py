@@ -13,12 +13,14 @@ from pathlib import Path
 
 from _helpers import REPO
 from lib import yaml_fast
+from validate.validate_lib.node_package_case import NODES, SERVER_PACKAGES
 
 HOSTS = REPO / "hosts"
 DOCKERFILE = HOSTS / "lib" / "tests" / "container" / "Dockerfile"
-# What the cases install: the real Pi package, the shared packages and every fixture variant.
+# What the cases install: every host's real package, the shared packages and every fixture variant.
 SPECS = (
     HOSTS / "daniel-pi" / "package.yml",
+    *(HOSTS / node / "package.yml" for node in NODES),
     *sorted((HOSTS / "packages").glob("*/package.yml")),
     *sorted((HOSTS / "lib" / "tests" / "container" / "fixture").glob("*.yml")),
 )
@@ -37,6 +39,7 @@ def _name(entry: str) -> str:
 def case_depends(specs=SPECS) -> dict[str, str]:
     """Each Depends a case installs, mapped to the spec that brought it in."""
     found = {name: "the renderer" for name in RENDERER_DEPENDS}
+    found |= dict.fromkeys(SERVER_PACKAGES, "node_package_case.SERVER_PACKAGES")
     for spec in specs:
         data = yaml_fast.safe_load(spec.read_text(encoding="utf-8")) or {}
         where = str(spec.relative_to(REPO) if spec.is_relative_to(REPO) else spec)
@@ -83,7 +86,15 @@ def test_the_image_holds_every_case_depends_is_clean() -> None:
 
 def test_the_census_finds_the_depends_it_must() -> None:
     depends = case_depends()
-    assert {"gh", "tree", "zram-tools", "python3"} <= depends.keys(), sorted(depends)
+    assert {
+        "gh",
+        "tree",
+        "zram-tools",
+        "python3",
+        "qemu-system-x86",
+        "ffmpeg",
+        "nftables",
+    } <= depends.keys(), sorted(depends)
     assert {"gh", "tree", "age", "linux-raspi"} <= image_packages(_dockerfile())
 
 

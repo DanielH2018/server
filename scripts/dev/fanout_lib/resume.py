@@ -56,12 +56,11 @@ from lib.exit_codes import (
     FANOUT_PLACE_OK,
 )
 
-# How many times one batch is restarted for a conflict. The pipeline's own resume is one per
-# unit, and a PR that conflicts a third time is changing files master keeps changing.
+# A PR that conflicts a third time is changing files master keeps changing.
 MAX_RESUMES = 2
 READ_TIMEOUT_S = 60.0
-# `autoland.STATE_DIR / "logs"`, restated because `place clean-one` imports this module
-# with no site-packages, which `autoland`'s imports need.
+# Restated from `autoland.STATE_DIR / "logs"` because `place clean-one` imports this module with no
+# site-packages.
 LANDER_LOGS = Path.home() / ".local" / "state" / "fanout-server-lander" / "logs"
 LOCK_TIMEOUT_S = 30.0
 _STAMP = re.compile(r"land\d+-(.+)\.log$")
@@ -69,9 +68,8 @@ _ACTIVE = re.compile(r"(?m)^ActiveState=(\S+)")
 _SECTION = re.compile(r"(?m)^--- (tree|landing|conflicts)\n")
 _LIVE = frozenset({"active", "activating", "deactivating"})
 
-# What a `place resume` unit's snapshot holds beyond `launch.SNAPSHOT_PATHS`: the files a pipeline
-# of this repo reads from its own source root at start (`batch_run.BatchRun.__init__`), and
-# the trees its held hooks read (`held_hooks.HELD_TREES`).
+# Beyond `launch.SNAPSHOT_PATHS`: the files a pipeline reads from its source root at start
+# (`batch_run.BatchRun.__init__`) and the trees its held hooks read.
 RESUME_SNAPSHOT_PATHS = (
     *launch_mod.SNAPSHOT_PATHS,
     ".claude/settings.json",

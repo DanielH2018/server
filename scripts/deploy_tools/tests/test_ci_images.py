@@ -22,8 +22,6 @@ from renderer.renderer_lib import derived, images
 
 DIGEST = "sha256:" + "ab" * 32
 SERVED = Answer(200, DIGEST)
-# Members the real render must yield: the multi-file context, and nut, whose LAN source is
-# the reason D5.4b keeps it last.
 NAMED = {"homelab-mcp", "nut"}
 
 
@@ -164,8 +162,8 @@ def test_a_failed_build_fails_its_image_and_the_others_still_build(out):
 
 
 def test_a_push_served_at_another_digest_than_the_build_metadata_names_is_success(out):
-    # The default `docker` driver's metadata digest can be the config digest, not the
-    # manifest digest GHCR serves.
+    # The default `docker` driver's metadata digest can be the config digest, not the manifest
+    # digest GHCR serves.
     fakes = Fakes(Answer(404), after=Answer(200, "sha256:" + "cd" * 32))
     assert _push(out, fakes) == []
 

@@ -46,8 +46,6 @@ def test_ha_base_builds_on_ha_host(monkeypatch):
 
 
 def test_ha_resolve_pins_vip(monkeypatch):
-    # Since the bridge teardown (slice-7 BT4) host-shell DNS for the .local name rides the
-    # Cloudflare wildcard, so every HA call pins the name to the ingress VIP.
     monkeypatch.setattr(core, "domain", lambda: "example.test")
     monkeypatch.setattr(core, "metallb_vip", lambda: "10.0.0.240")
     assert core.ha_resolve() == "home-assistant.local.example.test:443:10.0.0.240"
@@ -97,8 +95,7 @@ def _auto(
 _HA_STATES = [
     {"entity_id": "fan.tower_fan", "state": "on", "attributes": {}},
     _auto("automation.bedroom_presence_on", "presence_1", "Bedroom Presence On"),
-    # The CLAUDE.md trap: alias-slug != id. The id is bedroom_fan_temperature,
-    # but the entity_id (derived from the alias) is ..._control.
+    # alias-slug != id: the id is bedroom_fan_temperature, the entity_id is ..._control.
     _auto(
         "automation.bedroom_fan_temperature_control",
         "bedroom_fan_temperature",
@@ -220,8 +217,6 @@ def test_ws_read_frame_decodes_extended_length():
 
 
 _TRACE_BLOCKED = {
-    # Real HA trace/get shape (confirmed against live daniel-server): `trigger`
-    # is a plain string description, NOT a dict.
     "trigger": "state of binary_sensor.aqara_fp300_presence",
     "trace": {
         "trigger/0": [{"path": "trigger/0", "result": {}}],
@@ -305,8 +300,6 @@ def test_automation_load_errors_clean_when_all_loaded():
 
 
 def test_automation_load_errors_tolerates_missing_attributes():
-    # A live entity with attributes null or absent must be skipped, not raise — exercises the
-    # `(a.get("attributes") or {})` guard. (No expected id matches them, so they're ignored.)
     from diagnostics.probe_lib.ha import automation_load_errors
 
     expected = {"a"}
@@ -404,15 +397,12 @@ def test_automations_source_text_concatenates_every_file(tmp_path):
 
 
 def test_tls_context_states_the_protocol_floor():
-    # The floor is stated rather than inherited, so a platform whose default drops below 1.2
-    # cannot weaken this client silently. See ADR-0016.
     import ssl
 
     assert ha.tls_context().minimum_version == ssl.TLSVersion.TLSv1_2
 
 
 # `ha_curl_argv` has no `--fail`, so a rejected token reaches every HA read as a 200 body.
-# The stub sits at the process boundary, so `ha_get`, `ha_base` and `ha_token` all run for real.
 def _sops_ok_curl_401(argv, **_kwargs):
     stdout = "example.test" if argv[0] == "sops" else "401: Unauthorized"
     return subprocess.CompletedProcess(argv, 0, stdout=stdout, stderr="")

@@ -76,9 +76,8 @@ def _tracking_undefined(seen: dict[str, set[str]], template: str):
             return super().__str__()
 
         def __bool__(self) -> bool:
-            # `{% if undefined %}` is an error under Ansible's Templar, so it is one here too.
-            # `x | default(y)` and `x is defined` inspect the type without going through this,
-            # which is why those idioms are not flagged.
+            # `{% if undefined %}` is an error under Ansible's Templar, so it is one here;
+            # `default(y)` and `is defined` do not go through this and are not flagged.
             self._record()
             return False
 

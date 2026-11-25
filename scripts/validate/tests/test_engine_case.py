@@ -142,11 +142,6 @@ def test_the_red_fixture_is_the_real_pi_package_with_one_exact_depends_on_b(
     }
 
 
-# What the red fixture records. `red_outcome(held, after, apt_ok)` takes the held version A,
-# docker-ce's installed version after the red package's install ("" when not installed), and
-# whether apt exited 0.
-
-
 def test_an_install_apt_refused_with_the_engine_left_at_a_is_recorded_as_refused():
     red_outcome = _function(RED_OUTCOME)
     assert red_outcome("1.0", "1.0", False) == REFUSED
@@ -161,15 +156,11 @@ def test_an_install_that_left_the_engine_at_another_version_is_recorded_as_moved
 
 
 def test_an_install_apt_accepted_with_the_engine_still_at_a_fails_the_case():
-    # Depends (= B) cannot be met at A, so a green install means the red fixture never reached
-    # apt's resolution of the hold.
+    # Depends (= B) cannot be met at A, so a green install means the red fixture never reached apt's
+    # resolution of the hold.
     red_outcome = _function(RED_OUTCOME)
     with pytest.raises(CaseFailed):
         red_outcome("1.0", "1.0", True)
-
-
-# The green assertion. `expect_held(held, installed, prom)` takes the held version A, what
-# `dpkg-query -W docker-ce` read after the updater run, and homelab_host.prom's text.
 
 
 def test_the_engine_at_a_with_pending_one_passes():
@@ -203,8 +194,8 @@ def test_the_host_packages_job_runs_the_engine_case():
 
 
 def test_case_inputs_names_the_engine_case():
-    # The census in tests/repo/ reaches a case module only once main imports it, so a
-    # PR that changes only this case would skip the cases until then.
+    # The census reaches a case module only once main imports it, so a PR changing only this case
+    # would skip the cases until then.
     jobs = yaml_fast.safe_load((fx.REPO / CI_WORKFLOW).read_text())["jobs"]
     (render,) = [
         step
@@ -273,10 +264,6 @@ def test_the_case_holds_the_engine_runs_the_updater_and_reads_dpkg():
         ("dpkg-query", "true"),
     ):
         assert not _runs_the_real_tools(source.replace(word, mutant)), word
-
-
-# What the reviewed case adds: the companions that make pending discriminate, and the control
-# simulation's reader.
 
 
 def test_every_other_pinned_package_is_built_at_its_pin(tmp_path, pi):

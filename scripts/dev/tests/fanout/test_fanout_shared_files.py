@@ -1,0 +1,232 @@
+"""The file-level collision check: two batches citing one file are refused at launch."""
+
+import socket
+
+from dev.findings_lib.issue_model import Issue, IssueState
+from dev.fanout_lib.launch_gates import refuse_shared_files, shared_files
+from dev.fanout_lib.place import main
+from _fanout_fakes import HOST_KEY, fake_tools, ok
+
+HEADROOM = f"1\n12884901888\n1\n12884901888\n0\n{HOST_KEY}\n"
+
+# The shape: three issues under one domain label, two batches, one shared script.
+ALERTS = "scripts/diagnostics/probe_lib/alerts.py"
+ISSUES = [
+    Issue(
+        1780,
+        "bridge",
+        IssueState.OPEN,
+        body=f"`{ALERTS}` and k8s/roles/monitor-bridge/",
+        labels=frozenset({"claude"}),
+    ),
+    Issue(
+        1784,
+        "discord",
+        IssueState.OPEN,
+        body="k8s/roles/monitor-bridge/defaults/main.yml",
+        labels=frozenset({"claude"}),
+    ),
+    Issue(
+        1782,
+        "probe",
+        IssueState.OPEN,
+        body=f'  File "{ALERTS}", line 336, in run_alerts',
+        labels=frozenset({"claude"}),
+    ),
+]
+
+
+def _launch(tools, tmp_path, *args):
+    return main(
+        [
+            "launch",
+            *args,
+            "--host",
+            "daniel-box",
+            "--manifest-root",
+            str(tmp_path),
+        ],
+        tools,
+    )
+
+
+def test_shared_files_names_the_file_and_every_batch_that_cites_it():
+    batches = {"1780-1784": [1780, 1784], "1782": [1782]}
+    issues = {i.number: i for i in ISSUES}
+    assert shared_files(batches, issues) == [(ALERTS, ["1780-1784", "1782"])]
+
+
+def test_a_fragment_collides_with_the_full_path_it_names():
+    """`probe_lib/alerts.py` and the full path are one file to two agents."""
+    issues = {
+        1: Issue(
+            1,
+            "a",
+            IssueState.OPEN,
+            body=f"`{ALERTS}` drops the row",
+            labels=frozenset({"claude"}),
+        ),
+        2: Issue(
+            2,
+            "b",
+            IssueState.OPEN,
+            body="`probe_lib/alerts.py:336` drops it too",
+            labels=frozenset({"claude"}),
+        ),
+    }
+    batches = {"1": [1], "2": [2]}
+    assert shared_files(batches, issues, tracked={ALERTS}) == [(ALERTS, ["1", "2"])]
+
+
+def test_shared_files_is_clean_when_the_shared_script_sits_in_one_batch():
+    batches = {"1780-1782": [1780, 1782], "1784": [1784]}
+    issues = {i.number: i for i in ISSUES}
+    assert shared_files(batches, issues) == []
+
+
+def test_launch_refuses_two_batches_that_cite_one_file_before_any_ssh(tmp_path, capsys):
+    tools, run = fake_tools(answers={"daniel-box": ok(HEADROOM)}, issues=ISSUES)
+    assert _launch(tools, tmp_path, "--batch", "1780,1784", "--batch", "1782") == 1
+    assert not run.calls
+    err = capsys.readouterr().err
+    assert f"batches 1780-1784, 1782 all cite {ALERTS}" in err
+    assert f"regroup them into one batch, or pass --allow-shared-file {ALERTS}" in err
+    assert not list(tmp_path.glob("*.json"))
+
+
+def test_the_launch_gate_refuses_a_full_path_and_the_bare_filename_that_names_it(
+    capsys,
+):
+    issues = {
+        1: Issue(
+            1,
+            "a",
+            IssueState.OPEN,
+            body=f"`{ALERTS}` drops the row",
+            labels=frozenset({"claude"}),
+        ),
+        2: Issue(
+            2,
+            "b",
+            IssueState.OPEN,
+            body="`alerts.py` drops it too",
+            labels=frozenset({"claude"}),
+        ),
+    }
+    batches = {"1": [1], "2": [2]}
+    assert refuse_shared_files(batches, issues, (), tracked={ALERTS})
+    assert f"batches 1, 2 all cite {ALERTS}" in capsys.readouterr().err
+
+
+def test_launch_proceeds_when_the_shared_script_is_grouped_into_one_batch(tmp_path):
+    tools, run = fake_tools(answers={"daniel-box": ok(HEADROOM)}, issues=ISSUES)
+    assert _launch(tools, tmp_path, "--batch", "1780,1782", "--batch", "1784") == 0
+    assert [c for c in run.calls if "worktree add" in c[1]]
+
+
+def test_allow_shared_file_excuses_the_named_file_only(tmp_path, capsys, monkeypatch):
+    monkeypatch.setattr("sys.argv", ["fanout.py"])
+    doc = "docs/claude-tooling.md"
+    issues = [
+        Issue(
+            1780,
+            "bridge",
+            IssueState.OPEN,
+            body=f"`{ALERTS}` and `{doc}`",
+            labels=frozenset({"claude"}),
+        ),
+        Issue(
+            1782,
+            "probe",
+            IssueState.OPEN,
+            body=f"`{ALERTS}` and `{doc}`",
+            labels=frozenset({"claude"}),
+        ),
+    ]
+    tools, run = fake_tools(answers={"daniel-box": ok(HEADROOM)}, issues=issues)
+    assert (
+        _launch(
+            tools,
+            tmp_path,
+            "--batch",
+            "1780",
+            "--batch",
+            "1782",
+            "--allow-shared-file",
+            doc,
+        )
+        == 1
+    )
+    err = capsys.readouterr().err
+    # One run prints both, under argparse's prefix rather than a hand-written `launch:`.
+    assert f"fanout.py: warning: batches 1780, 1782 all cite {doc} — allowed by" in err
+    assert f"fanout.py: error: batches 1780, 1782 all cite {ALERTS} — two agents" in err
+    assert not run.calls
+
+    tools, run = fake_tools(answers={"daniel-box": ok(HEADROOM)}, issues=issues)
+    assert (
+        _launch(
+            tools,
+            tmp_path,
+            "--batch",
+            "1780",
+            "--batch",
+            "1782",
+            "--allow-shared-file",
+            doc,
+            "--allow-shared-file",
+            ALERTS,
+        )
+        == 0
+    )
+    assert [c for c in run.calls if "worktree add" in c[1]]
+
+
+def test_launch_refuses_a_batch_holding_a_fanout_tooling_issue_before_any_ssh(
+    tmp_path, capsys
+):
+    issues = [
+        *ISSUES,
+        Issue(
+            3959,
+            "tooling",
+            IssueState.OPEN,
+            body="`fanout_place.py launch` refuses",
+            labels=frozenset({"claude"}),
+        ),
+    ]
+    tools, run = fake_tools(answers={"daniel-box": ok(HEADROOM)}, issues=issues)
+    assert _launch(tools, tmp_path, "--batch", "1784,3959") == 1
+    assert not run.calls
+    err = capsys.readouterr().err
+    assert "batch 1784-3959: #3959 cites the fan-out tooling (fanout_place.py)" in err
+    assert not list(tmp_path.glob("*.json"))
+
+
+def test_launch_accepts_another_repos_issue_that_only_mentions_the_fanout_tooling(
+    tmp_path,
+):
+    """The clean half of the refusal above: a dotfiles batch cannot edit this repo."""
+    here = socket.gethostname()
+    issue = Issue(
+        838,
+        "hook",
+        IssueState.OPEN,
+        body="like the counter in `fanout-stop.py`",
+        labels=frozenset({"claude"}),
+    )
+    tools, _ = fake_tools(answers={here: ok(HEADROOM)}, issues=[issue])
+    argv = ["launch", "--repo", "DanielH2018/dotfiles", "--batch", "838"]
+    assert main([*argv, "--manifest-root", str(tmp_path)], tools) == 0
+    assert list(tmp_path.glob("*.json"))
+
+
+def test_the_triage_step_names_the_file_level_collision_check():
+    """The rule lives in the skill the orchestrator reads, so its triage step has to name
+    the field the check reads and the flag that overrides it, or the check is skipped."""
+    from lib.repo_paths import REPO
+
+    skill = (REPO / ".claude/skills/issue-fanout/SKILL.md").read_text()
+    triage = skill[skill.index("## 1. Triage") : skill.index("## 2.")]
+    assert "`paths`" in triage
+    assert "--allow-shared-file" in triage

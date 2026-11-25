@@ -19,21 +19,14 @@ import hashlib
 import json
 import re
 
-# Reach `scripts/lib`: this package is imported through `scripts/dev` (the bootstrap in
-# transport.py and clean.py), but a bootstrap belongs to the module that needs it.
-
 
 from lib.gh import gh
 
 GH_TIMEOUT_S = 30.0
-# An OpenSSH public key line: type, base64 blob, then an optional comment this ignores —
-# the comment is per-host text ("ubuntu@daniel-server-ansible") and no part of the identity
-# GitHub matches on. The three type prefixes are every family GitHub accepts as a signing
-# key: `ssh-ed25519`/`ssh-rsa`, `ecdsa-sha2-nistp256`, and the `sk-` hardware-backed pair. A
-# rotation to a type this missed would empty the registered set and refuse every host with a
-# misleading reason, so the prefixes are named rather than left as `ssh-`. They stay anchored
-# rather than widened to any word: a bare `[A-Za-z0-9@.-]+` type would read `-----BEGIN` as a
-# key type and let a private-key read through.
+# An OpenSSH public key line; the trailing comment is per-host text and no part of the identity
+# GitHub matches. The type prefixes are named, not `ssh-`, because a type this missed would empty
+# the registered set and refuse every host misleadingly. They stay anchored: a bare
+# `[A-Za-z0-9@.-]+` would read `-----BEGIN` as a key type and let a private-key read through.
 PUBLIC_KEY_RE = re.compile(
     r"^((?:ssh|ecdsa|sk)-[A-Za-z0-9@.-]+)\s+([A-Za-z0-9+/]+={0,3})(?:\s|$)"
 )

@@ -61,9 +61,6 @@ import re
 from collections.abc import Callable
 from dataclasses import dataclass, field
 
-# Reach the sibling package: a directly-invoked script gets only its own directory on
-# sys.path, and pyproject's `pythonpath` is a pytest setting.
-
 
 from dev.fanout_lib.review.batch_run import BatchRun
 from dev.fanout_lib.review.processes import Runner
@@ -98,12 +95,11 @@ TAIL_LINES = 40
 # The cap on one failed job's log in the resume prompt.
 LOG_CHARS = 4000
 MAX_FAILING = 8
-# How long `ready_for_ci` waits for the run `gh pr ready` starts. GitHub registers a run within
-# seconds of the event, so two minutes is a queue that is stuck, not slow.
+# GitHub registers a run within seconds, so two minutes means a stuck queue.
 READY_WAIT_S = 120
 READY_POLL_S = 10
-# GitHub reports `UNKNOWN` for a PR's `mergeable` while it computes it, so a read of `UNKNOWN`
-# is repeated once after this pause.
+# GitHub reports `UNKNOWN` for `mergeable` while it computes it; a read of `UNKNOWN` is repeated
+# once after this pause.
 MERGEABLE_RECHECK_S = 5
 PASSED = "passed"
 FAILED = "failed"
@@ -146,8 +142,8 @@ def _tail(text: str) -> str:
 
 def failing_checks(run: Runner, pr: str, repo: str) -> list[Failure]:
     """The PR head's failed checks with each job's log tail; empty when the read fails."""
-    # Imported here because `clean-one` imports this module from a snapshot of `scripts/`
-    # alone, which holds no `hosts/lib`.
+    # Imported here because `clean-one` imports this module from a `scripts/` snapshot that holds no
+    # `hosts/lib`.
     from lib import host_modules  # noqa: F401
     from ci_verdict import RunState, parse_rollup
 
@@ -374,10 +370,8 @@ def ready_for_ci(
         if now is not None and now - before:
             return ""
         sleep(READY_POLL_S)
-    # GitHub starts no `pull_request` run while the PR conflicts with its base, so a
-    # conflict, not Actions, is why none started. The PR stays ready: GitHub cannot merge it
-    # while it conflicts, and the push that resolves the conflict starts CI with no second
-    # `gh pr ready`. This unit's implementer phases are over, so `place resume` resolves it.
+    # GitHub starts no `pull_request` run while the PR conflicts with its base. The PR stays ready,
+    # and the push that resolves the conflict starts CI; `place resume` resolves it.
     if _mergeable(run, pr, repo, sleep) == "CONFLICTING":
         return (
             f"PR #{pr} conflicts with master, so marking it ready started no CI on head "
@@ -385,8 +379,8 @@ def ready_for_ci(
             "ended: it resumes the implementer to rebase, reviews the resolution and lands "
             "the PR, and the rebased push starts CI"
         )
-    # A ready PR whose only checks are the draft run's skipped ones reads green to GitHub's
-    # ruleset and to auto-merge, so the PR goes back to a draft, which GitHub refuses to merge.
+    # A ready PR whose only checks are the draft run's skipped ones reads green to GitHub's ruleset,
+    # so the PR goes back to a draft.
     undo = run(["gh", "pr", "ready", pr, "-R", repo, "--undo"], None)
     state = "back to a draft" if undo.returncode == 0 else "still ready, NOT a draft"
     return (
@@ -404,8 +398,7 @@ def ready_gate(pipe: BatchRun) -> dict | None:
     )
     if not why:
         return None
-    # `status` reads any `https://…/pull/N` in the text as `done`, so the hold names the PR
-    # without its scheme.
+    # `status` reads any `https://…/pull/N` as `done`, so the hold names the PR without its scheme.
     pr = pipe.record.pr.removeprefix("https://")
     return {"type": "result", "is_error": False, "result": f"needs input: {why}.\n{pr}"}
 
@@ -568,7 +561,6 @@ def ci_gate(pipe: BatchRun, last: Phase) -> tuple[Phase, dict | None]:
 
 
 def _needs_input(record: Record, why: str) -> dict:
-    # `status` reads any `https://…/pull/N` in the text as `done`, so the hold names the PR
-    # without its scheme.
+    # `status` reads any `https://…/pull/N` as `done`, so the hold names the PR without its scheme.
     pr = record.pr.removeprefix("https://")
     return {"type": "result", "is_error": False, "result": f"needs input: {why}.\n{pr}"}

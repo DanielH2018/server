@@ -66,10 +66,9 @@ from secrets_mgmt.secrets_lib.secret_registry import (
 from secrets_mgmt.secrets_lib.registry_model import RegistryError
 from secrets_mgmt.rotation_tools import REGISTRY_FILE, RotationTools
 
-# A LITERAL, and it must stay one: `scripts/docs/gen_doc_fragments.py` reads this assignment
-# with `ast.literal_eval` (it never imports this module, which would need an age key on the
-# path for nothing) to build the published tier table. `rotation_tools.DEFAULT_TIER_DAYS`
-# holds the same table for `secret_registry.py`, which may not import this file.
+# A LITERAL, and it must stay one: gen_doc_fragments.py reads it with `ast.literal_eval` and never
+# imports this module. `rotation_tools.DEFAULT_TIER_DAYS` holds the same table for
+# secret_registry.py, which may not import this file.
 TIER_DAYS = {
     "assisted": 365,
     "external": 365,
@@ -171,9 +170,8 @@ def cmd_audit(args, tools: RotationTools) -> int:
     reg = tools.load_registry()
     # Registry drift: warn by default (so a forgotten `sync` is visible); --check fails on it.
     missing, stale = registry_drift(set(reg.entries), set(tools.sops_names()))
-    # A real rotation changes the ciphertext in git but leaves `last_rotated` behind,
-    # because `sync` deliberately won't touch an existing value's date. Reading the date
-    # back out of git closes that gap without writing the registry.
+    # A real rotation changes the ciphertext but leaves `last_rotated` behind, because `sync` never
+    # touches an existing date; reading the date out of git closes the gap.
     advanced = (
         []
         if args.no_derive
@@ -193,23 +191,19 @@ def cmd_audit(args, tools: RotationTools) -> int:
             % (name, reg.entries[name].tier)
         )
     summary = audit_summary(res, missing, stale, unknown)
-    # An externally-detected fault the caller wants folded in, such as a revoked `gh` token.
-    # ADDITIVE, deliberately: the fault says nothing about the secrets, so forcing DOWN while
-    # still enumerating the audit keeps overdue reporting alive until a human clears it.
+    # ADDITIVE, deliberately: an external fault says nothing about the secrets, so the audit keeps
+    # enumerating overdue ones.
     extra_down = getattr(args, "extra_down", None)
     if extra_down:
         summary = f"{extra_down}; {summary}"
         print("audit: forced DOWN by --extra-down")
-    # `stale` too (a registry row for a since-removed secret), so the daily verdict and the CI
-    # `--check` gate below agree on registry drift — otherwise a `stale`-only drift fails CI
-    # while the daily verdict stays up.
+    # `stale` counts too, so the daily verdict and the CI `--check` gate agree on registry drift.
     ok = n_over == 0 and not missing and not stale and not unknown and not extra_down
     print("audit: verdict=%s %s" % ("up" if ok else "down", summary))
     if getattr(args, "verdict", False) and not ok:
         return 1
-    # --check: a CI/PR gate that the registry is in sync with secrets.yml and every tier has a
-    # cadence. NOT on overdue (a time-based runtime state the daily verdict owns — blocking an
-    # unrelated commit on a due-for-rotation secret would be wrong). Read-only (no decrypt).
+    # --check gates registry sync and tier cadence, NOT overdue: a due secret must not block an
+    # unrelated commit. Read-only.
     if getattr(args, "check", False) and (missing or stale):
         error(
             "registry out of sync with secrets.yml — run "
@@ -247,8 +241,8 @@ def cmd_record(args, tools: RotationTools) -> int:
     moved_from = None
     was = RENAMED_FROM.get(args.key)
     if was is not None and was in entries:
-        # A `sync` run before this would have seeded the new name too; the source row is
-        # the one carrying the operator's tier and `source`, so it wins.
+        # The source row carries the operator's tier and `source`, so it wins over a name `sync`
+        # already seeded.
         entries[args.key] = entries.pop(was)
         moved_from = was
     if args.key not in entries:
@@ -282,8 +276,7 @@ def build_parser() -> ArgumentParser:
     sub.add_parser("sync").set_defaults(func=cmd_sync)
     pc = sub.add_parser("consumers")
     pc.add_argument("name", help="secret name, as it appears in secrets.yml")
-    # `consumers` crosses no boundary, so it takes no `tools`. The adapter keeps the dispatch
-    # below uniform rather than making every other subcommand carry an argument for this one.
+    # `consumers` crosses no boundary, so it takes no `tools`; the adapter keeps dispatch uniform.
     pc.set_defaults(func=lambda args, _tools: cmd_consumers(args))
     pa = sub.add_parser("audit")
     pa.add_argument(
@@ -331,8 +324,6 @@ def build_parser() -> ArgumentParser:
 def main(argv=None) -> int:
     """Dispatch to the `sync`/`consumers`/`audit`/`record` subcommand and return its exit code."""
     args = build_parser().parse_args(argv)
-    # One `RotationTools` per run, built here and threaded down: every git call, sops call,
-    # registry read or write and clock read a subcommand makes goes through it.
     try:
         return args.func(args, RotationTools())
     except RegistryError as e:

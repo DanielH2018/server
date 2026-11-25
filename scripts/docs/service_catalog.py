@@ -2,7 +2,7 @@
 """Generate a single HTML page answering "what runs in this homelab".
 
 THE PROBLEM. ~60 services are declared across two files
-(cluster/services.yml and inventory/host_vars/daniel-pi.yml), and the only way to
+(k8s/services.yml and inventory/host_vars/daniel-pi.yml), and the only way to
 answer "what runs here, on which host, behind which auth, backed up how" is to read
 through 62 Ansible roles by hand. Every fact already lives in the repo — nothing
 assembles them into one place, so the answer drifts out of date the moment someone
@@ -67,9 +67,6 @@ from lib.estate import Estate, Inventory
 from lib.inventory_lists import K8S_HOST
 from lib.repo_paths import ALL_VARS, K8S_SERVICES
 
-# The service list comes from lib.estate, the loader every docs generator reads the
-# inventory through.
-
 
 # Assembly
 
@@ -95,8 +92,6 @@ def build_rows(
     tiers = load_longhorn_tier_lists(
         k3s_defaults, estate.group_vars, list(estate.k8s_entries().values())
     )
-    # Built once: a claim mounted by one role and declared by another (media-data) resolves
-    # through this index, and every k8s row reads it.
     claim_classes = claim_index(k8s_roles)
     k8s_namespace = estate.group_vars.get("k8s_namespace", "homelab")
 
@@ -144,7 +139,7 @@ def main(argv: list[str] | None = None) -> int:
         "--services",
         type=Path,
         default=K8S_SERVICES,
-        help="override cluster/services.yml (tests)",
+        help="override k8s/services.yml (tests)",
     )
     parser.add_argument(
         "--k8s-roles",
@@ -168,15 +163,12 @@ def main(argv: list[str] | None = None) -> int:
     if args.format == "markdown":
         from lib.docs_provenance import finish_generator
 
-        # Not write_text: the banner's timestamp moves on every run, so an
-        # unconditional write would make the docs-refresh cron commit on every run
-        # for no content change.
+        # Not write_text: the banner timestamp moves every run, so an unconditional write would make
+        # docs-refresh commit each time.
         return finish_generator(
             "service_catalog", args.out, rows, render_markdown, "service"
         )
 
-    # The HTML path targets ~/.claude/artifacts/, which is not committed and has no
-    # diff to protect, so it stays an unconditional write.
     args.out.parent.mkdir(parents=True, exist_ok=True)
     args.out.write_text(render_html(rows))
     print(f"service_catalog: wrote {len(rows)} service(s) to {args.out}")

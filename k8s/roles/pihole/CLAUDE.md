@@ -65,7 +65,7 @@ continuity (`tests/services/test_pihole_redundancy.py::test_two_instances_are_re
 ## Flux applies it
 
 - **Flux applies pihole.** Its `containers_list` entry
-  is in `cluster/services.yml`, so nothing applies it by hand, and a
+  is in `k8s/services.yml`, so nothing applies it by hand, and a
   merged change reaches the cluster when `promote` publishes and verifies the next bundle.
 - **Its restart.** `defaults/main.yml` sets `manifests_self_rollouts` because the renderer
   reads it to stamp the restart annotation on both instances.

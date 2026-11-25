@@ -109,7 +109,7 @@ this review makes it, never as a discovery. Count the run number, never copy a c
 first sighting is run 1, each re-observation adds one, and this review adds one more. So an
 issue that `findings.py list` prints as `x3` is on its fifth run now, which is the sighting
 number `findings.py touch` writes
-(`scripts/dev/tests/test_findings.py::test_touch_names_the_sighting_this_run_makes`). A legacy
+(`scripts/dev/tests/findings/test_findings.py::test_touch_names_the_sighting_this_run_makes`). A legacy
 register row that carried a finding across N runs makes this review run N+1. A third or later
 appearance is an escalation signal (it belongs in a durable owner: a test, a lint, a CLAUDE.md
 rule), and re-presenting it as new is how it stays unowned. Verify each is still live before

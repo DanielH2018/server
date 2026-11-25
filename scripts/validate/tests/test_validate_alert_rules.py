@@ -199,8 +199,8 @@ def _alertmanager_render() -> tuple[str, str, str]:
 
 def test_go_templates_that_survive_the_render_are_clean():
     source, rendered, templates = _alertmanager_render()
-    # Non-vacuity: named members of both inputs, so a renamed template or an emptied raw
-    # block fails here rather than leaving the check with nothing to require.
+    # Non-vacuity: named members of both inputs, so a renamed template or emptied raw block fails
+    # here.
     assert '{{ template "homelab.title" . }}' in alert_rules.RAW_BLOCK.findall(source)
     assert set(alert_rules.TEMPLATE_DEFINE.findall(templates)) == {
         "homelab.title",
@@ -297,8 +297,8 @@ def test_every_proof_names_fixtures_that_exist():
         ("lokitool", "rules", "lint", "--dry-run"),
         ("alloy", "run"),
     }
-    # promtool test rules has two proofs, and the set above holds the command once. The
-    # second shows condition 3 of the third `service` source rests on promtool.
+    # promtool test rules has two proofs; the second shows condition 3 of the third `service` source
+    # rests on promtool.
     assert [p.bad for p in alert_rules.PROOFS if p.args == ("test", "rules")] == [
         "bad-rules.test.yaml",
         "bad-job-service-rules.test.yaml",
@@ -397,8 +397,8 @@ def test_the_tree_rules_meet_every_convention_is_clean():
         "PrometheusRuleEvaluationFailures",
         "WarningUnresolved",
     }
-    # The ingress-probes rules take `service` from their scrape job, so the conventions read
-    # the rendered prometheus.yml, as check_tree hands it to them.
+    # The ingress-probes rules take `service` from their scrape job, so the conventions read the
+    # rendered prometheus.yml.
     prometheus_yml = alert_rules.rendered_files()["prometheus.yml"]
     assert alert_rules.rule_problems(groups, keys, prometheus_yml=prometheus_yml) == []
 

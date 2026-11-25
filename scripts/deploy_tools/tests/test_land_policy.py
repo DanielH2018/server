@@ -188,8 +188,6 @@ def test_a_head_that_moves_after_the_checks_stops_the_merge(landing):
     ln, calls = landing(
         Fakes(
             gh_views={
-                # The second poll reads MERGED, so a missing head check ends in a merge, and the
-                # test fails on "did not raise" rather than looping on a fake that never merges.
                 "state,mergeable,headRefOid": [
                     {"state": "OPEN", "mergeable": "MERGEABLE", "headRefOid": "d" * 40},
                     {

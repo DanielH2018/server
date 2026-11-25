@@ -34,8 +34,8 @@ _MOSQUITTO_PUB = """#!/bin/bash
 printf '%s\\n' "$@" >"$Z2M_STUB_PUB_ARGS"
 """
 
-# Answers the canned state after a short delay -- the republish arriving after the publish.
-# An empty Z2M_STUB_STATE is a device that never answers.
+# Answers the canned state after a short delay (the republish arriving after the publish); an empty
+# Z2M_STUB_STATE is a device that never answers.
 _MOSQUITTO_SUB = """#!/bin/bash
 sleep 1
 [[ -n "$Z2M_STUB_STATE" ]] && printf '%s\\n' "$Z2M_STUB_STATE"

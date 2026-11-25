@@ -290,8 +290,7 @@ def cmd_open(args: argparse.Namespace, tools: FindingsTools) -> int:
         labels.append("manual")
     if args.review_leftover:
         labels.append("review-leftover")
-    # `gh issue create --label` fails on a label the repo lacks, so `open` creates LABELS
-    # first.
+    # `gh issue create --label` fails on a label the repo lacks, so `open` creates LABELS first.
     run(plan_sync_labels(_existing_labels(tools)), args.dry_run, tools)
     existing = fingerprint_match(fp, tools)
     outcome, code, plans = plan_open(
@@ -314,8 +313,8 @@ def cmd_open(args: argparse.Namespace, tools: FindingsTools) -> int:
             return 0
         url = _create(plans[0], tools)
         number = url.rsplit("/", 1)[-1]
-        # `gh issue create` cannot set an issue field, so the fields and the type are a
-        # second write; re-running the same `open` repairs a failed one.
+        # `gh issue create` cannot set an issue field, so the fields and type are a second write;
+        # re-running `open` repairs a failed one.
         set_fields(int(number), fields, tools, dry_run=False, issue_type=issue_type)
         if blockers:
             # `gh issue create` has no blocked-by flag, so the relationship is a second write.
@@ -323,21 +322,17 @@ def cmd_open(args: argparse.Namespace, tools: FindingsTools) -> int:
         print(f"#{number} created  {url}")
         _print_blocker_hints(body, number, blockers, tools)
         return 0
-    # "created" is the only outcome plan_open returns for a missing issue, so every branch
-    # below has one to name. Checked here rather than in each branch: the two of them read
-    # `existing` four times between them.
+    # "created" is the only outcome for a missing issue, so every branch below has an `existing` to
+    # name.
     assert existing is not None
     if outcome in NO_REOPEN:
         closed = (existing.closed_at or "?")[:10]
         print(f"#{existing.number} {outcome}: closed on {closed}; not reopened")
         return code
     if outcome == "reopened":
-        # A `Closes #<n>` merge closes an issue without going through `close`, so the claim
-        # is still on it. Reopening for a later re-observation brings that claim back LIVE,
-        # where it blocks `claim` and withholds the issue from `next` for as long as the
-        # claiming worktree exists — an orchestrator's can be a long time. Released
-        # as its OWN comment rather than folded into the regression note, so the body never
-        # carries two claim trailers at once (see the DECIDED marker in `issue_model.claim_of`).
+        # A `Closes #<n>` merge leaves the claim on the issue; reopening brings it back live,
+        # blocking `claim` and withholding it from `next`. Released as its own comment so the body
+        # never carries two claim trailers (see the DECIDED marker in `issue_model.claim_of`).
         plans += plan_release_held(
             existing, when=now_iso(), reason="reopened after a re-observation"
         )
@@ -350,8 +345,7 @@ def cmd_open(args: argparse.Namespace, tools: FindingsTools) -> int:
             " --no-vetted-remediation applies only to a new issue\n"
         )
     if args.manual and "manual" not in existing.labels:
-        # A matched issue would otherwise drop the flag silently. A reopened one is open by
-        # the time these run, and its claim was released just above.
+        # A matched issue would otherwise drop the flag silently.
         reopened = dataclasses.replace(existing, state=IssueState.OPEN)
         plans += plan_manual(reopened, clear=False)
         if outcome != "reopened":
@@ -474,8 +468,7 @@ def _split_refs(values: list[str] | None) -> list[str]:
 
 
 def _release_for_manual(issue: Issue) -> list[list[str]]:
-    # Load-bearing: `reap` skips `manual` issues (`another_claim_blocks`), so a claim left on
-    # one would never be cleared.
+    # Load-bearing: `reap` skips `manual` issues, so a claim left on one would never be cleared.
     return plan_release_held(issue, when=now_iso(), reason="marked manual")
 
 
@@ -541,13 +534,11 @@ def cmd_close(args: argparse.Namespace, tools: FindingsTools) -> int:
         )
         return FINDINGS_BAD_ARGS
     if outcome != "fixed":
-        # `gh issue edit --add-label` fails on a label the repo does not have, and the
-        # not-planned outcomes are the only close that applies one. `refuted` exists only
-        # because some earlier `open` created it; `accepted` would not on its first use.
+        # `gh issue edit --add-label` fails on a label the repo lacks, and the not-planned outcomes
+        # are the only close that applies one.
         run(plan_sync_labels(_existing_labels(tools)), args.dry_run, tools)
-    # Closing ends the work, so it releases whoever holds the claim — not just the caller's
-    # own worktree. `claims`, `reap` and `next` all read open issues, so a claim left on a
-    # closed issue disappears from every view at once rather than showing up wrong.
+    # Closing releases whoever holds the claim, not just the caller's worktree: a claim left on a
+    # closed issue disappears from every view at once.
     issue = _load_issue(args.number, tools)
     plans = plan_release_held(
         issue, when=now_iso(), reason=f"closed as {outcome}", detach=False
@@ -725,10 +716,8 @@ def main(argv: list[str] | None, tools: FindingsTools) -> int:
     Returns:
         The dispatched handler's exit code, or 1 if `gh` failed.
     """
-    # The FIRST NON-BLANK line, not `[1]`. Line 1 of a module docstring is the blank line
-    # after the summary, so `[1]` passed argparse an empty description and `--help` printed
-    # none at all. Reading the line rather than restating it keeps one copy that cannot
-    # drift.
+    # The first non-blank line, not `[1]`: line 1 of the docstring is blank, so `[1]` gave argparse
+    # an empty description.
     summary = next(line for line in __doc__.splitlines() if line.strip())
     parser = _parser(summary)
     refuse_help_under_describe(parser, argv)
@@ -738,9 +727,8 @@ def main(argv: list[str] | None, tools: FindingsTools) -> int:
         and args.cmd in _READS_WORKTREES
         and args.repo not in REGISTER_CHECKOUTS
     ):
-        # Judged against this repo's worktrees, every claim on another repo's issue names a
-        # branch nothing here has checked out: `reap` would release them all and `claim`
-        # would refuse every one as stale at birth.
+        # Judged against this repo's worktrees, every claim on another repo's issue names a branch
+        # nothing here has: `reap` would release them all and `claim` would refuse every one.
         sys.stderr.write(
             f"{args.cmd}: --repo {args.repo} has no local checkout to judge claims against; "
             f"known: {', '.join(sorted(REGISTER_CHECKOUTS))} "
@@ -779,8 +767,8 @@ def main(argv: list[str] | None, tools: FindingsTools) -> int:
     try:
         return handler(args, tools)
     except (subprocess.SubprocessError, OSError) as exc:
-        # OSError covers a missing `gh` binary; SubprocessError covers TimeoutExpired as
-        # well as the CalledProcessError whose stderr is the message worth showing.
+        # OSError covers a missing `gh`; SubprocessError covers TimeoutExpired as well as
+        # CalledProcessError.
         if isinstance(exc, subprocess.CalledProcessError):
             sys.stderr.write(
                 f"gh failed ({exc.returncode}): {(exc.stderr or '').strip()}\n"
@@ -796,10 +784,9 @@ def main(argv: list[str] | None, tools: FindingsTools) -> int:
 
 
 if __name__ == "__main__":
-    # The ONE site that builds the real boundaries for this module. `main` takes them as a
-    # required argument so a library caller that forgets `tools` fails with a TypeError here
-    # rather than reaching real `gh` and real subprocesses. `gh_calls.load_issues` keeps its
-    # own default because `scripts/docs/reference/backlog.py` is a second production entry.
+    # The one site that builds the real boundaries: `main` requires them so a caller that forgets
+    # `tools` fails with a TypeError rather than reaching real `gh`. `gh_calls.load_issues` keeps
+    # its own default for `scripts/docs/reference/backlog.py`.
     raise SystemExit(
         main(
             None,

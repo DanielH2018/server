@@ -177,9 +177,6 @@ def test_every_candidate_losing_an_object_is_current(world, monkeypatch, capsys)
     )
 
 
-# -- a rename by digest is not a removal (D5.1f) --------------------------------------------
-
-
 def _rendered(revision: str) -> dict[str, bytes]:
     """The shared kinds alone, as the render job writes them for `revision`."""
     files = render_bundle({}, {}, [], "10m", "x=ENC[y]\n", revision=revision)

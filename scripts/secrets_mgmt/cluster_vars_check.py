@@ -29,14 +29,14 @@ import yaml
 
 from lib import yaml_fast
 
-# Printed after every failing check, because the obvious response to a dropped key, deleting
-# its line by hand, keeps the names green and breaks the SOPS MAC.
+# Printed after every failing check: deleting a dropped key's line by hand keeps the names green and
+# breaks the SOPS MAC.
 FIX = (
     "The only fix is `cluster_vars.py write` (operator-only). A hand edit of a cluster file "
     "breaks its SOPS MAC, and kustomize-controller then refuses to decrypt it."
 )
-# kustomize-controller skips substitution on a resource carrying this annotation as
-# `disabled`, which keeps a `${` inside a decrypted value literal.
+# A `${` inside a decrypted value stays literal when the resource carries this annotation as
+# `disabled`.
 SUBSTITUTE_OPT_OUT = "kustomize.toolkit.fluxcd.io/substitute"
 SOPS_PREFIX = "sops_"
 MANIFEST_SUFFIX = ".sops.yaml"
@@ -176,9 +176,8 @@ def is_dotenv(path: Path | str) -> bool:
     return str(path).endswith(".env")
 
 
-# The metadata lines the pinned SOPS writes into a dotenv for a cluster creation rule, each with
-# its value's shape; `test_cluster_vars_write.py` names the members from a real encrypt. Any
-# other `sops_` line, or a member in another shape, is a value line in disguise.
+# Metadata lines the pinned SOPS writes into a dotenv for a cluster creation rule, each with its
+# value's shape; any other `sops_` line is a value line in disguise.
 _AGE_ARMOR = (
     r"-----BEGIN AGE ENCRYPTED FILE-----(\\n[A-Za-z0-9+/=_-]+(?: [A-Za-z0-9+/=_-]+)*)+"
     r"\\n-----END AGE ENCRYPTED FILE-----(\\n)?"
