@@ -2,8 +2,8 @@
 
 The lines arm adds a marker-delimited block to a package's conffile, as k3s-server and k3s-agent
 add one to /etc/zsh/zshenv, so the file differs from the digest dpkg records. The change is
-explained only when removing exactly the declared block, between its markers, leaves the file
-dpkg installed. The case table below is the rule.
+explained only when removing exactly the declared blocks, each between its markers, leaves the
+file dpkg installed. The case table below is the rule.
 
 A conffile the arm only makes line edits to is explained when replaying those edits on a kept
 package copy of any version gives the file, the appended lines in any order. With no copy kept
@@ -41,10 +41,27 @@ def _manifest(edits: list[dict]) -> str:
     return json.dumps({"users": {"users": DECLARED_USERS}, "lines": {"edits": edits}})
 
 
+# A second component's block on the same conffile, as claude-code adds one to /etc/zsh/zshenv.
+SECOND_MARKER = "# {mark} MANAGED — tool oom score"
+SECOND_BEGIN, SECOND_END = (
+    SECOND_MARKER.replace("{mark}", w) for w in ("BEGIN", "END")
+)
+SECOND = f"{SECOND_BEGIN}\nexport S=1\n{SECOND_END}\n"
+TWO_BLOCKS = {
+    HOST_MANIFEST: _manifest(
+        [*LINE_EDITS, {"path": CONF, "marker": SECOND_MARKER, "block": "export S=1\n"}]
+    )
+}
+
 ACCEPTED = {
     "the block appended, as the arm adds it": {CONF: SHIPPED + BLOCK},
     "the block before the shipped lines, where an earlier run left it": {
         CONF: BLOCK + SHIPPED
+    },
+    "two declared blocks": {CONF: SHIPPED + BLOCK + SECOND, **TWO_BLOCKS},
+    "two declared blocks around the shipped lines": {
+        CONF: SECOND + SHIPPED + BLOCK,
+        **TWO_BLOCKS,
     },
 }
 
@@ -61,6 +78,29 @@ REJECTED = {
         HOST_MANIFEST: _manifest([e for e in LINE_EDITS if e["path"] != CONF]),
     },
     "an unreadable lines declaration": {CONF: SHIPPED + BLOCK, HOST_MANIFEST: "{"},
+    "one of two declared blocks missing": {CONF: SHIPPED + BLOCK, **TWO_BLOCKS},
+    "a changed body in the first of two declared blocks": {
+        CONF: SHIPPED + BLOCK.replace("L=2", "L=3") + SECOND,
+        **TWO_BLOCKS,
+    },
+    "a changed body in the second of two declared blocks": {
+        CONF: SHIPPED + BLOCK + SECOND.replace("S=1", "S=2"),
+        **TWO_BLOCKS,
+    },
+    "two declared blocks with swapped bodies": {
+        CONF: SHIPPED
+        + BLOCK.replace("export K=1\nexport L=2", "export S=1")
+        + SECOND.replace("export S=1", "export K=1\nexport L=2"),
+        **TWO_BLOCKS,
+    },
+    "one declared block nested in the other": {
+        CONF: SHIPPED + BLOCK.replace(f"{END}\n", f"{SECOND}{END}\n"),
+        **TWO_BLOCKS,
+    },
+    "a line between two declared blocks": {
+        CONF: SHIPPED + BLOCK + "export M=3\n" + SECOND,
+        **TWO_BLOCKS,
+    },
 }
 
 
