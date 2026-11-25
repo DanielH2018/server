@@ -75,8 +75,9 @@ other job stays on GitHub-hosted runners. A runner exists only under these condi
 
 ## Consequences
 
-**A job in a pod can reach the LAN.** Egress NetworkPolicies are not enforced on this cluster
-([ADR-0009](0009-networkpolicy-default-deny-ingress.md)), so the pod's network is the node's.
+**A job in a pod can reach the LAN.** No egress policy fences the runner pods. One would be
+enforced after the first seconds of a pod's life
+([ADR-0009](0009-networkpolicy-default-deny-ingress.md), amended on 2026-11-25).
 A job can reach every LAN service that asks for no login. The agent sessions' own test runs have
 the same reach.
 

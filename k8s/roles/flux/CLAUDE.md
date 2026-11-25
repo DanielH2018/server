@@ -94,9 +94,8 @@ artifact fetches and controller events. `k8s/roles/flux/templates/networkpolicy.
 `flux-allow-prometheus`, which admits only the `app: prometheus` pods in `observability` to
 the metrics port 8080
 (`tests/k8s/test_flux_role.py::test_all_namespace_peers_is_clean_on_the_rendered_fence`).
-Egress is not enforced on this cluster
-(`docs/adr/0009-networkpolicy-default-deny-ingress.md`), so `allow-egress`'s
-egress rule changes nothing. A change that adds a Receiver adds its fence with it.
+Its egress rule is empty, which admits every destination. Egress is enforced
+(`docs/adr/0009-networkpolicy-default-deny-ingress.md`), so narrowing that rule takes effect. A change that adds a Receiver adds its fence with it.
 
 ## Rollouts
 
