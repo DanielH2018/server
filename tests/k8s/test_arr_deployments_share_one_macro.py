@@ -29,14 +29,11 @@ import re
 from _helpers import K8S_ROLES
 from _k8s_render import rendered_docs
 
-# The roles whose deployment.yaml.j2 must be a call and nothing else. Named rather than
-# discovered: a census that globbed for callers would go empty on a rename and pass on nothing.
 CALLERS = ("radarr", "sonarr")
 
 _IMPORT = "{% from 'arr-deployment.yml.j2' import arr_deployment with context %}"
 _CALL = re.compile(r"\{\{\s*arr_deployment\(")
-# A line of the body, at the depth the macro emits it. `kind:`/`apiVersion:` sit at column 0;
-# `containers:`/`volumes:` at 6, under `spec.template.spec:`.
+# `kind:`/`apiVersion:` sit at column 0; `containers:`/`volumes:` at 6.
 _COPIED_BODY = re.compile(
     r"^(?:(kind|apiVersion):|      (containers|volumes):)", re.MULTILINE
 )

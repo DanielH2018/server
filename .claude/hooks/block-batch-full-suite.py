@@ -48,8 +48,6 @@ from _hook_common import (
     strip_shell_keywords,
 )
 
-# `scripts/dev/repo_guards.py` selects 143 modules; `tests` alone selects 537 and the whole
-# suite about 1,337.
 MAX_MODULES = 300
 
 _BATCH_TREE = re.compile(

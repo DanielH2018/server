@@ -32,9 +32,7 @@ import pytest
 
 SETTINGS = Path(__file__).resolve().parents[2] / "settings.json"
 
-# Verbs that only read. Anything else in an allow rule fails the test below rather than
-# being judged case by case -- a new kubectl verb should have to be argued for once, in
-# this list, instead of arriving unremarked inside a settings edit.
+# Any verb outside this list fails the test below.
 READ_ONLY_VERBS = frozenset(
     {
         "get",
@@ -160,9 +158,8 @@ def test_the_timeout_check_reads_the_entries_it_claims_to():
     )
 
 
-# The project-scope plugin disables this file may carry. `claude-permission-audit` is the reader
-# docs/claude-tooling.md names for the OTEL `tool_decision` stream; disabling it removes
-# `/audit-permissions` from every session opened in this repo, and nothing in a session says so.
+# Disabling `claude-permission-audit` removes `/audit-permissions` from every session in this repo,
+# and nothing says so.
 PLUGINS_ALLOWED_TO_BE_DISABLED = frozenset({"superpowers@claude-plugins-official"})
 
 PERMISSION_AUDIT_PLUGIN = "claude-permission-audit@daniel-tools"

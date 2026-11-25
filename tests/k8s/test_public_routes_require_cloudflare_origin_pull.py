@@ -50,9 +50,6 @@ _FILE_PROVIDER_REF = re.compile(
     r"^(?P<namespace>[a-z0-9-]+?)-(?P<name>[a-z0-9-]+)@kubernetescrd$"
 )
 
-# Routers matching a public Host the walk must find: the macro's public object, a bypass
-# twin, the hand-rolled ping route, the observability-namespace route and the file-provider
-# pair. A rename empties a glob-shaped census silently; this set names what must be there.
 REQUIRED_PUBLIC_ROUTERS = frozenset(
     {
         "karakeep-public",

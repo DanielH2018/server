@@ -46,8 +46,7 @@ class TestToposort:
         assert _names(toposort_containers(cl, {})) == ["x", "y", "z"]
 
     def test_ties_within_level_are_stable(self):
-        # both b and c become free at the same level once a is placed;
-        # they must come out in original list order (c before b here).
+        # b and c become free together once a is placed; they must come out in original list order.
         cl = _containers("a", "c", "b")
         deps = {"c": ["a"], "b": ["a"], "a": []}
         assert _names(toposort_containers(cl, deps)) == ["a", "c", "b"]

@@ -51,8 +51,6 @@ from _ratchet import (
     reasons_with_history,
 )
 
-# One file per top-level tree that holds Python, asserted by name so the census cannot go
-# quiet. A bare size floor would still pass if a whole tree stopped being enumerated.
 CENSUS_MEMBERS = frozenset(
     {
         ".claude/hooks/_hook_common.py",
@@ -61,8 +59,7 @@ CENSUS_MEMBERS = frozenset(
     }
 )
 
-# Changing any of these changes what the lists are allowed to contain, which is what lets a
-# widened heuristic add the files it newly sees.
+# Changing any of these changes what the lists may contain.
 WHOLE_FILE_GUARDS = (
     "tests/_ratchet.py",
     "tests/_ratchet_census.py",
@@ -70,9 +67,8 @@ WHOLE_FILE_GUARDS = (
     "tests/repo/test_module_length_ratchet.py",
 )
 
-# `is_test_file` decides both the cap a path gets and which files the patch census covers, so
-# it is a guard source. The rest of `_helpers.py` is not: many modules import that file, and
-# comparing all of it would let an unrelated edit wave through a forbidden addition.
+# `is_test_file` decides the cap and the patch census, so it is a guard source; the rest of
+# `_helpers.py` is not.
 HELPERS = "tests/_helpers.py"
 CAP_DECIDER = "is_test_file"
 

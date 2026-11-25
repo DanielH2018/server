@@ -57,8 +57,6 @@ _HOLD_FIRST_REASON = (
     "A hand-apply branch sets DEPLOY_HOLD before its apply, so a promotion cannot move `prod` "
     "past the reset while the operator works."
 )
-# The shed scenario's one statement of the offline order, and the token `_offline_order`
-# folds it to, so that `forbid` reads only the bullet's other sentences.
 _OFFLINE_ORDER = (
     "Once the WAN returns, run this step's `gh variable set DEPLOY_HOLD` first, before any "
     "resume and before step 4, because a queued `promote` run can start as soon as GitHub "

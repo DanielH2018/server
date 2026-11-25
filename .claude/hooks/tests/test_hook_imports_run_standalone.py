@@ -37,16 +37,12 @@ HOOKS = REPO / ".claude" / "hooks"
 PROBE = Path(__file__).with_name("_hook_import_probe.py")
 SKIPPED_DIRS = frozenset({"tests", "__pycache__"})
 OUT_OF_TREE = frozenset({"claude_guard", "_claude_guard"})
-# The top-level trees a hook's imports reach: the hooks themselves, `scripts/`, and the role
-# `files/` directories `lib.repo_paths` names.
 COPIED = (".claude/hooks", "scripts", "k8s", "inventory")
 # Anchored: the fallback after `||` names `run-hook.sh` again in its message text.
 _ENTRY = re.compile(
     r'"\$CLAUDE_PROJECT_DIR"/\.claude/hooks/run-hook\.sh ([\w.-]+)((?: --\S+)*)'
 )
 
-# Members the census must find, with the mode each one runs under. Every `--no-project`
-# entry is here, plus the `--project` guards that import from `scripts/`.
 MUST_FIND = {
     "session-health.py": {"no-project"},
     "inject-nested-docs.py": {"project"},
@@ -243,9 +239,7 @@ def test_a_module_from_another_checkout_is_reported(scratch):
     )
 
 
-# A review pipeline runs every phase after the implementer with each hook pointed at a held
-# copy outside the worktree (`fanout_lib.review.held_hooks`). A hook that finds `scripts/`
-# through its own `__file__` finds the held copy's, so the copy must carry it.
+# A hook that finds `scripts/` through its own `__file__` finds the held copy's.
 @pytest.fixture(scope="module")
 def held(tmp_path_factory) -> Path:
     from dev.fanout_lib.review.held_hooks import read_hooks, write_hooks
@@ -326,8 +320,7 @@ def test_a_held_copy_of_the_hooks_alone_cannot_read_the_inventory(hooks_alone):
     assert _held_footguns(hooks_alone, "_ssh_hosts()", venv_root=False) == "None"
 
 
-# With no inventory the guard cannot tell a homelab host from any other, so it matches a
-# remote git on every host rather than on none. A cd into the repo still passes.
+# With no inventory the guard matches a remote git on every host rather than none.
 def test_the_remote_git_rule_fails_closed_when_the_inventory_is_unreadable(
     hooks_alone,
 ):

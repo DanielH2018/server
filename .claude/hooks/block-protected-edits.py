@@ -42,14 +42,10 @@ from _hook_common import emit_pretooluse_decision, read_payload, repo_root
 
 
 _SOPS_MAC_RE = re.compile(r'(?m)^\s*"?mac"?:\s*"?ENC\[AES256_GCM,')
-# The dotenv store writes its metadata as plain `sops_<field>=<value>` lines (`SopsPrefix` in
-# sops `stores/metadata.go`), so the MAC line of a SOPS dotenv file opens with `sops_mac=`.
+# The dotenv store writes metadata as `sops_<field>=<value>` lines, so a MAC line opens with
+# `sops_mac=`.
 _SOPS_DOTENV_MAC_RE = re.compile(r"(?m)^sops_mac=ENC\[AES256_GCM,")
 
-# (tree, the generator that owns it). Rendered from the Ansible tree by
-# scripts/docs/build_docs.py and rewritten by the docs-refresh cron, so a hand edit is lost at
-# the next run. Listed rather than matched by a docs/ prefix: docs/ is mostly hand-written
-# runbooks that must stay editable.
 _GENERATED_DOC_TREES = (
     ("docs/reference", "the reference generators (scripts/docs/build_docs.py)"),
     (
@@ -99,16 +95,12 @@ def classify(file_path, repo_root):
     )
     target = os.path.normpath(target)
 
-    # 1. generated documentation pages
-    # Scoped to the two generated trees, never docs/ as a whole — docs/ is mostly
-    # hand-written runbooks, and a guard that blocked those is a guard that gets
-    # switched off.
+    # Scoped to the two generated trees, never docs/ as a whole.
     for tree, generator in _GENERATED_DOC_TREES:
         guard = os.path.normpath(os.path.join(repo_root, tree))
         if target == guard or target.startswith(guard + os.sep):
             rel = os.path.relpath(target, repo_root)
-            # A docs/reference/ page is generator-owned when it carries the provenance
-            # banner. Fails closed: only an existing file without the banner is exempt.
+            # Fails closed: only an existing file without the provenance banner is exempt.
             if (
                 target.endswith(".md")
                 and os.path.isfile(target)
@@ -153,8 +145,7 @@ def main():
     call = event.edit() if event else None
     if call is None:
         return 0
-    # Guard the checkout that owns the edited file, not the one this hook runs from: a
-    # session edits files outside its own checkout by absolute path.
+    # Guard the checkout that owns the edited file, not the one this hook runs from.
     hook_root = os.path.dirname(
         os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     )

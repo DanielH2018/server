@@ -59,12 +59,7 @@ def _glob_using_test_files() -> list[str]:
     ]
 
 
-# `<anything naming a role tree>.iterdir()` on one line: the constants a guard imports and
-# their local aliases, and the literal path written out or built a segment at a time. A tree
-# bound on one line and walked on another is invisible to it; ROLE_DIRS_CALLERS covers that.
-# The last branch is a parameter or local named for the tree (`roles_root`, `k8s_roles_dir`)
-# walked directly, even from a `tmp_path` test. It needs the `roles` plural, so a single role's
-# `(role / "templates").iterdir()` stays clean.
+# A tree bound on one line and walked on another is invisible to it.
 BARE_ROLE_WALK = re.compile(
     r"(?:K8S_ROLES|SETUP_ROLES|CONTAINERS_ROLES|DOCKER_ROLES"
     r'|k8s/roles"'
@@ -73,8 +68,6 @@ BARE_ROLE_WALK = re.compile(
     r"|\b\w*roles\w*\.iterdir\(\)"
 )
 
-# Every module whose role census goes through `role_dirs`, pinned by name so a rewrite that
-# drops the call fails even when it also drops the spelling BARE_ROLE_WALK reads.
 ROLE_DIRS_CALLERS = frozenset(
     f"tests/{rel}"
     for rel in (

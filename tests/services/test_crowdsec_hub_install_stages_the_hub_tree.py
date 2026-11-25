@@ -25,8 +25,6 @@ absence of the warning in a fresh pod's logs after a deploy.
 import pytest
 from _k8s_render import rendered_docs
 
-# Both pods carrying the sidecar. A rename, or a third pod that skips the hub staging, must
-# fail this rather than shrink the census to nothing and pass an all() over an empty set.
 EXPECTED_ROLES = frozenset({"traefik", "authelia"})
 
 INIT_NAME = "crowdsec-hub-install"

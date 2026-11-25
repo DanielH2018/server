@@ -32,18 +32,12 @@ from _k8s_render import render_role_template
 from lib.repo_paths import HOST_VARS
 from lib.render_guard import load_yaml
 
-# The census this file asserts over, named rather than derived. A test that globbed for
-# `host-record=` lines and asserted over whatever it found would pass on an empty set the
-# moment the directive were renamed, which is a failure a count cannot see.
 REQUIRED = ("daniel-box", "daniel-server")
 
-# Every host whose address a `host-record=` line carries. daniel-pi is in the render but not in
-# REQUIRED: it answers under `.lan` only, which is the convention it set.
+# daniel-pi answers under `.lan` only.
 HOSTS = ("daniel-pi", "daniel-box", "daniel-server")
 
-# One TEST-NET-3 address per host (RFC 5737, never routable), for the test that moves a host's
-# inventory address and asserts which records follow it. Distinct per host so a record that
-# followed the WRONG host's entry reads as a crossed pairing rather than as a pass.
+# Distinct per host so a record following the wrong host's entry reads as a crossed pairing.
 SENTINELS = {host: f"203.0.113.{n}" for n, host in enumerate(HOSTS, start=1)}
 
 CONFIGMAP = "configmap.yaml.j2"
@@ -131,11 +125,8 @@ def test_both_cluster_nodes_answer_under_their_bare_hostname():
 
 
 def test_the_lan_alias_is_present_too_but_is_not_what_the_sweep_uses():
-    # The rejecting half of the pair above, and the reason both halves exist: a record
-    # written only as `daniel-box.lan` satisfies the naming convention daniel-pi sets while
-    # leaving otel-sweep's fixed enum resolving nothing. Asserting the bare name alone would
-    # not catch a later tidy-up that moved these under `.lan` only, and asserting the alias
-    # alone would not catch the otel-sweep failure.
+    # A record written only as `daniel-box.lan` leaves otel-sweep's fixed enum resolving nothing, so
+    # both the bare name and the alias are asserted.
     records = records_at_inventory_addresses()
     for host in REQUIRED:
         assert f"{host}.lan" in records, (
@@ -144,10 +135,8 @@ def test_the_lan_alias_is_present_too_but_is_not_what_the_sweep_uses():
 
 
 def test_each_hosts_records_follow_that_hosts_own_inventory_entry():
-    # A literal address here would answer correctly today and keep answering after a node
-    # moved, which is worse than not answering at all — a stale A record sends every caller to
-    # whatever now holds that address. Moving one host's `server_ip` and asserting which
-    # records move covers that, and covers the crossed pairing a source scan cannot see.
+    # A literal address keeps answering after a node moves, sending callers to whatever holds it;
+    # move one host's `server_ip` and assert which records follow.
     for host in HOSTS:
         sentinel = SENTINELS[host]
         records = rendered_records({host: sentinel})
@@ -169,9 +158,7 @@ def test_each_hosts_records_follow_that_hosts_own_inventory_entry():
 
 
 def test_the_census_reads_real_directives():
-    # Non-vacuity on a record nothing else here touches, so a parser that quietly stopped
-    # matching the directive cannot read as a clean tree.
-    # Exact match, not `in`: see tests/repo/test_census_rows_python.py (row `no-host-shaped-membership-literal`)
+    # A parser that stopped matching the directive cannot read as a clean tree; exact match.
     records = records_at_inventory_addresses()
     assert any(name == "daniel-pi.lan" for name in records), (
         "the parser stopped reading host-record lines it used to read"

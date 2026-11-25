@@ -32,8 +32,7 @@ _WRITE_VERBS = frozenset(
         "set",
     }
 )
-# `kubectl`, or a shell variable or array holding it (`$KUBECTL`, `"${KUBECTL[@]}"`), then any
-# flags with their values, then the subcommand. A `kubectl exec … -- cscli delete` names `exec`.
+# Matches `kubectl` or a variable/array holding it, then flags with values.
 _SHELL_KUBECTL = re.compile(
     r"(?:\bkubectl\b|\$\{?\w*KUBECTL\w*(?:\[@\])?\}?\"?)"
     r"(?:\s+-{1,2}[\w-]+(?:=\S+|\s+(?!-|(?:"
@@ -164,9 +163,8 @@ def _host_scripts() -> list[str]:
     )
 
 
-# registry-gc.sh.j2's scale-down, held as a red case. The script's ghcr-mirror phase outlives
-# registry's flip, so its allow entry below rests on the operator's ruling.
-# tests/services/test_registry_gc_ghcr_mirror.py holds this line to the template's.
+# The ghcr-mirror phase outlives registry's flip, so this allow entry rests on the operator's
+# ruling.
 REGISTRY_GC_SCALE = '  $KUBECTL scale "deploy/${1}" --replicas=0 >/dev/null 2>&1\n'
 
 
@@ -211,7 +209,6 @@ HOST_SCRIPT_WRITES = Census(
             'run([K3S, "kubectl", "-n", NS, "exec", "deploy/x", "--", "cscli", "delete"])\n',
         ),
     ),
-    # 219 component templates and files on 2026-11-14.
     min_matches=150,
     must_find=frozenset({_REGISTRY_GC_SCRIPT, _LONGHORN_BACKUP_HEALTH}),
     allow={

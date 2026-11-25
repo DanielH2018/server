@@ -32,8 +32,7 @@ def test_every_snapshot_role_restores_its_own_replicas() -> None:
     """
     # fact: k8s/roles/navidrome/CLAUDE.md#Parking it again
     roles = _snapshot_roles()
-    # A floor, and only as a sanity check on the reader itself: the guard below is the loop,
-    # which covers however many roles opt in.
+    # A floor, only a sanity check on the reader; the guard below is the loop.
     assert len(roles) >= 13, (
         f"only found {len(roles)} snapshot roles; the reader is broken"
     )

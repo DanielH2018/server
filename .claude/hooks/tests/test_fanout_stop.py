@@ -32,8 +32,6 @@ PROGRESS = "Tests pass. Next I will open the PR."
 FINISHED = "Opened https://github.com/DanielH2018/server/pull/2900 and landed it."
 
 
-# The line only the daniel-box brief carries; a daniel-server brief says to stop at
-# `gh pr create`, which is what makes the marker the right thing to key on.
 LANDING_BRIEF = "# Fan-out batch\n./scripts/deploy_tools/land.sh --pr 1 --arm-merge\n"
 LANDED = FINISHED + "\nVERDICT: settled"
 
@@ -173,8 +171,7 @@ def test_a_review_phase_may_stop_on_its_json_but_the_same_text_outside_one_is_bl
 
 
 def test_a_review_batch_owes_no_verdict_in_any_phase(tmp_path):
-    # Its pipeline runs land.sh itself, so the apply phase it resumes finishes on the
-    # PR URL, and a PR URL alone still finishes a landing brief's session.
+    # Its pipeline runs land.sh itself, so the apply phase it resumes finishes on the PR URL.
     issues = [Issue(1, "one", IssueState.OPEN, body="body")]
     brief = render_brief(issues, "daniel-box", "1", "worktree-orch", [], review=True)
     root = _fanout_tree(tmp_path, brief)

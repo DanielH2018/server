@@ -59,9 +59,7 @@ def _pvc_names(text: str) -> list[str]:
     return names
 
 
-# The only PVC-name shape this repo writes: a whole-field reference to exactly one role-local
-# var — never a literal string, never a compound expression (`{{ a }}-{{ b }}`), never a
-# filter. `_resolve_claim_token` refuses anything else rather than guessing at it.
+# A whole-field reference to exactly one role-local var.
 _SINGLE_VAR_REF = re.compile(r"^\{\{\s*(\w+)\s*\}\}$")
 
 
@@ -122,9 +120,7 @@ def _rendered_pvc_claims(role: Path) -> tuple[set[str], list[str]]:
     return resolved, unresolved
 
 
-# The `spec_shell` macro call every Deployment makes (k8s/templates/workload-shell.yml.j2),
-# and the literal form, so a template that writes the strategy out, or a CronJob-shaped one
-# outside the call-site guard, still counts.
+# Matches the `spec_shell` macro call and the literal form.
 _STRATEGY_RECREATE = re.compile(
     r"^\s*strategy:\s*$\n\s*type:\s*Recreate\s*$"
     r"|\{\{\s*spec_shell\(\s*['\"]Recreate['\"]",
@@ -177,20 +173,8 @@ def _migrating_state(role: Path) -> bool:
     )
 
 
-# ── state coupled OUTSIDE the volume ─────────────────────────────────
-# The exclusion class every other guard in this file misses. The checks above ask whether a role
-# protects the claims it OWNS; this one asks whether it mounts a claim it does not own and
-# therefore cannot revert.
-#
-# `_rendered_pvc_claims` reads only what a role CAUSES to exist — a PVC document in its own
-# templates or a `k8s_claims` entry. `media-data` is rendered by `k8s/media-volume`, so
-# every *arr role mounting it is invisible to that reader. The gap this closes is the NEXT role
-# added with such a mount, promoted with nobody asked.
-#
-# The ack key is a list of claim names, not a prose reason — mechanically diffable, and the same
-# shape as k8s_autodeploy_snapshot_pvcs. It proves the question was asked, never that the answer
-# was right; that is the honest limit of a guard here, and it converts a silent omission into a
-# visible one.
+# Roles mounting a claim they do not own (`media-data`) are invisible to `_rendered_pvc_claims`;
+# the ack key lists claim names and proves the question was asked.
 _CLAIM_REF_RE = re.compile(r"^\s*claimName:\s*(?P<token>\S.*?)\s*$", re.MULTILINE)
 
 

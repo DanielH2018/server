@@ -98,7 +98,7 @@ def test_the_equal_list_names_only_labels_the_exporter_alert_carries():
 
 
 def test_an_equal_list_naming_job_is_flagged():
-    # `BlackboxExporterDown` is a max() over the job, so `job` is absent on the source and an
-    # `equal: [job]` would compare "" with "blackbox-ingress" and never match.
+    # `BlackboxExporterDown` is a max() over the job, so `job` is absent on the source and `equal:
+    # [job]` never matches.
     bad = {**exporter_inhibit(), "equal": ["job"]}
     assert equal_problems(bad, exporter_alert()) == ["job"]

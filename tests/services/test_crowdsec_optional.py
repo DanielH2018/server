@@ -77,12 +77,11 @@ def test_nothing_names_crowdsec_once_the_flag_is_off(role: str) -> None:
     crowdsec_vars: dict[str, object] = {
         name: sentinel
         for name in list(role_vars) + ["crowdsec_k8s_image", "crowdsec_k8s_lapi_port"]
-        # The flag's own name matches, and a sentinel STRING is truthy — setting it here
-        # would silently switch the subsystem back on and the check would pass vacuously.
+        # The flag's own name matches and a sentinel STRING is truthy, so setting it here would
+        # switch the subsystem back on and the check would pass vacuously.
         if ("crowdsec" in name or "bouncer" in name) and name != _FLAGS[role]
     }
-    # The map the shared macro indexes by app, so its sentinel has to be a map too: a string
-    # would fail the lookup rather than render the sentinel.
+    # The shared macro indexes this map by app, so its sentinel must be a map.
     crowdsec_vars["crowdsec_k8s_sidecar_agents"] = {role: sentinel}
     assert crowdsec_vars, (
         f"{role} names no CrowdSec variable — the sentinel proves nothing"
@@ -120,8 +119,8 @@ def test_the_middleware_ships_with_crowdsec_on_and_not_with_it_off() -> None:
 
 def test_the_bouncer_plugin_is_declared_with_crowdsec_on_and_gone_with_it_off() -> None:
     assert "bouncer" in _static_config(True)["experimental"]["plugins"]
-    # The whole `experimental` key goes: the bouncer is its only entry, and Traefik disables
-    # plugins silently rather than failing when one cannot be resolved.
+    # The whole `experimental` key goes: the bouncer is its only entry, and Traefik silently
+    # disables an unresolvable plugin.
     assert "experimental" not in _static_config(False)
 
 
@@ -255,8 +254,8 @@ def test_the_staged_datafiles_are_copied_in_so_geoip_can_initialise(role: str) -
             'for f in /staging/var/lib/crowdsec/data/*; do install -m 644 "$f" '
             "/var/lib/crowdsec/data/; done; exit 0",
         ),
-        # Without the trailing exit 0 an unreadable file fails the pod, and both roles roll
-        # under Recreate — for authelia that is SSO for the whole homelab.
+        # Without the trailing exit 0 an unreadable file fails the pod, and both roles roll under
+        # Recreate.
         (
             "no trailing exit 0",
             'for f in /staging/var/lib/crowdsec/data/*; do case "${f##*/}" in crowdsec.db*) '
@@ -304,17 +303,9 @@ def test_the_shared_log_volume_survives_without_crowdsec(
     assert volume in {m["name"] for m in container["volumeMounts"]}
 
 
-# --- k8s_public_route and the bouncer must move together, per host ---
-#
-# Detection is on RENDERED output, under each host's own variables. Two shortcuts would make
-# the guard inert:
-#
-# 1. Detecting the bouncer by SUBSTRING over raw template text. Every occurrence sits inside
-#    `{% if traefik_k8s_manage_crowdsec %}`, so the text is present whatever the flag says and
-#    the comparison reads True unconditionally.
-# 2. Reading `k8s_public_route` from group_vars/all.yml only, so a host that overrides it is
-#    never evaluated. The reading is per-host, and the rejecting test below drives the False
-#    side through an override.
+# Detect on RENDERED output under each host's own variables: a substring match over raw templates
+# reads True whatever the flag says, and reading only group_vars/all.yml never evaluates a host that
+# overrides it.
 
 
 def _host_render(host: str, template: str, overrides: dict | None = None) -> str:

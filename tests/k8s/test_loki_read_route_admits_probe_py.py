@@ -18,9 +18,6 @@ from lib import yaml_fast
 from _manifest_guards import ALL_VARS_VALUES, K8S, _k8s_entries, _render, _role_context
 
 ROLE = "loki-homelab"
-# The route object this guard is about, named rather than globbed: the role renders a second
-# monitoring route (the Pi's push door), and a census that lost the read route would assert
-# nothing while still passing.
 READ_ROUTE = "loki-homelab-monitoring"
 
 

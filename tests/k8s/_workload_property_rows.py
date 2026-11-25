@@ -38,8 +38,7 @@ def _service_namespace_offence(role: str, doc: dict) -> str | None:
     return f"Service renders into {actual!r}, not {expected!r}"
 
 
-# k8s_registry_pull_host is `localhost:<port>`. Nothing else on the plane pulls from a loopback
-# registry, so the prefix is the whole test of "built here".
+# Nothing else on the plane pulls from a loopback registry.
 _BUILT_PREFIX = "localhost:"
 
 
@@ -79,8 +78,7 @@ def _no_schema_offence(role: str, doc: dict) -> str | None:
 
 KARAKEEP_CHROME = "karakeep-chrome"
 
-# The paths chromium writes under a read-only root. Adding one is a tightening; removing one
-# needs evidence from the pod, not from the manifest.
+# Adding a path is a tightening; removing one needs evidence from the pod.
 CHROME_WRITABLE_PATHS = frozenset({"/tmp", "/var/cache/fontconfig"})
 
 
@@ -103,7 +101,7 @@ def _chrome_writable_offence(role: str, doc: dict) -> str | None:
     if chrome.get("securityContext", {}).get("readOnlyRootFilesystem") is not True:
         return "the root is not read-only, so this property no longer means anything"
     # Only an emptyDir counts: a PVC at the path satisfies a mount check while being RWO and
-    # node-pinning a pod that has no state to keep.
+    # node-pinning a stateless pod.
     empty_dirs = {v["name"] for v in spec.get("volumes", []) if "emptyDir" in v}
     writable = {
         m["mountPath"]
@@ -192,8 +190,7 @@ def _homepage_with_post_start(command: list[str]) -> dict:
 
 
 def pod_specs(role: str, tpl: str, doc: dict):
-    # The object name is in the key because one template can carry two Deployments (pihole's
-    # does), and a key naming only the file would merge them.
+    # The object name is in the key because one template can carry two Deployments.
     if doc.get("kind") in POD_KINDS:
         yield f"{doc['kind']}/{doc['metadata']['name']}", pod_spec(doc)
 

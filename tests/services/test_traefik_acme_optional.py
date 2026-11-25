@@ -32,8 +32,7 @@ def _render(template: str, manage_acme: bool) -> str:
 
 
 def _claims(manage_acme: bool) -> list:
-    # `k8s_claims` is a role default computed from the flag. `render_context` lays the flag in
-    # before the defaults resolve, so the claims follow it.
+    # `render_context` lays the flag in before the defaults resolve, so the claims follow it.
     ctx = render_context(K8S_ROLES / _ROLE, overrides={_FLAG: manage_acme}, strict=True)
     return ctx["k8s_claims"]
 
@@ -78,8 +77,8 @@ def test_cloudflare_env_is_present_with_acme_on_and_the_key_is_gone_with_it_off(
     }
 
     traefik = next(c for c in _pod_spec(False)["containers"] if c["name"] == "traefik")
-    # Not an empty list: `env:` with nothing under it parses as null, and the API server
-    # rejects that on a container spec. The whole key has to go.
+    # Not an empty list: `env:` with nothing under it parses as null, which the API server rejects
+    # on a container spec.
     assert "env" not in traefik
 
 

@@ -375,8 +375,6 @@ def test_rule_globs_without_frontmatter_is_empty():
 
 # ── non-vacuity against the real tree ────────────────────────────────────────────────
 
-# A role that exists and carries a CLAUDE.md, so a rename or move goes red here rather than
-# silently emptying every selection.
 KNOWN_ROLE = "k8s/roles/monitor-bridge"
 
 

@@ -221,18 +221,9 @@ def test_the_drain_waits_on_redis_only_while_the_lever_deploys_it():
     assert render_expr(declared, authelia_k8s_redis_sessions=False) == []
 
 
-# --- the policy ships with the workload it lets start ---------------------------------
-#
-# A fourth invariant. The three above all hold while the NetworkPolicy sits in a DIFFERENT
-# role: `rendered_docs()` sweeps the whole tree, so the port comparison finds the policy
-# wherever it lives. With the policy in another role such as netpol-baseline, `--tags authelia`
-# stages a portal with no path to its session store, and Authelia exits rather than degrades
-# when the session provider fails its startup check.
-#
-# `build_k8s_dep_map` cannot cover this: it derives a role's edges from templates inside that
-# role's own directory (scripts/renderer/template_filters/toposort.py), so a dependency expressed in a
-# sibling role produces no edge and no ordering constraint to violate. Co-location is what
-# closes it, and this is the guard that keeps it closed.
+# Co-location keeps the NetworkPolicy with Authelia: in another role, `--tags authelia` stages a
+# portal with no path to its session store, and `build_k8s_dep_map` derives no edge from a sibling
+# role.
 
 REDIS_POLICY_FILE = "networkpolicy-redis.yaml"
 

@@ -76,11 +76,8 @@ from pathlib import Path
 
 import pytest
 
-# Below this many runner seconds a worker costs more to start than it saves. Four
-# `scripts/dev/tests` files ran in 1.4s serial and 1.7s on four workers (the 2026-10-18 table),
-# and four files measuring 0.3s saved under half a second on two (the 2026-10-25 table). Those
-# tables put the floor at 2.0 of their own seconds, under the 2.22s heaviest module of the
-# `-python` hook's five, which ran fastest on 3. The runner measures a median 1.8x that.
+# Below this many runner seconds a worker costs more to start than it saves; the recorded tables put
+# the floor at 2.0.
 MIN_SECONDS_PER_WORKER = 3.6
 
 WEIGHTS_TABLE = Path("scripts/dev/pytest_shard_runner_weights.json")

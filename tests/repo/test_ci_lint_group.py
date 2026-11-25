@@ -20,8 +20,6 @@ from lib import yaml_fast
 PYPROJECT = REPO / "pyproject.toml"
 WORKFLOWS = REPO / ".github" / "workflows"
 LINT_TOOLS = {"actionlint-py", "zizmor", "ty", "mkdocs-material", "ruff"}
-# (workflow, job) pairs each side of the split must contain, so a reshaped workflow cannot pass
-# empty. promote.yml's render sets the variable at workflow level.
 KNOWN_LINT_FREE = {
     ("ci.yml", "pytest"),
     ("ci.yml", "pr_gates"),

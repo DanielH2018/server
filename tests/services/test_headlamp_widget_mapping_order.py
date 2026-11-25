@@ -32,10 +32,8 @@ from _homepage_config import tiles
 
 TILE = "Headlamp"
 
-# label_replace(<expr>, "k", "<name>", "", "") — capture the assigned name. Anchored on the
-# `"k",` destination label rather than on `label_replace(`, because the counter expressions
-# themselves contain quotes (condition="Ready") and a non-greedy span across them would stop
-# at the first inner quote and match only the one counter that has none.
+# Anchored on the `"k",` destination label, not `label_replace(`: counter expressions contain
+# quotes, and a non-greedy span would stop at the first inner quote.
 LABEL_REPLACE_RE = re.compile(r'"k",\s*"([^"]+)"')
 # `data.result.<n>.value.1` — the array position a mapping reads.
 RESULT_FIELD_RE = re.compile(r"^data\.result\.(\d+)\.value\.1$")

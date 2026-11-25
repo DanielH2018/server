@@ -90,8 +90,7 @@ def test_href_refuses_an_entry_with_no_route():
         homepage_href(ENTRIES, "nosuch", "example.com")
 
 
-# A Service homepage dials whose fence a bespoke netpol-baseline template renders, so its entry
-# cannot carry `homepage_widget` without rendering a second policy of the same name.
+# Its entry cannot carry `homepage_widget` without rendering a second policy of the same name.
 BESPOKE_FENCES = {"pihole": "networkpolicy-pihole.yaml.j2"}
 
 # Targets the census must find. Named, because a reshaped URL drops out of a pattern silently.

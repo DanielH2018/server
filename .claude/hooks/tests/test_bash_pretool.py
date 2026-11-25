@@ -41,9 +41,6 @@ def _load(name):
 
 _mod = _load("bash-pretool")
 
-# The arms this dispatcher must be running. Asserted by name rather than by count: the census
-# is a tuple of filenames, and a renamed arm would otherwise leave every test below passing
-# against four arms while the fifth judged nothing (`.claude/rules/python-layout.md`).
 EXPECTED_ARMS = (
     "block-protected-bash",
     "block-footguns",
@@ -234,11 +231,8 @@ def test_reject_a_cd_out_of_the_cwd_is_not_stripped(sandbox, monkeypatch, capsys
     assert out is None or "updatedInput" not in out
 
 
-# ── the rewrite in auto mode ─────────────────────────────────────────────────────────
-#
-# The auto-mode classifier refuses a call whose input a hook changed after it reviewed it, so
-# in auto mode no arm may answer with `updatedInput`. A deny that names the rewrite and a
-# rewrite skipped in auto mode both satisfy these.
+# The auto-mode classifier refuses a call whose input a hook changed, so no arm may answer with
+# `updatedInput` there.
 
 
 def dispatch_auto(command, load, monkeypatch, capsys):

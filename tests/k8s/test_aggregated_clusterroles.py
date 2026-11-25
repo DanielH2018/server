@@ -23,8 +23,6 @@ AGGREGATE_LABELS = frozenset(
     for role in ("view", "edit", "admin")
 )
 
-# Every ClusterRole that aggregates into a built-in role, and why it may. The census below
-# must find exactly these names, so a regenerated vendored file that adds or drops one fails.
 AGGREGATED_CLUSTERROLES = {
     "flux-view-flux-system": (
         "Flux's vendored read on its own API groups. It reaches `view`, so the read-only "
@@ -37,8 +35,7 @@ AGGREGATED_CLUSTERROLES = {
     ),
 }
 
-# The built-in roles `flux-edit-flux-system` widens with Flux writes. A binding to one of them
-# hands its subject those writes, so it voids that row's reason.
+# A binding to one of them hands its subject those writes, so it voids that row's reason.
 WRITING_AGGREGATES = frozenset({"edit", "admin"})
 
 
@@ -107,8 +104,7 @@ def test_the_aggregation_check_flags_an_unlisted_role_and_a_writing_binding():
     assert _aggregation_problems([*docs, binding]) == ["rogue-edit binds 'edit'"]
 
 
-# The groups `flux-view-flux-system` reads, as Flux v2.9.6 ships it. A regeneration that adds
-# a group widens `view` for every identity bound to it, so it fails here and is decided here.
+# A regeneration that adds a group widens `view` for every bound identity, so it fails here.
 FLUX_VIEW_GROUPS = frozenset(
     {
         "kustomize.toolkit.fluxcd.io",

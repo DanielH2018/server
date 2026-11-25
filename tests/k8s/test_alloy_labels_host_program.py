@@ -18,7 +18,6 @@ import pytest
 
 from _k8s_render import rendered_docs
 
-# Real line shapes from daniel-box and daniel-server syslog and auth.log, 2026-10-24.
 LINES = {
     "2026-10-24T20:54:47.994980+00:00 daniel-server kernel: IPv4: martian source": "kernel",
     "2026-10-22T02:11:03.120000+00:00 daniel-box uv[1333]: Traceback (most recent call last):": "uv",

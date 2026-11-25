@@ -14,8 +14,6 @@ Run: uv run pytest tests/repo/test_render_gate.py
 from _render_gate import template_source_reads
 
 
-# Every spelling of a source read a guard in this tree has used. Named at module level and
-# counted below, because the loop over it passes vacuously if a case is ever dropped.
 FLAGGED_SPELLINGS = (
     'T = K8S_ROLES / "n8n" / "templates" / "Dockerfile.j2"\nT.read_text()\n',
     'T = K8S_ROLES / "uptime-kuma/templates/x.yaml.j2"\nT.read_bytes()\n',
@@ -29,8 +27,7 @@ FLAGGED_SPELLINGS = (
     'for tpl in sorted(role_dir.glob("templates/*.j2")):\n    tpl.read_text()\n',
     # The pattern names no template, and the directory it globs does.
     'tdir = role / "templates"\nfor t in sorted(tdir.glob("*.j2")):\n    t.read_text()\n',
-    # The same read with a pattern that names nothing at all, which the unwrap alone misses:
-    # only the bound DIRECTORY says these are templates.
+    # Only the bound directory says these are templates.
     'tdir = role / "templates"\nTEXT = {t.name: t.read_text() for t in tdir.glob("*")}\n',
     # The helper parameter: no template path at the read site.
     "def f(p):\n    return p.read_text()\n\n\n"
@@ -39,14 +36,13 @@ FLAGGED_SPELLINGS = (
     "def _manifest_files():\n"
     '    return sorted(K8S_ROLES.glob("*/templates/*.j2"))\n\n\n'
     "for p in _manifest_files():\n    p.read_text()\n",
-    # The same, with the glob one level further in — inside the comprehension the function
-    # returns, which is the common spelling.
+    # The glob one level further in, inside the comprehension the function returns.
     "def _manifest_files():\n"
     '    return sorted(p for p in ROLES.rglob("templates/*.j2") if "archive" not in p.parts)\n'
     "\n\n"
     "for path in _manifest_files():\n    path.read_text()\n",
-    # A `+` of globs, with the template glob on the RIGHT. A detector
-    # that looked only at the left operand would pass this while the mirrored form went unseen.
+    # A `+` of globs with the template glob on the RIGHT: a detector reading only the left operand
+    # misses it.
     'for p in list(role.rglob("*.yaml")) + list(role.rglob("*.j2")):\n    p.read_text()\n',
     # A census that yields `(label, path)` pairs, unpacked by the caller's `for`.
     "def _scanned():\n"

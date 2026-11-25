@@ -39,8 +39,6 @@ import re
 
 from _hook_common import BashCall
 
-# One leading `cd <word> &&`. The word alternatives are a single-quoted string, a double-quoted
-# string without `$`, a backtick or a backslash, and a bare token without shell metacharacters.
 # A bare token may not start with `-`, which keeps `cd -`, `cd -P` and `cd --` out.
 _LEADING_CD = re.compile(
     r"""^\s*cd[ \t]+

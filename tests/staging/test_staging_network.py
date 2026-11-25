@@ -34,9 +34,7 @@ from _helpers import REPO
 ROLE = REPO / "hosts" / "components" / "hypervisor"
 TEMPLATE = "staging-network.xml.j2"
 
-# Ranges daniel-server routes, or that libvirt itself defines. Sources, in order: lan_subnet
-# in group_vars; k3s pod and service CIDRs; the bridges left behind by the Docker purge
-# (the packages are gone, the interfaces stay); libvirt's own `default` network.
+# Ranges daniel-server routes, or libvirt defines: lan_subnet, k3s pod and service CIDRs.
 RESERVED = [
     ipaddress.ip_network("10.0.0.0/24"),
     ipaddress.ip_network("10.42.0.0/16"),
@@ -79,8 +77,8 @@ def test_the_network_is_nat_with_a_named_bridge():
     bridge = root.find("bridge")
     assert bridge is not None
     name = bridge.get("name")
-    # IFNAMSIZ is 16 including the NUL, so an interface name over 15 chars is rejected by
-    # the kernel -- and libvirt reports it as a network that will not start.
+    # IFNAMSIZ is 16 including the NUL, so an interface name over 15 chars is rejected by the
+    # kernel.
     assert name and len(name) <= 15, f"bridge name {name!r} exceeds 15 characters"
 
 

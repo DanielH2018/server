@@ -21,17 +21,13 @@ from lib.proc_testing import fake_bin
 
 HYPERVISOR = REPO / "hosts" / "components" / "hypervisor"
 ORCHESTRATOR = HYPERVISOR / "templates" / "etcd-restore-drill-vm.sh.j2"
-# The orchestrator sources the check library and writes a textfile verdict from `report` and
-# `report_fence`. A runner has no /usr/local/lib copy, so the harness points the source at the
-# role's copy and the textfile directory at tmp_path, which keeps a run on daniel-box off the
-# real collector directory. The harness asserts on the literal first, so a renamed library fails
-# here instead of quietly disarming the run under test.
+# The harness points the check-library source at the role's copy and the textfile dir at tmp_path,
+# keeping a run off the real collector; it asserts on the literal first, so a renamed library fails.
 CHECK_LIB = "/usr/lib/homelab/homelab-check-lib.sh"
 ROLE_CHECK_LIB = (
     REPO / "hosts" / "components" / "check-lib" / "files" / "homelab-check-lib.sh"
 )
-# The two lines the harness strips to make the orchestrator sourceable. Named so a rename fails
-# loudly rather than leaving the harness running `main` against a real libvirt.
+# A rename fails loudly rather than leaving the harness running `main` against a real libvirt.
 ENTRYPOINT = 'trap teardown EXIT\nmain "$@"'
 
 
@@ -47,27 +43,14 @@ def _load_host_vars(host: str):
     return yaml_fast.safe_load((HOST_VARS / f"{host}.yml").read_text()) or {}
 
 
-# ── The reachability half: the orchestrator's fence leg, run against stub dials ─────────────
-#
-# The leg is exercised rather than pattern-matched because what breaks in it is shell logic and
-# a four-way verdict, neither of which a textual guard can see. Three things are stubbed: the
-# ssh to the guest, the dials on both sides of it, and `logger`. Every decision the leg makes
-# runs unmodified.
-
-# Stands in for `ssh <guest>`. The orchestrator hands it `bash -s` and pipes the dial script in,
-# exactly as it does to the real guest. `$BASH` is an absolute path, so the guest's PATH can be
-# narrowed to the stub directory alone — which is what lets a test model a guest with no `ping`.
-# The dial stubs carry an absolute shebang for the same reason: `/usr/bin/env` is not on that PATH.
+# `$BASH` is an absolute path, so the guest's PATH can be narrowed to the stub directory.
 GUEST_SSH_STUB = """\
 #!/bin/bash
 export FENCE_SIDE=guest PATH="$GUEST_STUBS"
 exec "$BASH" "${@:2}"
 """
 
-# One dial stub for `curl` and `ping`. It answers from a list of reachable targets, one per line,
-# chosen by which side of the fence it runs on — so a target can be reachable from daniel-server
-# and refused from the guest, which is the whole point of the control leg. Builtins only: the
-# guest's PATH holds nothing but these stubs.
+# A target can be reachable from daniel-server and refused from the guest.
 DIAL_STUB = """\
 #!/bin/bash
 target="${@: -1}"
@@ -77,25 +60,20 @@ while read -r line; do [[ "$line" == "$target" ]] && exit 0; done < "$list"
 exit 7
 """
 
-# `ip -4 neigh show dev cni0`, answering with one REACHABLE neighbour in the pod CIDR. The real
-# one would report this host's own neighbours, which is not a fixture.
+# The real one would report this host's own neighbours, which is not a fixture.
 IP_STUB = """\
 #!/bin/bash
 [[ -n "$STUB_POD_IP" ]] && echo "$STUB_POD_IP dev cni0 lladdr aa:bb:cc:dd:ee:ff REACHABLE"
 exit 0
 """
 
-# `logger`, recording instead of writing. The fence leg's own reporting calls it, and those tags
-# ship to Loki — a fixture verdict on the real syslog lands on a dashboard beside real ones.
-# tests/leakguard.py fails the test that lets one through, and fence_reports() below reads
-# the recording, which keeps this stub from failing open.
+# `logger`, recording instead of writing: its tags ship to Loki, so a fixture verdict on the real
+# syslog lands on a dashboard.
 LOGGER_STUB = """\
 #!/bin/bash
 printf '%s\\n' "$*" >>"$LOGGER_CALLS"
 """
 
-# Runs the leg and nothing else. `report` is the drill's own verdict; `fail` records the
-# message the way the real one does before exiting non-zero.
 DRIVER = """\
 #!/usr/bin/env bash
 source "$ORCH"
@@ -210,8 +188,7 @@ def run_fence(
         logger=LOGGER_STUB,
         **{"guest-ssh": GUEST_SSH_STUB},
     )
-    # Only the tools named in `guest_tools` exist on the guest side, so a leg that dials from
-    # the guest with a tool the guest lacks fails the way the VM would.
+    # Only the tools named in `guest_tools` exist on the guest side.
     guest_stubs = fake_bin(
         tmp_path / "guest-bin",
         **{name: DIAL_STUB for name in ("curl", "ping") if name in guest_tools},

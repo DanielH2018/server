@@ -42,9 +42,7 @@ def _code(subject: Subject) -> list[tuple[int, str]]:
 
 # ── No role ships a pytest file or a markdown file ──────────────────────────────────────
 
-# A ship names its file on a `src:`, `dest:` or `loop:` line, or inside a `lookup('file', ...)`
-# whose path may be built with `role_file('files/x.py')`. Jinja `{# #}` comments name
-# test files freely, so a `.py` on any other line is not a ship.
+# Jinja `{# #}` comments name test files freely, so a `.py` on any other line is not a ship.
 _PY_SHIP_LINE = re.compile(r"""\b(?:src|dest|loop)\s*:|lookup\(\s*['"]file['"]""")
 _PY_BASENAME = re.compile(r"(?<![\w.-])([\w-][\w.-]*\.py)\b")
 
@@ -59,14 +57,9 @@ def _shipped_py(subject: Subject) -> list[tuple[int, str]]:
     ]
 
 
-# The same two shapes for a `.md`, a `role_file(...)` call wherever it sits (a `*_modules`
-# list's `src: "{{ role_file('files/x') }}"`), plus a bare YAML list entry: `home-assistant`'s
-# four `*_files` lists in `defaults/main.yml` name what its ConfigMap ships that way.
-#
-# WHAT THIS SCAN DOES NOT SEE: a ship that names no basename (`with_fileglob`/`fileglob`, a
-# directory-shaped `src:`, `unarchive`/`synchronize` of a tree). None ships a `.md` today, so the
-# hole is latent; a `.md` added under one would pass this row and map to no deploy tag in
-# `role_paths.role_for`.
+# Blind spot: a ship naming no basename (`fileglob`, a directory-shaped `src:`,
+# `unarchive`/`synchronize`)
+# would pass this row and map to no deploy tag in `role_paths.role_for`.
 SHIPPED_MD = re.compile(
     r"""(?:src|dest)\s*:\s*['"]?\S*?(?P<a>[\w.-]+\.md)"""
     r"""|lookup\(\s*['"]file['"]\s*,\s*['"]?\S*?(?P<b>[\w.-]+\.md)"""
@@ -97,9 +90,8 @@ _JOB_RESOURCES_LITERAL = re.compile(
 )
 _JOB_RESOURCES_CALL = "{{ job_container_resources("
 
-# ── A pod-template container takes its resources from container_resources() ──────────────
-# The `limits:`/`requests:` line is what separates a container's block from authelia's
-# access-control `resources:` list, which sits at the same 10 spaces.
+# The `limits:`/`requests:` line separates a container's block from authelia's access-control
+# `resources:` list at the same indent.
 _POD_RESOURCES_LITERAL = re.compile(
     r"^ {10}resources:\n {12}(limits|requests):", re.MULTILINE
 )
@@ -136,7 +128,6 @@ ROWS = (
             Subject("b.yml", "# src: test_commented.py is not a ship\n"),
             Subject("c.yml", "{# test_render.py pins this block #}\n"),
         ),
-        # 32 ship lines across 14 files when H7.63 deleted the looped host copy (2026-11-09).
         min_matches=32,
         # Two ConfigMap-inlined scripts.
         must_find=frozenset(
@@ -183,11 +174,6 @@ ROWS = (
             ),
             Subject("b.yml", "example_config_files:\n  - settings.yaml\n"),
         ),
-        # 501 files under those directories before H7.52 deleted gitops_deploy's four task files
-        # and its handlers, 493 before H7.63 deleted initial_setup's and common's, 484 before
-        # H7.44 deleted three of k3s's and its handlers, 469 before H7.55 deleted the emptied
-        # setup roles and the runbook roles, 455 before H7.55's second PR deleted the rest, 435
-        # before 22 flat Secret templates became `render_secrets` entries.
         min_matches=433,
         # The `*_files` lists the bare-entry alternative exists for.
         must_find=frozenset({"k8s/roles/home-assistant/defaults/main.yml"}),
@@ -202,8 +188,7 @@ ROWS = (
             "either moves onto the entry or opens with that marker, so the next census does "
             "not have to re-derive it."
         ),
-        # The callers loop is the model itself. The homelab baseline, networkpolicy.yaml.j2,
-        # falls outside the glob; the observability one is inside it and carries a marker.
+        # The callers loop is the model itself; the homelab baseline falls outside the glob.
         files=lambda: [
             rel
             for rel in tracked(
@@ -218,7 +203,6 @@ ROWS = (
         ),
         red=(Subject("networkpolicy-new.yaml.j2", "---\nkind: NetworkPolicy\n"),),
         green=(Subject("networkpolicy-old.yaml.j2", "{# DECIDED: x. #}\n---\n"),),
-        # 15 policies when the row landed (2026-10-09).
         min_matches=15,
         must_find=frozenset(
             {
@@ -260,8 +244,6 @@ ROWS = (
                 '          env:\n            - name: TZ\n              value: "{{ tz }}"\n',
             ),
         ),
-        # 12 calls across 11 templates when the row landed (2026-10-09). qbittorrent's second,
-        # its WireGuard sidecar's, now sits in the shared wireguard-sidecar.yml.j2.
         min_matches=12,
         must_find=frozenset(
             {
@@ -306,7 +288,6 @@ ROWS = (
                 "deployment.yaml.j2", "          resources:\n            limits:\n"
             ),
         ),
-        # 12 calls across 4 templates when the row landed (2026-10-09).
         min_matches=12,
         must_find=frozenset(
             {
@@ -359,7 +340,6 @@ ROWS = (
                 "cronjob.yaml.j2", "              resources:\n                limits:\n"
             ),
         ),
-        # 103 calls across 71 templates when the row landed (2026-10-10).
         min_matches=100,
         must_find=frozenset(
             {

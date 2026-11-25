@@ -78,9 +78,6 @@ def test_an_unrendered_dockerfile_is_named_rather_than_missed() -> None:
         rendered_build_text("code-server", "Containerfile.j2")
 
 
-# The shell templates a guard reads today, across `tests/services/` and
-# `tests/longhorn/`. Named so a renamed or moved template fails as a missing
-# member rather than as a guard over an empty set.
 GUARDED_SHELL_TEMPLATES = frozenset(
     {
         ("components", "claude-code", "sync-artifacts.sh.j2"),

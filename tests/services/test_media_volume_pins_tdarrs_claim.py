@@ -15,8 +15,8 @@ from _k8s_render import render_role_template
 
 
 def test_the_media_volume_pins_tdarrs_claim_to_the_primary_node() -> None:
-    # Rendered with a sentinel node, so a PV pinned to a literal name or to any other variable
-    # renders something other than the sentinel and fails here.
+    # Rendered with a sentinel node: a PV pinned to a literal name or another variable renders
+    # something else and fails.
     pv = yaml_fast.safe_load(
         render_role_template(
             "media-volume", "pv.yaml.j2", {"k8s_primary_node": "sentinel-node"}

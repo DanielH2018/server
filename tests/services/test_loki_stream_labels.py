@@ -253,8 +253,7 @@ def test_a_config_emitting_an_unlisted_job_is_flagged():
     assert _emitted_jobs(config) - OWNER_JOBS == {"docker"}
 
 
-# The rule-file checks. A selector reaches them through `_stream_selectors`, so a rule with two
-# selectors has both read.
+# A selector reaches the rule-file checks through `_stream_selectors`.
 
 
 def _stream_selectors(expr: str) -> list[str]:
@@ -365,11 +364,9 @@ def test_a_loki_rule_on_an_unknown_machine_is_flagged():
     assert _unknown_machines({"r": expr}) == {"r": ["daniel-laptop"]}
 
 
-# Each `container` value a Loki rule selects on, and the role template whose pod declares a
-# container by that name. A value with no entry here fails, so a new rule adds its mapping.
+# A value with no entry fails, so a new rule adds its mapping.
 _RULE_CONTAINERS = {
-    # Both cloudflare-ddns Deployments name their container this; the rules tell them apart by
-    # `pod`, which test_a_cloudflare_ddns_rule_names_a_deployment_the_role_renders holds.
+    # The rules tell the two cloudflare-ddns Deployments apart by `pod`.
     "cloudflare-ddns": ("cloudflare-ddns", "deployment-direct.yaml.j2"),
     "home-assistant": ("home-assistant", "deployment.yaml.j2"),
 }
@@ -419,9 +416,8 @@ def test_a_loki_rule_on_an_undeclared_container_is_flagged():
     }
 
 
-# Each silence rule, and the `loki_streams` roles whose silence it reports. A cluster rule that
-# also matched a Pi stream would keep its count above zero through a total cluster outage and
-# never fire, and the Pi rule must not be held up by the cluster either.
+# A cluster rule that also matched a Pi stream would stay above zero through a total cluster outage
+# and never fire.
 _SILENCE_RULES = {
     "homelab-logs.yaml LokiHostLogsSilent": {"host_syslog", "host_authlog"},
     "homelab-logs.yaml LokiPodLogsSilent": {"cluster_pods"},
@@ -431,9 +427,8 @@ _SILENCE_RULES = {
     "homelab-logs.yaml CloudflareDdnsProxiedUpdateSilent": {"cluster_pods"},
 }
 
-# A silence rule that selects on a `container` or `pod` the generic stub stream lacks. The stub
-# for `cluster_pods` is an authelia stream with no `pod`, so these rules would read as missing
-# their own stream. Each override adds what a live stream of the named workload carries.
+# The `cluster_pods` stub is an authelia stream with no `pod`, so these rules would read as missing
+# their stream.
 _SILENCE_STREAM_EXTRA = {
     "homelab-logs.yaml CloudflareDdnsDirectUpdateSilent": {
         "container": "cloudflare-ddns",

@@ -50,9 +50,7 @@ def _all_vars() -> dict:
 
 _RESOURCE_KEYS = ("requests.cpu", "requests.memory", "limits.cpu", "limits.memory")
 _REQUEST_ONLY = frozenset({"requests.cpu", "limits.cpu", "limits.memory"})
-# A vendored container that may go without some keys: its id -> (the keys it lacks, why).
-# The set is exact. A key that gets set, or a container that disappears, fails the guard as
-# a stale exemption, so an entry cannot outlive its fix.
+# The set is exact: a key that gets set, or a container that disappears.
 _VENDORED_EXEMPT = {
     "longhorn DaemonSet/longhorn-manager containers/longhorn-manager": (
         _REQUEST_ONLY,
@@ -89,9 +87,8 @@ def _has_directive(node) -> bool:
 def _containers(role: str, doc: dict):
     """(role, container id, container) for each container in a workload doc."""
     pod = pod_spec(doc)
-    # initContainers included deliberately: an init container with no limit can consume
-    # the node just as thoroughly as the app container, and it runs before anything is
-    # watching the workload.
+    # initContainers included: an init container with no limit can consume the node as thoroughly as
+    # the app container.
     for key in ("initContainers", "containers"):
         for container in pod.get(key) or []:
             where = f"{doc['kind']}/{doc['metadata']['name']} {key}/{container['name']}"
@@ -159,9 +156,8 @@ def _pod_specs():
 
 
 def _missing_keys(container: dict) -> frozenset[str]:
-    # Per KEY, not per dict. Asserting the `limits` dict is merely truthy passes a container
-    # that sets `memory` and omits `cpu`, which then inherits the LimitRange's `cpu: "2"`
-    # default.
+    # Per KEY, not per dict: a container that sets `memory` and omits `cpu` inherits the
+    # LimitRange's `cpu: "2"` default.
     resources = container.get("resources") or {}
     return frozenset(
         name
@@ -198,9 +194,6 @@ def _limitranges() -> dict[str, dict]:
 
 def test_every_rendered_container_sets_requests_and_limits() -> None:
     containers = list(_pod_specs())
-    # A floor, not the exact count: this guard's failure mode is silence. If the render helper
-    # stops yielding workloads — a renamed kind, a template that drops out — every container
-    # passes because there are none, and the result is indistinguishable from full coverage.
     assert len(containers) > 90, (
         f"only {len(containers)} containers seen; the walk is broken"
     )
@@ -310,9 +303,8 @@ def test_the_roles_outside_the_render_walk_are_accounted_for() -> None:
         "leaving it passing on nothing."
     )
     for where, (has_requests, has_limits) in excluded.items():
-        # Either both or neither. Both means the LimitRange never touches it; neither means it
-        # takes the defaults, which is the control doing its job. Requests-only is the one
-        # combination that can be refused at admission.
+        # Either both or neither: requests-only is the one combination that can be refused at
+        # admission.
         assert has_requests == has_limits, (
             f"{where} sets a request without a limit. It will take the namespace default as "
             "its limit and be REFUSED if the request is higher. Set both, or neither."
@@ -344,18 +336,14 @@ def test_the_limitrange_sets_defaults_only() -> None:
                 f"{namespace}: a `max` REJECTS any pod above it at admission. Several "
                 "workloads here are already at 2Gi and 4Gi."
             )
-            # The ceiling is a safety property, not a preference. A container that states a
-            # request and no limit takes `default` as its limit, and the API server refuses
-            # the pod when that limit is below the stated request — so lowering this turns
-            # the guard rail into an admission failure for requests-only Helm charts.
+            # A container that states a request and no limit takes `default` as its limit, and the
+            # API server refuses the pod when that is below the request.
             assert entry["default"]["memory"] == "2Gi", (
                 f"{namespace}: the memory ceiling refuses any requests-only pod asking for "
                 "more than it. Read the rejection path in group_vars/all.yml before lowering."
             )
 
 
-# ADR-0032 bounds the runner launcher with a ResourceQuota in this namespace. It holds only
-# one-job runner pods, each of which states its requests and limits.
 RUNNER_NAMESPACE = "ci-runners"
 _QUOTA_KIND = re.compile(r"kind: ResourceQuota")
 _CREATE_QUOTA = re.compile(r"create (resource)?quota")
@@ -411,11 +399,9 @@ def test_a_quota_in_any_other_namespace_or_none_is_flagged() -> None:
 
 
 def test_no_resourcequota_is_declared_outside_the_runner_namespace() -> None:
-    # Grepped rather than read off the rendered docs: a ResourceQuota added to a role that
-    # renders no manifests, or staged by a `kubectl create quota`, would never appear in
-    # rendered_docs() and this is the decision, not the mechanism. Matched on the two forms
-    # that APPLY one, not on the bare word — the reasoning that rules it out names it
-    # repeatedly, and a guard that trips on its own rationale gets deleted rather than read.
+    # Grepped, not read off rendered docs: a quota staged by `kubectl create quota` would never
+    # appear there.
+    # Matched on the forms that APPLY one, not the bare word.
     scope = ["k8s/", "inventory/", "secrets/cluster-manifests/"]
     # A pathspec that names no tracked file makes the grep below pass over nothing.
     for path in scope:
@@ -450,9 +436,8 @@ def test_the_limitrange_values_live_in_group_vars_only() -> None:
     all_vars = _all_vars()
     assert set(all_vars["k8s_default_limitrange"]) == {"default", "defaultRequest"}
 
-    # Two readers — the renderer's homelab-namespace kind for homelab, the observability role
-    # for observability — so a role default would be invisible to one of them and silently win
-    # for the other.
+    # Two readers (the renderer's homelab-namespace kind and the observability role): a role default
+    # would be invisible to one of them and silently win for the other.
     duplicated = [
         str(path.relative_to(_REPO))
         for path in _REPO.glob("k8s/roles/**/defaults/main.yml")

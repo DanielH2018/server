@@ -16,8 +16,6 @@ from _k8s_render import pod_template, rendered_docs
 from _helpers import K8S_ROLES
 from lib import yaml_fast
 
-# Slice 1 of the rollout: the traefik-only leaf apps (docs/networkpolicy-default-deny.md).
-# Adding a role here without labelling it — or labelling one without listing it — fails below.
 SLICE_1_ROLES = {
     "bento-pdf",
     "littlelink",
@@ -26,9 +24,6 @@ SLICE_1_ROLES = {
     "code-server",
 }
 
-# Slice 2: the media stack plus both push bridges. configarr is a CronJob, not a Deployment —
-# its pod template lives two levels deeper, at spec.jobTemplate.spec.template, and
-# _pod_template_labels() below has a CronJob-specific branch to reach it.
 SLICE_2_ROLES = {
     "sonarr",
     "radarr",
@@ -42,75 +37,27 @@ SLICE_2_ROLES = {
     "configarr",
 }
 
-# Leaf apps born fenced. A service added AFTER a slice shipped belongs to no slice — it was
-# never part of that rollout — but it is the same shape slice 1 covers: Traefik is its only
-# caller and it dials nothing itself, so labelling it at creation costs nothing and skips the
-# unfenced window a later slice would have to close.
 BORN_FENCED_ROLES = {
-    # Traefik is the UI's only caller from outside the role. Its in-role callers, the task pods
-    # on 8080 and every Airflow pod on Postgres, are admitted by the role's own additive fences.
     "airflow",
     # Serves each host's ~/.claude/artifacts read-only; makes no outbound connection at all.
     "artifacts",
-    # nginx over a hostPath of built MkDocs output. Same shape as artifacts, and for the same
-    # reason: Traefik is its only caller, and the pod dials nothing — the site is built on the
-    # host by the docs-refresh cron, so the container never fetches, clones or resolves.
     "docs",
-    # nginx over a static LaTeX editor baked into the image. Traefik is its only caller. The
-    # app does reach jsDelivr for on-demand TeX packages and a CORS proxy for git — but those
-    # are the BROWSER's fetches, not the pod's, so the container itself dials nothing.
     "texbrain",
-    # Music server over its own Longhorn volume. Traefik is its only caller. It dials
-    # ListenBrainz and Deezer, which is egress and unfenced here, as nut-exporter's is.
     "navidrome",
-    # UPS metrics. The only entry here whose sole caller is PROMETHEUS rather than Traefik —
-    # it has no IngressRoute at all — but the baseline admits prometheus on every port, so the
-    # label alone fences it correctly and nothing bespoke is needed. Unlike its neighbours it
-    # does dial out, to upsd on the nut pod; that is egress, which the baseline does not fence,
-    # and the inbound half is admitted by the app=nut-exporter podSelector in
-    # netpol-baseline/templates/networkpolicy-nut.yaml.j2.
     "nut-exporter",
-    # Pi-hole's DNS statistics. Same shape as nut-exporter: Prometheus is its only caller, which
-    # the baseline already admits, and its own outbound poll of both Pi-holes' admin API is
-    # egress (unfenced here) plus an `app: pihole-exporter` podSelector in
-    # netpol-baseline/templates/networkpolicy-pihole.yaml.j2.
     "pihole-exporter",
-    # The alert UI. Traefik is its only caller. It dials Alertmanager in the observability
-    # namespace, which is egress (unfenced here) plus the `app: karma` podSelector in
-    # netpol-baseline/templates/networkpolicy-alertmanager.yaml.j2.
     "karma",
-    # GPU utilization from DRM sysfs. The simplest shape in this set: Prometheus is its only
-    # caller, which the baseline already admits, and it makes NO outbound connection of any
-    # kind — it reads the kernel through a read-only /host/sys mount, so unlike its two
-    # exporter neighbours it needs no podSelector added anywhere.
     "gpu-exporter",
-    # The dri-admission-reaper CronJob, the role's one pod in the workload namespace. It
-    # takes no connection at all, and its one outbound call is to the API server, which is
-    # egress. The DaemonSet sits in kube-system, which no baseline selects, so it stays unlabelled.
     "dri-device-plugin",
-    # The ingress probes (ADR-0026). It
-    # departs from this set's preamble twice. Traefik never calls it, since it has no route;
-    # its only caller is the prometheus pod, which the baseline already admits. And it dials
-    # every ingress name, but the baseline fences ingress only, so the label does not touch
-    # those probes. From M4's PR 3, up{job="blackbox-ingress"} shows the caller gets through.
     "blackbox-exporter",
-    # The music library manager. Its own NetworkPolicy admits traefik and prowlarr, whose
-    # Application Sync writes indexers in. It dials prowlarr, qBittorrent and MusicBrainz, which
-    # is egress and unfenced here, so the label fences only its ingress.
     "lidarr",
-    # The Soulseek client. Traefik is its only caller; Soularr shares its pod and talks over
-    # localhost. It dials Soulseek peers through its tunnel and Lidarr in-cluster, which is
-    # egress and unfenced here.
     "slskd",
-    # The password store. Traefik is its only caller; its outbound calls (favicon fetches, push
-    # relay) are egress and unfenced here.
     "vaultwarden",
 }
 
 LABEL = ("netpol-baseline", "enforced")
 
-# Slice 3: the observability namespace, plus the workloads the role has gained since. Named per
-# WORKLOAD, not per role — every one renders from the single observability role.
+# Named per workload, not per role: every one renders from the single observability role.
 SLICE_3_WORKLOADS = {
     ("observability", "grafana"),
     ("observability", "prometheus"),
@@ -124,13 +71,8 @@ SLICE_3_WORKLOADS = {
 
 SLICE_3_ROLES = {role for role, _name in SLICE_3_WORKLOADS}
 
-# Slice 4: core infra (docs/networkpolicy-default-deny.md). Named per WORKLOAD, not per role: two
-# roles here each render a second pod-producing doc the role-granular habit would miss — pihole
-# (pihole-2, its HA pair, same app label, different instance) and crowdsec (crowdsec-node-agent,
-# the DaemonSet). crowdsec-node-agent is labelled, not exempted: its only inbound caller is
-# prometheus scraping it, and the
-# baseline already admits prometheus on every port, so the baseline alone suffices. Its own calls
-# out to the LAPI are outbound, which kube-router does not enforce and an ingress policy can't break.
+# Named per WORKLOAD, not per role: pihole-2 and crowdsec-node-agent are second pod-producing docs a
+# role-granular habit would miss.
 SLICE_4_WORKLOADS = {
     ("traefik", "traefik"),
     ("authelia", "authelia"),
@@ -145,11 +87,7 @@ SLICE_4_WORKLOADS = {
 
 SLICE_4_ROLES = {role for role, _name in SLICE_4_WORKLOADS}
 
-# Slice 4.5 stage A: the roles that render more than one workload. A role is not the unit of
-# fencing (test_every_pod_producing_doc_in_a_fenced_role_is_labelled below enforces that), so
-# these roles are labelled WHOLE — labelling scrutiny-collector alone would fail that test on
-# scrutiny-web and scrutiny-influxdb. Sub-workloads whose role name differs from the workload
-# name are where an omission hides, so they are all named here.
+# Sub-workloads whose role name differs from the workload name are where an omission hides.
 SLICE_45A_WORKLOADS = {
     ("karakeep", "karakeep"),
     ("karakeep", "karakeep-meilisearch"),
@@ -184,10 +122,9 @@ SLICE_45B_WORKLOADS = {
 
 SLICE_45B_ROLES = {role for role, _name in SLICE_45B_WORKLOADS}
 
-# Slice 4.5 stage C: the LAN-facing workloads. Each is fenced by a policy that leaves its game or
-# VPN port OPEN, because its Service is a LoadBalancer with externalTrafficPolicy: Local and the
-# real client addresses are therefore neither SNAT-ed nor enumerable. They are labelled all the
-# same: the label is what puts them under the baseline, which fences every OTHER port on them.
+# Fenced by a policy that leaves their game or VPN port OPEN (LoadBalancer, externalTrafficPolicy:
+# Local);
+# labelled so the baseline fences every OTHER port.
 SLICE_45C_WORKLOADS = {
     ("terraria", "terraria"),
     ("valheim", "valheim"),
@@ -196,20 +133,10 @@ SLICE_45C_WORKLOADS = {
 
 SLICE_45C_ROLES = {role for role, _name in SLICE_45C_WORKLOADS}
 
-# Workloads inside a fenced role that are fenced by their OWN NetworkPolicy rather than by the
-# baseline label are exactly the ones carrying the exemption label, so the exemption below reads
-# `_exempt_workloads()` rather than a second hand-kept list. That set is pinned to
-# `netpol_baseline_exempt_workloads` and each member to a policy that selects it, further down.
-# Labelling one would ADD the baseline's traefik + prometheus + node-CIDR allow-list on top of
-# its tighter policy, widening it.
+# Exempt workloads carry their own tighter policy; labelling one would ADD the baseline's allow-list
+# on top and widen it.
 
-# Pod-producing docs that are deliberately unlabelled and deliberately NOT fenced: a netpol probe
-# stands in for a compromised pod with no allow-list entry, so labelling one would make it prove
-# nothing. This is a different category from the exempt workloads, which are "fenced by their own
-# policy" — these are fenced by nothing, on purpose.
-#
-# Entries are used only as a subtrahend, so one that matches no rendered doc is a silent no-op —
-# it neither widens nor narrows the gate, it just rots.
+# Deliberately unlabelled and unfenced: a netpol probe stands in for a compromised pod.
 UNFENCED_BY_DESIGN_WORKLOADS: frozenset[tuple[str, str]] = frozenset()
 
 
@@ -350,13 +277,7 @@ def test_exactly_the_slice_3_workloads_carry_the_baseline_label() -> None:
     )
 
 
-# The baseline is namespace-scoped, where the selector inverts: it fences every pod that does
-# NOT carry `netpol-baseline-exempt`. An exempt workload owns a bespoke policy TIGHTER than the
-# baseline, and a NetworkPolicy is additive — selecting one would ADD traefik, prometheus and both
-# node CIDRs on top of it. The exemption keeps the tighter policy the only thing fencing it.
-#
-# The expected set is the role default the live gate in tasks/main.yml compares the cluster
-# against, so the templates, the default and the cluster all answer to one list.
+# The baseline fences every pod that does not carry `netpol-baseline-exempt`.
 EXEMPT_LABEL = ("netpol-baseline-exempt", "true")
 
 _DEFAULTS = yaml_fast.safe_load(

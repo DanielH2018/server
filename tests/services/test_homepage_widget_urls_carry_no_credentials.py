@@ -33,8 +33,7 @@ import re
 from _homepage_config import config_urls, namespace
 from _k8s_render import host_context
 
-# A query parameter whose NAME says it carries a credential. `?query=` (the Headlamp tile's
-# PromQL) is not one of these, and must stay unflagged.
+# `?query=` (the Headlamp tile's PromQL) is not a credential name and must stay unflagged.
 CREDENTIAL_PARAM = re.compile(
     r"[?&](api_?key|apikey|token|access_token|password|passwd|secret|auth)=", re.I
 )

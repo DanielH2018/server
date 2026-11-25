@@ -71,8 +71,8 @@ def test_the_environment_variable_redirects_the_log(tmp_path, monkeypatch):
 def test_an_override_naming_another_file_is_neither_written_nor_rotated_is_flagged(
     tmp_path, monkeypatch, target
 ):
-    # A leaked value naming a large state file must not reach it: the appender would add a
-    # row and then rename the file aside. The row lands in the normal log instead.
+    # A leaked value naming a large state file must not reach it: the appender would add a row, then
+    # rename the file aside.
     monkeypatch.setattr(tempfile, "gettempdir", lambda: str(tmp_path / "tmp"))
     primary = init_repo(tmp_path / "primary", initial_commit="init")
     outside = tmp_path / target
@@ -151,8 +151,7 @@ def test_each_load_row_carries_the_byte_size_of_the_file_it_loaded(tmp_path):
 
 
 def test_a_file_it_cannot_stat_keeps_its_row_without_a_size(tmp_path):
-    # Paired with a file it can stat, so the test fails when the hook drops the unreadable
-    # file's row, gives it a made-up size, or records no size at all.
+    # Paired with a stat-able file so the test fails if the hook drops the row, invents a size.
     log = tmp_path / "instructions.log"
     present = tmp_path / "present" / "CLAUDE.md"
     present.parent.mkdir()

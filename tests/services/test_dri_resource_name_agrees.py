@@ -26,13 +26,11 @@ from _helpers import K8S_ROLES
 from _k8s_render import pod_spec, rendered_docs
 from lib import yaml_fast
 
-# The roles whose rendered Deployment must request the render node. Restated here so a consumer
-# that stops requesting it fails loudly rather than dropping out of the comparison.
+# Restated so a consumer that stops requesting the render node fails loudly.
 _CONSUMERS = ("jellyfin", "tdarr")
 
 _PLUGIN_ROLE = "dri-device-plugin"
-# generic-device-plugin's `--domain` default. The DaemonSet passes no `--domain`, and both nodes'
-# allocatable list `devic.es/dri` (kubectl get nodes, 2026-10-01), which is how this was read.
+# The DaemonSet passes no `--domain`, so this is generic-device-plugin's default.
 _PLUGIN_DEFAULT_DOMAIN = "devic.es"
 
 _RULES = K8S_ROLES / "observability" / "files" / "rules" / "k8s-workloads.yaml"

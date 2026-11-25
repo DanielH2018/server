@@ -60,8 +60,8 @@ from lib.proc_testing import run
 
 @functools.cache
 def _tracked_python() -> tuple[str, ...]:
-    # `git ls-files`, not `rglob`, for the reason rule 1 exists: a root-anchored walk descends
-    # into `.claude/worktrees/<name>/` and judges this commit against other sessions' checkouts.
+    # `git ls-files`, not `rglob`: a root walk descends into `.claude/worktrees/<name>/` and judges
+    # other checkouts.
     listed = run(["git", "ls-files", "-z", "--", "*.py"], cwd=REPO, check=True).stdout
     return tuple(sorted(rel for rel in listed.split("\0") if rel))
 
@@ -78,12 +78,10 @@ def test_the_scan_finds_tracked_python_files():
 
 # ---- rule 1: no root-anchored rglob
 
-# Matches `<name>.rglob(` where <name> is one of the repo-root variable names this repo uses,
-# case-sensitive to the conventions seen in `_helpers.py` and the `tests/` guards.
+# Case-sensitive to the repo-root variable names this repo uses.
 ROOT_ANCHORED_RGLOB = re.compile(r"\b(REPO|REPO_ROOT|repo_root|repo)\.rglob\(")
 
-# A scanner must not scan itself: this file's own red-proof fixtures quote the exact
-# `REPO.rglob(` shape it is looking for, as strings rather than code.
+# A scanner must not scan itself: this file's fixtures quote the `REPO.rglob(` shape as strings.
 SELF = "tests/repo/test_tracked_python_hazards.py"
 
 
@@ -116,22 +114,17 @@ def test_the_pattern_rejects_a_root_anchored_rglob_and_accepts_a_scoped_one():
 
 # ---- rule 2: no live clock in a test
 
-# A subprocess-driven test whose `now` cannot cross the process boundary. An entry here
-# needs a reason the `runpy` shim in `_reap_entrypoint_harness.py` does not cover, and is
-# removed again the moment the file sheds its clock read.
+# An entry needs a reason the `runpy` shim in `_reap_entrypoint_harness.py` does not cover.
 SUBPROCESS_DRIVEN: frozenset[str] = frozenset(
     {
-        # Its Valid-Until tests sign a Release relative to the live clock because the
-        # judge is a real `apt-get update`, which compares Valid-Until with the system clock
-        # and takes no `now`. The margins are an hour or more, not the suite's runtime.
+        # Its Valid-Until tests use the live clock: the judge is a real `apt-get update`, which
+        # takes no `now`.
         "scripts/validate/tests/test_validate_host_package_cases.py",
     }
 )
 
-# Non-vacuity floor: files the census must reach, so a moved `tests/` directory or a renamed
-# module cannot empty it and let the guard pass over nothing. The census is every tracked
-# module under a `tests/` directory, not just `test_*.py`: a `_*_fixtures.py` helper that
-# stamps `time.time() - age` reproduces the defect behind every test that imports it.
+# The census is every tracked module under a `tests/` directory, not just `test_*.py`: a fixtures
+# helper that stamps `time.time() - age` carries the defect into every test importing it.
 KNOWN_TEST_FILES = frozenset(
     {
         "scripts/dev/tests/findings/test_findings_claim_staleness.py",
@@ -162,10 +155,8 @@ def _owner_name(node: ast.AST) -> str | None:
     return None
 
 
-# A bare call reads the clock through a `from ... import` of one of these names. `time` counts
-# only from the `time` module, because `from datetime import time` imports a constructor. Any
-# module's `today`, `now` or `utcnow` counts, which is what catches a repo helper such as
-# `secrets_mgmt.rotation_tools.today`: the attribute form above never sees `today()`.
+# A bare call reads the clock via a `from ... import` of these names; `time` counts only from the
+# `time` module, since `from datetime import time` is a constructor.
 _BARE_CLOCK_NAMES = frozenset({"today", "now", "utcnow"})
 
 
@@ -281,9 +272,6 @@ def test_a_bare_datetime_time_constructor_is_clean():
 
 # ---- rule 3: no bare main() over an argparse entry point
 
-# Non-vacuity floor. The census finds its subjects by pattern, so it must be shown to contain
-# something concrete — a renamed module or a moved directory would otherwise empty it and let
-# the guard pass over nothing.
 KNOWN_ARGV_READERS = frozenset({"postflight"})
 
 

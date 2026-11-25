@@ -65,8 +65,8 @@ def test_remote_git_with_dash_C_is_clean():
 
 
 def test_the_ssh_hosts_match_the_inventory_host_vars():
-    # Compared against a direct host_vars listing, so a broken import (which the hook
-    # swallows into no hosts) or a reintroduced literal goes red here.
+    # Compared against a direct host_vars listing, so a broken import (which the hook swallows into
+    # no hosts) goes red.
     host_vars = os.path.join(_REPO, "inventory", "host_vars")
     expected = {
         name.removesuffix(".yml")
@@ -357,11 +357,6 @@ def test_other_gh_issue_subcommands_are_clean():
 def test_the_words_as_a_search_argument_are_clean():
     """Argv match, not substring: the subcommand run must be adjacent after `gh`."""
     assert _mod.problem("gh issue list --search 'gh issue create'") is None
-
-
-# --- 10. a leading shell keyword must not slip any rule ---------------------------------------
-#
-# Each of the four commands below must be denied exactly as its bare form is.
 
 
 def test_a_negated_rollout_restart_is_denied():

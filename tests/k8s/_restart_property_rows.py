@@ -85,8 +85,8 @@ RESTART_PROPERTIES = (
         offence=_restart_policy_offence,
         red=("pi-peer-backup", {"restartPolicy": "OnFailure"}),
         green=("pi-peer-backup", {"restartPolicy": "Never"}),
-        # A pod template with no restartPolicy is refused by the API for a Job, but the
-        # predicate must not read the gap as Never either.
+        # A pod template with no restartPolicy is refused by the API for a Job, but the predicate
+        # must not read the gap as Never.
         more_red=(("pi-peer-backup", {}),),
         # 9 Jobs and CronJobs render (measured by an impossible floor; netpol-baseline's probe Job was the tenth). The floor is the count.
         min_matches=9,

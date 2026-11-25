@@ -23,8 +23,6 @@ from renderer.renderer_lib.context import load_stubs
 # 22 digest-pinned containers render across these Jobs; the floor is the count.
 _FLOOR = 22
 
-# A verify Job, a precheck Job, and registry's `flux_job_image` branch, which sits beside an
-# `Always` in the other arm of an `{% if %}`.
 _MUST_FIND = frozenset(
     {
         "crowdsec/job.yaml:verify",

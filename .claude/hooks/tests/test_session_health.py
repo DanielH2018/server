@@ -78,12 +78,6 @@ def test_a_branch_only_banner_prints_no_triage_line():
     ]
 
 
-# The scrape-target section moved to hooklib/service_lines.py — its tests are in the sibling
-# test_hooklib_service_lines.py, driven through that module's seams.
-
-
-# `master_moved_problems` is tested in the sibling test_session_health_master_moved.py --
-# it moved there when this file hit its line cap.
 def _run_main(
     monkeypatch,
     stdin,
@@ -140,8 +134,6 @@ def test_main_silent_when_green(monkeypatch, capsys):
 
 
 def test_main_lists_other_sessions_even_when_green(monkeypatch, capsys):
-    # another session's open work is information this session needs whether or not the
-    # homelab itself is healthy, so it is not gated on the health banner
     run_main = _run_main(
         monkeypatch, '{"source":"startup"}', sessions=["  • other-branch — k8s/roles/x"]
     )
@@ -306,10 +298,7 @@ def test_main_cuts_the_agent_context_to_its_budget_and_keeps_the_health_lines(
     assert operator.startswith("[session-health] ")
 
 
-# `other_live_sessions` imports lib.worktrees off a hand-built sys.path. That path must point
-# at scripts/, which holds lib/, and a wrong path fails silently: the except returns
-# [], which reads identically to "no other sessions are running". These two pin the import and
-# the fail-loud, because a silent [] is what hid the bug.
+# A wrong sys.path fails silently: the except returns [].
 @pytest.fixture
 def _fence_worktree_survey(fenced_calls, tmp_path, monkeypatch):
     """Keep the hook off the host's worktree pruner and its survey cache.
@@ -368,11 +357,7 @@ def test_the_hook_can_import_the_worktree_library_when_run_as_a_subprocess(
         "other_live_sessions or master_moved_problems (both report through this string).\n"
         + proc.stdout
     )
-    # target_problems() runs unconditionally on every call to main(), so its binary is
-    # always exercised — unlike gh, which only fires per worktree on disk and so isn't
-    # asserted here. A stub silently dropped from PATH is
-    # indistinguishable from a passing run without this: the real binaries would just run
-    # underneath it.
+    # A stub silently dropped from PATH is indistinguishable from a pass.
     recorded = fenced_calls.read_text()
     assert "curl" in recorded, (
         "the real `curl` ran instead of the stub — the PATH fence did not hold.\n"
@@ -421,8 +406,7 @@ def test_a_hooklib_that_will_not_compile_is_named_rather_than_killing_the_banner
     and exits 0. An uncaught SyntaxError at import would take the whole banner out with nothing
     a session could see, and nothing at module scope may do that.
     """
-    # `-S`: without it the venv's `.pth` supplies this checkout's `scripts/`, which the copy
-    # lacks, so the other-session section would read the real worktrees.
+    # `-S`: without it the venv's `.pth` supplies this checkout's `scripts/`.
     proc = subprocess.run(
         [sys.executable, "-S", str(_hook_copy_with_a_broken_hooklib(tmp_path))],
         input='{"source": "startup"}',
@@ -434,6 +418,4 @@ def test_a_hooklib_that_will_not_compile_is_named_rather_than_killing_the_banner
     assert proc.returncode == 0
     assert "hooklib is broken" in proc.stdout
     assert "SyntaxError" in proc.stdout
-    # The rest of the banner still ran: this copy's REPO points at a tree with no
-    # scripts/, so the other-session section reports its own broken import.
     assert "other-session detection is broken" in proc.stdout

@@ -20,9 +20,7 @@ import os
 import re
 from collections.abc import Callable
 
-# Assignments a read-only command may carry. Most other variables are inert, but `GIT_PAGER`,
-# `GIT_EXTERNAL_DIFF`, `GIT_SSH_COMMAND`, `PAGER`, `LD_PRELOAD`, `BASH_ENV` and many more run a
-# command they name, and an allowlist is shorter than that list.
+# `GIT_PAGER`, `LD_PRELOAD`, `BASH_ENV` and many more variables run a command they name.
 SAFE_ASSIGNMENTS = frozenset(
     {"LC_ALL", "LANG", "LANGUAGE", "TZ", "NO_COLOR", "COLUMNS", "LINES", "TERM"}
 )
@@ -313,8 +311,7 @@ def _tee_check(is_scratch):
 
 
 def _ghread_check(is_scratch):
-    # ghread has no write subcommand; `--out` is its one write, and ghread confines it to /tmp
-    # itself, but that rule lives outside this repo, so the hook checks the path too.
+    # `--out` is ghread's one write; its /tmp confinement lives outside this repo.
     def check(args):
         for i, arg in enumerate(args):
             if arg == "--out":
@@ -330,8 +327,6 @@ def _ghread_check(is_scratch):
     return check
 
 
-# Scripts in this tree that only read, with the subcommands that only read. `None` allows every
-# subcommand: `probe.py` is the read-only diagnostics entry point by design.
 READ_SCRIPTS = {
     "scripts/diagnostics/probe.py": None,
     "scripts/dev/fact_status.py": frozenset({"lint", "notice", "report"}),

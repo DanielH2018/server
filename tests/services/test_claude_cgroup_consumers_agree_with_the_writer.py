@@ -36,8 +36,7 @@ BOARD = (
     / "claude-code-host-cgroups.json"
 )
 
-# The metric families the writer ships. Named rather than counted, so a writer that drops one
-# fails with the name it dropped. Any consumer selector outside this set is a typo or a rename.
+# Any consumer selector outside this set is a typo or a rename.
 EMITTED = frozenset(
     {
         "claude_cgroup_memory_current_bytes",
@@ -50,19 +49,12 @@ EMITTED = frozenset(
     }
 )
 
-# The `cgroup` label values the writer labels its series with. `claude-rc` is the one whose absence
-# the alert arm treats as a fault; `fleet` is the shared `user.slice` parent that carries the
-# fleet's single MemoryHigh/MemorySwapMax; `user-1000-slice` exists only once somebody
-# has logged in since boot, so it is watched-when-present rather than required. The alert arm and
-# the board both select by metric rather than by cgroup, so a label added here is judged and graphed
-# the moment it reports — this set exists so that ADDING one is a decision somebody makes rather
-# than a silent widening.
+# `claude-rc`'s absence is a fault; `fleet` is the shared `user.slice` parent;
+# `user-1000-slice` exists only once somebody has logged in since boot, so it is not required.
 LABELLED = frozenset({"claude-rc", "fleet", "user-1000-slice"})
 
 METRIC_RE = re.compile(r"claude_cgroup_[a-z0-9_]+")
-# The rule file's prose names metrics too, without a selector. Matching only a name carrying a
-# label selector picks out the PromQL selectors and nothing else — and a MISTYPED metric name
-# still carries its selector, so this narrowing costs no detection.
+# Matching only a name with a label selector picks out the PromQL selectors.
 ARM_SELECTOR_RE = re.compile(r"claude_cgroup_[a-z0-9_]+(?=\{)")
 
 

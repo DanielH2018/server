@@ -31,8 +31,7 @@ from lib.repo_paths import K8S_ROLES
 from _k8s_render import host_context, render_role_template, traefik_static_config
 
 _ROLE = "traefik"
-# daniel-box runs the bouncer plugin. A cluster without it has neither the failure mode nor
-# the probe, so that case is driven by an override rather than by a host.
+# A cluster without the bouncer plugin has neither the failure mode nor the probe.
 _HOST = "daniel-box"
 _WITHOUT_CROWDSEC = {"traefik_k8s_manage_crowdsec": False}
 
@@ -123,10 +122,8 @@ def test_the_probe_detects_a_missing_bouncer_plugin() -> None:
     route = _selfcheck_route(_HOST)
     config = traefik_static_config(host=_HOST)
     chains = {
-        # `or []`, not a default: dropping the last entry leaves a bare `middlewares:` key,
-        # which parses to None. `.get(..., [])` returns that None and `selfcheck_gaps` raises
-        # a TypeError instead of naming the gap. Matches the sibling guard in
-        # test_traefik_http_entrypoint_crowdsec.py.
+        # `or []`, not a default: a bare `middlewares:` key parses to None and `.get(..., [])`
+        # returns it, so `selfcheck_gaps` raises TypeError instead of naming the gap.
         name: (spec.get("http") or {}).get("middlewares") or []
         for name, spec in config["entryPoints"].items()
     }

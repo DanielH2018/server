@@ -18,8 +18,6 @@ from _k8s_render import rendered_build_text
 
 RENOVATE = REPO / "renovate.json"
 
-# The deps the pip line must carry, so a rewritten line fails as a missing member rather than
-# passing over nothing.
 KNOWN_DEPS = frozenset({"mcp", "httpx", "uvicorn"})
 
 

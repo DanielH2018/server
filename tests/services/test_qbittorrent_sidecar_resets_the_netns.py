@@ -58,8 +58,9 @@ def test_the_reset_script_is_mounted_from_the_configmap_that_carries_it():
 
 
 def test_the_gate_scopes_to_the_uid_qbittorrent_actually_runs_as():
-    # The script reads PUID from the SIDECAR's environment and qbittorrent runs as the PUID of
-    # ITS container. If the two ever decouple the gate matches nothing and reads green.
+    # The script reads PUID from the sidecar's environment and qbittorrent runs as its own
+    # container's PUID;
+    # if the two decouple, the gate matches nothing and reads green.
     spec, wg = _sidecar()
     qbt = next(c for c in spec["containers"] if c["name"] == "qbittorrent")
     env = lambda c: {e["name"]: e.get("value") for e in c["env"]}
@@ -69,9 +70,8 @@ def test_the_gate_scopes_to_the_uid_qbittorrent_actually_runs_as():
 
 
 def test_the_gate_goes_up_before_the_stale_tunnel_comes_down():
-    # The order is the whole privacy argument: qbittorrent keeps running while the sidecar
-    # restarts, and between the reset and the mod's PostUp the netns has no tunnel. The
-    # uid-scoped REJECT must be in place before wg0 is deleted, or that window leaks.
+    # The uid-scoped REJECT must be in place before wg0 is deleted, or the window between reset and
+    # PostUp leaks.
     text = SCRIPT.read_text()
     gate = text.index("--uid-owner ${uid}")
     teardown = text.index("ip link del wg0")
@@ -85,11 +85,8 @@ def test_the_gate_goes_up_before_the_stale_tunnel_comes_down():
 
 
 def test_the_gate_exempts_wireguards_own_carrier_packets():
-    # `-o wg0` is not enough. qbittorrent's packet enters wg0, and the encrypted carrier
-    # WireGuard then emits on eth0 still belongs to the originating socket, so `--uid-owner`
-    # matches it and `! -o wg0` is true: the gate rejects every carrier packet for uid 1000.
-    # wg-quick marks the carrier with fwmark 51820 (`wg set wg0 fwmark`),
-    # which is exactly how the mod's own kill-switch exempts it; the gate must too.
+    # `-o wg0` is not enough: WireGuard's encrypted carrier on eth0 still belongs to the originating
+    # socket, so the gate must exempt fwmark 51820, as the mod's own kill-switch does.
     gate_line = next(
         line for line in SCRIPT.read_text().splitlines() if "--uid-owner ${uid}" in line
     )
@@ -136,8 +133,8 @@ def test_a_start_with_a_default_route_stashes_it_in_the_netns(tmp_path):
 
 
 def test_a_start_after_a_failed_tunnel_restores_the_default_route(tmp_path):
-    # LSIO's svc-wireguard deletes the default route when a tunnel fails to come up, and the
-    # route belongs to the pod netns: without it no later start reaches CoreDNS or Mullvad.
+    # LSIO's svc-wireguard deletes the default route when a tunnel fails to come up; the route
+    # belongs to the pod netns, and without it no later start reaches CoreDNS or Mullvad.
     calls, out = _run_reset(
         tmp_path, stashed_default="default via 10.42.1.1 dev eth0\n"
     )

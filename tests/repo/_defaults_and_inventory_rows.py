@@ -154,8 +154,7 @@ _OBSERVABILITY_EXEMPT_SET_IS_EMPTY = Census(
 
 # ── No inventory block scalar carries a `#`-led continuation line ───────────────────────
 
-# `key: |`, `- |`, `key: >-`, `key: |2+` … with an optional trailing comment. The indicator
-# starts a block; the indentation of the line that carries it ends one.
+# The indicator starts a block; the indentation of the line that carries it ends one.
 _BLOCK_START = re.compile(r"^(\s*)(?:[^#\s][^#]*?:|-)\s*[|>][0-9+-]*\s*(?:#.*)?$")
 
 

@@ -65,11 +65,7 @@ classify = _edits_hook.classify
 find_repo_root = _edits_hook.find_repo_root
 
 
-# ── arm 1: writes ────────────────────────────────────────────────────────────────────
-#
-# The shapes a model's file write actually takes. Deliberately not a shell parser: a write
-# inside `python3 -c` or a called script is invisible in the command text and is not detected.
-# Each pattern captures the path in group 1.
+# Not a shell parser: a write inside `python3 -c` or a called script is not detected.
 _WRITE_SHAPES = (
     # `> path`, `>> path`, `>| path` — the redirect, by far the most common
     re.compile(r">[>|]?\s*([^\s;&|<>()]+)"),
@@ -92,20 +88,12 @@ def written_paths(command):
     return [p for p in found if p not in ("-",) and not p.startswith(("$", "<", "("))]
 
 
-# ── arm 2: a read-only agent that writes ─────────────────────────────────────────────
-#
-# `hooklib/read_only_agents.py`, split out because this file sat near its 600-line cap. It is
-# given `written_paths` rather than importing it, so the redirect detector stays one function.
-
-
 def decide(command, repo_root):
     """Return (decision, reason), or (None, None) for normal permission flow."""
     for path in written_paths(command):
         target = path if os.path.isabs(path) else os.path.join(repo_root, path)
-        # Classify against the checkout that owns the target, as the Edit hook does. The
-        # generated-docs trees are anchored at the root `classify` is given, so a write that
-        # leaves the cwd's checkout (an absolute path into another worktree, or `../docs/…`
-        # from a subdirectory) was checked against trees it is not in.
+        # Classify against the checkout that owns the target, as the Edit hook does: the
+        # generated-docs trees are anchored at the root given to `classify`.
         write_reason = classify(target, find_repo_root(target, repo_root))
         if write_reason:
             return (

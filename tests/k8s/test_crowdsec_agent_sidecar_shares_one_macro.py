@@ -22,8 +22,6 @@ from _helpers import K8S_ROLES
 from _k8s_render import host_context, rendered_docs
 from lib import yaml_fast
 
-# The roles whose pod carries the sidecar. Named rather than discovered: a census that globbed
-# for callers would go empty on a rename and pass on nothing.
 CALLERS = ("authelia", "traefik")
 
 _IMPORT = "{% from 'crowdsec-agent.yml.j2' import"

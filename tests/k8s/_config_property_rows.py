@@ -94,12 +94,10 @@ ALLOY_REQUIRED_FRAGMENTS = (
     'selector = "{container=\\"access-log-rotate\\"}"',
     'drop_counter_reason = "traefik_routine_access_log"',
     '"DownstreamStatus\\":(200|204|304),.*\\"Duration\\":[0-9]{1,9},',
-    # The HA cast refresh_token redaction, scoped the same way. Its behaviour (token gone,
-    # `_handle_signal_show_view` marker intact) is test_alloy_redacts_ha_refresh_token.py.
     'selector = "{container=\\"home-assistant\\"}"',
     "stage.replace {",
-    # Node scoping: Alloy has no __host__ filter, so this is what stops every node tailing
-    # every pod's path.
+    # Node scoping: Alloy has no __host__ filter, so this is what stops every node tailing every
+    # pod's path.
     'field = "spec.nodeName=" + sys.env("HOSTNAME")',
     # The pod-stream label set.
     'target_label  = "container"',
@@ -181,11 +179,7 @@ def _authelia_webauthn(role: str, tpl: str, doc: dict):
         yield "webauthn", webauthn
 
 
-# The keys this role deliberately writes. Deliberately NARROWER than the surface Authelia 4.39.21
-# accepts: the docs site describes a wider schema than any one release validates, and admitting
-# `metadata` or `filtering` would admit the copy-paste this row exists to reject. Adding a key is
-# the deliberate act: check it against the tag `authelia_k8s_image` names, in that tag's own
-# `config.template.yml` and `internal/configuration/validator/webauthn.go`, then add it here.
+# Deliberately narrower than the surface Authelia accepts.
 WRITTEN_WEBAUTHN_KEYS = frozenset(
     {
         "disable",
@@ -245,8 +239,8 @@ def _local_wildcard_offence(role: str, data: dict) -> str | None:
         return (
             f"{null} answer the NULL address; a client preferring IPv6 dials `::` first"
         )
-    # Without the A wildcard, the two checks above pass on a template that dropped the whole
-    # block, with `local=` surviving alone as an NXDOMAIN for every .local. name.
+    # Without the A wildcard, a template that dropped the block still passes, with `local=` alone
+    # giving NXDOMAIN for every .local. name.
     if not any(
         re.fullmatch(r"address=/local\.[^/]+/\d+\.\d+\.\d+\.\d+", line)
         for line in lines

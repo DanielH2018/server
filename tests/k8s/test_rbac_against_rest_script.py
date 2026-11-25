@@ -249,8 +249,7 @@ def test_the_longhorn_reconcile_role_grants_every_call_its_script_makes(
 ) -> None:
     # fact: k8s/roles/longhorn-reconcile/CLAUDE.md#What it writes, and how often (the autonomous-role contract)
     needs = rest_needs(_reconcile_calls(monkeypatch, tmp_path))
-    # The H1 plan's grant set, less the `get` on volumes: the script lists once and never reads
-    # one volume, where kubectl's `label` and `patch` read the object first.
+    # The script lists once and never reads one volume.
     assert needs == {
         ("longhorn-system", "longhorn.io", "volumes", "list", None),
         ("longhorn-system", "longhorn.io", "volumes", "patch", "pvc-1"),

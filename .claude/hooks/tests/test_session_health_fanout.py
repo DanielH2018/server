@@ -125,8 +125,8 @@ def test_batches_under_a_day_old_are_counted_on_one_line_per_run(tmp_path):
 
 
 def test_batches_over_a_day_old_fold_into_one_count_per_host(tmp_path):
-    # A run nobody ran `clean` on stays in the manifest forever; naming every batch put
-    # 35 finished worktrees into each session's context.
+    # A run nobody ran `clean` on stays in the manifest forever; naming every batch put 35 finished
+    # worktrees into context.
     _aged_manifest(tmp_path)
     lines = _mod.remote_fanout_lines(
         manifest_dir=tmp_path,
@@ -208,8 +208,7 @@ def test_remote_fanout_lines_skips_a_malformed_manifest_but_keeps_the_rest(tmp_p
 
 
 def test_remote_fanout_lines_skips_a_malformed_batch_but_keeps_its_sibling(tmp_path):
-    # Same manifest, two batches: the first is missing "branch", the second is fine.
-    # A bad batch must not take its sibling in the SAME manifest down with it.
+    # A bad batch must not take its sibling in the same manifest down with it.
     (tmp_path / "r.json").write_text(
         json.dumps(
             {
@@ -230,9 +229,7 @@ def test_remote_fanout_lines_skips_a_malformed_batch_but_keeps_its_sibling(tmp_p
 
 
 def test_a_cleaned_batch_leaves_the_banner_once_its_worktree_is_gone(tmp_path):
-    # `clean` records the removal in the manifest; the banner must stop counting that
-    # worktree, or it advertises a directory the other host no longer has until every
-    # batch of the run is cleaned.
+    # `clean` records the removal in the manifest; the banner must stop counting that worktree.
     (tmp_path / "r.json").write_text(
         json.dumps(
             {

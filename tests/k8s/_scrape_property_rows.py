@@ -14,8 +14,7 @@ from _helpers import HOST_VARS, load_yaml
 from _k8s_render import pod_spec
 from _property_table import Property
 
-# `startupProbe` is included: it runs at its own period until it first succeeds, so a fast one
-# against /metrics floods the same way during every rollout.
+# `startupProbe` is included: a fast one against /metrics floods during every rollout.
 _PROBE_KEYS = ("livenessProbe", "readinessProbe", "startupProbe")
 
 
@@ -91,9 +90,7 @@ def _seconds(duration: str) -> float:
 
 @cache
 def pi_ip() -> str:
-    # The Pi's own literal, not the k8s_pi_client_ip that all.yml derives from it through
-    # hostvars. Reading the derived value would compare the render against itself, and
-    # a derivation that resolved to None would still match.
+    # The Pi's own literal: reading the derived value would compare the render against itself.
     return load_yaml(HOST_VARS / "daniel-pi.yml")["server_ip"]
 
 

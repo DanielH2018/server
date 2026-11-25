@@ -32,8 +32,7 @@ MKDOCS = REPO / "mkdocs.yml"
 
 ADR_REF = re.compile(r"\bADR-(\d{4})\b")
 MARKER = re.compile(r"#\s*DECIDED:")
-# A continuation line of a marker: a comment line carrying no new marker of its own. The
-# reference often lands here, because the reasoning comes first and wraps.
+# The reference often lands on a continuation line.
 COMMENT_LINE = re.compile(r"^\s*(#|--|//)")
 
 SEARCH_SUFFIXES = (".py", ".yml", ".yaml", ".j2", ".sh", ".toml", ".cfg")
@@ -62,11 +61,8 @@ def _source_files() -> tuple[Path, ...]:
     out = []
     for rel in tracked(*(f"*{suffix}" for suffix in SEARCH_SUFFIXES)):
         path = REPO / rel
-        # A scanner must not scan itself. This file quotes the marker syntax five times —
-        # in its own docstring and in an assertion message — and each quote would count as
-        # a marker, inflating the corpus floor with prose about markers rather than markers.
-        # The same is true of any file whose subject is the convention; the headlamp
-        # mapping test is the one other case, and it names no ADR so it stays harmless.
+        # A scanner must not scan itself: this file quotes the marker syntax, and each quote would
+        # count as a marker and inflate the corpus floor.
         if path == Path(__file__).resolve():
             continue
         out.append(path)

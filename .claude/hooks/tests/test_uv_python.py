@@ -65,12 +65,6 @@ def rewrite(command, tool_name="Bash"):
     return arm.rewrite(call) if call else None
 
 
-# --- the fail-open posture ----------------------------------------------------------------
-#
-# The old shell hook asserted its three bail-outs by grepping its own text. The arm is Python,
-# so each is measured instead: a refusal is a None return, and None means the command stands.
-
-
 def test_the_arm_rewrites_rather_than_pinning_a_venv_path():
     """A PATH pin at the primary checkout's .venv would cross worktrees silently, so the
     rewrite names `uv run` and never a venv directory."""
@@ -97,8 +91,7 @@ def test_an_unterminated_quote_yields_no_command_starts():
         ("py.test", "uv run py.test"),
         ("python -V", "uv run python -V"),
         ("python3 -m pytest", "uv run python3 -m pytest"),
-        # A shebang-invoked script names no interpreter, so nothing python-shaped
-        # appears in the command at all — it would otherwise reach 3.12 unnoticed.
+        # A shebang-invoked script names no interpreter, so it would reach 3.12 unnoticed.
         (
             "./scripts/diagnostics/probe.py targets",
             "uv run ./scripts/diagnostics/probe.py targets",
@@ -121,9 +114,7 @@ def test_rewrite_applies_to_a_pipeline_consumer():
     assert rewrite("cat data.json | python3 -") == "cat data.json | uv run python3 -"
 
 
-# A `VAR=x.py` word is a shell assignment, not a script invocation. The arm once rewrote it
-# to `uv run P=…`, which failed with `Failed to spawn: P=…`. The pair proves the fix
-# skips only the assignment rather than abandoning the whole command.
+# A `VAR=x.py` word is a shell assignment; the pair proves only the assignment is skipped.
 
 
 def test_a_program_after_a_py_valued_assignment_is_rewritten():
@@ -204,9 +195,8 @@ def test_an_unterminated_quote_leaves_the_command_alone():
     assert rewrite("""python3 -c 'unterminated && pytest""") is None
 
 
-# Heredocs: a document body is data, not a command sequence, even when a body line starts
-# with a `.py` filename. The vectors are apostrophe-free: an apostrophe flips the quote state,
-# and the unterminated-quote bail would return None for the wrong reason.
+# The vectors are apostrophe-free: an apostrophe flips the quote state and the unterminated-quote
+# bail would return None for the wrong reason.
 
 
 def test_a_commit_message_naming_a_py_file_is_left_alone():
@@ -285,13 +275,6 @@ def test_a_body_apostrophe_no_longer_decides_the_outcome():
     assert rewrite(command) is None
 
 
-# --- through the dispatcher ---------------------------------------------------------------
-#
-# Everything above drives the arm directly. These two cover the half only the dispatcher can
-# get wrong: that the rewrite reaches the emitted `hookSpecificOutput` at all, and that it
-# rides beside another arm's verdict rather than replacing it.
-
-
 def _dispatch(command, monkeypatch, capsys):
     """`bash-pretool.py`'s parsed output for `command`, or None when it emitted nothing."""
     dispatcher = _load("bash-pretool")
@@ -308,8 +291,8 @@ def _dispatch(command, monkeypatch, capsys):
 
 
 def test_the_dispatcher_emits_the_rewrite(monkeypatch, capsys):
-    # One module, not a suite: run from a fan-out batch, `block-batch-full-suite` denies a
-    # command selecting over 300 modules, and `_REPO` is then the batch worktree.
+    # One module, not a suite: in a fan-out batch `block-batch-full-suite` denies a command
+    # selecting over 300 modules.
     command = "pytest .claude/hooks/tests/test_uv_python.py"
     out = _dispatch(command, monkeypatch, capsys)
     assert out["updatedInput"] == {"command": f"uv run {command}"}

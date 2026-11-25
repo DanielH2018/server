@@ -33,8 +33,6 @@ from lib.proc_testing import write_exec
 
 HOOKS = Path(__file__).resolve().parent.parent
 
-# The guards `bash-pretool` stands in front of. Named rather than counted: it can only ask once
-# for all of them, so the one thing its reason string has to keep true is which ones.
 MERGED_DENY_GUARDS = ("block-protected-bash", "block-footguns")
 
 
@@ -61,8 +59,6 @@ def _registered() -> dict[str, list[str]]:
 
 COMMANDS = _commands()
 REGISTERED = _registered()
-# The hooks whose `cd` arm must ask: the PreToolUse guards whose only decisions are deny and
-# ask. Named, so a registration that drops `--ask-on-cd` fails here rather than going quiet.
 ASKING = frozenset({"bash-pretool", "block-protected-edits"})
 
 

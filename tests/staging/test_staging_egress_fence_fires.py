@@ -97,8 +97,7 @@ def test_a_target_that_answers_from_neither_side_is_named_and_not_fatal(tmp_path
     verdict, lines = run_fence(
         tmp_path,
         guest_reachable=[CONTROL],
-        # Everything daniel-server can still reach EXCEPT the Longhorn ClusterIP, which is what
-        # a Service that moved to a new address looks like from this host.
+        # Everything daniel-server can still reach except the Longhorn ClusterIP.
         host_reachable=[CONTROL, f"http://{vip}", POD_IP],
     )
 

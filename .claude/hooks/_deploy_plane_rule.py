@@ -22,15 +22,11 @@ from _hook_common import invokes, strip_shell_keywords
 
 HOLD_VARIABLE = "DEPLOY_HOLD"
 DIGEST_VARIABLE = "PROD_DIGEST"
-# The repository variables the `promote` workflow reads and writes. GitHub stores variable
-# names in upper case and matches them without regard to case, so a lower-case spelling is the
-# same variable.
+# The repository variables `promote` reads and writes; GitHub matches names without regard to case.
 DEPLOY_PLANE_VARIABLES = frozenset({HOLD_VARIABLE, DIGEST_VARIABLE})
-# The values every hold reader treats as no hold. `promote_lib/reset.py` strips the value and
-# reads an empty one as none; the case fold makes the ask err towards asking.
+# `promote_lib/reset.py` reads an empty value as none; the case fold errs towards asking.
 _CLEAR_VALUES = frozenset({"", "none"})
-# The `gh api` flags that add a request field. Any of them turns gh's default method from GET
-# to POST.
+# Any of these flags turns `gh api`'s default method from GET to POST.
 _GH_API_FIELD_FLAGS = ("-f", "-F", "--field", "--raw-field", "--input")
 # The commands that move an OCI tag, each as `invokes` matches it.
 TAG_MOVES = (("flux", "tag", "artifact"), ("crane", "tag"), ("oras", "tag"))

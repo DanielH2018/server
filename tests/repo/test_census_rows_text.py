@@ -45,8 +45,7 @@ from _row_table import (
 
 # ── Shared macros named in the docs ───────────────────────────────────────────────────
 
-# `docs/reference/backlog.md` renders the findings register, so its rows are issue titles. An
-# issue proposing to delete a macro names it there, and nothing is copyable from a register row.
+# The generated register's rows are issue titles.
 GENERATED_REGISTER = "docs/reference/backlog.md"
 
 
@@ -64,10 +63,7 @@ def _macro_docs() -> list[str]:
 def _missing_macro_offence(subject: Subject) -> list[str]:
     lines = subject.text.splitlines()
     # `macro_citations` keeps one directory level, so role-local app config
-    # (`templates/config/config.yml.j2` in configarr) is told apart from a shared macro,
-    # which the docs always give bare or as `templates/<macro>.yml.j2`.
-    # A name a `config/`-qualified mention ties to a role's own app config is that file
-    # wherever else the doc names it bare.
+    # (`templates/config/config.yml.j2`) is told apart from a shared macro.
     local = {
         bare
         for line in lines

@@ -15,8 +15,6 @@ from deploy_tools.land_lib.outcome import VERDICTS
 
 from _helpers import REPO
 
-# land.py's module docstring is what `land.sh --help` prints; its verdict line is the copy an
-# operator at a terminal reads, pipe-separated rather than backticked.
 LAND_PY = REPO / "scripts" / "deploy_tools" / "land.py"
 _HELP_VERDICT_LINE = "Verdicts printed on stdout:"
 

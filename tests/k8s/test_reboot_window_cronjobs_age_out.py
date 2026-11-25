@@ -16,9 +16,7 @@ from zoneinfo import ZoneInfo
 
 from _k8s_render import host_context, rendered_docs
 
-# The issue's verify-by reads `kubectl get pods -A --field-selector=status.phase=Failed` an
-# hour after boot. The TTL clock starts once the Job is marked Failed, after the node is back,
-# so 45 minutes leaves the boot and the kubelet's status sync a quarter of an hour.
+# The TTL clock starts once the Job is marked Failed, after the node is back.
 TTL_BUDGET = 2700
 # A CronJob with no `activeDeadlineSeconds` is assumed to run up to this long.
 DEFAULT_RUN_SECONDS = 600

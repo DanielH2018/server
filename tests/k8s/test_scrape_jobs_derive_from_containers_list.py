@@ -17,9 +17,7 @@ from _k8s_render import host_context, render_pod_env, render_role_template
 from lib import yaml_fast
 from renderer.template_filters.scrape_jobs import entry_port, metrics_port, scrape_jobs
 
-# Every job derived from a `metrics` item. Each must
-# still render from an entry, so a `metrics` item dropped from the inventory fails here rather
-# than reading as a smaller loop.
+# Each must still render from an entry, so a dropped `metrics` item fails here.
 _DERIVED = {
     "crowdsec",
     "crowdsec-jobs",

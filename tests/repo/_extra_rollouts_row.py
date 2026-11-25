@@ -3,8 +3,6 @@
 from _row_table import Census, Subject, tracked
 from lib import yaml_fast
 
-# Per role: each extra rollout that must restart on nothing, and each that must keep the
-# shared restart.
 QUIET = {
     "scrutiny": {"scrutiny-influxdb", "scrutiny-collector"},
     "karakeep": {"karakeep-chrome"},

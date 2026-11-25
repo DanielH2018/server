@@ -34,9 +34,7 @@ PROOF_CONDITION = (
     " || (!cancelled() && needs.prove.outputs.proven != 'true'))"
     f" && {DRAFT_ARM}"
 )
-# The jobs that read the build's artifacts also skip when it did not succeed, and when
-# it had no work for them. The gate and `ci_verdict.jobs_verdict` pass that second skip, so a
-# job here may skip for no reason beyond the arm named for it.
+# The gate and `ci_verdict.jobs_verdict` pass the second skip.
 BUILD_ARM = "needs.host_packages_build.result == 'success'"
 RUN_CASES_ARM = "needs.host_packages_build.outputs.run-cases == 'true'"
 BUILD_CONSUMERS = {
@@ -194,8 +192,7 @@ def test_the_prove_job_reads_statuses_and_publishes_its_answer():
 def test_every_repeated_job_waits_for_the_proof_and_skips_on_it():
     jobs = _jobs()
     for job in DEPENDENTS:
-        # `host_tools_arm64` and the `host_packages` jobs also wait for `host_packages_build`, whose
-        # build they read.
+        # `host_tools_arm64` and the `host_packages` jobs also wait for `host_packages_build`.
         needs = (
             [jobs[job]["needs"]]
             if isinstance(jobs[job]["needs"], str)
@@ -250,8 +247,7 @@ def _dependent_runs(
 @pytest.mark.parametrize(
     ("prove", "proven", "cancelled", "runs"),
     [
-        # A timed-out `prove` runs the sweep, even when it had set `proven=true`, and
-        # whether or not GitHub reads the dependent as cancelled.
+        # A timed-out `prove` runs the sweep even when it had set `proven=true`.
         ("cancelled", "true", False, True),
         ("cancelled", "true", True, True),
         ("cancelled", "", True, True),

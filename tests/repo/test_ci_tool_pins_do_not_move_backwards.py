@@ -40,10 +40,6 @@ from _helpers import REPO
 from lib.git_testing import commit, git, init_repo
 from lib.proc_testing import run
 
-# Each pin, as the file that carries it and the patterns that find EVERY copy of its version
-# there. A pin whose copies disagree is the partial-rewrite defect; the census below asserts these
-# names are all found, so a renamed step or a dropped pin fails here rather than passing over
-# nothing.
 PINS: dict[str, tuple[str, tuple[str, ...]]] = {
     "prek": (".github/actions/setup/action.yml", (r"pip install prek==([\d.]+)",)),
     "vale-cli/vale": (
@@ -52,8 +48,6 @@ PINS: dict[str, tuple[str, tuple[str, ...]]] = {
     ),
 }
 
-# Every pin this file knows about must be found. A pattern that stops matching returns an empty
-# set, and `all()` over nothing passes — the repo's own vacuity failure class.
 MUST_FIND = frozenset(PINS)
 
 DOWNGRADE_MARKER = "downgrade-ok:"

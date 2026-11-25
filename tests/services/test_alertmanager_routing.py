@@ -44,8 +44,7 @@ from _k8s_render import render_role_template
 
 MUTE = "weekly-reboot"
 BLACKHOLE = "blackhole"
-# The tree uses the equality and regex matchers. Any other operator raises in `_matches`
-# rather than reading as no match, which would silently skip a route.
+# Any other matcher operator raises in `_matches` rather than reading as no match.
 MATCHER = re.compile(r'^(\w+)(=~|=)"([^"]*)"$')
 
 RULES_DIR = K8S_ROLES / "observability" / "files" / "rules"
@@ -53,13 +52,10 @@ INGRESS_RULES = RULES_DIR / "ingress-probes.yaml"
 DEPLOY_PIPELINE_RULES = RULES_DIR / "deploy-pipeline.yaml"
 LOKI_LOG_RULES = K8S_ROLES / "loki-homelab" / "files" / "rules" / "homelab-logs.yaml"
 LOKI_HEALTH_RULES = RULES_DIR / "loki-homelab.yaml"
-# A per-target or per-pod alert takes `service` from its series, so a real service stands in
-# for it. No route matches on `service`, so the stand-in cannot move a set.
+# No route matches on `service`, so the stand-in cannot move a set.
 STAND_IN_SERVICE = "homepage"
 CRITICAL_RECEIVERS = ["discord", "email"]
 
-# Each rules file whose every rule pages through the muted routes: the file, its count of
-# rules without `shadow`, and the alerts among them that are critical, so mail as well as post.
 # A rule added, dropped, shadowed or re-severitied fails its row until the row agrees.
 ROUTED = [
     (
@@ -379,8 +375,8 @@ def test_a_paging_alert_expected_as_blackhole_is_flagged():
     assert not_blackholed(labels) == receivers
 
 
-# M6's health-gate drill, written out rather than read from health-gate-drill.yaml: B-1e
-# deletes that rule and keeps the route, and the route must still hold this set.
+# Written out rather than read from health-gate-drill.yaml: the drill deletes that rule and keeps
+# the route.
 DRILL = {
     "alertname": "HealthGateDrill",
     "severity": "critical",
@@ -431,8 +427,7 @@ def test_rule_sets_names_every_host_check_rule():
         {f"TextfileCollectorError/{host}" for host in hosts}
         | {"ComposeUpFailed/daniel-pi"}
     )
-    # B9's twelve rules page: a `warning`, which posts to Discord alone, the channel the six
-    # Kuma tiles notified.
+    # A `warning` posts to Discord alone, the channel the six Kuma tiles notified.
     b9_alerts = (
         "AideCheckFailed AideCheckNotReporting RkhunterScanFailed RkhunterScanNotReporting"
     ).split()

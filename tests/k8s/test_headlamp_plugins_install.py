@@ -16,8 +16,6 @@ from _manifest_guards import K8S, _k8s_entries, _render, _role_context
 HEX64 = re.compile(r"^[0-9a-f]{64}$")
 
 
-# A real release, so the accept half exercises the same shape an operator would add. The image
-# bundles this one already (defaults/main.yml explains), so it is never in the committed list.
 SAMPLE_PLUGIN = {
     "name": "prometheus",
     "version": "0.9.1",

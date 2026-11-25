@@ -14,8 +14,7 @@ from lib.proc_testing import fake_bin, path_with, run
 
 from lib.k8s_roles import ROLLOUT_TIMEOUT_DEFAULT
 
-# `lib.repo_paths` owns the anchors. The `X as X` names are re-exports for the guards that
-# import them from here; a guard redefines none.
+# The `X as X` names are re-exports for the guards that import them from here.
 from lib.repo_paths import (
     ALL_VARS as ALL_VARS,
     HOST_VARS as HOST_VARS,
@@ -35,10 +34,7 @@ def load_yaml(path: Path):
 
 SECRET_REGISTRY = SECRETS / "secret_rotation.yml"
 
-# Registry names too generic to match on: a whole-word hit on one would flag every script
-# mentioning the word, and the guards that read this list would be turned off rather than
-# obeyed. `domain` is in the registry at `tier: ignore` because it is a hostname, not a
-# credential, and every script that builds a URL names it.
+# Too generic to match on: a whole-word hit would flag every script that mentions the word.
 GENERIC_SECRET_NAMES = frozenset({"domain"})
 
 
@@ -122,17 +118,12 @@ def image_tag(ref: str) -> str:
 # --- the k8s rollout budget, wherever a role spells it ---------------------------------------
 
 
-# A role's rollout budget is `manifests_rollout_timeout | default(manifests_rollout_timeout_default)`.
-# The guards that size themselves against it read the literal text, so a role that moves its
-# number into a variable (sonarr) would silently read as the shared default. Resolving the
-# reference here keeps that from being a green no-op.
+# A role that moves its number into a variable would silently read as the shared default.
 _SECONDS = re.compile(r"^(\d+)s$")
 _ROLE_VAR = re.compile(r"^\{\{\s*(\w+)\s*\}\}$")
 
 
-# The shared default is READ from the renderer's constant rather than pinned here. A pinned
-# copy would agree with the renderer only by coincidence, and the day the constant moved it
-# would size every unoverridden role wrongly with every guard green.
+# Read from the renderer's constant, not pinned: a pinned copy would drift with every guard green.
 def _manifests_rollout_default_s() -> int:
     """`ROLLOUT_TIMEOUT_DEFAULT`, the budget of a role with no timeout of its own, in seconds.
 
@@ -226,12 +217,8 @@ def discover_docs() -> list[Path]:
     return sorted(set(docs))
 
 
-# --- Python modules under a role's files/ ----------------------------------------------------
-#
-# A role's modules can sit at any depth (`files/bridge/common.py` is `bridge.common`), and a
-# one-level glob returns an EMPTY set once they move down a directory, so every `all(...)` over
-# it passes. These readers identify a module by its dotted path under the root and resolve an
-# import to that id in every spelling Python allows.
+# A role's modules can sit at any depth, and a one-level glob returns an EMPTY set once they move
+# down a directory.
 
 
 def is_test_file(path: Path) -> bool:
@@ -332,10 +319,6 @@ def module_of(node: ast.AST, bound: dict[str, str], ids) -> str | None:
     return dotted if dotted in ids else None
 
 
-# The stub records one line per call so a test can assert it intercepted something. Without
-# that record the fixture would be indistinguishable from one that silently stopped being on
-# PATH: a stub no longer on PATH fails OPEN, the run stays green, and the real `logger` takes
-# every call again.
 _LOGGER_STUB = """#!/bin/sh
 printf '%s\\n' "$*" >> "$TEST_LOGGER_CALLS"
 """

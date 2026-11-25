@@ -9,8 +9,7 @@ Run: uv run pytest .claude/hooks/tests/test_inject_nested_docs_budget.py
 
 import test_inject_nested_docs as base
 
-# Bound by assignment, not imported, so the test arguments naming it do not read as a
-# redefinition of an unused import (F811).
+# Bound by assignment so test arguments naming it do not trip F811.
 repo = base.repo
 _build, _mod = base._build, base._mod
 

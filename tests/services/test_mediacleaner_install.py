@@ -107,8 +107,7 @@ def _assert_pin_agrees(defaults: dict) -> None:
         f"two disagreeing means the version and the targetAbi name different builds."
     )
 
-    # And the asset filename is the third place the same ABI is written. Upstream drops a zero
-    # patch on the 12 line (MediaCleaner-12.0.zip) but kept it on 10.11 (MediaCleaner-10.11.0.zip).
+    # The asset filename is the third place the ABI is written.
     asset_abi = f"{abi[0]}.{abi[1]}.{abi[2]}"
     asset_names = {f"MediaCleaner-{asset_abi}.zip"}
     if abi[2] == 0:
@@ -381,8 +380,7 @@ def test_the_manager_admits_the_pinned_tag():
         f"the Media Cleaner Renovate manager's extractVersionTemplate {anchor.pattern!r} does "
         f"not admit the pinned tag v{release} — the manager offers nothing at all"
     )
-    # Upstream's older tags are four-part (`v3.1.0.0`); the versioning has to order both shapes
-    # or the newest release is unreachable from the oldest pin.
+    # Upstream's older tags are four-part (`v3.1.0.0`); the versioning must order both shapes.
     versioning = re.compile(
         manager["versioningTemplate"].removeprefix("regex:").replace("(?<", "(?P<")
     )
@@ -418,8 +416,7 @@ def test_the_bump_is_never_automerged():
         f"the {DEP} packageRule no longer sets automerge: false"
     )
 
-    # Only a later rule that sets automerge or groupName can override this rule's. A k8s-path rule
-    # setting neither (the pinDigests rule, which must sit last) is no threat to it.
+    # Only a later rule that sets automerge or groupName can override this rule's.
     k8s_plane = [
         i
         for i, r in enumerate(rules)

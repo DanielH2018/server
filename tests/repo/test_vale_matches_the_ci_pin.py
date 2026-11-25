@@ -28,9 +28,7 @@ from lib import yaml_fast
 CI_REL = ".github/workflows/ci.yml"
 TOOLS_REL = "hosts/packages/homelab-tools/package.yml"
 
-# The CI patterns are `test_ci_tool_pins_do_not_move_backwards.py`'s, deliberately: this guard
-# reads the same two copies that one does, so a rename there that this file did not follow shows
-# up as a missing version here rather than as agreement over nothing.
+# Deliberately the CI patterns of `test_ci_tool_pins_do_not_move_backwards.py`.
 CI_PATTERNS = (r"VALE_VERSION:\s*v([\d.]+)",)
 CI_DIGEST = re.compile(r"VALE_SHA256:\s*([0-9a-f]{64})")
 

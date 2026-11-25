@@ -26,8 +26,6 @@ from lib.repo_paths import K8S_SERVICES
 ROLE = K8S_ROLES / "artifacts"
 FILES = ROLE / "files"
 
-# The entry point plus the two modules it imports. Named rather than counted, so a census that
-# stopped seeing the tree fails here instead of passing over an empty set.
 REQUIRED_MODULES = frozenset({"_gui_html.py", "artifact_meta.py", "artifact_server.py"})
 
 

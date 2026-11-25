@@ -98,23 +98,15 @@ def test_k8s_authelia_database_is_on_its_own_volume():
     )
 
 
-# IngressRoutes that deliberately skip forward-auth on a service whose `use_authelia` is true.
-# Keyed by the IngressRoute's metadata.name so adding another unauthenticated route to an
-# otherwise-gated service has to be a conscious edit here, with a reason, rather than something
-# that slips in behind a passing test.
 AUTHELIA_BYPASS_ROUTES = {
-    # The three below are the NATIVE public bypasses on the UNSUFFIXED names —
-    # emitted by the ingressroute() macro from each entry's bridge_bypass_prefixes.
-    # Each serves session-less callers that arrive at this edge directly.
+    # Native public bypasses on the unsuffixed names.
     "n8n-public-webhook": (
         "External services POST /webhook/ with no session; gating it silently breaks every "
         "registered webhook while the callers keep reporting success."
     ),
-    # karakeep's session-less callers are the browser extension and the mobile app, Bearer
-    # API-key clients that cannot pass 2FA. Four prefixes rather than `/api/`: that width
-    # also reaches next-auth's /api/auth/* and the cookie-authenticated children, where the
-    # app password is the only gate on the internet. Each entry names the gate the
-    # app itself applies to that prefix, which is what makes it safe to leave Authelia off.
+    # karakeep's session-less callers are Bearer API-key clients that cannot pass 2FA. Four
+    # prefixes, not `/api/`: that width would reach next-auth's /api/auth/* and cookie-authenticated
+    # children, where the app password is the only gate.
     "karakeep-public-api-v1": (
         "The REST API; every /api/v1 route sits behind the app's authMiddleware, which 401s "
         "without a valid Bearer key or session."
@@ -169,13 +161,10 @@ def test_every_authed_service_carries_forward_auth_and_rate_limit():
             name = doc["metadata"]["name"]
             for route in doc["spec"]["routes"]:
                 middlewares = [m["name"] for m in route["middlewares"]]
-                # rate-limit is unconditional — it is the brute-force protection, and the
-                # login portal (use_authelia: false) is the route that needs it most. It
-                # applies to bypass routes too: skipping auth never means skipping this.
+                # rate-limit is unconditional, including on bypass routes: it is the brute-force
+                # protection.
                 assert any(m.startswith("rate-limit") for m in middlewares), name
-                # A `-monitoring` document is a LAN-host, ClientIP-confined read door, which the
-                # monitoring-route-is-lan-host-and-clientip-confined property row enforces.
-                # A ClientIP clause anywhere else exempts nothing.
+                # A `-monitoring` document is a LAN-host, ClientIP-confined read door.
                 if name.endswith("-monitoring"):
                     continue
                 if entry.get("use_authelia") and name not in AUTHELIA_BYPASS_ROUTES:
@@ -326,8 +315,7 @@ def test_routes_reference_a_tlsoption_that_exists_and_is_not_named_default():
         if tpl is None:
             continue
         rendered = _render(tpl, **_role_context(entry["name"], container_item=entry))
-        # Every document: a role may ship more than one IngressRoute, and a second one naming
-        # a TLSOption that does not exist fails exactly as loudly as the first would.
+        # Every document: a role may ship more than one IngressRoute.
         for doc in (d for d in yaml_fast.safe_load_all(rendered) if d):
             named = doc["spec"]["tls"]["options"]["name"]
             assert named in defined, (
@@ -336,9 +324,7 @@ def test_routes_reference_a_tlsoption_that_exists_and_is_not_named_default():
             )
 
 
-# monitoring_route() call sites allowed to serve PathPrefix(`/`). Empty on purpose — see the
-# test below. Adding a name here needs the reason written beside it, the same shape as
-# AUTHELIA_BYPASS_ROUTES above.
+# Empty on purpose; a name added here needs its reason beside it.
 _WIDE_MONITORING_ROUTES: dict[str, str] = {}
 
 
@@ -478,9 +464,8 @@ def test_scrutiny_bypass_is_read_only_and_path_scoped():
     assert set(rule.get("methods") or []) <= {"GET", "HEAD"}, rule.get("methods")
     for path in sorted(SCRUTINY_BYPASS_READS):
         assert any(re.search(p, path) for p in rule["resources"]), path
-    # Path scope, asserted independently of the method gate: `_bypass_permits_mutation` short-circuits
-    # to False on any GET/HEAD-only rule, so a re-widening to `^/api/.*$` — unauthenticated
-    # reads of every device and of the notify settings — would satisfy that check vacuously.
+    # Path scope, asserted independently of the method gate: `_bypass_permits_mutation` is False on
+    # any GET/HEAD-only rule, so a re-widening to `^/api/.*$` would pass it.
     for path in sorted(SCRUTINY_MUTATING_PATHS):
         assert not any(re.search(p, path) for p in rule["resources"]), path
         assert not _bypass_permits_mutation(rule, path), path

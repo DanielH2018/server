@@ -37,8 +37,7 @@ _COMPONENTS = REPO / "hosts" / "components"
 PING_HOST = "hc-ping.com"
 
 
-# Templates, baked-in scripts and manifests — the only places a ping can be written. Scanning
-# every file instead pulls in the vendored collections' binaries and fails on their bytes.
+# Scanning every file pulls in the vendored collections' binaries and fails on their bytes.
 SOURCE_SUFFIXES = {".j2", ".sh", ".py", ".yml", ".yaml"}
 
 
@@ -108,8 +107,8 @@ def _ping_files() -> list[Path]:
         if path.is_file()
         and path.suffix in SOURCE_SUFFIXES
         and "collections" not in path.parts
-        # A test's own fixtures are not ping wiring: one holding a `create=1` string would
-        # fail `test_no_auto_provisioning` for a URL nothing ever sends.
+        # A test's own fixtures are not ping wiring: one holding a `create=1` string would fail
+        # `test_no_auto_provisioning`.
         and "tests" not in path.parts
         and (PING_HOST in _read(path) or "HC_PING_URL" in _read(path))
     ]
@@ -151,12 +150,9 @@ def test_failure_is_reported(path: Path) -> None:
     )
 
 
-# Every hc-ping curl invocation, with backslash continuations folded first so a call split over
-# two lines is read whole.
+# Backslash continuations are folded first so a call split over two lines is read whole.
 _PING_CURL_RE = re.compile(r"curl\b[^\n]*?\$\{?(?:HC_URL|HC_PING_URL|url)\b[^\n]*")
 
-# The ping sites this guard must find. Named rather than counted: a census that globs reads
-# empty the day a file moves, and a parametrized check over nothing passes.
 PING_SENDERS = frozenset(
     {
         "disk-health.sh.j2",
@@ -210,9 +206,6 @@ def test_ping_is_optional(path: Path) -> None:
     )
 
 
-# The template this module's render routing is proved on, as a (plane, role, name) triple. Named
-# rather than discovered: a routing test over a template picked by glob reads green the day the
-# glob returns nothing, which is the failure mode the routing itself exists to remove.
 _RENDERED_SENDER = ("components", "k3s-host-checks", "disk-health.sh.j2")
 
 

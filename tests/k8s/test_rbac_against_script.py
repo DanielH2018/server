@@ -26,8 +26,6 @@ from _script_rbac import ALL_NAMESPACES, grants, missing, recorded_needs, shell_
 from _shell_render import render_shell_script
 from lib import yaml_fast
 
-# The drill restores into the claim's own namespace, and every claim it can pick is in
-# `homelab` (the plan's *The drill: state into a ConfigMap first, then the move*).
 DRILL_NAMESPACES = {"$PVC_NS": "homelab", "$STATE_NS": "homelab"}
 DRILL_TEMPLATE = ("k8s", "longhorn-restore-drill", "longhorn-restore-drill.sh.j2")
 
@@ -216,7 +214,6 @@ def test_an_unknown_verb_is_flagged() -> None:
         recorded_needs([["kubectl", "cordon", "node-a"]])
 
 
-# The drill's stamp ConfigMap grant from the plan (H2.3c): a get and a patch on one name.
 _STAMPS = {
     "apiGroups": [""],
     "resources": ["configmaps"],
@@ -326,8 +323,6 @@ def test_the_configarr_health_role_grants_every_call_its_reader_makes(
         )
     )
     needs = recorded_needs(argvs)
-    # The plan's grant set for this reader (*The *arr checks*), so a recorder that stopped
-    # recording cannot pass on an empty set.
     assert {need[:4] for need in needs} == {
         ("homelab", "batch", "jobs", "list"),
         ("homelab", "batch", "jobs", "get"),
@@ -361,8 +356,6 @@ def test_the_janitorr_health_role_grants_every_call_its_reader_makes(
         yaml_fast.safe_load_all(render_role_template("janitorr", "health-rbac.yaml.j2"))
     )
     needs = recorded_needs(argvs)
-    # The calls the plan derives this reader's grants from (*The *arr checks*), so a recorder
-    # that stopped recording cannot pass on an empty set.
     assert {need[:4] for need in needs} == {
         ("homelab", "apps", "deployments", "get"),
         ("homelab", "", "pods", "list"),
@@ -406,8 +399,6 @@ def test_the_crowdsec_jobs_role_grants_every_call_the_remote_allowlist_makes(
         yaml_fast.safe_load_all(render_role_template("crowdsec", "jobs-rbac.yaml.j2"))
     )
     needs = recorded_needs(argvs)
-    # The calls the plan derives this job's grants from (*CrowdSec*), less the exec the sidecar
-    # replaced, so a recorder that stopped recording cannot pass on an empty set.
     assert {need[:4] for need in needs} == {
         (ALL_NAMESPACES, "traefik.io", "ingressroutes", "list"),
         ("homelab", "apps", "deployments", "get"),

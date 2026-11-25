@@ -38,26 +38,17 @@ _LONG_RUNNING = {"Deployment", "DaemonSet", "StatefulSet"}
 # The cluster-base template that defines the four tiers, read as it renders.
 _PRIORITYCLASS_TEMPLATE = ("cluster-base", "priorityclass.yaml.j2")
 
-# Long-running pod templates allowed to name a class OUTSIDE the four homelab tiers, with the
-# reason. A new entry here is the decision the guard exists to force.
+# A new entry is the decision the guard exists to force.
 _SYSTEM_TIER = {
-    # Losing the device plugin makes jellyfin and tdarr unschedulable rather than degraded, so
-    # it must outrank every workload that consumes `devic.es/dri` — the template says so at
-    # the line. `system-node-critical` is the class k8s reserves for exactly that shape.
+    # Losing the device plugin makes jellyfin and tdarr unschedulable, so it must outrank every
+    # workload consuming `devic.es/dri`.
     ("dri-device-plugin", "daemonset.yaml.j2"): "system-node-critical",
-    # CoreDNS outranks every homelab tier as k3s ships it, and every tier and Flux's own
-    # controllers resolve names through it (H1.4). A homelab tier would lower its class, and
-    # `tier: platform` would derive `homelab-critical`. The entry stays untiered for that reason.
+    # CoreDNS outranks every homelab tier as k3s ships it and everything resolves through it.
     ("coredns", "deployment.yaml.j2"): "system-cluster-critical",
 }
 
-# Non-vacuity. The census renders 70 long-running pod templates. A floor far below the live
-# count cannot tell "the collector broke" from "half the fleet dropped out of the render", so
-# this one sits close enough to notice a contraction.
 _MIN_LONG_RUNNING = 60
 
-# Roles the census must contain, so a missing member is named rather than counted: a guard
-# that stopped seeing them would read green for the exact regression it was written against.
 _MUST_CONTAIN = frozenset(
     {
         "observability",

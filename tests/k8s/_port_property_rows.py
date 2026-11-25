@@ -10,8 +10,7 @@ from _k8s_render import pod_spec
 from _property_table import Property
 from _workload_property_rows import POD_KINDS
 
-# Kubernetes' IANA_SVC_NAME (k8s.io/apimachinery validation.IsValidPortName): at most 15
-# characters, lowercase alphanumerics and '-', alphanumeric at both ends, no "--", one letter.
+# Kubernetes IANA_SVC_NAME: at most 15 characters, lowercase alphanumerics and '-'.
 _PORT_NAME_MAX = 15
 _PORT_NAME = re.compile(r"[a-z0-9]([a-z0-9-]*[a-z0-9])?")
 _LETTER = re.compile(r"[a-z]")

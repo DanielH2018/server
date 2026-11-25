@@ -91,8 +91,7 @@ def _import_from(app: Path, module: str) -> subprocess.CompletedProcess:
         [
             sys.executable,
             "-c",
-            # `-c` puts '' at sys.path[0]; `python /app/cli.py` puts /app there. Same shape,
-            # stdlib intact behind it.
+            # `-c` puts '' at sys.path[0] and `python /app/cli.py` puts /app there; same shape.
             f"import sys; sys.path[0] = sys.argv[1]; import {module}",
             str(app),
         ],

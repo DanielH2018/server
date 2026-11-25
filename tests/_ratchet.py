@@ -181,8 +181,7 @@ def conjoined_reasons(text: str) -> dict[str, str]:
     return found
 
 
-# A number in a reason, unless it is part of an issue reference (`#4508`), a version or a
-# slice name (`D2.1b`).
+# A number in a reason, unless part of an issue reference, a version or a slice name.
 _BARE_NUMBER = re.compile(r"(?<![#\w.])\d+(?![\w.])")
 
 
@@ -367,8 +366,8 @@ def tighten(text: str, counts: Mapping[str, int], cap_of: Callable[[str], int]) 
                 count = counts.get(path)
                 if count is None or count <= cap_of(path):
                     continue
-                # Rewriting the number inside the line, rather than reconstructing the line,
-                # is what leaves a trailing comment and its spacing alone.
+                # Rewriting the number inside the line leaves a trailing comment and its spacing
+                # alone.
                 kept.append(
                     raw
                     if count >= int(number)

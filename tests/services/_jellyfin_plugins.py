@@ -28,9 +28,6 @@ from lib import yaml_fast
 ROLE = "jellyfin"
 DEPLOYMENT = "deployment.yaml.j2"
 
-# Every plugin installer the Deployment declares, by container name. Named rather than globbed
-# for the reason in .claude/rules/python-layout.md: a census that finds its subjects by pattern
-# passes over an empty set the moment they are renamed.
 INSTALLERS = (
     "install-ani-sync",
     "install-intro-skipper",
@@ -41,8 +38,7 @@ INSTALLERS = (
 
 SWEEP = "sweep-unlisted-plugins"
 
-# Where Jellyfin scans for plugins. Not read from the script — this is the value the scripts are
-# checked AGAINST, and taking it from the thing under test would assert nothing.
+# Not read from the script: this is the value the scripts are checked against.
 PLUGIN_ROOT = "/config/data/plugins"
 
 
@@ -175,8 +171,6 @@ def compares_against(installer: str, name: str) -> bool:
     )
 
 
-# Leading dotted version of a string: "10.11.6.-.ani-sync_4.1.0.0.zip" -> "10.11.6",
-# "10.11.10ubu2404-ls35" -> "10.11.10".
 LEADING_VERSION = re.compile(r"^(\d+(?:\.\d+)*)")
 
 

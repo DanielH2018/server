@@ -91,13 +91,12 @@ from _inline_budget import blocks, inline_margins, print_report, rule_globs
 from _inline_budget import header as _header
 from _transcript_docs import hook_contexts
 
-# Under both harness caps with headroom for the wrapper text: local persist at 10,000 chars,
-# remote truncation at 8,000 chars / 200 lines. Pinned by `test_inject_nested_docs.py`.
+# Under both harness caps: local persist 10,000 chars, remote truncation 8,000 chars / 200 lines.
 INLINE_MAX_CHARS = 7500
 INLINE_MAX_LINES = 190
 
-# A head shorter than this teaches less than the headings it displaces, so a doc that cannot
-# get this much text waits for a command with more budget left (the `render` deferral).
+# A head shorter than this teaches less than the headings it displaces, so the doc waits for a
+# command with more budget.
 MIN_HEAD_CHARS = 1500
 
 # The wrapper text, charged to both payload budgets before any doc is rendered.
@@ -121,7 +120,6 @@ TRAILER_MAX_HEADINGS = 40
 REASON = "bash_path_match"
 
 # The rules a READ needs whole: `secrets.md` warns before a content grep prints a credential.
-# Every other rule waits for a write.
 READ_RULES = frozenset({"secrets.md"})
 
 # Editing rules a read gets as one pointer line, so the first write still inlines them whole.
@@ -133,8 +131,7 @@ ALWAYS_WHOLE = frozenset({"secrets.md", "generated-docs.md"})
 # The state-file entry recording that a doc's pointer, not the doc, was sent.
 _POINTER_KEY = "pointer:"
 
-# An inline interpreter (`python3 - <<'EOF'`) writes through code the command text cannot show,
-# so every path such a command names counts as written.
+# An inline interpreter writes through code the command cannot show.
 _INLINE_INTERPRETER = re.compile(
     r"\b(?:python3?|perl|ruby|node)\s+(?:-\s|-c\b|-e\b|-$)", re.M
 )
@@ -146,8 +143,7 @@ AGENT_FIELD = "agent="
 # between parallel sessions, so the file is keyed by session id.
 _STATE_TTL_S = 24 * 3600
 
-# Where a command's path tokens end. Quotes and backticks are stripped from the token after
-# the split rather than treated as separators, so `'k8s/roles/foo/x.j2'` survives.
+# Quotes and backticks are stripped after the split, so a quoted path survives.
 _SEPARATORS = re.compile(r"[\s;|&<>()`]+")
 _QUOTES = "\"'"
 _TRAILING_PUNCT = ",:."
@@ -513,10 +509,8 @@ def _head_block(doc, text, header, budget_chars, budget_lines):
     `MIN_HEAD_CHARS`; the caller defers the doc to the next command naming the path.
     """
     lines = text.splitlines()
-    # Two passes. The first reserves room for the doc's whole outline, since the cut is not
-    # known yet; the second reserves only the headings that first cut left over, which frees
-    # the rest for head text. The final trailer is a subset of the one the last pass reserved
-    # for — a later cut can only drop headings — so the block stays under the budget.
+    # Two passes: the first reserves the whole outline, the second only the headings the first cut
+    # left.
     trailer, cut = _outline(lines)[:TRAILER_MAX_HEADINGS], 0
     for _ in range(2):
         over_chars, over_lines = _head_overhead(doc, text, header, trailer)
@@ -645,8 +639,7 @@ def build_context(
             except OSError:
                 continue
             candidates[doc] = (root, rel, floor, pointer)
-    # Only the first head is reserved for: it spends nearly all it is given, so a second
-    # head in the same command defers whatever the whole docs leave.
+    # Only the first head is reserved for; a second head in the same command defers.
     floors = [c[2] for c in candidates.values() if c[2] is not None]
     reserve, reserve_lines = (floors[0][0] + 1, floors[0][1] + 1) if floors else (0, 0)
     preamble = _SHORT_PREAMBLE if state.preambled else _PREAMBLE

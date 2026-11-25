@@ -26,8 +26,7 @@ from test_leakguard import _run_child
 
 _CHECK_LIB = REPO / "hosts/components/check-lib/files/homelab-check-lib.sh"
 
-# A child handed a PATH built from scratch, the shape of a test that pins `/usr/bin:/bin` for
-# its child. The pytest PATH prefix never reaches it, so only the `Popen` wrapper can.
+# A PATH built from scratch never gets the pytest PATH prefix.
 _LEAKS_THROUGH_A_HAND_BUILT_PATH = """
 import subprocess
 
@@ -37,13 +36,10 @@ def test_it_logs_through_a_hand_built_path():
 """
 
 
-# The real `logger` by absolute path, which no PATH reaches. None where the host has
-# none, and the test that runs it skips there.
+# The real `logger` by absolute path, which no PATH reaches; None where absent.
 _REAL_LOGGER = shutil.which("logger", path="/usr/bin:/bin")
 
-# Both ways a child names its program by absolute path: as `argv[0]`, and as `executable`
-# beside a bare `argv[0]`. One child run each, because a teardown failure leaves the next test
-# in the same run erroring in setup.
+# One child run each: a teardown failure leaves the next test in the same run erroring in setup.
 _ABSOLUTE_LAUNCHES = {
     "argv": f"[{_REAL_LOGGER!r}, 'leakguard-6463-argv']",
     "executable": f"['logger', 'leakguard-6463-executable'], executable={_REAL_LOGGER!r}",

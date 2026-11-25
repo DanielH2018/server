@@ -33,8 +33,7 @@ from lib import yaml_fast
 SIDECAR = "crowdsec-agent"
 METRICS_PORT = 6060
 
-# Named rather than counted, and asserted as a SUBSET of the rendered jobs below: the set of
-# jobs grows, so an equality check would fail on the next addition rather than on a regression.
+# Asserted as a subset of the rendered jobs: the set grows.
 SIDECAR_PODS = (
     # (the role and app label, the scrape job that must cover its sidecar, the NetworkPolicy)
     ("traefik", "crowdsec-traefik-agent", "traefik-crowdsec-agent-metrics"),
@@ -196,9 +195,8 @@ def test_every_subject_this_guard_reads_is_still_there():
     for role, _, policy_name in SIDECAR_PODS:
         assert role in sidecars, f"{role} renders no `{SIDECAR}` container"
         assert policy_name in policies, f"no `{policy_name}` NetworkPolicy rendered"
-    # And EQUALITY the other way: `_rendered()` collects a `crowdsec-agent` from any
-    # Deployment, so a third sidecar added later would render unscraped with every test
-    # above still green. This is the one assertion that notices it.
+    # EQUALITY the other way: `_rendered()` collects a `crowdsec-agent` from any Deployment, so a
+    # third unscraped sidecar would pass the tests above.
     assert set(sidecars) == {r for r, _, _ in SIDECAR_PODS}, (
         f"a pod runs {SIDECAR} and this guard does not cover it: {sorted(sidecars)}"
     )

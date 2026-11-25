@@ -32,9 +32,7 @@ def _rendered_dockerfile() -> str:
     return rendered_build_text("code-server")
 
 
-# The extensions the pin table must carry, so a renamed or emptied list fails as a missing
-# member rather than passing over nothing. The second set names the ones published per
-# platform: their URL has to select the linux-x64 build, or the API's first-listed one ships.
+# The second set names the per-platform extensions: their URL must select the linux-x64 build.
 KNOWN_EXTENSIONS = frozenset(
     {
         "ms-python.python",
@@ -61,8 +59,7 @@ TARGET_PLATFORM = "linux-x64"
 _SHA256 = re.compile(r"^[0-9a-f]{64}$")
 _RELEASE = re.compile(r"^\d+\.\d+\.\d+$")
 
-# The network-resolving forms. Any one of them in the Dockerfile means a version is decided at
-# build time.
+# Any one in the Dockerfile means a version is decided at build time.
 FLOATING_FORMS = (
     "deb.nodesource.com",
     "| bash",
@@ -71,8 +68,8 @@ FLOATING_FORMS = (
     "sh.rustup.rs",
 )
 
-# The subPath mounts of the backed-up workspace claim in deployment.yaml.j2. Cargo must write
-# none of them: a target/ there fills the 1 Gi claim and rides the weekly B2 backup.
+# Cargo must write none of the backed-up subPath mounts: a target/ there fills the 1 Gi claim and
+# rides the weekly B2 backup.
 BACKED_UP_MOUNTS = ("/config/workspace", "/config/.ssh", "/config/.config")
 CARGO_PATH_VARS = ("CARGO_HOME", "CARGO_TARGET_DIR")
 

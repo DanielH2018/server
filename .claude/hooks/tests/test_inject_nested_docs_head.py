@@ -12,8 +12,7 @@ import re
 
 import test_inject_nested_docs as base
 
-# Bound by assignment, not imported, so the test arguments naming it do not read as a
-# redefinition of an unused import (F811).
+# Bound by assignment so test arguments naming it do not trip F811.
 repo = base.repo
 RULE, _build, _mod = base.RULE, base._build, base._mod
 

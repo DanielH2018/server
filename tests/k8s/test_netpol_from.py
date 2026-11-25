@@ -28,9 +28,6 @@ from renderer import shadow_diff
 from renderer.renderer_lib import cluster
 from renderer.renderer_lib.context import load_stubs
 
-# Entries this guard must find, by the policy name each renders, with its renderer. Named rather
-# than counted: if the key were renamed, the census below would go empty and every `all()` here
-# would pass on nothing.
 KNOWN_FENCES = {
     "authelia": "netpol-baseline",
     "speedtest": "netpol-baseline",
@@ -54,9 +51,7 @@ KNOWN_FENCES = {
 }
 
 
-# Fences that admit homepage through `homepage_widget: true` on the entry rather than through
-# `netpol_from`, one per renderer: a role-owned fence and a netpol-baseline one. Named so the
-# key's derivation cannot quietly stop reaching either.
+# Named so the key's derivation cannot quietly stop reaching either renderer.
 HOMEPAGE_WIDGET_FENCES = frozenset(
     {"sonarr", "qbittorrent", "scrutiny-web", "ical-proxy"}
 )
@@ -67,11 +62,7 @@ def fence_name(entry: dict) -> str:
     return entry.get("netpol_app", entry["name"])
 
 
-# Callers whose pods render only from a role's `templates/verify/` or `templates/precheck/`, which
-# the renderer emits into `<tag>-verify` and `<tag>-precheck` and `rendered_docs()` does not read.
-# Named so the derivation below cannot quietly stop reaching a role: each must be a pod label `verify_pod_labels` returns.
-# qbittorrent's verify Job keeps the label of the `kubectl run` probe it replaced at the flip.
-# janitorr's tests/test_verify_janitorr.py also checks that sonarr's and radarr's fences admit its Job.
+# Their pods render only from `templates/verify/` or `templates/precheck/`.
 VERIFY_CALLERS = frozenset(
     {
         "sonarr-verify",

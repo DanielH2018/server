@@ -12,9 +12,7 @@ from lib.k8s_roles import MANIFEST_TEMPLATE_GLOB, resolved_manifest_files
 from _helpers import K8S_ROLES
 
 
-# Roles whose include builds a list with a Jinja expression over role vars. The deploy
-# evaluates it; the offline copy reads every basename in it, over-inclusively by design, so the
-# two are not comparable and these roles are left out of the agreement test by name.
+# The deploy evaluates the Jinja list; the offline copy over-includes by design.
 JINJA_LIST_ROLES = frozenset({"authelia", "navidrome", "traefik"})
 
 
@@ -39,8 +37,6 @@ def test_every_template_of_a_jinja_list_role_is_listed_is_clean():
     assert {name: unlisted_templates(name) for name in JINJA_LIST_ROLES} == {
         name: set() for name in JINJA_LIST_ROLES
     }
-    # The named members: authelia's OIDC key Secret, which R2's PR 7 lists behind its lever,
-    # and traefik's rbac.yaml, which its flip moved from a staging task into the list.
     assert "oidc-jwk-secret.yaml" in resolved_manifest_files("authelia")
     assert "rbac.yaml" in resolved_manifest_files("traefik")
 

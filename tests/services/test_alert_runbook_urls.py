@@ -40,8 +40,7 @@ from lib.repo_paths import ALL_VARS, REPO
 # The shipped rules of every role, Prometheus' and loki-homelab's ruler alike.
 RULE_FILES = sorted(K8S_ROLES.glob("*/files/rules/*.yaml"))
 RULE_TESTS = sorted(K8S_ROLES.glob("*/tests/rules/*.test.yaml"))
-# The longest description an alert rule's source may carry, in characters. Past it the
-# notification turns into an essay on a phone, and the edge cases belong in the runbook.
+# Past this the notification turns into an essay on a phone; edge cases belong in the runbook.
 DESCRIPTION_CAP = 300
 # The longest rendered summary, in characters: one line of a notification listing many alerts.
 SUMMARY_CAP = 120
@@ -50,8 +49,7 @@ TEMPLATED = frozenset({"K3sNodeVersionSkew", "FluxNotReady"})
 # Non-vacuity: critical rules the census must find, one of them loki-homelab's.
 CRITICAL = frozenset({"WANUnreachable", "HostFilesystemRemountedReadOnly"})
 DOCS = REPO / "docs"
-# A page the description cites as where to go next. The archived design docs under archive/
-# explain why a rule exists; they are not where a paged reader goes.
+# Archived design docs explain why a rule exists; they are not where a paged reader goes.
 CITED_PAGE = re.compile(r"(?<![\w/.-])docs/((?!archive/)[\w/-]+)\.md\b")
 # Non-vacuity: an alert that must link its runbook, and the page it links.
 NAMED = ("HostReconcileFailed", "host-packages")

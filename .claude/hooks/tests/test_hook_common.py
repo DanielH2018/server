@@ -283,10 +283,6 @@ def test_an_edit_with_no_file_path_is_no_edit_call(tool_input):
     )
 
 
-# Two ways to name the primary checkout were in use, and they disagree exactly where the git
-# dir has no checkout beside it. The tests below pin which one is right.
-
-
 def test_primary_checkout_is_the_same_from_the_primary_and_a_linked_worktree(tmp_path):
     primary = init_repo(tmp_path / "primary", initial_commit="init")
     worktree = tmp_path / "wt"
@@ -298,8 +294,7 @@ def test_primary_checkout_is_the_same_from_the_primary_and_a_linked_worktree(tmp
 
 
 def test_primary_checkout_is_none_for_a_separated_git_dir(tmp_path):
-    # `git worktree list --porcelain` names the git dir itself as the main worktree here, so
-    # a dirty check run on its first entry would read a directory that is not a checkout.
+    # `git worktree list --porcelain` names the git dir itself as the main worktree here.
     checkout = tmp_path / "checkout"
     git_dir = tmp_path / "separate"
     git(tmp_path, "init", "-q", f"--separate-git-dir={git_dir}", str(checkout))

@@ -14,15 +14,12 @@ _DEFAULTS = load_yaml(_CLUSTER_BASE / "defaults" / "main.yml")
 READONLY_SA = _DEFAULTS["cluster_base_readonly_sa_name"]
 READONLY_NS = _DEFAULTS["cluster_base_readonly_sa_namespace"]
 
-# Every group Kubernetes puts the identity in by name. `system:authenticated` is left out: it is
-# the same for every credential, so a binding to it is not a binding of this identity.
+# `system:authenticated` is left out: it is the same for every credential.
 READONLY_GROUPS = frozenset(
     {"system:serviceaccounts", f"system:serviceaccounts:{READONLY_NS}"}
 )
 
-# What cluster-base's own render binds the identity to, plus the built-in `view` it binds
-# already. A role named here is read-only; a binding from any other role to a roleRef outside
-# these is a new grant to the identity.
+# A binding from any other role to a roleRef outside these is a new grant to the identity.
 ALLOWED_CLUSTER_ROLES = frozenset({"view", READONLY_SA})
 ALLOWED_ROLES = frozenset({(READONLY_NS, f"{READONLY_SA}-kcm-lease")})
 
@@ -266,9 +263,6 @@ RBAC_PROPERTIES = (
                 ),
             ),
         ),
-        # Three bindings render, all cluster-base's: the identity's `view` and own ClusterRole
-        # bindings, and the lease Role binding. A floor of three and the names below fail when
-        # the census stops seeing them.
         min_matches=3,
         must_find=frozenset(
             {

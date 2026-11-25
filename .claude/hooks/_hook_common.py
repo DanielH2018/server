@@ -25,9 +25,8 @@ from typing import Any
 
 HOOKS_DIR = os.path.dirname(os.path.abspath(__file__))
 
-# The stage splitter is the dotfiles package's segmenter. When the package is not deployed,
-# `segments` raises `Unsplittable` and each consumer picks its posture: `ask` for a deny guard
-# with a real cost, no decision for the rest, never a silent "nothing here".
+# `segments` raises `Unsplittable` when the dotfiles package is absent; each consumer picks `ask`
+# or no decision, never a silent "nothing here".
 try:
     import _claude_guard  # noqa: F401  (bootstraps claude_guard onto sys.path)
     from claude_guard.segment import parse as _parse
@@ -132,9 +131,7 @@ def split_stages(
     return stages
 
 
-# Words that can precede the real binary in a stage. `until ! pgrep -f x; do sleep 15; done`
-# splits at each `;`, but its first stage still opens with `until` and `!` — a rule testing
-# `stage[0]` would never see the pgrep.
+# A stage can open with `until` or `!`, so a rule testing `stage[0]` would miss the pgrep.
 _LEADING_KEYWORDS = frozenset(
     {
         "!",
@@ -441,9 +438,8 @@ def primary_checkout(start: str = HOOKS_DIR) -> str | None:
     return os.path.dirname(common)
 
 
-# Test-only override; nothing on a host sets it. The appender renames the file it names, so
-# it is honoured only for `instructions.log` under the temp dir, never this module's
-# `claude-<name>-<sid>` state files that share that dir.
+# Test-only override, honoured only for `instructions.log` under the temp dir: the appender renames
+# the file it names, so state files sharing that dir must not match.
 INSTRUCTIONS_LOG_ENV = "CLAUDE_INSTRUCTIONS_LOG"
 INSTRUCTIONS_LOG_MAX_BYTES = 256 * 1024
 _INSTRUCTIONS_LOG_NAME = "instructions.log"

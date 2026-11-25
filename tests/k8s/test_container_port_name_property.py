@@ -95,8 +95,7 @@ def test_a_name_with_no_letter_is_flagged():
 
 
 def test_a_name_of_exactly_fifteen_characters_is_accepted():
-    # The only difference from the 16-character red name is the length, so a row that
-    # flags this one has its bound off by one.
+    # The only difference from the 16-character red name is length.
     assert _port_name_rows("Deployment", "dockerhub-mirror"), (
         "no row flags 'dockerhub-mirror', so the 15-character bound is untested"
     )

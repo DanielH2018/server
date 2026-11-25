@@ -50,8 +50,8 @@ def test_the_file_provider_is_declared_with_the_gate_on_and_gone_with_it_off() -
 
     providers = _static_config(False)["providers"]
     assert "file" not in providers
-    # kubernetesCRD is what every IngressRoute in the fleet depends on; gating the file
-    # provider must not take the providers block with it.
+    # kubernetesCRD is what every IngressRoute depends on; gating the file provider must not take
+    # the providers block.
     assert "kubernetesCRD" in providers
 
 

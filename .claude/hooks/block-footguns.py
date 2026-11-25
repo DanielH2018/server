@@ -84,9 +84,7 @@ _SCRIPTS = Path(__file__).resolve().parents[2] / "scripts"
 # cluster node keeps its own operator checkout at this path.
 _REPO_PATH = "/home/ubuntu/server"
 
-# Load generators, by the name you type. A single `curl` is deliberately absent: one request to
-# the public name is ordinary and must stay clean, and "many requests" is not visible in the
-# text of a `curl` call the way it is in the name of a tool built to make them.
+# A single `curl` is deliberately absent: one request to the public name is ordinary.
 _BURST_TOOLS = frozenset(
     {
         "ab",
@@ -252,13 +250,9 @@ def issue_create_by_hand_problem(stage: list[str]) -> str | None:
     )
 
 
-# The CI workflow, by every name `gh workflow run` accepts for it: the file, either extension,
-# and the `name:` in it. NOT the numeric workflow id — gh accepts that too, and a literal here
-# would drift the first time the workflow is recreated. Stated as a limit in the rule's
-# docstring rather than papered over.
+# Not the numeric workflow id: it would drift when the workflow is recreated.
 _CI_WORKFLOW_NAMES = frozenset({"ci.yml", "ci.yaml", "CI"})
-# The refs that mean "master". An absent `--ref` means the same thing: gh resolves an empty ref
-# to the repository's default branch (`pkg/cmd/workflow/run/run.go`).
+# An absent `--ref` also means master: gh resolves an empty ref to the default branch.
 _MASTER_REFS = frozenset({"master", "refs/heads/master"})
 
 
@@ -457,10 +451,8 @@ _RULES = (
 )
 
 
-# The binaries the rules key on, as words in the raw text. The gate for asking when the
-# splitter cannot read the command: text naming none of them cannot reach a rule however it
-# is split, so a typo in a command about something else costs no prompt, and a host without
-# the `claude_guard` deploy prompts only on the commands this hook exists for.
+# Gate for asking when the splitter cannot read the command: text naming none of these cannot reach
+# a rule.
 _RULE_BINARIES = (
     frozenset({"kubectl", "ssh", "gh", *(m[0] for m in TAG_MOVES)}) | _BURST_TOOLS
 )

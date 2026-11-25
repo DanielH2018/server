@@ -93,9 +93,7 @@ def test_target_problems_swallows_a_null_target_list():
 
 
 def test_target_problems_filters_scaled_to_zero_deployments():
-    # terraria-stats/valheim-stats are on-demand game servers deliberately scaled to 0 —
-    # reporting them every session open forever is exactly the noise the all-green contract
-    # exists to avoid, so only the genuinely-unexplained loki target survives.
+    # Deliberately scaled-to-0 targets are not reported.
     bad = _targets(
         _TARGETS_ONE_SCALED_TO_ZERO,
         scaled_to_zero=lambda run, job, ns: job == "terraria-stats",
@@ -122,9 +120,7 @@ def test_is_scaled_to_zero_false_when_replicas_nonzero():
 
 
 def test_is_scaled_to_zero_false_on_kubectl_failure():
-    # An unreadable answer must not be treated as "confirmed intentional" — a real problem
-    # we can't explain has to stay visible, the same fail-open-to-visible rule probe.py's
-    # format_k8s_health uses for an unreadable restart time.
+    # An unreadable answer must stay visible, not count as confirmed intentional.
     assert (
         service_lines.is_scaled_to_zero(
             lambda *a, **k: _result("", returncode=1), "sonarr", "homelab"

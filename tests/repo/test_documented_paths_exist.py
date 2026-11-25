@@ -50,10 +50,6 @@ from lib.facts.citations import (
 )
 
 
-# A floor, not the real count -- catches the walk silently shrinking (a renamed root, a
-# tightened exclude) without hardcoding a number that drifts every time a doc is added.
-# Set just under the ~166 the walk finds: far enough below to absorb ordinary
-# deletions, close enough that a broken walk cannot pass.
 _MIN_DOCS = 100
 
 DOCS = discover_docs()
@@ -105,15 +101,9 @@ def cited_paths(line: str) -> list[str]:
     return line_numbered_citations(line, _REPO_EXTENSIONS)
 
 
-# Archived plans describe the tree at the moment they were executed, so a test they name may
-# since have been retired with the work it guarded. Live docs are read as instructions.
+# Archived plans describe the tree when executed, so a test they name may since have been retired.
+# Live docs are read as instructions.
 _ARCHIVE = "docs/archive/"
-
-
-# --- the tree-dependent half's own paired tests ---------------------------------------
-#
-# The pattern's accept/reject pairs live beside it in scripts/lib/tests/test_facts_citations.py.
-# What stays here is the extension filter, which only this tree can answer.
 
 
 def test_a_citation_in_a_repo_extension_is_extracted():
@@ -173,8 +163,7 @@ def test_the_guard_finds_citations_to_check():
     hits = sum(
         len(cited_paths(line)) for doc in DOCS for line in doc.read_text().splitlines()
     )
-    # About 7. A floor just under it catches the pattern breaking; setting it at the exact
-    # count would instead fail every time a doc drops a citation, which is not a defect.
+    # A floor just under the count catches the pattern breaking.
     assert hits >= 5, (
         f"only {hits} line-numbered citations found across {len(DOCS)} docs -- the pattern "
         "has stopped matching, so the existence check below is passing on an empty set."
@@ -228,13 +217,7 @@ def test_the_test_citation_walk_finds_citations_to_check():
     assert found >= 50, found
 
 
-# --- `file.py::test_name` node ids -----------------------------------------------------
-#
-# A runtime module that says "pinned by test_x.py::test_the_thing" claims which check holds an
-# invariant closed, and that claim rots like a `file:line` citation. Neither pattern above sees
-# it: a node id carries no line number, and most are cited from context rather than from the
-# repo root. The corpus is wider than DOCS because docs cite from prose with backticks and
-# runtime modules from a docstring or comment with none. `node_citations` reads both shapes.
+# A node id carries no line number and is mostly cited from context.
 
 
 def _runtime_modules() -> list[Path]:
@@ -342,8 +325,6 @@ def test_the_node_walk_finds_citations_to_check():
         for path in NODE_CORPUS
         for line in path.read_text(errors="replace").splitlines()
     )
-    # About 10. A floor just under it catches the pattern breaking without failing every
-    # time a doc drops a citation.
     assert hits >= 8, (
         f"only {hits} test citations found across {len(NODE_CORPUS)} files -- the pattern "
         "has stopped matching, so the existence check below is passing on an empty set."
@@ -407,9 +388,8 @@ def test_the_walk_ignores_other_worktrees_on_disk():
     fails on paths that moved legitimately. A CI runner has no worktrees on disk, so master CI
     stays green while the docs-refresh cron's commit, which runs the prek hooks, is rejected.
     """
-    # Anchored to REPO, not matched as a substring: this suite often RUNS from inside
-    # `.claude/worktrees/<name>/`, so every legitimate doc path contains that text. The
-    # question is whether the walk left THIS checkout, which only the parent test answers.
+    # Anchored to REPO, not matched as a substring: the suite often RUNS inside
+    # `.claude/worktrees/<name>/`, so every legitimate doc path contains that text.
     nested = REPO / ".claude" / "worktrees"
     strays = [d for d in DOCS if nested in d.parents]
     assert not strays, "the doc walk reached into another checkout: " + ", ".join(
@@ -427,10 +407,7 @@ def test_the_walk_still_finds_this_repos_own_docs():
     assert any(d.as_posix().endswith("docs/secret-rotation.md") for d in DOCS)
 
 
-# --- `path/doc.md`, *Part name* pointers ------------------------------------------------
-#
-# The citing doc is still right about the file, so no path check sees a renamed heading. The
-# reader who follows the pointer searches a long page for text that is gone.
+# A renamed heading leaves the citing doc right about the file, so no path check sees it.
 
 POINTER_CORPUS = [d for d in DOCS if d.is_file()]
 

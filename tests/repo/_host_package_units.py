@@ -10,9 +10,7 @@ from _row_table import Subject, tracked
 from lib import yaml_fast
 from renderer.renderer_lib import host as host_mode
 
-# Units that kept their Ansible-era name: reconcile handed each over from /etc/systemd/system,
-# which a rename could not do for a running service that holds a port (h7, *Ruling 3*,
-# 2026-10-24), or a hook, poller or polkit rule starts it by name.
+# A rename could not hand over a running service that holds a port, or a hook.
 KEPT_NAMES = frozenset(
     {
         "claude-stop-alert@.service",

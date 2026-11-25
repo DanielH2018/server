@@ -16,10 +16,7 @@ from lib.proc_testing import run
 
 SETTINGS = REPO / ".claude" / "settings.json"
 
-# Only the command's FIRST token is executed, so only it needs the exec bit. A repo path
-# appearing later is an argument to an interpreter (`uv run python .claude/hooks/foo.py`)
-# and is read, not executed. Anchoring here keeps the test from demanding a bit that
-# shape does not need, and from reaching outside the repo for a `~/.claude/...` hook.
+# Only the command's first token is executed, so only it needs the exec bit.
 _SCRIPT_RE = re.compile(
     r"^(?:\"\$CLAUDE_PROJECT_DIR\"/|\./)(\.claude/[^\s\"']+\.(?:sh|py))(?:\s|$)"
 )
@@ -49,8 +46,6 @@ def _index_modes() -> dict[str, str]:
 
 
 def test_settings_reference_at_least_one_hook_script():
-    # Guards the regex: a parsing change that silently matched nothing would make
-    # every assertion below vacuous.
     assert _hook_scripts(), f"no hook scripts parsed out of {SETTINGS}"
 
 

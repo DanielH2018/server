@@ -22,8 +22,7 @@ import render_share
 
 TESTS = Path(render_share.__file__).parent
 
-# Appends one line to a counter file each time `compute` runs, then sleeps so that two
-# children started together overlap. Without the lock both would compute.
+# Without the lock both overlapping children would compute.
 _CHILD = """
 import sys, time
 sys.path.insert(0, sys.argv[1])
@@ -187,8 +186,7 @@ def test_with_no_run_id_one_process_computes_once_and_copies_each_call(
     assert calls == [1]
 
 
-# The modules that read the shared fleet render. The census below must find each one, so a
-# consumer whose import moved stops being prebuilt only with a red test.
+# A consumer whose import moved stops being prebuilt only with a red test.
 KNOWN_CONSUMERS = frozenset(
     {
         "scripts/renderer/tests/test_renderer_collision_census.py",

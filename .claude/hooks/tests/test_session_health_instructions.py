@@ -148,9 +148,7 @@ def test_report_counts_memory_and_output_style_in_the_session_start_total(
 def test_a_compaction_rows_memory_md_alone_and_the_report_totals_it(
     tmp_path, monkeypatch
 ):
-    # A compaction reloads MEMORY.md with no InstructionsLoaded event,
-    # so the hook rows it under `compact`. The output style is in the system prompt and is
-    # not re-injected, so it gets no row, and neither file counts as an at-start load.
+    # A compaction reloads MEMORY.md with no InstructionsLoaded event.
     _home, log, memory, style = _session(tmp_path, monkeypatch, source="compact")
     assert _start_rows_for(log, memory.resolve(), "compact") == [memory.stat().st_size]
     assert _start_rows_for(log, style.resolve(), "compact") == []
@@ -173,9 +171,7 @@ def test_session_start_rows_the_output_style_the_settings_name(tmp_path, monkeyp
 
 
 def test_a_worktree_session_rows_the_primary_checkouts_memory_md(tmp_path, monkeypatch):
-    # A worktree session loads the PRIMARY checkout's MEMORY.md. The decoy sits under the
-    # slug of the session's own cwd; it discriminates only when the suite runs from a linked
-    # worktree, and in a plain clone it is the same file the primary row names.
+    # A worktree session loads the primary checkout's MEMORY.md.
     home = tmp_path / "home"
     cwd = os.path.realpath(_HOOKS.parents[1])
     decoy = _memory_file(home, cwd)

@@ -19,7 +19,6 @@ from _k8s_render import rendered_docs
 JOB = load_yaml(ALL_VARS)["loki_streams"]["host_audit"]["job"]
 GS = "\x1d"  # auditd's ENRICHED format appends the translated fields after this byte.
 
-# Real line shapes from daniel-box's /var/log/audit/audit.log, 2026-11-13, trimmed.
 KEPT = (
     'type=SYSCALL msg=audit(1794549517.822:77687): arch=c000003e syscall=84 success=no exit=-2 items=1 ppid=1681085 pid=1681228 auid=4294967295 uid=0 comm="dpkg" exe="/usr/bin/dpkg" subj=unconfined key="actions"'
     + GS

@@ -22,10 +22,7 @@ import pytest
 
 from lib.proc_testing import fake_bin, path_with
 
-# One line per invocation, so a test can assert the stub intercepted a call rather than the
-# real binary running underneath it. A stub that silently drops off PATH fails OPEN -- the
-# run stays green and the real binary (real gh auth, a real SOPS decrypt, a real curl to
-# Prometheus) takes every call again.
+# A stub that silently drops off PATH fails open.
 _STUB_TEMPLATE = """#!/bin/sh
 printf '%s\\n' "{name} $*" >> "$FENCE_CALLS"
 """

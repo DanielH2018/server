@@ -26,16 +26,15 @@ import pytest
 from _helpers import REPO
 from _shell_render import rendered_shell_texts
 
-# Sourced, never executed. A sourced file's `$@` is its caller's argv, so a help check there
-# would answer the caller's own `--help` with the library's comment and exit the caller.
+# Sourced, never executed: a sourced file's `$@` is its caller's argv, so a help check would exit
+# the caller.
 EXEMPT = {
     "hosts/components/check-lib/files/homelab-check-lib.sh",
     # Sourced by login shells, never executed.
     "hosts/components/pi-tuning/templates/homelab-profile.sh",
 }
 
-# Non-vacuity: one of each shape. A forced command, a hook launcher, a host cron template, a
-# cluster-side template, and the template that pushes to GitHub.
+# One of each shape: a forced command, a hook launcher, a host cron template.
 MUST_FIND = frozenset(
     {
         "hosts/components/pi-peer-backup-target/pi-peer-backup-shell.sh",

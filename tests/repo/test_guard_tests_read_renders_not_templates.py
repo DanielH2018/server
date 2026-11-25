@@ -63,8 +63,7 @@ from lib.repo_paths import REPO, TESTS
 
 from _render_gate import sibling_sources, template_source_reads
 
-# Every directory the rule covers, by the label its keys carry. Adding one means converting its
-# readers first.
+# Adding a directory means converting its readers first.
 SCANNED = {
     "services": TESTS / "services",
     "longhorn": TESTS / "longhorn",
@@ -75,7 +74,6 @@ SCANNED = {
     "hosts/tests": REPO / "hosts" / "tests",
 }
 
-# Modules that read a template's SOURCE, each with why a render cannot answer the question.
 # Every entry is permanent: a render erases the thing it reads.
 TEMPLATE_SOURCE_READERS = {
     "hosts/tests/test_host_python_invocations.py": (
@@ -179,8 +177,7 @@ TEMPLATE_SOURCE_READERS = {
     ),
 }
 
-# Modules the census must reach. An empty or partial scan means the walk stopped matching
-# rather than that the directory is clean.
+# An empty or partial scan means the walk stopped matching, not that the directory is clean.
 KNOWN_MEMBERS = frozenset(
     {
         "services/_homepage_config.py",

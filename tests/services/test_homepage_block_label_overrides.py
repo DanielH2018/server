@@ -32,8 +32,7 @@ from lib import yaml_fast
 from _homepage_config import custom_css, tiles
 from _k8s_render import render_role_template
 
-# (href fragment, 1-based block index) -> the upstream field that block renders.
-# The rename itself is in the CSS; this table is what the rename is renaming.
+# The rename itself is in the CSS; this table is what it renames.
 EXPECTED_LABELS = {
     ("speedtest.", 1): "download",
     ("karakeep.", 1): "bookmarks",
@@ -42,8 +41,6 @@ EXPECTED_LABELS = {
     ("qbittorrent.", 2): "download",
 }
 
-# li.service:has(a[href*="peanut."]) .service-block:nth-child(2) > .font-bold::after {
-#   content: "Status";
 OVERRIDE_RE = re.compile(
     r'li\.service:has\(a\[href\*="([^"]+)"\]\)\s+'
     r"\.service-block:nth-child\((\d+)\)\s*>\s*\.font-bold::after\s*\{\s*\n"

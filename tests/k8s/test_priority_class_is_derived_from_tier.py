@@ -20,8 +20,7 @@ from renderer.template_filters.service_tier import (
     tier_priority_class,
 )
 
-# The class each tiered role's pods ran at when the literals were replaced. A tier edit that
-# moves one of these is a priority change, and should fail here before it reaches the cluster.
+# A tier edit that moves one of these is a priority change and should fail here first.
 _CLASS_AT_DERIVATION = {
     "crowdsec": "homelab-critical",
     "traefik": "homelab-critical",

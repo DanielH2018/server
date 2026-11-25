@@ -43,8 +43,8 @@ def _probes(**overrides):
 
 
 def test_the_probes_run_at_the_same_time(capsys):
-    # Each probe waits for the other: run one after another, the first never returns and
-    # the barrier times out, which leaves both sections empty.
+    # Each probe waits for the other: run in turn, the first never returns and the barrier times
+    # out.
     barrier = threading.Barrier(2, timeout=5)
 
     def target_problems():

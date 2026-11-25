@@ -23,8 +23,8 @@ Run: uv run pytest tests/services/test_homepage_longhorn_widget_url.py
 
 from _homepage_config import settings_yaml, widgets_yaml
 
-# The Service the URL must name. `longhorn-backend` is fenced by Longhorn's own chart-owned
-# NetworkPolicy and would render an empty tile just as quietly.
+# `longhorn-backend` is fenced by Longhorn's chart-owned NetworkPolicy and would render an empty
+# tile quietly.
 FRONTEND = "longhorn-frontend.longhorn-system.svc.cluster.local"
 
 

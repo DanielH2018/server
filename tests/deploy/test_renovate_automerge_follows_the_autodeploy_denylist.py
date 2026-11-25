@@ -54,38 +54,28 @@ _RENOVATE = REPO / "renovate.json"
 # `manual —` tell the renovate-prs skill triages by.
 MANUAL_GROUP_PREFIX = "k8s images (manual — k8s_autodeploy: false"
 
-# The base-image rule's head differs from the denylist rule's so `find_rule` keeps its
-# exactly-one contract on each; the parenthetical carries the same marker.
 DOCKERFILE_MANUAL_GROUP_PREFIX = "k8s base images (manual — k8s_autodeploy: false"
 DOCKERFILE_GLOB = "templates/Dockerfile*.j2"
 
-# The denied roles the Dockerfile census must find, so a moved or renamed template fails as a
-# missing member rather than passing over an empty glob.
 KNOWN_DENIED_DOCKERFILE_ROLES = frozenset({"code-server", "nut", "terraria", "valheim"})
 
-# The automerge rules the manual rule must FOLLOW, and the first per-package manual rule it
-# must PRECEDE — the CrowdSec bouncer plugin pin shares traefik's defaults/main.yml, and its
-# own rule must keep the last word on that pin's group name.
+# The manual rule must FOLLOW the automerge rules and PRECEDE the first per-package manual rule: the
+# CrowdSec bouncer plugin pin shares traefik's defaults/main.yml and its own rule must keep the last
+# word on its group name.
 AUTOMERGE_GROUP = "k8s image {{depName}}"
 DIGEST_UPDATE_TYPES = ["digest", "pinDigest"]
 FIRST_PER_PACKAGE_MANUAL_GROUP_PREFIX = "crowdsec bouncer plugin (manual"
 
-# The manual paths that are not a denied role's defaults. Fixed here rather than tolerated
-# as "any extra": another path added by hand has to be argued for the way these were.
+# Fixed here, not tolerated as "any extra": another path has to be argued for.
 ALL_VARS_REL = ALL_VARS.relative_to(REPO).as_posix()
 HOST_FILES_REL = "hosts/components/registry-gc/defaults/main.yml"
 _K8S_ROLES = REPO / "k8s" / "roles"
 
-# The pin the census must find, so a group_vars with no `_image:` key (renamed, moved back to
-# a role) fails as a missing member rather than passing over nothing.
 KNOWN_GROUP_VARS_PINS = frozenset({"crowdsec_k8s_image"})
 
-# A Jinja reference to the var — `{{ var }}`, `{% if var %}` — not a mention in a comment:
-# sonarr's defaults cite crowdsec_k8s_image in prose and read nothing.
+# A Jinja reference, not a mention in a comment.
 _JINJA_REF_PREFIX = r"\{[{%][^}%]*\b"
 
-# The floor the derived denylist must clear, mirroring test_the_real_repo_derives_a_plausible_denylist:
-# below it the filter has stopped reading roles and every assertion here runs over nothing.
 _DENYLIST_FLOOR = 34
 _LOAD_BEARING = frozenset({"traefik", "authelia", "code-server"})
 

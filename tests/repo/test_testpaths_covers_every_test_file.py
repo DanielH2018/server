@@ -30,9 +30,8 @@ from dev import pytest_shard
 from _helpers import REPO
 from lib.proc_testing import run
 
-# pytest's default `python_files`, both forms. Deriving the notion of "a test file" from a
-# hand-kept single glob would reproduce, inside this guard, the enumeration failure it exists
-# to catch: a `foo_test.py` outside testpaths would be invisible to pytest AND to this check.
+# pytest's default `python_files`, both forms: a hand-kept single glob would hide a `foo_test.py`
+# outside testpaths.
 _TEST_FILE_GLOBS = ("test_*.py", "*_test.py")
 
 
@@ -82,8 +81,6 @@ def test_repo_has_no_orphaned_test_files() -> None:
 
 
 def test_a_test_file_outside_testpaths_is_flagged() -> None:
-    # The RED proof for the assertion above: on a clean tree it passes whether the matching
-    # works or has silently stopped matching anything at all.
     orphans = orphaned_test_files(
         ["tests/test_a.py", "k8s/roles/newthing/files/test_b.py"],
         ["tests"],
@@ -92,8 +89,8 @@ def test_a_test_file_outside_testpaths_is_flagged() -> None:
 
 
 def test_a_sibling_sharing_a_name_prefix_is_flagged() -> None:
-    # `scripts` must not be read as covering `scripts_extra/`. A `str.startswith`
-    # implementation passes every other test in this file and fails only this one.
+    # `scripts` must not read as covering `scripts_extra/`; a `str.startswith` check fails only this
+    # test.
     assert orphaned_test_files(["scripts_extra/test_a.py"], ["scripts"]) == [
         "scripts_extra/test_a.py"
     ]
@@ -116,12 +113,9 @@ def test_a_glob_testpath_covers_role_tests_and_not_role_files() -> None:
 
 # Test-suite files that may sit outside a `tests/` directory, and why.
 _LAYOUT_EXCEPTIONS = {
-    # The shared conftest for the `scripts` testpath; pytest finds it by walking up from
-    # each collected file, so it has to sit at the root the subdirectories share.
+    # pytest finds it by walking up from each collected file.
     "scripts/conftest.py",
-    # Puts a role's own `files/` on sys.path for that role's tests. It sits above every
-    # role so pytest loads it for each `<plane>/<role>/tests/`, and inside none, so no role
-    # ships it.
+    # Sits above every role so pytest loads it for each role's tests, and inside none.
     "k8s/conftest.py",
 }
 

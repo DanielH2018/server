@@ -22,14 +22,10 @@ from _helpers import load_yaml
 ROLE = K8S_ROLES / "observability"
 DASHBOARDS_DIR = ROLE / "files" / "dashboards"
 
-# The folders that must still exist, named rather than counted. A census that globs for its own
-# subject returns an empty set once the tree moves, and `all()` over nothing passes.
 KNOWN_FOLDERS = frozenset(
     {"AI", "Apps", "Infrastructure", "Logs", "Networking", "Security"}
 )
 
-# Boards this suite knows are provisioned, so a rename or a move out of a mounted folder fails
-# here rather than at "the board is missing from Grafana".
 KNOWN_BOARDS = frozenset(
     {
         "Apps/exportarr-arr-stack.json",

@@ -70,7 +70,6 @@ def test_the_census_finds_the_stamp_and_the_cronjob_in_the_real_render_and_flags
     out = tmp_path / "out"
     assert homelab_render.cluster(out, [TAG], None) == 0
     assert bundle_census.member_census(out, [TAG]) == []
-    # Red case: a render whose kustomization no longer lists the ConfigMap.
     (out / "cluster" / TAG / "kustomization.yaml").write_text(kustomization_text([]))
     assert bundle_census.member_census(out, [TAG]) == [
         f"{TAG} renders no {kind} {name}, a named member: a "

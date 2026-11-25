@@ -35,14 +35,9 @@ from pathlib import Path
 
 from _hook_common import primary_checkout
 
-# The probe subcommands that grade the cluster against a render of this tree. `health` is the
-# post-merge gate `land.sh` and the deploy notifier also run; `takeover` is the D5 flip gate,
-# which renders a tag to compare with what Flux would strip.
 GATE_SUBCOMMANDS = frozenset({"health", "takeover"})
 # The root options of `probe_lib/cli_parser.py:_build_parser` that take a separate value.
 _VALUED_ROOT_OPTIONS = frozenset({"--cluster"})
-# The directories whose files the probe reads to form a verdict: role templates under k8s/, the
-# inventory and host_vars, and the probe and its tables under scripts/.
 _READ_PATHS = ("k8s", "inventory", "scripts")
 # How many stale files the denial lists by name.
 _SHOWN = 3

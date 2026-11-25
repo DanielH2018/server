@@ -11,8 +11,6 @@ from lib import yaml_fast
 
 from _manifest_guards import ALL_VARS_VALUES, K8S, _render
 
-# The pool template, the pool's address range and the version pin all live in the `metallb`
-# role since H1.3; `setup/k3s` keeps none of them.
 METALLB_ROLE = K8S / "metallb"
 METALLB_DEFAULTS = METALLB_ROLE / "defaults" / "main.yml"
 METALLB_DEFAULT_VALUES = yaml_fast.safe_load(METALLB_DEFAULTS.read_text())

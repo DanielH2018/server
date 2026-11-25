@@ -37,13 +37,11 @@ from lib import yaml_fast
 
 JOB = "blackbox-pi-ports"
 
-# These listen on these ports. The port is pinned with the name because the probe connects to
-# it: a name watched on the wrong port reads as a dead container on every cycle.
+# The port is pinned with the name because the probe connects to it.
 EXPECTED_PUBLISHERS = {"alloy": 12345, "wg-easy": 51821}
 # These publish no port. A rule that flagged them would page forever.
 EXPECTED_NON_PUBLISHERS = {"docker-proxy", "autoheal", "docker-proxy-lifecycle"}
-# wg-easy's WireGuard listener. Deliberately not watched: the probe is a TCP connect, and
-# there is no equivalent "is anything listening" answer for UDP.
+# Not watched: the probe is a TCP connect, with no equivalent for UDP.
 WG_EASY_UDP_PORT = 51822
 
 
@@ -92,8 +90,7 @@ def test_every_known_publisher_is_watched_on_its_published_port():
 
 
 def test_the_known_non_publishers_stay_out():
-    # docker-proxy-lifecycle is hardcoded in the Pi's compose and is not in compose_services
-    # at all, so it falls out for a second reason; the other two are here by having no port.
+    # docker-proxy-lifecycle is hardcoded in the Pi's compose and not in compose_services.
     assert not (EXPECTED_NON_PUBLISHERS & set(published()))
 
 
@@ -106,9 +103,8 @@ def test_the_set_has_not_widened_unreviewed():
 
 
 def test_the_wireguard_udp_port_is_not_watched():
-    # The source could only show that `udp_port` is absent from the loop body; the rendered
-    # value shows that wg-easy arrives carrying its TCP port and nothing else. A connect to
-    # the UDP port would read as a dead container every cycle.
+    # The rendered value shows wg-easy arrives with its TCP port only; a connect to the UDP port
+    # would read as dead.
     assert WG_EASY_UDP_PORT not in set(published().values())
 
 
@@ -125,8 +121,7 @@ def test_the_set_follows_the_inventory_rather_than_a_typed_list():
         f"a Pi container with a `port` did not reach {JOB}; the targets are typed in, not "
         f"derived, and the next container added to the Pi goes unwatched. got {added!r}"
     )
-    # Not every `port`: the `alloy-pi` scrape job reads alloy's port from the same list, so a
-    # Pi with none at all does not render. Dropping wg-easy's alone shows the same thing.
+    # The `alloy-pi` scrape job reads alloy's port from the same list.
     pi = _pi_vars()
     unported = published(
         [

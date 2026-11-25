@@ -71,8 +71,8 @@ def unconditional_source_keys(template: Path) -> list[str]:
 
     for line in template.read_text().splitlines():
         stripped = line.strip()
-        # Several roles carry a multi-line `{# ... #}` header inside the data map. Its middle
-        # lines are indented prose, so without this they read as dedents and stop the scan.
+        # A multi-line `{# ... #}` header inside the data map has indented-prose middle lines that
+        # would read as dedents and stop the scan.
         if in_comment:
             in_comment = "#}" not in line
             continue
@@ -96,9 +96,7 @@ def unconditional_source_keys(template: Path) -> list[str]:
             if match and depth == 0:
                 data_indent = len(match.group(1))
             continue
-        # `{{ lookup('file', ...) | indent(4, true) }}` at column 0 is how a role embeds a file
-        # as a key's value. It is not a dedent out of the `data:` map, so it must not reset the
-        # scan.
+        # A column-0 `{{ lookup('file', ...) }}` embeds a file as a value.
         if not stripped or stripped.startswith(("{%", "{#", "{{")):
             continue
         match = KEY_RE.match(line)
@@ -144,11 +142,9 @@ def test_the_scan_finds_keys_across_most_configmaps() -> None:
     """Guard the guard: a broken scan reports no keys and every assertion below vacuously passes."""
     templates = len(cases())
     keys = sum(len(k) for _, _, _, k in cases())
-    # The floors sit just under the measured counts, high enough to catch the two ways this scan
-    # can lose coverage silently: stopping at a multi-line `{# ... #}` header drops it to
-    # 49/312, and stopping at the first column-0 `{{ lookup(...) }}` line drops home-assistant
-    # from ten checked keys to one. Both still leave most templates passing, so a round number
-    # well below the measured value would miss them.
+    # The floors sit just under the measured counts: stopping at a `{# #}` header or the first
+    # column-0 `{{ lookup }}` line drops coverage silently while most templates still pass, so a
+    # round number well below would miss it.
     assert templates >= 50, (
         f"only {templates} templates carry scanned keys — the source scan broke"
     )

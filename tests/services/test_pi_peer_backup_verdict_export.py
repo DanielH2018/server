@@ -23,8 +23,6 @@ GATE = "pi-peer-backup-deploy-gate-1a2b3c4d-x7k2q"
 CONFIGMAP = "pi-peer-backup-verdict"
 URL = f"https://kubernetes.default.svc/api/v1/namespaces/homelab/configmaps/{CONFIGMAP}"
 
-# A curl that records each call as one line of NUL-free JSON and answers the PATCH with
-# $PATCH_CODE; any other call gets a 200.
 CURL = r"""#!/bin/sh
 patch=0
 for a in "$@"; do [ "$a" = PATCH ] && patch=1; done
@@ -112,8 +110,8 @@ def test_a_failed_pull_patches_down_with_the_address_redacted_and_exits_one(tmp_
 
 
 def test_a_rejected_patch_fails_a_good_pull(tmp_path):
-    # The success path exits 1 on a failed export, so the CronJob's last successful time stops
-    # moving and PiPeerBackupNotReporting fires.
+    # The success path exits 1 on a failed export, so the CronJob's last successful time stops and
+    # PiPeerBackupNotReporting fires.
     result, patches, _ = _run(tmp_path, patch_code="403")
     assert len(patches) == 1
     assert result.returncode == 1

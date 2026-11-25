@@ -13,26 +13,15 @@ from _helpers import ALL_VARS, HOST_VARS, load_yaml
 from _k8s_render import k8s_entries, pod_spec
 from _property_table import Property
 
-# The guard keys on FIELD NAMES, never on values. The render corpus stubs every secret lookup
-# (scripts/lib/render_guard.py, StubUndefined), so a value regex would read green forever while
-# checking nothing.
+# Keyed on field names, never values: the render corpus stubs every secret lookup.
 
-# A key name that names a credential. `crowdsecLapiKeyFile` is the correct form — a path into a
-# mounted Secret — so a `File` suffix exempts the key. That exemption is the disarm vector, and
-# the row's `red` fixture aims at it.
-#
-# A bare `key` is deliberately absent: it is the commonest word in a manifest (`key`,
-# `secretKey`, `matchLabels` values, every ConfigMap projection) and matching it would flag the
-# whole corpus. The cost is that `crowdsecLapiKey` — the name this guard was written for —
-# matches only because "lapikey" contains "apikey". A sibling named `bouncerKey` or `sharedKey`
-# is NOT caught. Do not "simplify" the alternation without checking that case still fires.
+# A `File` suffix exempts the key (the disarm vector); a bare `key` would flag the whole corpus.
+# `crowdsecLapiKey` matches only via "apikey"; `bouncerKey` is not caught. Keep that case firing.
 _CREDENTIAL_FIELD = re.compile(
     r"password|passwd|secret|token|apikey|api[-_]?key|credential", re.I
 )
 
-# The reference forms: `secret:` is how basicAuth/digestAuth name a Secret, `secretName` is how
-# a tls block does, `secretNames` is how a TLSOption's clientAuth names its CA Secrets. All are
-# the fix, not the finding.
+# `secret:`, `secretName` and `secretNames` are the reference forms: the fix, not the finding.
 _SECRET_REFERENCE_KEYS = frozenset({"secret", "secretName", "secretNames"})
 
 # Maps whose KEYS are HTTP header names, where an auth header carries its credential inline.
@@ -42,10 +31,7 @@ _AUTH_HEADER = re.compile(
     re.I,
 )
 
-# `Header(`/`HeaderRegexp(` in a route match. The header NAME is a literal even where the value
-# it compares against renders as a stub, so this rule stays name-keyed. The two file-provider
-# routers in livesync-gate-secret.yaml.j2 keep exactly this shape inside a Secret; moving one
-# into an IngressRoute CRD is the regression this catches.
+# The header name is a literal even where the value renders as a stub.
 _MATCH_HEADER = re.compile(r"Header(?:Regexp)?\(\s*`([^`]*)`", re.I)
 
 
@@ -106,11 +92,6 @@ def _inline_credential_offence(role: str, doc: dict) -> str | None:
     )
 
 
-# The members, as Kind/role/name, rather than a count alone: a correct guard finds zero
-# offenders, so without them the census could empty (a group-version bump, a role rename) and
-# still read green. traefik/crowdsec is the only object with a `plugin` block and the one this
-# row was written for. The TLSOptions are named so a lost kind is named too, since the table has
-# one floor for the whole group rather than one per kind.
 _TRAEFIK_MUST_FIND = frozenset(
     {
         "Middleware/authelia/authelia",
@@ -164,8 +145,7 @@ def _vip_node_offence(role: str, pod: dict) -> str | None:
     )
 
 
-# Every role whose rendered Service pins an address. jellyfin pins its LAN address in
-# `service-lan.yaml.j2`, which the template glob this row replaced never read.
+# jellyfin pins its LAN address in `service-lan.yaml.j2`.
 _METALLB_PINNED_ROLES = frozenset({"jellyfin", "mosquitto", "pihole", "traefik"})
 
 
@@ -187,8 +167,8 @@ def _metallb_prefix_offence(role: str, subject: dict) -> str | None:
 
 @cache
 def _pi_ip() -> str:
-    # The Pi's own literal, not k8s_pi_client_ip: that is derived from this through hostvars,
-    # and a derivation that lost the Pi's entry resolves to None without raising.
+    # The Pi's own literal, not `k8s_pi_client_ip`: a derivation that lost the Pi's entry resolves
+    # to None without raising.
     return load_yaml(HOST_VARS / "daniel-pi.yml")["server_ip"]
 
 
@@ -207,14 +187,12 @@ def _pi_push_offence(role: str, route: dict) -> str | None:
 
 @cache
 def _host_ip(host: str) -> str:
-    # The host's own literal, not the k8s_*_client_ip group_vars derives from it through
-    # hostvars: a derivation that lost the host's entry resolves to None without
-    # raising, and a guard reading the derived value would compare the render with itself.
+    # The host's own literal, not the derived `k8s_*_client_ip`: a derivation that lost the entry
+    # resolves to None, and the guard would compare the render with itself.
     return load_yaml(HOST_VARS / f"{host}.yml")["server_ip"]
 
 
-# Two monitoring_route() callers that take the macro's default k8s_bridge_client_ip grant and
-# nothing else from inventory. Named so the row fails `subject gone` if either stops rendering.
+# Named so the row fails `subject gone` if either stops rendering.
 _BRIDGE_ROUTES = frozenset({"ical-proxy-monitoring", "loki-homelab-monitoring"})
 
 
@@ -260,8 +238,7 @@ EDGE_PROPERTIES = (
         ),
         select=_traefik_objects,
         offence=_inline_credential_offence,
-        # Each red fixture is the inline form of something the live tree does correctly. The
-        # first is the crowdsec LAPI key without its `File` suffix: the disarm vector.
+        # Each red fixture is the inline form of something the live tree does correctly.
         red=("traefik", {"spec": {"plugin": {"bouncer": {"crowdsecLapiKey": "stub"}}}}),
         more_red=(
             ("traefik", {"spec": {"basicAuth": {"users": ["admin:$apr1$stub"]}}}),
@@ -289,8 +266,7 @@ EDGE_PROPERTIES = (
                 },
             ),
         ),
-        # The indirections that ARE the fix, plus the ordinary header work every edge
-        # middleware does. A row firing on these would be unusable and would get exempted away.
+        # The indirections that are the fix, plus ordinary header work.
         green=(
             "traefik",
             {

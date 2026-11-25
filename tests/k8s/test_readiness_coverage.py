@@ -30,8 +30,7 @@ _POD_KINDS = {"Deployment", "DaemonSet", "StatefulSet"}
 
 # (role, container) -> why this container has no readinessProbe.
 _NO_READINESS = {
-    # ── sidecars: pod Ready is the AND of all containers, so a sidecar probe gates the
-    #    whole pod's Service. Documented in each template.
+    # A sidecar probe gates the whole pod's Service, since pod Ready is the AND of all containers.
     (
         "traefik",
         "crowdsec-agent",
@@ -41,8 +40,7 @@ _NO_READINESS = {
         "access-log-rotate",
     ): "sidecar; a tail/rotate hiccup must never gate the edge proxy's Service",
     ("authelia", "crowdsec-agent"): "same shape as traefik's sidecar; would gate SSO",
-    # No Service selects either pod: each runs a loop against the metadata database and serves
-    # nothing, and `airflow jobs check` is their liveness probe.
+    # No Service selects either pod; `airflow jobs check` is their liveness probe.
     (
         "airflow",
         "airflow-scheduler",
@@ -56,11 +54,8 @@ _NO_READINESS = {
         "crowdsec-jobs",
     ): "sidecar running the crowdsec maintenance jobs; a probe would let a job's fault pull the "
     "LAPI out of its Service, so each job pages through its own pod-producers rule instead",
-    # The exportarr metrics sidecars, same shape as the three above and one degree worse: a
-    # readinessProbe here would let an EXPORTER outage pull its *arr out of its own Service,
-    # so monitoring would take down the thing it monitors. They keep a livenessProbe, which
-    # `_NO_LIVENESS` holds them to, and a dead exporter surfaces as `up == 0` on the
-    # `exportarr` scrape job. These four rows are the ONLY place that rule lives.
+    # A readinessProbe on an exporter would pull its *arr out of its own Service, so monitoring
+    # would take down what it monitors.
     ("sonarr", "exportarr"): "metrics sidecar; readiness would gate sonarr's Service",
     ("radarr", "exportarr"): "metrics sidecar; readiness would gate radarr's Service",
     ("lidarr", "exportarr"): "metrics sidecar; readiness would gate lidarr's Service",
@@ -72,8 +67,7 @@ _NO_READINESS = {
         "prowlarr",
         "exportarr",
     ): "metrics sidecar; readiness would gate prowlarr's Service",
-    # ── game servers: a startupProbe already gates Service publication, so a readinessProbe
-    #    would add nothing except a second probe hitting the same signal.
+    # A startupProbe already gates Service publication.
     (
         "terraria",
         "terraria",
@@ -83,8 +77,7 @@ _NO_READINESS = {
     ("valheim", "valheim"): "startupProbe (grep /proc/net/udp+udp6) already gates the "
     "Service; UDP has no LISTEN state so tcpSocket is impossible anyway, and a connect "
     "probe would log a join attempt every cycle",
-    # ── no Service fronts these; a livenessProbe restarts them and an Alertmanager rule
-    #    pages if they stop working. Readiness would add rollout gating only.
+    # No Service fronts these; a livenessProbe restarts them and an Alertmanager rule pages.
     ("autofix-bridge", "autofix-bridge"): "no Service; liveness plus AutofixBridgeDown",
     ("janitorr", "janitorr"): "no Service; liveness plus JanitorrErrorsFound",
     ("karakeep", "time-tagger"): "no Service; liveness probe covers a hung worker",
@@ -115,8 +108,7 @@ _NO_READINESS = {
     ): "textfile-writing sidecar, no server to probe; readiness would let a broken mirror "
     "hold the exporter out of the Kustomization's wait, and DockerhubMirrorPullNotReporting "
     "catches a loop that stops writing",
-    # ── periodic workers with no server to probe. A rule on the work they report catches
-    #    'running but not doing its job', which readiness cannot see.
+    # A rule on the work they report catches running but not doing its job.
     (
         "cloudflare-ddns",
         "cloudflare-ddns",
@@ -192,9 +184,6 @@ _LIVENESS_REQUIRED = frozenset(
 )
 
 
-# Of the exemptions above, the ones that ALSO declare a startupProbe — so their pod is held
-# NotReady while it runs, and the exemption's reason has to say that rather than claim the
-# container never gates its Service. Both entries here say so in as many words.
 _STARTUP_GATED = frozenset({("terraria", "terraria"), ("valheim", "valheim")})
 
 
@@ -306,8 +295,6 @@ def _exempt_with_startup() -> set[tuple[str, str]]:
 
 def test_no_exemption_gates_its_service_with_an_unrecorded_startupProbe():
     census = _exempt_with_startup()
-    # Non-vacuity: the census filters the rendered tree, and returns an empty set the moment
-    # those two workloads are renamed — after which the assertion below checks nothing.
     assert _STARTUP_GATED <= census, (
         f"census lost a known startup-gated container: {sorted(_STARTUP_GATED - census)}"
     )

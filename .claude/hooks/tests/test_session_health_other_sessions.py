@@ -43,10 +43,7 @@ def _fake_run_for_other_sessions(diff_stdout):
     return fake
 
 
-# The per-tree dirty check delegates to `lib.git.git_dirty`, not its own `git status
-# --porcelain` read. Pins "(+ uncommitted)" to follow git_dirty's answer, including a
-# git_dirty failure (tree vanished mid-scan) degrading to not-dirty rather than crashing the
-# section. `run` and `git_dirty` are `other_live_sessions`' own seams.
+# Pins "(+ uncommitted)" to `lib.git.git_dirty`'s answer.
 def test_other_live_sessions_dirty_marker_follows_lib_git():
     def scan(git_dirty):
         run = _fake_run_for_other_sessions("file.py\n")

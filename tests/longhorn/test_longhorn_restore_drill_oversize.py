@@ -70,9 +70,7 @@ def test_excluded_set_is_published_when_the_cap_leaves_nothing_eligible(
     assert _excluded(run) == [f"{BIG}\t{CAP + 1}"]
 
 
-# The native trim joins a volume with its per-job label, never a group label (H2.2a). Sorted
-# key order, as kubectl emits it; the drill's jq `keys[]` sorts on its own, so here the order
-# only keeps the fixture honest to the API.
+# A volume joins its per-job label, never a group label.
 _NO_BACKUP = "recurring-job-group.longhorn.io/no-backup"
 _TRIM_JOB = "recurring-job.longhorn.io/trim"
 

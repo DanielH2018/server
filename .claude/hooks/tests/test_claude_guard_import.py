@@ -23,14 +23,11 @@ REPO = (
 
 sys.path.insert(0, str(HOOKS))  # _claude_guard is imported by bare name
 
-# The `uv` that is running this suite: `uv run` exports its own path as `UV`, and PATH is
-# the fallback for a bare `pytest`. Resolved at import, before leakguard swaps PATH for a
-# stub directory at each test's setup.
+# Resolved at import, before leakguard swaps PATH for a stub directory.
 UV_BIN = os.environ.get("UV") or shutil.which("uv") or ""
 _CLAUDE_GUARD_DIR = Path("~/.local/share/claude-guard").expanduser()
 
-# A separate interpreter never sees this process's sys.modules, so the deployed-import test
-# can only fail, not prove anything, on a host that lacks the dotfiles deploy.
+# A separate interpreter never sees this process's sys.modules.
 _runnable = pytest.mark.skipif(
     not UV_BIN or not _CLAUDE_GUARD_DIR.is_dir(),
     reason="no `uv` on PATH to spawn"

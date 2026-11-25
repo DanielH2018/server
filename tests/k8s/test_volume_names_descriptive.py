@@ -41,8 +41,7 @@ from _k8s_render import rendered_texts
 BLOCK_RE = re.compile(r"^(\s*)(volumes|volumeMounts):\s*$")
 NAME_RE = re.compile(r"^(\s*)- name:\s*(\S.*?)\s*$")
 
-# Names that say nothing about which workload owns the volume. Adding one here is a
-# tightening; removing one needs a reason better than "a new manifest used it".
+# Adding one is a tightening; removing one needs a reason better than a new manifest using it.
 GENERIC = frozenset(
     {
         "app-config",
@@ -74,14 +73,11 @@ GENERIC = frozenset(
     }
 )
 
-# `media` is the shared media library, mounted by six roles from the one `media-data` claim.
-# It names a stack rather than a single workload, which is the point of it.
+# `media` names the shared library mounted by six roles from the one `media-data` claim.
 ALLOWED_UNPREFIXED = frozenset({"media"})
 
 
-# The templates the render skips that declare a `volumes:` or `volumeMounts:` block. Each is
-# checked from its source. image-builder's context ConfigMap is
-# skipped too, but declares no volume, so it is not a member.
+# image-builder's context ConfigMap is skipped too but declares no volume.
 SOURCE_FALLBACK_WITH_VOLUMES = frozenset(
     {
         "airflow/airflow-env.yaml.j2",

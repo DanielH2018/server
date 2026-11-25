@@ -95,8 +95,7 @@ def test_one_container_mirrors_ghcr_with_no_expiry():
     # ghcr.io itself is reached through the ghcr-resume sidecar, which the next test pins.
     port = CTX["registry_k8s_ghcr_resume_port"]
     assert env["REGISTRY_PROXY_REMOTEURL"] == f"http://127.0.0.1:{port}", env
-    # distribution's proxyregistry.go reads only a duration that is not > 0 as "never expire";
-    # an unset TTL is the 168h default.
+    # distribution reads only a duration that is not > 0 as never expire.
     assert env.get("REGISTRY_PROXY_TTL") in {"0", "0s"}, env
 
 
@@ -251,8 +250,6 @@ def test_the_dockerhub_mirror_has_its_own_ports_address_and_claim():
     assert CTX["registry_k8s_dockerhub_mirror_claim"] in declared, declared
 
 
-# Each mirror store's GC: (its Job template, the deployment it collects, its claim's key, its
-# keep-revisions key).
 _STORES = {
     "ghcr-mirror": (
         "ghcr-mirror-gc-job.yaml.j2",

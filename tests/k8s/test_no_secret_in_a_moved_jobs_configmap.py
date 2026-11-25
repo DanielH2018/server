@@ -23,18 +23,14 @@ from _k8s_render import render_role_template
 from lib import yaml_fast
 from secrets_mgmt.rotation_tools import sops_names
 
-# The roles whose moved job's ConfigMaps this test renders. M6 batch B6b's Cutover-2 removed
-# the Kuma push Secret of configarr, crowdsec and janitorr, so only qbittorrent keeps one.
+# Only qbittorrent keeps a push Secret.
 MOVED_ROLES = ("configarr", "crowdsec", "janitorr", "qbittorrent")
 
-# Role -> (the Secret template its moved job reads, a secrets.yml key that Secret renders).
-# The second half is the positive control's: that key's sentinel must reach that render.
+# The second half is the positive control: that key's sentinel must reach that render.
 SECRET_ROLES = {
     "qbittorrent": ("prefs-check-secret.yaml.j2", "qbittorrent_password"),
 }
 
-# The red fixture: the line the retired configarr-health.sh.j2 carried, staged into a
-# ConfigMap the way a careless move would stage it.
 _LEAKING_CONFIGMAP = """\
 apiVersion: v1
 kind: ConfigMap

@@ -40,9 +40,6 @@ SHA = "c0ffee" * 6 + "abcd"
 # The guest-side subcommands, in the order the orchestrator runs them.
 STEPS = ["prepare", "until4", "deviate", "bootstrap", "start", "check"]
 
-# Stands in for the repo's `.venv/bin/python` running homelab_render.py: a host render with the
-# four units the guest keeps, a drop-in, a template unit, a socket and wants links, and the
-# homelab-updater package whose timer daniel-box's package enables.
 RENDER = """\
 #!/bin/bash
 echo "render $2" >>"$EVENTS"
@@ -77,10 +74,6 @@ MASKS = [
 GIT = '#!/bin/bash\necho "$SHA"\n'
 # Records each syslog line, so a test can read which tag the run logged under.
 LOGGER = '#!/bin/bash\necho "logger $*" >>"$EVENTS"\n'
-# Stands in for `ssh <guest> ...`. A detached step reports exit 1 through `rc` when it is FAIL_AT,
-# and nothing at all when it is NEVER_DONE; a direct step exits 1 when it is FAIL_AT, and so do
-# the ship and the stage. NO_START refuses to start that detached step. CRASH_AT makes the guest
-# exit when that step runs, after which ssh to it fails.
 SSH = """\
 #!/bin/bash
 args="$*"

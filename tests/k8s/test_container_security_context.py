@@ -21,36 +21,16 @@ from _k8s_render import pod_spec, rendered_docs
 
 _POD_KINDS = {"Deployment", "DaemonSet", "StatefulSet", "Job", "CronJob"}
 
-# Containers that run `privileged: true`, each for a hardware reason k8s cannot express any
-# other way. Asking a privileged container to drop capabilities is meaningless — privileged
-# restores them — so these skip the two checks below and are allowlisted instead. That makes
-# the allowlist the real guard: a NEW privileged container fails until it is added here with a
-# justification, which is the decision worth forcing.
+# A privileged container is asked to drop no capabilities.
 _PRIVILEGED = {
-    # Raw USB access to the UPS; k8s has no equivalent of compose's `devices:`. Contained by a
-    # single-node pin and a loopback-only hostPort. See k8s/roles/nut/CLAUDE.md.
+    # Raw USB access to the UPS; contained by a single-node pin and a loopback-only hostPort.
     ("nut", "nut"),
-    # Registers a gRPC socket in the kubelet's device-plugin dir and hands it device file
-    # descriptors. It is privileged so the nine media workloads consuming `devic.es/dri` do
-    # not have to be.
     ("dri-device-plugin", "generic-device-plugin"),
-    # SMART reads: capabilities plus a CharDevice hostPath are not enough under k8s, as
-    # the device cgroup still refuses the open. A deliberate trade.
     ("scrutiny", "collector"),
 }
 
 
-# Roles this guard's corpus does NOT contain, each with the reason it is out.
-#
-# THE BLIND SPOT THIS PINS: rendered_docs() filters on
-# validate.render_lib.k8s.SKIP_ROLES — a list maintained for a DIFFERENT purpose, namely what the
-# manifest validator can render standalone. Coverage of this security guard is therefore a side
-# effect of someone else's list: a role on it that renders a pod spec is never examined, and
-# every assertion in this file passes anyway. Pinning the exempt set turns a role
-# joining it into a failure here instead of a silent contraction; anything added below needs a
-# justification and, if it renders a pod spec, its own test. A justification that names a file
-# must name one that exists: test_uncovered_roles_justifications_resolve.py checks every
-# `*.j2` and `test_*.py` token in this block against the tree.
+# Roles this guard's corpus does not contain.
 _UNCOVERED_ROLES = {
     # Builds images in-cluster; its Job carries reasoned Unconfined seccomp/AppArmor for
     # rootless BuildKit (build-job.yaml.j2). That reason covers only the two profiles, where
@@ -60,23 +40,15 @@ _UNCOVERED_ROLES = {
     "image-builder",
     # No manifest templates — each resolves a fact or drives kubectl/the Longhorn API directly.
     "volume-snapshot",
-    # Declares sonarr's/radarr's Discord Connect notification over the app's own API. The thing
-    # it writes is a row in the app's database, so it renders no manifest and starts no
-    # container — there is nothing here for a securityContext to be wrong about.
+    # Writes a row in the app's database: renders no manifest and starts no container.
     "arr-notification",
-    # No manifest templates — its only content is upstream's vendored CRD file, which starts
-    # no container.
+    # Only upstream's vendored CRD file; starts no container.
     "traefik-crds",
-    # No manifest templates — its workloads are upstream's vendored longhorn.yaml, and the fleet
-    # guards do not read vendored files (the H1 plan, *Vendored upstream manifests*). Its
-    # longhorn-manager runs privileged by upstream's design, which this corpus would refuse.
+    # Workloads are upstream's vendored longhorn.yaml, which the fleet guards do not read.
     "longhorn",
 }
 
-# The real container count is ~103. A floor of 40 cannot distinguish a broken collector from
-# half the fleet dropping out, which is the failure this file exists to prevent. Kept a little
-# below the live count so adding a workload never breaks the build, but close enough to notice
-# a contraction.
+# A floor of 40 cannot tell a broken collector from half the fleet dropping out.
 _MIN_CONTAINERS = 90
 
 
@@ -151,22 +123,8 @@ def test_the_corpus_covers_every_role_except_a_named_set():
     )
 
 
-# Containers that do NOT assert `runAsNonRoot: true`, grouped by the mechanism that stops them.
-#
-# Each member was measured live, by cgroup or container id rather than a `ps` name grep, because
-# inferring root from an image name is wrong in both directions: karakeep-chrome measures uid
-# 1000, and node-exporter measures 65534 despite its host access.
-#
-# The allowlist is the guard, exactly as _PRIVILEGED above is: the assertions are individually
-# near-worthless restatements of measured facts, and collectively they are what makes this list
-# small enough to read. A new container fails until it either asserts or is added
-# here with a mechanism.
+# Each member was measured live by cgroup or container id.
 
-# LSIO images: PID 1 is `s6-svscan` as uid 0, which chowns /config and hands the app to uid 1000
-# through `s6-supervise`. Traced three-hop per container, so the root half is measured, not
-# inferred from the image name. `runAsNonRoot` refuses the pod at admission and the chown never
-# runs — jellyfin's template records the failure it caused: `sed: couldn't open temporary file
-# /config/sedUo9qXt: Permission denied`, which reads like a read-only mount and is not one.
 _LSIO_CHOWN_THEN_DROP = {
     ("bazarr", "bazarr"),
     ("code-server", "code-server"),
@@ -184,26 +142,18 @@ _LSIO_CHOWN_THEN_DROP = {
 
 # The same shape without s6: the entrypoint starts as root and drops the app itself.
 _ENTRYPOINT_DROPS = {
-    # The LAPI plugin broker forks the notifier and drops it to uid 65534 — observed live in the
-    # same container.
+    # The LAPI plugin broker forks the notifier and drops it to uid 65534.
     ("crowdsec", "crowdsec"),
     # CouchDB chowns /opt/couchdb/data, then `setpriv`s to uid 5984.
     ("livesync", "couchdb"),
-    # `start.sh` runs as 0 and hands off to `pihole-FTL` at 1000. SETFCAP is the binding
-    # constraint — FTL applies file capabilities to its own binary — not the privileged ports,
-    # which NET_BIND_SERVICE already covers.
+    # `start.sh` runs as 0 and hands off to `pihole-FTL` at 1000.
     ("pihole", "pihole"),
     # Entrypoint chowns the data dir then gosu-drops to 1000.
     ("scrutiny", "influxdb"),
-    # s6-svscan at uid 0, like the LSIO set above, except this one does NOT drop: `node
-    # dist/index.js` and next-server both measure uid 0 too.
+    # s6-svscan at uid 0 like the LSIO set, but it does not drop.
     ("karakeep", "karakeep"),
-    # Starts as root to read its config and drops to the unbound user — SETUID/SETGID are granted
-    # for exactly that, and the template says so at the container. The settled process runs at
-    # uid 101 but PID 1 starts as root, so asserting here would refuse the container at admission.
     ("pihole", "unbound"),
-    # su-exec drop. Mounts only an emptyDir and a read-only ConfigMap, so whether it tolerates
-    # starting unprivileged is a deploy test rather than a template question.
+    # Whether it tolerates starting unprivileged is a deploy test, not a template question.
     ("homepage", "homepage"),
 }
 
@@ -224,27 +174,16 @@ _HOST_OR_NETWORK_ROOT = {
 _ROOT_BY_DESIGN = {
     ("code-server", "seed-workspace-claim"),
     ("wg-easy", "config-chown"),
-    # Copies the crowdsec image's 0600 root:root datafiles into the agent's data volume as
-    # world-readable, so the non-root sidecar can read them. Root over root-owned data
-    # it reads as the owner; DAC_READ_SEARCH covers the sources if the image reowns them.
     ("traefik", "crowdsec-data-install"),
-    # Same container in the authelia pod, for the same reason. Both pods run the
-    # crowdsec agent sidecar non-root, so both need the datafiles copied in readable.
     ("authelia", "crowdsec-data-install"),
-    # Copies the crowdsec image's root-only staged hub tree into /etc/crowdsec world-readable,
-    # so the parser configs that symlink into it resolve for the non-root sidecar.
-    # DAC_READ_SEARCH covers the root-only sources; it writes into a root-owned emptyDir.
+    # Copies the root-only hub tree into /etc/crowdsec world-readable for the non-root sidecar.
     ("traefik", "crowdsec-hub-install"),
     ("authelia", "crowdsec-hub-install"),
-    # Places the BepInEx plugin DLLs into /config and /opt/valheim before the server starts.
-    # Both are root-owned because the server itself runs as uid 0 (PUID/PGID default to 0), so
-    # root here is the OWNER writing its own files — no DAC capability, and a non-root uid
-    # could not write either path without an fsGroup that would recursively chown both PVCs.
+    # The server itself runs as uid 0, so root here is the owner writing its own files.
     ("valheim", "mods"),
 }
 
-# Runs as root over root-owned data. These are the ones with real work behind them: each needs an
-# fsGroup the role currently avoids, or a one-time chown, before it can assert.
+# Each needs an fsGroup the role avoids, or a one-time chown, before it can assert.
 _ROOT_OWNED_DATA = {
     # Root writing a SQLite DB + WAL in a root-owned PVC.
     ("scrutiny", "web"),
@@ -256,44 +195,29 @@ _ROOT_OWNED_DATA = {
     ("freshrss", "nginx"),
     # Measured uid 0 (`tini -- /bin/sh -c /bin/meilisearch`), writing a PVC it owns as root.
     ("karakeep", "meilisearch"),
-    # The crowdsec-jobs sidecar's cscli writes allowlist rows and prunes bouncer rows in the
-    # engine's root-owned SQLite file, beside the root engine container. Every capability is
-    # dropped; the owner's write bit is all it uses.
+    # cscli writes allowlist and bouncer rows in the engine's root-owned SQLite file.
     ("crowdsec", "crowdsec-jobs"),
-    # The lapi-register initContainer's cscli adds machine and allowlist rows to the same
-    # root-owned SQLite file before the engine starts, with every capability dropped.
     ("crowdsec", "lapi-register"),
 }
 
-# Empty by design. Kept as a named set rather than deleted, because the category is the thing worth
-# remembering: a container that lands non-root only from its image's USER needs `runAsUser` pinned
-# alongside the assertion, since `runAsNonRoot` alone makes the kubelet refuse a container whose
-# image NAMES its user rather than numbering it. A future one belongs here until it is measured.
+# A container that lands non-root only from its image's USER needs `runAsUser` pinned.
 _NON_ROOT_BY_IMAGE_DEFAULT: set[tuple[str, str]] = set()
 
-# The operator declined pinning a uid on these, in both templates, in the same words: doing it
-# "would be a behaviour change smuggled in under a platform move". Root buys them nothing; that is
-# not the question. Listed so a later census does not re-open a settled decision.
+# The operator declined pinning a uid on these; root buys them nothing.
 _UID_PIN_DECLINED = {
     ("littlelink", "littlelink"),
     ("peanut", "peanut"),
 }
 
-# Short-lived init and probe containers with no uid declared and no persistent process to measure.
-# Unclassified rather than cleared: the census could not observe them, and guessing from an image
-# name is an error.
 _UNMEASURED_SHORT_LIVED = {
     ("crowdsec", "config-install"),
-    # The LAPI startup gate: a `nc` retry loop from the crowdsec image, whose default user is root — the same
-    # image whose node-agent is allowlisted above under _HOST_OR_NETWORK_ROOT.
+    # A `nc` retry loop from the crowdsec image, whose default user is root.
     ("crowdsec", "wait-for-lapi"),
     ("homepage", "seed-config"),
     ("livesync", "seed-config"),
     ("n8n", "wait-for-broker"),
     ("peanut", "seed-config"),
-    # A `curl` retry loop from the scrutiny web image (debian-slim, default user root), gating
-    # the web container's start on scrutiny-influxdb answering — the web binary panics rather
-    # than retrying. Same family as crowdsec's wait-for-lapi above.
+    # A `curl` retry loop gating the web container on scrutiny-influxdb.
     ("scrutiny", "wait-for-influxdb"),
 }
 

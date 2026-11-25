@@ -31,29 +31,15 @@ from lib.guard_jinja_env import template_env
 
 K8S_ROLES = REPO / "k8s" / "roles"
 
-# `checksum/foo` in prose, including inside backticks. The trailing char class stops at the
-# closing backtick or punctuation rather than swallowing the rest of the sentence. This is the
-# DOCUMENTED side of the census only — what a CLAUDE.md promises is prose by nature.
 CHECKSUM_RE = re.compile(r"checksum/([a-zA-Z0-9._-]+)")
 
-# `checksum/foo:` as a real mapping key, optionally quoted — the DEFINED side of the census.
-# A pod annotation is always a key at a mapping indent, so nothing but whitespace may precede
-# it, and that is what keeps a `#` comment out: a comment line starts with `#` after its
-# indent and never matches.
-#
-# CHECKSUM_RE would credit a prose mention (a YAML comment naming `checksum/config`) as the
-# annotation, so the source half and the render half both read the defined side with this regex.
+# `checksum/foo:` as a real mapping key: nothing but whitespace may precede it, which keeps a `#`
+# comment naming `checksum/config` from counting as the annotation.
 ANNOTATION_KEY_RE = re.compile(
     r"^[ \t]*['\"]?checksum/([a-zA-Z0-9._-]+)['\"]?[ \t]*:", re.MULTILINE
 )
 
-# `checksum_annotation('foo', ...)` — the shared macro (k8s/templates/checksum-
-# annotation.yml.j2) that observability
-# calls instead of writing `checksum/foo:` literally. Scoped to the SOURCE half of the census:
-# the render expands the macro into the literal key that ANNOTATION_KEY_RE already matches, so
-# a rendered template needs this pattern for nothing. A template the render does
-# not reach — a nested `templates/config/*.j2`, a role with no `containers_list` entry — can
-# still call the macro, and there the call is all the census gets to see.
+# Scoped to the source half: the render already expands the macro into the literal key.
 MACRO_CALL_RE = re.compile(r"checksum_annotation\(\s*['\"]([a-zA-Z0-9._-]+)['\"]")
 
 
@@ -99,8 +85,6 @@ SOURCE_FALLBACK_REASONS = {
     ),
 }
 
-# One template per category the derivation must still find there, so a category whose detection
-# breaks fails as a missing member rather than passing over an empty set.
 SOURCE_FALLBACK_MEMBERS = {
     "image-builder/templates/build-job.yaml.j2": "unrendered-role",
     "code-server/templates/Dockerfile.j2": "build",
@@ -110,9 +94,6 @@ SOURCE_FALLBACK_MEMBERS = {
 }
 
 
-# One annotation per role that genuinely defines one, so narrowing the read cannot empty the
-# census and pass over nothing. Every member here arrives through the render: the macro writes
-# the literal key, and observability is the only role that calls it.
 CENSUS_MEMBERS = {
     "observability": "config",
 }

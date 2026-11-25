@@ -29,19 +29,14 @@ from lib.proc_testing import run
 HOOKS = Path(__file__).resolve().parent.parent
 RUNNER = HOOKS / "run-hook.sh"
 
-# The flag sets the six shims collapse into. Named rather than counted, so a variant that
-# stops being exercised fails here instead of thinning the coverage in silence.
 VARIANTS = {
     "quiet": [],
     "project": ["--project"],
     "ask": ["--project", "--ask-on-cd"],
 }
 
-# The host facts run-hook.sh defaults to, as it spells them. A GitHub runner has none of them: no
-# primary checkout under $HOME, no uv at this install path, and setup-python's patch release
-# rather than the hosts' pin, which `--no-python-downloads` will not fetch. The quiet variant
-# sends uv's stderr to /dev/null, so a missing one reads as a hook that printed nothing rather
-# than as an error.
+# A GitHub runner has none of these host facts: no primary checkout under $HOME, no uv at this path,
+# another python patch release.
 _PROJECT_DIR = "$home/server"
 _UV = "$home/.local/bin/uv"
 _PIN = re.compile(r"--python [0-9][0-9.]*")
@@ -64,7 +59,6 @@ def _variant_runner(tmp_path: Path, cd_target: str) -> Path:
     ):
         assert host_fact in text, f"run-hook.sh no longer holds {host_fact!r}"
     # Checked before the swap, because the runner-side values can live under /home/ubuntu too.
-    # The runner derives both defaults from $HOME, so no operator path may remain beside them.
     unswapped = text.replace(_PROJECT_DIR, "").replace(_UV, "")
     assert "/home/ubuntu" not in unswapped, (
         "run-hook.sh has a host path this copy keeps"

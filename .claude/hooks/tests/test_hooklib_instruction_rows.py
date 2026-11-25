@@ -59,8 +59,7 @@ def _slug(path):
 
 
 def test_a_linked_worktree_rows_its_primary_checkouts_memory_md(tmp_path, monkeypatch):
-    # A scratch repo with a linked worktree, so the session's cwd and the primary checkout
-    # differ wherever the suite runs, a plain CI clone included.
+    # A linked worktree makes the session's cwd differ from the primary checkout.
     primary = init_repo(tmp_path / "primary", initial_commit="i").resolve()
     worktree = tmp_path / "linked"
     git(primary, "worktree", "add", "-q", str(worktree))

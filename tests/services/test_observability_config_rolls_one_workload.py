@@ -41,8 +41,7 @@ from lib.k8s_roles import SECRET_TEMPLATE, declared_secret_file
 
 _ROLE = "observability"
 
-# The census must find these. A renamed template or a moved role would otherwise leave every
-# loop below iterating nothing, and an `all(...)` over nothing passes.
+# A renamed template or moved role would leave every loop below iterating nothing.
 _EXPECTED_WORKLOADS = frozenset(
     {
         "loki",
@@ -56,9 +55,8 @@ _EXPECTED_WORKLOADS = frozenset(
 )
 _EXPECTED_SECRET_READERS = frozenset({"prometheus", "grafana", "alertmanager"})
 
-# How many `data:` keys each role-rendered ConfigMap has, and so how much of it the pod
-# template's hash covers. Adding a key to any but grafana-provisioning needs the template's
-# `{% set %}` capture widened in the same edit — see this module's docstring.
+# Adding a key to any but grafana-provisioning needs the template's `{% set %}` capture widened in
+# the same edit.
 _CONFIGMAP_DATA_KEYS = {
     "prometheus-config": 1,
     "loki-config": 1,
@@ -67,14 +65,11 @@ _CONFIGMAP_DATA_KEYS = {
     "grafana-provisioning": 2,
 }
 
-# The ConfigMap Prometheus reloads in place rather than hashing, exempt from the key count above.
 # One key per rule group, so its count moves with every rule PR.
 _RULES_CONFIGMAP = "prometheus-rules"
 _RULES_RELOAD_FLAG = "--config.auto-reload"
-# The dashboard ConfigMaps, one key per board, which Grafana's file provisioner re-reads from the
-# mount every `updateIntervalSeconds`. Exempt from the key count too: this guard covers the
-# Ansible-era `checksum/config` capture only. The renderer's `checksum/restart` skips them too,
-# through `RELOADED_IN_PLACE` in scripts/renderer/renderer_lib/restart.py.
+# One key per board, which Grafana's file provisioner re-reads, so it is exempt from the key count
+# too.
 _DASHBOARD_CONFIGMAPS = "grafana-dashboards-"
 
 _WORKLOAD_KINDS = {"Deployment", "DaemonSet", "StatefulSet"}
