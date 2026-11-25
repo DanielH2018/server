@@ -329,8 +329,6 @@ def test_template_file_list_is_clean_when_it_matches(tmp_path):
 
 
 def test_root_file_list_flags_unlisted_file(tmp_path):
-    # A new root file (say thresholds.yaml behind a fresh !include) that nothing lists would
-    # validate clean and never reach the pod — the same gap the directory lists close.
     errors = _role_with_shipped_list(
         tmp_path,
         ["configuration.yaml"],
@@ -402,8 +400,6 @@ def test_uncoerced_macro_bool_uses_truth_table():
 
 
 def test_macro_bool_coercion_clean_on_real_role(real_role_errors):
-    # The real role must pass — no current macro is a raw boolean operand (error_in_scope is
-    # `| bool`-coerced). This guards against a false-positive regression.
     assert all("boolean and/or/not operand" not in e for e in real_role_errors), (
         real_role_errors
     )

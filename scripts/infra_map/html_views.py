@@ -52,9 +52,8 @@ def host_panel(host: dict) -> str:
     )
     node = host.get("node")
     if host["platform"] == "k8s":
-        # Say what is *running here*, not what declares it — the inventory
-        # declares every k8s service under daniel-box, and a "0 declared" line
-        # on daniel-server reads as an idle box while it carries half the pods.
+        # Say what is running here, not what declares it: the inventory declares every k8s service
+        # under daniel-box.
         scope = f"{len(host['services'])} services running here"
         if node:
             scope += f" &middot; {node['pods']} pods"

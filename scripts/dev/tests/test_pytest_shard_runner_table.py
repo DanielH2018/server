@@ -20,8 +20,6 @@ from lib.git import git
 FILES = [f"scripts/x/tests/test_{name}.py" for name in "abcdefgh"]
 
 
-# Two shard logs as `gh api .../jobs/<id>/logs` returns them: a timestamp on every line and
-# pytest's colours. Module `a` runs in both, so it takes the median of 3.0 and 5.0.
 _LOGS = [
     "2026-10-24T19:27:39.79Z \x1b[32m3.00s call     scripts/x/tests/test_a.py::t\x1b[0m\n"
     "2026-10-24T19:27:39.80Z 1.00s setup    scripts/x/tests/test_b.py::t\n",

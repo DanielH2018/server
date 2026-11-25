@@ -54,8 +54,7 @@ from lib.repo_paths import REPO
 
 CLEAN, REFUSED, UNJUDGED = 0, 1, 2
 
-# The forward-only pins, each with whether a bump may move it by at most one minor release.
-# MetalLB has no such rule upstream, so only its decrease and its PR's other paths are checked.
+# Whether a bump may move the pin by at most one minor release; MetalLB has no such rule upstream.
 PINS: Mapping[str, bool] = {
     "k3s_longhorn_version": True,
     "k3s_metallb_version": False,
@@ -225,8 +224,8 @@ def files_setting(key: str, sha: str, repo: Path = REPO) -> list[str]:
     return [line.split(":", 1)[1] for line in hits.stdout.splitlines()]
 
 
-# A quote opens at the line start or after whitespace or `{[,:=`, as a YAML scalar or an INI
-# value Ansible splits with shlex does. A quote inside a bare word, as in `x's`, opens none.
+# A quote opens at line start or after whitespace or `{[,:=`; a quote inside a bare word, as in
+# `x's`, opens none.
 QUOTE_OPENERS = " \t{[,:="
 
 

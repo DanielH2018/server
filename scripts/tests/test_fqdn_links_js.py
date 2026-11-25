@@ -30,10 +30,8 @@ pytestmark = pytest.mark.skipif(
     shutil.which("node") is None, reason="node is not installed"
 )
 
-# A DOM with exactly enough surface for the script: one span carrying data-host, one anchor
-# carrying a sentinel href, and a replaceWith that records what the script swapped in.
-# querySelectorAll dispatches on the selector, because the script asks for the two
-# separately and handing it the wrong node type is not a failure the real DOM can produce.
+# A DOM with just enough surface for the script; querySelectorAll dispatches on the selector because
+# the script asks for the two separately.
 _HARNESS = """
 const hostname = process.argv[1];
 const dataHost = process.argv[2];

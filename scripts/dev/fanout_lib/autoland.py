@@ -88,8 +88,6 @@ READ_TIMEOUT_S = 30.0
 START_TIMEOUT_S = 600.0
 GH_TIMEOUT_S = 60.0
 STATE_DIR = Path.home() / ".local" / "state" / "fanout-server-lander"
-# The worktree sweep's stamp in STATE_DIR, and how often it runs: a landed batch's tree is gone
-# within a day, and the legs of the batches that stay kept are not re-run every ten minutes.
 CLEAN_STAMP = "clean-sweep.stamp"
 CLEAN_INTERVAL_S = 6 * 3600
 PR_FIELDS = (
@@ -97,8 +95,7 @@ PR_FIELDS = (
     "isCrossRepository"
 )
 
-# Runs on daniel-server with `python3 -I -`, so nothing needs shell quoting. It prints the
-# fields the rule reads from each recent record, and the count of findings left.
+# Runs on daniel-server with `python3 -I -`, so nothing needs shell quoting.
 READER = f"""\
 import json, pathlib, time
 d = pathlib.Path.home() / ".local" / "state" / "fanout-review"
@@ -244,8 +241,6 @@ def problems(
     return ""
 
 
-# A landing that a rule refused before its merge, which merged nothing and ends exit 75
-# (`land_lib/slots.py:refuse_before_merge`).
 _REFUSED_FOR_NOW = re.compile(
     r"^LAND-RESULT: verdict=refused .*\bexit=75\b", re.MULTILINE
 )
@@ -569,8 +564,8 @@ def main(argv: list[str] | None = None) -> int:
         args.dry_run,
         gauge=operator_waits.TEXTFILE,
     )
-    # After the pass and whatever it returned: the check reads this host's worktrees and
-    # run manifests, so it still runs when daniel-server or GitHub could not be read.
+    # After the pass whatever it returned: the check reads this host's worktrees and manifests, so
+    # it runs even when daniel-server or GitHub could not be read.
     coordinators.report(args.state_dir, dry_run=args.dry_run)
     return code
 

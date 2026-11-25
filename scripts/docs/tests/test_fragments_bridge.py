@@ -122,8 +122,6 @@ def test_every_non_gate_check_is_in_exactly_one_gate_set_row():
     assert {"b2_reachable", "wan_reachable"} == {
         row["name"] for row in rows if row.get("is_gate")
     }
-    # The `prometheus` value has no gate row since M6 batch A6's Cutover-2, but its member keeps a
-    # set line: the exporter suppression.
     assert "| `prometheus` | " in body
     for row in rows:
         if not row.get("is_gate"):

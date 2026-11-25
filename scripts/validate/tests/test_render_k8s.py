@@ -91,17 +91,16 @@ def real_tree_run(real_tree):
 
 
 def test_real_tree_has_no_unresolved_claim_name(real_tree_run):
-    # The actual regression guard: every claimName across the real k8s roles must resolve
-    # against a rendered PVC (or a volume-claim-backed one) — a brand-new service naming a PVC
-    # that was never wired up must show here, since nothing else in the tree checks this.
+    # Every claimName across the real k8s roles must resolve against a rendered PVC; nothing else in
+    # the tree checks this.
     failures, err = real_tree_run
     assert failures == 0
     assert "matches no rendered PersistentVolumeClaim" not in err
 
 
 def test_real_tree_passes_the_schema(real_tree_run):
-    # The regression guard: no rendered object in the tree fails its schema. Paired with
-    # run()'s own failure count so a new failure cannot hide behind a passing older check.
+    # Paired with run()'s own failure count so a new failure cannot hide behind a passing older
+    # check.
     failures, err = real_tree_run
     assert failures == 0
     assert "fails the v" not in err

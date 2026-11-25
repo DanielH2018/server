@@ -94,10 +94,8 @@ def _step_hosts(ln: Landing) -> None:
     wait(ln, ln.host_targets, ln.merge_sha)
 
 
-# The numbered steps, in order. The label is formatted with `pr=`; the number and the
-# denominator both come from this list, so `== 3/7` cannot outlive a eighth step.
-# The callables are bound HERE at import: a test that monkeypatches `ci.preflight` on its
-# module does not reach the pipeline. Patch an entry of `_STEPS` instead.
+# The callables are bound at import: a test that monkeypatches `ci.preflight` does not reach the
+# pipeline. Patch an entry of `_STEPS` instead.
 _STEPS: tuple[tuple[str, Callable[[Landing], None]], ...] = (
     ("resolving PR #{pr}", _step_resolve),
     ("waiting for master CI", _step_ci),
@@ -107,8 +105,6 @@ _STEPS: tuple[tuple[str, Callable[[Landing], None]], ...] = (
 )
 
 STEP_COUNT = len(_STEPS)
-# The first step that holds a landing slot: every step from master CI on polls GitHub until the
-# verdict (`slots.py`).
 _SLOT_FROM_STEP = 2
 
 
@@ -120,10 +116,8 @@ def run(ln: Landing) -> Outcome:
         ln.ledger.verdict = outcome.verdict or ""
         outcome.add_notes(ln.warnings)
         return outcome
-    # Unreachable: the last step is `health_verdict.health`, which is `NoReturn`. Returned
-    # rather than raised, because `run`'s own `except Outcome` above would not catch an
-    # Outcome raised here and land.py would see a traceback instead of an exit code. It
-    # carries a verdict so the `VERDICT:` line still prints and the ledger is not `aborted`.
+    # Unreachable (the last step is `NoReturn`). Returned, not raised, because `run`'s `except
+    # Outcome` would not catch it and land.py would show a traceback.
     ln.ledger.verdict = Verdict.REFUSED
     return Outcome(
         1,
@@ -134,17 +128,12 @@ def run(ln: Landing) -> Outcome:
 
 
 def _phases(ln: Landing) -> None:
-    # Every later phase runs git with the primary checkout as cwd. A missing
-    # one is worth one named line here rather than an unreadable failure five phases in;
-    # land.sh checked it before anything else too.
     if not ln.opts.primary.is_dir():
         ln.die(f"cannot cd to {ln.opts.primary}", 1)
     if ln.opts.arm_merge:
         print(f"== arm  arming PR #{ln.opts.pr}'s merge")
         merge.arm_merge(ln)
     if ln.opts.await_merge:
-        # land.sh never arms GitHub's auto-merge (merge.py's docstring has why), so the wait
-        # either merges the PR itself or polls for a merge made some other way.
         how = (
             "merging it directly once its CI is green"
             if ln.opts.arm_merge

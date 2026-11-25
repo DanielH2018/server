@@ -30,12 +30,6 @@ from validate.validate_lib.k8s_schema import (
 from lib.repo_paths import REPO, SYSTEM_UPGRADE_DEFAULTS
 
 
-# ── schema validation ────────────────────────────────────────────────────────────────────
-# Every object the guard renders is checked against the upstream Kubernetes OpenAPI schema,
-# which is what `kubectl apply --dry-run=server` does, offline. These tests pin the two ways
-# that check goes wrong: a false positive from PyYAML's octal parsing, and a schema version
-# that drifts from the cluster.
-
 VALID_DEPLOYMENT: dict[str, Any] = {
     "apiVersion": "apps/v1",
     "kind": "Deployment",
@@ -61,8 +55,8 @@ def test_a_valid_deployment_passes():
 
 
 def test_a_misspelled_field_is_rejected():
-    # The half that strict=True buys. The API server ignores an undefined field, so a
-    # `readinessProb` typo applies clean and the probe simply never runs.
+    # The half strict=True buys: the API server ignores an undefined field, so a `readinessProb`
+    # typo applies clean and the probe never runs.
     err = schema_error(_with_spec(progressDeadlineSecond=600))
     assert isinstance(err, str)
     assert "progressDeadlineSecond" in err
@@ -75,8 +69,7 @@ def test_a_wrong_type_is_rejected():
 
 
 def test_a_misspelled_field_deep_in_a_pod_spec_is_rejected():
-    # Strictness has to reach the nested components, not just the Deployment's own spec: the
-    # probe typo the module docstring names lives three $refs down.
+    # Strictness must reach nested components: the probe typo lives three $refs down.
     container = {"name": "example", "image": "example:1", "readinessProb": {}}
     template = {
         "metadata": {"labels": {"app": "example"}},
@@ -88,8 +81,7 @@ def test_a_misspelled_field_deep_in_a_pod_spec_is_rejected():
 
 
 def test_a_free_form_map_accepts_any_key():
-    # ConfigMap data and labels are maps, not objects with properties, so strictness must leave
-    # them open: any key a role writes there is legal.
+    # ConfigMap data and labels are maps, so strictness must leave them open.
     doc = {
         "apiVersion": "v1",
         "kind": "ConfigMap",
@@ -100,8 +92,8 @@ def test_a_free_form_map_accepts_any_key():
 
 
 def test_null_in_a_required_field_is_flagged():
-    # The API server treats null as omitted, and omitting a required field is an error, so a
-    # required property keeps its type un-nullable: a container with `name: null` is rejected.
+    # The API server treats null as omitted and omitting a required field is an error, so a required
+    # property stays un-nullable.
     template = {
         "metadata": {"labels": {"app": "example"}},
         "spec": {"containers": [{"name": None, "image": "example:1"}]},
@@ -135,9 +127,8 @@ def test_strict_schema_closes_objects_with_properties_and_only_those():
 
 
 def test_a_crd_falls_through_to_its_vendored_schema():
-    # Traefik's IngressRoute and friends define their shape in the cluster, not in the upstream
-    # spec, so no vendored core file describes them. They fall through to the vendored catalog
-    # schema, so a well-formed one PASSES rather than skips.
+    # Traefik CRDs define their shape in the cluster, so they fall through to the vendored catalog
+    # schema; a well-formed one PASSES rather than skips.
     crd = {
         "apiVersion": "traefik.io/v1alpha1",
         "kind": "IngressRoute",
@@ -148,8 +139,7 @@ def test_a_crd_falls_through_to_its_vendored_schema():
 
 
 def test_a_crd_with_no_vendored_schema_still_reports_no_schema():
-    # The skip path is not gone, only narrowed: a CRD group nothing has vendored is still
-    # counted and named rather than silently passed.
+    # A CRD group nothing has vendored is still counted and named rather than silently passed.
     crd = {
         "apiVersion": "cert-manager.io/v1",
         "kind": "Certificate",
@@ -160,10 +150,8 @@ def test_a_crd_with_no_vendored_schema_still_reports_no_schema():
 
 
 def test_octal_literals_are_read_as_kubectl_reads_them():
-    # PyYAML is YAML 1.1, where `0o444` is a STRING; the parser behind kubectl reads 292.
-    # Without this, four correct `defaultMode: 0o444` volumes fail as type errors. Verified
-    # against live objects: scrutiny-web/scrutiny-influxdb/uptime-kuma all carry
-    # secret.defaultMode: 292.
+    # PyYAML is YAML 1.1, where `0o444` is a STRING; the parser behind kubectl reads 292. Without
+    # this, correct `defaultMode: 0o444` volumes fail as type errors.
     assert normalise_octal("0o444") == 292
     assert normalise_octal({"defaultMode": "0o440"}) == {"defaultMode": 288}
     assert normalise_octal([{"m": "0o755"}]) == [{"m": 493}]
@@ -213,11 +201,8 @@ def schema_tag_problem(
 
 
 def test_vendored_core_schemas_match_the_cluster():
-    # A cluster upgrade that leaves the schemas behind validates every manifest against the
-    # wrong API surface: a field added in the new minor reads as invalid, and one removed in it
-    # reads as fine. Silent in both directions, hence this test. It compares the FULL tag, so a
-    # patch bump refreshes the schemas too and the vendored files always name the release the
-    # cluster runs.
+    # A cluster upgrade that leaves the schemas behind validates against the wrong API surface,
+    # silently in both directions; the FULL tag is compared so a patch bump refreshes too.
     k3s_defaults = SYSTEM_UPGRADE_DEFAULTS.read_text()
     assert schema_tag_problem(k3s_defaults, _vendored_tag(), K8S_SCHEMA_VERSION) is None
 
@@ -247,8 +232,8 @@ def test_a_minor_bump_without_the_schema_version_is_flagged():
 
 
 def test_only_the_current_minor_is_vendored():
-    # A minor refresh writes a new v<minor>/ directory and leaves the old one, which nothing
-    # reads any more. Dead schemas would still be reviewed, refreshed and shipped.
+    # A minor refresh leaves the old v<minor>/ directory, which nothing reads but would still be
+    # reviewed, refreshed and shipped.
     vendored = sorted(p.name for p in CORE_SCHEMA_DIR.parent.iterdir() if p.is_dir())
     assert vendored == [f"v{K8S_SCHEMA_VERSION}"], (
         f"schemas/kubernetes.io holds {vendored}; delete every directory but "
@@ -287,13 +272,6 @@ def test_a_cap_one_minor_behind_the_schema_is_rejected():
     assert _cap_for("1.37") != "<1.37"
 
 
-# ── CRD schema validation ───────────────────────────────────────────────────────────────────
-# Kubernetes' own OpenAPI files have no schema for a CRD — a CRD's schema lives in the cluster —
-# so every Traefik object in this tree (IngressRoute, Middleware,
-# TLSOption) would be counted as skipped and checked by nothing. They validate against the
-# schemas vendored under scripts/validate/schemas/.
-
-
 def _ingressroute(spec):
     return {
         "apiVersion": "traefik.io/v1alpha1",
@@ -318,8 +296,8 @@ def test_crd_schema_path_follows_the_catalog_layout():
 
 
 def test_a_core_object_has_no_crd_schema_path():
-    # apiVersion "v1" carries no group, so there is nothing to look up — the core check owns
-    # core objects and must not be shadowed by a vendored CRD file.
+    # apiVersion `v1` has no group; the core check owns core objects and must not be shadowed by a
+    # vendored CRD file.
     assert crd_schema_path({"apiVersion": "v1", "kind": "Service"}) is None
 
 
@@ -328,8 +306,8 @@ def test_a_valid_ingressroute_is_clean():
 
 
 def test_a_misspelled_spec_key_is_flagged():
-    # `entrypoints` for `entryPoints`. The API server ignores an unknown field, so the object
-    # applies clean and the route simply never binds to the entrypoint — the silent class.
+    # `entrypoints` for `entryPoints`: the API server ignores an unknown field, so the route never
+    # binds to the entrypoint.
     err = crd_schema_error(
         _ingressroute({"entrypoints": ["https"], "routes": [_ROUTE]})
     )

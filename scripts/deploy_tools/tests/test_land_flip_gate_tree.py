@@ -71,8 +71,6 @@ def _probe(f: Fakes, healthy_everywhere: frozenset[str] = frozenset()):
                 "Deployment, DaemonSet or StatefulSet in its manifests) — nothing to gate",
             )
         if tag == "traefik-crds" and not flipped:
-            # Undeclared there, so the k8s probe guesses a workload by the tag's name, misses,
-            # and the Pi's `docker inspect` is asked next.
             rc, out = (
                 PROBE_NOT_APPLICABLE,
                 "traefik-crds: no Deployment or DaemonSet in this namespace",

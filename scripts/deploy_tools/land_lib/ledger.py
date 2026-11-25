@@ -38,8 +38,7 @@ class Ledger:
     verdict: str = ""
     cause: str = ""
     tags_label: str = ""
-    # Beside cause `promote-held`: the SHA DEPLOY_HOLD held and `promote_lib.wait.hold_owner`'s
-    # answer. `tags_label` cannot give the owner, since it holds every tag the promotion carried.
+    # `tags_label` cannot give the owner, since it holds every tag the promotion carried.
     hold_sha: str = ""
     hold_owner: str = ""
     # Seconds `merge.await_merge` waited for the landing turn, its batch's run excluded.

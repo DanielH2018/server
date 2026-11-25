@@ -48,29 +48,24 @@ from typing import Any
 
 SCRIPTS_PAGE = "reference/scripts.md"
 
-# Directories the basename scan prunes: build output, virtualenvs and other sessions'
-# checkouts. Pruning rather than filtering is the difference between 813 ms and 16 ms on a 2.3 s
-# build -- `.venv` alone is thousands of files this would otherwise walk and discard.
+# Prune, not filter: `.venv` alone is thousands of files this would otherwise walk and discard.
 _SKIP_NAMES = {".git", ".venv", ".fanout", "site", "node_modules", "__pycache__"}
 _SKIP_PATHS = {".claude/worktrees"}
 
-# The first cell of a generated table row, when that cell is a code span. Every table on the
-# Scripts page puts the script's repo-relative path there.
 _TABLE_ROW_PATH = re.compile(r"^\|\s*`([^`]+)`\s*\|")
 
-# Regions whose code spans are left alone. A fenced block shows a command rather than naming a
-# file; an anchor already goes somewhere; a heading carries its own permalink, and the Usage
-# headings on the Scripts page would otherwise link to a row two screens up.
+# Left alone: a fenced block shows a command, an anchor already goes somewhere, and a heading
+# carries its own permalink.
 _PROTECTED = re.compile(
     r"<pre\b[\s\S]*?</pre>|<a\b[\s\S]*?</a>|<h[1-6]\b[\s\S]*?</h[1-6]>", re.IGNORECASE
 )
 
-# Only an ATTRIBUTE-FREE code span is a candidate. That is what excludes the Script cells this
-# hook has just given an id to -- they would otherwise link to themselves.
+# Only an attribute-free code span is a candidate, which excludes the Script cells this hook just
+# gave an id.
 _CODE = re.compile(r"<code>([^<]+)</code>")
 
-# The repo writes a reference as `file:line` or `file:line-line`. The line is not addressable
-# on this site, so it is stripped for the lookup and kept in the link text.
+# The line is not addressable on this site, so it is stripped for the lookup and kept in the link
+# text.
 _LINE_SUFFIX = re.compile(r":\d+(?:-\d+)?$")
 
 # The Script cell of a rendered table row.

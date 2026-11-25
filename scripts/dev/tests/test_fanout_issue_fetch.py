@@ -53,8 +53,6 @@ def test_the_issue_fetch_asks_for_labels_and_carries_them_onto_the_issue():
     assert issue.labels == frozenset({"claude", "bug"})
     unlabelled = parse_issue({**_VIEW, "labels": []})
     assert unlabelled.labels == frozenset()
-    # A fetch that stopped asking for labels must fail loudly rather than read as
-    # unlabelled, which would refuse every issue.
     with pytest.raises(KeyError):
         parse_issue({k: v for k, v in _VIEW.items() if k != "labels"})
 

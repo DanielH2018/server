@@ -84,11 +84,8 @@ def test_seeds_spread_due_dates_no_single_day_pileup():
     assert len(set(due)) >= 12
 
 
-# ── the stagger survives a rotation ─────────────────────────────────────────
-# Accept/reject pair. `_is_clean` proves the real `due_date` fans a same-day batch out;
-# `_is_flagged` runs the stagger-free formula the tool used before over the SAME batch and
-# proves it piles up. Without the second half the first is only ever observed passing, and
-# a stagger that stopped applying would read green.
+# Accept/reject pair: the second half proves the stagger-free formula piles up, so a stagger that
+# stopped applying would not read green.
 BATCH = ["mb_%d_push_token" % i for i in range(30)]
 ROTATED_ON = dt.date(2026, 9, 5)  # one commit changed every name in the batch
 

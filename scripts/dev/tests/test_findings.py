@@ -444,8 +444,6 @@ def test_help_carries_the_docstring_summary(capsys, make_tools):
     tools, _ = make_tools()
     with pytest.raises(SystemExit):
         findings.main(["--help"], tools)
-    # argparse wraps the description at the terminal width and the formatter colours it, so
-    # the rendered text is compared with the escapes stripped and the whitespace collapsed.
     plain = " ".join(re.sub(r"\x1b\[[0-9;]*m", "", capsys.readouterr().out).split())
     assert "close Claude's unfixed findings as GitHub Issues" in plain
 
@@ -504,8 +502,6 @@ def test_cited_paths_counts_a_bare_filename_only_alone_in_a_code_span():
 
 
 def test_cited_paths_ignores_the_trailer_findings_py_writes():
-    # Every filed issue ends in `Filed by \`scripts/dev/findings.py\``; read as a citation, it
-    # would make every two batches collide on that one file.
     body = "fix `scripts/dev/fanout_place.py`" + trailer("c0a05de5f0e9", "session")
     assert cited_paths(body) == ["scripts/dev/fanout_place.py"]
     assert cited_paths("nothing" + trailer("c0a05de5f0e9", "review")) == []

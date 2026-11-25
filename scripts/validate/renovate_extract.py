@@ -46,7 +46,6 @@ from lib.renovate_annotations import annotations_in, is_annotation_manager
 from lib.repo_paths import REPO
 
 TABLE = REPO / "scripts/validate/renovate_expected_deps.tsv"
-# The check's own code and inputs: a PR changing one runs the extract against the real tree.
 # The annotation reader's path comes from the module, because a literal path here reads to
 # lib/script_classify.py as this script invoking it.
 CHECK_FILES = frozenset(
@@ -96,9 +95,8 @@ IMAGE_DEFAULTS = (
 )
 CONTROL_PLANE_DEFAULTS = "k8s/roles/system-upgrade/defaults/main.yml"
 
-# (file, depName) of regex deps whose captured value is deliberately shorter than the version
-# beside it. Each jellyfin plugin's release tag is the leading part of the plugin's four-part
-# version, so the matchStrings capture the tag and rewrite every occurrence in step.
+# Each jellyfin plugin's release tag is the leading part of its four-part version, so the
+# matchStrings capture the tag and rewrite every occurrence in step.
 PARTIAL_VALUE_DEPS = frozenset(
     {
         ("k8s/roles/jellyfin/defaults/main.yml", "vosmiic/jellyfin-ani-sync"),

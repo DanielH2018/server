@@ -150,8 +150,8 @@ ROLE_DIR = K8S_ROLES / ROLE
 TOOLS = REPO / "scripts" / "validate" / "alert_tools.sh"
 FIXTURES = REPO / "scripts" / "validate" / "tests" / "fixtures" / "alert_rules"
 PINT_OFFLINE = REPO / "scripts" / "validate" / "pint" / "offline.hcl"
-# pint's arguments before the path it lints. INFO lines go to stderr and the colour codes would
-# land in the problem text, so the run is quiet and plain.
+# INFO lines go to stderr and colour codes would land in the problem text, so the run is quiet and
+# plain.
 PINT_ARGS = (
     "--no-color",
     "--log-level",
@@ -162,8 +162,6 @@ PINT_ARGS = (
     "lint",
 )
 
-# Each rendered file the tool phase checks: the template that renders it, and the kind, name
-# and data key of the object that carries it.
 RENDERED = {
     "prometheus.yml": ("prometheus.yaml.j2", "ConfigMap", "prometheus-config"),
     "alertmanager.yml": (
@@ -174,13 +172,9 @@ RENDERED = {
     "homelab.tmpl": ("alertmanager-secret.yaml.j2", "Secret", "alertmanager-config"),
 }
 
-# The rendered files a run must find. The M1 slice plan raises it again when the rule files
-# land.
 FLOOR = frozenset({"prometheus.yml", "alertmanager.yml", "homelab.tmpl"})
 
-# The template whose Go expressions must survive the Jinja render, and what the survival
-# check reads from it and from homelab.tmpl. `{{ .Status }}` is the Watchdog's payload and is
-# required whatever the source holds.
+# `{{ .Status }}` is the Watchdog's payload and is required whatever the source holds.
 ALERTMANAGER_SOURCE = ROLE_DIR / "templates" / "alertmanager-secret.yaml.j2"
 WATCHDOG_STATUS = "{{ .Status }}"
 RAW_BLOCK = re.compile(r"\{% raw %\}(.*?)\{% endraw %\}", re.DOTALL)
@@ -189,9 +183,6 @@ TEMPLATE_DEFINE = re.compile(r'\{\{-? define "([^"]+)" -?\}\}')
 # The template that renders the rule files' ConfigMap.
 RULES_TEMPLATE = "prometheus-rules.yaml.j2"
 
-# The loki-homelab ruler's LogQL rules: the role, its rule directory, the template that
-# renders their ConfigMap, that ConfigMap, the role default listing the groups, and the groups
-# a run must find.
 LOKI_ROLE = "loki-homelab"
 LOKI_ROLE_DIR = K8S_ROLES / LOKI_ROLE
 LOKI_RULES_DIR = LOKI_ROLE_DIR / "files" / "rules"
@@ -202,19 +193,14 @@ LOKI_GROUP_FLOOR = frozenset({"homelab-logs"})
 # lokitool's arguments before the rule file. `--dry-run` keeps lint from rewriting the file.
 LOKITOOL_ARGS = ("rules", "lint", "--dry-run")
 
-# loki-homelab's Alloy config: the template that renders the ConfigMap carrying it, that
-# ConfigMap, and its data key. THE ALLOY LOAD (module docstring) boots the rendered file.
 ALLOY_CONFIG_TEMPLATE = "configmap.yaml.j2"
 ALLOY_CONFIGMAP = "loki-homelab-config"
 ALLOY_CONFIG_KEY = "config.alloy"
-# How long a booted Alloy may run before the load counts as accepted. A config Alloy rejects
-# ends the process in under a second (Alloy v1.20.1), so the
-# window only bounds the passing case.
+# A config Alloy rejects ends the process in under a second, so the window only bounds the passing
+# case.
 ALLOY_LOAD_SECONDS = 8
-# `discovery.kubernetes` builds its client when the component loads, and in-cluster it reads
-# the service-account token, which does not exist outside a pod. A kubeconfig for an address
-# nothing listens on lets the component build; its discovery then fails later, which is not a
-# load error.
+# `discovery.kubernetes` reads the service-account token when the component loads, which does not
+# exist outside a pod; a kubeconfig for an address nothing listens on lets it build.
 ALLOY_KUBE_COMPONENT = re.compile(r'^(discovery\.kubernetes "[^"]+" \{)$', re.MULTILINE)
 ALLOY_KUBECONFIG = """\
 apiVersion: v1
@@ -363,8 +349,8 @@ def run_alloy_load(config: Path) -> tuple[int, str]:
             try:
                 proc.wait(timeout=ALLOY_LOAD_SECONDS)
             except subprocess.TimeoutExpired:
-                # alert_tools.sh execs the tool, so this is Alloy itself. SIGKILL because a
-                # graceful stop of a loaded config took over two minutes to finish.
+                # alert_tools.sh execs the tool, so this is Alloy itself; SIGKILL because a graceful
+                # stop of a loaded config takes over two minutes.
                 proc.kill()
                 proc.wait()
                 return 0, ""

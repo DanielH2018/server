@@ -77,23 +77,15 @@ from lib.render_guard import (
 
 HOSTS = host_mode.HOSTS
 
-# A line systemd-analyze attributes to the file it's checking looks like
-# "<path>:<lineno>: <message>". A line about a followed unit ("k3s.service: Failed to open...")
-# or an ExecStart binary check ("notreal.service: Command ... is not executable") carries no
-# ":<lineno>:" — that shape difference is what keeps this from flagging either.
-#
-# `Unknown key` matches both wordings systemd has used for a typo'd directive key. systemd
-# v257 dropped the ` name` and squared the section brackets
-# (src/shared/conf-parser.c: "Unknown key name '%s' in section '%s', ignoring." →
-# "Unknown key '%s' in section [%s], ignoring."), so the old `Unknown key name` alternative
-# matches nothing on systemd 259 — the version the ubuntu-26.04 runner image carries — and
-# this check would go vacuous for the exact class it exists to catch.
-# The other two alternatives are unchanged from v255 through v259.
+# `Unknown key` matches both wordings systemd has used: v257 dropped the ` name` and squared the
+# section brackets, so the old `Unknown key name` matches nothing on systemd 259 and the check would
+# go vacuous. A line about a followed unit or an ExecStart binary carries no `:<lineno>:`, so it is
+# not flagged.
 _FAIL_MESSAGE = re.compile(r"Unknown key|Failed to parse|Assignment outside of section")
 
 
-# A host component that keeps role-shaped sources, `templates/` beside a `defaults/main.yml`,
-# such as claude-code. Its templates render with that file as their owning defaults.
+# A host component keeping role-shaped sources (`templates/` beside `defaults/main.yml`), such as
+# claude-code.
 COMPONENT_TEMPLATES = REPO / "hosts" / "components"
 
 
@@ -188,8 +180,8 @@ def check_polkit_rule(template: Path, out_dir: Path, node_bin: str) -> str | Non
     if rendered is None:
         return err
 
-    # .stem drops only the trailing ".j2" ("50-gitops-deploy.rules"); appending ".js" (not
-    # ".rules") gives node a real JS extension without renaming the rule itself.
+    # .stem drops only the trailing `.j2`; appending `.js` gives node a real JS extension without
+    # renaming the rule.
     out_path = out_dir / (template.stem + ".js")
     out_path.write_text(rendered)
 
@@ -207,8 +199,7 @@ def check_polkit_rule(template: Path, out_dir: Path, node_bin: str) -> str | Non
     return None
 
 
-# The unit the host renders must emit, so a render that emits nothing fails rather than
-# verifying zero units (H3, *Verification*, Unit validator).
+# A render that emits nothing must fail rather than verify zero units.
 HOST_NAMED_MEMBER = "homelab-updater.timer"
 
 # Directories under `hosts/` that hold no host package.

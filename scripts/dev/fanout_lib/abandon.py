@@ -14,9 +14,6 @@ import shlex
 import subprocess
 from datetime import UTC, datetime
 
-# Reach the sibling package: a directly-invoked script gets only its own directory on
-# sys.path, and pyproject's `pythonpath` is a pytest setting.
-
 
 from dev.fanout_lib import manifest as manifest_mod
 from dev.fanout_lib import status as status_mod
@@ -93,8 +90,8 @@ def release_batch(
         argv += ["--repo", target.repo]
     argv += ["--reason", f"fan-out batch {b.batch} {why}"]
     issues = ", ".join(f"#{n}" for n in b.issues)
-    # The manifest may already be gone, so a failed release prints its own retry: a second
-    # `abandon` stops at "no manifest".
+    # The manifest may already be gone, so a failed release prints its own retry: a second `abandon`
+    # stops at "no manifest".
     retry = "findings.py " + shlex.join(argv)
     try:
         proc = tools.findings(argv)
@@ -103,8 +100,8 @@ def release_batch(
         return False
     # findings.py prints a refusal on stderr.
     refusals = [ln for ln in proc.stderr.splitlines() if " refused: " in ln]
-    # `stop` then `abandon` releases twice. An issue nobody holds any more is the goal state,
-    # so only a refusal naming another holder, or a failure with no refusal line, fails.
+    # An issue nobody holds any more is the goal state, so only a refusal naming another holder, or
+    # a failure with no refusal line, fails.
     if (
         proc.returncode == 3
         and refusals
@@ -179,9 +176,8 @@ def cmd_stop(args, tools: Tools) -> int:
     for b in run.batches:
         if args.batch and b.batch != args.batch:
             continue
-        # `clean` already reset this batch's unit and took its worktree. Stopping it again
-        # reads systemd's "Unit … not loaded" as the batch's status and then tells the
-        # operator to clean a tree that is gone.
+        # `clean` already reset this batch's unit; stopping it again reads systemd's "Unit not
+        # loaded" as its status.
         if b.removed_at:
             print(f"{b.batch} on {b.host}: cleaned ({b.removed_at})")
             continue
@@ -193,8 +189,8 @@ def cmd_stop(args, tools: Tools) -> int:
         print(
             f"{b.batch} on {b.host}: {'stopped' if proc.returncode == 0 else proc.stderr.strip()}"
         )
-        # A stopped agent works nothing, so its claims go back. An open PR it left
-        # still withholds the issue from `next`, so nobody duplicates work that may merge.
+        # An open PR the agent left still withholds the issue from `next`, so nobody duplicates work
+        # that may merge.
         if proc.returncode == 0:
             try:
                 target = resolve(b.repo, tools.default_ref)
@@ -203,8 +199,6 @@ def cmd_stop(args, tools: Tools) -> int:
                 failed = True
             else:
                 failed = not release_batch(tools, run, b, target, "stopped") or failed
-        # The worktree stays locked until `clean` runs it through lib.worktrees' content
-        # check — stopping a batch says nothing about whether its PR merged.
         print(f"  run `clean {args.run_id}` once its PR merges")
         # A landing or detached deploy left the unit's cgroup for its own scope, so
         # the stop above did not end it.

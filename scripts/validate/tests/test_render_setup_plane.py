@@ -17,10 +17,8 @@ from renderer.renderer_lib.environment import render_file
 from renderer.renderer_lib.host_sources import confined_env
 from validate.render_lib import setup_plane as v
 
-# Named members the glob must find. Renaming or moving one of these should fail HERE, with the
-# member named, rather than silently shrinking the set every other test runs over. One per
-# shape the guard covers: a YAML manifest, a Corefile, an env file, a unit, a libvirt filter, a
-# sudoers drop-in, and templates of components with no `defaults/main.yml`.
+# One per shape the guard covers: a rename or move fails HERE with the member named instead of
+# shrinking the set.
 MUST_FIND = frozenset(
     {
         "hosts/components/k3s-host-dns/templates/netplan-dns.yaml.j2",

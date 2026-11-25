@@ -30,10 +30,7 @@ def wait_master_ci(ln: Landing, sha: str) -> None:
             Verdict.CI_TIMEOUT,
         )
     if rc == CI_UNPROVEN:
-        # Exit 1, not 75: 75 is the resume point, and no re-run converges here until the
-        # operator dispatches CI or promotes the tip. `line` names the tip and the command.
-        # An earlier promotion can already have carried the merge, so the message claims
-        # only what this landing did.
+        # Exit 1, not 75: no re-run converges until the operator dispatches CI or promotes the tip.
         tags = f" (this PR's tags: {ln.tags_csv})" if ln.tags_csv else ""
         ln.die(
             f"no CI verdict can arrive: {line}{tags} — land.sh deployed nothing itself",

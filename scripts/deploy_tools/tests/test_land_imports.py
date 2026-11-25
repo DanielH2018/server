@@ -102,8 +102,6 @@ ALLOWED = {
     },
     # What makes a green head stale against master, and the one branch update.
     "stale_base": {"landing", "outcome", "gh_read", "policy", "pr_json"},
-    # The one-landing-at-a-time lock the pipeline holds from the PR's CI run to its merge;
-    # `fresh` names the variable a landing handed the turn reads it from.
     "turn": {"landing", "outcome", "line", "fresh", "serial_lock"},
     # One live landing per PR: a lock beside the turn, taken before a landing forks or merges.
     "pr_lock": {"turn", "serial_lock"},
@@ -149,19 +147,14 @@ ALLOWED = {
         "outcome",
         "promotion",
     },
-    # The split of a landing's tags and the wait on promotion, step 5's work (D2.3).
     "promotion": {"landing", "outcome"},
     "health_verdict": {"landing", "outcome", "promotion", "health_gate"},
     "own_checkout": set(),
     # Makes a checkout and runs a child land.sh; it imports no phase. `grading_argv` reads Options.
     "fresh": {"options"},
-    # The fork, the logfile and the verdict wait. It imports no phase: `land.py` hands it a
-    # callable and it never knows what a landing is.
     "detach": set(),
     # A PR's kind and the quota floor: GitHub reads only, nothing that drives a landing.
     "live_limit": set(),
-    # The handoff to a lander unit reads the Options it refuses flags from, and prints its own
-    # stops through Outcome so they carry the verdict a landing's would.
     "handoff": {"options", "outcome"},
     # The tag derivation and what it reads. None of them knows what a landing is.
     "land_tags": set(),
@@ -176,12 +169,10 @@ ALLOWED = {
         "host_published",
         "host_schedule",
     },
-    # The boundaries for a tag Flux applies. It imports promote_lib.wait, outside land_lib.
-    # It also holds the pin gate's reads, `pin_reads.PinReads`.
     "land_flux": {"pin_reads"},
     "land_tested_base": set(),
-    # cc-wait's `land` source runs under `uv run --no-project`, so it reads only the
-    # stdlib-only fork record and the verdict words.
+    # cc-wait's `land` source runs under `uv run --no-project`, so it reads only the stdlib-only
+    # fork record and the verdict words.
     "land_probe": {"detach", "outcome"},
     "compose_wait": {"outcome"},
     "host_published": {"outcome"},

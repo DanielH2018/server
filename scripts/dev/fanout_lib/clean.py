@@ -293,11 +293,9 @@ def read_clean_result(proc: subprocess.CompletedProcess) -> tuple[str, str]:
     return "failed", f"clean failed (exit {proc.returncode}): {detail}"
 
 
-# What `live_process_scan`'s awk does with the root helper's answer. It reads the framing
-# `lib.worktrees.read_answer` reads, and prints `unknown (...)` for any answer that function
-# refuses, so the chain keeps the tree. `WT` is the worktree escaped the helper's way: awk
-# compares the escaped forms and never decodes. It arrives through ENVIRON, because
-# `awk -v` would read its backslashes as escapes.
+# `WT` is the worktree escaped the helper's way and arrives through ENVIRON, because `awk -v` would
+# read its backslashes as escapes. It prints `unknown (...)` for any answer
+# `lib.worktrees.read_answer` refuses, so the chain keeps the tree.
 _HOLDER_AWK = (
     'NR == 1 { if ($0 != "ok") { bad = 1; if ($1 == "refused") refused = 1 }; next } '
     "ended { bad = 1; next } "
@@ -364,8 +362,7 @@ def live_process_scan(
     )
 
 
-# The endings of the two `kept:` lines that clear without anyone acting on the tree: the
-# agent's unit stops, or the process using the tree exits. Neither counts toward a streak.
+# Neither ending counts toward a streak.
 UNIT_ACTIVE = "still active; stop it first"
 PID_BUSY = "still uses it"
 
@@ -375,9 +372,8 @@ def busy_refusal(wt: str) -> str:
     return f'echo "kept: {wt} — pid $busy {PID_BUSY}"'
 
 
-# What the `clean-one` leg's snapshot holds. `clean-one` imports across `scripts/dev`,
-# `scripts/lib` and `scripts/deploy_tools`, so the whole import root goes rather than a list
-# of its packages that the next import would outgrow.
+# The whole import root goes: `clean-one` imports across `scripts/dev`, `scripts/lib` and
+# `scripts/deploy_tools`.
 CLEAN_SNAPSHOT_PATHS = ("scripts",)
 
 

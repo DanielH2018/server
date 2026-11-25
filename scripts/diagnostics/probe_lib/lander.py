@@ -43,9 +43,8 @@ UNIT = f"homelab-{NAME}.service"
 ROLE = REPO / "hosts" / "components" / "claude-code"
 GROUP_VARS = INVENTORY / "group_vars" / "all.yml"
 SHOW = ["LoadState", "ActiveState", "Result", "ExecMainExitTimestamp"]
-# `fanout_lib/autoland.py:run` ends both of its unread lines with this, after
-# `<SERVER_HOST> records unreadable` or `GitHub unreadable`. A prefix match missed the first,
-# which names the host before the word, and that pass exits 0, so this is its only signal.
+# Both unread lines of `autoland.run` end with this; a prefix match missed the one naming the host
+# first, and that pass exits 0.
 UNREAD = "unreadable, nothing landed:"
 
 LANDER_HELP = (

@@ -41,37 +41,33 @@ from validate.validate_lib.secrets_case import seal_host
 
 NODES = ("daniel-server", "daniel-box")
 NAME = "install {host}'s real package, and no unit fails"
-# What a real node has from its Ubuntu server install and the image lacks. claude-agent-home
-# runs openssh-client's ssh-keygen.
+# claude-agent-home runs openssh-client's ssh-keygen.
 SERVER_PACKAGES = ("netplan.io", "nftables", "openssh-client")
 # The operator's per-user tools, which the dotfiles repo installs and the package does not.
 DOTFILES_TOOLS = ("/home/ubuntu/.local/bin/uv", "/home/ubuntu/.local/bin/claude")
 EXIT_0 = "#!/bin/sh\nexit 0\n"
-# The agent's dotfiles source and repo clone. claude-agent-setup clones each from GitHub only
-# while its .git is missing, and no name resolves once the seed has run.
+# claude-agent-setup clones each from GitHub only while its .git is missing, and no name resolves
+# once the seed has run.
 AGENT_CLONES = (
     "/var/lib/claude/.local/share/chezmoi/.git",
     "/var/lib/claude/server/.git",
 )
-# The image masks systemd-udevd, so that no case reaches the runner's devices through
-# --privileged. A node runs udevd, which reconcile's udev arm reloads when a shipped rule changes.
+# The image masks systemd-udevd so no case reaches the runner's devices through --privileged; a node
+# runs udevd, which reconcile's udev arm reloads.
 UDEVADM_STUB = "/usr/local/sbin/udevadm"
-# virsh's defines failed identically on 24.04 and 26.04 in CI run 45031671927, so the container,
-# not the release, refuses libvirt. The stub leaves reconcile's libvirt arm, daniel-server's
-# staging network and its egress nwfilter, untested here.
+# virsh's defines failed identically on 24.04 and 26.04, so the container refuses libvirt; the stub
+# leaves reconcile's libvirt arm untested here.
 VIRSH_STUB = "/usr/local/sbin/virsh"
-# Every container shares the runner's virtual consoles through --privileged, so logind starts a
-# getty on each console another case's container touches, and they trip each other's start
-# limits. The image masks getty@tty1 for that reason; a node container masks the rest.
+# Every container shares the runner's virtual consoles through --privileged, so getty on one trips
+# another's start limits; a node container masks the rest.
 GETTY_TEMPLATES = ("getty@.service", "autovt@.service")
 # Long enough for a forked service that dies, or a restart loop's RestartSec, to show.
 SETTLE_SECONDS = 30
 # Under `Container.sh`'s 900-second default, which kills the exec and drops its output.
 STEP_SECONDS = 840
 UNIT_PROPERTIES = "Id,ActiveState,SubState,NRestarts"
-# Each unit whose start needs something only the real host has, and that thing. A drop-in clears
-# what runs or changes directory before its ExecStart= and swaps that for `sleep`, so its other
-# lines still load and its enable link still starts it.
+# A drop-in clears what runs or changes directory before ExecStart= and swaps in `sleep`, so the
+# other lines still load and the enable link still starts it.
 STUBBED_UNITS = {
     "coredns-host.service": "daniel-box's LAN address, which its listener binds",
     "homelab-apt-repo.service": "daniel-box's LAN address, which its listener binds",

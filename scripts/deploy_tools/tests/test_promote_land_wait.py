@@ -182,8 +182,6 @@ def test_a_host_with_no_readable_kubeconfig_gives_up_at_the_first_poll():
     assert "no readable kubeconfig" in result.detail
 
 
-# -- the soak's verdict (D5.3b3) -------------------------------------------------------------
-
 # M changes bento-pdf, so its changed set holds `soak` as C2 puts it beside any tag.
 SOAK_PUBLISHED = {
     M: digests(bento_pdf="b", soak="k"),

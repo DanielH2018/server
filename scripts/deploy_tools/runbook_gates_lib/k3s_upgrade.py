@@ -60,8 +60,8 @@ from lib.longhorn_lib import longhorn_backups
 CLUSTER = "prod"
 RUNBOOK = "docs/k3s-upgrade.md"
 
-# Backup states a restart cannot abort. `New`, `Pending` and `InProgress` are in flight; the
-# empty string is a Backup CR the controller has not picked up yet.
+# In-flight backup states (`New`, `Pending`, `InProgress`) can be aborted by a restart; "" is a
+# Backup CR the controller has not picked up yet.
 SETTLED_BACKUP = frozenset({longhorn_backups.COMPLETED, "Error", "Unknown"})
 
 LIVE_HOLD = PinReads().hold
@@ -72,12 +72,8 @@ NODES_ARGS = ("get", "nodes", "-o", "json")
 __all__ = ["EX_UNAVAILABLE", "Unreadable", "unsafe_volumes"]
 
 
-# ── the gates, as pure verdicts over what kubectl answered ──────────────────────────────────
-#
-# Each returns the list of offenders — empty means the gate passes. `None` from kubectl_json
-# (a failed read) is an offender too, so a direct call can never pass on a read that failed;
-# the runner maps that case to `EX_UNAVAILABLE` before it gets here. Gate 1's verdict,
-# `unsafe_volumes`, is the shared one in `gate_runner`.
+# Each gate returns its offenders; empty passes. `None` from kubectl_json is an offender too, so a
+# failed read never passes.
 
 
 def in_flight_backups(doc) -> list[str]:

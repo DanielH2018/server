@@ -42,8 +42,6 @@ from lib.cli_help import answer_help
 from validate.render_lib import compose, k8s, setup_plane, shell, units
 from validate.validate_lib.ok_lines import ok_printer
 
-# A family's run takes the `[ok]` printer and returns (checked, failures), printing its own
-# `[FAIL]` lines as it goes.
 Run = Callable[[Callable[[str], None]], tuple[int, int]]
 
 
@@ -108,8 +106,8 @@ FAMILIES: dict[str, Family] = {
         rf"hosts/components/(?!{_COMPOSE_TREES}).*\.(j2|yml)|secrets/secret_rotation\.yml"
         r"|scripts/validate/(validate_lib/host_specs|render_lib/setup_plane)\.py",
     ),
-    # Every `.j2` under a role, not only templates/: a manifest embeds a script or a config
-    # from anywhere in the role with `lookup()`.
+    # Every `.j2` under a role, not only templates/: a manifest embeds a script or config from
+    # anywhere in the role with `lookup()`.
     "k8s": _family(
         k8s.run,
         rf"k8s/roles/.*\.j2|{_ROLE_DEFAULTS}|k8s/templates/ingressroute\.yml\.j2"

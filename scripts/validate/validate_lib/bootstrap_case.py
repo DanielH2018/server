@@ -220,8 +220,8 @@ def stock_kit(cases, clone: Path, kit: Path) -> Path:
     kit.mkdir(parents=True)
     script = SCRIPT.read_text()
     stock_pins(cases, script, kit)
-    # The script checks k3s against the kit's own checksum list, so a stand-in that answers
-    # `--version` at the pin stands for the 70 MB binary.
+    # The script checks k3s against the kit's checksum list, so a stand-in answering `--version` at
+    # the pin stands for the 70 MB binary.
     k3s = f'#!/bin/sh\necho "k3s version {script_value(script, "K3S_VERSION")}"\n'
     (kit / "k3s").write_text(k3s)
     (kit / "k3s").chmod(0o755)

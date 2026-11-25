@@ -125,9 +125,6 @@ def test_a_parked_batch_is_kept_until_its_pr_has_merged(tmp_path, merged, verdic
 
 
 def test_a_dirty_tree_is_kept_even_when_merged():
-    # classify's own reason text is "uncommitted changes", not "dirty" — read from
-    # lib.worktrees.classify rather than the
-    # word the brief guessed at.
     state, why = clean_one(
         "/r",
         _tree(),
@@ -208,8 +205,6 @@ def test_the_remote_command_resets_fetches_then_runs_a_snapshot_of_master():
         "systemctl --user reset-failed fanout-b 2>/dev/null; "
         "git -C /home/ubuntu/server fetch --quiet origin master && "
     )
-    # The interpreter leg is the else of the tree-exists test (Ruling 30). It runs from the
-    # primary checkout's cwd, and the script it runs is the snapshot's.
     assert (
         'else snap=$(mktemp -d) && { mkdir -p "$snap"/server && '
         'git -C /home/ubuntu/server archive -o "$snap"/server.tar origin/master scripts && '
@@ -349,8 +344,6 @@ def test_cmd_clean_one_reaches_clean_one_for_a_registered_tree(capsys):
         dirty=lambda p: False,
     )
     assert code == 0
-    # "kept ... not merged" only comes out of clean_one itself, proving the tree was found
-    # and handed to it rather than short-circuited by the absent-tree branch.
     out = capsys.readouterr().out
     assert "kept:" in out and "not merged" in out
 
@@ -480,8 +473,6 @@ def test_help_lists_clean_and_gives_clean_one_no_help_bullet(capsys):
     assert (
         "{read,launch,claim,status,stop,clean,abandon,resume,runs,clean-one}" in plain
     )
-    # No subcommand here gets a help bullet under "positional arguments" — clean-one stays
-    # exactly as undocumented as its siblings, rather than standing out with its own line.
     assert "clean-one " not in plain.split("positional arguments:", 1)[1]
 
 

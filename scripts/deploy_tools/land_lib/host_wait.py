@@ -85,15 +85,12 @@ from lib.systemd_timer import timer_settings
 # waits on every host.
 RENDERER = "scripts/renderer/homelab_render.py"
 HOST_RENDER_TIMEOUT = 300
-# One rendered host package: each path under `hosts/<host>/` mapped to its kind (`file` or
-# `link`), its mode, and its bytes or its link target.
 HostTree = dict[str, tuple[str, int, bytes]]
 
 PROMETHEUS_PORT = 9090
 LOOPBACK = "127.0.0.1"
-# observability's role defaults pin Prometheus's ClusterIP in plaintext. The address is read
-# from there, the way `probe_lib/core.py:observability_loki_ip` reads Loki's, and never through
-# `probe_lib/core.py:prom_endpoint`, which decrypts.
+# Read the address from role defaults like `observability_loki_ip`, never through `prom_endpoint`,
+# which decrypts.
 OBSERVABILITY_DEFAULTS = K8S_ROLES / "observability" / "defaults" / "main.yml"
 CLUSTER_IP_KEY = "observability_prometheus_cluster_ip"
 QUERY_TIMEOUT_S = 10
@@ -346,8 +343,6 @@ def _target(host: str, old: HostTree, at_parent: Path) -> HostTarget:
     try:
         triggers, delay = timer_settings(shared.read_text(), dropins)
         if poll and _links(old, POLL_TIMER):
-            # An armed poll starts the updater on its own fires, so each of its triggers
-            # bounds the deadline beside the updater timer's own.
             polls, poll_delay = timer_settings(poll[2].decode(), [])
             for key, values in polls.items():
                 triggers.setdefault(key, []).extend(values)

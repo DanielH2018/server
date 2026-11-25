@@ -174,10 +174,8 @@ def check_alert_plane():
     return OK, f"{len(up)} Alertmanager target(s) up, Watchdog firing"
 
 
-# §9.3: *arr + jellyfin API keys
-# A fresh *arr generates its own random key on first start, so the SOPS value that
-# configarr / janitorr / homepage / monitor-bridge / autofix-bridge authenticate with
-# is wrong until it's pasted in. Every consumer then 401s against a healthy service.
+# A fresh *arr generates its own key, so the SOPS value is wrong until pasted in and every consumer
+# 401s.
 
 
 def _unreachable(app, detail):
@@ -195,15 +193,8 @@ def _unreachable(app, detail):
     return SKIP, f"{app} unreachable from this host (pod on another node?) — {detail}"
 
 
-# The path each *arr's `-monitoring` IngressRoute admits, which is the only path the route
-# half of `get_via_service` can reach. `/api/<ver>/system/status` is on no route's PathPrefix,
-# so the fallback would 302 into Authelia and the check would be structurally SKIP whenever
-# the pod sat on the other node. A 200 here with the SOPS key proves the credential just as
-# well as system/status did: both are authenticated reads.
-#
-# Kept in step with the three `ingressroute-monitoring.yaml.j2` templates by
-# tests/k8s/test_arr_monitoring_routes_admit_postflight.py — a prefix edited on one
-# side alone breaks the fallback.
+# `/api/<ver>/system/status` is on no route's PathPrefix, so the fallback would 302 into Authelia.
+# This is the path each `-monitoring` IngressRoute admits.
 ARR_MONITORED_PATH = {
     "sonarr": "/api/v3/queue",
     "radarr": "/api/v3/queue",
@@ -257,9 +248,7 @@ def check_jellyfin_key():
     return FAIL, f"HTTP {status} — mint the key in Jellyfin and sops set it"
 
 
-# §9.4: Home Assistant long-lived tokens
-# Four separate consumers each hold their own token; one bad token silently disables
-# just that consumer, so they're checked individually rather than as a group.
+# Four consumers each hold their own token; one bad token silently disables just that consumer.
 
 HA_TOKENS = [
     "monitor_bridge_ha_token",
@@ -275,8 +264,6 @@ def check_ha_token(name):
     Args:
         name: The SOPS secret name of the token to check (one of ``HA_TOKENS``).
     """
-    # Since slice-5 B3 HA runs in the cluster — core.ha_base() is the bridge URL, the same
-    # endpoint before and after the cutover (no container to inspect).
     token, err = secret(name)
     if not token:
         return FAIL, err
@@ -288,10 +275,7 @@ def check_ha_token(name):
     return FAIL, f"HTTP {status} — re-mint under Profile → Security"
 
 
-# §9.5: Authelia
-# The role asserts the OIDC material exists, so a missing secret fails the deploy
-# rather than failing silently. What it can't tell you is whether the running
-# instance actually came up with it.
+# The role asserts the OIDC material exists, not that the running instance came up with it.
 
 
 def check_authelia():
@@ -332,8 +316,7 @@ def check_authelia():
     return OK, f"healthy ({json.loads(body).get('status', '?')}), OIDC material present"
 
 
-# §9.6 was Portainer environments, removed with Portainer itself. The
-# numbering below is left alone so §9.x keeps matching docs/host-bring-up.md.
+# 9.6 was removed; the numbering stays so §9.x keeps matching docs/host-bring-up.md.
 
 CHECKS = [
     ("9.1", "Alert plane (Alertmanager scraped, Watchdog firing)", check_alert_plane),

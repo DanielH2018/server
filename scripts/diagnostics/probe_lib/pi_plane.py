@@ -18,8 +18,8 @@ import subprocess
 import sys as _sys
 
 
-# `core.<name>` for anything the tests monkeypatch — binding those into this module's
-# globals with a `from core import ...` would take a snapshot the patch never reaches.
+# Use `core.<name>` for anything tests monkeypatch: a `from core import` binds a snapshot the patch
+# never reaches.
 from diagnostics.probe_lib import core
 from diagnostics.probe_lib.core import (
     PI_HOST,
@@ -36,9 +36,8 @@ PROMETHEUS_TEMPLATE_PATH = (
     REPO / "k8s" / "roles" / "observability" / "templates" / "prometheus.yaml.j2"
 )
 
-# prometheus.yaml.j2 writes `origin: daniel-pi` as a literal on each Pi job rather than deriving
-# it from the inventory hostname, so the label equals the host name by convention, not by
-# construction.
+# prometheus.yaml.j2 writes `origin: daniel-pi` literally, so the label equals the host name by
+# convention only.
 PI_ORIGIN_LABEL = PI_HOST
 
 _JOB_NAME_RE = re.compile(r"^\s*-\s*job_name:\s*(\S+)")
@@ -193,18 +192,8 @@ def run_pi_targets(ns):
     return code
 
 
-# pi containers: one ssh call, `docker ps -a` piped straight into `docker inspect`.
-#
-# ONE ssh invocation total — daniel-pi sits behind `ufw limit ssh`, which REJECTs the 6th+
-# connection in a 30s window (MEMORY: ssh-rate-limit-refuses-rapid-agent-calls.md). A
-# ps-then-inspect round trip from the CALLER side would be two; running both commands in the
-# one remote shell this ssh opens keeps it to one.
-#
-# Measured against the live Pi (7 containers, six consecutive runs): 3.65s, 7.8s, 8.3s,
-# 12.8s, 14.5s, 19.3s — almost entirely ssh/exec overhead on a Zero 2 W under its own cron
-# load, not the inspect itself. A 25s timeout was too tight and timed out on a seventh run.
-# PI_CONTAINERS_TIMEOUT sits well above the observed tail rather than at core.py's 10s HTTP
-# default, which this is not.
+# ONE ssh invocation: daniel-pi's `ufw limit ssh` REJECTs the 6th connection in 30s.
+# Timeout sits above the observed tail (3.65s to 19.3s on a Zero 2 W).
 PI_CONTAINERS_TIMEOUT = 45
 
 

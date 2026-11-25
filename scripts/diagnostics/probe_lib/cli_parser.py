@@ -383,8 +383,8 @@ def _build_parser():
     hl.add_argument(
         "--cluster",
         choices=sorted(CLUSTER_NODES),
-        # SUPPRESS, not DEFAULT_CLUSTER: a subparser default overwrites the value the root
-        # parser already stored, so `probe.py --cluster stage health x` would read prod.
+        # SUPPRESS, not DEFAULT_CLUSTER: a subparser default overwrites the root's value, so
+        # `--cluster stage` would read prod.
         default=argparse.SUPPRESS,
         help="which cluster the verdict is about (default: prod). The gate refuses rather "
         "than answering when the local kubectl serves a different one (#1663). Ignored "

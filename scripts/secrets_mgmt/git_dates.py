@@ -21,9 +21,8 @@ from lib import yaml_fast
 from secrets_mgmt.rotation_tools import RotationTools
 from secrets_mgmt.secrets_lib.registry_model import Registry
 
-# Repo-relative, for git revspecs — `git show <rev>:<path>` needs the tracked path.
-# `rotation_tools.SECRETS_FILE` is the absolute spelling of this same file, for the callers
-# that open it rather than ask git about it.
+# Repo-relative for git revspecs; `rotation_tools.SECRETS_FILE` is the absolute spelling for callers
+# that open the file.
 SECRETS_GIT_PATH = "secrets/secrets.yml"
 # The directory every SOPS file sat under before ADR 0030 renamed it to `secrets/`. The walks
 # read a file's history across the rename, so its older revisions are read at this path.
@@ -48,8 +47,6 @@ RENAMED_DIR = "secrets/"
 # `"<name>": "<name>"` as an api-key assignment and fails the commit on it. Merge a rename
 # that does not share a prefix in with `|`.
 RENAMED_FROM: dict[str, str] = {
-    # The B2 credentials Kopia held became Longhorn's. See
-    # docs/adr/0014-kopia-retired-longhorn-owns-the-b2-credentials.md.
     f"longhorn_b2_{suffix}": f"kopia_b2_{suffix}"
     for suffix in ("application_key", "bucket", "endpoint", "key_id")
 } | {
@@ -57,13 +54,9 @@ RENAMED_FROM: dict[str, str] = {
     for suffix in ("webhook",)
 }
 
-# Keys the store held once and holds no longer, dropped WITH the service or job that read
-# them rather than renamed. The pair with `RENAMED_FROM`: between them they must account for
-# every name that ever appeared in secrets.yml and is absent now, and
-# `test_departed_secrets_are_accounted_for` holds them to it — a departed name in neither
-# table is a rename nobody recorded, which is the silent clock reset `RENAMED_FROM`'s
-# comment describes. A retirement has no date to carry over, so listing it here is all it
-# needs. Names only, never values: the same rule `sops_names` keeps.
+# Keys dropped with the service that read them rather than renamed. With `RENAMED_FROM` they must
+# account for every departed name (`test_departed_secrets_are_accounted_for`); names only, never
+# values.
 RETIRED: frozenset[str] = frozenset(
     {
         # Ansible's privilege escalation read it; nothing did once the Ansible tree was deleted.
@@ -92,8 +85,6 @@ RETIRED: frozenset[str] = frozenset(
         # portainer's credentials.
         "portainer_agent_secret",
         "portainer_api_key",
-        # kopia and its monitors, which Longhorn replaced
-        # (docs/adr/0014-kopia-retired-longhorn-owns-the-b2-credentials.md).
         "kopia_password",
         "kopia_restore_drill_push_token",
         "monitor_bridge_b2_push_token",
@@ -120,8 +111,8 @@ RETIRED: frozenset[str] = frozenset(
         # crowdsec's console password and the healthchecks SMTP password.
         "crowdsec_password",
         "healthchecks_smtp_password",
-        # A duplicate of a value held elsewhere; the Django signing
-        # key is a different credential, not this one renamed.
+        # A duplicate of a value held elsewhere; the Django signing key is a different credential,
+        # not this one renamed.
         "healthchecks_smtp_user",
         # The staging-backfill ratchet's Kuma push token.
         "monitor_bridge_staging_backfill_push_token",
@@ -129,27 +120,15 @@ RETIRED: frozenset[str] = frozenset(
         "remember_logs_push_token",
         # The Cluster Prometheus gate's Kuma push token.
         "monitor_bridge_cluster_prometheus_push_token",
-        # The staging gate's restricted ssh identity. Its public halves stay in the hypervisor
-        # role's files/staging-gate-retired/ so every host withdrew the authorization.
         "staging_gate_ssh_key",
-        # The self-hosted Healthchecks' admin password and Django signing key, retired with
-        # the app.
         "healthchecks_password",
         "healthchecks_secret_key",
-        # Published as an inventory variable by the operator's 2026-10-14 ruling;
-        # inventory/group_vars/all.yml holds it (target slice R2, domain PR 3).
+        # Published as an inventory variable; inventory/group_vars/all.yml holds it.
         "domain",
-        # The push tokens of the bridge's Loki ingestion, Loki-reachable and Kuma notification
-        # checks, which M5's PR 4a deleted. M5's PR 5 retired them a week later.
         "monitor_bridge_kuma_notify_failures_push_token",
         "monitor_bridge_loki_push_token",
         "monitor_bridge_loki_reachable_push_token",
-        # The `daniel-box Disk` tile's push token, whose tile and push M3's PR 5 deleted on
-        # 2026-10-23. M3's PR 6 retired it a week later.
         "daniel_box_disk_push_token",
-        # M6's Phase A and B push tokens, whose Kuma tiles and pushes the batches' cutovers
-        # deleted between 2026-10-30 and 2026-11-01. Each batch's token PR retired them a week
-        # later. A3:
         "monitor_bridge_targets_push_token",
         "monitor_bridge_cluster_targets_push_token",
         "monitor_bridge_promtail_dropped_push_token",
@@ -226,8 +205,6 @@ RETIRED: frozenset[str] = frozenset(
         "prometheus_kuma_api_key",
         "uptime_kuma_password",
         "uptime_kuma_username",
-        # B9: the six per-host AIDE and rkhunter push tokens, retired after Cutover-2 stopped the
-        # push.
         "aide_daniel_box_push_token",
         "aide_daniel_pi_push_token",
         "aide_daniel_server_push_token",
@@ -257,8 +234,6 @@ RETIRED: frozenset[str] = frozenset(
         "monitor_bridge_wan_reachable_push_token",
         # R4: its only reader was the render_records role, since deleted.
         "render_records_push_token",
-        # Flux's github-status Provider moved to the GitHub App, and the
-        # operator revoked this fine-grained token and unset the key.
         "flux_github_status_token",
         # The B2 bucket name, which the BackupTarget renders from inventory.
         "longhorn_b2_bucket",
@@ -409,18 +384,17 @@ def _rotation_walk(
             if name in found:
                 continue
             if reencrypt and name in current:
-                # Every shared key changed here because the whole file was re-encrypted,
-                # not because this one rotated. Leave it undated and let the walk carry on
-                # to the (pre-re-encrypt) value in `current`, so an earlier real rotation
-                # still gets found on a later iteration.
+                # Every shared key changed here because the whole file was re-encrypted, not because
+                # this one rotated; leave it undated and keep walking so an earlier real rotation is
+                # still found.
                 continue
             if rotation_evidence(name, value, current, renamed_from):
                 found[name] = (newer_rev, newer_day)
         if tracked <= set(found):
             break
         newer, newer_rev, newer_day = current, rev, day
-    # Whatever never changed existed unaltered back to the oldest revision, so that
-    # revision is the best evidence of when its value was set.
+    # Whatever never changed existed back to the oldest revision, the best evidence of when its
+    # value was set.
     for name in newer:
         found.setdefault(name, (newer_rev, newer_day))
     return found

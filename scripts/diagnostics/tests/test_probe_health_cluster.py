@@ -23,8 +23,6 @@ from lib.exit_codes import PROBE_NOT_APPLICABLE, PROBE_UNREADABLE
 from diagnostics.probe_lib import health, health_alerts
 from _probe_health_fixtures import current_checkout
 
-# A Prometheus with no series at all, so these cases read the rollout verdict alone and
-# never reach the network. The alert plane's own cases are in test_probe_health_alerts.py.
 _QUIET = health_alerts.PromTools(query=lambda promql: [], sleep=lambda s: None)
 
 

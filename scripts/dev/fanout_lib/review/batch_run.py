@@ -37,12 +37,11 @@ from dev.fanout_lib.review.review_record import Phase, Record
 from dev.fanout_lib.sizing import REVIEWER
 from dev.fanout_lib.target import Target
 
-# The checkout this module was loaded from: the batch worktree for this repo, the batch's
-# `.fanout/server` snapshot for another repo. Both are trees the implementer can write.
+# The checkout this module was loaded from; both the worktree and the snapshot are trees the
+# implementer can write.
 SOURCE_ROOT = Path(__file__).resolve().parents[4]
 HEADLESS_PROMPT_FILE = SOURCE_ROOT / SYSTEM_PROMPT_FILE
-# Names the pipeline's own copy of `fanout-stop.py`. The worktree's copy, which this repo's
-# `.claude/settings.json` registers too, stands down while the file exists, so one Stop spends
+# The worktree's own copy of `fanout-stop.py` stands down while this file exists, so one Stop spends
 # the block cap once. `.claude/hooks/fanout-stop.py` mirrors the path.
 OWN_COPY = Path(".fanout") / "stop-hook"
 STATE_DIR = Path.home() / ".local" / "state" / "fanout-review"
@@ -90,20 +89,16 @@ class BatchRun:
         self.state_dir = state_dir
         self.base_check = base_check
         self.sleep = sleep
-        # Read at start for every reviewer: the skill lives outside the worktree, but one
-        # read keeps every phase on the same text.
         self.anti_patterns = anti_patterns()
         self.record = Record(batch)
         self.session = ""
-        # The implementer session's `total_cost_usd` so far: a resumed session reports its
-        # whole-session total, so each resumed phase records only the increase.
+        # A resumed session reports its whole-session total, so each resumed phase records only the
+        # increase.
         self.session_cost = 0.0
-        # Read now, before the implementer runs. A server unit imports this module from the
-        # batch worktree, which that agent can write, so a file read at review time would
-        # take whatever the implementer left there. The headless prompt and the Stop hook
-        # are held the same way for every phase the implementer's session resumes into: each
-        # phase gets the prompt as text and runs the hook from `hook_root`,
-        # which `_snapshot_hook` rewrites from these bytes before every call.
+        # Read before the implementer runs: a server unit imports this module from the batch
+        # worktree, which that agent can write. The headless prompt and Stop hook are held the same
+        # way; each phase runs the hook from `hook_root`, rewritten from these bytes before every
+        # call.
         self.review_prompt = system_prompt()
         self.headless_prompt = HEADLESS_PROMPT_FILE.read_text()
         self.hooks = read_hooks(SOURCE_ROOT)
@@ -117,7 +112,7 @@ class BatchRun:
         self.project_claude_md = (
             (SOURCE_ROOT / "CLAUDE.md").read_text() if target.is_server else ""
         )
-        # A held phase loads no `.claude/rules/`, so it gets their text too (G5 PR 0).
+        # A held phase loads no `.claude/rules/`, so it gets their text.
         self.rules = read_rules(SOURCE_ROOT) if target.is_server else {}
         # The merge base the review starts from; it fixes the range that selects the rules.
         self.range_base = ""

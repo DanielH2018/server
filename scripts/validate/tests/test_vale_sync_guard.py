@@ -34,8 +34,8 @@ from lib.repo_paths import REPO
 GUARD = REPO / "scripts" / "validate" / "vale.sh"
 PREK_TOML = REPO / "prek.toml"
 
-# The pre-fix hook entry, kept verbatim as the rejecting input. It is the thing the lock
-# replaced, so it is the only honest proof the harness can see the race at all.
+# The pre-fix hook entry, kept verbatim as the rejecting input: the only proof the harness can see
+# the race.
 UNLOCKED_GUARD = """#!/usr/bin/env bash
 set -euo pipefail
 repo="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
@@ -44,8 +44,7 @@ cd "$repo"
 exec vale "$@"
 """
 
-# Sleeps long enough that ten processes started back to back overlap if nothing serialises
-# them, and short enough to keep the suite fast. The unlocked variant races on every run.
+# Sleeps long enough that ten processes started back to back overlap if nothing serialises them.
 FAKE_VALE = """#!/usr/bin/env bash
 if [ "${1:-}" = "sync" ]; then
   printf 'sync-start %s\\n' "$(date +%s%N)" >>"$VALE_LOG"

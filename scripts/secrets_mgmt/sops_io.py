@@ -13,9 +13,7 @@ from collections.abc import Callable
 
 from lib.repo_paths import REPO as _REPO_PATH
 
-# `str`, because every consumer builds paths with os.path.join. lib.repo_paths.REPO is a Path;
-# this module is the last of the twenty call sites that module's docstring describes, which
-# re-derived `parents[2]` by hand under three different names.
+# `str`, because every consumer builds paths with os.path.join.
 REPO = str(_REPO_PATH)
 SECRETS_FILE = os.path.join(REPO, "secrets", "secrets.yml")
 

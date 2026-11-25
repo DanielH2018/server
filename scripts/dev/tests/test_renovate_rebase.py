@@ -23,9 +23,6 @@ from dev.renovate_rebase import (
 
 BODY = f"This PR contains the following updates:\n\n---\n\n{UNTICKED}\n\nSome text\n"
 
-# The shapes `gh pr view --json statusCheckRollup` really returns, copied off a soaking
-# PR and a PR whose soak is over. A CI check is a `CheckRun` with `name`/`conclusion`;
-# the soak is a `StatusContext` with `context`/`state`.
 CI_RUN = {
     "__typename": "CheckRun",
     "name": "pytest (shard 1)",

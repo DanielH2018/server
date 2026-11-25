@@ -35,20 +35,17 @@ from lib.repo_paths import REPO
 
 SCRIPTS = REPO / "scripts"
 
-# Every documented facade -> leaf split under scripts/, as the edge it puts in the graph. This
-# is the NON-VACUITY ANCHOR: the direction rule below iterates these pairs, so a rename or a
-# move that emptied the census would leave `all()` over nothing and pass. Requiring each edge to
-# be PRESENT in the live graph makes that failure name the pair that went missing instead.
+# Non-vacuity anchor: the direction rule iterates these pairs, so a rename that emptied the census
+# would pass `all()` over nothing.
 FACADE_EDGES = frozenset(
     {
-        # scripts/secrets_mgmt/: `secret_rotation.py` is the entry point; the other four are its
-        # leaves. rotation_tools.py's docstring is the one that spells the rule out.
+        # `secret_rotation.py` is the entry point; the other four are its leaves.
         ("secrets_mgmt.secret_rotation", "secrets_mgmt.consumers"),
         ("secrets_mgmt.secret_rotation", "secrets_mgmt.git_dates"),
         ("secrets_mgmt.secret_rotation", "secrets_mgmt.rotation_tools"),
         ("secrets_mgmt.secret_rotation", "secrets_mgmt.secrets_lib.secret_registry"),
-        # scripts/docs/reference/scripts.py renders the page; the census was split into lib/
-        # so the `--help` test could reach it without importing the generator.
+        # The census was split into lib/ so the `--help` test could reach it without importing the
+        # generator.
         ("docs.reference.scripts", "lib.script_classify"),
         # scripts/validate/render_lib/k8s.py reads the claim names through lib/k8s_yaml.py.
         ("validate.render_lib.k8s", "lib.k8s_yaml"),
@@ -56,8 +53,7 @@ FACADE_EDGES = frozenset(
         ("validate.render_lib.k8s", "validate.validate_lib.k8s_net_rules"),
         ("validate.render_lib.k8s", "validate.validate_lib.k8s_schema"),
         ("validate.render_lib.shell", "validate.validate_lib.shell_lint"),
-        # scripts/docs/service_catalog.py over the four catalogue modules; catalog_model is the
-        # one leaf with no first-party dependency beyond lib.repo_paths.
+        # catalog_model is the one leaf with no first-party dependency beyond lib.repo_paths.
         ("docs.service_catalog", "docs.catalog_lib.catalog_backup"),
         ("docs.service_catalog", "docs.catalog_lib.catalog_facts"),
         ("docs.service_catalog", "docs.catalog_lib.catalog_model"),
@@ -85,16 +81,13 @@ FACADE_EDGES = frozenset(
     }
 )
 
-# The four back-edges `_cycles` finds in the tree, each one a pair of modules that reach each
-# other by a DEFERRED import inside a function. An entry is one back-edge, NOT a complete cycle
-# census -- `_cycles` says why, and the name is kept only because the entries here happen to be
-# two-module loops, where the two coincide. They are listed so a FIFTH cannot appear unnoticed;
-# nothing here says they are good, and shrinking this set is a fix.
+# Each entry is one back-edge of a pair that reach each other by a DEFERRED import inside a
+# function, not a complete cycle census. Listed so a fifth cannot appear unnoticed; shrinking the
+# set is a fix.
 ALLOWED_CYCLES = frozenset(
     {
-        # longhorn.py:16 states it: "b2_ledger imports this module back by module object, so no
-        # helper module may import it." Both edges are module-level and survive only because
-        # each side reaches the other qualified.
+        # longhorn.py states it: b2_ledger imports this module back by module object, so no helper
+        # module may import it.
         frozenset(
             {"diagnostics.probe_lib.b2_ledger", "diagnostics.probe_lib.longhorn"}
         ),
@@ -117,8 +110,8 @@ ALLOWED_CYCLES = frozenset(
     }
 )
 
-# Named members the census must contain. A count alone moves with the tree; these say which
-# module went missing when the walk stops finding things.
+# Named members, so a stopped walk names the module that went missing; a count alone moves with the
+# tree.
 ANCHOR_MODULES = frozenset(
     {
         "dev.findings",
@@ -191,8 +184,8 @@ def _first_party_imports(
             if hit := resolve(node.module, importer, known):
                 found.add(hit)
                 continue
-            # `from diagnostics.probe_lib import core` — the module is the PACKAGE and the
-            # imported name is the module. Without this arm every such import reads as no edge.
+            # `from diagnostics.probe_lib import core`: the module is the PACKAGE and the imported
+            # name is the module; without this arm such an import reads as no edge.
             for alias in node.names:
                 if hit := resolve(f"{node.module}.{alias.name}", importer, known):
                     found.add(hit)
@@ -372,10 +365,8 @@ def test_the_cycle_detector_clears_a_diamond():
 
 # --- Package APIs -----------------------------------------------------------------------------
 
-# A package with one public module: a production module outside the package may import that
-# module and no other under it, so the rest of the package can change without its callers.
-# Tests may reach inside. Each entry names the outside importers the rule must find, so a move
-# that hid them from the census fails here rather than passing over nothing.
+# A production module outside the package may import only its one public module; tests may reach
+# inside. Each entry names the outside importers the rule must find.
 PACKAGE_APIS = {
     "dev.fanout_lib.review": (
         "dev.fanout_lib.review.api",

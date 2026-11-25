@@ -26,10 +26,6 @@ RESET = "sha256:" + "e" * 64
 # The move step's outputs: `moved`, and the UTC time stamped just before the move.
 MOVED = r"moved=true\nmoved_at=\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ\n"
 
-# Each fake logs `<tool> <argv>` and fails when its argv contains FAKE_<TOOL>_FAIL, for only the
-# first FAKE_<TOOL>_FAIL_TIMES such calls when that is set, printing an error body to stdout as
-# `gh api` does. `gh api` prints FAKE_GREEN, the head SHAs of CI's green push runs on master,
-# newest first. `docker` appends its stdin to `$CALLS.stdin`.
 _FAKE = """#!/usr/bin/env bash
 [ "{tool}" = docker ] && cat >> "$CALLS.stdin"
 echo "{tool} $*" >> "$CALLS"
@@ -50,10 +46,6 @@ def _fake(tool: str) -> str:
     return _FAKE.format(tool=tool, upper=tool.upper())
 
 
-# GHCR for the move step: a pull token, then `prod`'s HEAD, which answers FAKE_PROD_STATUS
-# (200 by default) with FAKE_PROD_DIGEST as its Docker-Content-Digest, or with
-# FAKE_PROD_DIGEST_LATER from the second read on when that is set. `last-good`'s HEAD answers
-# FAKE_LAST_GOOD_STATUS (200 by default) with FAKE_LAST_GOOD_DIGEST, or RESET_DIGEST.
 FAKE_CURL = r"""#!/usr/bin/env bash
 cat > /dev/null
 out= url=
@@ -234,9 +226,6 @@ def test_a_failure_with_no_last_good_digest_holds_and_does_not_reset(tmp_path, j
     assert "no last-good digest" in result.stdout
 
 
-# -- settle: a hold without a reset (H1.1b) -------------------------------------------------
-
-
 @pytest.mark.parametrize(
     ("verdict", "names"),
     [("failed", "longhorn"), ("", "")],
@@ -271,8 +260,6 @@ def test_a_failed_held_tag_exits_non_zero_with_the_hold_in_place(tmp_path, jobs)
     assert calls[0] == f"gh variable set DEPLOY_HOLD --body {T} -R DanielH2018/server"
     assert "tagging sha-" in result.stdout
 
-
-# -- settle: the stateful hold (D5.2b1) -----------------------------------------------------
 
 HELD = f"flux tag artifact {REPO_URL}@{DIGEST} --tag held"
 

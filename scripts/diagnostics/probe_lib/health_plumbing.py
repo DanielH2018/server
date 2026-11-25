@@ -48,9 +48,8 @@ from lib.kubectl import cluster_for_host, cluster_of, node_names
 
 # Answered by CoreDNS's own `kubernetes` plugin, so it proves the cluster zone loads.
 CLUSTER_NAME = "kubernetes.default.svc.cluster.local"
-# Answered by Pi-hole's FTL alone and NXDOMAIN everywhere else, so an answer proves CoreDNS
-# forwards to Pi-hole rather than to any upstream. It is the name the deleted host task
-# resolved (`k3s_coredns_probe_name` in `setup/k3s`'s defaults).
+# Answered by Pi-hole's FTL alone and NXDOMAIN elsewhere, so an answer proves CoreDNS forwards to
+# Pi-hole.
 UPSTREAM_NAME = "pi.hole"
 # dig bounds itself at 2 tries of 2s; the subprocess timeout only catches a hung binary.
 DIG_FLAGS = ("+short", "+time=2", "+tries=2")
@@ -58,15 +57,9 @@ DIG_TIMEOUT_S = 15
 # dig's exit code for "no reply from the server", which is CoreDNS failing, not dig.
 DIG_NO_REPLY = 9
 
-# How long a Corefile write takes to reach the running CoreDNS: kubelet's ConfigMap volume sync
-# (up to ~60s) plus the `reload` plugin's 30s interval and 15s jitter. A Corefile-only change
-# rolls no pod, so the rollout verdict passes at once; a dig inside this window can still be
-# answered by the PREVIOUS Corefile, and read green for a forward the new one broke.
-# The alert plane's waits clamp to `health_alerts.PROCESS_DEADLINE`, so this wait shortens them
-# rather than outlasting `detach_notify.PROBE_TIMEOUT_S`; failing digs skip the alert plane.
+# A Corefile-only change rolls no pod, so a dig inside kubelet's sync plus `reload` (up to ~60s +
+# 30s + 15s jitter) can be answered by the previous Corefile and read green for a broken forward.
 COREFILE_SETTLE_S = 120
-# After the settle wait, a name that gets no answer is asked again this often, 5s apart, as the
-# deleted host task did, so one dropped packet is not a red verdict.
 DIG_ATTEMPTS = 3
 DIG_RETRY_S = 5
 

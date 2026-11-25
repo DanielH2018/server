@@ -36,8 +36,6 @@ from test_ui_smoke import WRAPPER, McpClient
 pytestmark = pytest.mark.ui
 
 
-# Duplicated rather than shared: a fixture does not cross modules, and a `conftest.py` here
-# would apply to all 23 test modules in this directory to serve two of them.
 @pytest.fixture(scope="module")
 def domain() -> str:
     from diagnostics.probe_lib import core
@@ -45,17 +43,15 @@ def domain() -> str:
     return core.domain()
 
 
-# Hardcoded for the reason `test_ui_smoke.SERVICES` is: deriving it from files/dashboards/
-# would enlist every new board into a suite CI never runs. One per rendering shape, and each
-# `min_headers` is a count observed live — a deliberate dashboard change updates the number.
-# (uid, minimum rendered panel headers)
+# Hardcoded for the reason `test_ui_smoke.SERVICES` is: deriving would enlist every new board into a
+# suite CI never runs.
 GRAFANA_DASHBOARDS = [
     # The first four were observed live.
     ("longhorn-storage", 13),
     ("claude-code-otel", 25),
     ("ddmlqvk12uozka", 18),  # traefik-custom
-    # 4 panels, every one a `row`: it mounts fully and draws no panel header until a row is
-    # expanded, so 0 here means "assert on rows instead". See grafana_panel_report.py.
+    # 4 panels, every one a `row`: it draws no panel header until a row is expanded, so 0 means
+    # assert on rows instead.
     ("6L2GdB47z", 0),  # crowdsec-details-per-machine
     # The shape the four above do not have: no `row` at all, so
     # every panel must draw on load and `min_headers` is the board's whole panel count.
@@ -72,13 +68,10 @@ GRAFANA_DASHBOARDS = [
     ("exportarr-arr-stack", 15),
 ]
 
-# A dashboard that mounts draws its panels within ~2.2s, and 15 of 19 do so on the first
-# sample. Samples beyond that never changed a verdict, so the budget is for a slow cycle,
-# not for a settle that keeps moving.
 _PANEL_SAMPLES = 6
 _PANEL_SAMPLE_INTERVAL = 1.5
-# The un-mounted signature is a client-side race, not a slow load — it never resolves by
-# waiting (16s of samples, unchanged), only by navigating again.
+# The un-mounted signature is a client-side race that never resolves by waiting, only by navigating
+# again.
 _MOUNT_ATTEMPTS = 3
 
 _PANEL_STATE_JS = """() => {
@@ -121,8 +114,8 @@ class GrafanaPage:
         """
         seen = "nothing"
         for _ in range(_MOUNT_ATTEMPTS):
-            # Via about:blank, for the reason open_dashboard does it, and because a stale
-            # coalesced connection is what produces the 421 the fetches below retry past.
+            # Via about:blank: a stale coalesced connection produces the 421 the fetches below retry
+            # past.
             self.client.navigate("about:blank")
             self.client.navigate(self.base + "/")
             for _ in range(_PANEL_SAMPLES):
@@ -143,11 +136,8 @@ class GrafanaPage:
             f"`uv run python scripts/diagnostics/ui_login.py`."
         )
 
-    # Every same-origin fetch this tier makes goes through this: `ui_mcp.sh` pins the whole
-    # `*.local.<domain>` space to one ingress VIP behind one certificate, so Chromium
-    # coalesces HTTP/2 connections across those hostnames and Traefik answers a request that
-    # arrives on another host's connection with 421 Misdirected Request. The browser drops
-    # the offending connection, so a retry lands on a fresh one.
+    # `ui_mcp.sh` pins every `*.local.<domain>` to one VIP and certificate, so Chromium coalesces
+    # HTTP/2 connections and Traefik answers 421; the browser drops it, so a retry works.
     _FETCH = """async (url, opt) => {
       for (let i = 0; i < 5; i++) {
         const r = await fetch(url, Object.assign({cache: 'no-store'}, opt));
@@ -178,9 +168,8 @@ class GrafanaPage:
         """
         self._settle_on_grafana()
         self.client.navigate(self.base + "/logout")
-        # A full navigation, not a fetch: Grafana answers /login/generic_oauth with a
-        # 302 to Authelia's authorize endpoint, and only the browser can carry the
-        # Authelia cookie through that chain and back to the callback.
+        # A full navigation, not a fetch: only the browser can carry the Authelia cookie through the
+        # 302 chain.
         self.client.navigate(self.base + "/login/generic_oauth")
         self._settle_on_grafana()
         who = self._signed_in_as()
@@ -205,10 +194,8 @@ class GrafanaPage:
             for _ in range(_PANEL_SAMPLES):
                 time.sleep(_PANEL_SAMPLE_INTERVAL)
                 last = classify(self.evaluate(_PANEL_STATE_JS), min_headers=min_headers)
-                # Only a pass ends the sampling. A page part-way through loading looks
-                # exactly like a broken one — panels missing, a query still in flight — so
-                # returning the first non-pass would report whatever the load happened to
-                # look like at 1.5s. Keep sampling and let the settled state be the verdict.
+                # Only a pass ends the sampling: a page part-way through loading looks like a broken
+                # one.
                 if last.ok:
                     return last
             if not last.worth_renavigating:

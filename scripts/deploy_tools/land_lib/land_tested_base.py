@@ -16,9 +16,8 @@ from lib.json_types import as_list, as_object
 from lib import host_modules  # noqa: F401
 from ci_verdict import WorkflowRun
 
-# The line `actions/checkout` logs when a pull_request run checks out `refs/pull/N/merge`:
-# GitHub names that merge commit "Merge <head> into <base>", and <base> is the master commit
-# the run tested the head against.
+# The line `actions/checkout` logs for `refs/pull/N/merge`; <base> is the master commit the run
+# tested against.
 _MERGE_REF_LINE = re.compile(r"\bMerge ([0-9a-f]{40}) into ([0-9a-f]{40})\b")
 # A job that never checked out (skipped by a path filter) has no merge line; try a few.
 _JOBS_TRIED = 3

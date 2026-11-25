@@ -23,8 +23,7 @@ from test_renovate_managers import _pin_digest_rule_for
 
 _SERVICES = "hosts/components/pi-compose/services"
 
-# Named rather than derived, so a service that loses its manager fails as a missing member
-# instead of shrinking the census.
+# Named rather than derived, so a service that loses its manager fails as a missing member.
 PI_IMAGES = {
     f"{_SERVICES}/alloy/compose.yaml.j2": {"grafana/alloy"},
     f"{_SERVICES}/autoheal/compose.yaml.j2": {"willfarrell/autoheal"},

@@ -22,10 +22,8 @@ from lib.worktrees import Worktree
 MINE = "worktree-mine"
 OTHER = "worktree-issue-1132"
 
-# `MINE` is checked out and held by a live session in every fixture here. `cmd_claim`'s
-# stale-at-birth guard reads `--worktree` before it reads any issue, so
-# without this every test below would refuse for a reason none of them is about — they are
-# all about what happens to SOMEBODY ELSE's claim.
+# MINE is held by a live session, else the stale-at-birth guard refuses every test for an unrelated
+# reason.
 MINE_TREE = Worktree(
     path="/w/mine", head="abc1234", branch=MINE, locked=True, lock_reason="held"
 )

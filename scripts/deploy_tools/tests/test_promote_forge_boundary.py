@@ -19,8 +19,6 @@ from _promote_fakes import World, digest_of
 PROMOTE = Path(promote.__file__)
 # The modules split out of promote.py, read from disk so a fourth is held to the boundary too.
 PROMOTE_LIB = sorted(PROMOTE.with_name("promote_lib").glob("*.py"))
-# The members the glob must find, so a rename or a move out of the package fails by name
-# rather than leaving the census over fewer modules.
 PROMOTE_LIB_MEMBERS = frozenset(
     {
         "wait.py",
@@ -36,9 +34,6 @@ PROMOTE_LIB_MEMBERS = frozenset(
     }
 )
 
-# The modules that read only the checkout or the handoff directory, or compute from what they
-# are passed, so they have no forge call to route and need not import the adapter. The
-# forbidden imports still hold for them.
 CHECKOUT_ONLY = frozenset(
     {
         "controller_rollout.py",
@@ -50,8 +45,7 @@ CHECKOUT_ONLY = frozenset(
         "verify_handoff.py",
     }
 )
-# The modules that would let promote.py make a forge call without the adapter. `subprocess`
-# and `pty` are here because `gh` and `cosign` are forge calls too.
+# `subprocess` and `pty` are here because `gh` and `cosign` are forge calls too.
 FORBIDDEN = (
     "urllib",
     "http",
@@ -63,9 +57,8 @@ FORBIDDEN = (
     "pty",
 )
 
-# The `lib` modules promote.py may import. An allowlist rather than a denylist, because several
-# `lib` modules start subprocesses of their own (`lib.gh` runs `gh`, `lib.kubectl` and `lib.b2`
-# reach other services), and a new one would pass a denylist unseen. `lib.git` runs only git.
+# An allowlist, not a denylist: several `lib` modules start their own subprocesses, and a new one
+# would pass a denylist unseen.
 ALLOWED_LIB = frozenset(
     {
         "lib.cli_help",
@@ -80,9 +73,6 @@ ALLOWED_LIB = frozenset(
     }
 )
 
-# No `deployer_lib` module: `ci_verdict` moved to `hosts/lib/` in H7.2e, and the rest of the retired
-# deployer read GitHub's check-runs API through `urlopen` (`deploy_toolbox.fetch_ci_verdict`) or
-# posted to webhooks (`deploy_alerts`).
 ALLOWED_DEPLOYER_LIB: frozenset[str] = frozenset()
 
 # Each package whose imports are held to an allowlist, by the package name.
@@ -93,8 +83,6 @@ PACKAGES = {*ALLOWLISTS, "deploy_tools"}
 # The `os` functions that start a process, which promote.py's `import os` would reach.
 _OS_EXEC = ("system", "popen", "exec", "spawn", "posix_spawn", "fork")
 
-# The adapter itself: the one member the census must find, so a rename that leaves promote.py
-# importing nothing cannot pass as "imports nothing forbidden".
 ADAPTER = "deploy_tools.forge"
 
 

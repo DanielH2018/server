@@ -62,8 +62,6 @@ def test_parse_reading_never_puts_the_read_output_in_its_message():
 
 
 def test_parse_reading_is_flagged_on_a_short_or_non_numeric_read():
-    # Both older shapes are parse errors, not a reading with a half guessed at: the
-    # three-line fleet-only read, and the four-line read that carried the key but no plane.
     with pytest.raises(ValueError, match=r"expected 6 lines from the host read"):
         parse_reading("daniel-box", FLEET_ONLY)
     with pytest.raises(ValueError, match=r"expected 6 lines from the host read"):

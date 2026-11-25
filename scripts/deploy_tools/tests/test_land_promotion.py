@@ -42,7 +42,6 @@ def _fakes(**kwargs: object) -> Fakes:
 def test_a_pr_whose_only_tag_is_flux_owned_never_reaches_deploy_sh(land_run):
     rc, out, _, calls, logline = land_run([], _fakes())
     assert rc == 0 and "VERDICT: settled" in out
-    # The path-derived tag is not handed over: the changed set names it (D6.12).
     assert [c[1][:2] for c in calls if c[0] == "land_wait"] == [(MERGE_SHA, [])]
     # The gate runs on the changed set's tag, from the merge commit's snapshot.
     assert [c[1] for c in calls if c[0] == "gate"] == [(["bento-pdf"],)]

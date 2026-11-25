@@ -40,11 +40,9 @@ PI_DOCKER_DEB_PACKAGES = frozenset(
 PI_DOCKER_COMPONENT = "hosts/components/pi-docker/component.yml"
 PINS_TEMPLATE = "hosts/components/pi-docker/templates/docker-engine.pins.j2"
 
-# The apt version strings the index serves
-# (https://download.docker.com/linux/ubuntu/dists/noble/stable/binary-arm64/Packages):
 # containerd.io carries bare `<version>-<rev>` rows beside the suffixed ones, and docker-ce a `5:`
-# epoch. A version extractVersion cannot match is dropped from the version space, so a regex
-# anchored on `~ubuntu` would silently narrow it.
+# epoch; a version extractVersion cannot match is dropped, so a regex anchored on `~ubuntu`
+# would narrow it.
 _APT_VERSION_FIXTURES = [
     ("5:29.8.1-1~ubuntu.24.04~noble", "29.8.1"),
     ("2.3.5-1~ubuntu.24.04~noble", "2.3.5"),
@@ -53,9 +51,8 @@ _APT_VERSION_FIXTURES = [
     ("0.37.1-1~ubuntu.24.04~noble", "0.37.1"),
 ]
 
-# Shapes extractVersion must NOT turn into a version. A bare upstream tag is the one that
-# matters: it is what a github-releases datasource would hand over, and it is exactly the
-# version apt has no package for.
+# A bare upstream tag is the shape that matters: a github-releases datasource would hand it over,
+# and apt has no package for it.
 _NON_APT_VERSION_FIXTURES = ["2.4.0", "v2.4.0", "29.8.1"]
 
 

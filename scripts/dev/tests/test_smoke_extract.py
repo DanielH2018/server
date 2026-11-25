@@ -43,11 +43,8 @@ def test_dedupes():
 
 
 def test_config_required_images_are_still_emitted():
-    # These four are the shapes a bare boot cannot run: two hard-exit without their config, one's
-    # baked healthcheck never reaches "healthy" in the poll window, one's Cmd is a CLI binary
-    # that prints help and exits 1. The workflow's fatal checks do not execute the image, and
-    # excluding them would also exclude them from the `docker pull`, leaving those refs
-    # verified by nothing at all.
+    # A bare boot cannot run these shapes; excluding them would also exclude them from the `docker
+    # pull`, leaving the refs verified by nothing.
     diff = (
         "+    image: authelia/authelia:4.39.20\n"
         "+    image: couchdb:3.5.2@sha256:abc123\n"

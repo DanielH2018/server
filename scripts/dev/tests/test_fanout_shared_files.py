@@ -125,8 +125,6 @@ def test_launch_proceeds_when_the_shared_script_is_grouped_into_one_batch(tmp_pa
 
 
 def test_allow_shared_file_excuses_the_named_file_only(tmp_path, capsys, monkeypatch):
-    # A doc path is context for both batches; the override names it and nothing else, so the
-    # script collision beside it still refuses.
     monkeypatch.setattr("sys.argv", ["fanout.py"])
     doc = "docs/claude-tooling.md"
     issues = [

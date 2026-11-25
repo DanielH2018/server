@@ -70,13 +70,12 @@ SECRET = "authelia_storage"
 REGISTRY = SECRETS / "secret_rotation.yml"
 PVC = ("homelab", "authelia-config")
 WORKLOAD = ("homelab", "authelia")
-# Two hours: long enough to take the snapshot and read the runbook, short enough that the
-# nightly recurring snapshot never satisfies it by accident.
+# Long enough to take the snapshot and read the runbook, short enough that the nightly recurring
+# snapshot never satisfies it by accident.
 SNAPSHOT_MAX_AGE_S = 2 * 3600
 # Set in every shell the Claude Code Bash tool runs.
 CLAUDE_SESSION_VAR = "CLAUDECODE"
-# The server node's kubeconfig. Only daniel-box has one, and the runbook's `sudo k3s kubectl
-# exec` reads it.
+# Only daniel-box has the server kubeconfig.
 SERVER_KUBECONFIG = K3S_KUBECONFIG
 
 SNAPSHOTS_ARGS = ("-n", LONGHORN_NS, "get", "snapshots.longhorn.io", "-o", "json")

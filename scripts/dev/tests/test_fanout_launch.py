@@ -56,9 +56,7 @@ ISSUES = [
 
 
 def test_argv_picks_ssh_for_a_remote_host_and_bash_for_the_local_one():
-    # Assert on the pure argv builder rather than driving run_command through a real ssh
-    # call: leakguard shims `ssh` on PATH and fails the test at teardown the moment it's
-    # invoked — stubbed or not — for having "reached outside the test process".
+    # Assert on the argv builder: leakguard fails the test if `ssh` is invoked, stubbed or not.
     from dev.fanout_lib.transport import SSH_OPTS, _argv
 
     assert _argv("daniel-server", "echo hi", "daniel-box") == [
@@ -144,8 +142,6 @@ def test_an_existing_worktree_or_branch_is_refused_without_removing_anything():
         launch(tools, "daniel-server", "b", "BRIEF", issues=[1])
     message = str(excinfo.value)
     assert "worktree-fanout-b" in message and "clean <run-id>" in message
-    # The one call is the refused launch itself: no cleanup, so the earlier batch's tree
-    # and branch are still there to inspect or land.
     assert len(run.calls) == 1
     assert not any("worktree remove" in c[1] for c in run.calls)
 
@@ -159,8 +155,6 @@ def test_the_worktree_command_fetches_before_adding_from_origin_master():
     # The lock follows the add so a merged-worktree prune never sees the tree unlocked.
     assert cmd.index("worktree add") < cmd.index("worktree lock")
     assert f"worktree lock --reason fanout-b {as_operator(worktree_path('b'))}" in cmd
-    # Each step is sentinel-wrapped so a failure can be attributed to it (launch.py's
-    # `_step`); the lock step, being last, ends the whole command.
     assert cmd.rstrip().endswith('fanout-step: worktree lock" >&2; exit 1; }')
 
 
@@ -310,12 +304,9 @@ def test_a_failed_worktree_add_removes_the_half_made_tree_and_launches_nothing()
     )
     with pytest.raises(LaunchError, match="branch exists"):
         launch(tools, "daniel-server", "b", "BRIEF", issues=[1])
-    # Two calls total: the failed launch attempt, then cleanup. `&&` between every step of
-    # `launch_command` means systemd-run structurally cannot have run — the fake has no way
-    # to observe that, since it answers the whole chain with one canned result.
     assert len(run.calls) == 2
-    # The cleanup command chains removal and branch deletion with `&&`, not `;` — a bare
-    # `;` would force-delete the branch even when the tree was never created.
+    # Chained with `&&`: a bare `;` would force-delete the branch even when the tree was never
+    # created.
     assert run.calls[1][1] == remove_worktree_command("b")
 
 
@@ -336,8 +327,6 @@ def test_a_failed_cleanup_is_folded_into_the_launch_error():
 
 
 def test_a_failed_fetch_raises_with_no_cleanup():
-    # A fetch failure created nothing — cleanup would only fail its own `worktree remove`
-    # with a confusing "not a working tree", so it's skipped.
     tools, run = fake_tools()
     run.answers_by_call = [
         subprocess.CompletedProcess(
@@ -371,9 +360,6 @@ def test_a_failed_worktree_lock_still_cleans_up():
 
 
 def test_a_launch_timeout_still_cleans_up_and_raises():
-    # A timeout carries no stderr to attribute to a step, but systemd-run starts the unit
-    # and returns immediately, so a 120s hang is a stuck `git fetch`/`worktree add` in
-    # practice — treated the same as a worktree-add failure, cleanup included.
     tools, run = fake_tools({"daniel-server": ok("")})
     run.answers_by_call = [subprocess.TimeoutExpired(cmd="git", timeout=120.0)]
     with pytest.raises(LaunchError, match="timed out"):
@@ -382,9 +368,6 @@ def test_a_launch_timeout_still_cleans_up_and_raises():
 
 
 def test_a_failed_brief_write_raises_and_skips_systemd_run():
-    # A `cat > path` failure at the redirect never prints "cat:" — bash reports its own
-    # "Permission denied" — which is exactly why attribution reads the sentinel, not the
-    # tool's own stderr text.
     tools, run = fake_tools()
     run.answers_by_call = [
         subprocess.CompletedProcess(
@@ -400,8 +383,6 @@ def test_a_failed_brief_write_raises_and_skips_systemd_run():
     with pytest.raises(LaunchError, match="brief write") as excinfo:
         launch(tools, "daniel-server", "b", "BRIEF", issues=[1])
     assert "Permission denied" in str(excinfo.value)
-    # One call: the worktree add+lock already succeeded (the chain reached `cat`), so it
-    # stays for inspection — no cleanup call.
     assert len(run.calls) == 1
 
 
@@ -428,8 +409,6 @@ def test_a_failed_systemd_run_raises_with_its_stderr():
 
 
 def test_an_unattributable_failure_reports_launch_command_failed_with_no_cleanup():
-    # No `fanout-step:` sentinel at all — the ssh connection itself failed before the
-    # remote chain ever ran, so there's no step to attribute and nothing to clean up.
     tools, run = fake_tools()
     run.answers_by_call = [
         subprocess.CompletedProcess(

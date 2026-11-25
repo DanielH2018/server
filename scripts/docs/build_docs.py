@@ -57,9 +57,7 @@ from lib.exit_codes import (
 
 from lib.repo_paths import REPO
 
-# (argv, output path relative to the repo root). Order is not significant -- no generator
-# reads another's output. Every output must sit under docs/, which is what the hand-edit
-# hook protects; test_build_docs.py asserts that.
+# Order is not significant. Every output must sit under docs/, which the hand-edit hook protects.
 GENERATORS: list[tuple[list[str], str]] = [
     (
         [
@@ -111,9 +109,6 @@ GENERATORS: list[tuple[list[str], str]] = [
         ["scripts/docs/reference/size.py", "--out", "docs/reference/size.md"],
         "docs/reference/size.md",
     ),
-    # A directory, not a page: the fact tables the hand-written pages transclude. Listed
-    # after the pages because nothing reads it back, and before the map only so that the
-    # markdown outputs sit together in the cron log.
     (
         [
             "scripts/docs/gen_doc_fragments.py",
@@ -203,8 +198,8 @@ def _timeout(seconds: int):
     try:
         previous = signal.signal(signal.SIGALRM, fire)
     except ValueError:
-        # Not the main thread, where `signal.signal` refuses. A generator called from a
-        # worker gets no deadline rather than no run.
+        # `signal.signal` refuses off the main thread: a generator called from a worker gets no
+        # deadline rather than no run.
         yield
         return
     signal.alarm(seconds)
@@ -238,7 +233,6 @@ def guarded(script: str, invoke, timeout: int = GENERATOR_TIMEOUT) -> int:
             return int(invoke() or 0)
     except SystemExit as exc:
         # `sys.exit("message")` is a documented idiom, so the code is not always an int.
-        # `int()` on a string raises, out of the handler that exists to contain failures.
         if exc.code is None:
             return 0
         return exc.code if isinstance(exc.code, int) else 1
@@ -274,8 +268,6 @@ def run_generators() -> list[str]:
         if code != 0:
             failed.append(script)
             print(f"build_docs: {script} FAILED rc={code}", file=sys.stderr)
-    # One line for the whole pass: each generator already reports its own page, so a
-    # per-generator "ok" here only doubled the log.
     print(
         f"build_docs: {len(GENERATORS) - len(failed)}/{len(GENERATORS)} generator(s) ok"
     )
@@ -387,8 +379,7 @@ def build_site(site_dir: str, generators: str = "ok") -> bool:
     _write_build_stamp(staging, generators)
     final.mkdir(parents=True, exist_ok=True)
 
-    # Trailing slash on the source: copy the CONTENTS of staging into final, not staging
-    # itself as a subdirectory.
+    # Trailing slash on the source: copy the CONTENTS of staging, not staging as a subdirectory.
     synced = subprocess.run(
         [
             "rsync",
@@ -455,11 +446,8 @@ def main(argv: list[str] | None = None) -> int:
             f"build_docs: {len(failed)} generator(s) failed: {', '.join(failed)}",
             file=sys.stderr,
         )
-    # Distinct codes, because the two failures need opposite responses and the caller cannot
-    # tell them apart from rc 1. A generator failure means the PAGES are stale while the site
-    # still builds and serves -- wrong content, quietly. A site-build failure means the live
-    # tree keeps its previous contents (build_site swaps in only on success) -- right content,
-    # visibly old. Collapsing both into 1 left docs-refresh.sh unable to say which it hit.
+    # Distinct codes: a generator failure leaves PAGES stale while the site still serves; a
+    # site-build failure keeps the previous tree. The caller needs to tell them apart.
     if failed:
         return BUILD_DOCS_GENERATOR_FAILED
     return BUILD_DOCS_OK if built else BUILD_DOCS_SITE_FAILED

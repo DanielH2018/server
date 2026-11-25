@@ -11,17 +11,11 @@ longhorn.py keeps the `b2-budget` subcommand that drives this.
 
 from lib.longhorn_lib import longhorn_backups
 
-# B2's free tier allows 2,500 Class C transactions a day. Longhorn's retention delete is the
-# thing that spends them: DeleteDeltaBlockBackup walks the volume's whole block tree with one
-# delimited ListObjects per directory (backupstore deltablock.go getBlockNamesForVolume), and it
-# runs once per deleted backup. So a shard's daily Class C cost is set by how many BLOCKS its
-# volumes hold, not by how much data changed — which is why this is worth watching as volumes
-# grow, and why the seventh cap event was not preventable by looking at bytes.
+# Retention delete spends Class C, one ListObjects per directory per deleted backup, so a shard's
+# daily cost follows its BLOCK count, not changed data.
 B2_CLASS_C_DAILY_CAP = 2500
-# Headroom for everything this model does not count: monitor-bridge's two B2 probes
-# (check_b2_reachable, and check_b2_storage's daily listing), and the per-prune extras beyond the
-# block walk — the deletion lock check, the backups/ name list, and one cfg GET per retained
-# backup.
+# Headroom for what the model does not count: monitor-bridge's two B2 probes and per-prune extras
+# beyond the block walk.
 B2_BUDGET_RESERVE = 400
 
 
@@ -74,9 +68,8 @@ def format_backup_budget(vols, shards, names=None, owners=None):
         elif shard in (None, longhorn_backups.NO_BACKUP_GROUP):
             idle.append(vol)
         else:
-            # A PVC provisioned from the `longhorn` StorageClass lands in `default` — the DAILY
-            # group — until the next deploy reconciles its label. On B2 that is a prune every
-            # night against a budget sized for one a week, so it is the loudest thing here.
+            # A PVC from the `longhorn` StorageClass lands in the DAILY group until the next deploy
+            # relabels it: a nightly prune against a weekly budget.
             daily.append(vol)
 
     rows, over = [], []

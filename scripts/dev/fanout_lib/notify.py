@@ -22,8 +22,6 @@ import subprocess
 from collections.abc import Callable, Mapping
 from pathlib import Path
 
-# Reach the sibling package and `lib` (scripts/): a directly-invoked script gets only its own
-# directory on sys.path, and pyproject's `pythonpath` is a pytest setting.
 import sys as _sys
 
 
@@ -44,12 +42,9 @@ from dev.fanout_lib.transport import merged_pr_url, this_host
 from lib.cli_help import ArgumentParser
 from lib.exit_codes import OK
 
-# Every state `parse_status` or `reconciled` gives a stopped unit that pages. `done` and
-# `landed` do not, and neither does `parked`: the sub-coordinator that owns the batch re-lands
+# `done`, `landed` and `parked` do not page: the sub-coordinator that owns a parked batch re-lands
 # it once the hold clears.
 PAGED_STATES = ("failed", NEEDS_INPUT, NO_PR, NO_VERDICT, NO_REPORT)
-# Not a batch's state: a coordinator project whose session is gone while a batch waits on it.
-# `coordinators.page_orphaned` pages it through the same unit, named for the project.
 NO_COORDINATOR = "no-coordinator"
 # Every state the polkit rule admits; a test holds the two equal.
 ALERT_STATES = (*PAGED_STATES, NO_COORDINATOR)
@@ -122,8 +117,7 @@ def status_block(batch: str, env: Mapping[str, str], fanout: Path) -> str:
     )
 
 
-# How a SIGTERM from a stop job ends the process: `claude` traps it and exits 143 (its journal
-# on daniel-box reads `status=143/n/a`), and a review unit's Python dies by the signal.
+# `claude` traps SIGTERM and exits 143; a review unit's Python dies by the signal.
 _TERM_EXITS = frozenset({("exited", "143"), ("killed", "TERM")})
 
 

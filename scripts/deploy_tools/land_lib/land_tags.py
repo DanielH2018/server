@@ -36,14 +36,10 @@ from lib.repo_paths import REPO
 from lib.role_paths import SECRETS_FILE, tag_for
 from secrets_mgmt.stale_copies import unapplied_keys
 
-# The remediation for a rotated secret. A secret's value lives in no role's template, so the
-# changed-path matching every other rule uses has nothing to match on; `plane_note` names the
-# stale keys after it when the PR's range can say which they are.
-#
-# Named for the rotation it describes, not for the file that triggers it. CodeQL classifies a
-# constant whose name reads as `SECRET` as sensitive data, so `print(plane_note(...))` was
-# reported as py/clear-text-logging-sensitive-data every time a refactor moved that line. This
-# constant is operator prose and holds no credential.
+# A rotated secret's value lives in no role's template, so changed-path matching has nothing to
+# match.
+# Named for the rotation, not `SECRET`: CodeQL flags a constant so named as sensitive data when
+# printed.
 _ROTATION_NOTE = (
     "`secrets/secrets.yml` changed, and a secret's VALUE lives in no role's template — so "
     "a rotation **maps to no deploy tag by construction**, and a consumer keeps rendering the "
@@ -53,9 +49,6 @@ _ROTATION_NOTE = (
     "command."
 )
 
-# Where a k8s consumer of a changed key gets the new value, appended to `_ROTATION_NOTE`. A
-# flux-owned role reads the value through `homelab-cluster-vars`, which only
-# `cluster_vars.py write` regenerates, and `promote` then applies it.
 _K8S_READERS_NOTE = (
     "A k8s consumer reads a changed key through `homelab-cluster-vars`: regenerate it with "
     "`cluster_vars.py write` (operator-only), and `promote` applies it with the next bundle."
@@ -139,14 +132,13 @@ def doc_paths(paths) -> set[str]:
     return {p for p in paths if p.endswith(".md")}
 
 
-# A k8s role's `defaults/` file. Ansible reads it only through its values, so an edit that
-# moves no content line renders the same manifests. `manifests` is left out: it is the renderer
-# every service includes.
+# A role's `defaults/` file: an edit that moves no content line renders the same manifests.
+# `manifests` is excluded as the shared renderer.
 _K8S_DEFAULTS_FILE = re.compile(
     r"^k8s/roles/(?!manifests/)[^/]+/defaults/[^/]+\.ya?ml$"
 )
-# `key: |` / `key: >-` and their chomping/indent modifiers, with or without a trailing comment.
-# A bare list item `- |` opens one too; missing it read the scalar's `#` lines as comments.
+# A bare list item `- |` opens a block scalar too; missing it read the scalar's `#` lines as
+# comments.
 _BLOCK_SCALAR_HEAD = re.compile(r"(?::|^\s*-)\s*[|>][-+0-9]*\s*(?:#.*)?$")
 
 

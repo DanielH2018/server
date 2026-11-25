@@ -16,21 +16,16 @@ Run: uv run pytest scripts/diagnostics/tests/test_probe_boundaries.py
 import ast
 from pathlib import Path
 
-# The directory holding the probe modules. This read `parents[1]` while the test sat beside
-# them and `parents[2]` after it moved into tests/, and both resolve to the top-level
-# `scripts/`, one above the modules — so the glob below only ever matched `scripts/conftest.py`,
-# which mentions core in a comment. The guard passed for months while checking nothing.
+# A wrong directory (`scripts/`, one above the modules) matched only `scripts/conftest.py`, so the
+# guard checked nothing.
 DIAGNOSTICS = Path(__file__).resolve().parents[1]
 
-# Consumers that must be in the census. A wrong directory makes `_probe_modules()` return
-# something rather than nothing (conftest.py did), so an "is non-empty" check cannot catch it;
-# naming two known consumers can.
+# Naming two known consumers catches a wrong directory, which an 'is non-empty' check would not.
 KNOWN_CONSUMERS = frozenset(
     {"probe.py", "probe_lib/health.py", "probe_lib/monitors.py"}
 )
 
-# Names the probe test suites monkeypatch on core. Keep in step with the
-# `setattr(core, "...")` calls in scripts/diagnostics/tests/test_probe*.py.
+# Keep in step with the `setattr(core, ...)` calls in test_probe*.py.
 PATCHED = frozenset(
     {
         "domain",

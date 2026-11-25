@@ -22,8 +22,6 @@ from _probe_health_fixtures import current_checkout
 PROBE = "scripts/diagnostics/probe.py"
 CURL_ERROR = "curl: (6) Could not resolve host: prometheus.local.example.test"
 SSH_ERROR = "ssh: connect to host daniel-pi port 22: Connection refused"
-# A service daniel-pi's inventory really declares, so the absent-container branch is the
-# MISSING one rather than "not a declared service".
 PI_SERVICE = "wg-easy"
 
 
@@ -108,8 +106,6 @@ def test_unparseable_inspect_output_under_health_docker_is_not_reported_missing(
     assert rc == TEMP_FAIL
 
 
-# `readonly-rbac` is the model the issue names, apart from its exit code: refused control verbs
-# mean the probe could not look, and so does a placement read that came back empty.
 def test_readonly_rbac_with_its_control_verbs_refused_is_unreadable():
     allowed = dict.fromkeys(readonly_rbac.READONLY_ALLOWED, False)
     denied = dict.fromkeys(readonly_rbac.READONLY_DENIED, False)

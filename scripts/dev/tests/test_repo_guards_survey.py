@@ -20,8 +20,6 @@ from lib.repo_paths import REPO
 SCRIPT = REPO / "scripts" / "dev" / "repo_guards.py"
 FAKE_GITHUB = Path(__file__).with_name("ci_failures_fake_github.txt")
 
-# The epoch a dated run is measured from. `main` takes no `now=`, so the shim pins the child's
-# `datetime.now` and `today` to it before running the entry point as `__main__`.
 NOW = datetime(2026, 11, 8, 12, tzinfo=UTC)
 _FROZEN_CLOCK = (
     "import datetime, runpy, sys\n"

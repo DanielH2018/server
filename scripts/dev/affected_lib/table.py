@@ -57,8 +57,7 @@ from lib.git import git
 
 TABLE_PATH = Path(__file__).resolve().parents[1] / "affected_tests.json"
 
-# Paths that decide what a run is, so a change to one runs every module. A trailing `/` covers
-# everything below a directory.
+# A trailing `/` covers everything below a directory.
 FULL_SWEEP_PATHS = (
     "pyproject.toml",
     "uv.lock",

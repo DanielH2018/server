@@ -174,11 +174,6 @@ def test_a_homelab_fixture_declares_a_line_edit_on_the_owning_fixtures_conffile(
 # What the case records.
 
 
-# `outcome(before, offered, after, line_kept)` takes the owner's installed version before the
-# upgrade, the version the repository offered, the installed version after it, and whether the
-# arm's line was still in the conffile after the upgrade and before the next reconcile.
-
-
 def test_an_upgrade_dpkg_installed_with_the_local_file_kept_is_recorded_as_kept():
     outcome = _function(OUTCOME)
     assert outcome("0.1", "0.2", "0.2", True) == KEPT
@@ -190,8 +185,8 @@ def test_an_upgrade_dpkg_left_at_the_old_version_is_recorded_as_held_back():
 
 
 def test_an_upgrade_that_replaced_the_local_file_fails_the_case():
-    # Neither outcome --force-confold allows. The next reconcile re-adds the line, so only
-    # this check sees it.
+    # Neither outcome --force-confold allows; the next reconcile re-adds the line, so only this
+    # check sees it.
     outcome = _function(OUTCOME)
     with pytest.raises(CaseFailed):
         outcome("0.1", "0.2", "0.2", False)
@@ -314,8 +309,8 @@ def _confold_commands(source: str) -> list[tuple[str, str]]:
 
 
 def test_the_force_confold_command_itself_runs_without_a_terminal():
-    # The module-wide check above passes while another command carries the frontend, so this
-    # one reads the upgrade command alone.
+    # The module-wide check passes while another command carries the frontend, so this reads the
+    # upgrade command alone.
     _module()
     source = (fx.REPO / SOURCE).read_text()
     commands = _confold_commands(source)

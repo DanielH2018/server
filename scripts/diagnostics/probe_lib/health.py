@@ -46,8 +46,8 @@ from typing import cast
 import sys as _sys
 
 
-# `core.<name>` for anything the tests monkeypatch — binding those into this module's
-# globals with a `from core import ...` would take a snapshot the patch never reaches.
+# Use `core.<name>` for anything tests monkeypatch: a `from core import` binds a snapshot the patch
+# never reaches.
 from diagnostics.probe_lib import core
 from diagnostics.probe_lib.core import PI_HOST, pi_ssh_argv
 from diagnostics.probe_lib import health_alerts, health_checkout, health_plumbing
@@ -114,10 +114,8 @@ def _role_kind_targets(role, default_namespace, kinds, roles_dir=K8S_ROLES):
     Raises on a render failure rather than returning None. Fail closed: a role whose templates
     stopped rendering must not degrade to the guess-the-name path, where a miss reads as a skip.
     """
-    # `rendered_docs` checks the role directory before it builds the render context, so a block
-    # tag (`config`, `deploy`, `cron`) costs a directory stat rather than 0.44s of ansible +
-    # jsonschema imports, and a broken renderer environment cannot fail a tag that was never a
-    # role.
+    # `rendered_docs` checks the role directory first, so a block tag costs a stat, and a broken
+    # renderer environment cannot fail a tag that was never a role.
     docs = rendered_docs(role, roles_dir)
     if docs is None:
         return None
@@ -352,9 +350,7 @@ def format_role_cronjob_health(
     return "\n".join([head, *lines]), 0
 
 
-# `served=` sentinel: None is a meaningful value there (the node read failed), so it cannot
-# double as "not supplied". A caller that already knows which cluster it is talking to passes
-# it and skips the extra kubectl call; everyone else gets the read.
+# None is a meaningful `served=` value (the node read failed), so it cannot mean 'not supplied'.
 _UNSET = object()
 
 
@@ -379,12 +375,9 @@ def run_health(
     Pi's `--docker` path and a guessed workload name stay on the rollout verdict alone.
     """
     if docker:
-        # daniel-pi is the only Docker host left, so this is necessarily remote. The ssh is
-        # internal to the script, so it is covered by probe.py's own allow-list entry and never
-        # reaches the Bash classifier.
-        # A failed ssh or an unparseable inspect is a read that did not happen, not an absent
-        # container: reporting it as `[]` printed "MISSING — the deploy did not create it"
-        # for a Pi that was only unreachable.
+        # A failed ssh or unparseable inspect is a read that did not happen, not an absent
+        # container:
+        # reporting `[]` printed MISSING for an unreachable Pi.
         argv = pi_ssh_argv(shlex.join(inspect_argv(container)))
         out = subprocess.run(argv, capture_output=True, text=True)
         if out.returncode != 0:
@@ -405,16 +398,12 @@ def run_health(
         print(text)
         return code
 
-    # Before anything else reads the cluster. `lib.kubectl` refuses every call that names the
-    # wrong cluster, but the gate checks first so the refusal is one line with the container
-    # name rather than an exception out of the first fetch. Without any check, `probe.py health`
-    # run after a `-e target=daniel-stage` deploy gated production's workload and exited 0 — a
-    # green verdict about a cluster the deploy never touched.
+    # Check first, so a wrong-cluster refusal is one line naming the container, not an exception
+    # from the first fetch.
     served_name = served_cluster() if served is _UNSET else cast("str | None", served)
     refusal = cluster_refusal(cluster, served_name)
     if refusal:
-        # No workload was looked at, so this is a read that did not happen, not a verdict
-        # about the container.
+        # No workload was looked at: a read that did not happen, not a verdict.
         print(f"{container}: {refusal}", file=_sys.stderr)
         return PROBE_UNREADABLE
 
@@ -435,8 +424,7 @@ def run_health(
         return 1
 
     if targets is None:
-        # Not a k8s role, so the tag is the only name available. A miss here means "this tag
-        # is not a k8s workload name", which is exactly what lets --docker take over.
+        # A miss here means the tag is not a k8s workload name, which lets --docker take over.
         workload, pods = _fetch_workload(container, ns, cluster, tools)
         text, code = format_k8s_health(
             workload, pods, container, datetime.now(timezone.utc)
@@ -445,14 +433,10 @@ def run_health(
         return PROBE_NOT_APPLICABLE if workload is None else code
 
     if not targets and container == health_backup_targets.BACKUP_ROLE:
-        # No workload; the gate is the targets' availability (H1.7b).
         return health_backup_targets.report(read, prom, _with_alert_plane)
 
     if not targets:
-        # No Deployment/DaemonSet/StatefulSet — the CronJob-only path, the read-only analog
-        # of manifests_rollout for a role whose CronJob a `flux_cronjob_gates` entry gates. A role
-        # deploying both is gated on its rollout above, not here: role_cronjob_targets is
-        # only ever consulted when role_workload_targets found nothing to gate on.
+        # CronJob-only path; a role deploying both is gated on its rollout above, not here.
         try:
             cronjob_targets = role_cronjob_targets(container, ns, roles_dir)
         except Exception as exc:

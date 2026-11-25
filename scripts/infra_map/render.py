@@ -40,8 +40,6 @@ def _groups_view(model: dict) -> str:
 def _table_view(model: dict) -> str:
     rows = []
     for service in model["services"]:
-        # "Runs on" is where the pods landed; a k8s service with none falls back
-        # to the host that declares it.
         runs_on = ", ".join(service.get("nodes") or []) or service.get("host", "")
         rows.append(
             "<tr>"
@@ -84,11 +82,8 @@ def render_svg(model: dict) -> str:
     open_tag = svg[:open_tag_end].replace(
         "<svg ", '<svg xmlns="http://www.w3.org/2000/svg" ', 1
     )
-    # CDATA because the stylesheet contains '>' in descendant selectors, which is not
-    # legal bare text in XML.
-    # Trailing newline: the end-of-file-fixer prek hook adds one otherwise, and a
-    # generated file a hook keeps rewriting fails the docs-refresh cron's commit on
-    # every run.
+    # CDATA because the stylesheet contains '>' in selectors. Trailing newline: end-of-file-fixer
+    # would otherwise rewrite it and fail docs-refresh's commit.
     return f"{open_tag}<style><![CDATA[{STYLE}]]></style>{svg[open_tag_end:]}\n"
 
 

@@ -20,10 +20,6 @@ _sys.path.insert(1, str(Path(__file__).resolve().parents[2] / "tests"))
 from lib.git import git
 from lib.repo_paths import REPO
 
-# The wall seconds each render prebuild holds a CI leg before its first test, read off the
-# `phase timing` section of a master run: the k8s render alone takes 11s and
-# the fleet render alone 5-7s. `render_share.build_each` runs the two on different workers, so
-# a leg reading both waits the longer one.
 K8S_RENDER_WALL_SECONDS = 11.0
 FLEET_RENDER_WALL_SECONDS = 6.0
 # The census rows' pass `scripts/tests/conftest.py` runs: 16.0s of CI wall time.

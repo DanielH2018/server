@@ -418,6 +418,4 @@ def test_every_numbered_step_header_uses_the_same_denominator(land_run):
     assert [h.split()[1] for h in numbered] == [
         f"{n}/{pipeline.STEP_COUNT}" for n in range(1, pipeline.STEP_COUNT + 1)
     ]
-    # A step that stops printing its header, or one added to the list and never reached,
-    # both show up here. `STEP_COUNT == len(_STEPS)` would be a tautology.
     assert len(numbered) == pipeline.STEP_COUNT

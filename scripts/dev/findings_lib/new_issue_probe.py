@@ -64,9 +64,6 @@ import sys
 from datetime import date
 from pathlib import Path
 
-# Reach the sibling package directories: a directly-invoked script gets only its own
-# directory on sys.path, and pyproject's `pythonpath` is a pytest setting.
-
 
 from dev.findings_lib.boundaries import FindingsTools
 from dev.findings_lib.claim import free_issues

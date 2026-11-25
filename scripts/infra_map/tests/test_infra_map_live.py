@@ -176,8 +176,6 @@ def test_refresh_cron_sets_kubeconfig():
 
 
 def _refresh_cron_job():
-    # Since H7.10 the refresh is a timer's service in the infra-map component; its
-    # Environment= lines carry what the cron job line carried.
     unit = REPO_ROOT / "hosts/components/infra-map/units/homelab-infra-map.service.j2"
     if not unit.is_file():
         pytest.skip("host component tree not present")

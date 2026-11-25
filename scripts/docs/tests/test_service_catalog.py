@@ -158,8 +158,7 @@ def test_markdown_has_one_row_per_service():
         _ROW("wg-easy", "daniel-pi", "LAN-direct", "none", "none", "no"),
     ]
     out = render_markdown(rows)
-    # Count ROWS, not substrings: a service whose route equals its name puts the same
-    # "| name |" text in two cells of one line.
+    # Count ROWS, not substrings: a route equal to its name puts the same text in two cells.
     lines = out.splitlines()
     assert sum(1 for ln in lines if ln.startswith("| sonarr |")) == 1
     assert sum(1 for ln in lines if ln.startswith("| wg-easy |")) == 1

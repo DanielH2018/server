@@ -31,9 +31,7 @@ import pytest
 VALIDATE = Path(__file__).resolve().parent.parent
 TESTS = Path(__file__).resolve().parent
 
-# Signals that a suite asserts the validator REPORTS something, rather than only that a clean
-# input stays clean. Body-level on purpose: the name is where the convention lives, but the
-# assertion is where the evidence is.
+# Body-level on purpose: the assertion is where the evidence is, not the name.
 RED_PROOF = re.compile(
     r"pytest\.raises"
     r"|assert\s+(problems|errors|failures|found|flagged|missing)\b"
@@ -43,10 +41,8 @@ RED_PROOF = re.compile(
 )
 
 
-# Not a validator: it re-downloads the vendored schemas this repo checks rendered config
-# against -- the traefik CRD schemas and Authelia's configuration schema. One named exclusion, so the set stays derived rather than listed — the glob was
-# `validate_*.py` until the modules dropped that prefix, at which point it matched nothing and
-# `test_the_scan_finds_the_validators` below is what said so.
+# Not a validator: it re-downloads the vendored schemas. One named exclusion keeps the set derived;
+# `test_the_scan_finds_the_validators` catches a glob that matches nothing.
 NOT_A_VALIDATOR = {"refresh_vendored_schemas.py"}
 
 

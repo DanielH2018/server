@@ -26,9 +26,6 @@ CHECK_TABLE = MONITOR_BRIDGE_FILES / "check_table.py"
 # The settings the Deployment renders into its `env`; the env-secret holds only credentials.
 ENV_SETTINGS = BRIDGE_ROLE / "templates" / "config" / "env.yaml.j2"
 
-# The gate value that names no gate row: a reach-out check whose rule carries `for: 10m`, so it
-# rides out the weekly reboot instead of being suppressed. The bridge held it `up` through its
-# first down cycle until M6 batch A6's Cutover-2.
 STARTUP_GRACE_GATE = "startup_grace"
 
 # An env value that is a number or a duration (`300`, `0.02`, `2h`, `30m`).
@@ -124,8 +121,8 @@ def render_gate_sets(rows: list[dict]) -> str:
                 members.get(gate, []),
             )
         )
-    # A gate value with members and no gate row of its own is the exporter suppression:
-    # `check.EXPORTER_DEPENDENT` holds those rows while a node exporter is down.
+    # A gate value with members and no gate row is the exporter suppression
+    # (`check.EXPORTER_DEPENDENT`).
     for gate in members:
         if gate not in gate_rows and gate not in (STARTUP_GRACE_GATE, None):
             lines.append(

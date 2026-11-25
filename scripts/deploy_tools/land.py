@@ -305,8 +305,8 @@ def _hand_off(opts: Options, unit: str, tools: Tools) -> int:
             tools.systemctl,
             follow=tools.follow_journal,
         )
-        # The unit records the landing in the operator's file, which this user cannot
-        # read, so the reported line is recorded here too.
+        # The unit records the landing in the operator's file, which this user cannot read, so
+        # record the line here too.
         with contextlib.suppress(OSError):
             tools.record_verdict(opts.pr, rc, line)
         return rc
@@ -459,8 +459,7 @@ def _record(opts: Options, tools: Tools, ln: Landing, rc: int, line: str) -> Non
     # `probe.py landing-verdicts` reads this, so a caller never greps a task's output.
     with contextlib.suppress(OSError):
         tools.record_verdict(opts.pr, rc, line)
-    # Fire-and-forget: a landing that succeeded must never report failure because
-    # logging it did not. An unexpected exception still annotates, as `aborted`.
+    # Fire-and-forget: a landing that succeeded must never report failure because logging it failed.
     with contextlib.suppress(Exception):
         tools.logger(annotation_line(ln.ledger, rc, tools.clock() - ln.ledger.t_start))
 

@@ -127,12 +127,6 @@ def test_health_absent_but_declared_is_flagged():
     assert "not a declared service on any host" not in text
 
 
-#
-# daniel-pi's inventory is the population an absent container is measured against — the Pi is
-# the only Docker host left. `declared_on_pi` takes the inventory path as an argument so this
-# reads the fail-closed branch by passing one, rather than by patching a module global.
-
-
 def test_declared_on_pi_reads_the_pis_compose_services():
     assert health_docker.declared_on_pi("wg-easy") is True
     assert health_docker.declared_on_pi("definitely-not-a-service") is False
@@ -165,12 +159,6 @@ def test_declared_on_pi_raises_when_compose_services_is_missing(tmp_path):
 def test_declared_on_pi_fails_closed_on_an_unreadable_inventory(tmp_path):
     """Fail closed: an unreadable inventory must not turn a missing container into a skip."""
     assert health_docker.declared_on_pi("wg-easy", tmp_path / "gone.yml") is True
-
-
-# `health` must not run `docker inspect` unconditionally: neither cluster node has the binary,
-# so it would raise FileNotFoundError. Every case below is a way the k8s replacement could
-# report healthy when it is not, which is the only direction that matters for a post-deploy
-# gate.
 
 
 def _deploy(generation=1, observed=1, replicas=1, updated=1, ready=1, available=1):
@@ -410,12 +398,6 @@ def test_the_import_census_sees_a_module_that_reaches_for_a_sibling():
         "diagnostics.probe_lib"
     }
     assert _module_imports("import subprocess\n") == {"subprocess"}
-
-
-# A deploy tag names a ROLE, not a workload. Everything below covers the resolution step: for
-# eleven roles the tag is not the name of the thing to health-check, and for four of them it
-# names no workload at all — so `probe.py health <tag>` would report "no Deployment or
-# DaemonSet" and `deploy_lib/detach_notify.py` would skip it.
 
 
 def _target(namespace, kind, name, workload, pods_doc=None):

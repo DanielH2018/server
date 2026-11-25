@@ -145,9 +145,6 @@ def _total_on_session_line(out, sid, total):
 
 
 def test_report_prints_each_sessions_total_instruction_bytes(tmp_path, capsys):
-    # The bytes of instructions a session loads, summed per session from the sizes
-    # log-instructions.py records. A user-level file outside the repo counts too: most of
-    # the always-loaded context is ~/.claude/CLAUDE.md and MEMORY.md, not a repo doc.
     repo = _repo(tmp_path / "repo")
     doc = repo / "CLAUDE.md"
     head = doc.read_bytes()
@@ -156,8 +153,6 @@ def test_report_prints_each_sessions_total_instruction_bytes(tmp_path, capsys):
     user.parent.mkdir()
     user.write_bytes(b"u" * 5000)
     log = tmp_path / "instructions.log"
-    # The session runs in the repo, so the user file's row keeps its absolute path, as
-    # ~/.claude/CLAUDE.md's does: a total built only from repo docs misses it.
     _load(log, repo, doc, "aaaaaaaa-1", "Project")
     _load(log, repo, user, "aaaaaaaa-1", "User")
     _load(log, repo, doc, "bbbbbbbb-2", "Project")

@@ -110,9 +110,6 @@ def test_a_claim_after_a_release_takes_the_issue():
 
 
 def test_the_FIRST_of_two_unreleased_claims_wins():
-    # Two sessions racing. gh returns comments in createdAt order, so the earlier claim
-    # is the earlier comment, and a later one does not silently steal the issue — which
-    # is what lets the loser's own `release` still work.
     issue = _issue(
         claim_comment("worktree-issue-1132", None, "2026-09-05T18:40Z"),
         claim_comment("worktree-issue-1140", None, "2026-09-05T18:41Z"),
@@ -268,13 +265,6 @@ def test_a_comment_with_no_timestamp_leaves_the_order_alone():
     ]
     assert issue.holder == "worktree-second"
 
-
-# --- the non-vacuity assertion ------------------
-#
-# A parser test that counts is vacuous when its fixtures move: `all(...)` over an empty set
-# passes. So the fixture set is NAMED, a census asserts every name is present, and the verdicts
-# are asserted per name, so a rename or a regex that stops matching fails saying WHICH member
-# went missing.
 
 # The cases the claim parser must answer, by name -> (comment bodies, the holder they yield).
 CLAIM_PARSER_FIXTURES: dict[str, tuple[list, str | None]] = {

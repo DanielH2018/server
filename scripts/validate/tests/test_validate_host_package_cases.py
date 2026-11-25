@@ -35,9 +35,8 @@ from validate import host_packages
 from validate.validate_lib import host_fixtures as fx
 
 BOX = "10.0.0.215"
-# The names the signed fixture repository adds. Each is reached through getattr, as the
-# fix adds it: the keyword `publish` takes for the moment the Release stops being valid, and the
-# file name, inside the published repository, of the public keyring that verifies its InRelease.
+# Each is reached through getattr: the keyword `publish` takes for when the Release stops being
+# valid, and the keyring file name that verifies InRelease.
 VALID_UNTIL = "valid_until"
 TEST_KEYRING = "TEST_KEYRING"
 
@@ -151,8 +150,8 @@ def test_the_pi_disarmed_variant_drops_only_the_recovery_timers_link(tmp_path):
 def test_a_disarmed_variant_given_a_ciphertext_ships_it_and_changes_only_the_manifest(
     tmp_path,
 ):
-    # The by-hand and disarm cases install the real Pi package, which ships `secrets-unit`, so
-    # they seal it to a key the container holds (`secrets_case.seal_pi`).
+    # The by-hand and disarm cases install the real Pi package, which ships `secrets-unit`, so they
+    # seal it to a key the container holds.
     seal = tmp_path / "seal"
     seal.mkdir()
     cipher = "ciphertext-for-this-test-only\n"
@@ -336,8 +335,8 @@ def test_a_publish_given_a_past_valid_until_signs_that_moment(tmp_path):
 
 
 def test_apt_accepts_a_fresh_published_repository(tmp_path):
-    # The control for the next test: without it, an unsigned or untrusted repository would
-    # fail the fetch too, and the expired case would pass for the wrong reason.
+    # The control for the next test: without it, an unsigned or untrusted repository would fail the
+    # fetch and the expired case would pass for the wrong reason.
     done = _apt_update(_publish(tmp_path), tmp_path)
     assert done.returncode == 0, done.stdout + done.stderr
 
@@ -385,9 +384,8 @@ def _tracked(*paths: str) -> list[Path]:
 
 
 def test_no_container_source_trusts_the_repository_unsigned():
-    # `Trusted: yes` makes apt accept an InRelease signed by any key, or by none, so the case
-    # would pass whoever signed the index. The container's source names the test keyring in
-    # `Signed-By:` instead, as the hosts' source names the archive key.
+    # `Trusted: yes` makes apt accept an InRelease signed by any key, so the source names the test
+    # keyring in `Signed-By:` instead.
     files = _tracked(
         "hosts/lib/tests/container",
         "scripts/validate/validate_lib",

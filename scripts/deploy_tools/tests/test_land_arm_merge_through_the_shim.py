@@ -51,8 +51,6 @@ case "$*" in
 esac
 """
 
-# Records the cwd it was given and answers nothing, which is what `pr_range` needs to give up
-# on the PR's own range rather than reach `deploy_tags`.
 _GIT_STUB = """#!/bin/sh
 printf '%s\\t%s\\n' "$PWD" "$*" >> "{calls}/git-calls"
 """

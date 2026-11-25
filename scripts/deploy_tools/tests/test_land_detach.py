@@ -61,16 +61,15 @@ def _env(tmp_path: Path, gh: str = _GH_STUB) -> dict[str, str]:
         tmp_path / "bin",
         gh=gh,
         git=_GIT_STUB.replace("{calls}", str(tmp_path)),
-        # The landing leaves a fan-out unit's cgroup through busctl; refused here, so a run of
-        # this suite inside one creates no real scope. The unit-stop test puts the real one back.
+        # Refused so a run of this suite inside a fan-out unit creates no real scope.
         busctl=BUSCTL_REFUSED,
     )
     (tmp_path / "git-calls").touch()
     job_dir = tmp_path / "job"
     (job_dir / "tmp").mkdir(parents=True)
     return {
-        # `git commit` exports GIT_DIR and GIT_INDEX_FILE to its hooks, and a test inheriting
-        # them has written the real repo.
+        # `git commit` exports GIT_DIR and GIT_INDEX_FILE to its hooks, and a test inheriting them
+        # writes the real repo.
         **scrubbed_env(),
         "PATH": path_with(bin_dir),
         "LAND_PRIMARY": str(tmp_path),
@@ -110,8 +109,8 @@ def test_the_land_source_reads_the_childs_verdict_and_code(tmp_path):
     result = _run(tmp_path, "--detach")
 
     assert result.returncode == 0, result.stderr
-    # The count is asserted rather than unpacked: a glob that stops matching returns empty, and
-    # a check over nothing would never run.
+    # Assert the count: a glob that stops matching returns empty and a check over nothing never
+    # runs.
     logs = _logs(tmp_path)
     assert len(logs) == 1, logs
     assert _recorded(logs[0]) == 0, logs[0].read_text()
@@ -251,13 +250,9 @@ def test_killing_the_callers_whole_tree_leaves_the_landing_running_to_its_verdic
         [log] = _logs(tmp_path)
         while detach.recorded_pid(log) is None and time.monotonic() < deadline:
             time.sleep(0.05)
-        # None here means the parent blocked before it forked: something printed to stdout
-        # ahead of `detach.fork`'s flush and filled the pipe first.
         landing_pid = detach.recorded_pid(log)
         assert landing_pid is not None, "land.py never recorded the landing's pid"
         tree = _descendants(caller.pid)
-        # The precondition that keeps the walk meaningful: land.py is still in the tree, so a
-        # setsid-only landing would still be its child and inside this walk.
         assert any("land.py" in _cmdline(pid) for pid in tree), tree
         with contextlib.suppress(ProcessLookupError):
             os.killpg(caller.pid, signal.SIGKILL)
@@ -266,9 +261,8 @@ def test_killing_the_callers_whole_tree_leaves_the_landing_running_to_its_verdic
                 os.kill(pid, signal.SIGKILL)
         caller.wait(timeout=10)
 
-        # Wait for the exit code as well as the verdict: the landing prints the VERDICT line
-        # and only then exits and writes its `.rc`, so a read straight after the verdict can
-        # see none. That window failed this test on CI twice on 2026-10-03.
+        # Wait for the exit code as well as the verdict: the landing prints VERDICT and only then
+        # writes its `.rc`.
         deadline = time.monotonic() + 60
         while (
             detach.verdict_in(log) is None or detach.recorded_code(log) is None

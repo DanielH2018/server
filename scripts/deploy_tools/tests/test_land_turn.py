@@ -70,8 +70,6 @@ def test_the_merge_wait_gets_a_whole_budget_after_the_wait_for_the_turn(landing)
 def test_a_draft_stands_in_the_line_while_it_waits_and_leaves_with_the_turn(landing):
     ln, calls = turn_landing(landing, turn=[False, False, True])
     land_in_turn(ln)
-    # The last `stand` reads its place once more with the turn taken, for an answer the
-    # holder wrote after its last poll.
     assert line_calls(calls) == [
         ("join", "999", HEAD),
         ("stand", "999", HEAD),

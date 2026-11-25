@@ -8,8 +8,8 @@ import re
 import sys as _sys
 
 
-# `core.<name>` for anything the tests monkeypatch -- binding those into this module's
-# globals with a `from core import ...` would take a snapshot the patch never reaches.
+# Use `core.<name>` for anything tests monkeypatch: a `from core import` binds a snapshot the patch
+# never reaches.
 from diagnostics.probe_lib import core
 from diagnostics.probe_lib.core import (
     loki_endpoint,
@@ -21,15 +21,9 @@ from diagnostics.probe_lib.core import (
 )
 
 
-# --- Range-window truncation ---------------------------------------------------------------
-#
-# Prometheus here retains ~11.5 days, so a `[30d]` range selector returns eleven days of
-# samples with no error, no warning and no partial-data marker. A derivation
-# over that window then quotes a denominator three times the covered one. `metric` therefore
-# measures what Prometheus actually holds and says so when the query asks for more.
+# Prometheus retains ~11.5 days, so a `[30d]` selector silently returns eleven days; `metric`
+# measures what is held and says so.
 
-# A range selector or a subquery: `[30d]`, `[1h30m]`, `[500ms]`, `[30d:1h]`. The optional
-# `:<resolution>` tail is the subquery step, which does not widen the window.
 _RANGE_SELECTOR = re.compile(r"\[\s*((?:\d+(?:ms|[smhdwy]))+)\s*(?::[^\]]*)?\]")
 _DURATION_COMPONENT = re.compile(r"(\d+)(ms|[smhdwy])")
 _UNIT_SECONDS = {
@@ -42,17 +36,15 @@ _UNIT_SECONDS = {
     "y": 365 * 86400,
 }
 
-# The retention floor as one instant query through `/api/v1/query`. The prometheus IngressRoute
-# admits only `/api/v1/query` and `/api/v1/targets`, so `/api/v1/status/tsdb` is unreachable.
-# `time()` is Prometheus' own clock, which keeps the answer free of this host's clock skew.
+# One instant query: the prometheus IngressRoute admits only `/api/v1/query` and `/api/v1/targets`.
+# `time()` is Prometheus' own clock.
 SPAN_PROMQL = "time() - min(prometheus_tsdb_lowest_timestamp_seconds)"
 
-# An empty TSDB reports a max-int sentinel as its lowest timestamp, so the subtraction lands
-# hugely negative; a bad parse can land absurdly high. Neither is a retention span.
+# An empty TSDB reports a max-int sentinel, so the subtraction lands hugely negative; neither that
+# nor an absurdly high value is a span.
 _MAX_PLAUSIBLE_SPAN_S = 10 * 365 * 86400
 
-# Retention sized exactly to the window still falls a scrape or a compaction short of it.
-# Only a shortfall past 1% is the defect this warns about.
+# Retention sized exactly to the window falls a scrape short; only a shortfall past 1% warns.
 _SHORTFALL_SLACK = 0.99
 
 
@@ -159,9 +151,8 @@ def format_loki(data):
     if not rows:
         return "no logs"
     rows.sort(key=lambda r: r[0])
-    # HA's `_handle_signal_show_view` records carry the cast refresh_token, and Loki keeps the
-    # ones shipped before the Alloy redaction stage for its 744h retention. `--json`
-    # streams the raw body through curl and never reaches here, so it stays unredacted.
+    # Loki keeps pre-redaction `_handle_signal_show_view` records (cast refresh_token) for 744h;
+    # `--json` streams raw and stays unredacted.
     return core.redact_log_secrets("\n".join(line for _, line in rows))
 
 

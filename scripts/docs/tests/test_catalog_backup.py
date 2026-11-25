@@ -117,8 +117,6 @@ def test_backup_tier_var_resolved_from_role_defaults(tmp_path):
 
 
 def test_backup_tier_finds_pvc_referenced_only_by_claimname(tmp_path):
-    # home-assistant's real shape: no pvc.yaml.j2 of its own, just a claimName: reference
-    # to a PVC provisioned elsewhere in a deployment/pod template.
     paths = make_repo(tmp_path)
     role_templates = paths["k8s_roles"] / "jellyfin" / "templates"
     write(
@@ -153,15 +151,6 @@ def test_multiple_pvcs_report_each_tier_deduplicated(tmp_path):
     )
     row = next(r for r in service_catalog.build_rows(**paths) if r.name == "jellyfin")
     assert row.backup_tier == "weekly -> B2 (default target); daily -> R2"
-
-
-# --- Backup tier: the StorageClass axis ---------------------------------------------
-#
-# Longhorn backs a volume up only when its StorageClass asks (`longhorn`, not
-# `longhorn-nobackup`) AND the k3s role's no-backup list leaves it alone. One accept/reject
-# pair per branch of `_classify`, then one test per shape a role declares a claim in, because
-# the class is found by pattern and a regex that stops matching would turn every claim of that
-# shape "unknown" unnoticed.
 
 
 def _pvc_block(name, storage_class=None):
@@ -223,8 +212,6 @@ def test_backup_tier_reads_a_group_vars_override_of_a_tier_list(tmp_path):
 
 
 def test_backup_tier_derives_the_r2_set_from_the_injected_service_list(tmp_path):
-    # The role's R2 expression derives from the inventory build_rows was given, not
-    # from the repo's. Neither `lab/svc-config` nor the `lab` namespace exists in the repo.
     paths = make_repo(tmp_path)
     write(paths["all_vars"], "k8s_namespace: lab\n")
     write(paths["k8s_roles"] / "svc" / "defaults" / "main.yml", "---\n")
@@ -254,8 +241,6 @@ def test_backup_tier_derives_the_r2_set_from_the_injected_service_list(tmp_path)
 
 
 def test_backup_tier_nobackup_list_overrides_a_backup_class(tmp_path):
-    # uptime-kuma's shape: `longhorn` by class, excluded by the list — the list wins, as
-    # longhorn.yml's reconciliation applies it.
     paths = make_repo(tmp_path)
     assert _jellyfin_tier(paths, _pvc_block("uptime-kuma-data", "longhorn")) == (
         "no backup (listed in k3s_longhorn_nobackup_volumes)"
@@ -280,8 +265,7 @@ def test_backup_tier_nobackup_list_beats_the_weekly_list(tmp_path):
 
 
 def test_backup_tier_unresolvable_class_off_every_list_is_unknown_not_default(tmp_path):
-    # A claim with no readable class must not fall through to "daily -> B2
-    # (default group)", which is a guess, not a derivation.
+    # A claim with no readable class must not fall through to a guess.
     paths = make_repo(tmp_path)
     tier = _jellyfin_tier(paths, _pvc_block("some-other-claim"))
     assert tier.startswith("unknown")
@@ -299,8 +283,6 @@ def test_backup_tier_unresolvable_class_on_a_list_is_classified_by_the_list(tmp_
 def test_backup_tier_claimname_reference_finds_the_class_in_the_declaring_role(
     tmp_path,
 ):
-    # media-data's shape: declared (with its class) by media-volume, mounted by seven other
-    # roles that name it only through `claimName:`.
     paths = make_repo(tmp_path)
     write(
         paths["k8s_roles"] / "media-volume" / "templates" / "pv.yaml.j2",

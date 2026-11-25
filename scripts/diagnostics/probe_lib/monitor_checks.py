@@ -50,8 +50,6 @@ CHECK_QUERY = (
 STREAK_LOGQL = '{container="monitor-bridge"} |= "down streak"'
 # Two 300s cycles: the newest held cycle always falls inside it.
 STREAK_WINDOW_S = 600
-# How far a streak line's ingestion time may sit from the row's last-run stamp and still be
-# that cycle's line.
 SAME_CYCLE_S = 120
 CHECK_TABLE = REPO / "k8s" / "roles" / "monitor-bridge" / "files" / "check_table.py"
 CHECK_MODULE = CHECK_TABLE.with_name("check.py")

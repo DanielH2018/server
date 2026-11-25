@@ -14,8 +14,6 @@ import shlex
 import subprocess
 from pathlib import Path
 
-# /run/lock is a tmpfs every user can create a file in, and one file there serves every
-# landing on the host, whichever user runs it.
 LOCK_DIR = Path("/run/lock")
 # The host whose files are the landing locks. The lander units run there.
 TURN_HOST = "daniel-box"
@@ -23,8 +21,7 @@ TURN_HOST = "daniel-box"
 TURN_DIR_ENV = "LAND_TURN_DIR"
 # Held by a landing of a serial PR from the check before its merge until its process ends.
 SERIAL_NAME = "homelab-land-serial.lock"
-# Holds the number of the PR whose landing took the serial lock last. A landing opens the lock
-# file read-only (`turn._lock`), so the number lives beside it.
+# A landing opens the lock file read-only (`turn._lock`), so the holder's number lives beside it.
 HOLDER_NAME = "homelab-land-serial.holder"
 
 

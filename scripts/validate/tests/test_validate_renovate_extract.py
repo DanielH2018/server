@@ -41,8 +41,8 @@ K8S_TEMPLATE = next(
     and "autoReplaceStringTemplate" in m
 )
 
-# Pins whose digest moves in the same match as the version, so a manager that captured only
-# the version would bump it beside a stale digest and fail the job's checksum.
+# A manager capturing only the version would bump it beside a stale digest and fail the job's
+# checksum.
 DIGEST_PAIRS = [
     (
         "regex",

@@ -76,8 +76,7 @@ SNAPSHOT_FILES_ARGS = ("get", "etcdsnapshotfiles.k3s.cattle.io", "-o", "json")
 DRILL_STATE_DIR = "/var/lib/etcd-restore-drill"
 DRILL_STAMP = "last-success-list-only"
 DRILL_MODE = "list-only"
-# The weekly cron's window: one missed Monday tolerated, the same default as monitor-bridge's
-# `ETCD_DRILL_MAX_AGE_DAYS`.
+# One missed Monday tolerated, the same default as monitor-bridge's `ETCD_DRILL_MAX_AGE_DAYS`.
 MAX_DRILL_AGE_DAYS = 8
 
 HOMELAB_STATE_DIR = "/var/lib/homelab"

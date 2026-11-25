@@ -46,14 +46,12 @@ from renderer.template_filters.secret_stubs import homelab_secret_stub
 
 SECRETS = SECRETS_DIR / "secrets.yml"
 
-# The host gate's named member: bento-pdf's `.local.` route, as (tag, namespace, name). The
-# gate asserts it only while the tag is published, so a bundle without the tag does not fail it.
+# The gate asserts this member only while the tag is published.
 NAMED_ROUTE = ("bento-pdf", "homelab", "bento-pdf")
 
 _HOST = re.compile(r"(?<![A-Za-z])Host\(([^)]*)\)")
 _KEY = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
-# A Kustomization's `spec.path` as the renderer writes it: one directory under `cluster/`. A
-# segment cannot start with `.`, so no path leaves the bundle.
+# A segment cannot start with `.`, so no path leaves the bundle.
 _PATH = re.compile(rf"\./{CLUSTER_DIR}/([a-z0-9][a-z0-9.-]*)")
 
 

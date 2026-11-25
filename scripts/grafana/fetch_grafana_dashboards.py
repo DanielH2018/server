@@ -56,32 +56,17 @@ UID_BY_PLUGIN = {
     "prometheus": ("EGdsQqhVk", "Prometheus"),
     "loki": ("bf4q19tuivta8e", "Loki"),
 }
-# gnetId -> the PINNED grafana.com revision, never `latest`. A vendored board is a
-# dependency like any other: `revisions/latest` made a re-fetch return whatever upstream had
-# published since, so the 13,746-line node-exporter-full.json could change under an unrelated
-# re-run and the diff had no commit to explain it. Revision 45 of 1860 is the one the
-# committed JSON was adapted from (it carries the same dashboard `version: 101` the committed
-# file does), so re-running this script reproduces the committed bytes. Bump a revision
-# deliberately, in its own commit, and read the diff.
+# Pinned revision, never `latest`: a vendored board is a dependency, so a re-run must reproduce the
+# committed bytes. Bump deliberately, in its own commit.
 DASHBOARDS = {"node-exporter-full": (1860, 45)}
 OUTDIR = Path("k8s/roles/observability/files/dashboards")
 
-# Grafana folder (subdir) each community board is provisioned into; default is the General
-# root. Keeps a re-fetch writing to the same folder the boards live in, so it doesn't
-# recreate a duplicate at the root (foldersFromFilesStructure derives the folder from path).
+# A re-fetch writes to the folder the boards live in (foldersFromFilesStructure derives it from the
+# path), not a duplicate at the root.
 SUBDIR = {"node-exporter-full": "Infrastructure"}
 
-# Panels removed because the underlying metric has no data on this host: no NIC
-# link-speed / battery / fan sensors, and the systemd collector isn't enabled
-# (would need host D-Bus access from the container). Dropping them keeps the board
-# free of permanently-"No data" panels.
-#
-# The second group is the same rule applied to three collectors node_exporter ships
-# DISABLED by default, which the DaemonSet does not turn on. `count by (collector)
-# (node_scrape_collector_success)` is the census that names what IS registered — read
-# that before adding a panel back. `processes` feeds node_processes_*, `interrupts`
-# feeds node_interrupts_total, and `tcpstat` feeds node_tcp_connection_states; a panel
-# whose every target reads one of those is dead until the flag is added.
+# Panels removed because their metric has no data here (no NIC link-speed, battery, fan sensors).
+# The second group needs collectors node_exporter ships DISABLED (`processes`, `interrupts`).
 DROP_PANELS = {
     "node-exporter-full": {
         "Network Saturation",
@@ -152,9 +137,8 @@ def prom_label_values(query, resolved, series=prom_series):
             return []
         label = m.group(1)
         promql = 'group by (%s)({__name__!=""})' % label  # rarely used; broad fallback
-    # An unreachable or unparseable Prometheus yields no default rather than raising: the
-    # caller's next step is "pick a default for this variable", and a dashboard that lands
-    # with one variable undefaulted beats a run that dies part-way through rewriting the set.
+    # An unreachable Prometheus yields no default rather than raising, so one undefaulted variable
+    # does not kill the run.
     result = series(promql)
     return sorted({s["metric"].get(label) for s in result if s["metric"].get(label)})
 
@@ -220,8 +204,8 @@ def adapt(name, d):
     d.pop("__requires", None)
     d["id"] = None  # let Grafana assign a local id; keep the stable `uid`
 
-    # Same serialisation as export_grafana_dashboards.dump, so the two writers agree on
-    # the committed form and a re-fetch of an unchanged revision is a no-op.
+    # Same serialisation as export_grafana_dashboards.dump, so an unchanged revision re-fetches as a
+    # no-op.
     s = json.dumps(d, indent=2, sort_keys=True, ensure_ascii=False)
     for ph, uid in placeholders.items():
         s = s.replace("${%s}" % ph, uid)

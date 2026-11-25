@@ -149,8 +149,8 @@ def test_every_unit_runs_the_notifier_when_it_stops(review) -> None:
         f" {NOTIFY_SCRIPT} --batch b --unit fanout-b --branch worktree-fanout-b "
         "--repo DanielH2018/server " in prop
     )
-    # systemd opens the unit's file: outputs without truncating them, so a line on stdout
-    # would overwrite the head of report.json.
+    # systemd opens the output files without truncating them, so a line on stdout would overwrite
+    # the head of report.json.
     assert prop.endswith(' >>.fanout/notify.log 2>&1"')
     assert (REPO_ROOT / NOTIFY_SCRIPT).is_file()
 

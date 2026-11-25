@@ -29,7 +29,6 @@ from lib.render_guard import (
     host_layer,
 )
 
-# The Pi package's services (H5): one `compose.yaml.j2` tree per `compose_services` entry.
 COMPONENT_SERVICES = REPO / "hosts" / "components" / "pi-compose" / "services"
 
 
@@ -101,27 +100,21 @@ def find_watchtower_label_bugs(docs) -> list[tuple[str, str]]:
     return bugs
 
 
-# Documented exceptions to the cap_drop: [ALL] policy (service -> why). Keep SMALL and
-# justified — the baseline expectation is that EVERY service drops all caps and adds back only
-# what it proves it needs. These three need broad host/device access by design (verified in the
-# security reviews); everything else drops ALL.
+# Keep SMALL and justified: every service drops all caps and adds back only what it proves it needs.
+# These need broad host/device access by design.
 CAP_DROP_EXEMPT: dict = {
     "cadvisor": "needs host-wide introspection (cgroups/proc, SYS_PTRACE) to read every container's stats",
     "scrutiny-web": "LSIO web UI verified to need its default caps; no-cap_drop is accepted/documented",
     "scrutiny-collector": "SMART collector runs smartctl against raw block devices (needs SYS_RAWIO/SYS_ADMIN)",
 }
 
-# Companion to CAP_DROP_EXEMPT for the `security_opt: [no-new-privileges:true]` baseline. Every
-# service should set it (it blocks a setuid binary from re-gaining a dropped capability); a service
-# that legitimately can't goes here with a reason. Kept empty until a real exception appears — the
-# whole fleet sets it today, and the guard exists so a new service (or a copy-paste that silently
-# drops the line, the way ical-proxy's indent drifted) can't omit it unnoticed.
+# Every service sets `no-new-privileges`, which blocks a setuid binary from re-gaining a dropped
+# capability; a service that cannot goes here with a reason.
 NO_NEW_PRIV_EXEMPT: dict = {}
 
-# No guard covers the mutable-tag update policy, because nothing auto-updates a container.
-# `docker_deploy.yml` deploys with `pull: policy`, which never re-pulls a mutable tag already
-# present locally, so a `latest` tag ages in place rather than drifting. An image refresh is
-# the deliberate `deploy.yml --tags <svc> -e common_pull=always`.
+# Nothing auto-updates a container: `pull: policy` never re-pulls a mutable tag already present, so
+# `latest` ages in place. A refresh is the deliberate `deploy.yml --tags <svc> -e
+# common_pull=always`.
 
 
 # Compose services whose image is built or supplied rather than pulled by tag, so there is no
@@ -242,8 +235,8 @@ def _check_rendered(
     """Render `tpl` with `ci` as its `container_item` and run every check on the result."""
     # A component template reads its secrets as plain names, and no role defaults sit under it.
     ctx = render_context(None, host=host, overrides={"container_item": ci})
-    # A template reads its OWN entry through `container_item`; leaving the lists in would let
-    # one render against another service's entry.
+    # A template reads its OWN entry through `container_item`; leaving the lists in would let one
+    # render against another service's entry.
     ctx.pop("services", None)
     ctx.pop("compose_services", None)
     rendered, err = render_shipped(tpl, ctx)

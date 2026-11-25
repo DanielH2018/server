@@ -21,9 +21,6 @@ def as_operator(text: str) -> str:
     return text.replace(SERVER_CHECKOUT, OPERATOR_CHECKOUT)
 
 
-# A syntactically real ed25519 public key line (32 zero bytes), standing in for a host's
-# signing key, plus the registered set it is a member of. Both are test data: the gate
-# compares what a host prints against what GitHub answers, never against a constant.
 HOST_KEY = (
     "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
     " ubuntu@fake-host"
@@ -51,8 +48,6 @@ class FakeRun:
     )
     calls: list[tuple[str, str, str | None]] = field(default_factory=list)
     issue_fetches: list[tuple[int, str]] = field(default_factory=list)
-    # Every `(number, body, repo)` issue comment, kept apart from `calls` so a test that
-    # pins the host and `findings` call order does not see them.
     comments: list[tuple[int, str, str]] = field(default_factory=list)
 
     @property
@@ -146,8 +141,6 @@ def fake_tools(
         return BranchPrs(open=tuple(prs)) if isinstance(prs, list) else prs
 
     def findings(argv: list[str]) -> subprocess.CompletedProcess:
-        # Recorded among the host calls, under the pseudo-host `findings`, so a test reads
-        # where the claim fell relative to the tree and the agent from one list.
         run.calls.append(("findings", " ".join(argv), None))
         if argv[0] == "claim" and any(str(n) in argv[1:] for n in refused_claims):
             return subprocess.CompletedProcess(
