@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/backlog.py
-generated_at: 2026-11-24 18:17 UTC
-generated_sha: 9c261ef05
+generated_at: 2026-11-25 18:17 UTC
+generated_sha: 9a60147e9
 ---
 
 !!! warning "Generated file — do not edit"
@@ -18,7 +18,9 @@ Findings Claude confirmed and did not fix in the session that found them, filed 
 |---|---|---|---|---|---|---|---|---|
 | [#9667](https://github.com/DanielH2018/server/issues/9667) | medium | improvement | cicd | The landing turn takes 80% of a landing's time from arm to merge under load | 2026-11-20 | 0 | claude/backlog-burndown-033dbc | ✓ |
 | [#9725](https://github.com/DanielH2018/server/issues/9725) | medium | improvement | container | Roll out the kubelet's default seccomp profile to daniel-box, then census explicit Unconfined | 2026-11-21 | 0 | claude/backlog-burndown-033dbc | ✓ |
-| [#10068](https://github.com/DanielH2018/server/issues/10068) | medium | gap | security | Merge or replace the *.ucf-dist copies the 26.04 upgrade left on every host | 2026-11-23 | 0 | - | ✓ |
+| [#10087](https://github.com/DanielH2018/server/issues/10087) | medium | gap | backup-observability | daniel-pi rebooted before 06:00 UTC on two consecutive days after its load climbed | 2026-11-25 | 0 | - | ✓ |
+| [#10088](https://github.com/DanielH2018/server/issues/10088) | medium | gap | cicd | node_package_case turns master red when an apt download outlasts its 900 s timeout | 2026-11-25 | 0 | - | ✓ |
+| [#10119](https://github.com/DanielH2018/server/issues/10119) | medium | gap | - | k3s on daniel-box exited three times under session load on 2026-11-25, after #9060's fix — *no vetted remediation* | 2026-11-25 | 0 | - | ✓ |
 | [#6292](https://github.com/DanielH2018/server/issues/6292) | low | improvement | container | Retire sonarr-air-date-guard once Sonarr v5 stable ships its air-date Release Profile rule | 2026-10-25 | 0 | - | ✓ |
 | [#7220](https://github.com/DanielH2018/server/issues/7220) | low | improvement | docs | Delete the lock-retired lint rule once no branch predates the G2 flip | 2026-11-05 | 0 | - | ✓ |
 | [#8080](https://github.com/DanielH2018/server/issues/8080) | low | gap | cicd | Confirm hosted Renovate regenerates actions.lock on its first Actions bump | 2026-11-12 | 0 | - | ✓ |
@@ -41,6 +43,24 @@ Findings Claude confirmed and did not fix in the session that found them, filed 
 | [#10069](https://github.com/DanielH2018/server/issues/10069) | low | gap | backup-observability | Nothing reports the *.dpkg-dist and *.dpkg-old conffile copies dpkg leaves pending | 2026-11-23 | 0 | - | ✓ |
 | [#10078](https://github.com/DanielH2018/server/issues/10078) | low | improvement | - | Merge the duplicated blocks scb-check finds, starting with the Airflow check task | 2026-11-24 | 0 | - | - |
 | [#10079](https://github.com/DanielH2018/server/issues/10079) | low | improvement | - | Merge eight pass-through functions into the functions they call | 2026-11-24 | 0 | - | - |
+| [#10096](https://github.com/DanielH2018/server/issues/10096) | low | - | cicd | Compare improving the renderer in place, Helm and Python builders on three roles | 2026-11-25 | 0 | - | ✓ |
+| [#10099](https://github.com/DanielH2018/server/issues/10099) | low | improvement | container | Pilot Zot as the one registry in place of three registry:3 processes | 2026-11-25 | 0 | - | ✓ |
+| [#10100](https://github.com/DanielH2018/server/issues/10100) | low | improvement | container | Try icalendar in place of ical-proxy's hand-written parser | 2026-11-25 | 0 | - | ✓ |
+| [#10102](https://github.com/DanielH2018/server/issues/10102) | low | improvement | - | Property-test the renderer's Jinja subset with Hypothesis | 2026-11-25 | 0 | - | ✓ |
+| [#10103](https://github.com/DanielH2018/server/issues/10103) | low | improvement | cicd | Document pytest-testmon as a local-only test selector | 2026-11-25 | 0 | - | ✓ |
+| [#10104](https://github.com/DanielH2018/server/issues/10104) | low | improvement | cicd | Run the nightly pytest sweep in random order | 2026-11-25 | 0 | - | ✓ |
+| [#10105](https://github.com/DanielH2018/server/issues/10105) | low | improvement | cicd | Replace the import-direction test's facade rules with import-linter contracts | 2026-11-25 | 0 | - | ✓ |
+| [#10106](https://github.com/DanielH2018/server/issues/10106) | low | improvement | cicd | Show render diffs with dyff instead of diff -r | 2026-11-25 | 0 | - | ✓ |
+| [#10107](https://github.com/DanielH2018/server/issues/10107) | low | improvement | cicd | Run step-security/harden-runner in audit mode on the promote workflow | 2026-11-25 | 0 | - | ✓ |
+| [#10108](https://github.com/DanielH2018/server/issues/10108) | low | improvement | container | Use prometheus_client for metric exposition from one shared Python image | 2026-11-25 | 0 | - | ✓ |
+| [#10109](https://github.com/DanielH2018/server/issues/10109) | low | improvement | backup-observability | Replace monitor-bridge's parse_rfc3339 with datetime.fromisoformat | 2026-11-25 | 0 | - | ✓ |
+| [#10110](https://github.com/DanielH2018/server/issues/10110) | low | improvement | cicd | Validate containers_list entries and component.yml with pydantic | 2026-11-25 | 0 | - | ✓ |
+| [#10111](https://github.com/DanielH2018/server/issues/10111) | low | improvement | - | Make the fan-out batch state a StrEnum with an exhaustive match | 2026-11-25 | 0 | - | ✓ |
+| [#10112](https://github.com/DanielH2018/server/issues/10112) | low | improvement | network | Test gluetun as the shared VPN sidecar for qbittorrent and slskd | 2026-11-25 | 0 | - | ✓ |
+| [#10113](https://github.com/DanielH2018/server/issues/10113) | low | improvement | backup-observability | Check the Airflow scheduler through the blackbox exporter | 2026-11-25 | 0 | - | ✓ |
+| [#10114](https://github.com/DanielH2018/server/issues/10114) | low | improvement | security | Move every in-cluster secret to native SOPS manifests, hardest three first — *no vetted remediation* | 2026-11-25 | 0 | - | ✓ |
+| [#10117](https://github.com/DanielH2018/server/issues/10117) | low | improvement | security | Pilot a ValidatingAdmissionPolicy that limits the restore drill to its own PVs and pods | 2026-11-25 | 0 | - | ✓ |
+| [#10098](https://github.com/DanielH2018/server/issues/10098) | - | - | - | homelab-mcp's bearer check raises on a non-ASCII token instead of refusing it | 2026-11-25 | 0 | - | ✓ |
 
 ## Deferred, by date
 
@@ -280,3 +300,6 @@ Findings closed as not planned that carry neither the `accepted` nor the `refute
 | [#9934](https://github.com/DanielH2018/server/issues/9934) | low | security | Trim the Longhorn B2 key to the capabilities its readers use | 2026-11-23 |
 | [#10006](https://github.com/DanielH2018/server/issues/10006) | low | network | daniel-pi dropped off the LAN for 5 minutes at load 0.2 on 2026-11-22 01:49 | 2026-11-23 |
 | [#10037](https://github.com/DanielH2018/server/issues/10037) | medium | network | daniel-pi's USB Ethernet receive path fails order-3 atomic allocations, a candidate cause of its LAN drop | 2026-11-23 |
+| [#10101](https://github.com/DanielH2018/server/issues/10101) | low | cicd | Trial GitHub's merge queue on a throwaway organization repository | 2026-11-25 |
+| [#10115](https://github.com/DanielH2018/server/issues/10115) | low | backup-observability | Compare VictoriaMetrics with Prometheus plus Airflow rollups for long-term metrics | 2026-11-25 |
+| [#10116](https://github.com/DanielH2018/server/issues/10116) | low | backup-observability | Retire Airflow for CronJobs once VictoriaMetrics covers the metric rollups | 2026-11-25 |

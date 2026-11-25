@@ -1,239 +1,108 @@
 ---
-# The k3s services: one entry per k8s deploy tag. Flux applies every entry through `promote`.
-# Every template reads this list as the `services` variable, whichever host it renders for,
-# and every script reads it through `scripts/lib/render_guard.py:k8s_services`.
+# The k3s services, one entry per deploy tag. A service's description is its role's CLAUDE.md.
 #
-# The renderer (scripts/renderer/renderer_lib/context.py) toposorts this list with
-# build_k8s_dep_map / toposort_containers (scripts/renderer/template_filters/toposort.py) rather than
-# deploying it in list order. Three edges are derived automatically: traefik-CRD and authelia-middleware from each
-# role's own templates and its `use_authelia` flag, and netpol-baseline after every other entry
-# from K8S_APPLIES_LAST in toposort.py. A new entry gets them for free and does not need to be
-# positioned by hand. Every other constraint is an entry's own `depends_on:` (crowdsec before
-# traefik, sonarr and radarr before configarr, dri-device-plugin before jellyfin and tdarr), so
-# no order rests on list position. List order is kept only as the toposort's tiebreak, so
-# today's order stays the sorted order and a diff here still reads as "nothing moved".
+# List order is only the toposort's tiebreak. scripts/renderer/template_filters/toposort.py
+# derives the CRD, authelia and applies-last edges; any other constraint is `depends_on:`.
 #
-# Every `use_authelia: true` entry also declares `auth_tier: one_factor | two_factor` — the
-# Authelia policy its LAN name (`<hostname>.local.<domain>`) gets. The authelia role renders
-# its per-service access_control rules from these (template_filters/authelia_access.py), and an
-# entry that attaches the middleware without a tier fails the render, so no service rides the
-# `*.local` wildcard by omission. The public name is two_factor whatever is declared here. A
-# scoped bypass (scrutiny's read-only probes) has no per-service shape
-# and stays a hand-written rule in the authelia template; the entry's tier is what its UI gets.
-#
-# `tier:` ranks a service, and is declared here once and derived elsewhere
-# (template_filters/service_tier.py). `home-edge` is the edge (crowdsec, traefik), SSO
-# (authelia) and LAN DNS (pihole); `home-automation` is the automation chain (mosquitto,
-# zigbee2mqtt, home-assistant). Together they are the `home-critical` group, the services the
-# house and SSO stop working without. `platform` is critical without being home-critical: the
-# registry, the alert bridge, the UPS primary, the remote-access tunnel and the deploy
-# controller. Each tier names one
-# PriorityClass, and a tiered role's templates take it from `tier_priority_class` rather than
-# writing it. A home-critical entry's `backup_claims` names its Longhorn
-# volumes worth a daily backup; the k3s role's `k3s_longhorn_r2_volumes` is those claims, and
-# `tests/longhorn/test_r2_tier_is_derived.py` checks them against the role's rendered
-# PVCs. A tiered entry with no `backup_claims` holds nothing worth a daily copy.
-# `r2_backup_claims` puts an untiered entry's volume on the same daily R2 list, for data
-# that no source can re-derive once a week has passed; ADR 0007 names each one.
-#
-# The other two Longhorn tiers derive from the entries the same way.
-# `weekly_backup_claims` maps a claim to its weekly B2 shard, 0 (Sunday) to 6, and becomes
-# `k3s_longhorn_weekly_volumes`. The shard is that volume's weekday for good: change it only
-# to rebalance B2's daily transaction cap, and give a new claim the lightest weekday.
-# `no_backup_claims` lists bound claims forced out of the backup set, each with its reason,
-# and becomes `k3s_longhorn_nobackup_volumes`. A `longhorn`-class claim in none of the three
-# keys is backed up daily to B2 by the `default` group.
+# auth_tier: the Authelia policy of the LAN name, required beside `use_authelia: true`. The
+#   public name is always two_factor.
+# tier: home-edge | home-automation | platform (template_filters/service_tier.py). An untiered
+#   service can be shed when a node is lost.
+# backup_claims: a home-critical entry's volumes on the daily R2 list.
+# r2_backup_claims: the same for an untiered entry whose data nothing can re-derive (ADR 0007).
+# weekly_backup_claims: {claim: B2 shard}, 0 (Sunday) to 6. Change a shard only to rebalance
+#   B2's daily transaction cap; give a new claim the lightest weekday.
+# no_backup_claims: bound claims forced out of the backup set, each with its reason. A
+#   `longhorn`-class claim in none of these keys is backed up daily to B2.
+# metrics: scrape jobs (scripts/renderer/template_filters/scrape_jobs.py).
+# netpol_from: callers the baseline does not admit, rendered by netpol-baseline.
+# netpol_role_owned, role_owned: the role renders that fence itself, so it ships with the role.
+# homepage_widget: adds homepage to the callers.
 containers_list:
-  # crowdsec must precede traefik: the traefik pod carries a crowdsec agent sidecar that logs
-  # into this engine's LAPI, and the LAPI pod's `lapi-register` initContainer registers the
-  # machine credential before the LAPI serves — so the engine and its registrations must exist
-  # before a traefik rollout starts the sidecar. Not derivable from a template, so it is
-  # declared as traefik's `depends_on:` below rather than hand-positioned; see
-  # K8S_CRD_EDGE_EXEMPT in toposort.py for why the reverse (CRD) edge is exempted here instead
-  # of cycling against it.
-  #
-  # The cost accepted for that: this role renders an IngressRoute (the LAPI's LAN face)
-  # ahead of traefik installing the CRDs. Harmless on the running cluster; on a rebuild it
-  # is the one first-run ordering failure we accept, because the credential constraint wins.
   - name: crowdsec
-    # Flux applies crowdsec through `promote` and runs its ban-and-lift check as the
-    # `crowdsec-verify` Job (D5, crowdsec's own window).
-    # Decisions expire and re-derive from logs; Metabase dashboards are provisioned.
-    no_backup_claims: [crowdsec-db]
-    # daniel-server's agent and its traefik bouncer authenticate here with machine/bouncer
-    # keys, so use_authelia false is load-bearing. hostname also feeds the Pi-hole
-    # per-service DNS override.
+    no_backup_claims: [crowdsec-db]  # decisions re-derive from logs
     hostname: "crowdsec-lapi"
-    # `ScrapeTargetDown` (service crowdsec) and the crowdsec-jobs homelab_check_* gauges cover it.
-    probe: false
+    probe: false  # `ScrapeTargetDown` and the homelab_check_* gauges cover it
     port: 8080
-    use_authelia: false
-    # crowdsec-db is in k3s_longhorn_nobackup_volumes: decisions re-derive from logs.
+    use_authelia: false  # agents and bouncers authenticate with machine keys
     tier: home-edge
-    # The engine's (LAPI+AppSec) :6060 carries the LAPI/decision metrics the Grafana CrowdSec
-    # boards read. The `metrics` field is documented in scripts/renderer/template_filters/scrape_jobs.py;
-    # observability's prometheus.yaml.j2 renders a plain scrape job from each item, and the
-    # owning role reads the port back with `metrics_port`. The engine binds 6060 from the
-    # image's own config.yaml, so this records that port rather than setting it.
     metrics:
       - job: crowdsec
         port: 6060
-      # The crowdsec-jobs sidecar's check exporter (files/jobs_metrics.py), which serves three
-      # jobs' verdicts as homelab_check_* gauges (M6 B6b). The
-      # process binds whatever JOBS_METRICS_PORT holds, and deployment.yaml.j2 hands it this
-      # number, so unlike the engine's image-fixed 6060 this port moves the listener too.
       - job: crowdsec-jobs
         port: 9182
         interval: 1m
-  # The workload-tier PriorityClasses and the read-only cluster identity (H1.2). Flux applies the
-  # tag through `promote` and every Ansible path skips it. It renders prune: false, and it is
-  # untiered, so `NEVER_SHED` keeps it out of the lost-node shed set.
   - name: cluster-base
-  # MetalLB's vendored manifest and the address pool (H1.3). Flux applies the tag through
-  # `promote` and every Ansible path skips it. It renders prune: false, and it is untiered, so
-  # `NEVER_SHED` keeps it out of the lost-node shed set.
   - name: metallb
-  # Cluster DNS: the CoreDNS Deployment, Service, RBAC and the Corefile key of its ConfigMap
-  # (H1.4). Flux applies the tag through `promote` and every Ansible path skips it. It renders
-  # prune: false, and it is untiered because its pod keeps `system-cluster-critical`, so
-  # `NEVER_SHED` keeps it out of the lost-node shed set.
   - name: coredns
-  # Longhorn's vendored manifest, the manager memory patch and the `longhorn` class (H1.5a). Flux
-  # applies the tag through `promote` and every Ansible path skips it. It renders prune: false,
-  # and it is untiered, so `NEVER_SHED` keeps it out of the lost-node shed set.
   - name: longhorn
-  # The hourly CronJob that holds each Volume CR in its tier's recurring-job group and the CSI
-  # sidecars' memory request (H1.6). Its objects sit in `longhorn-system`, which `longhorn`'s
-  # vendored file creates, so it depends on that tag. It is untiered and prunes by default, so
-  # the lost-node shed set names it on its "nothing to scale" line and `NEVER_SHED` omits it.
   - name: longhorn-reconcile
     depends_on: [longhorn]
-  # The two credential Secrets, the BackupTargets `default` and `r2`, and the RecurringJobs
-  # (H1.7b). The `longhorn` vendored file defines the BackupTarget and RecurringJob CRDs, so the
-  # edge stops a first apply on a new cluster from failing on unknown kinds. It renders prune:
-  # false and is forward-only, and it is untiered, so `NEVER_SHED` keeps it out of the lost-node
-  # shed set.
   - name: longhorn-backup
     depends_on: [longhorn]
-  # The restore drill's stamp ConfigMap (H2.3b), and from H2.3d its CronJob. Its objects live in
-  # `homelab`, which `longhorn` cannot reach on a fresh cluster before step 8 of H1's DR order, so
-  # it is a tag of its own. It depends on `longhorn` for the Longhorn CRDs the CronJob will name.
-  # It prunes, except the stamp ConfigMap, and it is untiered, so `NEVER_SHED` omits it.
   - name: longhorn-restore-drill
     depends_on: [longhorn]
-  # The IngressRoute, Middleware and TLSOption CRDs, alone in their tag so it can render
-  # prune: false and its directory never substitutes. traefik's tier keeps it out of
-  # the shed set.
   - name: traefik-crds
-    # Flux applies traefik-crds and traefik through `promote`, and every Ansible path skips
-    # them (D5, traefik's own window).
     tier: home-edge
   - name: traefik
     port: 8080
+    # crowdsec first: its LAPI must hold the machine credential before the agent sidecar starts.
     depends_on: [crowdsec, traefik-crds]
-    # The k8s edge's traefik_* metrics, through the dedicated traefik-metrics ClusterIP: the
-    # internal :8080 entrypoint must not ride the LoadBalancer Service onto the LAN VIP.
-    # 8080 is Traefik's own default for that entrypoint, so this records it rather than
-    # setting it; the Service's targetPort stays the literal.
     metrics:
       - job: traefik-k8s
+        # Not the LoadBalancer Service, which would put :8080 on the LAN VIP.
         service: traefik-metrics
         port: 8080
         interval: 1m
     tier: home-edge
     backup_claims: [traefik-acme]
   - name: authelia
-    # Flux applies authelia through `promote`, and every Ansible path skips it (D5, authelia's
-    # own window).
-    # This portal's name is the OIDC issuer Jellyfin's SSO plugin points at.
     hostname: "auth"
     port: 9091
     use_authelia: false
     tier: home-edge
     backup_claims: [authelia-config]
-    # Rendered by netpol-baseline's networkpolicy-callers.yaml.j2 on the portal port.
     netpol_from:
-      - traefik  # forwardauth-middleware.yaml.j2 dials authelia.<ns>.svc:9091 from the Traefik
-                 # pod. Apps behind the middleware never dial authelia: Traefik issues the 302.
-    # Rendered by this role's templates/networkpolicy-redis.yaml.j2, not netpol-baseline:
-    # the portal exits without its session store, so the fence ships with the portal.
-    # `role_owned: true` makes netpol-baseline's callers loop skip the item.
+      - traefik  # forwardauth-middleware.yaml.j2
     netpol_fences:
       - app: authelia-redis
-        port: 6379  # the containerPort and Service port; test_authelia_redis_sessions.py pins it
-        from: [authelia]  # session.redis.host in config-secret.yaml.j2; nothing else dials it
+        port: 6379
+        from: [authelia]
         role_owned: true
   - name: bento-pdf
-    # Flux applies bento-pdf through `promote`, and every Ansible path skips it (D2.7).
-    # Single-label on purpose — bento-pdf.local.<domain> is covered by the existing
-    # *.local.<domain> wildcard cert; a nested bento-pdf.k8s.local.<domain> would not be.
     hostname: "bento-pdf"
     port: 8080
     use_authelia: true
     auth_tier: one_factor
   - name: texbrain
-    # Flux applies texbrain through `promote`, and every Ansible path skips it (D4.5).
-    # Single label, for the same wildcard-cert reason as bento-pdf above.
     hostname: "texbrain"
     port: 8080
     use_authelia: true
     auth_tier: one_factor
-  # Read-only cluster UI. use_authelia is load-bearing rather than decorative: the pod runs
-  # with -unsafe-use-service-account-token, so this Middleware is the only thing between a
-  # browser and the dashboard's (read-only) cluster identity.
   - name: headlamp
-    # Flux applies headlamp through `promote`, and `headlamp-verify` runs the isolation probe the
-    # deleted tasks ran. Its observability RBAC is `headlamp-deferred`, which waits on observability
-    # (D5, Wave D).
     hostname: "headlamp"
     port: 4466
+    # The pod uses its ServiceAccount token unsafely, so this is the only gate on the dashboard.
     use_authelia: true
     auth_tier: one_factor
-    # Callers of k8s/roles/headlamp/templates/networkpolicy.yaml.j2, which the role renders
-    # itself (hence netpol_role_owned) so its netpol-probe Job tests the fence it just applied.
     netpol_role_owned: true
     netpol_from:
-      - traefik  # the only caller: every human path runs the Authelia middleware first
-  # Route-only: the backend is deploy-ui.service on this host (hosts/components/deploy-ui/), reached
-  # through a selector-less Service. use_authelia is the whole access control, and the tier is
-  # two_factor because the page starts land.sh on a stolen password alone.
+      - traefik
   - name: deploy-ui
-    # Flux applies deploy-ui through `promote`, and every Ansible path skips it (D5.6).
     hostname: "deploy"
     port: 8790
+    # The only access control.
     use_authelia: true
-    auth_tier: two_factor
-  # Route-only entry: Longhorn's workloads come from the upstream manifest the longhorn role
-  # ships through Flux, and this entry adds nothing but the IngressRoute plus the middleware
-  # copies it needs inside longhorn-system. `port` is longhorn-frontend's Service port. use_authelia
-  # is the entire access control — Longhorn's UI has no login of its own. two_factor: the UI
-  # deletes volumes, replicas and their B2 backup chain on a stolen password alone, a heavier
-  # blast radius than code-server/n8n.
+    auth_tier: two_factor  # the page starts land.sh
   - name: longhorn-ui
-    # Flux applies longhorn-ui through `promote`, and every Ansible path skips it (D5.6).
     hostname: "longhorn"
     port: 80
+    # The only access control: the UI has no login.
     use_authelia: true
-    auth_tier: two_factor
-  # Makes /dev/dri/renderD128 schedulable as `devic.es/dri` so jellyfin and tdarr can
-  # request it without being privileged; both declare it in `depends_on`. No port/hostname —
-  # nothing routes to it.
+    auth_tier: two_factor  # the UI deletes volumes and their backup chain
   - name: dri-device-plugin
-    # Flux applies dri-device-plugin through `promote` (D5, Wave D); its soak verify is the
-    # `K8sExtendedResourceMissing` alert.
-  # The shared /data volume the nine media workloads mount. Storage, not a service.
-  # Must precede every media workload — a pod that mounts an undeclared claim stays
-  # Pending, and WaitForFirstConsumer makes that look like a scheduling problem rather
-  # than a missing volume.
   - name: media-volume
-    # Flux applies media-volume through `promote`, and its hardlink check runs as a Job in
-    # `media-volume-verify` (D5, Wave D).
-  # Mounts media-volume's claim at /data, so `depends_on` puts it after that role — as it does
-  # for every other media-data mounter below. tests/deploy/test_k8s_toposort.py pins
-  # each pair.
   - name: sonarr
-    # Flux applies sonarr through `promote`, and its verify Job and arr-notification's seed Job
-    # run in `sonarr-verify` (D5.20).
     weekly_backup_claims: {sonarr-config: 6}  # Sat
     depends_on: [media-volume]
     hostname: "sonarr"
@@ -241,54 +110,37 @@ containers_list:
     use_authelia: true
     auth_tier: one_factor
     service_extra_ports:
-      # The exportarr sidecar's scrape port. Named, and so is the primary port the shared
-      # default renders beside it: Kubernetes rejects a Service mixing named and unnamed
-      # ports, and rejects it at APPLY time, after every repo-side check has read green.
       - name: metrics
         port: 9707
-    # Callers of k8s/roles/sonarr/templates/networkpolicy.yaml.j2, the additive fence on
-    # this port; the header there says why each class of caller is listed. The role renders it
-    # itself so `--tags sonarr` carries its own fence, hence netpol_role_owned.
     netpol_role_owned: true
     netpol_from:
-      - traefik         # deliberate, not redundant — see the policy's header
-      - janitorr        # templates/config/application.yml.j2 — deploy-time verify too
-      - configarr       # CronJob; its pod template carries app: configarr
-      - monitor-bridge  # config/env.yaml.j2, cluster FQDN
-      - autofix-bridge  # deployment.yaml.j2, cluster FQDN
-      - bazarr          # app DB, bare name — see the policy's header
-      - prowlarr        # Application Sync writes indexers in — see the policy's header
-      - sonarr-verify   # templates/verify/ Jobs — see the policy's header
-      - janitorr-verify # janitorr's templates/verify/ Job — see the policy's header
-    # homepage's Sonarr widget dials the ClusterIP; this key adds homepage to the callers above.
+      - traefik
+      - janitorr
+      - configarr
+      - monitor-bridge
+      - autofix-bridge
+      - bazarr
+      - prowlarr
+      - sonarr-verify
+      - janitorr-verify
     homepage_widget: true
-  # Runs a WireGuard/Mullvad sidecar sharing the pod's netns, gating qbittorrent's start so
-  # it cannot talk to a tracker before the kill-switch exists.
   - name: qbittorrent
-    # Flux applies qbittorrent through `promote`, decrypts its Mullvad account Secret, and runs
-    # its verify, prefs and gate Jobs in `qbittorrent-verify` (D5, Wave D).
     weekly_backup_claims: {qbittorrent-config: 4}  # Thu
     depends_on: [media-volume]
     hostname: "qbittorrent"
     port: 8080
     use_authelia: true
     auth_tier: one_factor
-    # Callers of k8s/roles/qbittorrent/templates/networkpolicy.yaml.j2, the additive fence on
-    # the WebUI port; the header there says why each caller is listed. The role renders it
-    # itself so `--tags qbittorrent` carries its own fence, hence netpol_role_owned.
     netpol_role_owned: true
     netpol_from:
-      - traefik                  # deliberate, not redundant — see the policy's header
-      - sonarr                   # download client, app DB host `wireguard` (compat Service)
-      - radarr                   # same as sonarr
-      - lidarr                   # same as sonarr
-      - qbittorrent-reach-probe  # the qbittorrent-verify Job's pod-CIDR reachability check
-      - qbittorrent-prefs-check  # the daily log-only drift check CronJob, files/prefs_check.py
-    # homepage's qBittorrent widget dials the ClusterIP; this key adds homepage to the callers.
+      - traefik
+      - sonarr
+      - radarr
+      - lidarr
+      - qbittorrent-reach-probe
+      - qbittorrent-prefs-check
     homepage_widget: true
   - name: radarr
-    # Flux applies radarr through `promote`, and arr-notification's seed Job runs in
-    # `radarr-verify` (D5.20).
     weekly_backup_claims: {radarr-config: 2}  # Tue
     depends_on: [media-volume]
     hostname: "radarr"
@@ -296,33 +148,21 @@ containers_list:
     use_authelia: true
     auth_tier: one_factor
     service_extra_ports:
-      # The exportarr sidecar's scrape port. Named, and so is the primary port the shared
-      # default renders beside it: Kubernetes rejects a Service mixing named and unnamed
-      # ports, and rejects it at APPLY time, after every repo-side check has read green.
       - name: metrics
         port: 9707
-    # Callers of k8s/roles/radarr/templates/networkpolicy.yaml.j2, the additive fence on
-    # this port; the header there says why each class of caller is listed. The role renders it
-    # itself so `--tags radarr` carries its own fence, hence netpol_role_owned.
     netpol_role_owned: true
     netpol_from:
-      - traefik         # deliberate, not redundant — see the policy's header
+      - traefik
       - janitorr
       - configarr
       - monitor-bridge
       - autofix-bridge
       - bazarr
-      - prowlarr        # Application Sync writes indexers in — see the policy's header
-      - radarr-verify   # templates/verify/ Job — see the policy's header
-      - janitorr-verify # janitorr's templates/verify/ Job — see the policy's header
-    # homepage's Radarr widget dials the ClusterIP; this key adds homepage to the callers above.
+      - prowlarr
+      - radarr-verify
+      - janitorr-verify
     homepage_widget: true
-  # Brings a second workload with it — flaresolverr, which renders attacker-supplied
-  # Cloudflare pages. An INGRESS NetworkPolicy keeps it reachable from prowlarr alone;
-  # ingress is the direction actually enforced on this cluster.
   - name: prowlarr
-    # Flux applies prowlarr through `promote`, and its flaresolverr isolation check runs in
-    # `prowlarr-verify`.
     weekly_backup_claims: {prowlarr-config: 4}  # Thu
     hostname: "prowlarr"
     # DECIDED: LAN-only by operator ruling 2026-11-15 (#8514); WireGuard covers remote use.
@@ -331,24 +171,17 @@ containers_list:
     use_authelia: true
     auth_tier: one_factor
     service_extra_ports:
-      # The exportarr sidecar's scrape port. Named, and so is the primary port the shared
-      # default renders beside it: Kubernetes rejects a Service mixing named and unnamed
-      # ports, and rejects it at APPLY time, after every repo-side check has read green.
       - name: metrics
         port: 9707
-    # Callers of k8s/roles/prowlarr/templates/networkpolicy-prowlarr.yaml.j2, the additive fence on
-    # this port; the header there says why each class of caller is listed. The role renders it
-    # itself so `--tags prowlarr` carries its own fence, hence netpol_role_owned.
     netpol_role_owned: true
     netpol_from:
-      - traefik                    # deliberate, not redundant — see the policy's header
+      - traefik
       - monitor-bridge
       - sonarr
       - radarr
       - lidarr
-      - prowlarr-verify            # templates/verify/ Job's control leg — see the policy's header
+      - prowlarr-verify
   - name: bazarr
-    # Flux applies bazarr through `promote`, and every Ansible path skips it (D5.9).
     weekly_backup_claims: {bazarr-config: 5}  # Fri
     depends_on: [media-volume]
     hostname: "bazarr"
@@ -357,423 +190,216 @@ containers_list:
     port: 6767
     use_authelia: true
     auth_tier: one_factor
-    # Callers of k8s/roles/bazarr/templates/networkpolicy-bazarr.yaml.j2, the additive fence on
-    # this port; the header there says why. The role renders it itself so `--tags bazarr`
-    # carries its own fence, hence netpol_role_owned.
     netpol_role_owned: true
     netpol_from:
-      - traefik         # deliberate, not redundant — see the policy's header
-      - monitor-bridge  # its Bazarr Health check dials bazarr:6767 directly
+      - traefik
+      - monitor-bridge  # the Bazarr Health check dials bazarr:6767
 
-  # use_authelia stays FALSE, and that is load-bearing rather than an oversight: Jellyfin's
-  # clients are TV and phone apps that cannot complete a web SSO flow.
   - name: jellyfin
-    # Flux applies jellyfin through `promote`, caps its snapshot space and checks the render node
-    # and the library in `jellyfin-verify` (D5, Wave D).
     weekly_backup_claims: {jellyfin-config: 1}  # Mon
-    # dri-device-plugin advertises the `devic.es/dri` resource this pod requests.
     depends_on: [media-volume, dri-device-plugin]
     hostname: "jellyfin"
-    # blackbox-extra's tcp_connect target on the LAN VIP covers it.
-    probe: false
+    probe: false  # blackbox-extra's tcp_connect target covers it
     port: 8096
-    use_authelia: false
+    use_authelia: false  # TV and phone apps cannot complete a web SSO flow
 
-  # Holds the GPU for minutes at a time on real files and rewrites the library IN PLACE —
-  # the one media service where a wrong mount does lasting damage rather than a failed
-  # request. Its /media mount is consequently the only read-write one among the consumers.
   - name: tdarr
-    # Flux applies tdarr through `promote`, pulls its image in `tdarr-prepull` first, snapshots
-    # both config claims, and checks the device and library in `tdarr-verify` (D5, Wave D).
     weekly_backup_claims: {tdarr-server: 1, tdarr-configs: 2}  # Mon, Tue
-    # dri-device-plugin advertises the `devic.es/dri` resource this pod requests.
     depends_on: [media-volume, dri-device-plugin]
     hostname: "tdarr"
     port: 8265
     use_authelia: true
     auth_tier: one_factor
 
-  # A nightly reconcile that reads the two *arrs and exits, so it is a CronJob with no
-  # Service and nothing to route to. Follows sonarr and radarr by the edge below: it
-  # addresses them by bare Service name.
   - name: configarr
-    # Flux applies configarr through `promote` and runs its two gate Jobs in `configarr-verify`
-    # (D5, Wave D).
     depends_on: [sonarr, radarr]
 
-  # No web UI, so no route. Must follow sonarr, radarr AND jellyfin: it addresses all three
-  # by bare Service name, and its verify step reads a symlink from inside the jellyfin pod.
   - name: janitorr
-    # Flux applies janitorr through `promote` and checks its dry-run state, its reach and its
-    # leaving-soon links in `janitorr-verify` (D5, Wave D).
     depends_on: [media-volume, sonarr, radarr, jellyfin]
 
   - name: observability
-    # Flux applies observability through `promote`, restarts a workload whose Secret changed
-    # through the renderer's restart annotation, and reads the OTLP bind address back in
-    # `observability-verify` (D5, Wave D).
-    # `hostname`/`port` describe Grafana — the only routed workload here. The OTEL
-    # collector, Loki, Prometheus and Tempo are reached on the node's loopback via hostPort
-    # so `otelq`, which hardcodes 127.0.0.1, can read them from the host. Content logging is
-    # on, so none of them gets an ingress route.
+    # Grafana only. The other workloads hold prompt content, so none gets an ingress route.
     hostname: "grafana"
     port: 3000
     use_authelia: true
     auth_tier: one_factor
-    # Prometheus' own name, so Pi-hole answers it with the cluster VIP instead of the
-    # local.<domain> wildcard pointing at daniel-server. monitor-bridge runs there and
-    # cannot reach this host's ClusterIP or its loopback-pinned hostPort, so this name plus
-    # the role's query-only `prometheus-monitoring` IngressRoute is the whole path in. Keep
-    # the two in step — that route hardcodes `prometheus`.
+    # Must match the host the `prometheus-monitoring` IngressRoute hardcodes.
     extra_hostnames:
       - "prometheus"
-  # The public link-in-bio landing page, so a login gate would break it.
   - name: littlelink
-    # Flux applies littlelink through `promote`, and every Ansible path skips it (D5.6).
     hostname: "www"
     port: 3000
-    use_authelia: false
+    use_authelia: false  # public landing page
   - name: speedtest
-    # Flux applies speedtest through `promote`, and substitutes its APP_KEY Secret from
-    # homelab-cluster-vars (D5.9).
     hostname: "speedtest"
     # DECIDED: LAN-only by operator ruling 2026-11-15 (#8514); WireGuard covers remote use.
     public_route: false
     port: 80
     use_authelia: true
     auth_tier: one_factor
-    # The image serves speedtest_tracker_* natively at `/prometheus` on its UI port.
-    # UNVERIFIED until someone flips the app's `prometheus_enabled` Settings toggle by hand: it
-    # defaults OFF and lives in the app's own DB, so until then this job reads `up == 0`, not
-    # silently empty. See k8s/roles/speedtest/CLAUDE.md. The port is the entry's own, which
-    # the image fixes.
+    # Reads `up == 0` until the app's `prometheus_enabled` setting is turned on by hand.
     metrics:
       - job: speedtest
         path: /prometheus
-    # Callers beyond the baseline, rendered by netpol-baseline's networkpolicy-callers.yaml.j2.
-    # Browsers arrive through traefik and prometheus scrapes `/prometheus` on this port; the
-    # baseline already admits both on every port. The baseline's node CIDRs are two /32 cni0
-    # host addresses, so no pod-network caller is covered by them.
     netpol_from:
-      # SPEEDTEST_URL (monitor-bridge/templates/config/env.yaml.j2): the check that reads the
-      # newest result row. A failed run leaves no other trace, because the container logs only
-      # its pre-run connectivity ping.
-      - monitor-bridge
-  # Headless DDNS client: no web UI, no Traefik route.
+      - monitor-bridge  # SPEEDTEST_URL
   - name: cloudflare-ddns
-    # Flux applies cloudflare-ddns through `promote` and substitutes its API-token Secret from
-    # homelab-cluster-vars (D5.19).
   - name: freshrss
-    # Flux applies freshrss through `promote`, and every Ansible path skips it (D5.9).
     weekly_backup_claims: {freshrss-config: 5}  # Fri
     hostname: "freshrss"
     port: 80
     use_authelia: true
     auth_tier: one_factor
-    # Fences for this role's sub-workloads, which have no entry of their own, rendered by
-    # netpol-baseline's networkpolicy-callers.yaml.j2. Each names its own pod label and port,
-    # so freshrss's own port and any fence freshrss later declares stay separate.
     netpol_fences:
-      # The nginx feed cache (files/nginx-feed-cache.conf). Its Service is `feed-cache`, its pod
-      # label `app: freshrss-feed-cache`; port 80 is the containerPort and Service port both,
-      # verified 2026-08-20.
       - app: freshrss-feed-cache
         port: 80
         from:
-          - freshrss  # the subscription URL lives in FreshRSS's own database, so no template
-                      # names `feed-cache` as a target and a grep cannot see this caller.
-                      # Confirm after a deploy that the Rest of World feed still refreshes.
+          - freshrss  # the subscription URL is in FreshRSS's database, so no grep finds this caller
   - name: navidrome
-    # Flux applies navidrome through `promote`, and every Ansible path skips it (D5.8).
     weekly_backup_claims: {navidrome-data: 3}  # Wed
     depends_on: [media-volume]
     hostname: "navidrome"
     port: 4533
     use_authelia: true
     auth_tier: one_factor
-    # Subsonic clients (Symfonium, Feishin) cannot pass forward-auth, so the Subsonic API skips
-    # Authelia on the public name and navidrome authenticates each request itself.
+    # Subsonic clients cannot pass forward-auth; navidrome authenticates each request.
     bridge_bypass_prefixes:
       - /rest/
-    # ND_PROMETHEUS_ENABLED serves /metrics beside the UI. db_model_totals feeds homepage's
-    # Navidrome tile. Parking navidrome means dropping this item too, or its scrape target
-    # reads `up == 0` and pages.
+    # Parking navidrome means dropping this too, or its target reads `up == 0` and pages.
     metrics:
       - job: navidrome
-  # CouchDB for Obsidian LiveSync. use_authelia is false because the LiveSync client uses
-  # non-interactive basic auth and cannot pass 2FA — CouchDB's own require_valid_user is
-  # the gate. Its data volume is longhorn-NOBACKUP, so the backup plane ignores this PVC
-  # deliberately (see the role's defaults).
   - name: livesync
-    # Flux applies livesync through `promote`, and substitutes its CouchDB credentials Secret
-    # from homelab-cluster-vars (D5.9).
     hostname: "livesync"
-    # blackbox-extra's http_401 target covers it: CouchDB's 401 is the end-to-end signal.
-    probe: false
+    probe: false  # blackbox-extra's http_401 target covers it
     port: 5984
+    # Clients use basic auth and cannot pass 2FA. Traefik's livesync-gate-secret serves the
+    # names; a bare `Host(livesync…)` router added beside it would bypass the token gate.
     use_authelia: false
-    # NO IngressRoute at all, and that is load-bearing rather than an omission. Its names
-    # are served by the X-Sync-Token gate in the k8s Traefik's Secret-mounted file provider
-    # (k8s/roles/traefik/templates/livesync-gate-secret.yaml.j2 — token router, Authelia'd
-    # /_utils carve-out at priority 200, and the LAN-only `livesync-probe` router whose CouchDB
-    # 401 is the end-to-end signal). The token stays out of CRDs because the readonly
-    # kubeconfig can read IngressRoutes but is RBAC-denied Secrets. Replication keeps its
-    # 20x limiter there — the default 300/min 429'd a phone mid-pull within an hour.
-    #
-    # No bare `Host(livesync…)` router may be added beside the gate's: that would break the
-    # gate's whole invariant, that a request without the token matches NO router and 404s
-    # before CouchDB. `hostname` stays only to feed the Pi-hole override and blackbox-exporter's
-    # hostAliases.
   - name: homepage
-    # Flux applies homepage through `promote`, and substitutes its config Secret from
-    # homelab-cluster-vars (D5.7).
     hostname: "homepage"
     port: 3000
     use_authelia: true
     auth_tier: one_factor
-  # UPS web UI. Reads upsd over the in-cluster `nut` Service.
   - name: peanut
-    # Flux applies peanut through `promote`, and substitutes its Secret from
-    # homelab-cluster-vars (D3.6).
     hostname: "peanut"
     port: 8080
     use_authelia: true
     auth_tier: one_factor
-  # Browses every host's ~/.claude/artifacts at one authenticated URL. Serves hostPath
-  # trees, so the pod is pinned to daniel-box and daniel-server's copy is rsynced in by a
-  # cron there. Answers on both the LAN and the public name — a link is the only way anyone
-  # reaches an artifact, so one that resolves inside the LAN alone fails wherever the
-  # reader is.
   - name: artifacts
-    # Flux applies artifacts through `promote`. The claude-code host component creates its host
-    # directories, in tmpfiles.d/homelab-artifacts.conf.j2 (H7.40).
     hostname: "artifacts"
     port: 8080
     use_authelia: true
     auth_tier: one_factor
-  # MkDocs Material site over docs/, built on this host by scripts/docs/build_docs.py and served
-  # from a hostPath. Sits next to artifacts because they are the same shape: nginx-class
-  # static serving over a daniel-box tree, reachable on both the LAN and public names behind
-  # Authelia. The role's ingressroute template records why it stopped being LAN-only.
   - name: docs
-    # Flux applies docs through `promote`. The docs-refresh host component creates its site
-    # directory, in tmpfiles.d/homelab-docs-site.conf.j2 (H7.10a).
     hostname: "docs"
     port: 8080
     use_authelia: true
     auth_tier: one_factor
-  # Read-only MCP server. No hostname/ingressroute — its bearer-token router lives in the
-  # edge gate Secret (k8s/roles/traefik/templates/livesync-gate-secret.yaml.j2), matching
-  # only mcp.local.<domain>, so no dnsmasq override or public router may exist for it.
   - name: homelab-mcp
-    # Flux applies homelab-mcp through `promote`, pulls its image from GHCR, and substitutes
-    # its token Secret from homelab-cluster-vars (D5.14).
+    # No hostname: the bearer-token router in Traefik's livesync-gate-secret is the only route.
     port: 8000
     use_authelia: false
-    # Named Service port, which the shared default Service renders on request.
     service_port_name: http
-  # Brings three unrouted workloads with it — headless Chrome, Meilisearch and the
-  # time-tagger — reached in-cluster by Service name. Those names are load-bearing:
-  # karakeep addresses them by those names.
   - name: karakeep
-    # Flux applies karakeep through `promote`, snapshots karakeep-data in `karakeep-snapshot`,
-    # and runs the archive pruner's gate in `karakeep-verify` (D5, Wave C).
     weekly_backup_claims: {karakeep-data: 3}  # Wed
     hostname: "karakeep"
     port: 3000
     use_authelia: true
     auth_tier: one_factor
-    # The browser extension and mobile app authenticate with Bearer API keys and cannot pass
-    # 2FA, so the paths they call are public on purpose. The app itself
-    # key-gates each prefix but /api/health (packages/api/index.ts in the pinned image): the
-    # extension and the app speak tRPC at /api/trpc/, the app uploads to /api/assets and reads
-    # /api/assets/<id>, and /api/v1/ is the REST API. /api/health returns a constant body, and
-    # the mobile app's connection test and online indicator read it. The list is an allow-list, not `/api/` — that prefix also
-    # reaches next-auth's /api/auth/* (password login, no app-side throttle) and cookie-session
-    # auth on every other child, which would leave the app password as the only gate on the
-    # internet.
-    # The trailing slashes are load-bearing: PathPrefix(`/api`) would also match siblings like
-    # /api-docs. /api/assets and /api/health have none because the mobile app calls exactly
-    # those paths; nothing else under /api/ starts with `assets` or `health`.
+    # Public; all but /api/health need a Bearer key. Never `/api/`, which reaches next-auth at
+    # /api/auth/*. The trailing slashes keep siblings such as /api-docs out; the app calls
+    # exactly /api/assets and /api/health, which take none.
     bridge_bypass_prefixes:
       - /api/v1/
       - /api/trpc/
       - /api/assets
       - /api/health
-    # Callers beyond the baseline, rendered by netpol-baseline's networkpolicy-callers.yaml.j2.
-    # Browsers arrive through traefik and prometheus scrapes this port; the baseline admits both.
     netpol_from:
-      # The `wait-for-karakeep` init container (karakeep/templates/deployment-time-tagger.yaml.j2)
-      # dials karakeep:3000 every 5s until it connects. Denied, the new tagger pod sits in Init
-      # forever while the old one keeps running, so the rollout never completes. The first
-      # census missed it because it excluded karakeep's own role: read a role's own templates
-      # for init containers and wait loops (`grep -rn 'create_connection\|nc -z'`) too.
-      - karakeep-time-tagger
-      # The archive pruner CronJob (karakeep/templates/cronjob-archive-pruner.yaml.j2) calls
-      # the REST API at karakeep:3000.
-      - karakeep-archive-pruner
-    # The backends `wait-for-deps` (karakeep/templates/deployment.yaml.j2) dials in an unbounded
-    # loop. Each fence ships with this role, rendered by its templates/networkpolicy-<backend>
-    # template, so `--tags karakeep` never stages a pod that waits in Init forever.
-    # Ports are the containerPort and Service port both; test_karakeep_backend_policies.py pins them.
+      - karakeep-time-tagger  # its init container waits on karakeep:3000
+      - karakeep-archive-pruner  # REST API
     netpol_fences:
       - app: karakeep-meilisearch
         port: 7700
-        from: [karakeep]  # MEILI_ADDR in deployment.yaml.j2
+        from: [karakeep]
         role_owned: true
-      # Exempt from the baseline (netpol_baseline_exempt_workloads), so this is the pod's only
-      # policy: it serves unauthenticated DevTools, and karakeep is its one caller.
+      # Exempt from the baseline, so this is the only policy on unauthenticated DevTools.
       - app: karakeep-chrome
         port: 9222
-        from: [karakeep]  # BROWSER_WEB_URL in deployment.yaml.j2
+        from: [karakeep]
         role_owned: true
-  # An unauthenticated plain-HTTP registry, reachable only on the node's loopback via
-  # hostPort and in-cluster via its Service. Giving it an ingress would put push access on
-  # the LAN.
   - name: registry
-    # Flux applies registry through `promote`, and the `registry-verify` Jobs replace the
-    # self-tests and the netpol probe (D5, Wave D). `registry-gc.sh` stays a host script and the
-    # one writer of ghcr-mirror's replicas.
+    # Unauthenticated registry: an ingress would put push access on the LAN.
     tier: platform
-  # two_factor even on the LAN: arbitrary workflow execution on a stolen
-  # password alone. /webhook/ below is unaffected — that route carries no forward-auth at all,
-  # and monitor-bridge's check_n8n rides the API-key route.
   - name: n8n
-    # Flux applies n8n through `promote`, and every Ansible path skips it.
     weekly_backup_claims: {n8n-data: 0, n8n-files: 5}  # Sun, Fri
     hostname: "n8n"
     port: 5678
     use_authelia: true
-    auth_tier: two_factor
-    # External services POST here with no session. Authelia would not fail loudly — it
-    # would silently break every registered webhook while the callers keep reporting
-    # success. The trailing slash keeps /webhook-test/ (dev-only) out.
+    auth_tier: two_factor  # arbitrary workflow execution
+    # Webhook callers have no session. The trailing slash keeps /webhook-test/ out.
     bridge_bypass_prefixes:
       - /webhook/
 
-  # No port/hostname/route — MQTT is raw TCP and crosses hosts on the role's pinned MetalLB
-  # VIP (mosquitto_k8s_lan_ip), not through Traefik.
   # DECIDED: mosquitto-data stays out of the daily R2 tier (#3389). It holds retained
   # messages and QoS session state the three clients republish on reconnect, on the
   # longhorn-nobackup class, so the broker is tiered for placement and alerting only.
   - name: mosquitto
-    # Flux applies mosquitto through `promote` (D5.20). The MosquittoLanAddressNotPinned rule
-    # replaces the LAN-address assert, and cluster_vars.py write refuses a `:` in
-    # mqtt_password_hash.
     tier: home-automation
 
-  # Must follow mosquitto — z2m resolves the broker by bare Service name. The SLZB
-  # coordinator accepts one client, hence `strategy: Recreate` in the role.
   - name: zigbee2mqtt
-    # Flux applies zigbee2mqtt through `promote`, and substitutes its network key and MQTT
-    # credentials from homelab-cluster-vars (D5.10, own window).
     depends_on: [mosquitto]
     hostname: "zigbee2mqtt"
     port: 8080
     use_authelia: true
     auth_tier: one_factor
-    # Named Service port, which the shared default Service renders on request.
     service_port_name: http
     tier: home-automation
     backup_claims: [zigbee2mqtt-data]
 
-  # use_authelia false: forward-auth breaks the companion app, so HA's own login + TOTP is
-  # the gate. Reaches mosquitto by Service name.
   - name: home-assistant
-    # Flux applies home-assistant through `promote`, and substitutes its Google project id and
-    # Google service-account Secret from homelab-cluster-vars (D5.11, own window).
     hostname: "home-assistant"
-    # Records HA's own listener rather than setting it: HA binds 8123 by default, and
-    # files/configuration.yaml ships verbatim, so no template can move it. Changing this moves
-    # the Service, the route and the prometheus scrape target, but not the listener.
+    # Records HA's own listener; changing it moves the Service and route but not the listener.
     port: 8123
-    use_authelia: false
-    # Named Service port, which the shared default Service renders on request.
+    use_authelia: false  # forward-auth breaks the companion app; HA's login + TOTP gates
     service_port_name: http
     tier: home-automation
     backup_claims: [home-assistant-config]
-    # Callers beyond the baseline, rendered by netpol-baseline's networkpolicy-callers.yaml.j2.
-    # prometheus scrapes this port and browsers arrive through traefik; the baseline admits
-    # both. probe.py's `ha` subcommands run on a node, so the baseline's cni0 /32s cover them.
     netpol_from:
-      - airflow-task    # HA_URL (airflow/files/dags/homelab_warehouse/ha_rollup.py), the
-                        # nightly sensor-history rollup
-      - homelab-mcp     # HA_URL (homelab-mcp/templates/deployment.yaml.j2), Claude's read tools
-      - monitor-bridge  # HA_URL (monitor-bridge/templates/config/env.yaml.j2), the
-                        # scheduler-stuck check the container healthcheck cannot see
+      - airflow-task  # HA_URL in homelab_warehouse/ha_rollup.py
+      - homelab-mcp  # HA_URL
+      - monitor-bridge  # HA_URL
 
-  # LAN DNS on its own pinned VIP (dns_k8s_vip). Not seeded: blocklist state is declared in
-  # the role defaults (pihole_k8s_adlists) and everything else in /etc/pihole regenerates.
   - name: pihole
-    # Flux applies pihole through `promote`, and every Ansible path skips it (D5.26).
     hostname: "pihole"
-    # blackbox-extra's dns_a_homepage target covers it: a DNS query against the VIP.
-    probe: false
+    probe: false  # blackbox-extra's dns_a_homepage target covers it
     port: 80
     use_authelia: true
     auth_tier: one_factor
-    # Both pihole-etc claims are longhorn-nobackup: every byte regenerates.
     tier: home-edge
-  # Pi-hole v6 serves no Prometheus endpoint, so this polls its admin API and exports
-  # `pihole_*` — for BOTH instances, since each FTL keeps its own query database and one alone
-  # reports half the house's volume. `port` is the port it DIALS on the Pi-holes, not one it
-  # serves; it renders no IngressRoute, so no route derives from it. `depends_on: [pihole]`
-  # because it reads its password out of the `pihole-env` Secret that role renders, rather than
-  # holding a second copy of the credential.
   - name: pihole-exporter
-    # Flux applies pihole-exporter through `promote`, and every Ansible path skips it (D5.5).
+    # The port it dials on the Pi-holes, not one it serves.
     port: 80
     depends_on: [pihole]
-    # One exporter, BOTH FTL instances, every series labelled `hostname`: a panel must sum
-    # across them, or it reports about half the real volume. 1m rather than the global 15s:
-    # these are cumulative daily counters, and each scrape costs the exporter an authenticated
-    # round trip to each Pi-hole.
+    # Each scrape logs in to both Pi-holes, hence 1m. A panel must sum over `hostname`.
     metrics:
       - job: pihole
         port: 9617
         interval: 1m
 
-  # GPU utilization per node, from DRM sysfs. A DaemonSet with no Service and no IngressRoute —
-  # Prometheus discovers its pods individually — so no ordering edge derives from its templates
-  # and none is needed: it reads the kernel, not another workload. `port` is the exporter's
-  # listener, which its DaemonSet and observability's `gpu` scrape job both read through
-  # `entry_port`. 9101 is one past node-exporter's 9100. They do not collide, since
-  # this pod is not hostNetwork, but a distinct number keeps `ss -ltnp` on a node unambiguous.
   - name: gpu-exporter
-    # Flux applies gpu-exporter through `promote`, and every Ansible path skips it (D5.5).
     port: 9101
 
   - name: ical-proxy
-    # Flux applies ical-proxy through `promote`, pulls its image from GHCR, and substitutes
-    # its calendar-feed Secret from homelab-cluster-vars (D5.14).
     hostname: "ical-proxy"
-    # blackbox-extra's target for /calendar1.ics covers it, over the ClusterIP.
-    probe: false
+    probe: false  # blackbox-extra's /calendar1.ics target covers it
     port: 5000
     use_authelia: false
-    # Callers beyond the baseline, rendered by netpol-baseline's networkpolicy-callers.yaml.j2.
-    # ADDED 2026-08-24 with the ical-proxy route narrowing. The app serves unauthenticated
-    # private calendar feeds (/calendar{1,2,4}.ics is all of it, and there is no health
-    # endpoint). The route's ClientIP guard was once widened to the whole pod CIDR for an
-    # in-cluster prober, which let any pod read the calendars: demonstrated live with a 200
-    # and 847,922 bytes. So the in-cluster callers use the ClusterIP, where a podSelector can
-    # tell them apart; everything arriving through Traefik carries Traefik's identity. The
-    # baseline admits only traefik, prometheus and the node CIDRs, so without this list each
-    # caller is denied. Traefik keeps its access through the baseline, and the
-    # daniel-server-guarded route still works.
+    # The feeds are private and unauthenticated, so in-cluster callers stay enumerated here.
     netpol_from:
-      - blackbox-exporter  # the `blackbox-extra` probe of /calendar1.ics
-    # homepage's Calendar tile reads three feeds over the ClusterIP; this key adds homepage
-    # to the callers above.
+      - blackbox-exporter  # the /calendar1.ics probe
     homepage_widget: true
 
-  # The tunnel answers on the node IP (the wg-easy-udp Service's externalIP) rather than a
-  # VIP: router UIs forward to devices, and VIPs have no lease. There is no password_hash on
-  # either side: v15 owns its admin credentials in its own SQLite DB. Rotation is `cli db:admin:reset`
-  # inside the pod — see k8s/roles/wg-easy/defaults/main.yml.
   - name: wg-easy
-    # Flux applies wg-easy through `promote`, and every Ansible path skips it (D5.12, own window,
-    # operator on the LAN).
     weekly_backup_claims: {wg-easy-config: 4}  # Thu
     tier: platform
     hostname: "wg-easy"
@@ -783,67 +409,33 @@ containers_list:
     auth_tier: one_factor
     default_dns: "{{ dns_k8s_vip }}"
 
-  # Runs WITHOUT docker plumbing — no DOCKER_HOST, so no in-IDE docker CLI or devcontainers.
-  # CI's `images` job builds the image from the role's own Dockerfile and pushes it to GHCR.
-  # two_factor even on the LAN: a shell as the repo user on a stolen password alone.
   - name: code-server
-    # Flux applies code-server through `promote`, snapshots both claims in its
-    # code-server-snapshot Job first, and substitutes its password Secret from
-    # homelab-cluster-vars (D5.16).
     weekly_backup_claims: {code-server-workspace: 0}  # Sun
-    # Measured composition, not an estimate. `du` inside the pod puts 5.8 G in
-    # .local/share/code-server/extensions — a directory the server does NOT read, since it
-    # runs with `--extensions-dir /config/extensions` (637 M, complete) — plus 223 M of
-    # caches and 17 M of code-server state, against 2.4 M of workspace. Backing up the whole
-    # volume made one service 52% of the 13.72 GiB backup set and 3,668 of 7,023 blocks; at
-    # one Class-B GET per block on restore, that volume alone was 147% of B2's 2,500/day cap
-    # and could not be restored inside a day. The keepers live in code-server-workspace,
-    # which IS backed up. Not a class change, because storageClassName is immutable once
-    # bound.
+    # Unread extension cache; the keepers are in code-server-workspace.
     no_backup_claims: [code-server-config]
     hostname: "code-server"
     port: 8443
     use_authelia: true
-    auth_tier: two_factor
+    auth_tier: two_factor  # a shell as the repo user
 
-  # No port/hostname: nothing routes over HTTP. The game's TCP 7777 answers on the node IP
-  # via its Service (the wg-easy pattern — the router's forward points at this device).
   - name: terraria
-    # Flux applies terraria through `promote`, and every Ansible path skips it (D5.15).
     weekly_backup_claims: {terraria-config: 3}  # Wed
 
-  # Same shape as terraria: nothing about it is HTTP — the game answers UDP 2456-2457 on
-  # the node IP via its own Service.
   - name: valheim
-    # Flux applies valheim through `promote`, and substitutes its join-password Secret from
-    # homelab-cluster-vars (D5.15).
     weekly_backup_claims: {valheim-config: 2}  # Tue
 
-  # The homelab log store — a SECOND cluster Loki, deliberately separate from observability's,
-  # which holds verbatim prompts and stays loopback-only. The route is ClientIP-gated
-  # (monitoring_route), so use_authelia is moot but stated. Ships with the pod-log promtail
-  # DaemonSet.
   - name: loki-homelab
-    # Flux applies loki-homelab through `promote`, and every Ansible path skips it (D5.8).
     hostname: "loki-homelab"
-    # `ScrapeTargetDown` (service loki-homelab) covers it, through the entry's own scrape job.
-    probe: false
+    probe: false  # `ScrapeTargetDown` covers it
     port: 3100
     use_authelia: false
-    # loki_* internals, scraped on the entry's own port. The configmap's http_listen_port sets
-    # the listener, so the two must change together.
+    # Change `port` and the configmap's http_listen_port together.
     metrics:
       - job: loki-homelab
         interval: 1m
-  # MUST follow loki-homelab: both exporters tail their game pod's console lines from that
-  # Loki. No web UI and no route; each exporter's Service is scraped in-cluster.
   - name: game-stats
-    # Flux applies game-stats through `promote` (D5.19).
     weekly_backup_claims: {terraria-stats-data: 0, valheim-stats-data: 1}  # Sun, Mon
     depends_on: [loki-homelab]
-    # One job per game, each behind its own Service. The jobs render whether or not the Games
-    # panel has the exporter running (ADR-0033). A parked exporter's Service has no endpoint,
-    # and its ScrapeTargetDown rule mutes while kube-state-metrics reads 0 replicas.
     metrics:
       - job: terraria-stats
         service: terraria-stats
@@ -851,132 +443,58 @@ containers_list:
       - job: valheim-stats
         service: valheim-stats
         port: 9420
-  # The bridge twins, neither of which has a route — both are pushers. monitor-bridge runs
-  # every metric/API check; autofix-bridge is the *arr remediation loop.
   - name: monitor-bridge
-    # Flux applies monitor-bridge through `promote`, and every Ansible path skips it.
     tier: platform
-    # The check exporter's listener (files/verdict_export.py), beside the deploy-pipeline
-    # exporter's on monitor_bridge_deploy_pipeline_port. The `metrics` item renders the
-    # `monitor-bridge` scrape job and config/env.yaml.j2 hands the same number to the process,
-    # so the two cannot drift apart. The process binds whatever CHECK_EXPORTER_PORT holds, so
-    # unlike an image-fixed port this one moves the listener too.
     port: 9181
     metrics:
       - job: monitor-bridge
         interval: 1m
   - name: node-exporter
-    # Flux applies node-exporter through `promote`, and every Ansible path skips it (D5.7).
   - name: autofix-bridge
-    # Flux applies autofix-bridge through `promote` and substitutes its env Secret from
-    # homelab-cluster-vars (D5.19).
-    # The check exporter's listener (autofix.py, through jobs_metrics.py), which serves the
-    # *arr remediation loop's verdict as homelab_check_* gauges (M6 batch B7). The entry has no `port` of its own, so the item names it. The `metrics` item renders
-    # the `autofix-bridge` scrape job and the Service port, and deployment.yaml.j2 hands the
-    # same number to the process, so the two cannot drift apart. The process binds whatever
-    # CHECK_EXPORTER_PORT holds, so this port moves the listener too.
     metrics:
       - job: autofix-bridge
         port: 9183
         interval: 1m
-  # The NUT primary (upsd + usbhid-ups + upsmon). The pod is pinned to daniel-server, the
-  # UPS's USB host — a physical pin that never unwinds. The host's secondary upsmon, the
-  # thing that actually powers daniel-server off on FSD, is the nut_host role and keeps its
-  # 127.0.0.1:3493 target via hostPort.
   - name: nut
-    # Flux applies nut through `promote` and pulls its image from GHCR, first through the
-    # in-cluster ghcr.io mirror (D5.17).
     tier: platform
-  # The Prometheus face of the same upsd, as its own workload rather than a sidecar: the nut pod
-  # is privileged and USB-pinned, and a sidecar there would restart the shutdown chain on every
-  # exporter bump. No port and no route derive — it is a scrape target only.
   - name: nut-exporter
-    # Flux applies nut-exporter through `promote`, and every Ansible path skips it (D5.5).
-    # upsd's own variables: battery charge and runtime, load, input voltage, and ups.status as
-    # a per-flag 0/1. Before this job, UPS state reached Grafana only as `hass_*` series from
-    # the home-assistant job, which routes a power-loss signal through a workload the UPS
-    # itself protects. These series do not depend on HA being up.
-    #
-    # `/ups_metrics`, not `/metrics`: the latter is the exporter's own process registry and
-    # carries no UPS reading. The `ups` param matters even with one UPS attached, because the
-    # exporter fails the scrape if it discovers several and was not told which. The value is
-    # the expression nut/templates/config-secret.yaml.j2 uses for the ups.conf section, so the
-    # two cannot drift apart. The port reaches the listener through `--web.listen-address`.
     metrics:
       - job: nut
         port: 9199
+        # `/metrics` carries no UPS reading.
         path: /ups_metrics
         interval: 1m
+        # The scrape fails if the exporter finds several UPSes and no `ups`.
         params:
           ups: ["{{ nut_ups_name | default('apc-ups') }}"]
-  # Nightly CronJob: the Pi's WireGuard peer keys land on a Longhorn PVC the WEEKLY tier
-  # carries to B2 on its Saturday shard (`k3s_longhorn_weekly_volumes`, `# Sat`), and the job
-  # exports its verdict to the `pi-peer-backup-verdict` ConfigMap. The job is nightly; the OFF-SITE copy is
-  # weekly, so there is no same-day off-site restore point.
   - name: pi-peer-backup
-    # Flux applies pi-peer-backup through `promote` and runs its gate in
-    # `pi-peer-backup-verify`. Its two daniel-pi writes ship in the `pi-peer-backup-target` host
-    # component (H7.25).
     weekly_backup_claims: {pi-peer-backup-data: 6}  # Sat
-  # SMART monitoring. UI behind Authelia; /api/* is bypassed for LAN machine traffic (the
-  # collector's POSTs and monitor-bridge's summary reads) in the authelia role's config.
   - name: scrutiny
-    # Flux applies scrutiny through `promote`, and substitutes its InfluxDB credentials Secret
-    # from homelab-cluster-vars (D5.8).
     weekly_backup_claims: {scrutiny-web-config: 6}  # Sat
-    # The volume holds ONLY the SMART TSDB (verified single mount), regenerating from the
-    # daily collector runs.
-    no_backup_claims: [scrutiny-influxdb-data]
+    no_backup_claims: [scrutiny-influxdb-data]  # SMART TSDB; the daily collector runs rebuild it
     hostname: "scrutiny"
-    # blackbox-extra's target for /api/health covers it, through the LAN bypass.
-    probe: false
+    probe: false  # blackbox-extra's /api/health target covers it
     port: 8080
     use_authelia: true
     auth_tier: one_factor
-    # Callers of scrutiny's web UI and API, rendered by netpol-baseline's
-    # networkpolicy-callers.yaml.j2 on this port. The Service is `scrutiny` but the pod label is
-    # `app: scrutiny-web`, so netpol_app names the pod the fence selects; a fence written
-    # against the entry name would select nothing.
-    netpol_app: scrutiny-web
+    netpol_app: scrutiny-web  # the pod label differs from the entry name
     netpol_from:
-      - scrutiny-collector  # COLLECTOR_API_ENDPOINT (scrutiny/templates/collector-daemonset.yaml.j2),
-                            # posts SMART data from both nodes
-      - monitor-bridge      # SCRUTINY_URL (monitor-bridge/templates/config/env.yaml.j2), the
-                            # `scrutiny` check behind SmartHealthFailing
-      - homelab-mcp         # SCRUTINY_URL (homelab-mcp/templates/deployment.yaml.j2), Claude's
-                            # disk-health read tool
-      - airflow-task        # SCRUTINY_URL (airflow/files/dags/homelab_warehouse/smart_history.py),
-                            # the warehouse's daily SMART rollup
-    # homepage's Scrutiny widget dials the ClusterIP, because scrutiny's route is Authelia-gated.
-    # This key adds homepage to the callers above and is its only grant.
+      - scrutiny-collector  # COLLECTOR_API_ENDPOINT
+      - monitor-bridge  # SCRUTINY_URL
+      - homelab-mcp  # SCRUTINY_URL
+      - airflow-task  # SCRUTINY_URL in homelab_warehouse/smart_history.py
     homepage_widget: true
-  # Flux's three controllers in flux-system and the sync objects they follow
-  # (docs/flux-deploy-plane.md). Flux applies the tag through `promote`, so it reconciles
-  # itself, and every Ansible path skips it (D5 step 29). On a rebuilt cluster the operator
-  # installs it by hand: docs/flux-deploy-plane.md, *Bootstrapping Flux on a rebuilt cluster*.
-  # It renders prune: false, and its tier keeps it out of the lost-node shed set. No port and
-  # no hostname: nothing dials the controllers from outside their namespace but Prometheus,
-  # and the role fences that itself.
   - name: flux
     tier: platform
-  # system-upgrade-controller, its CRD and the two k3s Plans (docs/archive/host/
-  # h6-k3s-suc.md, H6.1b). Born Flux-owned, so every Ansible path skips it from its first commit.
-  # The Plans select the nodes in `system_upgrade_nodes`, both since H6.3d. No port and no
-  # hostname: nothing dials the controller, and the namespace denies all ingress.
   - name: system-upgrade
     tier: platform
-  # The ingress probes' exporter (docs/archive/monitoring/m4-blackbox-ingress.md).
-  # No depends_on: the plan states no order against observability.
   - name: blackbox-exporter
-    # Flux applies blackbox-exporter through `promote`, and every Ansible path skips it (D5, Wave
-    # A's last PR).
     port: 9115
   - name: karma
     hostname: "karma"
     port: 8080
     use_authelia: true
     auth_tier: two_factor
-  # The music library manager: imports by hardlink into media/music, which navidrome serves.
   - name: lidarr
     platform: k8s
     weekly_backup_claims: {lidarr-config: 6}  # Sat
@@ -986,22 +504,15 @@ containers_list:
     use_authelia: true
     auth_tier: one_factor
     service_extra_ports:
-      # The exportarr sidecar's scrape port, named as radarr's is.
       - name: metrics
         port: 9707
-    # Callers of k8s/roles/lidarr/templates/networkpolicy.yaml.j2.
     netpol_role_owned: true
     netpol_from:
-      - traefik         # deliberate, not redundant — see the policy's header
-      - prowlarr        # Application Sync writes indexers in
-      - slskd           # Soularr, a container in the slskd pod, triggers imports
-      - lidarr-verify   # templates/verify/ Job — see the policy's header
-    # homepage's Lidarr widget dials the ClusterIP; this key adds homepage to the callers above.
+      - traefik
+      - prowlarr
+      - slskd
+      - lidarr-verify
     homepage_widget: true
-  # The Soulseek client, with Soularr feeding it Lidarr's wanted albums, behind its own
-  # Mullvad tunnel. Traefik reaches it through the baseline; homepage's widget through the
-  # caller fence `homepage_widget` adds. LAN_NETWORKS keeps the pod CIDR off the tunnel, so the
-  # kill-switch passes homepage's replies.
   - name: slskd
     depends_on: [media-volume]
     hostname: "slskd"
@@ -1011,55 +522,28 @@ containers_list:
     use_authelia: true
     auth_tier: one_factor
     homepage_widget: true
-    # slskd's settings and transfer history; the downloads live on media-data.
-    no_backup_claims: [slskd-config]
-  # The password store. Bitwarden clients call the API directly and cannot follow Authelia's
-  # 302, so the route is ungated; the LAN-only route and SIGNUPS_ALLOWED=false take its place.
+    no_backup_claims: [slskd-config]  # settings and transfer history; downloads live on media-data
   - name: vaultwarden
     weekly_backup_claims: {vaultwarden-data: 1}  # Mon
     hostname: "vaultwarden"
     port: 8080
+    # Bitwarden clients cannot follow Authelia's 302; the LAN-only route gates instead.
     use_authelia: false
-    # LAN-only; remote clients reach it over wg-easy.
     public_route: false
-    # Held at zero replicas, so the route has no backend and the probe would read 503. Drop
-    # this once vaultwarden_k8s_replicas is raised.
+    # Held at zero replicas, so a probe would read 503. Drop with vaultwarden_k8s_replicas.
     probe: false
   - name: airflow
-    # Flux applies airflow through `promote`. The warehouse holds daily history its sources
-    # have discarded, Scrutiny's after six days and Home Assistant's after seven, so a week-old
-    # restore would lose days nothing can re-derive (ADR 0007).
+    # Holds daily history that its sources discard within a week.
     r2_backup_claims: [airflow-postgres-data]
     hostname: "airflow"
     port: 8080
     use_authelia: true
-    # The UI triggers, clears and backfills runs, which write to the warehouse.
-    auth_tier: two_factor
-    # The execution API on 8080: every task pod reports to it, and so does the dag-processor.
-    netpol_from: [airflow-task, airflow-dag-processor]
+    auth_tier: two_factor  # the UI can clear and backfill runs, which write to the warehouse
+    netpol_from: [airflow-task, airflow-dag-processor]  # the execution API
     netpol_role_owned: true
     netpol_fences:
-      # The scheduler's health server, which answers GET /health and nothing else. This port
-      # feeds the containerPort, the Service and the server's own port setting.
       - app: airflow-scheduler
         port: 8974
-        from: [monitor-bridge]  # AIRFLOW_SCHEDULER_URL in monitor-bridge/templates/config/env.yaml.j2
+        from: [monitor-bridge]  # AIRFLOW_SCHEDULER_URL
         role_owned: true
-  # Deploys LAST: every workload role must finish before this role fences the namespace
-  # (docs/networkpolicy-slice-answers.md). K8S_APPLIES_LAST in template_filters/toposort.py gives
-  # it an edge onto every other entry, so it applies last wherever it sits in this list, and an
-  # entry appended after it still deploys before it.
-  #
-  # Not for the usual "after traefik" reason — this role renders no Traefik CRDs, and a
-  # NetworkPolicy peer podSelector is a label match evaluated at connection time, so
-  # `app: traefik` resolves whether or not a traefik pod exists when the policy is applied.
-  #
-  # Its batch does not matter. tasks/k8s_batch.yml drains rollouts only at the END of a
-  # batch, so a role sharing this role's batch may still be rolling when it runs. The role's
-  # first task drains them itself, so its exempt-set reads, its policy applies and its probe
-  # all run against settled workloads, never against a shared end-of-batch drain. That drain
-  # waits only for roles deployed BEFORE this one, which is why it applies last.
   - name: netpol-baseline
-    # Flux applies netpol-baseline through `promote` and checks the policies in
-    # `netpol-baseline-verify`, which depends on `netpol-baseline-deferred` (D5, Wave D's last
-    # flip).

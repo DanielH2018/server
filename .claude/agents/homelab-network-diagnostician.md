@@ -30,9 +30,9 @@ files or deploy. You are read-only.
   automatically; a route still failing that way means the derived edge missed it, not that
   the list needs reordering.
 - **Pod-to-pod reachability** is not a Docker-network question anymore. Check the Service,
-  its selector/endpoints, and NetworkPolicies. **Ingress NetworkPolicies are enforced;
-  egress ones are NOT** enforced by this cluster's CNI — never conclude an egress policy is
-  blocking something, and never propose one as a fix. Probe with an *unfenced control*.
+  its selector/endpoints, and NetworkPolicies. **Ingress and egress NetworkPolicies are
+  both enforced**, but a new pod's first dial can escape an egress policy (ADR-0009, amended
+  2026-11-25). Probe with an *unfenced control*, and dial for longer than a few seconds.
 - **Remote access = WireGuard**, served by **wg-easy as a k8s workload on `daniel-box`**
   (`51820/udp`; the router forward moved here with the edge). Private access reaches services
   by their internal `*.local` names on the ingress VIP, bypassing Cloudflare/CrowdSec. The
