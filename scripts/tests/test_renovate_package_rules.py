@@ -13,6 +13,7 @@ needs a census or a join to another file keeps its own `test_renovate_*.py` modu
 Run: uv run pytest scripts/tests/test_renovate_package_rules.py
 """
 
+import re
 from collections import defaultdict
 
 import pytest
@@ -66,9 +67,11 @@ NO_TIMESTAMP_DIGESTS = [
     k8s_image("ghcr.io/schaka/janitorr", "janitorr"),
     k8s_image("favonia/cloudflare-ddns", "cloudflare-ddns"),
 ]
+SONARR = k8s_image("lscr.io/linuxserver/sonarr", "sonarr", tag="develop-5.")
+SONARR_RULE = "Sonarr runs the v5 beta"
 NO_TIMESTAMP_VERSIONS = [
     k8s_image("lscr.io/linuxserver/bazarr", "bazarr"),
-    k8s_image("lscr.io/linuxserver/sonarr", "sonarr"),
+    SONARR,
     k8s_image("lscr.io/linuxserver/homeassistant", "home-assistant"),
     k8s_image("ghcr.io/raydak-labs/configarr", "configarr"),
     k8s_image("gcr.io/go-containerregistry/crane", "registry"),
@@ -206,6 +209,30 @@ IMAGE_ROWS = [
         "auto",
         rules=appended({"matchManagers": ["custom.regex"], "rebaseWhen": "auto"}),
     ),
+    *(
+        Row(f"sonarr-{u}-{field}", SONARR, u, field, value)
+        for u in ("major", "minor", "patch", "digest")
+        for field, value in (
+            ("automerge", False),
+            ("dependencyDashboardApproval", True),
+        )
+    ),
+    Row(
+        "sonarr-rule-dropped-automerges-a-patch",
+        SONARR,
+        "patch",
+        "automerge",
+        True,
+        rules=without(SONARR_RULE),
+    ),
+    Row(
+        "sonarr-rule-hoisted-above-the-linuxserver-rule-loses-its-channel",
+        SONARR,
+        "patch",
+        "versioning",
+        Has("[a-z]+"),
+        rules=moved(SONARR_RULE, before="LinuxServer.io images tag"),
+    ),
 ]
 ROWS = [*HOST_ROWS, *IMAGE_ROWS]
 
@@ -254,3 +281,24 @@ def test_each_image_pin_still_sits_where_the_rule_looks(dep: Dep) -> None:
     assert (dep.tag or "") in tag, (
         f"{dep.file} pins {dep.name}:{tag}, not a {dep.tag} tag"
     )
+
+
+@pytest.mark.parametrize(
+    ("tag", "offered"),
+    [
+        ("develop-5.0.0.3041-ls212", True),
+        ("develop-5.1.0.12-ls1", True),
+        ("4.0.20.3014-ls6", False),
+        ("5.0.0.3041-ls1", False),
+        ("develop-6.0.0.1-ls1", False),
+        ("develop-version-5.0.0.3041", False),
+        ("develop", False),
+    ],
+)
+def test_sonarr_versioning_accepts_only_the_v5_develop_channel(
+    tag: str, offered: bool
+) -> None:
+    versioning = resolve(Row("sonarr-versioning", SONARR, "patch", "versioning", None))
+    assert isinstance(versioning, str)
+    pattern = versioning.removeprefix("regex:").replace("(?<", "(?P<")
+    assert bool(re.match(pattern, tag)) is offered
