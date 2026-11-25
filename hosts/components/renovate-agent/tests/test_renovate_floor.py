@@ -40,6 +40,7 @@ def _bump(old=f"ghcr.io/x/y:1.2@sha256:{OLD}", new=f"ghcr.io/x/y:1.2@sha256:{NEW
         "conftest.py",
         "k8s/roles/sonarr/tests/deep/conftest.py",
         "k8s/roles/monitor-bridge/files/registry.py",
+        "k8s/services.yml",
         "docs/CLAUDE.md",
     ],
 )
