@@ -118,7 +118,7 @@ def _services(tmp_path, entries):
 def test_a_flux_owned_tag_with_role_is_clean(out, tmp_path):
     """`render_targets()` stays the full universe, so `cluster --role` still renders a tag
     Flux applies (D2.4b), where the hourly record list leaves it out."""
-    services = _services(tmp_path, "  - name: littlelink\n    owner: flux\n")
+    services = _services(tmp_path, "  - name: littlelink\n")
     assert cluster_mod.select_tags(["littlelink"], services) == ["littlelink"]
     assert k8s_tags(services) == {"littlelink"}
     # A fixture cluster file, so the bundle copies fake ciphertext rather than the tree's.

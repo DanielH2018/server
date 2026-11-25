@@ -1389,14 +1389,19 @@
       "rebaseWhen": "conflicted"
     },
     {
-      "description": "The renderer's dependency closure (jinja2, pyyaml, markupsafe) never automerges (R4 Open question 12), because a bump that moves rendered output needs a human to read the render-diff job's diff. It sits after every automerge rule. ENFORCED: scripts/tests/test_renovate_renderer_closure_no_automerge.py.",
+      "description": "The renderer's dependency closure (jinja2, pyyaml, markupsafe, and pydantic with its four dependencies) never automerges (R4 Open question 12), because a bump that moves rendered output needs a human to read the render-diff job's diff. It sits after every automerge rule. ENFORCED: scripts/tests/test_renovate_renderer_closure_no_automerge.py.",
       "matchDatasources": [
         "pypi"
       ],
       "matchPackageNames": [
         "jinja2",
         "pyyaml",
-        "markupsafe"
+        "markupsafe",
+        "pydantic",
+        "pydantic-core",
+        "annotated-types",
+        "typing-extensions",
+        "typing-inspection"
       ],
       "automerge": false
     },
