@@ -100,7 +100,7 @@ real, and tears everything down.
   yet, the gate passes for one schedule period after Flux first applied the revision and fails
   after that. With a Job, the gate reads the newest firing, which must have succeeded within two
   periods. ENFORCED:
-  `scripts/diagnostics/tests/test_probe_health_cronjob_schedule_gate.py::test_no_job_past_one_schedule_period_of_the_apply_fails`,
+  `scripts/diagnostics/tests/probe_health/test_probe_health_cronjob_schedule_gate.py::test_no_job_past_one_schedule_period_of_the_apply_fails`,
   `tests/deploy/test_cronjob_only_roles_include_the_gate.py::test_the_schedule_gate_marker_names_exactly_the_ungated_roles`.
 - **Abort valves.** The Job's `activeDeadlineSeconds` is the restore timeout plus the probe pod's
   300-second bound plus a 600-second margin. The kubelet's SIGTERM at the deadline runs the

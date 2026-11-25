@@ -46,7 +46,7 @@ from lib.json_types import JsonObject
 # `https://127.0.0.1:6443` its production counterpart does, so the address discriminates
 # nothing. Named rather than derived from the inventory at runtime — probe.py must answer
 # without parsing Ansible — and pinned to it by
-# scripts/diagnostics/tests/test_probe_health_cluster.py, which fails if a name here stops
+# scripts/diagnostics/tests/probe_health/test_probe_health_cluster.py, which fails if a name here stops
 # naming a host_vars file under inventory/host_vars/.
 #
 # DECIDED: `stage` stays after daniel-stage was retired (#2941). What it buys does not depend
