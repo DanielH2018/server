@@ -17,7 +17,6 @@ from collections.abc import Collection
 from datetime import datetime, timedelta, timezone
 
 from bridge.common import sanitize
-from bridge.parsing import parse_rfc3339
 from bridge.types import CheckResult
 
 
@@ -68,7 +67,7 @@ def n8n_update_streaks(
             st["last_id"], st["streak"] = None, 0
             continue
         eid, ts = info
-        dt = parse_rfc3339(ts)
+        dt = datetime.fromisoformat(ts)
         if (
             dt.tzinfo is None
         ):  # n8n emits UTC 'Z'; assume UTC if a naive ts slips through
@@ -287,7 +286,7 @@ def _within_title_hold_grace(
     if not added:
         return False
     try:
-        stamp = parse_rfc3339(str(added))
+        stamp = datetime.fromisoformat(str(added))
     except ValueError:
         return False
     if stamp.tzinfo is None:
@@ -322,7 +321,7 @@ def indexers_down(
         if not init:
             continue
         try:
-            age_s = (now - parse_rfc3339(init)).total_seconds()
+            age_s = (now - datetime.fromisoformat(init)).total_seconds()
         except ValueError, TypeError:
             continue
         if age_s >= cutoff_s:
@@ -348,7 +347,7 @@ def ha_heartbeat_fresh(
     lc = (state or {}).get("last_changed")
     if not lc:
         return False, "no heartbeat state (entity missing or never set)"
-    age = (now - parse_rfc3339(lc)).total_seconds()
+    age = (now - datetime.fromisoformat(lc)).total_seconds()
     if age > max_age_s:
         return False, "stale — automations last ran %.0fs ago (> %gs)" % (
             age,

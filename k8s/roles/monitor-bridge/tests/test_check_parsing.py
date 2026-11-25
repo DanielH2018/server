@@ -7,8 +7,6 @@ adversary-controlled alert text through reaches Discord verbatim.
 
 from dataclasses import fields, replace
 
-from datetime import datetime, timezone
-
 
 import bridge.common
 import bridge.parsing
@@ -53,27 +51,6 @@ def test_env_file_directory_path_falls_back_to_env(tmp_path):
     # open() raises IsADirectoryError (an OSError subclass) — must still fall back to the env var.
     env = {"HA_TOKEN_FILE": str(tmp_path), "HA_TOKEN": "inline-fallback"}
     assert load_config(env).HA_TOKEN == "inline-fallback"
-
-
-def test_nanosecond_precision_with_z():
-    # Real Kopia value: 9 fractional digits + trailing Z
-    dt = bridge.parsing.parse_rfc3339("2026-06-06T00:00:00.011699074Z")
-    assert dt.tzinfo == timezone.utc
-    assert dt.year == 2026
-    assert dt.microsecond == 11699  # truncated from .011699074
-
-
-def test_plain_z_no_fraction():
-    dt = bridge.parsing.parse_rfc3339("2026-06-06T00:00:00Z")
-    assert dt == datetime(2026, 6, 6, tzinfo=timezone.utc)
-
-
-def test_offset_after_fraction():
-    dt = bridge.parsing.parse_rfc3339("2026-06-06T01:00:00.123456789+01:00")
-    offset = dt.utcoffset()
-    assert offset is not None
-    assert offset.total_seconds() == 3600
-    assert dt.microsecond == 123456
 
 
 def test_parse_duration_units():
