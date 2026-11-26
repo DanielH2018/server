@@ -1,0 +1,16 @@
+---
+{#
+  The vault API carries no Authelia (the Bitwarden clients cannot follow its 302), so this
+  allowlist is its gate. A hostname is not access control.
+#}
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: vaultwarden-lan-only
+  namespace: {{ k8s_namespace }}
+spec:
+  ipAllowList:
+    sourceRange:
+{% for source in vaultwarden_k8s_allowed_sources %}
+      - "{{ source }}"
+{% endfor %}

@@ -31,7 +31,7 @@ _REPLACED_HAND_LIST = frozenset(
 )
 
 # The `r2_backup_claims` of untiered entries. ADR 0007 names each and why.
-_DECLARED_R2 = frozenset({"homelab/airflow-postgres-data"})
+_DECLARED_R2 = frozenset({"homelab/airflow-postgres-data", "homelab/vaultwarden-data"})
 
 # The tagged entries. A census that finds fewer stopped matching.
 _KNOWN_HOME_CRITICAL = frozenset(

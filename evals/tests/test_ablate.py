@@ -6,8 +6,12 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from ablate import (
+    BASELINE,
+    NO_SKILL,
     REPO,
     SWEEP_WEEKDAY,
+    agent_source,
+    build_skill_arms,
     doc_without,
     main,
     split_sections,
@@ -56,6 +60,25 @@ def test_an_ablated_prompt_differs_from_the_baseline_only_by_the_section():
 
 def test_the_whole_doc_arm_is_the_agent_file_unchanged():
     assert with_doc(AGENT, "CLAUDE.md", None) == AGENT
+
+
+def test_the_skill_arms_are_the_file_as_swept_and_its_frontmatter_alone():
+    source = agent_source("coordinate").read_text()
+    (base_name, base), (bare_name, bare) = build_skill_arms(["coordinate"])
+    assert (base_name, bare_name) == (BASELINE, NO_SKILL)
+    assert base["coordinate"] == source
+    assert source.startswith(bare["coordinate"])
+    assert bare["coordinate"].rstrip().endswith("---")
+    assert "## Recap" not in bare["coordinate"]
+
+
+def test_skill_dry_run_prices_two_arms(tmp_path, capsys):
+    case = "coordinate/001-hold-pauses-refills-and-recaps"
+    argv = ["skill", "--case", case, "--cost-reports", str(tmp_path), "--dry-run"]
+    assert main(argv) == 0
+    out = capsys.readouterr().out
+    assert "baseline and -skill x 1 case(s) x k=3 = 6 runs" in out
+    assert "2 of 2 arm(s) expected to finish" in out
 
 
 def test_sweep_weekday_matches_the_timer():
