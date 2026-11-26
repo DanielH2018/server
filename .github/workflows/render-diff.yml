@@ -1,8 +1,9 @@
 name: render-diff
 
 # Advisory: renders the merge base and the PR head with one commit value, then prints the
-# difference and the head's tree digest. It fails nothing and no ruleset requires it. A human
-# reads the printed diff before merging a renderer or renderer-dependency change. renovate.json
+# head's tree digest and the difference by structure (`shadow_diff.py diff`, through dyff). It
+# fails nothing and no ruleset requires it. A human reads the printed diff before merging a
+# renderer or renderer-dependency change. renovate.json
 # disables automerge for the renderer's dependency closure, so a bump that moves output waits
 # for that read. On a draft the job skips at job level and takes no runner; the read happens
 # before merge, and `ready_for_review` starts the run that prints the diff.
@@ -39,6 +40,12 @@ jobs:
     env:
       # Skips pyproject.toml's `lint` group, which no step here runs (test_ci_lint_group.py).
       UV_NO_GROUP: lint
+      # The dyff release `shadow_diff.py diff` compares rendered YAML with. renovate.json's
+      # custom manager reads this annotation and moves both pins in one PR; the sha256 is
+      # dyff_<version>_linux_amd64.tar.gz's.
+      # renovate: datasource=github-release-attachments depName=homeport/dyff
+      DYFF_VERSION: v1.12.0
+      DYFF_SHA256: 50b43017a7474c2216694d0b5387439488a1d3c2b5eefe1674cd0e5c18bc0316
     steps:
       - uses: actions/checkout@v7.0.1
         with:
@@ -47,6 +54,13 @@ jobs:
           persist-credentials: false
 
       - uses: $/.github/actions/setup
+
+      - name: Fetch the pinned dyff and check its sha256
+        uses: $/.github/actions/pinned-tool
+        with:
+          tool: dyff
+          version: ${{ env.DYFF_VERSION }}
+          sha256: ${{ env.DYFF_SHA256 }}
 
       - name: Render the merge base and the head with one commit value
         env:
@@ -70,7 +84,7 @@ jobs:
           (render "$RUNNER_TEMP/base-tree" "$RUNNER_TEMP/base-out")
           (render "$GITHUB_WORKSPACE" "$RUNNER_TEMP/head-out")
 
-      - name: Print the difference and the head's tree digest
+      - name: Print the head's tree digest and the difference
         run: |
-          diff -r "$RUNNER_TEMP/base-out" "$RUNNER_TEMP/head-out" || true
           uv run --frozen python scripts/renderer/shadow_diff.py digest "$RUNNER_TEMP/head-out"
+          uv run --frozen python scripts/renderer/shadow_diff.py diff "$RUNNER_TEMP/base-out" "$RUNNER_TEMP/head-out"

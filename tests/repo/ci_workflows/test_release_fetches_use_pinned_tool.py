@@ -80,6 +80,7 @@ KNOWN_CALLERS = {
     ("pytest-tools", "pytest-tools", "sops"),
     ("promote.yml", "promote", "cosign"),
     ("prune-artifacts.yml", "prune", "cosign"),
+    ("render-diff.yml", "render-diff", "dyff"),
 }
 
 
