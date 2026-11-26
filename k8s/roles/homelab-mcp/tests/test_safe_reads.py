@@ -438,9 +438,14 @@ def test_bearer_token_valid_never_raises_and_accepts_only_the_exact_token(
     assert bearer_token_valid(header, token) is (header == f"Bearer {token}")
 
 
+ROW = st.fixed_dictionaries(
+    {}, optional={key: JSON for key in ("metric", "value", "stream", "values")}
+)
+
+
 @pytest.mark.parametrize("parse", [parse_metric, parse_loki])
 @FIXED
-@given(row=JSON)
+@given(row=ROW)
 def test_a_malformed_upstream_row_raises_value_error_or_parses(parse, row):
     try:
         rows = parse({"data": {"result": [row]}})
