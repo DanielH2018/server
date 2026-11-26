@@ -31,8 +31,33 @@ spec:
             # WebAuthn and attachment links are built from this, so it must match the route.
             - name: DOMAIN
               value: "https://{{ container_item.hostname }}.local.{{ domain }}"
+            # Rendered from a bool: Vaultwarden reads an unparsable value as unset, and unset is true.
             - name: SIGNUPS_ALLOWED
+              value: "{{ 'true' if vaultwarden_k8s_signups_allowed | bool else 'false' }}"
+            - name: INVITATIONS_ALLOWED
               value: "false"
+            - name: ORG_CREATION_USERS
+              value: "none"
+            - name: PASSWORD_HINTS_ALLOWED
+              value: "false"
+            - name: SHOW_PASSWORD_HINT
+              value: "false"
+            - name: EMERGENCY_ACCESS_ALLOWED
+              value: "false"
+            - name: SENDS_ALLOWED
+              value: "false"
+            - name: IP_HEADER_TRUSTED_PROXIES
+              value: "{{ vaultwarden_k8s_trusted_proxies }}"
+            # Outside /data, so the cache (one file per vault domain) never reaches a backup.
+            - name: ICON_CACHE_FOLDER
+              value: /tmp/icon_cache
+            - name: HTTP_REQUEST_BLOCK_REGEX
+              value: '(^|[.]){{ domain | replace(".", "[.]") }}$'
+            # Keeps each icon request's domain out of Loki; failed logins still log.
+            - name: LOG_LEVEL
+              value: "info,vaultwarden::api::icons=warn"
+            - name: EXTENDED_LOGGING
+              value: "true"
             # No ADMIN_TOKEN is set, which disables /admin entirely.
           ports:
             - containerPort: {{ container_item.port }}
@@ -60,4 +85,5 @@ spec:
           persistentVolumeClaim:
             claimName: {{ vaultwarden_k8s_claim }}
         - name: vaultwarden-tmp
-          emptyDir: {}
+          emptyDir:
+            sizeLimit: 256Mi

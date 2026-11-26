@@ -5,6 +5,7 @@
 | `authelia-config` | Daily | R2 | every day |
 | `zigbee2mqtt-data` | Daily | R2 | every day |
 | `home-assistant-config` | Daily | R2 | every day |
+| `vaultwarden-data` | Daily | R2 | every day |
 | `airflow-postgres-data` | Daily | R2 | every day |
 | `code-server-workspace` | Weekly | B2 | Sunday |
 | `n8n-data` | Weekly | B2 | Sunday |
@@ -12,7 +13,6 @@
 | `jellyfin-config` | Weekly | B2 | Monday |
 | `tdarr-server` | Weekly | B2 | Monday |
 | `valheim-stats-data` | Weekly | B2 | Monday |
-| `vaultwarden-data` | Weekly | B2 | Monday |
 | `radarr-config` | Weekly | B2 | Tuesday |
 | `tdarr-configs` | Weekly | B2 | Tuesday |
 | `valheim-config` | Weekly | B2 | Tuesday |
