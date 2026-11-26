@@ -66,9 +66,9 @@ def emit(line: str) -> None:
 
 def age_seconds(stamp: str, now: float) -> float:
     """Seconds from an RFC 3339 timestamp to `now`. Kubernetes always emits UTC with a Z."""
-    finished = datetime.strptime(stamp, "%Y-%m-%dT%H:%M:%SZ").replace(
-        tzinfo=timezone.utc
-    )
+    finished = datetime.fromisoformat(stamp)
+    if finished.tzinfo is None:
+        raise ValueError(f"timestamp {stamp!r} has no UTC offset")
     return now - finished.timestamp()
 
 
