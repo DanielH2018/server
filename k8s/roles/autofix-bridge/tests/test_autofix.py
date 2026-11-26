@@ -441,3 +441,9 @@ def test_post_discord_caps_an_over_long_report(monkeypatch):
     content = json.loads(sent[0].data)["content"]
     assert len(content) <= 2000
     assert content.endswith("…(truncated)")
+
+
+def test_an_unknown_flag_exits_non_zero_without_starting_the_loop():
+    with pytest.raises(SystemExit) as stopped:
+        autofix.main(["--onec"])
+    assert stopped.value.code != 0

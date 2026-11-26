@@ -163,6 +163,34 @@ uv run python evals/ablate.py run --agent skeptic --section "Secrets Management"
   `run --by-reads` ablates the sections in that order, so a budget stop cuts the least-read.
   Without it, `run` takes the doc's sections in doc order unless `--section` names them.
 
+## Skill ablation (does a case need its skill?)
+
+`ablate.py skill` runs each case twice over. The `baseline` arm grades the agent or skill
+file unchanged, as the weekly sweep does. The `-skill` arm grades the file's frontmatter
+alone, with its body removed. Neither arm carries `CLAUDE.md`, because the doc restates
+rules that some cases grade, and a case could then pass on the doc.
+
+```bash
+uv run python evals/ablate.py skill --dry-run                    # the plan, its price, the largest selection that fits
+uv run python evals/ablate.py skill --agent coordinate --k 3     # one target's cases
+```
+
+It shares `run`'s budget, cap, sweep-day refusal, API-key refusal and report directory. Two
+arms over every hermetic case cost more than the cap allows, so a full measurement takes
+several runs. A refused plan prints the largest `--case` selection that fits. Run that
+selection, then the cases it left out.
+
+Read a result this way:
+
+- **A case that fails without its body** measures the skill. This is the expected result for
+  every case.
+- **A case that still passes without its body** is one of two things, and the tool cannot tell
+  which. Either the case is weak, because its input carries the answer or the model does
+  the right thing unprompted. Or the skill restates what the model already does. Read the case
+  before you hand the skill to `scaffolding-delete-pass`.
+- **The frontmatter stays in the `-skill` arm**, because the engine needs it to load the
+  file. A pass there can come from the `description:` field alone, and some are long.
+
 ## What's tested (v1: the /homelab-review fleet)
 
 - **catch-defect** — a planted regression (drawn from this repo's documented gotchas) the agent must flag.
@@ -223,8 +251,8 @@ says why it has none. The test also fails on a `NO_CASE` entry for a target that
 and on a name that matches no skill or agent. A reason says why a hermetic case cannot measure
 the target, such as a live page or a live MQTT publish. A reason that cites an issue number
 fails, because it defers a case instead of saying why there is none: write the case. A target
-whose case shows no difference with the skill removed is a candidate for the
-`scaffolding-delete-pass` skill.
+whose case still passes with its body removed, as `ablate.py skill` measures (*Skill
+ablation*), is a candidate for the `scaffolding-delete-pass` skill.
 
 Each `/homelab-review` case pins one contract paragraph the skill grew after a real misfire, so a
 paragraph and its case move together: `001` dedup vs `004` anti-merge are deliberately a matched

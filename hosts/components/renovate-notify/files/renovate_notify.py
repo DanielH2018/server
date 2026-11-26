@@ -17,6 +17,7 @@ calling Discord, and persists neither the fingerprint nor the liveness marker. `
 `--help` print this text.
 """
 
+import argparse
 import json
 import os
 import subprocess
@@ -26,31 +27,32 @@ import urllib.parse
 from datetime import datetime, timedelta, timezone
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import renovate_identity
+from builder_ci_grade import read_check_pages
+from ci_verdict import checks_verdict, parse_check_runs, parse_rollup
+from github_rest import github_get, github_token
+from host_lib import atomic_write, discord_post, log, parse_env_file
 from notify_logic import (
     AUTOCLOSED_LOOKBACK_DAYS,
+    CLEARED_MSG,
+    DASHBOARD_UNPARSEABLE_MSG,
     PR,
     actionable,
     autoclosed_fingerprint,
+    compose_message,
     dashboard_body,
     dashboard_headers_unrecognized,
     dashboard_stale,
-    find_dashboard,
     find_autoclosed,
+    find_dashboard,
     find_dashboard_problems,
     fingerprint,
     parse_automerge,
     problems_fingerprint,
-    compose_message,
     render_autoclosed,
     render_problems,
     should_notify,
-    CLEARED_MSG,
-    DASHBOARD_UNPARSEABLE_MSG,
 )
-import renovate_identity
-from builder_ci_grade import read_check_pages
-from ci_verdict import checks_verdict, parse_check_runs, parse_rollup
-from renovate_identity import RenovatePR
 from pending_logic import (
     churn_fingerprint,
     churning_pending,
@@ -64,8 +66,7 @@ from pending_logic import (
     stale_pending,
     update_pending_seen,
 )
-from github_rest import github_get, github_token
-from host_lib import atomic_write, discord_post, log, parse_env_file
+from renovate_identity import RenovatePR
 
 CONFIG = "/etc/renovate-notify/config.env"
 USER_AGENT = "renovate-notify"
@@ -292,14 +293,27 @@ def renovate_issues(repo: str) -> list[dict]:
     )
 
 
-def main() -> int:
+def parse_args(argv: list[str]) -> argparse.Namespace:
+    """Parses the notifier's flags, exiting non-zero on an unknown one."""
+    parser = argparse.ArgumentParser(
+        description=__doc__.strip().split("\n\n")[0], allow_abbrev=False
+    )
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="log what would be posted; persist nothing",
+    )
+    return parser.parse_args(argv)
+
+
+def main(argv: list[str]) -> int:
     """Fetch open Renovate PRs and the dashboard, and post a digest on a fingerprint change.
 
     With `--dry-run`, logs what it would post instead of calling Discord and does not persist
     the fingerprint or the liveness marker. A fetch failure raises rather than returning
     non-zero, so the OnFailure alert unit pages on it. Otherwise always returns 0.
     """
-    dry = "--dry-run" in sys.argv
+    dry = parse_args(argv).dry_run
     c = cfg()
     repo = c["REPO"]
     # Authenticate the REST calls when a token is configured. Unauthenticated GitHub is 60 req/hr/IP,
@@ -428,7 +442,4 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    if any(arg in ("-h", "--help") for arg in sys.argv[1:]):
-        print(__doc__.strip())
-        sys.exit(0)
-    sys.exit(main())
+    sys.exit(main(sys.argv[1:]))

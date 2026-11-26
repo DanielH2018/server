@@ -36,3 +36,8 @@ def test_the_fitting_selection_takes_cases_cheapest_first_then_sections():
     assert cases == ["a/2", "a/3"]
     assert sections == ["X", "Y"]
     assert fitting_selection(["a/1"], {"a/1": 1.0}, 3, ["X"], 10.0) == ([], [])
+
+
+def test_a_plan_with_no_sections_needs_only_its_two_fixed_arms():
+    # $3.00 an arm: two arms launch under the $6.25 the floor leaves, a third does not.
+    assert fitting_selection(["a/1"], {"a/1": 1.0}, 3, [], 10.0) == (["a/1"], [])

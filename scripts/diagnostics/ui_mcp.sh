@@ -17,6 +17,10 @@
 #      neither of the above can be written into ~/.claude.json. The config is generated at
 #      launch into a 0600 file instead.
 #
+# The wrapper also installs the Chromium revision the launched playwright-mcp pins, through that
+# same playwright-mcp, on every launch. A launch that finds it downloads nothing, and a failed
+# install stops the launch before the server starts.
+#
 # Node comes from fnm's `default` alias rather than $PATH: a Claude session inherits an
 # ephemeral /run/user/1000/fnm_multishells/<pid>_<ts> path that dies with the shell that
 # made it, and an MCP server outlives that.
@@ -43,6 +47,9 @@ if [[ "${1:-}" == "--two-factor" ]]; then
 fi
 
 export PATH="$NODE_BIN:$PATH"
+
+# stdout is the MCP stream, so the installer's progress goes to stderr.
+playwright-mcp install-browser chromium >&2
 
 # `UI_MCP_STATE_PATH` uses a caller-owned state file and skips the mint: test_ui_state_reload.py
 # swaps it under a running server. Its config gets its own name.

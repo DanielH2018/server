@@ -9,8 +9,9 @@ k8s_autodeploy_reason: "stateless RollingUpdate Deployment, no PVC, readinessPro
 
 # Blast-radius caps.
 ical_proxy_k8s_cpu_limit: 500m
-# The working set plateaus near 108 MiB once the feeds are parsed, so 128Mi left too little room.
-ical_proxy_k8s_mem_limit: 256Mi
+# icalendar's parse of a feed at MAX_FEED_BYTES (10 MB) peaks near 340 MiB; the steady working
+# set sits near 108 MiB.
+ical_proxy_k8s_mem_limit: 448Mi
 ical_proxy_k8s_cpu_request: 50m
 ical_proxy_k8s_mem_request: 96Mi
 
