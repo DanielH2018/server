@@ -26,7 +26,7 @@ from pathlib import Path
 
 from lib.cli_help import warn
 from lib.container_entry import parse_containers_list
-from lib.inventory_lists import PI_LIST_KEY
+from lib.inventory_lists import PI_LIST_KEY, host_names
 from lib.estate import (
     REPO_INVENTORY,
     Inventory,
@@ -37,7 +37,6 @@ from lib.k8s_context import failed_key, resolve_vars
 from lib.render_guard import (
     BASE_CONTEXT,
     StubUndefined,
-    host_files,
     host_layer,
     k8s_services,
     load_yaml,
@@ -180,8 +179,8 @@ def _hosts(inventory: Inventory) -> dict[str, dict]:
     passes its own ``hosts``.
     """
     found = {}
-    for path in host_files(inventory.host_vars):
-        layer = host_layer(path.parent, path.stem)
+    for host in host_names(inventory.host_vars):
+        layer = host_layer(inventory.host_vars, host)
         literal = {
             key: layer[key]
             for key in _HOSTS_KEYS
@@ -192,7 +191,7 @@ def _hosts(inventory: Inventory) -> dict[str, dict]:
                 literal[PI_LIST_KEY], key=PI_LIST_KEY
             )
         if literal:
-            found[path.stem] = literal
+            found[host] = literal
     return found
 
 

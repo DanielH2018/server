@@ -301,7 +301,8 @@ def test_a_held_copy_reads_its_own_inventory_ahead_of_the_venvs_checkout(tmp_pat
     from dev.fanout_lib.review.held_hooks import read_hooks, write_hooks
 
     write_hooks(read_hooks(REPO), tmp_path)
-    (tmp_path / "inventory/host_vars/daniel-held-only.yml").write_text("{}\n")
+    (tmp_path / "hosts/daniel-held-only").mkdir()
+    (tmp_path / "hosts/daniel-held-only/vars.yml").write_text("{}\n")
     assert "daniel-held-only" in _held_footguns(tmp_path, "_ssh_hosts()")
 
 

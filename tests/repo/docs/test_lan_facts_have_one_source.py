@@ -55,12 +55,12 @@ ALLOWLIST: list[tuple[str, str]] = [
         "the source definition site for every fact this guard covers",
     ),
     (
-        r"^inventory/host_vars/(daniel-box|daniel-pi|daniel-server|daniel-stage)\.yml$",
+        r"^hosts/(daniel-box|daniel-pi|daniel-server|daniel-stage)/vars\.yml$",
         "per-host source definitions; daniel-stage's MetalLB pool is a deliberately separate "
         "override, not a duplicate of the production one",
     ),
     (
-        r"^inventory/host_vars/_example\.yml$",
+        r"^hosts/_example/vars\.yml$",
         "placeholder template (`10.0.0.x`), not a real address",
     ),
     (

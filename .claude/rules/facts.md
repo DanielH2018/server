@@ -110,8 +110,8 @@ claim still holds.
 The notice compares cited atoms only, so a sentence that cites nothing can go stale with no
 row to show it. Some lint rules therefore read the prose itself.
 
-- `retired-host` (error) flags a host-shaped word that names no file in
-  `inventory/host_vars/`. The rule derives the host prefix from the inventory, never
+- `retired-host` (error) flags a host-shaped word that names no directory under
+  `hosts/` holding a `vars.yml`. The rule derives the host prefix from those files, never
   from a list. A word inside a path or a longer name, such as `/srv/artifacts/daniel-box-claude`
   or the domain `daniel-hunter.com`, is not a host mention.
 - `version-as-fact` (warning) flags a backticked `image:tag` span whose image the tree pins.

@@ -210,12 +210,6 @@ ROWS = (
                 "tests/k8s/_manifest_guards.py",
             }
         ),
-        allow={
-            "scripts/lib/tests/test_render_guard.py": (
-                "`test_anchors_resolve_to_the_real_tree` checks that `repo_paths`' own "
-                "`INVENTORY` anchor reaches the real tree, so it spells a path under it"
-            ),
-        },
     ),
     Census(
         name="tests-read-shell-templates-rendered",

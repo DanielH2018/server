@@ -11,22 +11,31 @@ import textwrap
 
 from docs.reference import hosts as g
 from lib.estate import Inventory
+from lib.inventory_lists import host_vars_file
+
+
+def _write_vars(host_vars, name, text):
+    host_vars_file(name, host_vars).parent.mkdir(parents=True, exist_ok=True)
+    host_vars_file(name, host_vars).write_text(text)
 
 
 def _make_inventory(tmp_path):
-    host_vars = tmp_path / "host_vars"
-    host_vars.mkdir()
-    (host_vars / "daniel-box.yml").write_text(
+    host_vars = tmp_path / "hosts"
+    _write_vars(
+        host_vars,
+        "daniel-box",
         textwrap.dedent("""\
         server_ip: 10.0.0.161
-        """)
+        """),
     )
-    (host_vars / "daniel-pi.yml").write_text(
+    _write_vars(
+        host_vars,
+        "daniel-pi",
         textwrap.dedent("""\
         server_ip: 10.0.0.139
         compose_services:
           - name: c
-        """)
+        """),
     )
     services = tmp_path / "services.yml"
     services.write_text("containers_list:\n  - name: a\n  - name: b\n")
@@ -43,12 +52,10 @@ def test_counts_services_per_host(tmp_path):
 def test_the_docker_fact_follows_whether_the_package_lists_pi_docker(tmp_path):
     """A host with no package is unknown, not "no": nothing says what it ships."""
     inventory = _make_inventory(tmp_path)
-    hosts_root = tmp_path / "hosts"
-    (hosts_root / "daniel-pi").mkdir(parents=True)
+    hosts_root = inventory.host_vars
     (hosts_root / "daniel-pi" / "package.yml").write_text("components: [pi-docker]\n")
-    (hosts_root / "daniel-box").mkdir()
     (hosts_root / "daniel-box" / "package.yml").write_text("components: [sshd]\n")
-    (inventory.host_vars / "daniel-server.yml").write_text("server_ip: 10.0.0.162\n")
+    _write_vars(hosts_root, "daniel-server", "server_ip: 10.0.0.162\n")
     rows = {
         r["name"]: r["docker"] for r in g.build_rows(inventory, hosts_root=hosts_root)
     }
@@ -60,7 +67,7 @@ def test_the_docker_fact_follows_whether_the_package_lists_pi_docker(tmp_path):
 def test_a_host_whose_host_vars_declare_nothing_still_renders(tmp_path):
     """A host file that declares no address or services must not vanish."""
     inventory = _make_inventory(tmp_path)
-    (inventory.host_vars / "daniel-pi.yml").write_text("{}\n")
+    _write_vars(inventory.host_vars, "daniel-pi", "{}\n")
     rows = {r["name"]: r for r in g.build_rows(inventory)}
     assert "daniel-pi" in rows
     assert rows["daniel-pi"]["ip"].startswith("unknown")
@@ -84,8 +91,7 @@ def test_markdown_ends_with_exactly_one_newline(tmp_path):
 
 def test_the_page_names_each_hosts_package_and_no_inventory_connection_key(tmp_path):
     inventory = _make_inventory(tmp_path)
-    hosts_root = tmp_path / "hosts"
-    (hosts_root / "daniel-pi").mkdir(parents=True)
+    hosts_root = inventory.host_vars
     (hosts_root / "daniel-pi" / "package.yml").write_text("components: [a, b]\n")
     rows = g.build_rows(inventory, hosts_root=hosts_root)
     by_name = {r["name"]: r for r in rows}

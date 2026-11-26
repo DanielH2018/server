@@ -1206,7 +1206,7 @@ jobs:
         env:
           EVENT: ${{ github.event_name }}  # via env, never interpolated into the shell
           CASE_INPUTS: |
-            inventory/host_vars/_example.yml
+            hosts/_example/vars.yml
             docs/host-packages.md
             hosts/bootstrap-host.sh
             hosts/lib/tests/container/

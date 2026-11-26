@@ -293,7 +293,7 @@ ROWS = (
             "nothing after the move. Read a value through `lib.estate.shared_vars()` or "
             "`host_vars(host)`, or an `Estate`. A hit is a call that takes an inventory path "
             "as its receiver or an argument, or a function whose parameter defaults to one; "
-            "`relative_to` and `copytree` only name the path. Every Python file is in the "
+            "`relative_to`, `copytree`, `copy_host_files` and `host_vars_file` only name the path. Every Python file is in the "
             "census, not only the tests."
         ),
         files=lambda: tracked("*.py"),
@@ -305,7 +305,7 @@ ROWS = (
             Subject(
                 "b.py",
                 "from lib.repo_paths import HOST_VARS\n"
-                'vars_of(HOST_VARS / "daniel-pi.yml")\n',
+                'vars_of(HOST_VARS / "daniel-pi" / "vars.yml")\n',
             ),
             Subject(
                 "c.py",

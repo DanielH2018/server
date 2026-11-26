@@ -68,11 +68,12 @@ def test_remote_git_with_dash_C_is_clean():
 def test_the_ssh_hosts_match_the_inventory_host_vars():
     # Compared against a direct host_vars listing, so a broken import (which the hook swallows into
     # no hosts) goes red.
-    host_vars = os.path.join(_REPO, "inventory", "host_vars")
+    hosts = os.path.join(_REPO, "hosts")
     expected = {
-        name.removesuffix(".yml")
-        for name in os.listdir(host_vars)
-        if name.endswith(".yml") and name != "_example.yml"
+        name
+        for name in os.listdir(hosts)
+        if os.path.isfile(os.path.join(hosts, name, "vars.yml"))
+        and not name.startswith("_")
     }
     assert "daniel-server" in expected
     assert set(_mod._ssh_hosts()) == expected

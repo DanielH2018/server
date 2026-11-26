@@ -42,11 +42,11 @@ def two_commit_repo(tmp_path):
     commit and in no checkout until checkout-sync fast-forwards.
     """
     repo = tmp_path / "repo"
-    inventory = repo / "inventory" / "host_vars"
-    inventory.mkdir(parents=True)
+    pi = repo / "hosts" / "daniel-pi"
+    pi.mkdir(parents=True)
     (repo / "k8s").mkdir()
     box = repo / "k8s" / "services.yml"
-    (inventory / "daniel-pi.yml").write_text("containers_list:\n  - name: not-a-host\n")
+    (pi / "vars.yml").write_text("containers_list:\n  - name: not-a-host\n")
     init_repo(repo)
     box.write_text("containers_list:\n  - name: sonarr\n")
     git_out(repo, "add", "-A")

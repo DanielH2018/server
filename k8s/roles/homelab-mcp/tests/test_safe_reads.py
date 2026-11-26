@@ -249,7 +249,7 @@ def test_path_is_denied_blocks_secrets(rel):
     [
         "deploy.yml",
         "roles/containers/traefik/templates/config.yml.j2",
-        "inventory/host_vars/daniel-server.yml",
+        "hosts/daniel-server/vars.yml",
         "README.md",
     ],
 )

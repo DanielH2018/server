@@ -204,7 +204,7 @@ ENFORCED: `hosts/tests/test_renovate_agent_identity.py`, which also runs the pro
 2. Run `claude setup-token`.
 3. Add both as `renovate_agent_gh_token` and `renovate_agent_claude_oauth_token` with the
    `add-secret` skill, then run `secret_rotation.py sync`.
-4. Set `renovate_agent_enabled: true` in `inventory/host_vars/daniel-box.yml`, and let the next
+4. Set `renovate_agent_enabled: true` in `hosts/daniel-box/vars.yml`, and let the next
    package version arm the timer.
 5. Start one run by hand and watch it. Auto mode's classifier decides whether the session may
    write its request files, and nothing short of a real run tests that.

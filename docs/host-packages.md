@@ -712,7 +712,7 @@ daniel-box serves the repository, so it builds its own packages from the clone.
 
 1. Check that the server came up with the flags the package's
    `/etc/rancher/k3s/config.yaml.d/50-homelab.yaml` sets. Each read has one expected answer:
-    - the first prints daniel-box's `server_ip` from `inventory/host_vars/daniel-box.yml`.
+    - the first prints daniel-box's `server_ip` from `hosts/daniel-box/vars.yml`.
       Any other address means k3s picked a second NIC, and every pod would dial the
       apiserver on it;
     - the second prints `etcd`. Without it, `cluster-init` did not take and k3s runs on SQLite;
@@ -831,7 +831,7 @@ daniel-server installs from daniel-box's repository, so daniel-box and the repos
     ```
 
 1. Check that the node holds `server_ip` on `k3s_node_static_link`, which
-   `inventory/host_vars/daniel-server.yml` names. Then start the agent, for the same
+   `hosts/daniel-server/vars.yml` names. Then start the agent, for the same
    reason as on daniel-box, and read the node from daniel-box:
 
     ```bash
@@ -967,7 +967,7 @@ arm64 only. The `arm64` build ships only the tools daniel-pi's packages name. To
 
     In the same step, name the host in two more places. The renderer reads the inventory, and
     `bootstrap-host.sh` refuses a host that `HOSTS` does not list:
-    - copy `inventory/host_vars/_example.yml` to `<host>.yml`, which makes it an
+    - copy `hosts/_example/vars.yml` to `<host>.yml`, which makes it an
       inventory host;
     - add the host to `HOSTS` in `hosts/bootstrap-host.sh`.
 1. **Operator-only:** create the age key and read its public key. Run the script from the PR
@@ -1101,7 +1101,7 @@ Every `k3s` subcommand needs root.
 1. On a cluster node, pause system-upgrade-controller and check the cluster, both from daniel-box.
    The label stops a promoted k3s bump from starting a Job on the node. Go on only when the gate
    exits 0. daniel-box's restart runs at `k3s_restart_window` in
-   `inventory/host_vars/daniel-box.yml`, so pick a quiet slot outside that window.
+   `hosts/daniel-box/vars.yml`, so pick a quiet slot outside that window.
 
     ```bash
     sudo k3s kubectl label node <node> homelab/k3s-upgrade-paused=true

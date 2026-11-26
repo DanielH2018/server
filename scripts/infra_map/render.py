@@ -117,7 +117,7 @@ def render_html(model: dict) -> str:
 <style>{STYLE}</style>
 </head><body><div class="wrap">
 <h1>Homelab infrastructure</h1>
-<p class="lede">Declared state from <code>k8s/services.yml</code> and <code>inventory/host_vars/</code>, overlaid with
+<p class="lede">Declared state from <code>k8s/services.yml</code> and <code>hosts/&lt;host&gt;/vars.yml</code>, overlaid with
 live state from <code>kubectl</code> and <code>docker ps</code>. Regenerated on a timer, so
 edits to the inventory and drift in the running fleet both show up here on their own.</p>
 <p class="meta">Generated {e(model["generated_at"])} &middot; page reloads every {PAGE_REFRESH_SECONDS // 60} min</p>

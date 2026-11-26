@@ -128,8 +128,18 @@ fan-out issue held those files when step 4 landed.
 + hosts/_example/vars.yml
 ```
 
-`host_names` derives from `hosts/*/package.yml`. The checks that read every directory under
-`hosts/` must skip `_example`, which has no package. The fan-out pauses for this PR.
+As built, `lib.repo_paths.HOST_VARS` names `hosts/`, and `inventory_lists.host_vars_file` is the
+one function that turns a host into its file. `host_names` lists each directory under `hosts/`
+that holds a `vars.yml`, skipping a `_`-prefixed one, so `_example` stays a template and
+`components/`, `lib/` and `packages/` are never hosts. A test that edits a host's values copies
+the vars files with `render_guard.copy_host_files`, not the 8 MB `hosts/` tree. The fan-out
+pauses for this PR.
+
+Two references stay on the old path. The comment in
+`k8s/roles/pi-peer-backup/templates/secret.yaml.j2` renders into the Secret, so editing it
+would restart the role; step 7 changes it. `scripts/dev/affected_tests.json` is the
+docs-refresh cron's to re-record, and until it does, a change to a host's file runs the whole
+suite.
 
 **Done when** each host package's content is byte-identical and `host_names` returns the same
 three names.
@@ -153,7 +163,8 @@ before, by name.
 
 ### Step 7: the old paths go
 
-The installed readers drop `inventory/`, and homelab-mcp stops mounting it. The readers that
+The installed readers drop `inventory/`, and homelab-mcp stops mounting it. The comment in
+`k8s/roles/pi-peer-backup/templates/secret.yaml.j2` names `hosts/daniel-pi/vars.yml`. The readers that
 compare two commits drop the old layout last: `render_diff_gates.py` and `cluster_pins.py` keep
 it until no open PR and no `promote` revision predates step 6.
 

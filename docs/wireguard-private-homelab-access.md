@@ -256,7 +256,7 @@ the package, and `homelab-compose.service` runs the project.
 - **Where it lives.** The service file is
   `hosts/components/pi-compose/services/wg-easy/compose.yaml.j2`, and its header holds the
   notes that the deleted role's `CLAUDE.md` carried. The entry is in `compose_services` in
-  `inventory/host_vars/daniel-pi.yml`.
+  `hosts/daniel-pi/vars.yml`.
 - **What did not move.** The WireGuard port is still `51822/udp` on every interface, the admin
   UI is still the Pi's LAN address on `51821/tcp`, and the generated client configs still name
   `wireguard.<domain>:51822`. The Pi's `ufw` needs no rule for either port, because Docker's `nat`

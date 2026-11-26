@@ -57,7 +57,7 @@ _FENCE_MARK = re.compile(r"```")
 
 _DATE_CLAIM = re.compile(r"\bverified\b[^.\n]{0,40}\b\d{4}-\d{2}-\d{2}\b", re.I)
 
-INVENTORY_REL = "inventory/host_vars"
+INVENTORY_REL = "hosts"
 RETIRED_LOCK_REL = "docs/facts.lock"
 
 
@@ -67,7 +67,7 @@ def host_pattern(hosts: frozenset[str]) -> re.Pattern | None:
     The prefix is derived, never listed, so a host added to the inventory widens it. The
     boundaries keep out identifiers that merely contain a host name. A token preceded by a
     word character, ``/``, ``.`` or ``-`` is inside a path or a longer name
-    (``/srv/artifacts/daniel-box-claude``, ``host_vars/daniel-pi.yml``). One followed by a
+    (``/srv/artifacts/daniel-box-claude``, ``hosts/daniel-pi/vars.yml``). One followed by a
     word character, ``-`` or ``.<word>`` is a longer name or a domain (``daniel-hunter.com``).
     A sentence-final period still ends a host mention. None when the hosts share no prefix.
     """

@@ -6,7 +6,7 @@
 # header cloud-init writes when `manage_etc_hosts` lets it regenerate the file at boot.
 #
 # /etc/ssh/ssh_known_hosts pins the Pi's key from `ssh_host_ed25519_key` in
-# inventory/host_vars/daniel-pi.yml under the name and the address. Without it `ssh daniel-pi`
+# hosts/daniel-pi/vars.yml under the name and the address. Without it `ssh daniel-pi`
 # ends "Host key verification failed" for a user with no per-user known_hosts entry, such as the
 # agent user. No session accepts a changed key: re-pinning is the operator's edit to host_vars.
 #

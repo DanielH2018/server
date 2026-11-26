@@ -90,6 +90,7 @@ from lib.docs_provenance import write_if_body_changed
 from lib.inventory_lists import (
     PI_HOST,
     PI_HOST_VARS,
+    host_names,
     pi_entries_in,
 )
 from lib.estate import Estate
@@ -233,7 +234,7 @@ def _deadman() -> tuple[str, list[str]]:
         "hosts/components/worktree-sweep/defaults/main.yml",
         "k8s/roles/airflow/files/dags/homelab_warehouse/freshness.py",
         "inventory/group_vars/all.yml",
-        "inventory/host_vars/",
+        *(f"hosts/{h}/vars.yml" for h in host_names()),
         *(
             f"hosts/{h}/package.yml"
             for h in sorted(

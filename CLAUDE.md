@@ -14,7 +14,7 @@ regenerates it.
 
 **A new service is a k3s role under `k8s/roles/<name>/`** unless it must run on the Pi.
 daniel-box and daniel-server have no Docker, so a Compose service there deploys nothing. The
-Pi's services are `compose_services` entries in `inventory/host_vars/daniel-pi.yml`.
+Pi's services are `compose_services` entries in `hosts/daniel-pi/vars.yml`.
 A service's config lives in the tree that deploys it: if a k3s workload reads it, it is under
 its role.
 

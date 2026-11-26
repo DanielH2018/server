@@ -30,7 +30,7 @@ BOOTSTRAP_SCRIPT = "hosts/bootstrap-host.sh"
 # No real render reads the walkthrough or the example.
 FIXTURE_HOST_FILES = (
     "docs/host-packages.md",
-    "inventory/host_vars/_example.yml",
+    "hosts/_example/vars.yml",
 )
 # The renderer is a render input the render diff already sees.
 _CASE_PACKAGES = ("validate",)

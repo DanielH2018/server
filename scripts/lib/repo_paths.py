@@ -68,7 +68,8 @@ SECRETS = REPO / "secrets"
 # Each cluster key's ciphertext digest, which `checksum/restart` and the verify Jobs' roll hash.
 CLUSTER_VARS_SOURCE = SECRETS / "cluster-vars.source"
 ALL_VARS = INVENTORY / "group_vars" / "all.yml"
-HOST_VARS = INVENTORY / "host_vars"
+# Each host's own values, `hosts/<host>/vars.yml` (ADR-0042); `render_guard.host_file` names one.
+HOST_VARS = REPO / "hosts"
 # The k3s service list, every template's `services` (render_guard.k8s_services).
 K8S_SERVICES = REPO / "k8s" / "services.yml"
 # Node keys both k3s components render; the Longhorn backup schedule and arm flags are
