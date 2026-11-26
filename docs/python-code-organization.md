@@ -222,7 +222,7 @@ The second shape, for a program whose boundary is configuration rather than I/O,
 `load_config(env)`, constructed once in `cli.py` and passed down. A test builds its own with `load_config({...})` or `dataclasses.replace(cfg,
 X=...)` rather than a fakes module, because the fields are values, not callables. The
 transport underneath (`bridge.net`) is still patched, which is why
-`tests/services/test_bridge_patch_boundary.py` stays and why that role's monkeypatch
+`tests/services/monitor_bridge/test_bridge_patch_boundary.py` stays and why that role's monkeypatch
 entries have not reached zero.
 
 **Decision functions are pure.** A function that decides takes plain values and returns plain
@@ -380,9 +380,9 @@ behind them.
   `sys.path` leak into a test failure.
 - `scripts/deploy_tools/land_lib/outcome.py`: exit code and verdict constructed
   together and validated in `__init__`, so "printed without its verdict" is unrepresentable.
-- `tests/services/test_monitor_bridge_modules.py`: a ship list guarded in both
+- `tests/services/monitor_bridge/test_monitor_bridge_modules.py`: a ship list guarded in both
   directions against the tree.
-- `tests/services/test_monitor_bridge_mount_layout.py`: a synthesized missing
+- `tests/services/monitor_bridge/test_monitor_bridge_mount_layout.py`: a synthesized missing
   module must produce `No module named 'bridge.config'`.
 - `pyproject.toml` `addopts`: `-p leakguard` makes "does a test reach the network" a runner
   verdict rather than a review question.

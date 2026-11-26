@@ -47,7 +47,7 @@ The init containers' working-out is `docs/crowdsec-waf-record.md`.
   2026-09-06 (#1322). The probe targets `edge-selfcheck-ingressroute.yaml.j2`, a router of
   Traefik's own backed by `ping@internal`, so the failure that kills every app route kills it
   too. Three constraints hold it together — the entrypoint, the path and matching on a path
-  rather than a Host — and `tests/services/test_traefik_edge_selfcheck.py` ENFORCES
+  rather than a Host — and `tests/services/traefik/test_traefik_edge_selfcheck.py` ENFORCES
   all three.
 - **A rejected bouncer key is refused before the roll by `traefik-precheck`** (#6095,
   switched on by #6157 through `traefik_k8s_bouncer_key_precheck`). The startupProbe also
@@ -63,7 +63,7 @@ The init containers' working-out is `docs/crowdsec-waf-record.md`.
   short-circuits nothing.
 - **The bouncer runs with `metricsUpdateIntervalSeconds: 0`**, because nothing reads its usage
   metrics. The `DECIDED: no usage-metrics ticker` comment in `templates/dynamic.yaml.j2` has the
-  ruling, and `tests/services/test_traefik_bouncer_metrics_ticker_off.py` pins the value.
+  ruling, and `tests/services/traefik/test_traefik_bouncer_metrics_ticker_off.py` pins the value.
   Changing it needs a pod restart, not just a Middleware edit.
 - **`cloudflare-realip` is an in-repo LOCAL plugin** (`files/cloudflare-realip/`), projected
   from a ConfigMap rather than downloaded, and gated with the bouncer so the startupProbe
@@ -100,7 +100,7 @@ The init containers' working-out is `docs/crowdsec-waf-record.md`.
 - **`allowEmptyServices` keeps a router whose backend has no ready endpoints** (#2747,
   #2758), which is what opened that router-less window on a reboot. `static-config.yaml.j2`
   carries the `DECIDED: keep a router` marker, and
-  `tests/services/test_traefik_watched_namespaces.py::test_empty_services_keep_their_router_is_clean`
+  `tests/services/traefik/test_traefik_watched_namespaces.py::test_empty_services_keep_their_router_is_clean`
   pins the flag.
 
 ## Pod plumbing

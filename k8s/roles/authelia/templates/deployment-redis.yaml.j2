@@ -52,7 +52,7 @@ spec:
           ports:
             - containerPort: 6379
           # 6379 is the containerPort, the Service port AND the NetworkPolicy port. All three
-          # must agree; tests/services/test_authelia_redis_sessions.py pins that.
+          # must agree; tests/services/authelia/test_authelia_redis_sessions.py pins that.
 {{ hardened_security_context(read_only=true, non_root=true, run_as_user=999, run_as_group=1000) }}
           env:
             # redis-cli reads REDISCLI_AUTH from the environment, so the probes below

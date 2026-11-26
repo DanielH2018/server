@@ -1,7 +1,7 @@
 """The project and bind-source censuses over the rendered Compose project.
 
 The last two cases cover the rows the project gives the nut login census
-(`tests/services/test_nut_fsd_login_confined.py`).
+(`tests/services/network/test_nut_fsd_login_confined.py`).
 
 Each census has a `_is_clean` case and a `_is_flagged` case, so a rule that stopped matching fails
 its own test. The named members below are

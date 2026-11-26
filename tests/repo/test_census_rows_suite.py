@@ -79,7 +79,7 @@ ROLE_DIRS_CALLERS = frozenset(
         "deploy/test_k8s_autodeploy_guard.py",
         "deploy/test_renovate_automerge_follows_the_autodeploy_denylist.py",
         "repo/test_role_claude_md.py",
-        "services/test_bridge_patch_boundary.py",
+        "services/monitor_bridge/test_bridge_patch_boundary.py",
     )
 )
 

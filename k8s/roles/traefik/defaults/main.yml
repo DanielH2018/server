@@ -37,7 +37,7 @@ traefik_k8s_uid: 65532
 # Namespaces this cluster's Traefik watches. rbac.yaml.j2 renders one namespaced Role per
 # entry, and static-config.yaml.j2 lists the same set as `providers.kubernetesCRD.namespaces`.
 # ONE variable, so the two cannot drift.
-# ENFORCED by tests/services/test_traefik_watched_namespaces.py, which compares the RENDERED
+# ENFORCED by tests/services/traefik/test_traefik_watched_namespaces.py, which compares the RENDERED
 # manifests (Role namespaces vs the provider list), not the templates' text.
 #
 # Scoped to named namespaces: Traefik should not pick up an IngressRoute someone drops in an

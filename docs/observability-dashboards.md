@@ -177,7 +177,7 @@ registered.
 
 **The `with_groups` claims policy and the client secret are the other two rules.** The policy is
 measured above. Three settings are written twice and drift silently (`require_pkce`, the `groups`
-scope, that `claims_policy`), and `tests/services/test_grafana_authelia_oidc.py` holds both
+scope, that `claims_policy`), and `tests/services/dashboards/test_grafana_authelia_oidc.py` holds both
 the `observability` and `authelia` roles to them. The client secret is one credential in two SOPS
 keys, `grafana_oidc_client_secret` and `grafana_oidc_client_secret_hash`, so rotate them together.
 

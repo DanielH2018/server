@@ -68,7 +68,7 @@ the Trakt and SSO-Auth decisions, and why the snapshot cap is the number it is.
 - **`sweep-unlisted-plugins` removes every plugin this role does not install** (#2873), because
   **dropping an installer is not a removal** — the install wrote `<Name>_<Version>` onto the PVC and
   Jellyfin scans that directory every start. It runs before the installers, skips `configurations/`
-  by name, and `tests/services/test_jellyfin_plugin_allowlist.py` holds its `KEEP` tuple
+  by name, and `tests/services/jellyfin/test_jellyfin_plugin_allowlist.py` holds its `KEEP` tuple
   equal to the set the installers write. **It matches names, not versions** by design, so a newer
   directory `Update Plugins` downloaded survives it — the next bullet removes that one.
 - **Each installer holds its own version on every start** (#2905), through two steps that both sit
@@ -76,7 +76,7 @@ the Trakt and SSO-Auth decisions, and why the snapshot cap is the number it is.
   every `<Name>_*` directory the pin does not name, and `autoUpdate: false` goes into the plugin's
   `meta.json`, which is what stops the fetch recurring (it defaults to TRUE). The sweep runs AFTER
   the download, so a failed install leaves the working version in place.
-  `tests/services/test_jellyfin_plugin_pins_hold_across_a_restart.py` runs all five
+  `tests/services/jellyfin/test_jellyfin_plugin_pins_hold_across_a_restart.py` runs all five
   installers against a seeded directory.
 - **`templates/verify/` holds jellyfin's two Jobs**, which the renderer emits into
   `jellyfin-verify`.

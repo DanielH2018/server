@@ -1,0 +1,106 @@
+#!/usr/bin/env python3
+"""Every consumer of `claude_cgroup_*` must name a metric the writer actually emits.
+
+The two consumers are the `ClaudeCgroup*` rules in observability's `hosts.yaml` and the
+`AI/claude-code-host-cgroups` Grafana board. Both select by metric name across a tree boundary —
+the names are written by `hosts/components/claude-code/files/claude-cgroup-metrics.sh` — and a
+name-based selector that stops matching returns an EMPTY vector rather than an error. The board
+then renders "No data" behind a healthy Grafana pod, and the alert arm's third verdict is the only
+thing standing between that and a silent green.
+
+THIS IS THE NON-VACUITY HALF of the red-proof pair in
+`k8s/roles/observability/tests/rules/hosts.test.yaml`. That file proves the rules can fire on a
+fixture; a fixture cannot notice that the real series were renamed out from under it. Both
+halves are needed, and this one is the half that goes empty: `EMITTED` is asserted against a
+named frozenset rather than a count, so a writer that stops emitting fails with the missing name
+instead of passing over nothing.
+
+Run: uv run pytest tests/services/alert_rules/test_claude_cgroup_consumers_agree_with_the_writer.py
+"""
+
+import json
+import re
+
+from _helpers import K8S_ROLES
+from _setup_render import CLAUDE_CODE
+
+
+WRITER = CLAUDE_CODE / "files" / "claude-cgroup-metrics.sh"
+ARM = K8S_ROLES / "observability" / "files" / "rules" / "hosts.yaml"
+BOARD = (
+    K8S_ROLES
+    / "observability"
+    / "files"
+    / "dashboards"
+    / "AI"
+    / "claude-code-host-cgroups.json"
+)
+
+# Any consumer selector outside this set is a typo or a rename.
+EMITTED = frozenset(
+    {
+        "claude_cgroup_memory_current_bytes",
+        "claude_cgroup_memory_swap_current_bytes",
+        "claude_cgroup_memory_events_total",
+        "claude_cgroup_memory_events_local_total",
+        "claude_cgroup_memory_pressure_stalled_usec_total",
+        "claude_cgroup_cpu_usage_usec_total",
+        "claude_cgroup_pids_current",
+    }
+)
+
+# `claude-rc`'s absence is a fault; `fleet` is the shared `user.slice` parent;
+# `user-1000-slice` exists only once somebody has logged in since boot, so it is not required.
+LABELLED = frozenset({"claude-rc", "fleet", "user-1000-slice"})
+
+METRIC_RE = re.compile(r"claude_cgroup_[a-z0-9_]+")
+# Matching only a name with a label selector picks out the PromQL selectors.
+ARM_SELECTOR_RE = re.compile(r"claude_cgroup_[a-z0-9_]+(?=\{)")
+
+
+def _writer_metrics() -> set[str]:
+    return set(METRIC_RE.findall(WRITER.read_text()))
+
+
+def _writer_cgroup_labels() -> set[str]:
+    """Every key the script assigns into its `CGROUPS` map, in either form.
+
+    Both forms are read across the whole file rather than by slicing the `declare -A CGROUPS=(`
+    block: a comment inside that block containing a `)` would truncate a slice to nothing — an
+    empty set that a subset assertion would pass. That is the argument for asserting a named set
+    rather than a bound.
+    """
+    text = WRITER.read_text()
+    literal = re.findall(r"^\s*\[([A-Za-z0-9_-]+)\]=", text, re.MULTILINE)
+    assigned = re.findall(r"CGROUPS\[([A-Za-z0-9_-]+)\]=", text)
+    return set(literal) | set(assigned)
+
+
+def _board_exprs() -> list[str]:
+    board = json.loads(BOARD.read_text())
+    return [
+        t["expr"]
+        for panel in board["panels"]
+        for t in panel.get("targets", [])
+        if "expr" in t
+    ]
+
+
+def test_the_writer_still_emits_every_metric_family_the_consumers_were_built_on():
+    """The named-member assertion. An empty or narrowed writer fails here, not silently."""
+    assert EMITTED <= _writer_metrics()
+
+
+def test_the_writer_still_labels_both_cgroups():
+    assert LABELLED == _writer_cgroup_labels()
+
+
+def test_the_alert_arm_selects_only_emitted_metrics():
+    """And selects at least the two families the alert is built on, so it cannot go vacuous."""
+    used = set(ARM_SELECTOR_RE.findall(ARM.read_text()))
+    assert used, "hosts.yaml selects no claude_cgroup_* metric at all"
+    assert used <= EMITTED, sorted(used - EMITTED)
+    assert {
+        "claude_cgroup_memory_pressure_stalled_usec_total",
+        "claude_cgroup_memory_events_total",
+    } <= used

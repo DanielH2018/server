@@ -57,7 +57,7 @@ verbatim-prompts store this role's LAN route
 - Alloy replaced Promtail on 2026-09-02 (Promtail reached end of life 2026-03-02).
 - **The `job` label values are not this role's to choose.** They render from `loki_streams` in
   `group_vars/all.yml`, shared with the Pi's Alloy and with every selector that reads them
-  (#3740). `tests/services/test_loki_stream_labels.py` fails when an emitted value
+  (#3740). `tests/services/scraping/test_loki_stream_labels.py` fails when an emitted value
   and the consumers' values drift apart.
 - **`stage.replace` stages redact credentials on the way in.** Each substitutes the
   capture group only, so the rest of the record survives:
@@ -94,7 +94,7 @@ verbatim-prompts store this role's LAN route
 - **The access-log drop keeps a person's 302 and drops a pod's.** blackbox-exporter's
   `http_sso_302` module probes every SSO-gated name from the pod CIDR, and those probes were
   about 35,000 of 37,000 302s a day. The drop counts as `traefik_pod_probe_302` in
-  `loki_process_dropped_lines_total`. `tests/services/test_traefik_access_log_drop.py` holds
+  `loki_process_dropped_lines_total`. `tests/services/traefik/test_traefik_access_log_drop.py` holds
   both halves.
 - **The Flux controllers' and the CrowdSec LAPI's routine info lines are dropped here**
   (#8988), because a level flag on either app would also hide lines worth keeping. Flux at

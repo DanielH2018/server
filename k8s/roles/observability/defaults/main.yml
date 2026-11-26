@@ -197,7 +197,7 @@ observability_loki_retention: 744h
 # k8s/roles/observability/files/dashboards, which is the single source of truth for the JSON.
 # templates/grafana-dashboards.yaml.j2 renders one ConfigMap per folder holding the boards listed
 # here, so a board on disk that is not listed reaches no Grafana, and a listed board with no file
-# fails the render. tests/services/test_dashboard_configmaps.py holds the lists to the
+# fails the render. tests/services/dashboards/test_dashboard_configmaps.py holds the lists to the
 # files, and names the entry a new board needs.
 # DECIDED: this map has no folder-level prune, and that is deliberate (operator 2026-08-28).
 # Dropping a folder here removes its volume and volumeMount from grafana.yaml.j2 (both
@@ -366,7 +366,7 @@ observability_expected_hosts:
 # `env.valueFrom`, and alertmanager file-mounts `alertmanager-config`, its whole config. The
 # renderer derives the restart from the Secrets the pod template names, so an alertmanager
 # config edit rolls alertmanager alone. The key stays as the declaration
-# tests/services/test_observability_config_rolls_one_workload.py holds equal to the
+# tests/services/scraping/test_observability_config_rolls_one_workload.py holds equal to the
 # Secrets each pod reads. `origin-pull-secret.yaml` restarts nothing, because only a Traefik
 # middleware reads it.
 observability_stabilise_workloads:

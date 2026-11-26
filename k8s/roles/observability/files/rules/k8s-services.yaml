@@ -6,7 +6,7 @@
 # each role's pinned LAN address on a metric (docs/archive/deploy/d5-bulk-move.md).
 # Each carries verify="true", so the soak Job fails a revision that changes its service while
 # it fires. The address is a literal because a rule file is never Jinja;
-# tests/services/test_lan_address_rules_agree.py holds it, the namespace and the
+# tests/services/alert_rules/test_lan_address_rules_agree.py holds it, the namespace and the
 # Service name to the rendered Service.
 # TraefikIngressAddressNotPinned is the same check for traefik's reserved ingress VIP.
 groups:

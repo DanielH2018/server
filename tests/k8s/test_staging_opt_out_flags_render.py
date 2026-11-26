@@ -10,7 +10,7 @@ which this module checks once over the whole table:
 - A flag that defaults off loses the feature on every cluster by omission, prod included.
 
 What each flag gates, and the asymmetries between them, stay in the flag's own module:
-`tests/services/test_traefik_acme_optional.py`, `test_livesync_gate_optional.py` and
+`tests/services/traefik/test_traefik_acme_optional.py`, `test_livesync_gate_optional.py` and
 `test_crowdsec_optional.py`.
 """
 

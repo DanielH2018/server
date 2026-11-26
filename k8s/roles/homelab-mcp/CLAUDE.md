@@ -37,7 +37,7 @@ routed tenant of the retired Docker edge.
   mounts under `/srv/homelab-src` (`homelab_mcp_source_dirs`). Only daniel-box's package ships
   `checkout-sync`, so only its checkout stays at origin/master. A cordoned or down daniel-box
   leaves the pod Pending rather than serving a stale tree
-  (`tests/services/test_homelab_mcp_source_mounts.py`).
+  (`tests/services/apps/test_homelab_mcp_source_mounts.py`).
 - **RBAC:** `templates/rbac.yaml.j2` grants a dedicated `homelab-mcp` ServiceAccount
   `get`/`list` on pods, `pods/log`, nodes, deployments and daemonsets — no `watch`, no
   secrets, no exec. Deliberately narrower than the shell's own read-only ServiceAccount.

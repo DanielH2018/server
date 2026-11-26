@@ -100,7 +100,7 @@ The role `CLAUDE.md` keeps the rules; this is the wiring.
   keys, which `templates/config/env.yaml.j2` renders from the `weekly_reboot_*` group vars, so
   PromotionStalled stays quiet while `promote` defers across the weekly reboot (#5458).
 - **The deploy-pipeline scrape port is a literal in `prometheus.yaml.j2`.**
-  `tests/services/test_deploy_pipeline_scrape.py` holds it to the role's default.
+  `tests/services/scraping/test_deploy_pipeline_scrape.py` holds it to the role's default.
 - **The gates' labels.** B2 and WAN Reachable skip the rows naming them. The `prometheus` gate
   value suppresses no row in the bridge: it labels the rows `EXPORTER_DEPENDENT` holds and the
   rules that carry the exporter inhibit. `registry.build_checks` hands each row's `gate` to
@@ -205,7 +205,7 @@ The role `CLAUDE.md` keeps the rules; this is the wiring.
   for this role.
 - **A test that does patch one must patch the module that READS the name, and a module reads
   it qualified** (`bridge.net.prom_vector` at call time, never `from bridge.net import prom_vector`). Getting it
-  wrong is silent, so `tests/services/test_monitor_bridge_modules.py` re-derives every
+  wrong is silent, so `tests/services/monitor_bridge/test_monitor_bridge_modules.py` re-derives every
   patched `(module, name)` pair by AST, and `test_bridge_patch_boundary.py` beside it fails a
   runtime module that from-imports a patched name.
 - **Per-check state is a parameter too.** Every streak counter and probe cache is a field of

@@ -26,7 +26,7 @@ See repo-root `CLAUDE.md` for shared conventions.
   pod address and a fence answers it 404.
   `tests/k8s/test_alertmanager_read_route.py::test_karma_names_authelia_on_both_its_lan_and_public_routes`
   holds the routes, and
-  `tests/services/test_authelia_access_tiers.py::test_a_user_outside_admins_is_denied_a_silence_ui`
+  `tests/services/authelia/test_authelia_access_tiers.py::test_a_user_outside_admins_is_denied_a_silence_ui`
   and `::test_the_public_silence_ui_admits_admins_only_from_any_source` hold the rules.
 - **Severity colours and sort order come from `karma_severities` in `defaults/main.yml`.**
   `k8s/roles/karma/tests/test_karma_config.py::test_every_rule_severity_has_a_colour_and_a_rank`
