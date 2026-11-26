@@ -41,9 +41,7 @@ def test_the_pod_is_pinned_to_a_host_whose_checkout_is_synced() -> None:
     assert nodes and nodes <= _synced_hosts(), f"{nodes} has a host checkout-sync skips"
 
 
-def test_the_jail_mounts_k8s_inventory_and_tests_read_only_and_no_ansible_tree() -> (
-    None
-):
+def test_the_jail_mounts_the_source_trees_read_only_and_no_ansible_tree() -> None:
     pod = _pod()
     [container] = pod["containers"]
     checkout = PurePosixPath(f"/home/{host_context()['sys_user']}/server")
@@ -53,6 +51,7 @@ def test_the_jail_mounts_k8s_inventory_and_tests_read_only_and_no_ansible_tree()
         if "hostPath" in v
     }
     assert sorted(p.relative_to(checkout).as_posix() for p in host_paths.values()) == [
+        "estate",
         "inventory",
         "k8s",
         "tests",
