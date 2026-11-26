@@ -14,17 +14,23 @@ vaultwarden_k8s_replicas: 1
 # same PR narrows vaultwarden_k8s_allowed_sources to the registering device's /32.
 vaultwarden_k8s_signups_allowed: false
 
+# k8s_primary_node's pod subnet (its spec.podCIDR). Traefik and wg-easy are both pinned there.
+vaultwarden_k8s_primary_node_pod_cidr: 10.42.0.0/24
+
 # The only sources the IngressRoute admits, matched on the remote address. Traefik's Service is
 # externalTrafficPolicy: Local, so that is the real client.
-# DECIDED: never a pod or service CIDR. It would admit every pod in the cluster; WireGuard peers
-# arrive as wg-easy's pod IP, so they wait for a stable wg-easy source rather than widening this.
+# DECIDED: the primary node's pod subnet and no other cluster range (operator, 2026-11-26).
+# WireGuard peers arrive as wg-easy's pod IP, which changes on every restart, and no cheap change
+# gives wg-easy a stable source. The /24 also admits every other pod on that node, which the
+# master password, 2FA and the login rate limit still face; the whole pod CIDR is refused.
 vaultwarden_k8s_allowed_sources:
   - "{{ lan_subnet }}"
+  - "{{ vaultwarden_k8s_primary_node_pod_cidr }}"
 
 # The only sources Vaultwarden takes X-Real-IP from, which keys its login rate limit: Traefik's
-# node's pod subnet (Traefik is pinned to k8s_primary_node). A host process or admitted pod on
-# that node could still set the header; one on daniel-server cannot.
-vaultwarden_k8s_trusted_proxies: 10.42.0.0/24
+# node. A host process or admitted pod on that node could still set the header; one on
+# daniel-server cannot.
+vaultwarden_k8s_trusted_proxies: "{{ vaultwarden_k8s_primary_node_pod_cidr }}"
 
 vaultwarden_k8s_cpu_limit: "500m"
 vaultwarden_k8s_mem_limit: 256Mi
