@@ -17,6 +17,8 @@ import subprocess
 import sys
 import tomllib
 
+import pytest
+
 from _k8s_render import render_role_template
 from lib import yaml_fast
 from lib.repo_paths import REPO
@@ -192,3 +194,9 @@ def test_the_parser_key_is_a_name_promotes_gitleaks_scan_admits():
         i for i in volume["configMap"]["items"] if i["path"] == "lib/k8s_conditions.py"
     ]
     assert _bundle_key_name_allowlist().match(f"          - key: {item['key']}")
+
+
+def test_age_seconds_refuses_a_stamp_with_no_offset():
+    with pytest.raises(ValueError, match="no UTC offset"):
+        configarr_health.age_seconds("2026-10-18", _NOW)
+    assert configarr_health.age_seconds("2026-10-18T04:30:26Z", _NOW) == 3600.0
