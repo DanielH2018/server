@@ -59,11 +59,11 @@ class TestToposort:
         assert "cycle" in str(exc.value).lower()
 
     def test_cycle_error_names_the_cycle_not_what_waits_on_it(self):
-        cl = _containers("a", "b", "c")
-        deps = {"a": ["b"], "b": ["a"], "c": ["a"]}
+        cl = _containers("a", "b", "c", "d")
+        deps = {"a": ["b"], "b": ["c"], "c": ["a"], "d": ["a"]}
         with pytest.raises(DependencyCycle) as exc:
             toposort_containers(cl, deps)
-        assert str(exc.value).endswith("a -> b -> a")
+        assert str(exc.value).endswith(": a -> b -> c -> a")
 
     def test_dep_absent_from_list_is_ignored(self):
         # 'ghost' isn't a container; 'a' should still sort with in-degree 0.
