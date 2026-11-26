@@ -1,0 +1,23 @@
+{% from 'ingressroute.yml.j2' import ingressroute, monitoring_route with context %}
+---
+{# `vaultwarden-lan-only` (middleware.yaml.j2) is the vault API's only gate. #}
+{{ ingressroute(
+    container_item.name,
+    container_item.hostname | default(container_item.name),
+    container_item.port,
+    container_item.use_authelia,
+    extra_middlewares=['vaultwarden-lan-only'],
+    public=container_item.public_route | default(true),
+  )
+}}
+---
+{# The blackbox ingress probe is a pod, outside the allowlist; /alive answers only a timestamp. #}
+{{ monitoring_route(
+    container_item.name,
+    container_item.hostname | default(container_item.name),
+    container_item.port,
+    '/alive',
+    extra_client_cidrs=[k3s_pod_cidr],
+    include_bridge_ip=false
+  )
+}}
