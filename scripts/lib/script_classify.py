@@ -42,21 +42,15 @@ __all__ = [
     "importers",
 ]
 
-# Not documentation about the tree: a test, a pytest fixture module, or a private helper
-# whose name says it is not an entry point.
 _EXCLUDED_PREFIXES = ("test_", "_")
 _EXCLUDED_NAMES = {"conftest.py"}
-# A Job's ConfigMap carries these files, and a pod runs them. No person or cron runs one, and
-# editing one renames the Job, so the entry-point rules do not reach them.
+# No person or cron runs these; editing one renames the Job, so the entry-point rules do not reach
+# them.
 _JOB_FILES = "job_files"
 
 SUFFIXES = (".py", ".sh")
 
-# --- How a script is run --------------------------------------------------------------
-#
-# Four kinds, most-demanding first. A script reached more than one way takes the highest,
-# because that is the one that decides how much a break costs: a scheduled script fails
-# unattended at 3am, an adhoc one fails in front of the person who ran it.
+# Most-demanding first; a script reached more than one way takes the highest.
 RUNS = {
     "scheduled": "a timer runs it unattended",
     "gate": "every commit, CI run, deploy or Claude session runs it",
@@ -65,20 +59,16 @@ RUNS = {
 }
 _PRECEDENCE = ("adhoc", "library", "gate", "scheduled")
 
-# A reference to a script, in any of the spellings the tree uses.
-# `*` on the directory group, not `?`: a script may sit any number of directories under
-# `scripts/`, and capping the path at one level made a nested one read as never invoked.
+# `*` on the directory group: a script may sit any number of directories under scripts/.
 _SCRIPT_REF_RE = re.compile(
     r"(?:\./|/)?scripts/(?:[A-Za-z0-9_]+/)*([A-Za-z0-9_-]+\.(?:py|sh))"
 )
 
-# A whole string literal that is a script path and nothing else — one element of an argv
-# list, as opposed to a sentence that happens to name a script.
+# A whole string literal that is a script path: one argv element, not a sentence naming a script.
 ARGV_RE = re.compile(r"(?:\./)?scripts/(?:[A-Za-z0-9_]+/)*([A-Za-z0-9_-]+\.(?:py|sh))")
 
-# A line that RUNS something, as opposed to one that mentions it. Every generated doc page,
-# every role CLAUDE.md and a good many comments name these scripts; without this the census
-# would classify by how often a script is talked about.
+# A line that RUNS a script, not one that mentions it; docs and comments name scripts far more
+# often.
 _RUN_CONTEXT_RE = re.compile(
     r"uv run|python|bash|/bin/sh|\bexec\b|entry\s*=|\./scripts/"
 )
@@ -289,8 +279,6 @@ def _invocation_sites(repo: Path) -> list[tuple[Path, str, str]]:
         sites.append((path, "gate", f"Claude hook: {path.name}"))
 
     roles = repo / "k8s" / "roles"
-    # `files/*/*` reaches a package a role ships from a subdirectory, such as the retired
-    # gitops_deploy role's `files/deployer_lib/`.
     patterns = (
         "**/templates/*",
         "**/files/*",
@@ -356,9 +344,6 @@ def _has_main_guard(text: str) -> bool:
 def classify(repo: Path = REPO, scripts: Path = SCRIPTS) -> dict[str, tuple[str, str]]:
     """Script filename -> (how it runs, the evidence for saying so)."""
     verdicts: dict[str, tuple[str, str]] = {}
-    # Each script is read once per question for this call. Three checks below ask its
-    # `_main_shape`, and a dispatch target is asked what it invokes twice; the repeats were
-    # a sixth of this function's time.
     shape = functools.cache(lambda path: _main_shape(file_text(path)))
 
     def record(script: str, kind: str, evidence: str) -> bool:
@@ -382,9 +367,8 @@ def classify(repo: Path = REPO, scripts: Path = SCRIPTS) -> dict[str, tuple[str,
     for stem, callers in imported.items():
         record(f"{stem}.py", "library", f"imported by {', '.join(sorted(callers))}")
 
-    # A SCRIPT another one imports and calls in process runs as often as that caller does,
-    # exactly as it did when the caller spawned it. Only a module with its own `__main__`
-    # guard counts: a plain library module has no run of its own to inherit.
+    # A script another one imports and calls in process runs as often as its caller; only a module
+    # with a `__main__` guard counts.
     entry_points = {
         stem
         for stem in imported
@@ -395,8 +379,8 @@ def classify(repo: Path = REPO, scripts: Path = SCRIPTS) -> dict[str, tuple[str,
         for caller in imported[stem]:
             runs_in_process.setdefault(caller, set()).add(f"{stem}.py")
 
-    # A dispatcher's target has a module-level `main` and no guard. It stays a library itself,
-    # since no person runs it, but what it runs is credited to its importer.
+    # A dispatcher's target (module-level `main`, no guard) stays a library; what it runs is
+    # credited to its importer.
     for stem, stem_callers in imported.items():
         path = by_path.get(f"{stem}.py")
         # A dispatch target: a module-level `main` and no `__main__` guard.
@@ -406,10 +390,8 @@ def classify(repo: Path = REPO, scripts: Path = SCRIPTS) -> dict[str, tuple[str,
         for caller in stem_callers:
             runs_in_process.setdefault(caller, set()).update(runs)
 
-    # One script running another inherits the caller's kind, so the six reference
-    # generators are scheduled by way of `build_docs.py` and its timer rather than reading
-    # as things nobody runs. Iterated to a fixpoint: the chain is timer → build_docs.py →
-    # generator, and a longer one would otherwise resolve only as far as it was walked.
+    # One script running another inherits the caller's kind; iterated to a fixpoint so a long chain
+    # resolves fully.
     callers = {
         path: invoked(path) | runs_in_process.get(path.name, set())
         for path in catalogue
@@ -419,8 +401,7 @@ def classify(repo: Path = REPO, scripts: Path = SCRIPTS) -> dict[str, tuple[str,
         for path, targets in callers.items():
             kind = verdicts.get(path.name, ("adhoc", ""))[0]
             if kind == "library":
-                # A library is reached through whoever imports it; propagating "library"
-                # onto something it shells out to would say the wrong thing.
+                # Propagating "library" onto what a library shells out to would say the wrong thing.
                 kind = "adhoc"
             for target in targets:
                 if record(target, kind, f"{path.name} ({RUNS[kind]})"):
@@ -428,10 +409,8 @@ def classify(repo: Path = REPO, scripts: Path = SCRIPTS) -> dict[str, tuple[str,
         if settled:
             break
 
-    # A Python module with no `__main__` guard that only a test imports is not a library by
-    # the rule above, and it is not something a person runs either -- there is nothing to run.
-    # `grafana_panel_report.py` is the live case: its classifier is unit-tested without a
-    # browser, and the page called it "no automated caller in the tree".
+    # A module with no `__main__` guard that only a test imports is neither a library nor something
+    # a person runs.
     tested = _test_importers(scripts)
     for path in catalogue:
         if path.suffix != ".py" or path.name in verdicts:

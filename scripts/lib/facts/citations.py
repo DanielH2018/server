@@ -128,12 +128,8 @@ def line_numbered_citations(
     return [path for path, ext in _LINE_NUMBERED.findall(text) if ext in extensions]
 
 
-# A bare `tests/<group>/<file>.py` or `hosts/tests/<file>.py` citation is the ONE exception to
-# the line-number rule. Every such path is a claim about this tree: a role's own `tests/` holds
-# no group directory, so a role-relative `tests/test_x.py` does not match. A `pytest <path>`
-# line or an `ENFORCED by <path>` note is an instruction someone runs. A move of the guards rewrites these citations, and the line-number
-# rule would watch none of them go stale. A trailing `:line` or `::node_id` is allowed and
-# dropped.
+# A bare `tests/<group>/<file>.py` citation is a claim about this tree, so it is exempt from the
+# line-number rule.
 _GUARD_PATH = re.compile(
     r"`(hosts/tests/[\w./-]+\.py|tests/(?:deploy|k8s|longhorn|repo|services|staging)/[\w./-]+\.py)"
     r"(?::\d+(?:-\d+)?|::[\w\[\]:.-]+)?`"
@@ -145,13 +141,7 @@ def guard_path_citations(text: str) -> list[str]:
     return _GUARD_PATH.findall(text)
 
 
-# A `<name>.yml.j2`, whether bare (a `{% from %}` line or an inline bullet mention) or with
-# one directory level in front of it -- role-local app config shares the extension
-# (`templates/config/config.yml.j2` in configarr, `templates/config/application.yml.j2` in
-# janitorr). The directory is kept so the caller can tell those apart from a shared-macro
-# reference, which this repo's docs always give bare or as `templates/<macro>.yml.j2`.
-# Unlike every other scanner here it needs no backticks: the skeleton it guards is a
-# `{% from '<macro>.yml.j2' import ... %}` line inside a fence.
+# Needs no backticks: it guards a `{% from '<macro>.yml.j2' import ... %}` line inside a fence.
 _MACRO = re.compile(r"\b((?:[a-z0-9_-]+/)?[a-z0-9_-]+\.yml\.j2)\b")
 
 
@@ -160,10 +150,8 @@ def macro_citations(text: str) -> list[str]:
     return _MACRO.findall(text)
 
 
-# A pointer to one part of another doc: a backticked Markdown path, then the part's name in
-# italics, as in "`docs/landing.md`, *Reading the verdict*". The path needs a slash, as
-# ``_FILE`` does: a bare `CLAUDE.md` names whichever doc the sentence is about, so it is no
-# claim about one file. A bold span is not a pointer.
+# A backticked .md path with a slash, then the part name in italics; a bare CLAUDE.md or bold span
+# is no pointer.
 _HEADING_POINTER = re.compile(
     rf"`(?P<doc>{_FILE}\.md)`(?:,|'s| →)?\s+\(?(?<!\*)\*(?!\*)(?P<part>[^*]{{3,90}})\*(?!\*)"
 )
@@ -200,8 +188,7 @@ def names_a_part(part: str, doc_text: str) -> bool:
 # the convention is adopted rather than invented. The bold need not close after the dash.
 HISTORY_MARKER = "**HISTORY —"
 
-# A hook rewrites a generated block from its source, so its text is nobody's prose: a pin it
-# names is never stale, and a change to it is no edit to the section that holds it.
+# A hook rewrites a generated block, so a pin it names is never stale.
 GENERATED_BLOCK = re.compile(r"<!-- generated_from:.*?<!-- /generated_from -->", re.S)
 
 _LIST_ITEM = re.compile(r"(?:[-*+]|\d+[.)])\s+")
@@ -326,8 +313,6 @@ def is_fact_doc(path: str) -> bool:
     return len(parts) > 3 and parts[1] == "skills" and name == "SKILL.md"
 
 
-# Trees that describe the repo as it was (archives, ADR bodies, slice plans), or that a
-# generator writes.
 _NOT_LIVE = (
     "docs/archive/",
     "docs/adr/",

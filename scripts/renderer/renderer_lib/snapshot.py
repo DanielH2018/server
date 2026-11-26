@@ -55,8 +55,8 @@ MOUNT = "/opt/snapshot"
 NAME_LIMIT = 63
 # `%Y%m%d%H%M%S`, the token the Job appends at run time.
 TOKEN_WIDTH = 14
-# How far below its Kustomization's `timeout` the Job's `activeDeadlineSeconds` sits, so the
-# Job fails with its own message before Flux reports a bare timeout.
+# Below the Kustomization's `timeout`, so the Job fails with its own message before Flux reports a
+# bare timeout.
 DEADLINE_MARGIN_S = 60
 SA_CA = "/var/run/secrets/kubernetes.io/serviceaccount/ca.crt"
 _DURATION = re.compile(r"(?:(\d+)h)?(?:(\d+)m)?(?:(\d+)s)?")

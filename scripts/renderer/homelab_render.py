@@ -266,8 +266,7 @@ def _stub_cluster(
     try:
         tags = select_tags(roles, kinds=kinds)
         rendered = [render_tag(tag, stubs) for tag in tags]
-        # The stamp hashes the placeholder form, never the stub render, so the value equals
-        # the placeholder render's.
+        # The stamp hashes the placeholder form, never the stub render.
         keys = secret_keys()
         placeholder = render(tags, keys)
         rendered = stamp_restarts(

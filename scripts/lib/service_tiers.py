@@ -49,8 +49,6 @@ def shed_set(entries: list[dict] | None = None) -> list[str]:
     return [entry["name"] for entry in shed_entries(entries)]
 
 
-# Each tier list the k3s role derives, and the filter that derives it from
-# ``(entries, namespace)``.
 _DERIVED = {
     "k3s_longhorn_r2_volumes": longhorn_r2_claims,
     "k3s_longhorn_weekly_volumes": longhorn_weekly_claims,

@@ -18,16 +18,14 @@ from lib.estate import role_defaults
 from renderer.renderer_lib.cluster import RenderRefused
 from renderer.renderer_lib.environment import strict_env
 
-# Each file a `shared` entry may name, by its repo path. A file two components ship stays
-# single here: check-lib and pi-heartbeats both ship homelab-check-lib.sh (M6 B5). A named
-# allowlist rather than a path, so a component cannot copy any other file of the repo.
+# A file two components ship stays single here; a named allowlist so a component cannot copy any
+# other repo file.
 _LONGHORN_LIB = "scripts/lib/longhorn_lib"
 SHARED_FILES = {
     "homelab-check-lib.sh": "hosts/components/check-lib/files/homelab-check-lib.sh",
-    # daniel-box's weekly list-only timer runs it from the checkout (H7.35).
     "etcd_restore_drill.sh": "scripts/backup/etcd_restore_drill.sh",
-    # What the backup-health reader imports. The reapers, `probe.py` and the runbook gates import
-    # the same modules from the checkout, so they stay single in scripts/lib/.
+    # What the backup-health reader imports; other tools import the same modules from the checkout,
+    # so they stay single in scripts/lib/.
     "k8s_conditions.py": "scripts/lib/k8s_conditions.py",
     "k8s_objects.py": "scripts/lib/k8s_objects.py",
     "longhorn_backup_health_logic.py": f"{_LONGHORN_LIB}/longhorn_backup_health_logic.py",
@@ -39,15 +37,11 @@ SHARED_FILES = {
     "longhorn_skipped_volumes_logic.py": f"{_LONGHORN_LIB}/longhorn_skipped_volumes_logic.py",
 }
 
-# The components whose defaults and templates another component or a host's package.yml may
-# borrow with `component:`. Each file stays single in its owner, so two renderers cannot fork
-# it. claude-code's agent user and its per-uid slice cap sit in each host's package.yml, because
-# the uid differs per host. k3s-agent renders k3s-server's defaults and address-pin
-# template, and k3s-host-dns renders pi-resolver's resolv.conf. A named allowlist, so a spec
-# cannot read any other component.
+# Each file stays single in its owner so two renderers cannot fork it; a named allowlist so a spec
+# cannot read any other component. claude-code's agent user and per-uid slice cap sit in each host's
+# package.yml, because the uid differs per host.
 COMPONENT_SOURCES = frozenset({"claude-code", "k3s-server", "pi-resolver"})
-# A `src` with this prefix names a path inside the spec's `component:`, such as
-# `component:templates/x.j2`, which loads from that component as its own `src` would.
+# A `src` with this prefix names a path inside the spec's `component:`.
 COMPONENT_SRC = "component:"
 
 
@@ -103,9 +97,8 @@ def confined_env(directory: Path) -> jinja2.Environment:
     return env
 
 
-# A `lib` entry names a script in hosts/lib/, or a module of a package there such as
-# `reconcile_lib/ufw.py`, or a top-level module such as `k3s_gates.py` (H6.3b), which a script
-# of the same directory imports. A module is lowercase with underscores and ends `.py`.
+# A `lib` entry names a script, a package module such as `reconcile_lib/ufw.py`, or a top-level
+# module; a module is lowercase with underscores and ends `.py`.
 _LIB_NAME = re.compile(
     r"[a-z0-9][a-z0-9-]*|[a-z][a-z0-9_]*\.py|[a-z][a-z0-9_]*/[a-z_][a-z0-9_]*\.py"
 )

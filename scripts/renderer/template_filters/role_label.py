@@ -29,16 +29,9 @@ import yaml
 
 ROLE_LABEL = "homelab/role"
 
-# Plain scalars kubectl's YAML reader (go-yaml v2) resolves to something other than a string.
-# PyYAML quotes a string only when its OWN resolver would misread it, and go-yaml's is wider:
-# `y`/`n` are bools there, and `1e3`, `0o17` and `0b1` are numbers. Dumped plain, a quoted
-# env value "y" would reach the API server as `true` and fail the apply. Every string matching
-# one of these is written double-quoted instead.
-#
-# The reverse holds for a scalar the template wrote PLAIN: PyYAML loads `defaultMode: 0o444` as
-# the string "0o444", where go-yaml reads the integer 292. Quoting it would hand the API server
-# a string and fail the apply (scrutiny's secret volumes). `_Loader` keeps such a scalar as a
-# `_GoPlain`, which is written back plain, so kubectl reads what the template said.
+# go-yaml (kubectl) resolves `y`/`n`, `1e3` and `0o17` as non-strings where PyYAML does not quote
+# them, so matching strings are double-quoted. A scalar the template wrote PLAIN (`defaultMode:
+# 0o444`) is kept as `_GoPlain` and written back plain, since quoting it would fail the apply.
 _GO_YAML_NON_STRING = re.compile(
     r"""
     (?: y|Y|yes|Yes|YES|n|N|no|No|NO
@@ -61,8 +54,7 @@ class _GoPlain(str):
     """A plain scalar PyYAML read as a string and go-yaml reads as a number or a bool."""
 
 
-# libyaml's parser, where PyYAML's wheel ships it: the pure-Python one was a quarter of a full
-# k8s render.
+# Uses libyaml's parser where PyYAML's wheel ships it.
 class _Loader(getattr(yaml, "CSafeLoader", yaml.SafeLoader)):
     """SafeLoader that marks a plain scalar go-yaml would not read as a string."""
 

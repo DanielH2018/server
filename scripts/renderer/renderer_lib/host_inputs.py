@@ -23,15 +23,9 @@ HOST_INPUTS = (
     "uv.lock",
     # Host mode removes its key names (`host.secret_names`).
     "secrets/secrets.yml",
-    # The ciphertext a host package carries (`host_outputs.finish`): a change to a host's file
-    # changes that host's package (H4.2, H4.5).
     "secrets/hosts/",
     # The drill script daniel-server's hypervisor component ships (`host_sources.SHARED_FILES`).
     "scripts/backup/etcd_restore_drill.sh",
-    # Past the plan's list, found by the audit test: `homelab_render.py` imports it at load, for
-    # cluster mode.
+    # `homelab_render.py` imports it at load, for cluster mode.
     "scripts/secrets_mgmt/cluster_vars_check.py",
-    # `host_lib.py` and `longhorn_lib/longhorn_backups.py`, which the template filters and
-    # `scripts/lib/` import at load, sit under `hosts/` and `scripts/lib/` since H7.2e, so the
-    # two directory members above already cover them.
 )

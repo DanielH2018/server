@@ -18,11 +18,9 @@ import yaml
 
 from lib import yaml_fast
 
-# The flux role's old lever over its sync objects, refused when true (D5 step 29).
 SYNC_SUSPEND_KEY = "flux_sync_suspend"
 
-# Every Flux kind's API group ends in this. A Job's or CronJob's `spec.suspend` is another
-# field and stays free to read `false`.
+# A Job's or CronJob's `spec.suspend` is another field and stays free to read `false`.
 FLUX_API_GROUP_SUFFIX = ".toolkit.fluxcd.io"
 
 
