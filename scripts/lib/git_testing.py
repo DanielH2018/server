@@ -41,8 +41,7 @@ __all__ = [
     "scrubbed_env",
 ]
 
-# The identity every scratch commit is authored with. A fixed value rather than the host's, so
-# a test asserting on an author line reads the same on CI and on a workstation.
+# Fixed identity so author-line assertions read the same on CI and a workstation.
 AUTHOR_NAME = "t"
 AUTHOR_EMAIL = "t@example.invalid"
 

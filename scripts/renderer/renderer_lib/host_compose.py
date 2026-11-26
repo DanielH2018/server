@@ -45,12 +45,10 @@ from renderer.renderer_lib.host_outputs import COMPOSE_ROOT
 from renderer.renderer_lib.host_package import Package
 from renderer.renderer_lib.placeholders import Sentinels
 
-# The inventory key that lists the project's services (H5, *The service list*).
 LIST_KEY = "compose_services"
 INPUTS_VAR = "compose_inputs_sha256"
 NETWORKS_VAR = "compose_external_networks"
-# Files outside the compose directory that the project's run reads. A package that ships none
-# of them yet hashes without them, and each joins the hash when a later PR ships it.
+# A package that ships none of these hashes without them; each joins the hash when shipped.
 INPUT_EXTRAS = (
     "/usr/lib/homelab/compose-run",
     "/usr/lib/homelab/compose-adopt",

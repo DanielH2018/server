@@ -129,14 +129,11 @@ def cluster_refusal(requested: str, served: str | None) -> str | None:
 
 # ── discovery ───────────────────────────────────────────────────────────────────────────────
 
-# Directories searched for the binary, on top of whatever PATH the caller happens to have.
-# cron runs with PATH=/usr/bin:/bin, which omits /usr/local/bin — where kubectl lives as a
-# symlink to k3s.
+# cron runs with PATH=/usr/bin:/bin, which omits /usr/local/bin, where kubectl is a symlink to k3s.
 TOOL_DIRS = ("/usr/local/bin", "/usr/bin", "/bin", "/usr/local/sbin", "/snap/bin")
 
-# k3s ships kubectl as a symlink to itself and defaults it at this file, which is root-owned
-# 0640. An interactive shell exports KUBECONFIG to the user copy, so `kubectl get` works by
-# hand and fails under cron — the same ambient-environment trap as PATH, one variable over.
+# k3s.yaml is root-owned 0640; an interactive shell exports KUBECONFIG to the user copy, cron does
+# not.
 K3S_KUBECONFIG = Path("/etc/rancher/k3s/k3s.yaml")
 USER_KUBECONFIG = Path.home() / ".kube" / "config"
 
@@ -254,15 +251,10 @@ def _resolve(tools: Tools) -> tuple[str, Path]:
     return binary, kubeconfig
 
 
-# One identity read per (tools, binary, kubeconfig) per process. probe.py runs several kubectl
-# calls per subcommand; the check must cost one `get nodes`, not one per call. Only a
-# recognised answer is cached: a read that failed or timed out is retried on the next call,
-# so one slow API-server moment does not turn into a process-long refusal.
+# Only a recognised answer is cached: a failed or timed-out read is retried on the next call.
 _SERVED: dict[tuple[Tools, str, str], str] = {}
 
-# The identity read's own budget. It is a different question from the caller's query and must
-# not inherit the caller's timeout: a caller polling at a short budget while a rollout is in
-# flight would hand it that budget exactly when `get nodes` is slowest.
+# Not inherited from the caller: a short caller timeout would starve `get nodes` mid-rollout.
 IDENTITY_TIMEOUT = 30.0
 
 

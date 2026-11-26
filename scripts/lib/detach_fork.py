@@ -42,15 +42,12 @@ import time
 from collections.abc import Callable, Iterable
 from pathlib import Path
 
-# How long the move may take to show in /proc/self/cgroup. `StartTransientUnit` returns a job
-# rather than waiting for it; the move measured under 50ms on daniel-box.
 MOVE_WAIT_S = 5.0
 MOVE_POLL_S = 0.05
 BUSCTL_TIMEOUT_S = 10
 
-# How long a log may sit unchanged with neither a pid nor a code beside it before a probe reads
-# the run as dead. The caller writes the pid milliseconds after it touches the log, so a run
-# past this never forked, or its caller died before writing the pid.
+# A log unchanged this long with no pid or code reads as dead: the caller writes the pid
+# milliseconds after touching the log.
 START_GRACE_S = 60
 
 # The cgroup v2 line of a process inside a user manager's service, and that service's name.
@@ -59,8 +56,8 @@ _USER_SERVICE = re.compile(r"^0::/.*/user@\d+\.service/(?:.+/)?([^/]+\.service)$
 # The cgroup v2 line of a process inside a system unit, and that unit's name.
 _SYSTEM_SERVICE = re.compile(r"^0::/system\.slice/(?:.+/)?([^/]+\.service)$")
 
-# Variables systemd sets to describe the unit a process runs in; copied into another unit,
-# they would describe the wrong one.
+# Variables systemd sets to describe the unit; copied into another unit they would describe the
+# wrong one.
 _UNIT_OWN_ENV = frozenset(
     {
         "INVOCATION_ID",

@@ -72,9 +72,8 @@ OCIREPOSITORIES = (
 )
 # The OCIRepository that follows `prod`, and the one that follows `last-good`, the base.
 SOURCE, BASE_SOURCE = "homelab", "last-good"
-# The manifest annotation `flux push artifact --revision` writes, which kustomize-controller's
-# getOriginRevision reads. `.status.artifact.revision` is `prod@sha256:<digest>` and names no
-# commit, so a check against it never matches R.
+# `.status.artifact.revision` is `prod@sha256:<digest>` and names no commit, so a check against it
+# never matches R.
 ORIGIN_KEY = "org.opencontainers.image.revision"
 DIGESTS_FILE = "digests.json"
 SOAK = "soak"
@@ -205,8 +204,8 @@ def read_both_digests(
     elif (((base.get("status") or {}).get("artifact") or {}).get("metadata") or {}).get(
         ORIGIN_KEY
     ) == origin(inputs.revision):
-        # `settle` moved `last-good` to R before this read, so R against itself would read
-        # as an empty set and pass a soak that judged nothing.
+        # `settle` moved `last-good` to R before this read, so R against itself would read empty and
+        # pass a soak that judged nothing.
         old, old_why = None, f"OCIRepository {BASE_SOURCE} already names R"
     else:
         old, old_why = read_digests(reads, base)
@@ -285,10 +284,8 @@ def await_ready(reads: Reads, inputs: Inputs, digests: tuple, deadline: float) -
         if left != logged:
             print(f"soak: waiting for Ready at R: {', '.join(left)}", file=sys.stderr)
             logged = left
-        # A reset moves `homelab` off R, and the Kustomizations then apply another revision,
-        # so none of them would ever name R. kustomize-controller holds the next promotion's
-        # health check behind this Job, so the Job ends itself rather than wait out
-        # its deadline.
+        # A reset moves `homelab` off R, so no Kustomization would name R; the Job ends itself
+        # because the next promotion waits behind it.
         retry_transient(reads, deadline, lambda: read_sources(reads, inputs.revision))
         reads.sleep(POLL_SECONDS)
 
@@ -322,8 +319,8 @@ def workload_pods(
                     f"/apis/apps/v1/namespaces/{namespace}/replicasets/{owner['name']}"
                 )
                 if path not in owners:
-                    # A refused read exits through SoakError rather than dropping every
-                    # Deployment pod from the restart leg.
+                    # A refused read exits through SoakError rather than dropping every Deployment
+                    # pod from the restart leg.
                     owners[path] = controller_of(api(path))
                 owner = owners[path]
             if owner.get("kind") in WORKLOADS:
@@ -443,8 +440,8 @@ def judge_alerts(reads: Reads, scope: Scope, t0: float, verdict: Verdict) -> Non
     """A critical or `verify="true"` alert on an in-scope service, activated after T0."""
     preexisting: set[frozenset] = set()
     if reads.prometheus_start() > t0:
-        # A rule with no `for:` re-activates with a fresh `activeAt` when Prometheus restarts.
-        # One that was already firing at T0 is not R's doing.
+        # A rule with no `for:` re-activates with a fresh `activeAt` on a Prometheus restart; one
+        # firing at T0 is not R's doing.
         preexisting = {
             _alert_key(s["metric"])
             for s in reads.query(
@@ -560,7 +557,6 @@ def main(argv: list[str] | None = None, reads: Reads | None = None) -> int:
                 f"soak: {inputs.revision[:8]} judged {', '.join(verdict.judged)} over "
                 f"{verdict.window:.0f}s; pass"
             )
-        # The cluster's deploy annotation (D5.3b3): observability's
         # `observability_flux_deploy_annotation_expr` reads this line from Loki.
         print(deploy_line(inputs.revision, "flux", "ok"), flush=True)
         return 0

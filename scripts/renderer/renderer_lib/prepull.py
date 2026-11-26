@@ -222,8 +222,7 @@ def prepull_files(tag: str, pulls: Iterable[tuple[dict, list[str]]]) -> dict[str
                 "annotations": {"homelab/job-kind": "prepull"},
             },
             "spec": {
-                # Retries a Pod that failed rather than waited, and sets no deadline: the
-                # module docstring's first two DECIDEDs say why.
+                # Retries a Pod that failed, and sets no deadline.
                 "backoffLimit": BACKOFF_LIMIT,
                 "template": {
                     "metadata": {"labels": {"app": base}},

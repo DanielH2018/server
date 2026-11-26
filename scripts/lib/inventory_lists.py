@@ -41,7 +41,6 @@ def host_vars_file(host: str, host_vars: Path = HOST_VARS) -> Path:
 PI_HOST_VARS = host_vars_file(PI_HOST)
 
 
-# The key that lists the Pi's services, which the `homelab-daniel-pi` package deploys (H5).
 PI_LIST_KEY = "compose_services"
 
 

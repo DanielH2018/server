@@ -29,12 +29,10 @@ import re
 
 import yaml
 
-# The loader `lib.yaml_fast` selects, restated because the filter plugin loads this module by
-# path and so cannot import `lib`. The same YAML 1.1 safe schema either way.
+# Restated because the filter plugin loads this module by path and cannot import `lib`.
 _LOADER = getattr(yaml, "CSafeLoader", yaml.SafeLoader)
 
-# go-yaml v2.4.4 resolve.go: the plain scalars its resolve map types, every one but `<<`.
-# The merge key `<<` decodes as the string `<<` in a value, as the pinned CLI returned it.
+# The merge key `<<` decodes as the string `<<` in a value.
 _GO_MAP = frozenset(
     "y Y yes Yes YES true True TRUE on On ON "
     "n N no No NO false False FALSE off Off OFF "
@@ -43,8 +41,7 @@ _GO_MAP = frozenset(
 )
 # resolve.go's resolveTable: the first characters that send a scalar past the string default.
 _GO_SIGNED, _GO_DIGITS, _GO_DOT = "+-", "0123456789", "."
-# strconv.ParseInt(s, 0, 64) syntax, after resolve has stripped every `_`. An out-of-range
-# value fails ParseInt and ParseUint and then matches the float rule below, so range is moot.
+# An out-of-range value fails ParseInt and ParseUint, then matches the float rule, so range is moot.
 _GO_INT = re.compile(
     r"[-+]?(0[xX][0-9a-fA-F]+|0[oO][0-7]+|0[bB][01]+|0[0-7]*|[1-9][0-9]*)"
 )
@@ -52,9 +49,8 @@ _GO_INT = re.compile(
 _GO_FLOAT = re.compile(r"[-+]?(\.[0-9]+|[0-9]+(\.[0-9]*)?)([eE][-+]?[0-9]+)?")
 # strconv.ParseFloat over a `.`-led scalar: only a decimal fraction parses.
 _GO_DOT_FLOAT = re.compile(r"\.[0-9]+([eE][-+]?[0-9]+)?")
-# resolve.go's parseTimestamp: four digits and a `-`, then one of four time.Parse layouts.
-# The shapes are matched without range checks, so an impossible date such as 2001-13-40 is
-# refused too, which fails closed.
+# Shapes are matched without range checks, so an impossible date such as 2001-13-40 is refused too
+# (fails closed).
 _GO_TIMESTAMP = re.compile(
     r"[0-9]{4}-[0-9]{1,2}-[0-9]{1,2}"
     r"([Tt][0-9]{1,2}:[0-9]{1,2}:[0-9]{1,2}(\.[0-9]+)?(Z|[-+][0-9]{2}:[0-9]{2})"
@@ -83,8 +79,8 @@ def go_yaml_v2_types(text: str) -> bool:
 
 def yaml_1_1_keeps(text: str) -> bool:
     """Whether PyYAML's `safe_load` reads the bare text `text` back as exactly `text`."""
-    # libyaml's parser takes an exact `str` and refuses a subclass, which is what Ansible
-    # hands a filter, so the text is copied out first.
+    # libyaml's parser refuses a str subclass, which Ansible hands a filter, so the text is copied
+    # out.
     plain = str.__str__(text)
     try:
         return yaml.load(plain, Loader=_LOADER) == plain

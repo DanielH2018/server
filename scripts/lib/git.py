@@ -26,11 +26,7 @@ from pathlib import Path
 
 def git_env() -> dict[str, str]:
     """The process environment minus every ``GIT_*`` variable, for any git this module starts."""
-    # Benign today: no caller of this module runs under an `Environment=GIT_...` (no
-    # GIT_SSH_COMMAND, no signing config arrives by env for the three publish_pr.py crons).
-    # But this strips ALL of it, including one a future cron unit adds on purpose -- e.g. a
-    # signing key path -- and `git push` would then fail on all three crons with nothing
-    # testing it, since `git()` is the one write path they share.
+    # Strips ALL GIT_* vars, including one a cron unit adds on purpose, such as a signing key path.
     return {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}
 
 

@@ -55,10 +55,8 @@ from renderer.renderer_lib.host_arms import add_sysusers, arm_sections
 
 UNIT_DIR = PurePosixPath("/usr/lib/systemd/system")
 DROPIN = "50-homelab.conf"
-# The manifest `homelab-reconcile` reads (H3, *Shared names*). Only a host package installs it.
 MANIFEST = "/usr/lib/homelab/manifest.json"
-# The shared package every host installs beside its own. Reconcile manages its units too, so
-# a host's manifest lists them.
+# Reconcile manages the shared package's units too, so a host's manifest lists them.
 UPDATER = "homelab-updater"
 POLICIES = frozenset({"manual", "windowed"})
 # Each legacy entry kind, by its key set, as `homelab-reconcile:parse_legacy` reads it.
@@ -138,8 +136,8 @@ def manifest(package: Package, updater: Package | None) -> dict:
     }
     if activations:
         result["activations"] = dict(sorted(activations.items()))
-    # Only a package that ships the `secrets-unit` component carries the field, so reconcile keys
-    # its secrets step on it (H4, *The restart contract*).
+    # Only a package shipping `secrets-unit` carries the field; reconcile keys its secrets step on
+    # it.
     if package.secrets_inputs_sha256:
         result["secrets_inputs_sha256"] = package.secrets_inputs_sha256
     return result

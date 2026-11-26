@@ -41,17 +41,15 @@ from renderer.renderer_lib.task_inputs import image_builder_sites, image_context
 
 IMAGES_DIR = "images"
 TAGS_FILE = f"{IMAGES_DIR}/tags.json"
-# A GHCR content tag is immutable under `ci_images`' push-once rule, so a node's cached copy is
-# always the right image. Under `Always`, kubelet asks GHCR on every container start, so a GHCR
-# or WAN outage would fail every restart, reboot and crash recovery of the consumer.
+# A GHCR content tag is immutable, so a cached copy is always right; `Always` would fail every
+# restart during a GHCR or WAN outage.
 GHCR_PULL_POLICY = "IfNotPresent"
-# A built-image ref as a role default spells it: `<pull host>/<name>:<content tag>`. A GHCR ref
-# has a second `/` before the name, so it never matches.
+# A GHCR ref has a second `/` before the name, so it never matches.
 BUILT_REF = re.compile(
     r"[^/\s]+/(?P<name>[a-z0-9]+(?:-[a-z0-9]+)*):(?P<tag>sha-[0-9a-f]{12})"
 )
-# Where `ci_images` pushes each image. A host render imports this module, and `ci_images` is no
-# `HOST_INPUTS` member, so the prefix is repeated here and a test holds the two equal.
+# A host render imports this module and `ci_images` is no HOST_INPUTS member, so the prefix is
+# repeated and a test holds the two equal.
 GHCR = "ghcr.io/danielh2018"
 GHCR_REF = re.compile(re.escape(GHCR) + r"/[^:\s]+:sha-[0-9a-f]{12}")
 
