@@ -431,10 +431,20 @@ JSON = st.recursive(
 
 
 @FIXED
-@given(token=st.text(min_size=1), header=st.none() | st.text())
+@given(
+    token=st.text(min_size=1),
+    sent=st.text(),
+    shape=st.sampled_from(["absent", "raw", "bearer-other", "bearer-exact"]),
+)
 def test_bearer_token_valid_never_raises_and_accepts_only_the_exact_token(
-    token, header
+    token, sent, shape
 ):
+    header = {
+        "absent": None,
+        "raw": sent,
+        "bearer-other": f"Bearer {sent}",
+        "bearer-exact": f"Bearer {token}",
+    }[shape]
     assert bearer_token_valid(header, token) is (header == f"Bearer {token}")
 
 
