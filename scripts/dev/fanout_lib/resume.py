@@ -75,7 +75,6 @@ RESUME_SNAPSHOT_PATHS = (
     ".claude/settings.json",
     ".claude/rules",
     ".claude/agents",
-    "inventory",
     "hosts",
     "CLAUDE.md",
 )

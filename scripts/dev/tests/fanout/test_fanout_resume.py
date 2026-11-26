@@ -6,10 +6,17 @@ The command's checks and refusals are in `test_fanout_abandon.py`, and its lock 
 Run: uv run pytest scripts/dev/tests/fanout/test_fanout_resume.py
 """
 
-from dev.fanout_lib.launch import SYSTEM_PROMPT_FILE
+from fnmatch import fnmatch
+from pathlib import Path
+
+import pytest
+
+from dev.fanout_lib.launch import SNAPSHOT_PATHS, SYSTEM_PROMPT_FILE
 from dev.fanout_lib.resume import RESUME_SNAPSHOT_PATHS, resume_command
 from dev.fanout_lib.review.held_hooks import HELD_TREES, HOOKS_DIR, RULES_DIR
 from _fanout_fakes import as_operator
+from lib.doc_freshness import tracked_files
+from lib.repo_paths import REPO
 
 
 def test_the_resume_command_runs_masters_pipeline_from_a_fresh_snapshot_of_it():
@@ -37,3 +44,40 @@ def test_the_resume_snapshot_holds_every_tree_the_pipeline_reads_at_start():
             wanted == held or wanted.startswith(f"{held}/")
             for held in RESUME_SNAPSHOT_PATHS
         ), wanted
+
+
+def untracked(paths, trees, tracked: set[str]) -> list[str]:
+    """Each snapshot path no tracked file sits at or under, and each held tree with no match."""
+    missing = [
+        p for p in paths if not any(f == p or f.startswith(f"{p}/") for f in tracked)
+    ]
+    for top, pattern in trees:
+        under = [f for f in tracked if f.startswith(f"{top.as_posix()}/")]
+        if not any(fnmatch(f.rsplit("/", 1)[-1], pattern) for f in under):
+            missing.append(f"{top.as_posix()}/**/{pattern}")
+    return missing
+
+
+def test_every_snapshot_path_and_held_tree_names_a_tracked_file():
+    paths = sorted({*SNAPSHOT_PATHS, *RESUME_SNAPSHOT_PATHS})
+    assert untracked(paths, HELD_TREES, tracked_files(REPO)) == []
+
+
+@pytest.mark.parametrize(
+    "paths, trees",
+    [
+        (["inventory"], []),
+        ([], [(Path("inventory"), "*")]),
+        ([], [(Path("hosts"), "*.py")]),
+    ],
+)
+def test_a_path_or_tree_no_tracked_file_matches_is_flagged(paths, trees):
+    assert untracked(paths, trees, {"hosts/vars.yml", "scripts/x.py"})
+
+
+def test_a_path_and_tree_a_tracked_file_matches_is_clean():
+    tracked = {"hosts/vars.yml", "hosts/daniel-box/vars.yml", "scripts/x.py"}
+    assert (
+        untracked(["hosts", "scripts/x.py"], [(Path("hosts"), "vars.yml")], tracked)
+        == []
+    )
