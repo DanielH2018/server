@@ -93,6 +93,9 @@ DESIRED: dict[str, bool | int | str] = {
     "enable_piece_extent_affinity": True,
     # A torrent under the slow_torrent_* rates frees its max_active_downloads slot; a dead swarm held one.
     "dont_count_slow_torrents": True,
+    "max_active_downloads": 10,
+    # libtorrent's active_limit counts slow torrents too, so it must sit well above max_active_downloads.
+    "max_active_torrents": 50,
     # Not throughput: skips fake-release executables/archives and RARs, which nothing here unpacks.
     "excluded_file_names_enabled": True,
     # The WebUI API joins and splits this list on "\n" (appcontroller.cpp).
