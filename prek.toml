@@ -410,7 +410,7 @@ pass_filenames = false
 files = "(\\.py|^tests/repo/(module_length|monkeypatch|copied_tests)_allowlist\\.txt)$"
 
 # Lint the fact citations in any CLAUDE.md section this branch touched, against origin/master
-# (`tests/repo/test_every_section_lints_clean.py` holds every section at every commit;
+# (`tests/repo/docs/test_every_section_lints_clean.py` holds every section at every commit;
 # this names the finding at commit time). `--changed-since` needs a real git history, which `--all-files` on a shallow
 # runner may not have for origin/master — see the `land-after-merge`/CI fetch-depth notes.
 # CI's prek jobs check out with fetch-depth: 0 and fetch the base branch, so origin/master is
@@ -471,7 +471,7 @@ exclude = "^(docs/assets/generated/|evals/history\\.json$)"
 [[repos.hooks]]
 id = "static-ratchet-tests"
 name = "Static ratchet tests (module length, section lint, shard partition, doc fragments, role CLAUDE.md, census rows)"
-entry = "uv run --frozen pytest -q -p no:cacheprovider tests/repo/test_module_length_ratchet.py tests/repo/test_every_section_lints_clean.py tests/repo/test_pytest_shards_partition_the_suite.py scripts/docs/tests/test_gen_doc_fragments.py tests/repo/test_role_claude_md.py tests/repo/test_census_rows_python.py tests/repo/test_census_rows_suite.py tests/repo/test_census_rows_roles.py tests/repo/test_census_rows_text.py tests/repo/test_census_rows_layout.py"
+entry = "uv run --frozen pytest -q -p no:cacheprovider tests/repo/ratchets/test_module_length_ratchet.py tests/repo/docs/test_every_section_lints_clean.py tests/repo/ci_workflows/test_pytest_shards_partition_the_suite.py scripts/docs/tests/test_gen_doc_fragments.py tests/repo/docs/test_role_claude_md.py tests/repo/census_rows/test_census_rows_python.py tests/repo/census_rows/test_census_rows_suite.py tests/repo/census_rows/test_census_rows_roles.py tests/repo/census_rows/test_census_rows_text.py tests/repo/census_rows/test_census_rows_layout.py"
 language = "system"
 pass_filenames = false
 files = "(\\.py$|(^|/)CLAUDE\\.md$|^scripts/dev/pytest_shard_runner_weights\\.json$|^tests/repo/module_length_allowlist\\.txt$|^pyproject\\.toml$|^\\.github/workflows/[^/]+\\.yml$|^\\.github/actions/[^/]+/action\\.yml$|^(k8s|inventory|secrets|tests)/.*\\.(ya?ml|j2|ini)$|^k8s/roles/[^/]+/(templates|defaults|vars)/|^prek\\.toml$|^(\\.claude/(skills|agents)|evals/cases)/.*\\.(md|json)$|\\.(pyc|so)$|(^|/)__pycache__/|\\.(sh|bash)$|^hosts/(lib|components)/|^\\.claude/wait-sources/)"
@@ -508,7 +508,7 @@ files = "^((scripts|k8s|\\.claude/hooks|evals|hosts/components|hosts/lib)/(.*/)?
 [[repos.hooks]]
 id = "static-ratchet-tests-python"
 name = "Static ratchet tests over the tracked Python (import direction, exit codes, prek files, hazards)"
-entry = "uv run --frozen pytest -q -n 4 -p no:cacheprovider scripts/tests/test_scripts_import_direction.py scripts/lib/tests/test_exit_codes.py scripts/tests/test_prek_files_cover_entry_imports.py tests/repo/test_tracked_python_hazards.py"
+entry = "uv run --frozen pytest -q -n 4 -p no:cacheprovider scripts/tests/test_scripts_import_direction.py scripts/lib/tests/test_exit_codes.py scripts/tests/test_prek_files_cover_entry_imports.py tests/repo/ratchets/test_tracked_python_hazards.py"
 language = "system"
 pass_filenames = false
 files = "(\\.py$|^scripts/.*\\.sh$|^(prek\\.toml|pyproject\\.toml|uv\\.lock)$)"
@@ -541,10 +541,10 @@ files = "^(hosts/lib/host_lib\\.py|scripts/lib/longhorn_lib/longhorn_backups\\.p
 [[repos.hooks]]
 id = "static-ratchet-tests-shell"
 name = "Shell entry points answer --help"
-entry = "uv run --frozen pytest -q -n0 -p no:cacheprovider tests/repo/test_shell_entry_points_answer_help.py"
+entry = "uv run --frozen pytest -q -n0 -p no:cacheprovider tests/repo/suite/test_shell_entry_points_answer_help.py"
 language = "system"
 pass_filenames = false
-files = "(^(hosts/lib/host_lib|scripts/lib/longhorn_lib/longhorn_backups)\\.py$|^scripts/renderer/renderer_lib/[^/]+\\.py$|^scripts/deploy_tools/(chained_timeout|changed_set|kustomizations)\\.py$|\\.sh(\\.j2)?$|^tests/(_[^/]+|repo/test_shell_entry_points_answer_help)\\.py$|^scripts/(lib|validate|renderer/template_filters)/.*\\.py$|^(pyproject\\.toml|uv\\.lock)$)"
+files = "(^(hosts/lib/host_lib|scripts/lib/longhorn_lib/longhorn_backups)\\.py$|^scripts/renderer/renderer_lib/[^/]+\\.py$|^scripts/deploy_tools/(chained_timeout|changed_set|kustomizations)\\.py$|\\.sh(\\.j2)?$|^tests/(_[^/]+|repo/suite/test_shell_entry_points_answer_help)\\.py$|^scripts/(lib|validate|renderer/template_filters)/.*\\.py$|^(pyproject\\.toml|uv\\.lock)$)"
 
 # The two Renovate-rule modules: renovate.json against the autodeploy denylist, which each
 # k8s role's `k8s_autodeploy` in its defaults and `lib.k8s_roles` decide, and against who

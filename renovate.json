@@ -95,7 +95,7 @@
     },
     {
       "customType": "regex",
-      "description": "The Vale binary CI's `hooks` job runs, pinned by version and sha256 in one match. The `vale` tool of hosts/packages/homelab-tools/package.yml is a second copy (#1703), the `{{depName}}` group puts both in one PR, and tests/repo/test_vale_matches_the_ci_pin.py ENFORCES that they agree.",
+      "description": "The Vale binary CI's `hooks` job runs, pinned by version and sha256 in one match. The `vale` tool of hosts/packages/homelab-tools/package.yml is a second copy (#1703), the `{{depName}}` group puts both in one PR, and tests/repo/ci_workflows/test_vale_matches_the_ci_pin.py ENFORCES that they agree.",
       "managerFilePatterns": [
         "/(^|/)\\.github/workflows/ci\\.yml$/"
       ],
@@ -197,7 +197,7 @@
     },
     {
       "customType": "regex",
-      "description": "The kindest/node image CI's `sops_manifest_type_proof` job boots (#5173), pinned by tag and digest. Its Kubernetes minor follows `k3s_version`, which tests/repo/test_kind_node_image_follows_k3s.py holds. ENFORCED by the `kind-` rows of scripts/tests/_renovate_rule_rows.py.",
+      "description": "The kindest/node image CI's `sops_manifest_type_proof` job boots (#5173), pinned by tag and digest. Its Kubernetes minor follows `k3s_version`, which tests/repo/ci_workflows/test_kind_node_image_follows_k3s.py holds. ENFORCED by the `kind-` rows of scripts/tests/_renovate_rule_rows.py.",
       "managerFilePatterns": [
         "/(^|/)\\.github/workflows/ci\\.yml$/"
       ],
@@ -260,7 +260,7 @@
     },
     {
       "customType": "regex",
-      "description": "CI test-runner Python pin (`python-version:` in .github/actions/setup/action.yml, #3733), which helpers:pinGitHubActionDigests does not track. The literal is three-part (#2152) while `.python-version` stays two-part, and tests/repo/test_python_version_consistency.py compares them on major.minor.",
+      "description": "CI test-runner Python pin (`python-version:` in .github/actions/setup/action.yml, #3733), which helpers:pinGitHubActionDigests does not track. The literal is three-part (#2152) while `.python-version` stays two-part, and tests/repo/ci_workflows/test_python_version_consistency.py compares them on major.minor.",
       "managerFilePatterns": [
         "/(^|/)\\.github/workflows/[^/]+\\.yml$/",
         "/(^|/)\\.github/actions/[^/]+/action\\.yml$/"
@@ -551,7 +551,7 @@
       "groupName": "kind (binary + node image)"
     },
     {
-      "description": "No major or minor update for the kindest/node image (#5173). Its Kubernetes minor follows `k3s_version` (tests/repo/test_kind_node_image_follows_k3s.py), so the person finishing a k3s upgrade moves the image.",
+      "description": "No major or minor update for the kindest/node image (#5173). Its Kubernetes minor follows `k3s_version` (tests/repo/ci_workflows/test_kind_node_image_follows_k3s.py), so the person finishing a k3s upgrade moves the image.",
       "matchManagers": [
         "custom.regex"
       ],
@@ -749,7 +749,7 @@
       "automerge": false
     },
     {
-      "description": "Every Python pin the repo keeps in lockstep, in ONE PR (#5479): the CI setup action, `.python-version`, Dockerfile `FROM python:` tags and the k8s `python:<minor>-alpine` pins (#8532). A PR that bumped only the CI pin stayed red against tests/repo/test_python_version_consistency.py. The group carries `k8s_autodeploy: false` because it owns denied roles' pins. ENFORCED: the `python-` rows of scripts/tests/_renovate_rule_rows.py.",
+      "description": "Every Python pin the repo keeps in lockstep, in ONE PR (#5479): the CI setup action, `.python-version`, Dockerfile `FROM python:` tags and the k8s `python:<minor>-alpine` pins (#8532). A PR that bumped only the CI pin stayed red against tests/repo/ci_workflows/test_python_version_consistency.py. The group carries `k8s_autodeploy: false` because it owns denied roles' pins. ENFORCED: the `python-` rows of scripts/tests/_renovate_rule_rows.py.",
       "matchManagers": [
         "custom.regex",
         "pyenv",

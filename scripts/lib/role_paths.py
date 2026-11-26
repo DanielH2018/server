@@ -41,7 +41,7 @@ def is_test_path(path: str) -> bool:
 
     The `tests/` directory shape, which `test_testpaths_covers_every_test_file.py` enforces,
     plus a `test_*.py` or `conftest.py` wherever it sits. The `no-role-ships-a-pytest-file`
-    row of `tests/repo/test_census_rows_roles.py` holds that no role ships one.
+    row of `tests/repo/census_rows/test_census_rows_roles.py` holds that no role ships one.
     """
     if path.startswith("tests/"):
         return True

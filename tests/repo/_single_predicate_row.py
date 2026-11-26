@@ -10,7 +10,7 @@ import re
 
 from _row_table import REPO, Census, Subject, tracked
 
-SUITE = "tests/repo/test_census_rows_suite.py"
+SUITE = "tests/repo/census_rows/test_census_rows_suite.py"
 
 READS_THE_TREE = re.compile(
     r"\.r?glob\(|\bls-files\b|\btracked\(|\bos\.walk\(|\brole_dirs\("
@@ -206,38 +206,38 @@ SINGLE_PREDICATE_CHECK_IS_A_ROW = Census(
     must_find=frozenset(
         {
             SUITE,
-            "tests/repo/test_runbook_rules.py",
+            "tests/repo/census_rows/test_runbook_rules.py",
             "tests/k8s/rendered_properties/test_rendered_properties.py",
         }
     ),
     allow={
-        "tests/repo/test_ci_lint_group.py": (
+        "tests/repo/ci_workflows/test_ci_lint_group.py": (
             "a join of pyproject.toml's lint group and default groups against every "
             "workflow that installs the project"
         ),
-        "tests/repo/test_claude_md_paragraphs_have_one_home.py": (
+        "tests/repo/docs/test_claude_md_paragraphs_have_one_home.py": (
             "a join of each long CLAUDE.md paragraph against every other operator doc"
         ),
-        "tests/repo/test_doc_values_hook.py": (
+        "tests/repo/ci_workflows/test_doc_values_hook.py": (
             "a join of the prek hook's `files` pattern against the paths the doc_values "
             "rows name and the paths the docs-refresh cron stages"
         ),
-        "tests/repo/test_failure_class_detectors.py": (
+        "tests/repo/docs/test_failure_class_detectors.py": (
             "a join of docs/failure-classes.md against the detector tests it cites"
         ),
-        "tests/repo/test_host_package_case_inputs_census.py": (
+        "tests/repo/ci_workflows/test_host_package_case_inputs_census.py": (
             "a join of the render step's CASE_INPUTS against the modules the cases "
             "script imports and the tracked tree"
         ),
-        "tests/repo/test_kind_node_image_follows_k3s.py": (
+        "tests/repo/ci_workflows/test_kind_node_image_follows_k3s.py": (
             "a join of CI's kind node image against the k3s version in the "
             "system-upgrade role's defaults"
         ),
-        "tests/repo/test_renovate_canary_is_scheduled_not_per_merge.py": (
+        "tests/repo/ci_workflows/test_renovate_canary_is_scheduled_not_per_merge.py": (
             "a join of ci.yml and renovate-config-canary.yml, which run the one "
             "retrying validator script"
         ),
-        "tests/repo/test_vale_matches_the_ci_pin.py": (
+        "tests/repo/ci_workflows/test_vale_matches_the_ci_pin.py": (
             "a join of the Vale version and sha256 CI installs against the "
             "homelab-tools package pin"
         ),
@@ -259,26 +259,26 @@ SINGLE_PREDICATE_CHECK_IS_A_ROW = Census(
             "a join of the writer script's metrics against the alert rules and the "
             "Grafana board that read them"
         ),
-        "tests/repo/test_every_ci_job_is_gated.py": (
+        "tests/repo/ci_workflows/test_every_ci_job_is_gated.py": (
             "a join of ci.yml's jobs and the gate step's reads against the ruleset "
             "contexts in the github-checks defaults"
         ),
-        "tests/repo/test_pytest_shards_partition_the_suite.py": (
+        "tests/repo/ci_workflows/test_pytest_shards_partition_the_suite.py": (
             "a join of ci.yml's pytest matrix against pytest_shard.py's assignment of "
             "the tracked suite and its runner-seconds table"
         ),
-        "tests/repo/test_release_fetches_use_pinned_tool.py": (
+        "tests/repo/ci_workflows/test_release_fetches_use_pinned_tool.py": (
             "a join of every workflow's release fetches against the pinned-tool action "
             "and the tools it fetches"
         ),
-        "tests/repo/test_static_ratchet_hook.py": (
+        "tests/repo/ci_workflows/test_static_ratchet_hook.py": (
             "a join of the prek hooks' entries and `files` gates against the modules "
             "they name, their import closure and ci.yml's prek steps"
         ),
-        "tests/repo/test_testpaths_covers_every_test_file.py": (
+        "tests/repo/suite/test_testpaths_covers_every_test_file.py": (
             "a join of pyproject.toml's testpaths against every tracked test file"
         ),
-        "tests/repo/test_ty_config_covers_the_repo.py": (
+        "tests/repo/ci_workflows/test_ty_config_covers_the_repo.py": (
             "a join of ty's include and extra-paths against pytest's pythonpath and "
             "testpaths and every tracked Python file"
         ),

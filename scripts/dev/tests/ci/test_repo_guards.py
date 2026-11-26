@@ -13,7 +13,7 @@ from lib.repo_paths import REPO
 def test_every_guard_exists_and_the_list_covers_every_hook_file():
     """A renamed guard or a widened hook turns this red instead of the list going stale (#5077)."""
     hooks = repo_guards.hook_files()
-    assert "tests/repo/test_module_length_ratchet.py" in hooks
+    assert "tests/repo/ratchets/test_module_length_ratchet.py" in hooks
     missing = [
         p for p in repo_guards.GUARDS if not (REPO / p.split("::", 1)[0]).exists()
     ]

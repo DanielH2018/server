@@ -21,6 +21,8 @@ from lib import yaml_fast
 PROMOTE = ".github/workflows/promote.yml"
 CI = ".github/workflows/ci.yml"
 SETUP_ACTION = ".github/actions/setup/action.yml"
+# The line a step runs before it calls `retry`, which defines the function.
+LOAD_RETRY = 'eval "$RETRY_FUNCTIONS"'
 _DUMPER = getattr(yaml, "CSafeDumper", yaml.SafeDumper)
 
 Workflow = dict

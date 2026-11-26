@@ -326,7 +326,7 @@ compiled module file: a `__pycache__/` path, a `.pyc` or an extension module. Py
 `.pyc` file in place of unchanged source and an extension module before the `.py` beside it, and
 a loaded module's `__file__` names the source either way, so the loaded set cannot see them.
 `gate_hits` in `scripts/deploy_tools/land_lib/policy.py` holds the rule, and the
-`no-compiled-module-file-is-tracked` row of `tests/repo/test_census_rows_text.py`
+`no-compiled-module-file-is-tracked` row of `tests/repo/census_rows/test_census_rows_text.py`
 refuses such a file on any branch.
 
 ## Slice 4: the phone host runs as `claude`

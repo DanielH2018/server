@@ -24,7 +24,7 @@
 # dockerfile manager raises the bump PR. karakeep is `k8s_autodeploy: false`, so renovate.json's
 # denylist-marker rule lists this file — a person merges a bump, and promote's `images` job then
 # builds the moved content tag. The tag's Python minor is the one `.python-version` names, which
-# tests/repo/test_python_version_consistency.py holds; uv publishes 3.15 on trixie only.
+# tests/repo/ci_workflows/test_python_version_consistency.py holds; uv publishes 3.15 on trixie only.
 FROM ghcr.io/astral-sh/uv:python3.15-trixie-slim@sha256:980d6aa868431fd4ef2b32481e934ef5ee3b662c5decade3aa2d7e7ffb8075e4
 
 # Read off the interpreter rather than written out, so a base-image bump to python3.15 cannot

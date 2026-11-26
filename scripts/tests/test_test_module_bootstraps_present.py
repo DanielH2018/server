@@ -3,7 +3,7 @@
 It reads the pytest-only modules outside `scripts/`: `test_*.py`, `conftest.py`, and every
 module under a `tests/` directory, fixture modules included. `_bootstrap_eval.is_pytest_only`
 is that predicate. Under `scripts/`, every module imports dotted from the one root, and the
-`no-sys-path-change-under-scripts` row of `tests/repo/test_census_rows_layout.py` refuses any
+`no-sys-path-change-under-scripts` row of `tests/repo/census_rows/test_census_rows_layout.py` refuses any
 insert there.
 
 pytest puts a test module's OWN directory on `sys.path` and nothing else, plus the `pythonpath`
@@ -88,7 +88,7 @@ def _tracked_python() -> list[Path]:
 
     `git ls-files` rather than `REPO.rglob` — a root-anchored rglob walks other sessions'
     `.claude/worktrees/<name>/` checkouts and judges this commit against their older copies
-    (ENFORCED by `tests/repo/test_tracked_python_hazards.py`). This checkout is itself
+    (ENFORCED by `tests/repo/ratchets/test_tracked_python_hazards.py`). This checkout is itself
     one of those worktrees, so the hazard is not hypothetical here.
     """
     return [REPO / rel for rel in _tracked_files() if rel.endswith(".py")]
@@ -126,7 +126,7 @@ def repo_module_dirs() -> dict[str, set[Path]]:
 def collect_test_modules() -> list[Path]:
     """Every pytest-only module under `testpaths` outside `scripts/`: what pytest collects, plus
     the fixture modules those collect from. Under `scripts/`, the
-    `no-sys-path-change-under-scripts` row of `tests/repo/test_census_rows_layout.py` refuses
+    `no-sys-path-change-under-scripts` row of `tests/repo/census_rows/test_census_rows_layout.py` refuses
     every insert, test modules included."""
     found: set[Path] = set()
     scripts = REPO / "scripts"

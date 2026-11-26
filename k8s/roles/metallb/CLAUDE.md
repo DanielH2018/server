@@ -62,7 +62,7 @@ probes stay green.
   untiered, and the lost-node break-glass must not scale the announcer down.
   `tests/k8s/workloads/test_shed_set_is_derived_from_tier.py::test_never_shed_matches_the_untiered_roles_that_never_prune`
   holds the set equal to the untiered roles that set `flux_prune: false`.
-- **`k3s_metallb_pool` is defined here**, and `tests/repo/test_lan_facts_have_one_source.py`
+- **`k3s_metallb_pool` is defined here**, and `tests/repo/docs/test_lan_facts_have_one_source.py`
   exempts this file for it. `templates/metallb-pool.yaml.j2` carries the
   `DECIDED:` and `PERMANENT` comments: the L2Advertisement announces from `k8s_primary_node`
   alone, and every VIP-backed workload's `nodeSelector` is the same variable.

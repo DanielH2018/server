@@ -97,7 +97,7 @@ needs, decides which one.
   shape the callers model below cannot express: an ipBlock, a from-less open port, UDP, a
   second port, a cross-namespace peer or a non-`app:` peer (#3701). The
   `bespoke-netpol-says-why-it-is-not-a-callers-fence`
-  row of `tests/repo/test_census_rows_roles.py` fails on one that does not.
+  row of `tests/repo/census_rows/test_census_rows_roles.py` fails on one that does not.
 - **As data on the `containers_list` entry**, when the fence is one port and a list of caller
   pods: `netpol_from: [apps]`, rendered through the `networkpolicy` macro in
   `k8s/templates/networkpolicy.yml.j2`. `templates/networkpolicy-callers.yaml.j2` renders

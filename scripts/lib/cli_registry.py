@@ -11,7 +11,7 @@ The name carries the ``cli_`` prefix because monitor-bridge's copy is
 ``pythonpath``. That role's module is imported bare (``import registry``, from inside the
 container image), so a second top-level ``registry`` would shadow one of them depending on
 ``sys.path`` order. The ``no-two-import-roots-share-a-module-basename`` row of
-``tests/repo/test_census_rows_python.py`` enforces the separation.
+``tests/repo/census_rows/test_census_rows_python.py`` enforces the separation.
 
 Argparse still owns argument parsing in every caller. This module owns two things argparse
 does not: a `--list` renderer, and a completeness guard so a new entry point can't ship

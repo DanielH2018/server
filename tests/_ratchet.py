@@ -3,8 +3,8 @@
 The monkeypatch counter is `tests/_ratchet_patches.py`. Everything here is a function over mappings and strings, with one exception:
 `Ratchet.allowlist()` reads the list file the dataclass points at. The census of the tree is
 `tests/_ratchet_census.py` and the reads of the merge base are in
-`tests/repo/test_module_length_ratchet.py`, which also holds the tests for all three.
-The counter's tests are `tests/repo/test_ratchet_rules.py`.
+`tests/repo/ratchets/test_module_length_ratchet.py`, which also holds the tests for all three.
+The counter's tests are `tests/repo/ratchets/test_ratchet_rules.py`.
 
 Module length and `monkeypatch` on a first-party module are ratcheted the same way. A cap says
 what a new file may do, an allowlist records what the files that already exceed it do today,
@@ -69,7 +69,7 @@ What changed instead is that nobody writes the edit by hand -- `tighten` below i
 `tighten-ratchet-allowlists` prek hook runs that on every commit touching Python.
 
 The census that feeds these functions is `tests/_ratchet_census.py`, and the tests
-for both are in `tests/repo/test_module_length_ratchet.py`.
+for both are in `tests/repo/ratchets/test_module_length_ratchet.py`.
 """
 
 import ast

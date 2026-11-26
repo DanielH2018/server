@@ -53,7 +53,7 @@ so a regeneration diffs as the pipeline plus upstream's change.
   and `scripts/tests/test_renovate_flux_cli.py` fails a pin that lost it (#4822). For a bump by
   hand, set every pin and the homelab-tools `flux` blocks yourself.
   The `promote-flux-cli-matches-the-controllers` row of
-  `tests/repo/test_census_rows_workflows.py` fails a drift.
+  `tests/repo/census_rows/test_census_rows_workflows.py` fails a drift.
 
 ## How the render meets the fleet guards
 
@@ -195,11 +195,11 @@ promotion.
 `prod` already carries would reuse `prod`'s signed digest. The drill push therefore carries the
 annotation `io.homelab.verify-drill=true`, so no signed push carries its digest, and the
 dispatch fails unless `cosign verify` refuses that digest (#4826,
-`tests/repo/test_promote_drill_workflow.py::test_the_drill_path_holds_every_property`). The refusal alone proves
+`tests/repo/ci_workflows/test_promote_drill_workflow.py::test_the_drill_path_holds_every_property`). The refusal alone proves
 nothing, because cosign v3.1.3 reads a registry error on its bundle probe as "no bundle"
 (#4829). The dispatch therefore also reads the registry itself, and fails unless it answers
 that the digest has no referrer and no legacy `.sig` tag
-(`tests/repo/test_promote_drill_workflow.py::test_the_refusal_step_passes_only_on_a_registry_that_holds_no_signature`). GHCR serves no referrers API, so
+(`tests/repo/ci_workflows/test_promote_drill_workflow.py::test_the_refusal_step_passes_only_on_a_registry_that_holds_no_signature`). GHCR serves no referrers API, so
 cosign keeps a digest's bundle in the referrers tag `sha256-<hex>`.
 
 **HISTORY — The drill ran on 2026-10-13.** The first dispatch was a false green: `verify-drill`

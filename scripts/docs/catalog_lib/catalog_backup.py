@@ -454,7 +454,7 @@ def owner_stance(tags: str = "") -> str:
     Args:
         tags: the entry's deploy tags, comma-joined. When given, the gate names them as a
             literal `--tags=<tags>`, which the glance needs: the role-doc census
-            (`tests/repo/test_role_claude_md.py`) wants `--tags` and the role's name
+            (`tests/repo/docs/test_role_claude_md.py`) wants `--tags` and the role's name
             on one line, and the `=` form gives the glance's wrap no space to break at.
     """
     tag = f"`land.sh --tags={tags}`" if tags else "`land.sh`"

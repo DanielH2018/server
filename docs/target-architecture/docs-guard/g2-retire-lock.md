@@ -148,7 +148,7 @@ Two shared helpers live inside modules G2 deletes:
   `test_every_recorded_atom_hashes_as_recorded`*.
 - `docs/claude-tooling.md`: one paragraph on the `_facts_line` injection line.
 - `mkdocs.yml` lists every ADR in its nav by hand.
-  `tests/repo/test_adr_links.py:test_the_nav_lists_every_adr` fails an ADR the nav
+  `tests/repo/docs/test_adr_links.py:test_the_nav_lists_every_adr` fails an ADR the nav
   leaves out.
 
 **Generated pages that carry rows from the lock's code.** `docs/reference/decisions.md`

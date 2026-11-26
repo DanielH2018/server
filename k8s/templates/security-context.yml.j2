@@ -29,7 +29,7 @@
   containers in crowdsec-agent.yml.j2 (rendered into authelia's and traefik's pods) are the
   `runAsUser: 0` sites in this family and stay written out in full.
   The root-security-context-is-written-out-in-full row of
-  tests/repo/test_census_rows_roles.py refuses a macro call
+  tests/repo/census_rows/test_census_rows_roles.py refuses a macro call
   that passes `run_as_user=0`, and
   tests/k8s/workloads/test_root_needs_dac_capability.py's
   test_every_documented_root_site_still_renders_a_clean_root_block holds that all six root

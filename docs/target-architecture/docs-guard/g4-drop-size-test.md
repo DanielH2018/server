@@ -518,8 +518,8 @@ uv run --no-sync python .claude/hooks/inject-nested-docs.py --report; echo "exit
 git grep -n -e _doc_size -e RoleDocNearCeiling -e OVER_CEILING \
   -- ':!docs/archive/' ':!docs/reference/' ':!docs/target-architecture/'
 git grep -n -e '7,272' -e '7,500 chars' -- docs/claude-tooling.md
-uv run pytest -q -p no:cacheprovider tests/repo/test_role_claude_md.py \
-  tests/repo/test_module_length_ratchet.py .claude/hooks/tests
+uv run pytest -q -p no:cacheprovider tests/repo/docs/test_role_claude_md.py \
+  tests/repo/ratchets/test_module_length_ratchet.py .claude/hooks/tests
 ```
 
 The report command is run without a pipe, so `exit=0` is the report's own status. Both
@@ -530,7 +530,7 @@ Proof that the gate is gone: in a scratch worktree, append 500 characters of pro
 7,570 characters, past the 7,174 its directory trigger leaves it. Run:
 
 ```bash
-uv run pytest -q -p no:cacheprovider tests/repo/test_role_claude_md.py
+uv run pytest -q -p no:cacheprovider tests/repo/docs/test_role_claude_md.py
 uv run --no-sync python .claude/hooks/inject-nested-docs.py --report | grep deploy_ui
 ```
 

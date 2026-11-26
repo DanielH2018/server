@@ -13,7 +13,7 @@ tightest first, then the root `CLAUDE.md`. It exits non-zero on any error.
 WHY. Claude Code loads a role's `CLAUDE.md` (`nested_traversal`) and a `.claude/rules/*.md`
 whose `paths:` glob matches (`path_glob_match`) only when the Read, Edit or Write tool touches
 a matching path. Auto mode instructs the model to read files with `cat` / `sed -n` / `head`
-through Bash instead, which fires neither. `tests/repo/test_role_claude_md.py` guarantees
+through Bash instead, which fires neither. `tests/repo/docs/test_role_claude_md.py` guarantees
 every role has a doc; nothing guaranteed a session loads it.
 
 WHAT. Every token in the command that names a path on disk inside a git checkout selects

@@ -127,7 +127,7 @@ _ROLE_DIR_RE = re.compile(r"^(k8s/roles/[^/]+)/")
 _COUNTEREXAMPLE_POINTERS = frozenset(
     {
         (
-            "tests/repo/test_documented_paths_exist.py",
+            "tests/repo/docs/test_documented_paths_exist.py",
             "scripts/gen_infra_map.py",
         ),
     }
@@ -138,7 +138,7 @@ def _tracked_files(root: Path) -> list[str] | None:
     """`git ls-files` under `root`, or None when `root` is not a git repository.
 
     DECIDED: `git ls-files`, not a walk plus a hand-maintained skip list — the same
-    reasoning `tests/repo/test_documented_paths_exist.py` gives for the same
+    reasoning `tests/repo/docs/test_documented_paths_exist.py` gives for the same
     choice. A walk sees whatever happens to be on disk, and this repo grows untracked
     trees during ordinary work: `.venv`, `__pycache__`, and — the concrete miss that motivated this — `.mkdocs-strict-check/`,
     the prek hook's own build output, which is not one of those named exceptions and

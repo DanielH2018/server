@@ -379,7 +379,7 @@ claude_agent_ssh_key_path: /var/lib/claude/.ssh/peers_ed25519
 #
 # Four readers share the list, so it lives here: `scripts/deploy_tools/promote.py decide`, the
 # host packages' builder, `homelab-checkout-sync` and
-# `tests/repo/test_ci_contexts_match_workflows.py`. `decide` reads this file by path and
+# `tests/repo/ci_workflows/test_ci_contexts_match_workflows.py`. `decide` reads this file by path and
 # refuses anything but a non-empty list of strings, so this key stays a literal list. `scripts/deploy_tools/await_ci.py` names it in a comment.
 #
 # A change to this key or to `ci_ancestor_walk_max` reaches daniel-box only through its host

@@ -12,7 +12,7 @@ this file*).
 
 Changing anything below means opening <https://dashboard.uptimerobot.com> and editing it there.
 
-Two checks read the monitor table below. `tests/repo/test_uptime_robot_keywords.py` asserts,
+Two checks read the monitor table below. `tests/repo/docs/test_uptime_robot_keywords.py` asserts,
 against the live public endpoint, that each documented keyword rule holds. It is marked `ui`,
 so it runs on demand (`uv run pytest -m ui -k uptime_robot`) and never in CI. It cannot see
 the console. monitor-bridge's `uptime_robot_monitors` check reads the console through the API

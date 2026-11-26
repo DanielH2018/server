@@ -133,7 +133,7 @@ def _flux_view_role() -> dict:
 def test_flux_view_role_reads_the_six_flux_groups_only():
     role = _flux_view_role()
     groups = {g for rule in role["rules"] for g in rule.get("apiGroups", [])}
-    # Exact match, not `in`: see tests/repo/test_census_rows_python.py (row `no-host-shaped-membership-literal`)
+    # Exact match, not `in`: see tests/repo/census_rows/test_census_rows_python.py (row `no-host-shaped-membership-literal`)
     assert any(g == "kustomize.toolkit.fluxcd.io" for g in groups), (
         "no Flux group parsed from flux-view-flux-system"
     )

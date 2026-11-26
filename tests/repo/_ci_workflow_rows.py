@@ -239,7 +239,7 @@ CI_ROWS = (
                 "The bootstrap cases run in the `host_packages_bootstrap` job and nowhere else. "
                 "Inside the legs they were the longest case group, 338-477 s against 214-271 s "
                 "for the next, and their offline builds shared the leg's CPUs with every other "
-                "group. `tests/repo/test_every_ci_job_is_gated.py` holds the job inside the "
+                "group. `tests/repo/ci_workflows/test_every_ci_job_is_gated.py` holds the job inside the "
                 "`prek` gate."
             ),
             offence=judge(_only_one_job_bootstraps),

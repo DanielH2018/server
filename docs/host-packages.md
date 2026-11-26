@@ -556,7 +556,7 @@ key. Every step is **operator-only**, and each host step runs from a LAN session
 
     In the same commit, update the fingerprint pin, `ARCHIVE_FINGERPRINT` in
     `hosts/bootstrap-host.sh`.
-    `tests/repo/test_lan_facts_have_one_source.py::test_the_bootstrap_pin_is_the_committed_keyrings_key`
+    `tests/repo/docs/test_lan_facts_have_one_source.py::test_the_bootstrap_pin_is_the_committed_keyrings_key`
     fails until the two match. Copy the new private key into the break-glass kit, as
     [the break-glass doc](break-glass.md) describes.
 1. Delete the old key from the signer's home, because the role's apply refuses a home that
@@ -1061,7 +1061,7 @@ Every `k3s` subcommand needs root.
 1. To make the host's package one the suite has tested on the target, merge a PR that adds the
    release to the `host_packages` matrix in `.github/workflows/ci.yml`, with the suite green. The
    PR makes the same edit to `.github/workflows/host-test-image.yml`, which
-   `tests/repo/test_host_test_image.py` holds equal to `ci.yml`, and adds a
+   `tests/repo/ci_workflows/test_host_test_image.py` holds equal to `ci.yml`, and adds a
    `<release>-<arch> -` line per new leg to `hosts/lib/tests/container/image.pins`, which the same
    test requires. Until that workflow has published the new release's image and a later PR copies
    its digest into `image.pins` and adds the leg to that test's `PUBLISHED` set, the new leg

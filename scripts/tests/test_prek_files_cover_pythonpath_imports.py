@@ -31,12 +31,12 @@ def _entries(hook_id: str) -> list[tuple[str, Path, dict]]:
 
 
 def test_a_test_modules_bare_row_table_import_resolves_through_pythonpath():
-    module = REPO / "tests/repo/test_census_rows_python.py"
+    module = REPO / "tests/repo/census_rows/test_census_rows_python.py"
     assert _ROW_TABLE in imported_files(module)
 
 
 def test_the_static_ratchet_hook_covers_the_row_table_its_entry_imports():
-    entry_rel = "tests/repo/test_census_rows_python.py"
+    entry_rel = "tests/repo/census_rows/test_census_rows_python.py"
     by_entry = {
         rel: (entry, hook) for rel, entry, hook in _entries("static-ratchet-tests")
     }

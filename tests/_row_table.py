@@ -13,7 +13,7 @@ Three tables use it:
   in `tests/repo/test_census_rows_*.py`, one file per domain, because
   `TEST_CAP` in `_ratchet.py` caps any one module.
 - `tests/_runbook_rule.py` selects the units of one Markdown section of an operator-only
-  runbook. Its rows live in `tests/repo/test_runbook_rules.py`.
+  runbook. Its rows live in `tests/repo/census_rows/test_runbook_rules.py`.
 
 What a row buys over a file:
 
@@ -29,7 +29,7 @@ What a row buys over a file:
 - **An exemption carries its reason, and a stale one fails.** `allow` maps a key to why it is
   exempt. A key that no longer matches, or no longer offends, is reported for removal.
 
-Run: uv run pytest tests/repo/test_row_table.py
+Run: uv run pytest tests/repo/census_rows/test_row_table.py
 """
 
 import ast

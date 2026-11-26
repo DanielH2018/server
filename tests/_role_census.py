@@ -4,7 +4,7 @@
 asking it (#3717, #3726).
 
 Lives in its own module rather than in `_helpers.py`, which was at its line cap.
-The `role-tree-walks-use-role-dirs` row of `tests/repo/test_census_rows_suite.py` keeps
+The `role-tree-walks-use-role-dirs` row of `tests/repo/census_rows/test_census_rows_suite.py` keeps
 the next role walk from being written inline.
 """
 

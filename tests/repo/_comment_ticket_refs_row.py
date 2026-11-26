@@ -26,7 +26,7 @@ _ALLOW = {
     "scripts/deploy_tools/chained_timeout.py": (
         "test_chained_timeout.py parses the `#5868: <n>s` measurement out of this comment"
     ),
-    "tests/repo/test_role_claude_md.py": "its DECIDED paragraph cites the operator ruling",
+    "tests/repo/docs/test_role_claude_md.py": "its DECIDED paragraph cites the operator ruling",
 }
 
 

@@ -226,8 +226,8 @@ def test_a_non_line_numbered_span_is_flagged_as_no_citation(line):
     "line,expected",
     [
         (
-            "run `tests/repo/test_helpers.py` first",
-            ["tests/repo/test_helpers.py"],
+            "run `tests/repo/suite/test_helpers.py` first",
+            ["tests/repo/suite/test_helpers.py"],
         ),
         (
             "pinned by `tests/k8s/test_x.py::test_the_thing`",
@@ -250,7 +250,7 @@ def test_a_guard_path_citation_is_clean(line, expected):
         "the guards live under `tests/`",
         "see `scripts/deploy.sh` for the wrapper",
         "a role's own `tests/test_macros.py`",
-        "tests/repo/test_helpers.py with no code span",
+        "tests/repo/suite/test_helpers.py with no code span",
     ],
 )
 def test_a_non_guard_path_span_is_flagged_as_no_citation(line):
