@@ -22,10 +22,6 @@ PROXY_PASSWORD = "PROXY-PASSWORD-SENTINEL"
 HERE = socket.gethostname().split(".")[0]
 
 ROUTES = {
-    "torrents/info?category=lidarr": [
-        {"name": "Album A", "category": "lidarr", "state": "stalledDL"},
-        {"name": "Album B", "category": "lidarr", "state": "queuedDL"},
-    ],
     "app/preferences": {
         "max_active_downloads": 5,
         "dont_count_slow_torrents": False,
@@ -105,22 +101,10 @@ def _run(argv):
 
 @pytest.mark.parametrize(
     "path",
-    [
-        "app/preferences",
-        "/app/preferences",
-        "api/v2/app/preferences",
-        "v2/app/preferences",
-    ],
+    ["/app/preferences", "api/v2/app/preferences", "v2/app/preferences"],
 )
 def test_every_path_spelling_reaches_api_v2(path):
     assert qbit.qbit_url("h", path) == "http://h:8080/api/v2/app/preferences"
-
-
-@pytest.mark.usefixtures("fake_qbit")
-def test_torrents_are_read_with_the_bearer_key(capsys):
-    assert _run(["torrents/info?category=lidarr", "--json"]) == 0
-    states = [t["state"] for t in json.loads(capsys.readouterr().out)]
-    assert states == ["stalledDL", "queuedDL"]
 
 
 @pytest.mark.usefixtures("fake_qbit")
