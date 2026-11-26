@@ -230,8 +230,13 @@ def _dotted_modules() -> list[str]:
 
 
 def _bare_sibling_offence(subject: Subject) -> list[str]:
-    """Each import whose top name is a module or package in the importer's own directory."""
+    """Each import whose top name is a module or package in the importer's directory or one above it.
+
+    A run by path puts the entry point's directory first on `sys.path`, so a module two levels
+    down can reach `fanout_lib.review` that way. The walk stops below `scripts/`, the real root.
+    """
     here = REPO / subject.rel.rsplit("/", 1)[0]
+    dirs = [here, *here.parents[: len(here.relative_to(REPO / "scripts").parts) - 1]]
     own = subject.rel.rsplit("/", 1)[-1].removesuffix(".py")
     hits = []
     for node in ast.walk(ast.parse(subject.text)):
@@ -242,7 +247,9 @@ def _bare_sibling_offence(subject: Subject) -> list[str]:
         else:
             continue
         for top in tops:
-            if top != own and ((here / f"{top}.py").is_file() or (here / top).is_dir()):
+            if top != own and any(
+                (d / f"{top}.py").is_file() or (d / top).is_dir() for d in dirs
+            ):
                 hits.append(f"line {node.lineno}: {ast.unparse(node)}")
     return hits
 
@@ -384,6 +391,10 @@ ROWS = (
         red=(
             Subject("scripts/dev/x.py", "import label_worktree\n"),
             Subject("scripts/dev/x.py", "def f():\n    from fanout_lib import place\n"),
+            Subject(
+                "scripts/dev/fanout_lib/x.py",
+                "from fanout_lib.review import base_check\n",
+            ),
         ),
         green=(
             Subject("scripts/dev/x.py", "from dev import label_worktree\n"),
