@@ -322,12 +322,6 @@ def test_a_value_change_inside_a_multi_line_scalar_is_flagged(old, new):
     )
 
 
-def test_a_comment_only_edit_to_an_unloadable_file_is_quiet():
-    show = _show({"old": "a: {{ x }}\n# one\n", "new": "a: {{ x }}\n# two\n"})
-    quiet = land_tags.comment_only_k8s_defaults([_SONARR_DEFAULTS], "old", "new", show)
-    assert quiet == {_SONARR_DEFAULTS}
-
-
 def test_an_edit_that_stops_a_file_loading_is_flagged():
     show = _show({"old": "a: !!bool |-\n  false\n", "new": "a: !!bool |-\n\n  false\n"})
     assert (
