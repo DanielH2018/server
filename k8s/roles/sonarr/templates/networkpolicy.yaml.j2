@@ -26,8 +26,8 @@
 # public route is Authelia-gated and its monitoring IngressRoute exposes only one path; fencing it
 # out breaks the widget.
 #
-# sonarr-verify is the pod label of the Jobs in templates/verify/ and of the
-# `sonarr-air-date-guard` CronJob; without this entry the fence refuses their API calls.
+# sonarr-verify is the pod label of the Jobs in templates/verify/; without this entry the fence
+# refuses their API calls.
 # janitorr-verify is janitorr's verify Job label. No pod carries it until janitorr's Flux flip,
 # and tests/k8s/edge/test_netpol_from.py holds it in STAGED_CALLERS until then.
 #

@@ -10,7 +10,7 @@ conventions.
 <!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates or containers_list entry, or the Longhorn tier lists in k8s/roles/longhorn-reconcile/defaults/main.yml. -->
 - **Applied by:** Flux, through `promote`; `land.sh --tags=sonarr` gates the rollout
 - **Images:** `lscr.io/linuxserver/sonarr` (`sonarr_k8s_image`), `ghcr.io/onedr0p/exportarr`
-  (`sonarr_k8s_exportarr_image`), `python` (`sonarr_k8s_air_date_guard_image`)
+  (`sonarr_k8s_exportarr_image`)
 - **Route:** `sonarr.<domain>` · `sonarr.local.<domain>`, Authelia one_factor
 - **Claims:** `sonarr-config` (weekly -> B2 (default target)), `media-data` (not Longhorn
   (media-local))
@@ -75,24 +75,20 @@ conventions.
   fixture API. `notification.yaml.j2` beside it is arr-notification's seed Job, which shares
   the directory, the ServiceAccount and the pod label; `k8s/roles/arr-notification/CLAUDE.md`
   has its design.
-- **`sonarr-air-date-guard` (CronJob, every 5 minutes) removes fakes that race the real
-  release.** It applies Sonarr v5's "do not download before air date" rule after the grab:
-  a queued download whose release was published more than
-  `sonarr_k8s_air_date_guard_grace_hours` before its episode airs is removed from qBittorrent
-  and blocklisted. Anime series, series tagged `allow-early` and episodes with no air date
-  are skipped. `files/sonarr_air_date_guard.py` has the rule and the backtest behind each
-  exception. It is a stopgap for #6292. Sonarr 5.0.0.3041 has the rule as a Release Profile's
-  air-date restriction, whose grace period is in hours and matches by tag, not by series type.
-  - **Its gate Job runs a real pass on every sonarr revision.** `flux_cronjob_gates` copies
-    it into `sonarr-verify` as a mutation gate, so Renovate's image bumps run it too. A
-    second run removes nothing
-    (`k8s/roles/sonarr/tests/test_sonarr_air_date_guard.py::test_a_second_run_removes_nothing`).
-  - **Its pod carries `app: sonarr-verify`**, the label `netpol_from` already admits, so the
-    fence needed no inventory change.
-  - **To exempt one series without a deploy**, add the `allow-early` tag to it in Sonarr. To
-    make every run a dry-run report, set `sonarr_k8s_air_date_guard_apply: false`. To
-    restore a release it blocklisted by mistake, remove it from Sonarr's Activity →
-    Blocklist.
+- **The air-date Release Profile rejects fakes that race the real release.**
+  `templates/verify/release-profile.yaml.j2` is a seed Job in `sonarr-verify` that declares a
+  Sonarr Release Profile with the air-date restriction on. Sonarr then rejects a release whose
+  indexer publish date is more than `sonarr_k8s_air_date_grace_hours` before its episode airs,
+  and an episode with no air date. Series tagged with a `sonarr_k8s_air_date_excluded_tags`
+  entry are exempt. `files/seed_sonarr_release_profile.py` has the rule and why anime is
+  excluded.
+  - **The seed owns the profile, not configarr.** configarr refuses a negative grace; the
+    `DECIDED:` note in the template says what adding `release_profiles` to configarr would do.
+  - **It writes through the v5 API.** A profile written through v3 never applies; the
+    script's docstring says why.
+  - **To exempt a series**, add a tag to `sonarr_k8s_air_date_excluded_tags`, tag the
+    series in Sonarr and deploy. A rejected release shows on the episode's interactive search
+    with the air-date reason.
 - **The rollout budget is 660s.** A first boot installing the striptracks DOCKER_MODS takes up
   to 10 minutes. `k8s/roles/sonarr/defaults/main.yml:manifests_rollout_timeout` is the
   one place that budget is written, as a literal role default because the renderer reads Flux's
