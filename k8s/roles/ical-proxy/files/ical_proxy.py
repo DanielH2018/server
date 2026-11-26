@@ -31,6 +31,7 @@ if __name__ == "__main__":
 
 from flask import Flask, Response
 import icalendar
+from icalendar.parser import Contentlines
 import requests, threading, time, os, re, hashlib
 
 from datetime import UTC, datetime, timedelta
@@ -54,9 +55,11 @@ OBSIDIAN_URI_RE = re.compile(r'obsidian://[^\s"]+')
 # Tags drive Obsidian's Tasks queries and are calendar noise; the leading \s* avoids a double space.
 TOD_TAG_RE = re.compile(r"\s*#tod/\S+")
 
+RAW_TODO_TEXT_RE = re.compile(r"(SUMMARY|DESCRIPTION)(?:;[^:]*)?:(.*)")
+
 
 def wire_value(component, name):
-    """Returns a property's value as the feed wrote it: escaped, unfolded, stripped; "" if absent."""
+    """Returns a property's re-serialised value, without parameters, stripped; "" if absent."""
     if name not in component:
         return ""
     return component[name].to_ical().decode().strip()
@@ -132,7 +135,25 @@ def obsidian_deep_link(uri):
     return head + path.replace("&", "%26")
 
 
-def stable_uid(todo):
+def raw_todo_text(raw_ics):
+    """Yields each VTODO's SUMMARY and DESCRIPTION as the feed wrote them, in feed order.
+
+    The values are unfolded but still escaped. icalendar's parsed values are unescaped,
+    and re-serialising them escapes a bare ',' or ';' the feed left raw, so only these
+    reproduce the text stable_uid has always hashed.
+    """
+    values = None
+    for line in Contentlines.from_ical(raw_ics):
+        if line == "BEGIN:VTODO":
+            values = {}
+        elif line == "END:VTODO":
+            yield values
+            values = None
+        elif values is not None and (match := RAW_TODO_TEXT_RE.match(line)):
+            values.setdefault(match[1], match[2].strip())
+
+
+def stable_uid(raw_text):
     """Deterministic UID for a VTODO, derived from its note link + summary.
 
     The obsidian-to-ical-plugin (v2.0.1, what this feed uses) emits a fresh random
@@ -143,11 +164,10 @@ def stable_uid(todo):
     show up between refreshes). Rewriting the UID to a hash of the note + summary
     (what newer plugin versions do) keeps the key stable so refetches overwrite.
 
-    Hashes the escaped wire values: hashing the unescaped text would mint a new UID for
-    every task whose summary or note holds a comma, semicolon or backslash.
+    Takes one raw_todo_text entry, and hashes the summary with its time-block tags removed.
     """
-    summary = wire_value(todo, "SUMMARY")
-    description = wire_value(todo, "DESCRIPTION")
+    summary = TOD_TAG_RE.sub("", raw_text.get("SUMMARY", "")).strip()
+    description = raw_text.get("DESCRIPTION", "")
     return hashlib.sha1(f"{description}::{summary}".encode()).hexdigest()
 
 
@@ -167,13 +187,14 @@ def process_obsidian_ics(raw_ics):
     leave the old row behind as a duplicate.
     """
     calendar = icalendar.Calendar.from_ical(raw_ics)
-    for todo in calendar.walk("VTODO"):
+    todos = calendar.walk("VTODO")
+    for todo, raw_text in zip(todos, raw_todo_text(raw_ics), strict=True):
         source = str(todo.get("DESCRIPTION") or todo.get("LOCATION") or "")
         link = OBSIDIAN_URI_RE.search(source)
         if "SUMMARY" in todo:
             todo["SUMMARY"] = icalendar.vText(TOD_TAG_RE.sub("", str(todo["SUMMARY"])))
         if "UID" in todo:
-            todo["UID"] = stable_uid(todo)
+            todo["UID"] = stable_uid(raw_text)
         todo.pop("LOCATION", None)
         if link and "URL" not in todo:
             todo.add("URL", obsidian_deep_link(link.group(0)))

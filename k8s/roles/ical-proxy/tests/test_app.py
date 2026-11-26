@@ -13,6 +13,7 @@ import hashlib
 from datetime import UTC, datetime
 
 import icalendar
+import pytest
 
 import ical_proxy as app
 
@@ -163,10 +164,21 @@ def test_obsidian_deep_link_encodes_only_file_ampersands():
     )
 
 
-def test_uid_hashes_the_escaped_summary_and_note():
+@pytest.mark.parametrize(
+    ("summary", "description"),
+    [
+        ("🔲 Pay rent\\, utilities", OBS),
+        ("🔲 Pay rent, utilities", OBS),
+        ("🔲 Pay rent;utilities", OBS),
+        ("🔲 Pay rent #tod/morning", f"{OBS}\\N"),
+        ("🔲 Pay rent", f"{OBS} tail, comma"),
+    ],
+)
+def test_uid_hashes_the_summary_and_note_as_the_feed_wrote_them(summary, description):
     # A UID that moves when the feed is re-parsed duplicates every task on Homepage's next soft reload.
-    out = app.process_obsidian_ics(_calendar(_todo("🔲 Pay rent\\, utilities", OBS)))
-    expected = hashlib.sha1(f"{OBS}::🔲 Pay rent\\, utilities".encode()).hexdigest()
+    out = app.process_obsidian_ics(_calendar(_todo(summary, description)))
+    untagged = summary.removesuffix(" #tod/morning")
+    expected = hashlib.sha1(f"{description}::{untagged}".encode()).hexdigest()
     assert _extract_uid(out) == expected
 
 
