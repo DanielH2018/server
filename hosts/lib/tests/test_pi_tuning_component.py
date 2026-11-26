@@ -29,6 +29,7 @@ COMPONENTS = REPO / "hosts" / "components"
 LOG2RAM_CONF = "/etc/log2ram.conf"
 JOURNALD_CAP = "/etc/systemd/journald.conf.d/60-homelab-pi.conf"
 AUDITD_CONF = "/etc/audit/auditd.conf"
+ACCT_LOGROTATE = "/etc/logrotate.d/acct"
 WATCHDOG_RESTART = "try-restart:watchdog.service"
 APT_DROPINS = {
     "apt-daily.timer": "/usr/lib/systemd/system/apt-daily.timer.d/50-homelab.conf",
@@ -173,6 +174,7 @@ ADOPTED = [
     (AUDITD_CONF, "admin_space_left = 50", "try-restart:auditd.service"),
     (AUDITD_CONF, "admin_space_left_action = SUSPEND", "try-restart:auditd.service"),
     ("/etc/locale.gen", "# en_US.UTF-8 UTF-8", "locale-gen"),
+    (ACCT_LOGROTATE, "\trotate 30", None),  # 26.04's acct stanza, tab-indented
 ]
 
 
@@ -185,7 +187,7 @@ def test_each_edit_replaces_the_line_ansible_left_and_names_its_activation(
     ]
     assert len(matching) == 1, f"{path}: {len(matching)} edits match {stock!r}"
     assert re.search(matching[0]["regexp"], matching[0]["line"])
-    assert package.activations[path] == action
+    assert package.activations.get(path) == action
 
 
 UPDATE_NOTIFIER = "/etc/apt/apt.conf.d/99update-notifier"
@@ -296,7 +298,7 @@ JOURNAL_ACTIVE_FILES = 2  # system.journal and user-1000.journal
 def _edit_value(package: host_mode.Package, path: str, key: str) -> str:
     """The value the package's edit of `path` sets for `key`."""
     for line in _edits(package, path):
-        match = re.fullmatch(rf"{re.escape(key)}\s*=\s*\"?([^\"]+)\"?", line)
+        match = re.fullmatch(rf"\s*{re.escape(key)}(?:\s*=\s*|\s+)\"?([^\"]+)\"?", line)
         if match:
             return match.group(1)
     raise AssertionError(f"no edit of {path} sets {key}")
@@ -306,8 +308,8 @@ def sd_copy_worst_mb(package: host_mode.Package) -> float:
     """The largest the log2ram SD copy grows to under the package's caps, in MB."""
     _, journal_archives, file_mb = journal_caps(_text(package, JOURNALD_CAP))
     journal = journal_archives + JOURNAL_ACTIVE_FILES * file_mb
-    # savelog leaves pacct.0 uncompressed and gzips the generations after it.
-    generations = int(_edit_value(package, "/etc/default/acct", "ACCT_LOGGING"))
+    # `start 0` and delaycompress keep pacct.0 uncompressed and gzip the generations after it.
+    generations = int(_edit_value(package, ACCT_LOGROTATE, "rotate"))
     pacct = PACCT_MB_PER_DAY * (2 + (generations - 1) * PACCT_GZIP_RATIO)
     audit = int(_edit_value(package, AUDITD_CONF, "max_log_file")) * int(
         _edit_value(package, AUDITD_CONF, "num_logs")
