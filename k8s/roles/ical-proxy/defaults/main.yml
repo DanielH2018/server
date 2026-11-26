@@ -1,6 +1,4 @@
 ---
-# Built in-cluster by this role via k8s/image-builder from this role's own
-# templates/Dockerfile.j2; the app source and its tests live in files/ here too.
 ical_proxy_k8s_image: "{{ k8s_registry_pull_host }}/ical-proxy:{{ k8s_built_image_tags.get('ical-proxy', 'latest') }}"  # Renovate offers no version for this ref — see k8s_autodeploy_reason
 
 # Renovate stance: whether an image bump here may automerge. `promote` deploys what merges.
@@ -19,17 +17,13 @@ ical_proxy_k8s_mem_request: 96Mi
 image_builder_builds:
   - image_builder_name: ical-proxy
     image_builder_dockerfile: "{{ role_file('templates/Dockerfile.j2') }}"
-    # The one file the Dockerfile COPYs, at the exact context path the COPY names
-    # (flat — ConfigMap keys cannot contain '/').
-    # The source is ical_proxy.py rather than app.py so it cannot shadow homelab-mcp's app.py
-    # in a shared pytest session; the image still runs it as app.py.
+    # Flat key (ConfigMap keys cannot contain '/'). ical_proxy.py, not app.py, so it cannot shadow
+    # homelab-mcp's app.py in a shared pytest session; the image runs it as app.py.
     image_builder_context:
       "{{ role_file('files/ical_proxy.py') }}": app.py
 
 manifests_rollout: ical-proxy
 
-# Each entry renders k8s/templates/secret-default.yaml.j2 as secret-<name>.yaml:
-# its `string_data` maps a Secret field to the SOPS key its value comes from.
 render_secrets:
   # Private calendar URLs: possession of a URL is access to its feed.
   - name: ical-proxy-env

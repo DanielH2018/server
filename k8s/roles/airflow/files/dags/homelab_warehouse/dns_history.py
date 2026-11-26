@@ -31,7 +31,6 @@ INSTANCES = {
 PIHOLE_KEEP_DAYS = 91
 TOP_DOMAINS = 200
 TOP_CLIENTS = 1000
-# Each instance answered about 51,000 queries a day on 2026-11-20.
 MIN_DAILY_QUERIES = 1000
 
 SCHEMA = "dns"

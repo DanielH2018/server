@@ -1,37 +1,5 @@
 {% from 'networkpolicy.yml.j2' import networkpolicy with context %}
 ---
-# sonarr and radarr reach this pod as the download client at `wireguard:8080` — a compat Service
-# (service-wireguard.yaml.j2) that selects `app: qbittorrent`, carrying the hostname their SQLite
-# databases hold. The Service name differs; the pod is the same, so a podSelector on
-# `app: qbittorrent` covers it. The PORT is the WebUI port, which the macro call below passes
-# explicitly; it equals the entry's `port`, and test_netpol_from.py fails if the two diverge.
-#
-# This rule is PORT-SCOPED: the baseline admits none of sonarr, radarr, qbittorrent-reach-probe,
-# qbittorrent-prefs-check or homepage, so they reach this pod only through this rule and only on
-# the WebUI port.
-#
-# TRAEFIK IS LISTED DELIBERATELY — do not remove it as redundant. While qbittorrent carries the
-# baseline label the union is the same with or without it. The entry matters for a pod that
-# lacks the label, which this policy alone selects, and it keeps this policy's caller set
-# complete if the baseline's traefik rule is ever port-scoped.
-#
-# qbittorrent-reach-probe (the `qbittorrent-verify` Job, templates/verify/job.yaml.j2) is
-# load-bearing: it proves qbittorrent is reachable from the POD CIDR specifically, despite the
-# Mullvad kill-switch's iptables rules on the wireguard sidecar. Fence that probe out and the check
-# would pass-or-fail on this policy alone, silently inverting what it asserts: the one regression
-# it exists to catch (the kill-switch swallowing pod-CIDR traffic) would read as green. Same shape
-# as k8s/roles/registry/templates/networkpolicy.yaml.j2 admitting its own selftest Jobs. The Job's
-# pod carries this app label; the template's DECIDED note says why.
-#
-# homepage's widget authenticates to the WebUI over the ClusterIP, not through Traefik, because
-# qbittorrent's public route is Authelia-gated; fencing it out breaks the widget.
-#
-# qbittorrent-prefs-check is the daily drift check's CronJob (prefs-check-cronjob.yaml.j2). It
-# dials the WebUI Service directly, so this entry is its whole grant. It lands in the same apply
-# as the CronJob, because this role renders the fence.
-#
-# The caller list is `netpol_from:` on this role's containers_list entry (cluster/services.yml),
-# each caller's reason beside it. `homepage_widget: true` adds homepage through the
-# `netpol_callers` filter, and `netpol_role_owned: true` keeps netpol-baseline from
-# rendering a second copy.
+# Keep traefik listed: it covers a pod lacking the baseline label, which only this policy selects.
+# qbittorrent-reach-probe is the verify Job's control: fencing it out makes the check meaningless.
 {{ networkpolicy(container_item.name, qbittorrent_k8s_webui_port, container_item | netpol_callers) }}

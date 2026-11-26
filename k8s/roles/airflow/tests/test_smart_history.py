@@ -40,7 +40,6 @@ def test_a_held_day_gives_every_attribute_of_every_device():
 
 
 def test_a_day_with_two_readings_keeps_the_later_one():
-    # 2026-11-20 holds the 00:00 reading and one taken at 14:51.
     assert rows_on(date(2026, 11, 20))[(CRUCIAL, "data_units_written")] == 68_429_948
 
 

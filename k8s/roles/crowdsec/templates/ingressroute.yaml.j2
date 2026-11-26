@@ -1,11 +1,9 @@
 {% from 'ingressroute.yml.j2' import ingressroute with context %}
 ---
-{# Machine-key API for LAN agents and bouncers (the node agents and the traefik plugin).
-   TLS-terminated at the VIP with the LE wildcard, deliberately
-   NOT Authelia-gated — clients authenticate with LAPI machine/bouncer keys, and forward-auth
-   would break them. No unsuffixed_hostname: nothing calls an unsuffixed name.
-   public=false: the ban-management API must never gain a public Host rule, whatever
-   k8s_public_route says — machine keys are the only gate on it. #}
+{# Machine-key API for LAN agents and bouncers, deliberately NOT Authelia-gated: forward-auth would
+   break their keys.
+   public=false: the ban-management API must never gain a public Host rule, whatever k8s_public_route
+   says. #}
 {{ ingressroute(
     container_item.name,
     container_item.hostname | default(container_item.name),

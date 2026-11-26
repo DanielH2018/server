@@ -160,8 +160,6 @@ def test_no_job_starts_in_the_startup_grace():
         return _Alive(False)
 
     cj.main(clock=lambda: now[0], sleep=sleep, start=start, minutes=7)
-    # 13:00 and 13:01 fall inside the 120 s grace from 12:59:30; 13:05 is the first slot after,
-    # and 13:06 is the home allowlist's.
     assert started == [
         ("crowdsec-remote-allowlist", 5),
         ("crowdsec-home-allowlist", 6),
@@ -169,9 +167,8 @@ def test_no_job_starts_in_the_startup_grace():
 
 
 def test_a_late_wake_still_runs_the_minute_it_slept_to():
-    # From 13:04:30 UTC the sleep to 13:05 overshoots by 61 s and wakes at 13:06:01. The clock
-    # then reads minute 6, which has no job; the boundary it slept to is minute 5, which starts
-    # the remote allowlist. Minute 7, the next boundary, has no job either.
+    # From 13:04:30 the sleep to 13:05 overshoots by 61 s and wakes at 13:06:01; the clock reads
+    # minute 6, but the boundary slept to is minute 5.
     now = [1792328670.0]
     wakes = iter([61.0])
 
@@ -238,9 +235,8 @@ def test_the_sidecar_runs_the_scheduler_from_the_configmap_with_the_tools_the_mo
 
 
 def test_the_engines_trace_link_resolves_to_a_writable_directory_in_the_sidecar(pod):
-    # The engine's entrypoint links `trace` into crowdsec-db as
-    # /staging/var/lib/crowdsec/data/trace, a path only the engine image has. cscli creates its
-    # trace directory through that link on every call, so the sidecar mounts a directory there.
+    # cscli creates its trace directory through the engine image's /staging link on every call, so
+    # the sidecar mounts a directory there.
     [sidecar] = [c for c in pod["containers"] if c["name"] == "crowdsec-jobs"]
     [mount] = [
         m
@@ -289,8 +285,6 @@ def test_the_kubeconfig_names_the_paths_the_sidecar_mounts(pod):
 
 
 def test_each_log_line_carries_the_syslog_prefix_and_is_flushed():
-    # The host crons' syslog shape: two whitespace-free tokens before the tag, a time and the
-    # host.
     printed = []
     cj.emit(
         "crowdsec-appsec-verify: status=down no enabled appsec-configs",
@@ -316,11 +310,10 @@ def test_every_module_imports_from_the_pods_mounted_layout(tmp_path):
     for key, text in configmap["data"].items():
         (tmp_path / key).write_text(text)
     assert {job.script for job in cj.JOBS} <= set(configmap["data"])
-    # `--help` returns after every module-level import has run, so exit 0 proves the import
-    # closure resolves from the mounted files alone. The pod runs `python3 /jobs/<script>`,
-    # which puts the script's own directory on sys.path, so this does too. `-S` drops the
-    # venv's site-packages, because the pod's bare python image has no wheels, and `-E` and
-    # `-s` drop PYTHONPATH and the user site.
+    # `--help` exits after every module-level import has run, so exit 0 proves the import closure
+    # resolves from the mounted files alone.
+    # `-S` drops the venv's site-packages (the pod's python image has no wheels); `-E` and `-s` drop
+    # PYTHONPATH and the user site.
     for script in ["crowdsec_jobs.py", *(job.script for job in cj.JOBS)]:
         proc = subprocess.run(
             [sys.executable, "-E", "-s", "-S", str(tmp_path / script), "--help"],

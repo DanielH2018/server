@@ -26,8 +26,6 @@ def _row(name, pulled=None, created=timedelta(days=60)):
 
 
 LIVE = _row("k8straefik@10.42.0.207", pulled=timedelta(seconds=40))
-# The observed shape: a base row last pulled long ago, rows for past pod IPs, and a bouncer
-# row that never pulled.
 OBSERVED = [
     _row("k8straefik", pulled=timedelta(days=49)),
     _row("k8straefik@10.42.0.12", pulled=timedelta(days=3)),
@@ -55,8 +53,8 @@ def test_a_row_pulled_inside_the_window_is_kept():
 
 
 def test_a_row_that_never_pulled_is_judged_by_its_creation_time():
-    # QueryBouncersInactiveSince falls back to created_at, so a fresh row that has not pulled
-    # yet survives the prune and an old one does not.
+    # QueryBouncersInactiveSince falls back to created_at, so a fresh unpulled row survives and an
+    # old one does not.
     rows = [
         LIVE,
         _row("fresh", created=timedelta(minutes=5)),
@@ -66,8 +64,8 @@ def test_a_row_that_never_pulled_is_judged_by_its_creation_time():
 
 
 def test_a_prune_with_no_recently_pulling_edge_row_is_refused():
-    # A Traefik outage longer than the window: every k8straefik row would go, and with them
-    # the key, so LAPI would answer the next pull with 403.
+    # A Traefik outage longer than the window would delete every k8straefik row and the key, so LAPI
+    # would answer the next pull with 403.
     rows = [
         _row("k8straefik", pulled=timedelta(days=49)),
         _row("k8straefik@10.42.0.207", pulled=timedelta(minutes=90)),
@@ -78,8 +76,8 @@ def test_a_prune_with_no_recently_pulling_edge_row_is_refused():
 
 
 def test_an_edge_row_pulled_inside_the_margin_is_refused():
-    # 55 minutes is inside the hour but not inside hour-minus-margin: the seconds between the
-    # list and the prune must not be able to age the only survivor out.
+    # 55 minutes is inside the hour but not hour-minus-margin: the gap between list and prune must
+    # not age the only survivor out.
     rows = [_row("k8straefik@10.42.0.207", pulled=timedelta(minutes=55))]
     assert bp.plan(rows, NOW).refused
 

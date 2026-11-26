@@ -35,8 +35,7 @@ WAREHOUSE_DAGS = (
     "smart_daily_rollup",
 )
 HC_SLUG = "airflow-warehouse-fresh"
-# The DAG's cron, UTC, after every load and check is due. monitor-bridge's console
-# expectation for HC_SLUG is held to it.
+# The DAG's cron, UTC; monitor-bridge's console expectation for HC_SLUG is held to it.
 HC_SCHEDULE = "0 6 * * *"
 HC_URL = "https://hc-ping.com"
 

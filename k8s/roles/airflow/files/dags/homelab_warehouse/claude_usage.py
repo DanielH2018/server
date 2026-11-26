@@ -47,8 +47,7 @@ DDL = (
 STEP_S = 300
 # A scrape gap shorter than this keeps a session's series continuous across it.
 LOOKBACK = "1h"
-# Longer than the collector's metric_expiration (168h), so a session the collector forgot
-# still has its last value here.
+# Longer than the collector's metric_expiration (168h), so a forgotten session keeps its value.
 BASELINE_LOOKBACK = "8d"
 BASELINE_SPAN = timedelta(days=8)
 

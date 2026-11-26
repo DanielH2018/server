@@ -57,43 +57,14 @@ spec:
       ports:
         - protocol: TCP
           port: {{ k8s_registry_port }}
-    # The PULL path. containerd on daniel-box is a HOST process reaching the pod through the
-    # loopback hostPort (portmap), not a pod on the cluster network — a podSelector cannot admit
-    # it by identity, only an ipBlock by address can.
-    #
-    # PROVEN: `ip -4 addr show cni0` on daniel-box reads 10.42.0.1/24, matching the node's live
-    # podCIDR (`kubectl get node daniel-box -o jsonpath='{.spec.podCIDR}'` = 10.42.0.0/24). That
-    # is the standard hostPort/portmap SNAT target — the address hostPort-forwarded traffic is
-    # rewritten to before it reaches the pod netns, so return traffic routes back through cni0.
-    #
-    # NOT PROVEN, and stated plainly rather than papered over: this repo has no prior
-    # hostPort+NetworkPolicy combination to test against (every other fenced pod in this cluster
-    # is reached over its Service or a normal pod IP, never a hostPort), and applying this policy
-    # for a live test is out of scope for this change (no cluster writes). Three outcomes are
-    # possible after a real deploy, not two:
-    #   (a) this ipBlock is exactly right — the pull succeeds because the source matches;
-    #   (b) the SNAT target is some other address — the pull fails, this ipBlock needs widening;
-    #   (c) hostPort-DNAT'd traffic bypasses kube-router's ingress enforcement entirely, the same
-    #       way kubelet's direct-to-pod-IP probe traffic does (see the probe paragraph above) —
-    #       the pull succeeds, but this ipBlock is inert: neither protecting nor admitting
-    #       anything, and should be deleted so it doesn't read as load-bearing to the next
-    #       person who edits this policy.
-    # The `pull` check in templates/verify/ already runs on every roll and distinguishes (a)/(c)
-    # from (b) for free: (b) fails loudly (`sudo k3s kubectl -n {{ k8s_namespace }} logs
-    # job/<the registry-verify-pull Job>` shows an image-pull error). Telling (a) apart from (c) needs
-    # one manual check the selftest can't do on its own — during/after a deploy, on daniel-box:
-    # `sudo conntrack -L 2>/dev/null | grep :{{ k8s_registry_port }}` while a pull is in flight.
-    # If it shows the pod receiving 10.42.0.1, this rule is load-bearing (a). If it shows
-    # something else and the pull still succeeds, this rule is dead (c) — remove it.
+    # containerd is a host process; hostPort traffic arrives SNAT'd to the cni0 gateway, which only
+    # an ipBlock can admit. If kube-router skips ingress enforcement for hostPort traffic, this rule
+    # is inert.
     - from:
         - ipBlock:
             cidr: {{ registry_k8s_netpol_cni_gateway }}
-        # The AGENT pull path: containerd on daniel-server
-        # reaches the pinned ClusterIP through its registries.yaml mirror. Host-originated
-        # traffic entering the overlay is SNAT'd to the node's own flannel.1 address —
-        # `ip -4 addr show flannel.1` on daniel-server reads 10.42.1.0/32.
-        # Same (a)/(b)/(c) caveats as the loopback ipBlock above; the
-        # daniel-server-pinned pull selftest is what distinguishes (b) loudly.
+        # Agent pull path: host traffic entering the overlay is SNAT'd to the node's flannel.1
+        # address.
         - ipBlock:
             cidr: {{ registry_k8s_netpol_agent_flannel }}
       # The ghcr.io mirror's pod has its own policy, beside its Deployment in ghcr-mirror.yaml.j2.

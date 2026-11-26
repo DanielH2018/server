@@ -22,9 +22,8 @@ metadata:
 spec:
   # Recreate: the claim is ReadWriteOnce and the hostPort is node-exclusive.
 {{ spec_shell('Recreate') }}
-  # No `replicas:`, for the ghcr-mirror's reason. registry-gc.sh scales this Deployment
-  # to zero while it prunes the store, and a rendered field would give Flux a claim on it that
-  # restores the pod mid-GC.
+  # No `replicas:`: a rendered field lets Flux restore the pod while registry-gc.sh holds it at
+  # zero.
   selector:
     matchLabels:
       app: dockerhub-mirror
@@ -33,12 +32,10 @@ spec:
       labels:
         app: dockerhub-mirror
         registry-service: "true"
-        # Opted out of the namespace baseline: the policy below is tighter, and the baseline is
-        # additive.
         netpol-baseline-exempt: "true"
     spec:
-      # On the registry node, because daniel-box's registries.yaml reaches this mirror on its
-      # own loopback hostPort.
+      # On the registry node: daniel-box's registries.yaml reaches this mirror on its loopback
+      # hostPort.
       nodeSelector:
         kubernetes.io/hostname: {{ k8s_registry_node }}
 {{ pod_shell(services | tier_priority_class('registry'), run_as_user=1000, run_as_group=1000, fs_group=1000) }}
@@ -50,8 +47,7 @@ spec:
             # Named for the Service's targetPort.
             - name: dockerhub
               containerPort: {{ k8s_registry_dockerhub_mirror_port }}
-              # Loopback only. Without hostIP this binds 0.0.0.0 and an unauthenticated
-              # pull-through cache of every public Docker Hub image becomes open to the LAN.
+              # Loopback only: without hostIP the pull-through cache is open to the LAN.
               hostIP: {{ k8s_registry_host_ip }}
               hostPort: {{ k8s_registry_dockerhub_mirror_port }}
 {{ hardened_security_context(read_only=true, non_root=true) }}
@@ -65,8 +61,6 @@ spec:
               value: "127.0.0.1:{{ registry_k8s_dockerhub_mirror_debug_port }}"
             - name: REGISTRY_STORAGE_FILESYSTEM_ROOTDIRECTORY
               value: /var/lib/registry
-            # Docker Hub's registry API host. containerd sends a docker.io pull to a mirror with
-            # the repository path normalised (`library/alpine`), which this host serves as is.
             - name: REGISTRY_PROXY_REMOTEURL
               value: https://registry-1.docker.io
             # DECIDED: a zero TTL and the weekly GC, not a long TTL (#6536). distribution counts
@@ -81,8 +75,8 @@ spec:
           volumeMounts:
             - name: dockerhub-mirror-data
               mountPath: /var/lib/registry
-          # `/v2/` answers from the local handler, so neither probe depends on Docker Hub being
-          # reachable, which would mark the mirror unready in the WAN outage it exists for.
+          # `/v2/` answers locally, so probes do not depend on Docker Hub being reachable in a WAN
+          # outage.
           readinessProbe:
             httpGet:
               path: /v2/
@@ -101,10 +95,8 @@ spec:
           persistentVolumeClaim:
             claimName: {{ registry_k8s_dockerhub_mirror_claim }}
 ---
-# A pull path only, admitted from the two host sources the ghcr-mirror's policy admits:
-# daniel-box's containerd through the loopback hostPort, and daniel-server's across the overlay
-# to the pinned ClusterIP. networkpolicy.yaml.j2 has the SNAT evidence for both. No pod-network
-# rule: a pod that could reach it could fill the claim with arbitrary public images.
+# Pull path only, from the same two host sources as the ghcr-mirror's policy.
+# No pod-network rule: a reachable pod could fill the claim with arbitrary public images.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:

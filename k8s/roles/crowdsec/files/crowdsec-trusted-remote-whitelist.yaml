@@ -1,15 +1,10 @@
 name: local/trusted-remote-whitelist
 description: "Whitelist trusted remote clients (pinned VPN exits)"
-# Exempts the operator's own browsing when tunnelled through a pinned VPN
-# exit. VPN exits are shared datacenter IPs (AS-class CrowdSec distrusts),
-# so burst browsing trips http-probing / http-crawl-non_statics / 403-bf and
-# self-bans (the ban's own 403s feed the 403-bf scenario). Whitelisting at
-# parse-time stops those events from ever becoming decisions for THIS IP only.
-#
-# Trade-off: this also exempts anyone else exiting through the same IP.
-# Keep entries pinned (/32 each) — do NOT widen to a provider's whole range.
-# Exit IPs rotate, so an entry going stale (provider reassigned it) is
-# expected; add the new one here and redeploy traefik when it changes.
+# Exempts the operator's browsing through a pinned VPN exit: shared datacenter IPs trip http-probing
+# and 403-bf and self-ban.
+# Trade-off: this also exempts anyone else exiting through the same IP, so keep entries /32 and
+# never widen to a provider range.
+# Exit IPs rotate: add the new one and redeploy traefik.
 whitelist:
   reason: "Trusted remote — operator's pinned VPN exit(s)"
   ip:

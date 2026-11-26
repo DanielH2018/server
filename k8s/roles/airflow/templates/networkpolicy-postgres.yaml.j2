@@ -2,9 +2,6 @@
    the observability namespace, and the callers macro (k8s/templates/networkpolicy.yml.j2)
    admits same-namespace `app:` peers only. #}
 ---
-# Additive to the namespace baseline. The four Airflow pods write, and Grafana's `Warehouse`
-# datasource reads as `warehouse_reader`, which the init script grants SELECT and nothing else.
-# Ships with this role because every Airflow pod's startup waits on the database.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:

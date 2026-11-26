@@ -50,9 +50,6 @@ import urllib.parse
 import urllib.request
 from collections.abc import Callable, Mapping
 
-# Exit codes. EXIT_DRIFT is what a scheduled --dry-run caller branches on — see
-# files/prefs_check.py — because a bare `--dry-run` cannot otherwise tell "nothing to do" from
-# "found changes but wrote none" without parsing stdout.
 EXIT_OK = 0
 EXIT_UNREACHABLE = 1
 EXIT_BAD_ARGS = 2
@@ -79,65 +76,22 @@ EXCLUDED_FILE_NAMES = (
     "*.r[0-9][0-9]",
 )
 
-# The desired values, keyed by the qBittorrent WebUI API v2 preference names.
-#
-# Every one is chosen for a client that CANNOT ACCEPT INBOUND CONNECTIONS. Mullvad
-# removed port forwarding on 2023-07-01 and this pod egresses through a Mullvad tunnel,
-# so qBittorrent only ever pairs with peers it dials itself. That single fact is what
-# makes the connection-related values worth raising: reach is bounded by how fast and how
-# widely we dial, not by how many peers find us.
+# Chosen for a dial-only client: Mullvad has no port forwarding, so inbound never arrives.
 DESIRED: dict[str, bool | int | str] = {
-    # Outbound connection attempts per second. The ramp rate for a dial-only client, and
-    # the largest single win here — 30 is the stock value and assumes peers dial back.
     "connection_speed": 100,
-    # Global and per-torrent connection ceilings. Raised because only a minority of peers
-    # accept inbound, so more attempts are needed to find them. Costs almost nothing:
-    # measured 5m of a 2000m CPU limit while downloading.
     "max_connec": 1000,
     "max_connec_per_torrent": 200,
-    # Announce to every tracker in a tier rather than stopping at the first that answers,
-    # which widens the peer set on multi-tracker torrents. Matters more while portless.
     "announce_to_all_trackers": True,
-    # Piece verification is single-threaded at the stock value, which shows on the large
-    # remuxes this instance handles. The container's CPU LIMIT is 2 and its REQUEST is
-    # 100m, so 2 is the ceiling worth setting and it is burst capacity, not two reserved
-    # cores.
+    # Burst capacity, not reserved cores: the CPU limit is 2 and the request 100m.
     "hashing_threads": 2,
-    # INERT ON LINUX, kept only so a WebUI edit cannot set something worse. Traced in
-    # qBittorrent's source: applyMemoryWorkingSetLimit() (app/application.cpp) is
-    # compiled under `QBT_USES_LIBTORRENT2 && !Q_OS_LINUX && !Q_OS_MACOS`, so on this image the
-    # function does not exist and is never called — setMemoryWorkingSetLimit() only persists the
-    # value to QSettings. Even the unreachable Q_OS_UNIX branch says "has no effect on linux" and
-    # implements it as setrlimit(RLIMIT_RSS), which the kernel stopped enforcing in the 2.4 era.
-    # So there is NO application-side bound on libtorrent's mmap page cache; the cgroup memory
-    # limit is the only ceiling, and page cache expands to fill whatever it is given. That is why
-    # the container limit stays at 2048Mi: a working set pinned at 99.9% of it with zero restarts
-    # and zero OOM events is reclaimable cache, not unmet demand, and raising the limit would just
-    # move where it pins.
+    # Inert on Linux: only persisted, never applied; the cgroup limit is the only memory bound.
     "memory_working_set_limit": 1024,
-    # Blocks held in memory while hash-checking, in MiB (sessionimpl.cpp multiplies by 64 to reach
-    # libtorrent's count of 16 KiB blocks). 32 is stock. Raised because piece verification here
-    # runs over multi-GB remuxes and is the same bottleneck `hashing_threads: 2` above was set to
-    # lift — two threads reading through a 32 MiB window stay window-bound. Consumed in
-    # torrent.cpp's start_checking(), which is backend-agnostic: `checking_mem_usage` appears
-    # nowhere in mmap_disk_io.cpp, so libtorrent 2.0's mmap path does not bypass it. Costs up to
-    # ~96 MiB more RSS during a recheck only, against the 2048Mi limit.
+    # MiB held while hash-checking, on top of the session; raised so hashing is not window-bound.
     "checking_memory_use": 128,
-    # fallocate the full file up front on ext4. Avoids fragmentation across a multi-hour
-    # 60GB+ download and fails fast on out-of-space instead of part-way through.
     "preallocate_all": True,
     # Group piece requests by file extent, reducing write scatter. Modest on NVMe, free.
     "enable_piece_extent_affinity": True,
-    # NOT A THROUGHPUT SETTING. qBittorrent marks a file matching one of these patterns
-    # "do not download" when the torrent is added, so a fake episode that is only an
-    # executable or an archive downloads and seeds nothing. Indexers served
-    # three shapes in 2026-10: a release holding a `.exe`, a single `.7z` wrapping a padded
-    # `.exe`, and (2023) a `.iso` inside a folder named `.mkv`. Sonarr still flags the empty
-    # download, so the Arr Queue Warnings monitor still pages and a human still removes it.
-    # `.iso` is safe to exclude because the BR-DISK custom format already scores full-disc
-    # releases out of every profile. RAR volumes (`.rar`, `.r00`...) are excluded because
-    # nothing in this stack unpacks them, so Sonarr cannot import a RAR release whether or
-    # not it downloads. The operator had `*.rar` set in the WebUI before this list existed.
+    # Not throughput: skips fake-release executables/archives and RARs, which nothing here unpacks.
     "excluded_file_names_enabled": True,
     # The WebUI API joins and splits this list on "\n" (appcontroller.cpp).
     "excluded_file_names": "\n".join(EXCLUDED_FILE_NAMES),
@@ -213,11 +167,8 @@ class QbtClient:
         Raises:
             SystemExit: If no QBT_SID session cookie was set after the login POST.
         """
-        # SUCCESS IS THE SESSION COOKIE, NOT THE BODY. qBittorrent 5.2.3 answers a good
-        # login with **HTTP 204 and an empty body**; older builds answered 200 with the
-        # literal string "Ok.". Checking for "Ok." therefore rejects a login that in fact
-        # succeeded. A bad password answers 200 with "Fails." and sets no cookie, so the
-        # cookie is the one signal that means the same thing across versions.
+        # Success is the session cookie, not the body: 5.2.3 answers 204 empty, older builds 200
+        # "Ok.".
         body = self._post(
             "/api/v2/auth/login", {"username": username, "password": password}
         )
@@ -370,8 +321,7 @@ def main(
 
     client.set_preferences({key: DESIRED[key] for key in changes})
 
-    # Read back rather than trusting the POST — setPreferences returns 200 for keys it
-    # silently ignored, so the write is only proven by what the server reports afterwards.
+    # Read back: setPreferences returns 200 for keys it silently ignored.
     remaining = diff_prefs(client.preferences(), DESIRED)
     if remaining:
         for key, (have, want) in sorted(remaining.items()):

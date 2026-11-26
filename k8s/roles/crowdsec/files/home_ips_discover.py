@@ -65,8 +65,6 @@ IPIFY4 = "https://api4.ipify.org"
 CALL_TIMEOUT = 10
 # A WAN probe gets no retry: it runs only on a path that has already failed.
 WAN_PROBE_TIMEOUT = 5
-# The `if_inet6` scope of a global address, and the flags that make one unusable
-# (include/uapi/linux/if_addr.h: IFA_F_DADFAILED, IFA_F_DEPRECATED, IFA_F_TENTATIVE).
 SCOPE_GLOBAL = 0x00
 UNUSABLE_FLAGS = 0x08 | 0x20 | 0x40
 WAN_UNREACHABLE = "WAN unreachable"

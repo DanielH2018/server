@@ -10,8 +10,7 @@ metadata:
   name: qbittorrent
   namespace: {{ k8s_namespace }}
 spec:
-  # The config PVC is ReadWriteOnce on single-replica Longhorn, so a rolling update deadlocks on
-  # a volume the outgoing pod still holds.
+  # Recreate: the RWO claim is held by the outgoing pod.
 {{ spec_shell('Recreate') }}
   replicas: 1
   selector:
@@ -25,9 +24,8 @@ spec:
     spec:
 {{ pod_shell('homelab-standard') }}
       securityContext:
-        # The whole reason for the kubelet allow-list. wg-quick attempts to set this
-        # itself and aborts the tunnel when it cannot — /proc/sys is mounted read-only in a pod
-        # even with NET_ADMIN. Pre-set here, wg-quick finds it already 1 and skips the write.
+        # Pre-set: wg-quick aborts when it must write src_valid_mark, as /proc/sys is read-only in a
+        # pod.
         sysctls:
           - name: net.ipv4.conf.all.src_valid_mark
             value: "1"
@@ -45,15 +43,11 @@ spec:
         - name: qbittorrent
           image: {{ qbittorrent_k8s_image }}
           imagePullPolicy: IfNotPresent
-          # No network configuration of its own: containers in a pod share one network
-          # namespace, so it inherits the wireguard sidecar's.
           ports:
             - containerPort: {{ qbittorrent_k8s_webui_port }}
               name: webui
             - containerPort: {{ qbittorrent_k8s_torrenting_port }}
               name: torrent
-          # No NET_ADMIN. Networking belongs to the sidecar; this container only needs the
-          # LSIO s6 set to chown /config and /data and drop to PUID/PGID.
 {{ hardened_security_context(add=['CHOWN', 'SETUID', 'SETGID', 'FOWNER', 'DAC_OVERRIDE']) }}
           env:
 {{ lsio_env() }}
@@ -77,16 +71,9 @@ spec:
             initialDelaySeconds: 10
             periodSeconds: 10
           livenessProbe:
-            # K8sDeploymentReplicasUnavailable already pages on this, so this probe closes
-            # a self-healing gap, not an alerting one: it restarts a wedged WebUI.
-            #
-            # Deliberately looser than the sidecar's own liveness (failureThreshold 6 / period
-            # 60s = 6 min) — ~10 min of sustained failure before a restart. The kill-switch
-            # iptables rules live in the POD network namespace, not this container, and survive a
-            # container restart. Restarting just this container can't touch
-            # that netns state, so if a wedge outlives several restarts here, the fault is
-            # netns-adjacent — the sidecar's own restart resets it (files/netns-reset.sh);
-            # tightening this probe would not.
+            # Looser than the sidecar's liveness on purpose: the kill-switch iptables live in the
+            # pod netns, which restarting this container cannot reset; a persisting wedge needs the
+            # sidecar's restart.
             httpGet:
               path: /
               port: {{ qbittorrent_k8s_webui_port }}
@@ -102,10 +89,6 @@ spec:
         - name: media
           persistentVolumeClaim:
             claimName: {{ qbittorrent_k8s_media_claim }}
-        # Both Secrets at qbittorrent_k8s_secret_mount: the WireGuard key from
-        # qbittorrent-mullvad, and the account number, which has a Secret of its own because its
-        # all-digit value cannot pass through a Flux placeholder
-        # (templates/mullvad-account-secret.yaml.j2).
         - name: qbittorrent-mullvad
           projected:
             defaultMode: 0400

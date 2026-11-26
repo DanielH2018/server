@@ -2,9 +2,6 @@
 {% from 'security-context.yml.j2' import hardened_security_context with context %}
 {% from 'workload-shell.yml.j2' import pod_shell with context %}
 ---
-# Per-node log-processing agent: tails the node's auth.log and delivers to the in-cluster
-# LAPI. Same shape as the traefik pod's sidecar agent — the repo's reference for an
-# agent-only crowdsec container — with a per-node identity.
 apiVersion: apps/v1
 kind: DaemonSet
 metadata:
@@ -22,9 +19,6 @@ spec:
     spec:
 {{ pod_shell(services | tier_priority_class('crowdsec')) }}
       initContainers:
-        # Seeds /etc/crowdsec before the entrypoint fills in defaults: the auth.log
-        # acquis plus the same whitelist parsers the other agents carry (from the
-        # crowdsec-config Secret — one source for all stacks).
         - name: config-install
           image: {{ crowdsec_k8s_image }}
           imagePullPolicy: IfNotPresent
@@ -46,15 +40,9 @@ spec:
               readOnly: true
             - name: crowdsec-etc
               mountPath: /etc/crowdsec
-          # Wait for the LAPI to answer before the agent starts. The entrypoint calls
-          # `cscli lapi register`/`authenticate watcher` immediately and exits FATAL if the LAPI
-          # is unreachable ("dial tcp ...:8080: connect: connection refused"), so there is no
-          # internal retry to rely on. An already-authenticated agent tolerates a LAPI bounce
-          # fine (the liveness probe below is `cscli lapi status` at 60s with the default
-          # failureThreshold 3); the gap is only at AGENT start, which in practice means the
-          # weekly node reboot racing the LAPI pod. During the resulting crash-backoff cycles
-          # this node's auth.log is unparsed — the SSH brute-force scenarios are the ones that
-          # go blind. Waiting turns "crash, backoff, crash" into "not started yet".
+          # Wait for the LAPI before the agent starts: the entrypoint exits FATAL when the LAPI is
+          # unreachable and has no retry, so the weekly node reboot racing the LAPI pod leaves
+          # auth.log unparsed through crash-backoff.
 {{ container_resources(cpu_limit='250m', mem_limit='128Mi', cpu_request='10m', mem_request='16Mi') }}
         - name: wait-for-lapi
           image: {{ crowdsec_k8s_image }}
@@ -62,15 +50,9 @@ spec:
           command:
             - /bin/sh
             - -c
-            # Bounded, not unbounded: 60 x 2s. If the LAPI is still down after two minutes the
-            # init container fails and the pod backs off exactly as it does today, so this can
-            # only improve on the current behaviour, never mask a genuinely dead LAPI.
-            #
-            # `nc` is busybox's, and this image is busybox-based — the config-install container
-            # above already relies on the busybox `install` applet in the same image. Same
-            # pattern as n8n's wait-for-broker (deployment-runners.yaml.j2:35). The retry also
-            # absorbs kube-router's source-pod lookup lagging pod creation, which a single
-            # connect attempt at init time would trip over.
+            # Bounded, 60 x 2s: a LAPI down for two minutes still fails the init container, so this
+            # never masks a dead LAPI.
+            # The retry also absorbs kube-router's source-pod lookup lagging pod creation.
             - >-
               i=0;
               until nc -z crowdsec {{ crowdsec_k8s_lapi_port }}; do
@@ -96,9 +78,8 @@ spec:
               valueFrom:
                 fieldRef:
                   fieldPath: spec.nodeName
-            # Per-node machine identity — two pods sharing one machine name would fight
-            # over its heartbeat. Registered by the "Register the remote agent machines"
-            # task (crowdsec_k8s_node_agent_machines must list every node).
+            # Per-node identity: two pods sharing a machine name would fight over its heartbeat;
+            # crowdsec_k8s_node_agent_machines must list every node.
             - name: AGENT_USERNAME
               value: "k8s-node-agent-$(NODE_NAME)"
             - name: AGENT_PASSWORD
@@ -108,8 +89,7 @@ spec:
                   key: AGENT_PASSWORD
             - name: COLLECTIONS
               value: "{{ crowdsec_k8s_node_agent_collections }}"
-          # Root (image default) — auth.log is 640 syslog:adm on the host.
-          # Read the host's root-owned log files; nothing here writes them.
+          # Root: auth.log is 640 syslog:adm on the host; nothing here writes it.
 {{ hardened_security_context(add=['DAC_READ_SEARCH']) }}
           ports:
             - name: metrics
@@ -126,8 +106,6 @@ spec:
             - name: crowdsec-tmp
               mountPath: /tmp
           livenessProbe:
-            # Round-trips the LAPI with the agent's own credentials — alive means
-            # "parsing and able to deliver".
             exec:
               command: ["cscli", "lapi", "status"]
             initialDelaySeconds: 30

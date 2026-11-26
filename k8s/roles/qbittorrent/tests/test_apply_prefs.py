@@ -41,8 +41,6 @@ def test_absent_key_counts_as_a_change() -> None:
 
 
 def test_extra_keys_in_current_are_ignored() -> None:
-    # The live API returns ~200 preferences; this script owns only the DESIRED keys and
-    # must not report the rest as drift.
     current = dict(apply_prefs.DESIRED) | {"web_ui_port": 8080, "dht": True}
     assert apply_prefs.diff_prefs(current, apply_prefs.DESIRED) == {}
 
@@ -72,8 +70,6 @@ def test_extra_keys_in_current_are_ignored() -> None:
 def test_excluded_file_names_skip_fakes_and_keep_real_releases(
     filename: str, excluded: bool
 ) -> None:
-    # qBittorrent matches each pattern as a case-insensitive wildcard against the file
-    # name; fnmatch on lowered strings is the same match for these `*.ext` patterns.
     # fact: k8s/roles/qbittorrent/CLAUDE.md#Throughput settings live on the PVC, not in this role
     assert apply_prefs.DESIRED["excluded_file_names_enabled"] is True
     patterns = apply_prefs.EXCLUDED_FILE_NAMES
@@ -87,37 +83,20 @@ def test_every_desired_key_is_reported_when_current_is_empty() -> None:
 
 
 def test_desired_values_are_scalars_the_api_accepts() -> None:
-    # setPreferences serialises to JSON, and qBittorrent silently ignores a key whose type
-    # it does not expect — which the read-back in main() would then report as NOT APPLIED.
-    # Catch a bad literal here instead. The one string is the "\n"-joined pattern list.
     for key, value in apply_prefs.DESIRED.items():
         expected = str if key == "excluded_file_names" else bool | int
         assert isinstance(value, expected), f"{key} is {type(value).__name__}"
 
 
 def test_hashing_threads_stays_within_the_container_cpu_limit() -> None:
-    # qbittorrent_k8s_cpu_limit is "2" in the role defaults. More hashing threads than
-    # that buys nothing and invites throttling, since the CPU REQUEST is only 100m.
     assert _int_pref("hashing_threads") <= 2
 
 
 def test_memory_working_set_fits_the_container_memory_limit() -> None:
-    # qbittorrent_k8s_mem_limit is 2048Mi. libtorrent 2.0's mmap I/O holds dirty pages up
-    # to this bound, so it has to leave headroom for the rest of the process.
-    #
-    # NB the bound is the only thing this asserts, and that is now the only thing worth
-    # asserting: the setting is inert on Linux (see the DESIRED comment), so it cannot
-    # actually exceed anything. Kept so a future edit can't raise it past the container
-    # limit on the assumption that it works.
     assert _int_pref("memory_working_set_limit") <= 1536
 
 
 def test_checking_memory_use_leaves_room_under_the_container_memory_limit() -> None:
-    # In MiB, and additive to the resident session rather than carved out of it: the recheck
-    # buffer is held on top of whatever the session already holds. Against a 2048Mi container
-    # limit — with mmap page cache already growing to fill it, since memory_working_set_limit
-    # bounds nothing here — a large value turns a routine post-restore recheck into the one
-    # operation that can push the cgroup over. 256 keeps it to an eighth of the limit.
     assert _int_pref("checking_memory_use") <= 256
 
 
@@ -181,19 +160,12 @@ def _run_dry_run(
     )
 
 
-# THE MUTATION: a cron branching on exit code must be able to tell "found drift" from "nothing
-# to do". These two tests are the pair that catches a regression to `return 0` on --dry-run —
-# flip EXIT_DRIFT back to EXIT_OK in main() and
-# test_dry_run_exits_drift_when_a_preference_has_changed fails while its sibling keeps passing.
 def test_dry_run_exits_ok_when_nothing_has_changed(monkeypatch) -> None:
     exit_code = _run_dry_run(monkeypatch, dict(apply_prefs.DESIRED))
     assert exit_code == apply_prefs.EXIT_OK
 
 
 def test_dry_run_exits_drift_when_a_preference_has_changed(monkeypatch) -> None:
-    # This also covers "--dry-run never writes": set_preferences is not on _StubClient at all,
-    # so main() raises AttributeError — not EXIT_DRIFT — if the early return stops gating the
-    # write. A separate test asserting the same exit code on the same input added no branch.
     current: dict[str, object] = {**apply_prefs.DESIRED, "connection_speed": 30}
     exit_code = _run_dry_run(monkeypatch, current)
     assert exit_code == apply_prefs.EXIT_DRIFT
@@ -205,10 +177,6 @@ def test_missing_credentials_exits_bad_args(monkeypatch) -> None:
     assert apply_prefs.main(["--dry-run"]) == apply_prefs.EXIT_BAD_ARGS
 
 
-# The connect retry (the H2 plan's *Who applies each grant*): a CronJob pod's first dials can
-# be dropped through an open fence, so the check polls without credentials for up to 60 s, and
-# then logs in exactly once, because every answered bad login counts against qBittorrent's
-# web_ui_max_auth_fail_count of 5.
 def test_connect_wait_polls_until_the_webui_answers_then_logs_in_once(
     monkeypatch,
 ) -> None:

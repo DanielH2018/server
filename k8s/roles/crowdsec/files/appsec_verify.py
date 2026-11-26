@@ -33,8 +33,6 @@ import json
 import subprocess
 import sys
 
-# The sidecar's initContainer copies the binary into the shared `tools` emptyDir
-# (`templates/deployment.yaml.j2`).
 CSCLI = "/tools/cscli"
 
 

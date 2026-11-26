@@ -17,8 +17,6 @@ spec:
   template:
     metadata:
       annotations:
-        # D7's red proof, the P leaf: a pod-template change that rolls the pod and nothing
-        # else (docs/archive/deploy/d7-superseding-promotions.md, *Verification*).
         homelab/d7-red-proof: "2026-11-02-green"
       labels:
         app: ical-proxy
@@ -29,8 +27,7 @@ spec:
       containers:
         - name: ical-proxy
           image: {{ ical_proxy_k8s_image }}
-          # Built in-cluster to a mutable :latest; explicit for the reason terraria's
-          # deployment records.
+          # Built in-cluster to a mutable :latest, so pull explicitly.
           imagePullPolicy: Always
           ports:
             - containerPort: 5000
@@ -42,12 +39,8 @@ spec:
           envFrom:
             - secretRef:
                 name: ical-proxy-env
-          # The image drops to uid-1000 appuser itself; rootfs read-only
-          # (app.py caches calendars in memory, never on disk — /tmp scratch only).
-          # The uid is pinned alongside the assertion, not left to the image: `runAsNonRoot`
-          # alone makes the kubelet REFUSE a container whose image names its user rather than
-          # numbering it, and it would not pin the uid even where it works. 1000 is this repo's
-          # own `useradd -u 1000` in Dockerfile.j2.
+          # The uid is pinned: `runAsNonRoot` alone makes the kubelet REFUSE an image that names its
+          # user.
 {{ hardened_security_context(read_only=true, non_root=true, run_as_user=1000) }}
           volumeMounts:
             - name: ical-proxy-tmp

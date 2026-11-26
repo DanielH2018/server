@@ -39,8 +39,6 @@ import apply_prefs
 TAG = "qbittorrent-prefs-check"
 CONNECT_WAIT_S = 60
 
-# apply_prefs exit -> (verdict prefix, this process's exit). The prefixes are the host
-# script's logger messages, so a search written for those lines still matches.
 _VERDICTS = {
     apply_prefs.EXIT_OK: ("ok: preferences match", 0),
     apply_prefs.EXIT_DRIFT: ("DRIFT", 0),
@@ -84,8 +82,6 @@ def run(
         try:
             with contextlib.redirect_stdout(buffer), contextlib.redirect_stderr(buffer):
                 status = check(["--dry-run", "--connect-wait", str(CONNECT_WAIT_S)])
-        # apply_prefs.QbtClient.login raises SystemExit with its message on a rejected login,
-        # and urllib lets a read timeout or a dropped response escape main() unwrapped.
         except SystemExit as exc:
             failure = f"login rejected: {exc.code}"
         except Exception as exc:

@@ -1,34 +1,9 @@
 {% from 'container-resources.yml.j2' import job_container_resources with context %}
 {% from 'security-context.yml.j2' import job_hardened_security_context with context %}
-{#
-  The nightly Longhorn restore drill. The script's header is the design, and this role's
-  CLAUDE.md has the contract.
-
-  Both runners name their restore `restore-drill-${PVC}` and `cleanup()` deletes that name on
-  every exit, so two runs at once could tear down each other's restore.
-  `kubectl create job --from=cronjob/...` takes the CronJob whether or not it is suspended,
-  which is how the hand run in this role's CLAUDE.md works.
-
-  `concurrencyPolicy: Forbid` keeps two scheduled runs off each other. The deadline and the grace
-  period come from this role's defaults, and test_longhorn_restore_drill_deadline.py holds the
-  deadline above the restore timeout plus the probe pod's bound. The script traps TERM and INT
-  and runs `cleanup` through the exit, so a Job killed at the deadline removes its Volume, PV,
-  PVC and probe pod.
-
-  The pod spec's shell fields (`enableServiceLinks`, the priority class, the token mount) are
-  written out here because `pod_shell` emits at a Deployment's depth and a CronJob pod spec sits
-  one level further in (workload-shell.yml.j2).
-
-  The container is named `longhorn-restore-drill`, so the pod log is read with
-  `probe.py loki-query '{container="longhorn-restore-drill"}'`. The pod carries no
-  `netpol-baseline` label: it opens no inbound connection and reaches the API server, and the
-  probe pod it creates is a separate pod in the claim's namespace.
-
-  `homelab/gate: schedule` tells `probe.py health` that no gate Job runs this CronJob per
-  revision, so the scheduled run is the gate. With no Job yet, the gate passes for one
-  schedule period after the revision applies and fails after it
-  (`scripts/diagnostics/probe_lib/health_cronjob.py:format_schedule_gated`).
-#}
+{# Forbid: both runners name their restore `restore-drill-${PVC}` and `cleanup()` deletes it, so two
+   runs would tear down each other's.
+   `homelab/gate: schedule` makes the scheduled run the gate; with no Job yet it passes for one
+   schedule period. #}
 ---
 apiVersion: batch/v1
 kind: CronJob

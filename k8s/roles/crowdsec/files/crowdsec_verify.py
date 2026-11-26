@@ -175,8 +175,7 @@ class Lapi:
             )
             why = "" if status == 200 else f"HTTP {status}"
         except OSError as err:
-            # A refused connect past open_url's retries, a timeout or a dropped reply. Raising
-            # it out of the `finally` would replace the verdict with a traceback.
+            # Raising out of the `finally` would replace the verdict with a traceback.
             why = f"no answer ({err!r})"
         if why:
             print(
@@ -312,8 +311,8 @@ def main(
         print(f"crowdsec-verify: {err}", file=sys.stderr)
         return 1
     except OSError as err:
-        # A transport failure on any hop: say so as a verdict rather than dying with a
-        # traceback. The `finally` in `run` has already tried the lift.
+        # Report a transport failure as a verdict, not a traceback; the `finally` in `run` has
+        # already tried the lift.
         print(
             f"crowdsec-verify: a call got no answer: {err!r}",
             file=sys.stderr,
