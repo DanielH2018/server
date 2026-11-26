@@ -44,9 +44,7 @@ runs:
         echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
         "$RUNNER_TEMP/bin/nfpm" --version
 
-    # The cases seed from the pins the build job fetched and saved under this key, so a pin is
-    # downloaded once per run. Restore-only: a case job never saves what its cases fetched
-    # under the build's key. A miss, such as a lost save race, makes the cases download instead.
+    # Restore-only: a case job never saves under the build's key; a miss makes the cases download.
     - name: Restore the build job's homelab-tools cache
       id: tools-cache
       if: inputs.tools-key != ''

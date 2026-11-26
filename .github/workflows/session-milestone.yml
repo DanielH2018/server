@@ -1,12 +1,7 @@
 name: session-milestone
 
-# Keeps a Claude session's milestone in step with its work: files the branch's PR under it when
-# the PR opens, and closes it when a PR or issue in it closes and nothing in it is left open.
-# scripts/dev/findings_lib/milestone.py documents the scheme. The PR event covers every way a PR
-# opens: `gh pr create`, a fan-out batch, and the web UI.
-#
-# Only a same-repo PR runs a job. A fork PR gets a read-only token, and this repo is public, so
-# no job uses `pull_request_target`.
+# Only a same-repo PR runs a job: a fork PR gets a read-only token and no job uses
+# `pull_request_target`.
 
 on:
   pull_request:
@@ -55,8 +50,7 @@ jobs:
       github.event.pull_request.milestone)
     runs-on: ubuntu-26.04
     timeout-minutes: 5
-    # Keyed on the milestone and never cancelled: two milestones finishing together must
-    # both close, and a cancelled close would leave one open until `reap`.
+    # Never cancelled: two milestones finishing together must both close.
     concurrency:
       group: session-milestone-close-${{ github.event.pull_request.milestone.number || github.event.issue.milestone.number }}
       cancel-in-progress: false

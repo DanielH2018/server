@@ -31,20 +31,12 @@
           image: {{ image }}
           imagePullPolicy: IfNotPresent
           restartPolicy: Always
-          # files/netns-reset.sh runs before the image's own /init on EVERY start of this
-          # container. The pod netns outlives the container, so a restart inherits the dead
-          # wg0, wg-quick's policy rules, the LAN routes and the kill-switch from the previous
-          # one, and the mod cannot bring a tunnel up behind them; a failed tunnel start also
-          # deletes the pod's default route, which the reset restores (otherwise the pod stays
-          # deadlocked until it is deleted). The reset makes a
-          # container restart equivalent to that delete, and gates {{ app }}'s uid off eth0
-          # while the tunnel is down. `exec` keeps /init as PID 1, which s6 requires.
+          # Reset before /init on every start: the pod netns outlives the container, so a restart
+          # inherits the dead wg0, rules, routes and kill-switch. `exec` keeps /init as PID 1, which
+          # s6 requires.
           command: ["/bin/sh", "-c", "/opt/netns-reset/netns-reset.sh && exec /init"]
-          # NET_ADMIN for the tunnel interface and its routing/fwmark rules; NET_RAW
-          # because the Mullvad mod's kill-switch initialises the iptables `raw` table,
-          # which fails with "unable to initialize table 'raw'" without it. Plus the LSIO
-          # s6 set to chown /config and drop privileges. NOT privileged, and no
-          # SYS_MODULE — the wireguard module is loaded on the host.
+          # NET_RAW: the kill-switch initialises the iptables `raw` table. Not privileged; no
+          # SYS_MODULE.
 {{ hardened_security_context(add=['NET_ADMIN', 'NET_RAW', 'CHOWN', 'SETUID', 'SETGID', 'FOWNER', 'DAC_OVERRIDE']) }}
           env:
 {{ lsio_env() }}
@@ -65,15 +57,9 @@
           volumeMounts:
             - name: {{ app }}-config
               mountPath: /config
-            # Persists LSIO's docker-mods cache. The script caches every downloaded mod in
-            # /modcache as `<name>.tar.xz`; on a registry failure it sets MOD_OFFLINE itself and
-            # applies the cached copy. A container-local /modcache dies with each pod and the
-            # fallback finds nothing; persisted, one successful start makes every later start
-            # survive an lscr.io outage.
-            #
-            # A subPath of the config claim rather than a PVC of its own: the tarball is a few MB
-            # against 1Gi, and a second claim would add a storage-class decision and a backup
-            # surface for a cache that any successful start can rebuild.
+            # Persists the mod cache so later starts survive an lscr.io outage by applying the
+            # cached copy.
+            # A subPath, not its own PVC: a few MB, rebuilt by any successful start.
             - name: {{ app }}-config
               mountPath: /modcache
               subPath: modcache
@@ -84,21 +70,18 @@
               mountPath: /opt/netns-reset
               readOnly: true
           startupProbe:
-            # THE GATE. Nothing else in this pod runs until this passes, so it must assert the
-            # tunnel exists — not that the process started. `wg show wg0` fails while the
-            # interface is absent, which is exactly the window {{ app }} must not run in.
+            # The gate: `wg show wg0` fails until the tunnel exists, the window the app must not run
+            # in.
             exec:
               command: ["sh", "-c", "wg show wg0 >/dev/null 2>&1"]
             periodSeconds: 5
-            # 5 min. The mod resolves api.mullvad.net and negotiates a relay on first start,
-            # and a cold pull of the mod makes that slower still.
+            # 5 min: first start resolves api.mullvad.net and negotiates a relay, slower on a cold
+            # mod pull.
             failureThreshold: 60
           livenessProbe:
-            # Both signals: if the mod fails at boot then wg0 AND the kill-switch are never
-            # installed, so a bare reach
-            # for 1.1.1.1 LEAKS out eth0 and false-passes while the tunnel is dead. Asserting
-            # wg0 first makes that state fail instead. Tolerant — only a sustained outage
-            # restarts the tunnel.
+            # Both signals: if the mod failed, a bare reach for 1.1.1.1 leaks out eth0 and
+            # false-passes.
+            # Tolerant: only a sustained outage restarts the tunnel.
             exec:
               command:
                 - sh
