@@ -12,7 +12,7 @@ packages that configure each host.
 ## Repository Structure
 - **Host bring-up**: `hosts/bootstrap-host.sh` brings a host up, and the host packages under `hosts/` carry its setup plane.
 - **Roles**: Located in `k8s/roles/`. New services are k3s workloads under `k8s/roles/`; the Pi's Docker services live in `hosts/components/pi-compose/services/`.
-- **Inventory**: Host-specific variables are in `hosts/<host>/vars.yml`. Shared variables are in `inventory/group_vars`.
+- **Inventory**: Host-specific variables are in `hosts/<host>/vars.yml`. Shared variables are in `estate/vars.yml`, `k8s/vars.yml` and `hosts/vars.yml`.
 - **Secrets**: Sensitive data is in `secrets/secrets.yml` (SOPS-encrypted).
 - **Rendered output**: the Pi's Compose project is rendered into its host package from `hosts/components/pi-compose/` — never edit it on the host.
 

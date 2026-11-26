@@ -83,7 +83,7 @@ def test_a_defined_variable_is_clean(tmp_path, ctx, known):
     tpl.parent.mkdir(parents=True)
     tpl.write_text(
         'secret: "{{ longhorn_b2_key_id }}"\n'  # SOPS registry
-        'inventory: "{{ domain }}"\n'  # group_vars/all.yml
+        'inventory: "{{ domain }}"\n'  # estate/vars.yml
         'magic: "{{ inventory_hostname }}"\n'  # Ansible-supplied
         'required: "{{ nut_monitor_password | mandatory }}"\n'  # the Ansible filter
     )

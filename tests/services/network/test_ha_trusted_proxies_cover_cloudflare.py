@@ -7,7 +7,7 @@ is not a trusted proxy. With the pod CIDR alone it took the edge, so `ip_ban` co
 Cloudflare edge and lock out every client routed through it.
 
 `files/configuration.yaml` ships verbatim through `lookup('file')`, so it cannot template
-`cloudflare_ips` or `k3s_pod_cidr` from `group_vars/all.yml` and carries both literally. This
+`cloudflare_ips` or `k3s_pod_cidr` from the shared vars files and carries both literally. This
 guard keeps the file equal to both variables. When monitor-bridge's `cloudflare_ips_drift` tile reports new published ranges
 and `all.yml` is updated, this test goes red until HA's list follows. It also checks each entry
 is a strict network, because nothing else validates the CIDRs before HA reads them and a

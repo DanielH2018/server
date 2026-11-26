@@ -440,7 +440,7 @@ transform of the key.
   bound it to a literal container, a length test in an `{% if %}`. A value alias passes none
   of the three.
 - **Role defaults and inventory name no key.** A Jinja string in
-  `k8s/roles/*/defaults/main.yml`, `inventory/group_vars/` or `hosts/<host>/vars.yml` that
+  `k8s/roles/*/defaults/main.yml`, `estate/vars.yml`, `k8s/vars.yml`, `hosts/vars.yml` or `hosts/<host>/vars.yml` that
   names a secret key, bare or through a literal `vars` lookup, is a violation, and so is a
   non-literal `vars` lookup there. A template reads a key by its own name, so no template
   sees an alias it did not bind itself

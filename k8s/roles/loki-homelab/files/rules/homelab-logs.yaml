@@ -9,7 +9,7 @@
 # rule instead. tests/services/scraping/test_loki_stream_labels.py holds every selector to the
 # labels and values Alloy emits, and holds each silence rule to its side of the Pi boundary.
 #
-# Every selector is a literal copied from `loki_streams` in group_vars/all.yml, because this
+# Every selector is a literal copied from `loki_streams` in estate/vars.yml, because this
 # file is never rendered. No annotation templates a log line's text, so no line content
 # reaches Discord or email.
 #

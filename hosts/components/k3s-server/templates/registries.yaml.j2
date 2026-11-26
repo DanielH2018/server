@@ -11,7 +11,7 @@
 #     never crosses a wire, which is why plain HTTP was acceptable single-node.
 #   - agents: the Service's pinned ClusterIP over flannel — plain HTTP that DOES cross
 #     the LAN, inside the vxlan; accepted trade-off, see k8s_registry_cluster_ip in
-#     group_vars/all.yml.
+#     k8s/vars.yml.
 mirrors:
   "{{ k8s_registry_pull_host }}":
     endpoint:

@@ -185,7 +185,7 @@ http:
   # (lookup('file')) and cannot template `cloudflare_ips`. Literal rather than a `!secret`
   # because nothing validates the CIDRs before HA reads them, and a malformed entry can
   # crash-loop HA. ENFORCED: tests/services/network/test_ha_trusted_proxies_cover_cloudflare.py
-  # fails when this list and group_vars/all.yml `cloudflare_ips` differ, or an entry is not a
+  # fails when this list and estate/vars.yml `cloudflare_ips` differ, or an entry is not a
   # strict network. When monitor-bridge's cloudflare_ips_drift tile goes red and all.yml is
   # updated, that test goes red until this list follows.
   #
@@ -196,12 +196,12 @@ http:
   # admits on 8123 (homelab-mcp, monitor-bridge) could forge XFF to dodge ip_ban or misattribute
   # a log line. It cannot bypass auth: there is no `trusted_networks` auth provider. /16 not a
   # /24: the pod CIDR grows a /24 per node.
-  # The pod CIDR is `k3s_pod_cidr` in inventory/group_vars/all.yml, written out here
+  # The pod CIDR is `k3s_pod_cidr` in k8s/vars.yml, written out here
   # because this file ships verbatim and cannot template it.
   # test_ha_trusted_proxies_cover_cloudflare.py reads the variable, so the two stay equal.
   trusted_proxies:
     - 10.42.0.0/16
-    # Cloudflare, kept equal to `cloudflare_ips` in inventory/group_vars/all.yml.
+    # Cloudflare, kept equal to `cloudflare_ips` in estate/vars.yml.
     - 173.245.48.0/20
     - 103.21.244.0/22
     - 103.22.200.0/22
