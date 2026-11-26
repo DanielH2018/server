@@ -136,6 +136,5 @@ def _out_of_bounds(draw) -> str:
 @example("*/5:00")
 @example("14/10:00")
 def test_a_calendar_bound_systemd_refuses_raises(expression):
-    # An empty step fails in `int`, before the bounds are compared.
-    with pytest.raises(ValueError, match=r"out of bounds|invalid literal"):
+    with pytest.raises(ValueError, match="out of bounds"):
         calendar_fires(expression)

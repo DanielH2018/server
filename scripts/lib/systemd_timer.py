@@ -59,7 +59,8 @@ def _field(text: str, top: int) -> list[int]:
     values = set()
     for part in text.split(","):
         body, slash, step_text = part.partition("/")
-        step = int(step_text) if slash else 1
+        # An empty step reads as 0, which the bounds below refuse.
+        step = int(step_text or 0) if slash else 1
         if body == "*":
             low, high = 0, top
             valid = not slash
