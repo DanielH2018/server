@@ -29,9 +29,9 @@ Alertmanager instead, because `ALERTS` shows no silence or inhibition: `alertman
 the one muting a gated alert, and its failure prints a note rather than changing the verdict.
 """
 
-import calendar
 import time
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Callable
 
 # `probe_lib` is a namespace package under `scripts/`, as in health.py.
@@ -400,9 +400,10 @@ def gate(tag, reference, probe_reference, has_route, tools=DEFAULT_PROM):
 def epoch(stamp):
     """An RFC3339 `...Z` timestamp as epoch seconds, or None when it does not parse."""
     try:
-        return calendar.timegm(time.strptime(stamp or "", "%Y-%m-%dT%H:%M:%SZ"))
+        when = datetime.fromisoformat(stamp or "")
     except ValueError, TypeError:
         return None
+    return int(when.timestamp()) if when.tzinfo else None
 
 
 def pods_ready_at(pods_docs):

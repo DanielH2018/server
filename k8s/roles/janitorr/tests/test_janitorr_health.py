@@ -15,6 +15,8 @@ import socket
 import subprocess
 import sys
 
+import pytest
+
 from _k8s_render import render_role_template
 from lib import yaml_fast
 
@@ -150,3 +152,11 @@ def test_the_reader_imports_from_the_pods_mounted_layout(tmp_path):
         timeout=60,
     )
     assert proc.returncode == 0, proc.stderr
+
+
+def test_uptime_seconds_refuses_a_stamp_with_no_offset():
+    with pytest.raises(ValueError, match="no UTC offset"):
+        janitorr_health.uptime_seconds("2026-10-18", 1792301426.0)
+    assert (
+        janitorr_health.uptime_seconds("2026-10-18T04:30:26Z", 1792301426.0) == 3600.0
+    )

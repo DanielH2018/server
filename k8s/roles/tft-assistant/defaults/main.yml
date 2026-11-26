@@ -1,0 +1,45 @@
+---
+# Renovate's k8s-defaults manager tracks this pin. The tag stays beside the digest
+# (`repo:tag@sha256:...`): a bare `repo@sha256:...` freezes the image with no update signal.
+# The image's repository publishes a version tag per release, not per merge.
+tft_assistant_k8s_image: ghcr.io/danielh2018/tft-assistant:0.2.1@sha256:48e230700dd2eb95bc933fef2fabc3ee4f44be9a1445bb461af48861504e3374
+
+# Renovate stance: whether an image bump here may automerge. `promote` deploys what merges.
+k8s_autodeploy: true
+k8s_autodeploy_reason: "the volume holds matches the crawl can fetch again and a page the pod rebuilds at start, so a bad release costs a stale page until the next one"
+# Every auto-deployed role with a Recreate strategy and an RWO claim snapshots it before a
+# revision. A revert here saves a re-crawl, not data.
+k8s_autodeploy_snapshot_pvcs: [tft-assistant-data]
+
+# The web container: python's http.server over one static page.
+tft_assistant_k8s_cpu_limit: "200m"
+tft_assistant_k8s_mem_limit: 96Mi
+tft_assistant_k8s_cpu_request: "10m"
+tft_assistant_k8s_mem_request: 32Mi
+
+# The crawler container. It idles on Riot's rate limit between builds. A build holds every board
+# of a selection in memory, about 800 MB for 13,600 matches, and the image analyses 20,000 at most.
+tft_assistant_k8s_crawler_cpu_limit: "1500m"
+tft_assistant_k8s_crawler_mem_limit: 2Gi
+tft_assistant_k8s_crawler_cpu_request: "100m"
+tft_assistant_k8s_crawler_mem_request: 512Mi
+
+# The node with memory to spare for a build.
+tft_assistant_k8s_node: daniel-server
+
+# The uid the containers run as, pinned rather than left to the image's named user.
+# `tests/k8s/workloads/test_container_security_context.py::test_every_asserting_container_pins_a_uid`
+# requires it. 10001 is the uid the image creates.
+tft_assistant_k8s_uid: 10001
+
+# The match store, the static-data cache and the built page. Every byte comes back from Riot's
+# API and Community Dragon, so the volume is on the class no backup job reads. A match is about
+# 4 KB stored.
+tft_assistant_k8s_claim: tft-assistant-data
+tft_assistant_k8s_storage_class: longhorn-nobackup
+tft_assistant_k8s_size: 10Gi
+
+k8s_claims:
+  - name: "{{ tft_assistant_k8s_claim }}"
+    storage_class: "{{ tft_assistant_k8s_storage_class }}"
+    size: "{{ tft_assistant_k8s_size }}"

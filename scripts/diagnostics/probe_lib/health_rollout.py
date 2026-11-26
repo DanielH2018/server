@@ -10,7 +10,7 @@ it was asked about was guessed from a deploy tag rather than resolved from rende
 Read that paragraph before rewording anything below.
 """
 
-from datetime import datetime, timezone
+from datetime import datetime
 
 # The probe takes one sample, so it reads how long ago the last restart was; wider than the 60s
 # Ansible soak since a sample can land anywhere in a crash cycle.
@@ -22,10 +22,10 @@ def seconds_since(timestamp, now):
     if not timestamp:
         return None
     try:
-        when = datetime.strptime(timestamp, "%Y-%m-%dT%H:%M:%SZ").replace(
-            tzinfo=timezone.utc
-        )
+        when = datetime.fromisoformat(timestamp)
     except ValueError, TypeError:
+        return None
+    if when.tzinfo is None:
         return None
     return (now - when).total_seconds()
 

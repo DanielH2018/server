@@ -1,0 +1,18 @@
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ container_item.name }}
+  namespace: {{ k8s_namespace }}
+spec:
+{# DECIDED: the page keeps its endpoint while the pod is unready. A crawler container that
+   restarts, on a dead API key or an out-of-memory build, makes the whole pod unready, and
+   the web container beside it still serves the last page. Without this field Traefik
+   answers 503 for a page that is there. The cost is that a web container with no page yet
+   answers 404 instead of 503. #}
+  publishNotReadyAddresses: true
+  selector:
+    app: {{ container_item.name }}
+  ports:
+    - port: {{ container_item.port }}
+      targetPort: {{ container_item.port }}

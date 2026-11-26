@@ -43,6 +43,7 @@ on:
       - "tests/_role_census.py"
       - "tests/_shell_render.py"
       - "tests/failure_report.py"
+      - "tests/hypothesis_profiles.py"
       - "tests/leakguard.py"
       - "tests/named_files.py"
       - "tests/phase_timing.py"

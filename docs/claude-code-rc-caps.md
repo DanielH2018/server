@@ -285,6 +285,32 @@ kill. The operator decides what keeps k3s in memory
 systemd-oomd each contradict a ruling above. `MemorySwapMax=0` on k3s has none, but it takes k3s's
 last outlet for reclaim, which is the trade the *No `MemoryMin`* bullet rejects.
 
+### The repeat on 2026-11-26
+
+k3s on daniel-box exited three more times on 2026-11-26, at 15:50:43, 19:46:28 and 19:50:13
+UTC. Each exit followed a lost leader lease after a 5 s lease GET timed out. The host package
+carrying the zsh OOM score had been installed since 2026-11-25 21:49, so the desktop sessions
+ran at 1000. The figures follow the 2026-11-25 pattern:
+
+| | 15:30 | 15:50 | 19:30 | 19:46 |
+|---|---|---|---|---|
+| k3s working set (GiB) | 2.27 | 0.45 | 2.28 | 0.78 |
+| k3s swap (GiB) | 1.26 | 1.86 | 0.18 | 1.82 |
+| Fleet `memory.current` (GiB), against its 20 GiB `MemoryHigh` | 14.3 | 17.9 | 11.4 | 16.5 |
+| Fleet swap (GiB), against its 2 GiB cap | 2.00 | 2.00 | 2.00 | 2.00 |
+| Host `MemAvailable` (GiB) | 4.4 | 2.1 | 6.9 | 1.9 |
+| Memory pressure, full | 0.00 | 0.19 | 0.01 | 0.10 |
+| Major faults per second | 170 | 32,400 | 310 | 36,400 |
+
+- **The fleet's swap was at its cap before each episode began.** k3s was again the plane that
+  gave up its anon.
+- **The fleet's `MemoryHigh` never acted.** Its `high` counter read 1619 at 15:30 and at 19:46.
+- **No OOM kill came near the 15:50 exit.** The kernel logged one kill between 15:00 and
+  20:30: a uid 1000 Claude Code process at `oom_score_adj` 1000, at 19:49:07.
+
+The OOM score decides which process a global OOM kills. It does not keep k3s in memory, and the
+repeat shows that a session load can take k3s down without any OOM kill.
+
 ## The fleet's CPU weight
 
 The same drop-in sets `CPUWeight=` from `claude_code_fleet_cpu_weight`. At the root cgroup,
