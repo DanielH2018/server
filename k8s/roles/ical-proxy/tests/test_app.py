@@ -190,12 +190,12 @@ def _events(feed):
     return icalendar.Calendar.from_ical(feed).walk("VEVENT")
 
 
-def test_an_override_drops_the_master_it_reschedules():
+def test_an_override_of_the_first_occurrence_keeps_the_master():
     feed = _calendar(
         _event(
             "UID:s",
             "DTSTART;TZID=America/New_York:20260201T090000",
-            "RRULE:FREQ=DAILY",
+            "RRULE:FREQ=DAILY;COUNT=3",
             "SUMMARY:x",
         ),
         _event(
@@ -204,25 +204,11 @@ def test_an_override_drops_the_master_it_reschedules():
             "DTSTART;TZID=America/New_York:20260201T110000",
             "SUMMARY:x",
         ),
-        _event("UID:other", "DTSTART:20260201T090000Z", "SUMMARY:y"),
     )
     kept = [
         (str(e["UID"]), "RECURRENCE-ID" in e) for e in _events(app.process_ics(feed))
     ]
-    assert kept == [("s", True), ("other", False)]
-
-
-def test_an_override_of_a_later_occurrence_keeps_the_master():
-    feed = _calendar(
-        _event("UID:s", "DTSTART;VALUE=DATE:20260201", "RRULE:FREQ=DAILY", "SUMMARY:x"),
-        _event(
-            "UID:s",
-            "RECURRENCE-ID;VALUE=DATE:20260203",
-            "DTSTART;VALUE=DATE:20260204",
-            "SUMMARY:x",
-        ),
-    )
-    assert len(_events(app.process_ics(feed))) == 2
+    assert kept == [("s", False), ("s", True)]
 
 
 def test_the_earlier_of_two_matching_series_ends_the_day_before_the_later_starts():

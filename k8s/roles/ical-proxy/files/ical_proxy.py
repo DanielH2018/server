@@ -1,9 +1,8 @@
 """Flask proxy that republishes ICS calendar feeds Homepage can render directly.
 
 Fetches two Google Calendar ICS feeds and one Obsidian Tasks gist feed on a background
-refresh loop, processes each (drops superseded recurrence occurrences, caps overlapping
-recurring series, and — for the Obsidian feed — hoists a clickable link, a stable UID and
-drops LOCATION per VTODO), and serves the cached, processed result at /calendar{1,2,4}.ics.
+refresh loop, processes each (caps overlapping recurring series, and — for the Obsidian feed —
+hoists a clickable link, a stable UID and drops LOCATION per VTODO), and serves the cached, processed result at /calendar{1,2,4}.ics.
 
 Usage:
 
@@ -65,28 +64,6 @@ def wire_value(component, name):
     return component[name].to_ical().decode().strip()
 
 
-def drop_superseded_masters(calendar):
-    """Removes each recurring master whose DTSTART an override of the same UID re-schedules.
-
-    Compares the wire DTSTART and RECURRENCE-ID values, without their TZID, so a feed mixing
-    all-day, floating and zoned times never compares a date with a datetime.
-    """
-    overridden = {
-        (str(e["UID"]), wire_value(e, "RECURRENCE-ID"))
-        for e in calendar.walk("VEVENT")
-        if "UID" in e and "RECURRENCE-ID" in e
-    }
-    calendar.subcomponents = [
-        c
-        for c in calendar.subcomponents
-        if not (
-            c.name == "VEVENT"
-            and "RECURRENCE-ID" not in c
-            and (str(c.get("UID")), wire_value(c, "DTSTART")) in overridden
-        )
-    ]
-
-
 def cap_overlapping_series(calendar):
     """Caps the earlier of two recurring series that share the same SUMMARY and RRULE.
 
@@ -112,9 +89,8 @@ def cap_overlapping_series(calendar):
 
 
 def process_ics(raw_ics):
-    """Drops superseded recurrence masters and caps overlapping series in one ICS feed."""
+    """Caps overlapping series in one ICS feed."""
     calendar = icalendar.Calendar.from_ical(raw_ics)
-    drop_superseded_masters(calendar)
     cap_overlapping_series(calendar)
     return calendar.to_ical().decode()
 
