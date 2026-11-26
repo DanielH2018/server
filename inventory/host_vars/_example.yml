@@ -1,31 +1,20 @@
 ---
-# Template for a new host's host_vars. Copy it to `<hostname>.yml` and edit the copy. The
-# inventory skips a `_`-prefixed file (scripts/lib/inventory_lists.py), so this one is no host.
-# docs/host-packages.md, *Adding a host*, is the walkthrough. Defaults quoted below come from
-# inventory/group_vars/all.yml; leave out anything already correct there.
-#
-# Never put a secret here: inventory/ is neither SOPS-encrypted nor hook-guarded
-# (.claude/rules/secrets.md). A host's secrets go in secrets/hosts/<hostname>.sops.yaml.
+# Template for a new host: copy to `<hostname>.yml`. Never put a secret here (not SOPS-encrypted);
+# use secrets/hosts/<hostname>.sops.yaml.
 
 # Required: no default exists, and the host's package fails to render or misbehaves without it
 
-# The host's LAN IP. Needed by every component that publishes a LAN-bound port or firewalls by
-# IP, and read cross-host as hosts[<other>].server_ip.
+# Read cross-host as hosts[<other>].server_ip.
 server_ip: 10.0.0.x
 
-# Where sshd's config actually lives on this OS image — check with
-# `sudo sshd -T | grep -i '^include'` or `ls /etc/ssh/sshd_config.d/`. Cloud-init images
-# (the Pi) drop a file under sshd_config.d/; a stock Ubuntu install uses the bare path.
-# The sshd and integrity-scans components read this path.
+# Cloud-init images (the Pi) use a drop-in under sshd_config.d/; a stock Ubuntu install uses the
+# bare path.
 ssh_config_path: /etc/ssh/sshd_config
 
-# A Docker host lists its Compose services here, which its host package deploys. A k3s node
-# deletes the key, because its services are k3s roles under k8s/roles/ (repo-root CLAUDE.md,
-# "Project Overview").
+# A k3s node deletes this key: its services are k3s roles under k8s/roles/.
 compose_services: []
 
-# Whether this host holds a checkout of THIS repo at ~/server. Default: true. The k3s-host-checks
-# component reads it to decide whether the host runs the B2-accounting crons.
+# The k3s-host-checks component reads it to decide whether the host runs the B2-accounting crons.
 has_repo_checkout: true
 
 # Hardware / capability flags: set only what this host actually has
