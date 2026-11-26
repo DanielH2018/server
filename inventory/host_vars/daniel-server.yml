@@ -1,14 +1,10 @@
 ---
 server_ip: 10.0.0.161
-# The link carrying server_ip. The k3s-agent component's netplan file pins the address on it
-# statically, so the k3s agent still starts when the gateway's DHCP server is down.
-# The gateway reserves server_ip for this NIC. wlo1 keeps its DHCP
-# route at metric 600 as the fallback. That fallback wins only because the netplan file sets
-# ignore_routes_with_linkdown on this link. The pin also holds the link's IPv6 RA route
-# at metric 100, so IPv6 prefers it over wlo1 too.
+# Static pin keeps the agent starting with DHCP down; the gateway reserves server_ip for this NIC.
+# wlo1's metric-600 route is the fallback and wins only via ignore_routes_with_linkdown on this
+# link.
 k3s_node_static_link: enp88s0
-# The Intel AX201. The installer's 00-installer-config-wifi.yaml joined it first; the k3s-agent
-# component's wifi fallback netplan file merges on top and pins the metric-600 route.
+# The installer's wifi file joins it first; the k3s-agent fallback netplan merges on top.
 k3s_node_wifi_link: wlo1
 ssh_config_path: /etc/ssh/sshd_config
 # Intel XE iGPU present — enables /dev/dri passthrough for jellyfin/tdarr hardware transcode.
@@ -21,12 +17,9 @@ has_igpu: true
 # `intel-microcode` apt package, not fwupd. Set this true once LVFS lists the board or the drive.
 has_fwupd: false
 
-# Claude Code session host for issue-fanout agents. The Remote Control unit
-# stays on daniel-box; agents here stop at `gh pr create` and a daniel-box session lands the
-# PR, because the k8s play, the connection=local pin and the per-host lock keep deploys there.
+# Fan-out agents here stop at `gh pr create`; a daniel-box session lands the PR (deploys stay
+# there).
 claude_code_rc_enabled: false
-# daniel-box's agent logs in here as `claude` with the key claude-agent-home generates there.
-# False removes the key and the ssh-users membership.
 claude_agent_ssh_login_enabled: true
 
 # DECIDED: 24G fleet cap. It was meant to hold a floor of 8 GiB of MemAvailable, and it holds
@@ -43,20 +36,15 @@ claude_agent_ssh_login_enabled: true
 # With the RC unit disabled, user-1000.slice is the only plane here, so the 23G login cap is
 # the effective per-plane bound and the fleet cap only matters once a second plane appears.
 claude_code_fleet_memory_high: 24G
-# The homelab plane's MemoryLow, derived as hosts/components/k3s-server/defaults/main.yml states
-# at k3s_kubepods_memory_low. Measured on daniel-server on 2026-11-22:
-#   kubepods.slice: cAdvisor's 14-day rss peak 7.3 GiB + kernel 0.4 = 7.7 -> 8G.
-#   k3s-agent.service: cAdvisor's 14-day rss peak 0.76 GiB -> 1G.
-#   system.slice: k3s-agent's 1G + the other units' steady anon + kernel 0.25 GiB -> 1536M.
+# Derived per k3s_kubepods_memory_low in hosts/components/k3s-server/defaults/main.yml (14-day rss
+# peaks).
 k3s_kubepods_memory_low: 8G
 k3s_memory_low: 1G
 k3s_system_slice_memory_low: 1536M
-# 2G is under a third of this host's 7 GiB swap (`free -g`) — the same shape as daniel-box's
-# "a quarter of its 8 GiB" reasoning beside claude_code_fleet_swap_max in defaults/main.yml.
+# Under a third of this host's 7 GiB swap.
 claude_code_fleet_swap_max: 2G
 claude_code_rc_memory_high: 23G
 claude_code_rc_memory_swap_max: 2G
-# 8 cores against daniel-box's 16. The bound that matters is workers x concurrent runs, not
-# workers (defaults/main.yml): 4 x 6 fan-out agents is 24 workers, ~2.4 GB against the 23G
-# login cap. CPU is not what failed, so the count is not scaled down with the cores.
+# The bound is workers x concurrent runs: 4 x 6 fan-out agents is 24 workers, ~2.4 GB against the
+# 23G cap.
 claude_code_rc_pytest_workers: 4
