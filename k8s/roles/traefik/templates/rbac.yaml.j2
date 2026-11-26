@@ -52,8 +52,8 @@ metadata:
   labels:
     kustomize.toolkit.fluxcd.io/prune: disabled
 rules:
-  # The ONLY genuinely cluster-scoped read: clusterScopeFactory's Nodes informer, used to
-  # resolve node addresses for NodePort/ExternalName resolution.
+  # The only genuinely cluster-scoped read: the Nodes informer, for NodePort/ExternalName
+  # resolution.
   - apiGroups:
       - ""
     resources:
@@ -62,10 +62,7 @@ rules:
       - get
       - list
       - watch
-  # IngressClasses are cluster-scoped objects. The kubernetesIngress provider is NOT enabled
-  # here (kubernetesCRD only), so nothing reads them; kept so that enabling that provider
-  # later does not fail on a missing cluster-scoped grant, which would be hard to diagnose
-  # given the fail-green mode described above.
+  # Unused while kubernetesIngress is off; kept so enabling it does not fail on a missing grant.
   - apiGroups:
       - extensions
       - networking.k8s.io
@@ -87,8 +84,7 @@ kind: Role
 metadata:
   name: traefik-ingress-controller
   namespace: {{ ns }}
-  # Exempt from prune like the ClusterRole above: traefik's tag prunes, and a pruned Role drops
-  # the Secrets grant, the fail-green outage in the header.
+  # Exempt from prune like the ClusterRole: a pruned Role drops the Secrets grant, failing green.
   labels:
     kustomize.toolkit.fluxcd.io/prune: disabled
 rules:

@@ -10,10 +10,7 @@ data:
       dashboard: true
       insecure: false
       debug: false
-    # entryPoint is explicit, not inherited. It defaults to the internal `traefik` entrypoint, so
-    # merely declaring an entrypoint NAMED ping does not bind the handler to it, and both probes
-    # below would poll a port serving nothing. A k8s httpGet probe names the port, so the
-    # binding has to be real.
+    # Explicit: the default is the internal `traefik` entrypoint, so the probes would poll nothing.
     ping:
       entryPoint: ping
 
@@ -45,10 +42,8 @@ data:
         http:
           redirections:
             entryPoint:
-              # NOT `to: https` (the entrypoint name): that emits the entrypoint's LISTEN
-              # port — the container-side 8443 — into the Location header, which the
-              # Service never exposes, so every http→https redirect died on arrival.
-              # ":443" pins the redirect to the port clients actually reach.
+              # Not `to: https`: it emits the container-side 8443 in Location, which the Service
+              # never exposes.
               to: ":443"
               scheme: https
 {% if traefik_k8s_manage_crowdsec %}
@@ -88,13 +83,10 @@ data:
 {% for ip in cloudflare_ips %}
             - "{{ ip }}"
 {% endfor %}
-            # Same list as the http entrypoint above; its DECIDED comment covers why
-            # `lan_subnet` is absent.
             - "127.0.0.1/32"
         http:
           middlewares:
-            # rate-limit stays per-router (the ingressroute() macro attaches it) so a service can
-            # opt into a higher ceiling, which an entrypoint-level limiter cannot express.
+            # rate-limit stays per-router so a service can opt into a higher ceiling.
 {% if traefik_k8s_manage_crowdsec %}
             # cloudflare-realip FIRST, ahead of crowdsec and of every router's forwardAuth.
             # Cloudflare appends the client address to any XFF the client sent, so the
@@ -109,11 +101,9 @@ data:
             - {{ k8s_namespace }}-crowdsec@kubernetescrd
 {% endif %}
             - {{ k8s_namespace }}-default-headers@kubernetescrd
-            # compress LAST, and the order is load-bearing. An entrypoint chain wraps in list order
-            # on the way in, so the last entry is the INNERMOST: it compresses the backend's
-            # response first, and the entries above add their headers on top of an already-encoded
-            # body. Listed first it would sit outside crowdsec and compress for requests about to
-            # be rejected with a 403.
+            # Last on purpose: the last entry is innermost, so it compresses before the others add
+            # headers.
+            # Listed first it would compress responses for requests crowdsec rejects with a 403.
             - {{ k8s_namespace }}-compress@kubernetescrd
       ping:
         address: ":{{ traefik_k8s_ping_port }}"
@@ -124,11 +114,8 @@ data:
         addRoutersLabels: true
         addServicesLabels: true
 
-    # A real file, not stdout: the crowdsec agent sidecar tails it from the shared emptyDir. The
-    # json format with StartUTC dropped is the shape the crowdsecurity/traefik parser reads. The
-    # access-log-rotate sidecar (deployment.yaml.j2) tails the same file to stdout for Loki and
-    # copytruncates it to keep the emptyDir bounded; its comment says why copytruncate is safe
-    # for both readers.
+    # A file, not stdout: the crowdsec sidecar tails it; json without StartUTC is the parser's
+    # format.
     accessLog:
       filePath: /var/log/traefik/access.log
       format: json
@@ -143,12 +130,8 @@ data:
         bouncer:
           moduleName: github.com/maxlerebourg/crowdsec-bouncer-traefik-plugin
           version: {{ traefik_k8s_bouncer_plugin_version }}
-      # A LOCAL plugin: Traefik reads the source from ./plugins-local/src/<moduleName>/ (the
-      # working directory is /) and downloads nothing, so it adds no startup network
-      # dependency beside the bouncer's. The Deployment projects it there from the
-      # traefik-cloudflare-realip ConfigMap. The key must match the one under `plugin:` in
-      # the Middleware, and moduleName must match the manifest's `import` prefix; a mismatch
-      # disables every plugin, the bouncer included.
+      # A local plugin: nothing is downloaded. The key must match the Middleware's `plugin:` key and
+      # moduleName the manifest's `import` prefix; a mismatch disables every plugin.
       localPlugins:
         {{ traefik_k8s_realip_plugin_name }}:
           moduleName: {{ traefik_k8s_realip_plugin_module }}
@@ -159,22 +142,17 @@ data:
 
     providers:
 {% if traefik_k8s_manage_livesync_gate %}
-      # LiveSync's token gate (livesync-gate-secret.yaml.j2) — a Secret-mounted dynamic
-      # config, because the token must stay out of CRDs the readonly kubeconfig can read.
-      # watch:true makes token rotation a Secret update + kubelet propagation, no restart.
+      # Secret-mounted dynamic config, so the token stays out of CRDs the readonly kubeconfig reads;
+      # watch:true makes rotation a Secret update with no restart.
       file:
-        # filename, NOT directory: a Secret volume projects through `..data` symlink dirs
-        # and a directory watch parses the same file twice ("HTTP router already
-        # configured, skipping").
+        # filename, not directory: `..data` symlinks make a directory watch parse the file twice.
         filename: /etc/traefik-file/livesync-gate.yml
         watch: true
 {% endif %}
       kubernetesCRD:
-        # One list, `traefik_k8s_watched_namespaces` (role defaults), shared with the Roles
-        # rbac.yaml.j2 renders. A namespace absent here is not merely unrouted — Traefik
-        # never sees its IngressRoutes at all, so a route applies cleanly, reports nothing
-        # wrong, and the host simply 404s. Adding one is additive: existing routes are
-        # unaffected. `allowCrossNamespace` stays OFF; see the variable's comment.
+        # One list shared with rbac.yaml.j2. A namespace missing here fails silently: its routes
+        # 404.
+        # `allowCrossNamespace` stays OFF.
         namespaces:
 {% for ns in traefik_k8s_watched_namespaces %}
           - {{ ns }}

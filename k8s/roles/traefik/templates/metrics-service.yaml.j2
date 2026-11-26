@@ -1,11 +1,6 @@
 ---
-# ClusterIP door to Traefik's auto-created internal `traefik` entrypoint (:8080), where
-# metrics.prometheus serves (no metrics entryPoint is configured, so Traefik creates the
-# default one). A SEPARATE Service on purpose: adding 8080 to the main LoadBalancer Service
-# would publish the metrics (and the api@internal dashboard surface) on the LAN VIP. Scraped by
-# the cluster prometheus's `traefik-k8s` job. The Service port is the `traefik-k8s` metrics
-# item on traefik's containers_list entry; targetPort is Traefik's own default for that
-# entrypoint, which no setting here changes.
+# Separate on purpose: 8080 on the LoadBalancer would expose metrics and api@internal on the VIP.
+# targetPort is the default of Traefik's auto-created `traefik` entrypoint (:8080).
 apiVersion: v1
 kind: Service
 metadata:

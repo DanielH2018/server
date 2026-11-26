@@ -39,8 +39,6 @@
 #}
 {% from 'digest-job.yml.j2' import digest_job with context %}
 {% set script = 'traefik_bouncer_key_precheck.py' %}
-{#- The key's ciphertext digest, read from the cluster file's source; no value enters the
-    spec. -#}
 {% set key = namespace(digest='') %}
 {% for line in lookup('file', cluster_vars_source()).splitlines() if line and not line.startswith('#') and line.split()[0] == 'crowdsec_k8s_bouncer_api_key' %}
 {% set key.digest = line.split()[1] %}
