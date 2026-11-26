@@ -1,4 +1,4 @@
-"""Unit tests for the ical-proxy Obsidian transform in ical_proxy.py.
+"""Unit tests for the ical-proxy feed transforms in ical_proxy.py.
 
 Run: uv run pytest k8s/roles/ical-proxy/tests
 (or `uv run pytest` for the whole repo suite).
@@ -9,7 +9,10 @@ them as plain, non-clickable text. process_obsidian_ics hoists that link into a
 real URL property (which Homepage turns into an <a href>) and cleans up the row.
 """
 
-import re
+import hashlib
+from datetime import UTC, datetime
+
+import icalendar
 
 import ical_proxy as app
 
@@ -41,36 +44,43 @@ def _calendar(*todos):
     return CRLF.join(["BEGIN:VCALENDAR", "VERSION:2.0", *todos, "END:VCALENDAR"]) + CRLF
 
 
+def _todos(feed):
+    return icalendar.Calendar.from_ical(feed).walk("VTODO")
+
+
+def _only_todo(feed):
+    (todo,) = _todos(feed)
+    return todo
+
+
 def _extract_uid(feed):
-    m = re.search(r"^UID:(.+)$", feed, re.MULTILINE)
-    assert m is not None
-    return m.group(1).strip()
+    return str(_only_todo(feed)["UID"])
 
 
 def test_adds_url_property_from_description():
     out = app.process_obsidian_ics(
         _calendar(_todo("🔲 Shave", OBS, location=f'ALTREP="{OBS}":{OBS}'))
     )
-    assert f"URL:{OBS_ENCODED}{CRLF}END:VTODO" in out
+    assert str(_only_todo(out)["URL"]) == OBS_ENCODED
 
 
 def test_ampersand_inside_file_is_percent_encoded():
-    out = app.process_obsidian_ics(_calendar(_todo("t", OBS)))
-    assert "%26" in out
+    url = str(_only_todo(app.process_obsidian_ics(_calendar(_todo("t", OBS))))["URL"])
+    assert "%26" in url
     # the legitimate vault/file query separator stays a bare '&'
-    assert "vault=My_Vault&file=" in out
+    assert "vault=My_Vault&file=" in url
 
 
 def test_removes_location_line():
     out = app.process_obsidian_ics(
         _calendar(_todo("t", OBS, location=f'ALTREP="{OBS}":{OBS}'))
     )
-    assert "LOCATION:" not in out
+    assert "LOCATION" not in _only_todo(out)
 
 
 def test_preserves_summary_including_status_and_priority_emoji():
     out = app.process_obsidian_ics(_calendar(_todo("🔲 Pay Mortgage ⬆️", OBS)))
-    assert "SUMMARY:🔲 Pay Mortgage ⬆️" in out
+    assert str(_only_todo(out)["SUMMARY"]) == "🔲 Pay Mortgage ⬆️"
 
 
 def test_single_end_vcalendar():
@@ -90,12 +100,12 @@ def test_does_not_add_second_url_when_one_exists():
         ]
     )
     out = app.process_obsidian_ics(_calendar(todo))
-    assert out.count(f"{CRLF}URL:") == 1
+    assert str(_only_todo(out)["URL"]) == OBS_ENCODED
 
 
 def test_todo_without_obsidian_link_is_untouched():
     out = app.process_obsidian_ics(_calendar(_todo("plain", "no link here")))
-    assert "URL:" not in out
+    assert "URL" not in _only_todo(out)
 
 
 def test_uid_is_stable_across_regenerations_with_different_source_uids():
@@ -119,13 +129,13 @@ def test_strips_time_of_day_tag_from_summary():
     out = app.process_obsidian_ics(
         _calendar(_todo("🔲 Clean PC & Screens #tod/afternoon ⬆️", OBS))
     )
-    assert "SUMMARY:🔲 Clean PC & Screens ⬆️" in out
+    assert str(_only_todo(out)["SUMMARY"]) == "🔲 Clean PC & Screens ⬆️"
     assert "#tod/" not in out
 
 
 def test_strips_trailing_time_of_day_tag_without_leaving_whitespace():
     out = app.process_obsidian_ics(_calendar(_todo("🔲 Shave #tod/evening", OBS)))
-    assert f"SUMMARY:🔲 Shave{CRLF}" in out
+    assert str(_only_todo(out)["SUMMARY"]) == "🔲 Shave"
 
 
 def test_uid_is_stable_when_time_of_day_tag_changes():
@@ -142,7 +152,7 @@ def test_uid_is_stable_when_time_of_day_tag_changes():
 
 def test_leaves_unrelated_tags_alone():
     out = app.process_obsidian_ics(_calendar(_todo("🔲 Buy onions #produce", OBS)))
-    assert "#produce" in out
+    assert str(_only_todo(out)["SUMMARY"]) == "🔲 Buy onions #produce"
 
 
 def test_obsidian_deep_link_encodes_only_file_ampersands():
@@ -151,3 +161,102 @@ def test_obsidian_deep_link_encodes_only_file_ampersands():
     assert (
         app.obsidian_deep_link("obsidian://open?vault=V") == "obsidian://open?vault=V"
     )
+
+
+def test_uid_hashes_the_escaped_summary_and_note():
+    # A UID that moves when the feed is re-parsed duplicates every task on Homepage's next soft reload.
+    out = app.process_obsidian_ics(_calendar(_todo("🔲 Pay rent\\, utilities", OBS)))
+    expected = hashlib.sha1(f"{OBS}::🔲 Pay rent\\, utilities".encode()).hexdigest()
+    assert _extract_uid(out) == expected
+
+
+def _event(*lines):
+    return CRLF.join(["BEGIN:VEVENT", *lines, "END:VEVENT"])
+
+
+def _events(feed):
+    return icalendar.Calendar.from_ical(feed).walk("VEVENT")
+
+
+def test_an_override_drops_the_master_it_reschedules():
+    feed = _calendar(
+        _event(
+            "UID:s",
+            "DTSTART;TZID=America/New_York:20260201T090000",
+            "RRULE:FREQ=DAILY",
+            "SUMMARY:x",
+        ),
+        _event(
+            "UID:s",
+            "RECURRENCE-ID;TZID=America/New_York:20260201T090000",
+            "DTSTART;TZID=America/New_York:20260201T110000",
+            "SUMMARY:x",
+        ),
+        _event("UID:other", "DTSTART:20260201T090000Z", "SUMMARY:y"),
+    )
+    kept = [
+        (str(e["UID"]), "RECURRENCE-ID" in e) for e in _events(app.process_ics(feed))
+    ]
+    assert kept == [("s", True), ("other", False)]
+
+
+def test_an_override_of_a_later_occurrence_keeps_the_master():
+    feed = _calendar(
+        _event("UID:s", "DTSTART;VALUE=DATE:20260201", "RRULE:FREQ=DAILY", "SUMMARY:x"),
+        _event(
+            "UID:s",
+            "RECURRENCE-ID;VALUE=DATE:20260203",
+            "DTSTART;VALUE=DATE:20260204",
+            "SUMMARY:x",
+        ),
+    )
+    assert len(_events(app.process_ics(feed))) == 2
+
+
+def test_the_earlier_of_two_matching_series_ends_the_day_before_the_later_starts():
+    feed = _calendar(
+        _event(
+            "UID:new",
+            "DTSTART;VALUE=DATE:20260301",
+            "RRULE:FREQ=WEEKLY;BYDAY=TU",
+            "SUMMARY:Gym",
+        ),
+        _event(
+            "UID:old",
+            "DTSTART;VALUE=DATE:20250101",
+            "RRULE:FREQ=WEEKLY;BYDAY=TU",
+            "SUMMARY:Gym",
+        ),
+    )
+    rules = {str(e["UID"]): e["RRULE"] for e in _events(app.process_ics(feed))}
+    assert rules["old"]["UNTIL"] == [datetime(2026, 2, 28, 23, 59, 59, tzinfo=UTC)]
+    assert "UNTIL" not in rules["new"]
+
+
+def test_a_folded_rrule_keeps_every_part_when_capped():
+    folded = ("RRULE:FREQ=WEEKLY;BYDAY=TU,TH;INTER", " VAL=2;WKST=SU")
+    feed = _calendar(
+        _event("UID:old", "DTSTART;VALUE=DATE:20250101", *folded, "SUMMARY:Gym"),
+        _event("UID:new", "DTSTART;VALUE=DATE:20260301", *folded, "SUMMARY:Gym"),
+    )
+    rules = {str(e["UID"]): e["RRULE"] for e in _events(app.process_ics(feed))}
+    assert rules["old"]["INTERVAL"] == [2]
+    assert rules["old"]["UNTIL"] == [datetime(2026, 2, 28, 23, 59, 59, tzinfo=UTC)]
+
+
+def test_series_with_different_rules_are_not_capped():
+    feed = _calendar(
+        _event(
+            "UID:a",
+            "DTSTART;VALUE=DATE:20250101",
+            "RRULE:FREQ=WEEKLY;BYDAY=TU",
+            "SUMMARY:Gym",
+        ),
+        _event(
+            "UID:b",
+            "DTSTART;VALUE=DATE:20260301",
+            "RRULE:FREQ=WEEKLY;BYDAY=TH",
+            "SUMMARY:Gym",
+        ),
+    )
+    assert all("UNTIL" not in e["RRULE"] for e in _events(app.process_ics(feed)))
