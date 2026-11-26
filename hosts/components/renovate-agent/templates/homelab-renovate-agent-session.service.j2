@@ -13,14 +13,11 @@ After=squid.service
 [Service]
 Type=oneshot
 User={{ pins.user }}
-# Group-readable for the controller, which reads the requests and output this unit writes
-# into the exchange directory through the session's group.
+# Group-readable: the controller reads this unit's output through the session's group.
 UMask=0027
-# The controller's clone at origin/master, read-only to the session: the repo's hooks run from it,
-# so a session that could write it could change its own guard.
+# Read-only to the session: the repo's hooks run from it, so a writable clone could change its own
+# guard.
 WorkingDirectory={{ pins.clone_dir }}
-# The session's wall clock. systemd stops the whole unit at it, and the runner reads
-# Result=timeout and still posts a digest naming it.
 TimeoutStartSec={{ pins.session_timeout_s }}
 # systemd's PATH omits /usr/local/bin, and the session needs kubectl there.
 Environment=PATH={{ pins.tools_dir }}/.local/bin:/usr/local/bin:/usr/bin:/bin
@@ -32,9 +29,8 @@ Environment=PYTHONDONTWRITEBYTECODE=1
 Environment=GIT_CONFIG_COUNT=1
 Environment=GIT_CONFIG_KEY_0=safe.directory
 Environment=GIT_CONFIG_VALUE_0={{ pins.clone_dir }}
-# The repo's hook shim resolves the clone and uv from these. A guard that cannot start turns each
-# Bash call into an `ask`, and nobody answers one here. The setup syncs the clone's venv before
-# each run, so a hook never tries to write it.
+# A guard that cannot start turns each Bash call into an `ask` nobody answers; setup syncs the venv
+# first.
 Environment=RUN_HOOK_PROJECT_DIR={{ pins.clone_dir }}
 Environment=RUN_HOOK_UV={{ pins.tools_dir }}/.local/bin/uv
 Environment=UV_NO_SYNC=1
@@ -45,8 +41,6 @@ Environment=CLAUDE_GUARD_HOME={{ pins.tools_dir }}/.local/share/claude-guard
 Environment=CLAUDE_WORKTREE_HOME={{ pins.tools_dir }}/.local/share/claude-worktree
 # The controller owns the binary; the session cannot update it.
 Environment=DISABLE_AUTOUPDATER=1
-# No error reports or telemetry to Claude Code's third-party intakes, which the egress allowlist
-# leaves out.
 Environment=CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1
 # gh's telemetry goes to cafe.github.com, which the egress allowlist leaves out too.
 Environment=GH_TELEMETRY=false
@@ -54,25 +48,22 @@ Environment=GH_TELEMETRY=false
 Environment=CLAUDE_CODE_DISABLE_AUTO_MEMORY=1
 EnvironmentFile=/etc/renovate-agent/session.env
 {% if t2_egress_proxy is defined %}
-# The T2 egress proxy (hosts/components/t2-egress). curl reads only the lowercase names, and Go
-# tools both. Loopback stays direct.
+# curl reads only the lowercase names, Go tools both.
 Environment=HTTPS_PROXY=http://{{ t2_egress_proxy }} https_proxy=http://{{ t2_egress_proxy }}
 Environment=HTTP_PROXY=http://{{ t2_egress_proxy }} http_proxy=http://{{ t2_egress_proxy }}
 Environment=NO_PROXY=localhost,127.0.0.1,::1 no_proxy=localhost,127.0.0.1,::1
 # probe.py's in-cluster reads go to squid as plain HTTP, the only form squid admits for them.
 Environment=HOMELAB_PROBE_VIA_PROXY=1
 {% endif %}
-# Only this script's own lines reach the journal: it captures the session's output and writes
-# it to a file the runner reads, so session text never becomes a syslog line.
+# Only this script's lines reach the journal: session output goes to a file, never a syslog line.
 SyslogLevel=notice
 # SIGINT ends the session's turn and leaves the script alive to copy the transcript out.
 KillSignal=SIGINT
 NoNewPrivileges=yes
 ProtectHome=yes
 ProtectProc=invisible
-# Nothing the session writes reaches a later run: every other path is
-# read-only, and each writable one but the exchange's requests/ and out/ is a tmpfs that ends
-# with the unit. The runner keeps the transcript out of out/ and then deletes both.
+# Every writable path but the exchange's requests/ and out/ is a tmpfs that ends with the unit;
+# the runner keeps the transcript out of out/ and deletes both.
 ProtectSystem=strict
 TemporaryFileSystem={{ renovate_agent_home }}:mode=0700,uid={{ pins.session_uid }},gid={{ pins.session_uid }},size={{ pins.home_size }}
 TemporaryFileSystem=/tmp:mode=1777,size={{ pins.tmp_size }}

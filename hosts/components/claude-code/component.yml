@@ -152,6 +152,8 @@ files:
   - {src: templates/fleet-user-manager-oom.conf.j2, dst: /usr/lib/systemd/system/user@1000.service.d/homelab-claude-fleet-oom.conf}
   # Every user manager on the host reads it.
   - {src: templates/pytest-fanout-cap.conf.j2, dst: /usr/lib/environment.d/90-homelab-claude-pytest-cap.conf}
+  # The ssh sessions' copy of the same cap, which environment.d does not reach.
+  - {src: templates/sshd-pytest-cap.conf.j2, dst: /etc/ssh/sshd_config.d/20-homelab-claude-pytest-cap.conf, activate: "reload:ssh.service"}
   - {src: units/claude-stop-alert@.service, dst: /usr/lib/systemd/system/claude-stop-alert@.service}
   - {src: templates/50-claude-stop-alert.rules.j2, dst: /usr/share/polkit-1/rules.d/50-claude-stop-alert.rules}
   - {src: units/fanout-alert@.service, dst: /usr/lib/systemd/system/fanout-alert@.service}

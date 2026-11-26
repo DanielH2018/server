@@ -124,8 +124,8 @@ env:
   # of tests/repo/census_rows/test_census_rows_workflows.py fails a workflow without them.
   UV_NO_DEV: "1"
   UV_NO_GROUP: lint
-  # The flux CLI this workflow's flux steps fetch, equal to flux_version in k8s/roles/flux and to
-  # the amd64 flux pin in hosts/packages/homelab-tools/package.yml. Env, so the cache key reads it.
+  # Equal to flux_version in k8s/roles/flux and the amd64 pin in homelab-tools/package.yml; env so
+  # the cache key reads it.
   # renovate: datasource=github-release-attachments depName=fluxcd/flux2
   FLUX_VERSION: v2.9.6
   FLUX_SHA256: b4d22673e9246cbd628881f1a9ef3b090085dced291e42d804555cee8e8d42c5
@@ -154,11 +154,8 @@ env:
     }
     ghcr_login_once() { printf '%s' "$GITHUB_TOKEN" | docker login ghcr.io -u "$GH_ACTOR" --password-stdin; }
     ghcr_login() { retry ghcr_login_once; }
-  # The registry reads of the jobs that check out nothing. `ghcr_pull_token` prints the job
-  # token's pull token for the bundle package, or fails. `live_tag <tag>` HEADs that tag and
-  # prints its digest, prints nothing when GHCR answers 404, and fails on any other answer,
-  # naming it on stderr; each caller decides what a 404 means. curl reads each credential from
-  # stdin, so none reaches its argv. A step loads it with `eval "$REGISTRY_FUNCTIONS"`.
+  # `live_tag <tag>` prints nothing on 404 and fails on any other answer; each caller decides what a
+  # 404 means. curl reads each credential from stdin so none reaches its argv.
   REGISTRY_FUNCTIONS: |
     ghcr_pull_token() {
       local token
@@ -183,19 +180,8 @@ env:
         *) echo "HEAD $1 answered HTTP $status" >&2; return 1 ;;
       esac
     }
-  # `dispatch_newer_green <commit>`, which `settle` and `reconcile` run after they settle
-  # <commit>, so a green commit newer than it does not wait for the next merge.
-  # It dispatches one more run when CI's newest green push run on master is for a commit newer
-  # than <commit>. The list is newest first, so "newer" means <commit>'s own run sits further
-  # down it. With <commit> outside the list it cannot tell, and dispatches nothing. The bound: a
-  # dispatched run that promotes that commit finds it equal to its own commit here, and one that
-  # decides anything else never reaches `settle` or a `last-good` move in `reconcile`.
-  #
-  # GitHub starts no run for an event GITHUB_TOKEN causes, except workflow_dispatch, so the
-  # caller sets GH_TOKEN to the job token, which `actions: write` reaches, and PROMOTE_TOKEN
-  # gains no scope. `gh` prefers GH_TOKEN to GITHUB_TOKEN. The `sha` input sends the run through
-  # render's ancestry and CI re-check, which a bare dispatch of master's tip would skip. A step
-  # loads it after RETRY_FUNCTIONS.
+  # Dispatches one more run when CI's newest green push run on master is newer than <commit>;
+  # with <commit> outside the list it dispatches nothing.
   DISPATCH_FUNCTIONS: |
     dispatch_newer_green() {
       local commit=$1 green newest
@@ -213,23 +199,22 @@ env:
         echo "$commit is master's newest green commit, so no run follows"
         return 0
       fi
-      # A here-string, not a pipe: `grep -q` exiting early would SIGPIPE a writer, and
-      # pipefail would read the match as a miss.
+      # A here-string, not a pipe: `grep -q` exiting early would SIGPIPE a writer and pipefail would
+      # read the match as a miss.
       if ! grep -qx "$commit" <<< "$green"; then
         annotate warning "$commit has no green CI run among master's newest 100, so this run cannot tell whether $newest is newer, and dispatches nothing"
         return 0
       fi
-      # A retry after a 5xx that did create the dispatch starts a second run for the same
-      # commit, which finds `prod` already moved and moves nothing.
+      # A retry after a 5xx that did create the dispatch starts a second run for the same commit,
+      # which finds `prod` already moved.
       retry gh workflow run promote.yml -R "$GITHUB_REPOSITORY" --ref master -f sha="$newest" || return 1
       echo "dispatched promote for $newest, master's newest green commit, which is newer than $commit"
     }
 
 jobs:
   render:
-    # The same guard opens every job: a successful push run of CI on master in this repository,
-    # or a dispatch of master's copy of this file. A branch's copy never runs with these tokens.
-    # A reset dispatch and the scheduled run skip it, and so every job that needs it.
+    # The same guard opens every job: a successful push run of CI on master, or a dispatch of
+    # master's copy of this file, so a branch's copy never runs with these tokens.
     if: >-
       (github.event_name != 'workflow_dispatch' && github.run_attempt == '1' || contains(fromJSON('["DanielH2018", "github-actions[bot]"]'), github.triggering_actor)) &&
       !inputs.reset_to_last_good &&
@@ -251,16 +236,15 @@ jobs:
       # The gitleaks release assets' common URL prefix, in job env so the cache key can read it.
       GITLEAKS_URL: https://github.com/gitleaks/gitleaks/releases/download/v8.30.1/gitleaks_8.30.1_
     steps:
-      # The triggering commit's tree is the bundle. A dispatch has no workflow_run event, so it
-      # renders the `sha` input, or master's tip when the input is empty.
+      # A dispatch has no workflow_run event, so it renders the `sha` input, or master's tip when
+      # empty.
       - uses: actions/checkout@v7.0.1
         with:
           ref: ${{ inputs.sha || github.event.workflow_run.head_sha || github.sha }}
           fetch-depth: 0  # the ancestry check reads origin/master's history
           persist-credentials: false
 
-      # WANTED is the commit the checkout was asked for, so a dispatched `sha` is the commit
-      # this step checks, never the workflow's own `github.sha`.
+      # WANTED is the commit the checkout was asked for, never the workflow's own `github.sha`.
       - name: Refuse a commit that is not on master
         id: ancestry
         env:
@@ -288,8 +272,7 @@ jobs:
       # Python and uv for the renderer and promote.py.
       - uses: $/.github/actions/setup
 
-      # A workflow_run carries CI's own success. A dispatched `sha` carries none, so its CI is
-      # read again, as `decide` reads it, and anything but green stops the run here.
+      # A dispatched `sha` carries no CI success, so its CI is read again as `decide` reads it.
       - name: Refuse a dispatched commit whose CI is not green
         id: ci-recheck
         if: ${{ inputs.sha != '' }}
@@ -328,10 +311,8 @@ jobs:
             uv run python scripts/renderer/homelab_render.py cluster --out out --all-images "${roles[@]}"
           fi
 
-      # The publish census: flux/ holds exactly the published tags' files, and the root lists
-      # every one. Beside it run three gates: source, host and no-stub (bundle_gates.py). A
-      # refusal fails the job before any push, so `prod` stays where it was. --against-prod adds
-      # the tag rule against the bundle at `prod`, and a failed pull fails the job too (tag_rule.py).
+      # A refusal fails the job before any push, so `prod` stays where it was; --against-prod adds
+      # the tag rule against the bundle at `prod`.
       - name: Check the bundle
         id: check-bundle
         env:
@@ -394,16 +375,7 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
-  # images: contents: read, packages: write. Builds each of the ten contexts `render` wrote under
-  # out/images/ and pushes ghcr.io/danielh2018/<name>:<content tag> when GHCR does not serve that
-  # tag (D5.4a2). It runs no renderer code: it reads `render`'s artifact and this workflow's own
-  # scripts/deploy_tools/ci_images.py, which imports only the stdlib and lib.cli_help. The plan is
-  # docs/archive/deploy/d5-bulk-move.md, *Images built by CI (D5.4)*.
-  #
-  # `publish` needs it, so a failing image stops every promotion until it is fixed. A served tag
-  # is success and is never rebuilt, because the push-once rule is what makes a content tag
-  # immutable. The concurrency group keeps two runs from both reading a tag as absent and both
-  # pushing it; a newer pending run evicts an older one, and pushes whatever that one would have.
+  # `publish` needs this, so a failing image stops every promotion.
   images:
     needs: render
     if: >-
@@ -440,8 +412,8 @@ jobs:
           name: bundle
           path: out
 
-      # Before any credential exists: each context's files must hash to the tag tags.json names,
-      # by image-builder's own rule, or nothing is pushed.
+      # Before any credential exists: each context must hash to the tag tags.json names, or nothing
+      # is pushed.
       - name: Check each image context against its content tag
         id: plan
         run: python3 scripts/deploy_tools/ci_images.py plan out
@@ -470,7 +442,7 @@ jobs:
     runs-on: ubuntu-26.04
     timeout-minutes: 10
     # GitHub can deliver one CI completion as two workflow_run events, and two publishes of one
-    # commit then race to write its signature, and GHCR refuses the second with `write_package`.
+    # commit race to write its signature; GHCR refuses the second with `write_package`.
     concurrency:
       group: publish-${{ needs.render.outputs.sha }}
       cancel-in-progress: false
@@ -532,14 +504,7 @@ jobs:
           sudo install -m 0755 "$cosign" /usr/local/bin/cosign
           cosign version
 
-      # `--reproducible` fixes the created timestamp, so pushing one commit twice yields one
-      # digest. The revision is the form promote.py's REVISION_ANNOTATION parser reads.
-      # The push lands on the shared `publishing` tag, and `sha-<X>` follows only once the
-      # digest carries promote's signature: `decide` verifies the newest `sha-` tag it reads,
-      # so a tag ahead of its signature fails a concurrent run's Decide.
-      # A digest that already verifies is not signed again: GHCR refuses a second signature write
-      # with `write_package`. cosign can read a registry error as unsigned, which only costs a
-      # redundant sign.
+      # `--reproducible` fixes the created timestamp, so pushing one commit twice yields one digest.
       - name: Push and sign the bundle
         id: push
         if: ${{ !inputs.verify_drill }}
@@ -580,11 +545,7 @@ jobs:
           retry sign_unless_signed "$repo@$digest"
           retry flux tag artifact "oci://$repo@$digest" --tag "sha-$SHA"
 
-      # The drill pushes an unsigned bundle to its own tag. It never writes sha-<X>, because an
-      # unsigned sha-<X> makes `decide` report an error for that commit. The annotation gives
-      # the drill bundle a digest that no signed push carries. Without it, --reproducible makes
-      # the drill's digest equal sha-<X>'s, and cosign v3 stores a signature as a referrer of
-      # the digest, so `verify-drill` verified against promote's signature.
+      # The drill never writes sha-<X>: an unsigned one makes `decide` report an error.
       - name: Push the drill bundle unsigned
         id: drill-push
         if: ${{ inputs.verify_drill }}
@@ -615,18 +576,8 @@ jobs:
           echo "pushed $repo:verify-drill at $digest, left unsigned"
           echo "digest=$digest" >> "$GITHUB_OUTPUT"
 
-      # The drill's red half, proven on every dispatch: no signature may reach the drill digest
-      # under the identity the OCIRepository checks. A signature there means `verify-drill`
-      # would read Ready and prove nothing. The identity is scripts/deploy_tools/forge.py's
-      # SIGNER_IDENTITY and SIGNER_ISSUER, and the workflow test fails a drift.
-      #
-      # `cosign verify` must refuse the digest, but its refusal alone proves nothing: cosign
-      # v3.1.3 swallows a registry error on its bundle probe and falls back to the legacy `.sig`
-      # tag, which a referrer signature never writes, so a 429 on a signed digest still reads
-      # `no signatures found`. The step therefore reads the registry itself and fails on any
-      # answer other than 200 or 404. GHCR answers the OCI referrers API with 404, so cosign
-      # stores its bundle in the referrers-tag fallback `sha256-<hex>`, an image index that
-      # lists each referrer. The step reads the API first anyway, in case GHCR starts serving it.
+      # cosign v3.1.3 swallows a registry error on its bundle probe and falls back to the legacy
+      # `.sig` tag, so a 429 on a signed digest still reads `no signatures found`.
       - name: Refuse a drill bundle that verifies
         id: drill-refuses
         if: ${{ inputs.verify_drill }}
@@ -663,8 +614,8 @@ jobs:
           index=application/vnd.oci.image.index.v1+json
           hex="${DIGEST#sha256:}"
 
-          # Every 404 below reads as "nothing there", which is true only if this token can
-          # see the drill digest at all, so the step reads that first.
+          # Every 404 below means nothing there only if this token can see the drill digest at all,
+          # so the step reads that first.
           status="$(fetch "manifests/$DIGEST" application/vnd.oci.image.manifest.v1+json)"
           if [ "$status" != 200 ]; then
             echo "::error::the drill digest's own manifest answered HTTP $status, so a 404 below would prove nothing"
@@ -697,8 +648,7 @@ jobs:
 
   promote:
     needs: publish
-    # The scheduled run skips publish, so this job runs on a skipped publish for it alone, and
-    # on a successful one otherwise.
+    # The scheduled run skips publish, so this job runs on a skipped publish for it alone.
     if: >-
       (github.event_name != 'workflow_dispatch' && github.run_attempt == '1' || contains(fromJSON('["DanielH2018", "github-actions[bot]"]'), github.triggering_actor)) &&
       !cancelled() &&
@@ -713,13 +663,11 @@ jobs:
       github.event.workflow_run.head_branch == 'master' &&
       github.event.workflow_run.head_repository.full_name == github.repository))))
     runs-on: ubuntu-26.04
-    # `decide` waits up to 350 minutes on a verification in flight
-    # (promote_lib/verify_promotion.py:IN_FLIGHT_WAIT_S), and the walk and the pulls take a few more.
-    # 360 is GitHub's limit for a job on a hosted runner, so this cannot rise further.
+    # `decide` waits up to 350 minutes on a verification in flight; 360 is GitHub's hosted-runner
+    # limit, so this cannot rise.
     timeout-minutes: 360
-    # GitHub keeps one pending job per group and a newer one evicts it. `decide` walks master
-    # from its tip rather than reading the trigger, so the last job to run promotes the newest
-    # published commit whichever pending job was evicted.
+    # GitHub keeps one pending job per group and a newer one evicts it; `decide` walks master from
+    # its tip, so the last job to run promotes the newest published commit.
     concurrency:
       group: promote
       cancel-in-progress: false
@@ -728,11 +676,11 @@ jobs:
       checks: read
       packages: read
       # The forward-only gate maps a pin-changing commit to its PR and reads the
-      # homelab/upgrade-gates status on that PR's head (H1.1b).
+      # homelab/upgrade-gates status on its head.
       pull-requests: read
       statuses: read
-      # The in-flight wait lists the in-progress promote runs, so a run that ended without
-      # its `settle` is named rather than waited on.
+      # The in-flight wait lists in-progress promote runs, so a run that ended without its `settle`
+      # is named rather than waited on.
       actions: read
     outputs:
       verdict: ${{ steps.decide.outputs.verdict }}
@@ -749,8 +697,8 @@ jobs:
       lost_settle: ${{ steps.decide.outputs.lost_settle }}
       lost_settle_digest: ${{ steps.decide.outputs.lost_settle_digest }}
     steps:
-      # This workflow's own commit, so the promote.py that runs matches the promote.yml that
-      # calls it. A workflow_run always runs master's copy of this file.
+      # This workflow's own commit, so the promote.py that runs matches the promote.yml that calls
+      # it.
       - uses: actions/checkout@v7.0.1
         with:
           ref: ${{ github.sha }}
@@ -767,8 +715,7 @@ jobs:
           version: ${{ env.COSIGN_VERSION }}
           sha256: ${{ env.COSIGN_SHA256 }}
 
-      # `cosign verify` inside `decide` passes no credentials of its own and reads the docker
-      # config, and the package is private until the operator makes it public.
+      # `cosign verify` passes no credentials and reads the docker config; the package is private.
       - name: Log in to GHCR read-only
         env:
           GH_ACTOR: ${{ github.actor }}
@@ -777,12 +724,8 @@ jobs:
           eval "$RETRY_FUNCTIONS"
           ghcr_login
 
-      # GITHUB_TOKEN reads the registry, the check-runs, the statuses and the commit-to-PR
-      # lookup. GH_TOKEN is PROMOTE_TOKEN, for the `gh variable get DEPLOY_HOLD` inside
-      # `decide`, and for the `gh variable set` that writes T's SHA when T fails the
-      # forward-only gate. That read goes through the API when
-      # `decide` runs, not through the `vars` context, so a hold written after this run
-      # started is still seen.
+      # GH_TOKEN is PROMOTE_TOKEN: the DEPLOY_HOLD read goes through the API, not the `vars`
+      # context, so a hold written after this run started is seen.
       - name: Decide
         id: decide
         env:
@@ -793,9 +736,7 @@ jobs:
           uv run --frozen python scripts/deploy_tools/promote.py decide
           --trigger "$TRIGGER" --bundle-dir "$RUNNER_TEMP/verify-input"
 
-      # The two bundles `decide` pulled before anything moved, and its record of `prod`'s
-      # statuses. `verify` reads them, so it waits on T's own changed set rather than on the
-      # render of the commit that triggered, and excuses only a dependent already failing.
+      # `verify` reads these so it waits on T's own changed set, not the triggering commit's render.
       - uses: actions/upload-artifact@v7.0.2
         if: ${{ steps.decide.outputs.verdict == 'promote' }}
         with:
@@ -804,9 +745,8 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
-      # D5.1d's hold is written inside Decide, so it posts here rather than from `post`. This
-      # step carries the webhook and no token, and Decide carries PROMOTE_TOKEN and no webhook,
-      # so no code that posts can write DEPLOY_HOLD. A failed post fails the run.
+      # This step carries the webhook and no token while Decide carries PROMOTE_TOKEN and no
+      # webhook, so no code that posts can write DEPLOY_HOLD.
       - name: Post the suspended-changed hold
         if: ${{ steps.decide.outputs.suspended_hold != '' }}
         env:
@@ -818,8 +758,8 @@ jobs:
 
   tag:
     needs: promote
-    # !cancelled() and the result, because a skipped publish on the scheduled run would skip
-    # this job too: GitHub's implicit success() reads every ancestor, not only `promote`.
+    # !cancelled() and the result, because GitHub's implicit success() reads every ancestor and a
+    # skipped publish would skip this job.
     if: >-
       (github.event_name != 'workflow_dispatch' && github.run_attempt == '1' || contains(fromJSON('["DanielH2018", "github-actions[bot]"]'), github.triggering_actor)) &&
       !cancelled() &&
@@ -867,30 +807,7 @@ jobs:
           sudo install -m 0755 "$RUNNER_TEMP/flux" /usr/local/bin/flux
           flux version --client
 
-      # The commit and digest come from `decide`, never from the trigger: the commit `prod`
-      # moves to is the newest published one, which need not be the one whose CI ran.
-      #
-      # `prod` moves only if it still names the digest `decide` read. Another run's `promote`
-      # can decide while this run's `tag` waits on the group, so two runs can each read the
-      # same `prod`. The first `tag` moves it; the second finds it moved, moves nothing, and
-      # verifies nothing, rather than moving `prod` past a T that the first run's `verify`
-      # still waits on. `tag` jobs share the `promote` group, so the read and the move are
-      # never interleaved with another run's. The DECIDED marker in promote_lib/verify_promotion.py
-      # has the other half, `decide`'s wait.
-      #
-      # The first verified run seeds `last-good`: when `decide` read no `last-good`, the step
-      # tags `prod`'s digest with it before `prod` moves, so a failed verification has a
-      # verified revision to reset to.
-      #
-      # DEPLOY_HOLD is read again just before the move (D7.1). A `settle` can write a hold
-      # while this job waits on the group, and a move after it would promote past the hold.
-      # Anything but `none`, a failed read included, moves nothing.
-      #
-      # When `decide` promotes T over a verification in flight (D7), it names the run it
-      # supersedes in `supersedes`, and T's digest is tagged `superseding` BEFORE `prod`
-      # moves. `decide` never supersedes the `superseding` digest, so a verification is
-      # superseded at most once. Tagged after the move, a failed tag write would leave a T
-      # that the next run may supersede again.
+      # The commit and digest come from `decide`, never the trigger.
       - name: Move prod
         id: move
         env:
@@ -936,13 +853,11 @@ jobs:
             flux tag artifact "oci://$repo@$PRIOR_DIGEST" --tag last-good
             echo "seeded last-good at prod's digest $PRIOR_DIGEST"
           fi
-          # Stamped before the move, so no status Flux posts for this promotion predates it.
-          # verify ignores any older status on T, such as one an earlier promotion left.
+          # Stamped before the move, so verify ignores any older status on T.
           moved_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
           if [ -n "${SUPERSEDES:-}" ]; then
-            # T's base and reset digest are last-good's as decide read it. A settle of the
-            # superseded run that moved last-good since then would leave T resetting past a
-            # verified revision, so T moves nothing and that settle's dispatch promotes again.
+            # A settle of the superseded run that moved last-good since would leave T resetting past
+            # a verified revision, so T moves nothing and that settle's dispatch promotes again.
             lg="$(live_tag last-good)" || { echo "::error::last-good's digest could not be read"; exit 1; }
             [ -n "$lg" ] || { echo "::error::last-good is absent"; exit 1; }
             if [ "$lg" != "$RESET_DIGEST" ]; then
@@ -955,8 +870,8 @@ jobs:
           flux tag artifact "oci://$repo@$DIGEST" --tag prod
           printf 'moved=true\nmoved_at=%s\n' "$moved_at" >> "$GITHUB_OUTPUT"
 
-      # A write that fails every try leaves PROD_DIGEST behind prod, which the deploy-pipeline
-      # exporter pages on from slice D2: the safe direction.
+      # A write that fails every try leaves PROD_DIGEST behind prod, the safe direction the exporter
+      # pages on.
       - name: Record prod's digest
         if: ${{ steps.move.outputs.moved == 'true' }}
         env:
@@ -968,8 +883,8 @@ jobs:
 
   verify:
     needs: [promote, tag]
-    # always() so the job is weighed even when `tag` failed after the move, such as on a
-    # failed PROD_DIGEST write: once `prod` has moved, T is verified.
+    # always() so the job is weighed even when `tag` failed after the move: once `prod` has moved, T
+    # is verified.
     if: >-
       (github.event_name != 'workflow_dispatch' && github.run_attempt == '1' || contains(fromJSON('["DanielH2018", "github-actions[bot]"]'), github.triggering_actor)) &&
       always() &&
@@ -983,15 +898,11 @@ jobs:
       github.event.workflow_run.head_branch == 'master' &&
       github.event.workflow_run.head_repository.full_name == github.repository))
     runs-on: ubuntu-26.04
-    # Above the cap on every derived timeout (chained_timeout.py:VERIFY_CAP_S, 330
-    # minutes), so `verify` prints `failed` with the names before this limit stops it, and with
-    # settle's below decide's in-flight wait. A job killed at this limit leaves no verdict,
-    # which settle holds as unverified.
+    # Above the cap on every derived timeout and below decide's in-flight wait; a job killed at this
+    # limit leaves no verdict, which settle holds as unverified.
     timeout-minutes: 335
-    # No concurrency group: a pending job in `promote` can be evicted. `decide` waits while
-    # `prod` differs from `last-good` instead (the DECIDED marker in promote_lib/verify_promotion.py).
-    # packages: read is for `prod`'s digest, which ends the wait as `superseded` once a later
-    # run has moved it past T (D7.2, promote_lib/superseded.py).
+    # No concurrency group: a pending job in `promote` can be evicted, so `decide` waits while
+    # `prod` differs from `last-good` instead.
     permissions:
       contents: read
       statuses: read
@@ -1012,8 +923,8 @@ jobs:
           name: verify-input
           path: ${{ runner.temp }}/verify-input
 
-      # T is `decide`'s target, never the triggering commit: Flux posts statuses only on the
-      # commit `prod` names, so waiting on another one would time out into a false hold.
+      # T is `decide`'s target, never the triggering commit: Flux posts statuses only on the commit
+      # `prod` names.
       - name: Verify
         id: verify
         env:
@@ -1029,9 +940,8 @@ jobs:
 
   verdict-status:
     needs: [promote, tag, verify]
-    # always() so a verify that failed, timed out or was cancelled still leaves a status. It
-    # does not gate `settle`, so a run GitHub creates without its `settle` still
-    # records the verdict that `reconcile` acts on in a later run.
+    # always() so a failed, timed-out or cancelled verify still leaves a status; it does not gate
+    # `settle`, so `reconcile` can act on the verdict later.
     if: >-
       (github.event_name != 'workflow_dispatch' && github.run_attempt == '1' || contains(fromJSON('["DanielH2018", "github-actions[bot]"]'), github.triggering_actor)) &&
       always() &&
@@ -1051,11 +961,8 @@ jobs:
     permissions:
       statuses: write
     steps:
-      # `good` posts success and anything else failure, each described as
-      # `<verdict> <digest> <form>`. The digest lets `reconcile` refuse a status that an earlier
-      # promotion of the same commit left. The form is `decide`'s `hold_form`, the hold `settle`
-      # writes for anything but good. A `superseded` verdict posts nothing: a later run owns
-      # `prod`.
+      # The digest lets `reconcile` refuse a status an earlier promotion of the same commit left; a
+      # `superseded` verdict posts nothing because a later run owns `prod`.
       - name: Post the verdict status
         env:
           TARGET: ${{ needs.promote.outputs.target }}
@@ -1088,8 +995,8 @@ jobs:
 
   settle:
     needs: [promote, tag, verify]
-    # always() so a verify that failed, timed out or was cancelled still settles: once `prod`
-    # has moved, anything but a good verdict holds.
+    # always() so a failed, timed-out or cancelled verify still settles: once `prod` has moved,
+    # anything but good holds.
     if: >-
       (github.event_name != 'workflow_dispatch' && github.run_attempt == '1' || contains(fromJSON('["DanielH2018", "github-actions[bot]"]'), github.triggering_actor)) &&
       always() &&
@@ -1133,25 +1040,7 @@ jobs:
           sudo install -m 0755 "$RUNNER_TEMP/flux" /usr/local/bin/flux
           flux version --client
 
-      # Contract C2: good moves `last-good` to T. Anything else writes the hold FIRST, so a
-      # failed reset still stops the next promotion, then resets `prod` to the digest `decide`
-      # read for `last-good` and records it in PROD_DIGEST. A failed hold write still attempts
-      # the reset, and the step names both results. A verify that ended with no verdict holds
-      # as `<T> unverified`, a form the revert rule never passes.
-      #
-      # A hold without a reset (H1.1b): when `decide`'s `hold_form` is `no-reset`, because T
-      # changes a forward-only tag against `last-good`, anything but good writes DEPLOY_HOLD as T's SHA alone, never
-      # `failed=` or `unverified`, and leaves `prod` on T. A reset would re-apply an older
-      # Longhorn or MetalLB over upgraded objects. It then tags T's digest `held`, which
-      # `decide`'s in-flight wait reads once the operator clears the hold.
-      #
-      # The stateful hold (D5.2b1): when `hold_form` is `stateful`, because T changes a
-      # snapshot role, anything but good writes DEPLOY_HOLD as `<T> stateful=<names>`, or `<T> stateful=unverified` when
-      # verify left no usable names, tags T `held` and leaves `prod`. A reset would apply the
-      # old image onto data T may have migrated. A T that changes both gets the stateful form,
-      # which also never resets. A `hold_form` other than these and `reset` writes nothing and
-      # fails the step. The value goes
-      # to the `stateful_hold` output once written, and the `post` job posts it.
+      # Anything but good writes the hold FIRST so a failed reset still stops the next promotion.
       - name: Apply the verdict
         id: apply
         env:
@@ -1176,11 +1065,8 @@ jobs:
             || { echo "::error::decide's digest '$DIGEST' is not sha256:<64 hex>"; exit 1; }
           repo=ghcr.io/danielh2018/homelab-manifests
 
-          # A verdict on T counts only while `prod` still names T's digest (D7.1). Once a
-          # later run has moved `prod` past T, that run owns the cluster, and this one writes
-          # neither `last-good`, the hold, `held` nor the reset, and dispatches nothing.
-          # A failed read keeps today's behaviour, the safe direction: a hold stops promotion,
-          # and a later run that verifies moves `last-good` again.
+          # A verdict on T counts only while `prod` still names T's digest; once a later run moved
+          # it, that run owns the cluster.
           owns_prod() {
             local live
             if ! live="$(live_tag prod)"; then
@@ -1191,8 +1077,8 @@ jobs:
             echo "prod is at '${live:-absent}', not sha-$TARGET's $DIGEST: a later run moved it, so this run writes nothing and dispatches nothing"
             return 1
           }
-          # `verify` already read `prod` past T, so its verdict is not this run's to apply,
-          # even when the read below would fail.
+          # `verify` already read `prod` past T, so its verdict is not this run's to apply even if
+          # the read below fails.
           if [ "$VERDICT" = superseded ]; then
             echo "verify read prod moved past sha-$TARGET, so this run writes nothing and dispatches nothing"
             echo "owned=false" >> "$GITHUB_OUTPUT"
@@ -1243,8 +1129,7 @@ jobs:
           fi
 
           if [ "$HOLD_FORM" = no-reset ]; then
-            # `held` marks prod's run as settled, so it is tagged only once the hold is
-            # written. With no hold, the next run's in-flight wait ends `current` instead.
+            # `held` marks prod's run as settled, so it is tagged only once the hold is written.
             if ! retry gh variable set DEPLOY_HOLD --body "$TARGET" -R "$GITHUB_REPOSITORY"; then
               echo "::error::writing DEPLOY_HOLD='$TARGET' failed, so prod stays on sha-$TARGET untagged"
               exit 1
@@ -1270,12 +1155,9 @@ jobs:
           else
             problems+=("writing DEPLOY_HOLD='$hold' failed")
           fi
-          # A superseding T's `tag` checked `last-good` before its move, but the superseded
-          # run's `settle` can have read `prod` before that move and moved `last-good` after
-          # it. The reset then goes to the live `last-good`: RESET_DIGEST would roll
-          # back a verified revision and leave `prod` behind `last-good`, which `decide`
-          # reads as a verification in flight. Only that settle moves `last-good` while T is
-          # in flight, so a run that supersedes nothing keeps RESET_DIGEST.
+          # The superseded run's `settle` can have moved `last-good` after T's `tag` checked it, so
+          # the reset goes to the live `last-good`: RESET_DIGEST would roll back a verified
+          # revision.
           if [ -n "${SUPERSEDES:-}" ] && printf '%s' "$RESET_DIGEST" | grep -Eqx 'sha256:[0-9a-f]{64}'; then
             if lg="$(live_tag last-good)" && printf '%s' "$lg" | grep -Eqx 'sha256:[0-9a-f]{64}'; then
               if [ "$lg" != "$RESET_DIGEST" ]; then
@@ -1288,8 +1170,8 @@ jobs:
           fi
           if ! printf '%s' "$RESET_DIGEST" | grep -Eqx 'sha256:[0-9a-f]{64}'; then
             problems+=("decide read no last-good digest to reset to, so prod stays on sha-$TARGET")
-          # Read again: the hold write takes seconds, and a reset after a later run's move
-          # would undo that move.
+          # Read again: the hold write takes seconds, and a reset after a later run's move would
+          # undo that move.
           elif ! owns_prod; then
             :
           elif ghcr_login && flux tag artifact "oci://$repo@$RESET_DIGEST" --tag prod; then
@@ -1302,9 +1184,8 @@ jobs:
           for problem in "${problems[@]}"; do echo "::error::$problem"; done
           [ "${#problems[@]}" -eq 0 ]
 
-      # A run whose `tag` found `prod` already moved verifies nothing, so its commit would wait
-      # for the next merge. After a hold the step still dispatches: the run decides `held`
-      # unless the revert rule lets it promote a descendant.
+      # A run whose `tag` found `prod` already moved verifies nothing, so its commit would wait for
+      # the next merge.
       - name: Dispatch a run for a newer green commit
         # A run that a later run superseded dispatches nothing; the later run owns the dispatch.
         if: steps.apply.outputs.owned == 'true'
@@ -1319,8 +1200,8 @@ jobs:
 
   post:
     needs: [promote, tag, verify, settle]
-    # always() so the post still goes out when `settle` wrote the stateful hold and then
-    # failed to tag T `held`. `stateful_hold` is set only once the hold is written.
+    # always() so the post still goes out when `settle` wrote the hold and then failed to tag T
+    # `held`.
     if: >-
       (github.event_name != 'workflow_dispatch' && github.run_attempt == '1' || contains(fromJSON('["DanielH2018", "github-actions[bot]"]'), github.triggering_actor)) &&
       always() &&
@@ -1335,8 +1216,7 @@ jobs:
       github.event.workflow_run.head_repository.full_name == github.repository))
     runs-on: ubuntu-26.04
     timeout-minutes: 5
-    # Repo code runs here, so the job holds no token that writes: `settle` wrote the hold, and
-    # the post reads `decide`'s record from the artifact rather than from the registry.
+    # Repo code runs here, so the job holds no token that writes.
     permissions:
       contents: read
     steps:
@@ -1352,10 +1232,8 @@ jobs:
           name: verify-input
           path: ${{ runner.temp }}/verify-input
 
-      # The record `decide` wrote beside the bundles names each changed snapshot role's digest8
-      # and claims and `sha-<T>`'s digest. The webhook is the repository secret
-      # DEPLOY_DISCORD_WEBHOOK, a copy of the SOPS value discord_alert_webhook, and
-      # promote.py never prints it.
+      # The webhook is the repository secret DEPLOY_DISCORD_WEBHOOK, a copy of the SOPS value
+      # `discord_alert_webhook`; promote.py never prints it.
       - name: Post the stateful hold
         env:
           TARGET: ${{ needs.promote.outputs.target }}
@@ -1368,17 +1246,8 @@ jobs:
           --hold "$HOLD" --bundle-dir "$RUNNER_TEMP/verify-input"
           --verdict "$VERDICT" --failed "$FAILED_NAMES"
 
-  # A run that ended without its `settle`: `decide` names `prod`'s commit and digest
-  # in `lost_settle` once no other run past its decide has been in progress for LOST_SETTLE_S.
-  # This job reads the `homelab/promote-verdict` status the lost run's `verdict-status` posted
-  # on that commit, and finishes what `settle` would have: a good verdict for `prod`'s digest
-  # moves `last-good`, and anything else writes the hold the status's form names. A missing
-  # status, or one for another digest, takes the form from `decide`'s `hold_form`, which it
-  # reads from what `prod` changes against `last-good`. The `reset` form writes the unverified
-  # hold.
-  # It resets nothing: the operator decides on `reset_to_last_good` after a hold. After a move
-  # it dispatches a run for a newer green commit, as `settle` does; after a hold it dispatches
-  # nothing. No concurrency group, because a newer pending job in `promote` would evict it.
+  # Runs when `decide` names a run that ended without its `settle`: a good verdict for `prod`'s
+  # digest moves `last-good`.
   reconcile:
     needs: promote
     if: >-
@@ -1426,17 +1295,13 @@ jobs:
           sudo install -m 0755 "$RUNNER_TEMP/flux" /usr/local/bin/flux
           flux version --client
 
-      # `settle`'s guard holds before each write: `prod` must still name the digest `decide`
-      # read, or a later run owns the cluster and this job writes nothing. A failed read of
-      # `prod`, the hold or the status writes nothing and fails, and the next run's `decide`
-      # names the state again. The job token reads the status; PROMOTE_TOKEN writes the hold.
+      # `settle`'s guard holds before each write: `prod` must still name the digest `decide` read,
+      # or a later run owns the cluster.
       - name: Apply the lost run's verdict
         id: apply
         env:
           COMMIT: ${{ needs.promote.outputs.lost_settle }}
           DIGEST: ${{ needs.promote.outputs.lost_settle_digest }}
-          # decide's hold form for what prod changes against last-good, for a status that
-          # names no form.
           HOLD_FORM: ${{ needs.promote.outputs.hold_form }}
           GH_ACTOR: ${{ github.actor }}
           GITHUB_TOKEN: ${{ github.token }}
@@ -1451,8 +1316,8 @@ jobs:
             || { echo "::error::decide's lost_settle_digest '$DIGEST' is not sha256:<64 hex>"; exit 1; }
           repo=ghcr.io/danielh2018/homelab-manifests
 
-          # Exits the step unless `prod` still names DIGEST: 0 when a later run moved it, 1
-          # when the read failed.
+          # Exits the step unless `prod` still names DIGEST: 0 when a later run moved it, 1 when the
+          # read failed.
           require_prod() {
             local live
             live="$(live_tag prod)" || { echo "::error::prod's digest could not be read, so this job writes nothing"; exit 1; }
@@ -1487,8 +1352,8 @@ jobs:
             echo "::warning::$COMMIT's verdict reads '${verdict:-absent}', and DEPLOY_HOLD already reads '$hold', so this job writes no hold"
             exit 0
           fi
-          # `settle`'s hold for the form the lost run recorded. A status for another digest, or
-          # none, takes decide's HOLD_FORM. Any form but stateful or no-reset holds `unverified`.
+          # A status for another digest, or none, takes decide's HOLD_FORM; any form but stateful or
+          # no-reset holds `unverified`.
           if [ "$digest" != "$DIGEST" ]; then
             case "$HOLD_FORM" in
               stateful|no-reset|reset) form=$HOLD_FORM ;;
@@ -1517,8 +1382,8 @@ jobs:
               echo "::warning::DEPLOY_HOLD set to '$new_hold': $COMMIT's verdict reads '${verdict:-absent}', not good for $DIGEST. To reset prod (operator-only), dispatch promote.yml with reset_to_last_good=true" ;;
           esac
 
-      # This run's `decide` ended `current` on the lost run's commit, so without this step the
-      # commit that started this run waits for the next merge.
+      # This run's `decide` ended `current` on the lost run's commit, so the commit that started it
+      # would wait for the next merge.
       - name: Dispatch a run for a newer green commit
         if: steps.apply.outputs.moved == 'true'
         env:
@@ -1530,10 +1395,8 @@ jobs:
           eval "$DISPATCH_FUNCTIONS"
           dispatch_newer_green "$COMMIT"
 
-  # A dispatch or a re-run is started by whoever `triggering_actor` names, and every job above
-  # runs it only for an account on the list: the operator, and this workflow's own GITHUB_TOKEN
-  # dispatch from `settle` or `reconcile`. Anyone else's start skips every job, and this one
-  # fails the run so the refusal shows as red rather than as a run that did nothing.
+  # Anyone off the starter list skips every job, and this one fails the run so the refusal shows as
+  # red.
   refuse-starter:
     if: >-
       !(github.event_name != 'workflow_dispatch' && github.run_attempt == '1' || contains(fromJSON('["DanielH2018", "github-actions[bot]"]'), github.triggering_actor))
@@ -1550,14 +1413,8 @@ jobs:
           echo "::error::$STARTER started this $EVENT run (attempt $ATTEMPT), and only the operator or this workflow's own dispatch may start one. Every job was skipped."
           exit 1
 
-  # The `reset_to_last_good` dispatch (D5.2b2): move `prod` back to `last-good` and do nothing
-  # else, for the revert runbook's Branch 1 and the broken-sync-object runbook. It follows C2's
-  # split: `reset-check` decides with read tokens, and `reset-move` writes with no checkout.
-  # Both run in `promote-reset`, never `promote`: in `promote` the reset would wait behind a
-  # `decide` in its in-flight wait, up to 6 hours, and the next merge's run would evict it while
-  # pending. `reset-check`'s refusal while a verification is in flight replaces the
-  # serialisation a shared group would give (promote_lib/reset.py). The reset ignores the
-  # reboot window: it moves `prod` back to a revision the cluster already ran.
+  # Both jobs run in `promote-reset`, never `promote`: there the reset would wait behind a `decide`
+  # in its in-flight wait for up to 6 hours and a newer run would evict it.
   reset-check:
     if: >-
       (github.event_name != 'workflow_dispatch' && github.run_attempt == '1' || contains(fromJSON('["DanielH2018", "github-actions[bot]"]'), github.triggering_actor)) &&
@@ -1595,8 +1452,7 @@ jobs:
 
       - uses: $/.github/actions/setup
 
-      # GITHUB_TOKEN reads GHCR and the run list. GH_TOKEN is PROMOTE_TOKEN, for the
-      # `gh variable get DEPLOY_HOLD` read through the API, as in Decide.
+      # GH_TOKEN is PROMOTE_TOKEN for the `gh variable get DEPLOY_HOLD` read through the API.
       - name: Check the reset
         id: check
         env:
@@ -1643,10 +1499,8 @@ jobs:
           sudo install -m 0755 "$RUNNER_TEMP/flux" /usr/local/bin/flux
           flux version --client
 
-      # The same compare-and-move as `tag`'s: `prod` moves only while it still names the digest
-      # `reset-check` read. A live `prod` already on `last-good`, as after `settle`'s own reset
-      # landed first, succeeds and moves nothing. Any other digest means a run moved `prod`
-      # after the read, so nothing moves and the step names both.
+      # The same compare-and-move as `tag`'s: a live `prod` already on `last-good` succeeds and
+      # moves nothing; any other digest means a run moved it after the read.
       - name: Move prod to last-good
         id: move
         env:
@@ -1679,8 +1533,7 @@ jobs:
           echo "prod moved from $PROD to last-good $LAST_GOOD"
           echo "moved=true" >> "$GITHUB_OUTPUT"
 
-      # A write that fails every try leaves PROD_DIGEST ahead of prod, which the deploy-pipeline
-      # exporter pages on, as after `tag`'s move.
+      # A write that fails every try leaves PROD_DIGEST ahead of prod, which the exporter pages on.
       - name: Record prod's digest
         if: ${{ steps.move.outputs.moved == 'true' }}
         env:

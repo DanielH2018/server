@@ -21,6 +21,7 @@ import pytest
 from _condition_status_row import CONDITION_STATUS_IS_PARSED
 from _future_annotations_row import NO_FUTURE_ANNOTATIONS
 from _helpers import REPO
+from _pass_through_row import NO_PASS_THROUGH_FUNCTIONS
 from _printed_json_row import PRINTED_JSON_IS_COMPACT
 from _rendered_documents_row import RENDERED_OBJECTS_ARE_PARSED
 from _row_table import (
@@ -459,6 +460,7 @@ ROWS = (
             "scripts/lib/cli_help.py": "tracked in #10240",
         },
     ),
+    NO_PASS_THROUGH_FUNCTIONS,
 )
 _IDS = [row.name for row in ROWS]
 

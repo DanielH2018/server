@@ -5,6 +5,7 @@ for the systemd units that neither the shell family nor `render_lib/k8s.py` cove
 import shutil
 
 import pytest
+from lib.render_context import render_context
 from validate.render_lib import units as v
 
 # A module-wide skip would also hide the fails-closed test (which needs no real binary) and every
@@ -166,13 +167,13 @@ def test_discover_templates_finds_the_known_set():
     assert len(names) == 32
 
 
-def test_unit_context_layers_the_owning_roles_real_defaults(fixture_unit):
+def test_render_context_layers_the_owning_roles_real_defaults(fixture_unit):
     # A real value, not "STUB": bare StubUndefined renders OnUnitActiveSec as "STUB".
-    assert v.unit_context(fixture_unit)["widget_interval"] == "10min"
+    assert render_context(fixture_unit)["widget_interval"] == "10min"
 
 
-def test_unit_context_still_stubs_a_var_no_default_carries(fixture_unit):
-    ctx = v.unit_context(fixture_unit)
+def test_render_context_still_stubs_a_var_no_default_carries(fixture_unit):
+    ctx = render_context(fixture_unit)
     assert "inventory_hostname" not in ctx
 
 

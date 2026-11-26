@@ -1,85 +1,82 @@
 #!/usr/bin/env python3
-"""Dependency direction across ``scripts/``: a leaf never imports the facade it was split out of.
+"""Dependency direction across ``scripts/``: the import contracts, and no new import cycle.
 
-Several modules under ``scripts/`` were split out of a larger one, and each records the same
-invariant in its own docstring — ``rotation_tools.py`` says it "names ``secret_rotation`` nowhere,
-at import time or later", ``lib/script_classify.py`` says "a leaf never imports the facade it was
-split out of", and ``docs/catalog_lib/catalog_model.py`` says it again in its own words. A docstring
-is not a check. Monitor-bridge's split is guarded by
-``tests/services/monitor_bridge/test_bridge_patch_boundary.py``, but nothing walked ``scripts/``, so a late
-``import secret_rotation`` inside a leaf function would have landed green.
+Several modules under ``scripts/`` were split out of a facade that also runs as ``__main__``. A
+leaf that imports its facade back gets a SECOND copy of that module under a second name, with its
+own module-level constants, or an ``ImportError`` partway through the cycle when the import is at
+module level.
 
-WHY THE DIRECTION MATTERS, not just tidiness. Every facade here is also an entry point run as
-``__main__``. A leaf that imports it back gets a SECOND copy of that module under a second name,
-with its own module-level constants — and, when the import is at module level rather than
-deferred into a function, an ``ImportError`` partway through the cycle instead.
+THE CONTRACTS. ``[tool.importlinter]`` in ``pyproject.toml`` holds the direction rules and the
+one package-API rule. The tests below run each contract against the grimp graph of every
+``scripts/`` package, and plant one edge per contract to prove it can break. A contract naming a
+module that no longer exists raises rather than passing. grimp reads only the dotted spelling; the
+``scripts-import-their-siblings-dotted`` census row refuses the bare one, deferred or not.
 
-WHAT IS CHECKED. ``_module_graph`` walks every non-test ``scripts/**/*.py`` with ``ast`` and
-records the first-party modules each one imports. ``ast.walk`` descends into function bodies, so
-a deferred import weighs exactly as much as a module-level one; both the ``import x`` and the
-``from x import y`` forms count, in the dotted-from-``scripts/`` and the bare-sibling spellings
-both, because which form a module uses changes nothing about the direction of the edge.
-
-Two rules ride on that graph: the declared facade edges in ``FACADE_EDGES`` may not run
-backwards, and a depth-first walk may meet no back-edge beyond the four in
-``ALLOWED_CYCLES``. Back-edges, not cycles -- ``_cycles``'s own docstring says what that
-allowlist does and does not bound.
+THE CYCLE CHECK. ``_module_graph`` walks every non-test ``scripts/**/*.py`` with ``ast``, in both
+spellings, and a depth-first walk may meet no back-edge beyond the four in ``ALLOWED_CYCLES``.
+Back-edges, not cycles -- ``_cycles``'s own docstring says what that allowlist does and does not
+bound.
 
 Run: uv run pytest scripts/tests/test_scripts_import_direction.py
 """
 
 import ast
+import copy
+import tomllib
 from pathlib import Path
+
+import grimp
+import importlinter.configuration
+import pytest
+from importlinter.contracts.forbidden import ForbiddenContract
+from importlinter.contracts.layers import LayersContract
+from importlinter.contracts.protected import ProtectedContract
 
 from lib.repo_paths import REPO
 
 SCRIPTS = REPO / "scripts"
+IMPORTLINTER = tomllib.loads((REPO / "pyproject.toml").read_text())["tool"][
+    "importlinter"
+]
+CONTRACTS = {contract["name"]: contract for contract in IMPORTLINTER["contracts"]}
+CONTRACT_TYPES = {
+    "forbidden": ForbiddenContract,
+    "layers": LayersContract,
+    "protected": ProtectedContract,
+}
 
-# Non-vacuity anchor: the direction rule iterates these pairs, so a rename that emptied the census
-# would pass `all()` over nothing.
-FACADE_EDGES = frozenset(
-    {
-        # `secret_rotation.py` is the entry point; the other four are its leaves.
-        ("secrets_mgmt.secret_rotation", "secrets_mgmt.consumers"),
-        ("secrets_mgmt.secret_rotation", "secrets_mgmt.git_dates"),
-        ("secrets_mgmt.secret_rotation", "secrets_mgmt.rotation_tools"),
-        ("secrets_mgmt.secret_rotation", "secrets_mgmt.secrets_lib.secret_registry"),
-        # The census was split into lib/ so the `--help` test could reach it without importing the
-        # generator.
-        ("docs.reference.scripts", "lib.script_classify"),
-        # scripts/validate/render_lib/k8s.py reads the claim names through lib/k8s_yaml.py.
-        ("validate.render_lib.k8s", "lib.k8s_yaml"),
-        # The rule modules only one family imports sit in validate/validate_lib/.
-        ("validate.render_lib.k8s", "validate.validate_lib.k8s_net_rules"),
-        ("validate.render_lib.k8s", "validate.validate_lib.k8s_schema"),
-        ("validate.render_lib.shell", "validate.validate_lib.shell_lint"),
-        # catalog_model is the one leaf with no first-party dependency beyond lib.repo_paths.
-        ("docs.service_catalog", "docs.catalog_lib.catalog_backup"),
-        ("docs.service_catalog", "docs.catalog_lib.catalog_facts"),
-        ("docs.service_catalog", "docs.catalog_lib.catalog_model"),
-        ("docs.service_catalog", "docs.catalog_lib.catalog_render"),
-        ("docs.catalog_lib.catalog_facts", "docs.catalog_lib.catalog_model"),
-        ("docs.catalog_lib.catalog_render", "docs.catalog_lib.catalog_model"),
-        # scripts/docs/gen_doc_fragments.py over the fragment reader/renderer pair.
-        ("docs.gen_doc_fragments", "docs.fragment_readers"),
-        ("docs.gen_doc_fragments", "docs.fragment_renderers"),
-        # scripts/dev/findings.py over the findings_* leaves.
-        ("dev.findings", "dev.findings_lib.gh_calls"),
-        ("dev.findings", "dev.findings_lib.issue_model"),
-        ("dev.findings", "dev.findings_lib.plans"),
-        ("dev.findings", "dev.findings_lib.boundaries"),
-        ("dev.findings", "dev.findings_lib.verify"),
-        # probe_lib/b2_ledger.py over the spend report split out at its 600-line cap.
-        ("diagnostics.probe_lib.b2_ledger", "diagnostics.probe_lib.b2_spend"),
-        # probe_lib/longhorn.py over the two modules split out of its 630 lines.
-        ("diagnostics.probe_lib.longhorn", "diagnostics.probe_lib.longhorn_budget"),
-        ("diagnostics.probe_lib.longhorn", "diagnostics.probe_lib.longhorn_cluster"),
-        # probe_lib/health.py over the transport- and object-specific readers.
-        ("diagnostics.probe_lib.health", "diagnostics.probe_lib.health_cronjob"),
-        ("diagnostics.probe_lib.health", "diagnostics.probe_lib.health_docker"),
-        ("diagnostics.probe_lib.health", "diagnostics.probe_lib.health_rollout"),
-    }
-)
+# One edge per contract that breaks it, the shape a late import inside the importer would add.
+PLANTED = {
+    "secret_rotation's leaves never import it": (
+        "secrets_mgmt.rotation_tools",
+        "secrets_mgmt.secret_rotation",
+    ),
+    "script_classify never imports the scripts page generator": (
+        "lib.script_classify",
+        "docs.reference.scripts",
+    ),
+    "the render rule modules never import their render family": (
+        "validate.validate_lib.shell_lint",
+        "validate.render_lib.shell",
+    ),
+    "catalog_lib never imports service_catalog, and catalog_model imports no sibling": (
+        "docs.catalog_lib.catalog_model",
+        "docs.catalog_lib.catalog_facts",
+    ),
+    "the fragment readers and renderers never import gen_doc_fragments": (
+        "docs.fragment_readers",
+        "docs.gen_doc_fragments",
+    ),
+    "findings_lib never imports findings": ("dev.findings_lib.verify", "dev.findings"),
+    "probe_lib's split-out leaves never import the module they left": (
+        "diagnostics.probe_lib.longhorn_budget",
+        "diagnostics.probe_lib.longhorn",
+    ),
+    "outside code imports dev.fanout_lib.review only through its api": (
+        "dev.fanout_lib.place",
+        "dev.fanout_lib.review.base_check",
+    ),
+}
 
 # Each entry is one back-edge of a pair that reach each other by a DEFERRED import inside a
 # function, not a complete cycle census. Listed so a fifth cannot appear unnoticed; shrinking the
@@ -148,26 +145,7 @@ def _resolve(name: str, importer: str, known: set[str]) -> str | None:
     return sibling if sibling in known else None
 
 
-def _resolve_from_ancestors(name: str, importer: str, known: set[str]) -> str | None:
-    """`_resolve`, plus the name taken from any package above `importer`.
-
-    A module inside `scripts/dev/fanout_lib` spells a sibling `fanout_lib.manifest`, which
-    resolves against `scripts/dev`, the directory its own `sys.path` insert names. `_resolve`
-    reads that import as no edge; the package-API rule below has to see it.
-    """
-    if hit := _resolve(name, importer, known):
-        return hit
-    parts = importer.split(".")[:-1]
-    for depth in range(len(parts), -1, -1):
-        candidate = ".".join([*parts[:depth], name])
-        if candidate in known:
-            return candidate
-    return None
-
-
-def _first_party_imports(
-    source: str, importer: str, known: set[str], resolve=_resolve
-) -> set[str]:
+def _first_party_imports(source: str, importer: str, known: set[str]) -> set[str]:
     """Every module in `known` that `source` imports, by any form and at any nesting depth.
 
     `ast.walk` rather than a scan of `tree.body`: an import deferred into a function body is the
@@ -178,25 +156,25 @@ def _first_party_imports(
         if isinstance(node, ast.Import):
             for alias in node.names:
                 # An alias binds a second name for the same module; the edge is identical.
-                if hit := resolve(alias.name, importer, known):
+                if hit := _resolve(alias.name, importer, known):
                     found.add(hit)
         elif isinstance(node, ast.ImportFrom) and node.level == 0 and node.module:
-            if hit := resolve(node.module, importer, known):
+            if hit := _resolve(node.module, importer, known):
                 found.add(hit)
                 continue
             # `from diagnostics.probe_lib import core`: the module is the PACKAGE and the imported
             # name is the module; without this arm such an import reads as no edge.
             for alias in node.names:
-                if hit := resolve(f"{node.module}.{alias.name}", importer, known):
+                if hit := _resolve(f"{node.module}.{alias.name}", importer, known):
                     found.add(hit)
     return found - {importer}
 
 
-def _module_graph(resolve=_resolve) -> dict[str, set[str]]:
+def _module_graph() -> dict[str, set[str]]:
     files = _module_names()
     known = set(files)
     return {
-        name: _first_party_imports(path.read_text(), name, known, resolve)
+        name: _first_party_imports(path.read_text(), name, known)
         for name, path in files.items()
     }
 
@@ -250,35 +228,6 @@ def test_the_census_finds_every_scripts_module():
         f"the glob matched {len(names)} modules — SCRIPTS is wrong"
     )
     assert ANCHOR_MODULES <= names, f"missing: {sorted(ANCHOR_MODULES - names)}"
-
-
-def test_every_declared_facade_edge_is_in_the_live_graph():
-    """Non-vacuity for the direction rule: a pair whose leaf moved must fail here, loudly.
-
-    Without this, renaming a leaf silently drops it from the graph and the rule below stops
-    governing it while still reading green.
-    """
-    graph = _module_graph()
-    missing = sorted(
-        f"{facade} -> {leaf}"
-        for facade, leaf in FACADE_EDGES
-        if leaf not in graph.get(facade, set())
-    )
-    assert not missing, f"declared facade edges absent from the tree: {missing}"
-
-
-def test_no_leaf_imports_its_facade():
-    """The rule the docstrings state. Both import forms, module-level and deferred alike."""
-    graph = _module_graph()
-    backwards = sorted(
-        f"{leaf} imports {facade}"
-        for facade, leaf in FACADE_EDGES
-        if facade in graph.get(leaf, set())
-    )
-    assert not backwards, (
-        f"a leaf reaches back into the facade it was split out of: {backwards} — "
-        f"when the facade runs as __main__ that is a second copy of it under a second name"
-    )
 
 
 def test_no_import_cycle_beyond_the_documented_ones():
@@ -363,66 +312,40 @@ def test_the_cycle_detector_clears_a_diamond():
     assert _cycles({"a": {"b", "c"}, "b": {"d"}, "c": {"d"}, "d": set()}) == set()
 
 
-# --- Package APIs -----------------------------------------------------------------------------
-
-# A production module outside the package may import only its one public module; tests may reach
-# inside. Each entry names the outside importers the rule must find.
-PACKAGE_APIS = {
-    "dev.fanout_lib.review": (
-        "dev.fanout_lib.review.api",
-        frozenset(
-            {
-                "dev.fanout_lib.review_unit",
-                "dev.fanout_lib.review_stats",
-            }
-        ),
-    ),
-}
+# --- The import contracts ---------------------------------------------------------------------
 
 
-def _past_the_api(graph: dict[str, set[str]], package: str, api: str) -> list[str]:
-    """Each edge from outside `package` to a module in it other than `api`."""
-    inside = f"{package}."
-    return sorted(
-        f"{importer} imports {target}"
-        for importer, targets in graph.items()
-        if not importer.startswith(inside)
-        for target in targets
-        if target.startswith(inside) and target != api
-    )
+@pytest.fixture(scope="module")
+def graph() -> grimp.ImportGraph:
+    importlinter.configuration.configure()  # a broken forbidden contract reads its timer
+    return grimp.build_graph(*IMPORTLINTER["root_packages"], cache_dir=None)
 
 
-def test_outside_code_imports_a_package_only_through_its_api():
-    graph = _module_graph(_resolve_from_ancestors)
-    for package, (api, consumers) in PACKAGE_APIS.items():
-        found = {importer for importer, targets in graph.items() if api in targets}
-        assert consumers <= found, f"{api} lost importers: {sorted(consumers - found)}"
-        past = _past_the_api(graph, package, api)
-        assert not past, f"import {api} instead: {past}"
+def _kept(name: str, graph: grimp.ImportGraph) -> bool:
+    """Whether contract `name` holds over a copy of `graph`; a protected check edits its graph."""
+    options = {k: v for k, v in CONTRACTS[name].items() if k not in ("name", "type")}
+    contract = CONTRACT_TYPES[CONTRACTS[name]["type"]](name, IMPORTLINTER, options)
+    return contract.check(copy.deepcopy(graph), verbose=False).kept
 
 
-def test_an_import_past_the_api_is_flagged():
-    graph = {"dev.fanout_lib.place": {"dev.fanout_lib.review.base_check"}}
-    assert _past_the_api(
-        graph, "dev.fanout_lib.review", "dev.fanout_lib.review.api"
-    ) == ["dev.fanout_lib.place imports dev.fanout_lib.review.base_check"]
-
-
-def test_the_api_itself_and_imports_inside_the_package_are_clean():
-    graph = {
-        "dev.fanout_lib.place": {"dev.fanout_lib.review.api"},
-        "dev.fanout_lib.review.review": {"dev.fanout_lib.review.base_check"},
+def test_the_contracts_read_every_scripts_package():
+    """A package left out of the graph hides its imports from every contract."""
+    packages = {
+        p.name
+        for p in SCRIPTS.iterdir()
+        if p.is_dir() and p.name not in ("tests", "__pycache__")
     }
-    assert (
-        _past_the_api(graph, "dev.fanout_lib.review", "dev.fanout_lib.review.api") == []
-    )
+    assert set(IMPORTLINTER["root_packages"]) == packages
 
 
-def test_a_package_import_resolves_from_an_ancestor_directory():
-    """`fanout_lib.review.base_check` inside `dev/fanout_lib/launch.py` names `dev.fanout_lib...`."""
-    known = {"dev.fanout_lib.launch", "dev.fanout_lib.review.base_check"}
-    source = "from fanout_lib.review.base_check import unproven_tests\n"
-    assert _first_party_imports(source, "dev.fanout_lib.launch", known) == set()
-    assert _first_party_imports(
-        source, "dev.fanout_lib.launch", known, _resolve_from_ancestors
-    ) == {"dev.fanout_lib.review.base_check"}
+@pytest.mark.parametrize("name", sorted(CONTRACTS))
+def test_the_live_tree_keeps_the_contract(name, graph):
+    assert _kept(name, graph)
+
+
+@pytest.mark.parametrize("name", sorted(CONTRACTS))
+def test_a_planted_import_breaks_the_contract(name, graph):
+    importer, imported = PLANTED[name]
+    planted = copy.deepcopy(graph)
+    planted.add_import(importer=importer, imported=imported)
+    assert not _kept(name, planted)

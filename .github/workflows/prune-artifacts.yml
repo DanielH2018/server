@@ -51,9 +51,8 @@ jobs:
     # A dispatch from a branch would run that branch's copy with a token that can delete.
     if: github.ref == 'refs/heads/master'
     runs-on: ubuntu-26.04
-    # Deletes are paced one a second (forge.py:DELETE_PAUSE_S), about 370 on a normal day. A
-    # backlog that outlasts this is cut off between deletes. Signatures go last, so what is left
-    # is what the next run selects again, never a kept version's missing signature.
+    # Deletes are paced one a second; a backlog that outlasts the budget is cut off between deletes,
+    # and signatures go last so what is left is selected again.
     timeout-minutes: 60
     # Not `promote`: a job queued in that group would evict a pending promote job.
     concurrency:
@@ -81,8 +80,7 @@ jobs:
           version: ${{ env.COSIGN_VERSION }}
           sha256: ${{ env.COSIGN_SHA256 }}
 
-      # `cosign verify` passes no credentials of its own and reads the docker config, and the
-      # package is private until the operator makes it public.
+      # `cosign verify` passes no credentials and reads the docker config; the package is private.
       - name: Log in to GHCR
         env:
           GH_ACTOR: ${{ github.actor }}
@@ -91,8 +89,6 @@ jobs:
           eval "$RETRY_FUNCTIONS"
           ghcr_login
 
-      # GITHUB_TOKEN lists and deletes package versions through the Packages API, and reads
-      # each untagged manifest from GHCR.
       - name: Prune
         env:
           GITHUB_TOKEN: ${{ github.token }}

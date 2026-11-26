@@ -1,27 +1,5 @@
 name: Bootstrap drill
 
-# Rehearses the order of the rebuilt-cluster Flux procedure (target slice D5, step 28, in
-# docs/archive/deploy/d5-bulk-move.md) on a throwaway kind cluster. The numbered
-# comments below are that procedure's steps. Longhorn, the backupstore sync and the DR gate
-# (steps 7 and 8) are not drilled: a stand-in creates one claim, so the drill proves the
-# order, not a restore. Signature verification is not drilled either: the OCIRepository is
-# patched to a local registry without its `verify` block, and production's pull on every
-# promotion proves keyless verification.
-#
-# Three legs share the steps:
-#   green         the whole order. The stateful tag's claim keeps the stand-in's uid and gains
-#                 the root's ownership label.
-#   no-sops-age   skips step 4. Passes only when `cluster-vars` fails to decrypt.
-#   root-first    applies the root before the stand-in. Passes only when the claim check
-#                 fails, because the root created the claim first.
-#
-# A pull request whose changed paths match the filter below starts it. `gh workflow run`
-# finds only workflows on the default branch, so `gh workflow run bootstrap-drill.yml --ref
-# <branch>` runs it on any branch only once the file is there. On a draft the jobs skip at job
-# level and take no runner; GitHub evaluates `paths:` against the whole PR diff on
-# `ready_for_review`, which starts the run that counts (docs/ci-throughput.md, *When a job may
-# skip at job level*).
-
 on:
   workflow_dispatch:
   pull_request:
@@ -58,8 +36,8 @@ jobs:
       LEG: ${{ matrix.leg }}
       # `--field-manager` of every hand apply in steps 3, 5, 6 and 9: the root's own manager.
       APPLY: kubectl apply --server-side --field-manager=kustomize-controller
-      # The flux CLI this job's flux steps fetch, equal to flux_version in k8s/roles/flux and to
-      # the amd64 flux pin in hosts/packages/homelab-tools/package.yml. Env, so the cache key reads it.
+      # Equal to flux_version in k8s/roles/flux and the amd64 pin in homelab-tools/package.yml; env
+      # so the cache key reads it.
       # renovate: datasource=github-release-attachments depName=fluxcd/flux2
       FLUX_VERSION: v2.9.6
       FLUX_SHA256: b4d22673e9246cbd628881f1a9ef3b090085dced291e42d804555cee8e8d42c5
@@ -78,8 +56,6 @@ jobs:
           version: ${{ env.FLUX_VERSION }}
           sha256: ${{ env.FLUX_SHA256 }}
 
-      # sops, kind and the node image come from the pins ci.yml's sops_manifest_type_proof job
-      # reads, so this file holds no copy that could drift. age comes from apt.
       - name: Read the sops and kind pins
         id: pins
         run: |
@@ -116,8 +92,8 @@ jobs:
           sudo apt-get install -y --no-install-recommends age \
             || { sudo apt-get update -q && sudo apt-get install -y --no-install-recommends age; }
 
-      # The registry sits on kind's docker network, so source-controller reaches it by
-      # container name and the runner pushes through the published port.
+      # The registry sits on kind's docker network, so source-controller reaches it by container
+      # name.
       - name: Create the kind cluster and the registry
         run: |
           set -euo pipefail
@@ -127,8 +103,6 @@ jobs:
           kind create cluster --name drill --image "$node_image" --wait 120s
           docker run -d --name kind-registry --network kind -p 127.0.0.1:5001:5000 "$registry_image"
 
-      # The render of the Flux role at this commit, in placeholder mode. The bundle below
-      # reads its `cluster/flux-deferred/sync.yaml`.
       - name: Render the Flux role
         run: uv run python scripts/renderer/homelab_render.py cluster --out "$RUNNER_TEMP/out" --role flux
 
@@ -142,12 +116,8 @@ jobs:
           flux push artifact oci://127.0.0.1:5001/drill:drill --path="$RUNNER_TEMP/drill/bundle" \
             --source=bootstrap-drill --revision="drill@sha1:$GITHUB_SHA" --insecure-registry
 
-      # 3. The Flux components. Step 3 applies components.yaml alone: cluster/flux/secret.yaml
-      # holds `${...}` placeholders, and its Secret arrives through the `flux` tag's own
-      # Kustomization, with substitution, once cluster-vars is up.
-      # The pods carry priorityClassName homelab-critical, which H1's steps 1 to 3 install on a
-      # real cluster (the k3s role's priorityclass.yaml.j2). Without it the ReplicaSet cannot
-      # create a pod, so the drill creates the class first.
+      # The Flux pods carry priorityClassName homelab-critical, so the drill creates the class first
+      # or the ReplicaSet cannot create a pod.
       - name: "Step 3: apply the Flux components"
         run: |
           set -euo pipefail
@@ -206,8 +176,7 @@ jobs:
           echo "::error::the root never created the claim, so the leg cannot judge the order"
           exit 1
 
-      # 8. The stand-in for the restores: the claim from the fixture's own render, labelled,
-      # under a different field manager so the root's apply cannot remove the label.
+      # A different field manager, so the root's apply cannot remove the label.
       - name: "Step 8: restore stand-in"
         if: matrix.leg != 'no-sops-age'
         run: |
@@ -221,8 +190,6 @@ jobs:
           set -euo pipefail
           kinds=kustomization.kustomize.toolkit.fluxcd.io,configmap,persistentvolumeclaim
           if [ "$LEG" = root-first ]; then
-            # The leg passes only on the claim-specific problem: Flux owns a claim the
-            # stand-in did not create. Any other failure leaves the leg red.
             if out=$(kubectl get "$kinds" -A -o json \
                 | uv run python scripts/deploy_tools/bootstrap_drill.py check before-root); then
               echo "::error::the root-first leg passed the claim check, so the check cannot see a root that ran early"
@@ -236,8 +203,6 @@ jobs:
               | uv run python scripts/deploy_tools/bootstrap_drill.py check before-root
           fi
 
-      # 9. The root, from the render. It adopts what step 6 applied and creates the stateful
-      # tag, which binds the stand-in's claim.
       - name: "Step 9: apply the root"
         if: matrix.leg == 'green'
         run: |

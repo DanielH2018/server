@@ -11,7 +11,7 @@ Run: uv run pytest hosts/tests/host_checks/test_aide_check_names_its_config.py
 import re
 
 import pytest
-from _host_packages import shipped_text
+from _host_packages import package, shipped_text
 from _shell_render import rendered_shell_text
 
 UNIT_DIR = "/usr/lib/systemd/system"
@@ -19,9 +19,11 @@ TIMER = f"{UNIT_DIR}/homelab-aide-check.timer"
 SERVICE = f"{UNIT_DIR}/homelab-aide-check.service"
 SCRIPT = ("components", "aide-scan", "aide-check.sh.j2")
 
-# `aide` as a command word, followed by `--config=<path>` or `--config <path>` before the end.
+AIDE_CONF = "/usr/lib/homelab/aide.conf"
+
+# `aide` as a command word, followed by `--config=` or `--config ` and the AIDE_CONF variable.
 _AIDE_WITH_CONFIG = re.compile(
-    r"/aide\s+(?:\S+\s+)*?(?:--config[= ]|-c\s)/etc/aide/aide\.conf\b"
+    r'/aide\s+(?:\S+\s+)*?(?:--config[= ]|-c\s)"?\$AIDE_CONF\b'
 )
 
 
@@ -37,9 +39,12 @@ def test_the_weekly_cron_runs_the_check_script(host: str):
 
 
 def test_weekly_aide_check_passes_its_config():
+    script = rendered_shell_text(*SCRIPT)
+    assert re.search(rf"^AIDE_CONF={re.escape(AIDE_CONF)}$", script, re.M)
+    assert AIDE_CONF in package("daniel-box").files
     aide_lines = [
         line
-        for line in rendered_shell_text(*SCRIPT).splitlines()
+        for line in script.splitlines()
         if "/usr/bin/aide " in line and not line.lstrip().startswith("#")
     ]
     assert aide_lines, "aide-check.sh no longer invokes /usr/bin/aide"

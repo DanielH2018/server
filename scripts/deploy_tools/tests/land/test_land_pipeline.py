@@ -100,10 +100,9 @@ def test_a_verdict_is_recorded_for_probe_landing_verdicts(land_run, verdict_reco
 @pytest.mark.parametrize("argv", [["--bogus"], []])
 def test_a_usage_error_does_not_annotate(argv):
     """The rejecting half: a bad flag and a missing `--pr` are usage errors, not landings,
-    and must write nothing to the stream the Landings board counts. Both reach argparse's
-    SystemExit before a Landing or a Ledger exists, so the only line they could write is
-    `pr=unknown verdict=aborted` -- 592 of which reached Loki's 744h window. `main`
-    renumbers the code to `LAND_BAD_ARGS` on the way out and still annotates nothing.
+    and must write nothing to the stream the Landings board counts. Both exit
+    `LAND_BAD_ARGS` before a Landing or a Ledger exists, so the only line they could write is
+    `pr=unknown verdict=aborted` -- 592 of which reached Loki's 744h window.
 
     Real `parse_args`, not the `land_run` fixture's wrapper: the wrapper always calls the
     real parser first and only replaces `primary` afterwards, so an unrecognized flag still

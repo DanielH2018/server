@@ -31,24 +31,20 @@ as_ctl() {
   runuser -u "$ctl" -- env HOME="$ctl_home" TMPDIR=/tmp PATH=/usr/bin:/bin "$@"
 }
 
-# The mountpoint of the session's home. The session unit mounts a tmpfs here for each run, so the
-# directory itself stays root's and empty. What earlier sessions wrote here would only be hidden
-# by the mount. find -delete follows no link, and the session's tmpfs exists only in its own unit.
+# The session unit mounts a tmpfs here each run, so the directory itself stays root's and empty.
 install -d -o root -g root -m 0755 "$home"
 chmod g-s "$home"
 find "$home" -xdev -mindepth 1 -delete
-# The controller's home holds the run's state. Group sys_user and setgid, so the docs-refresh
-# reader, which runs as sys_user, reads runs.jsonl.
+# Group sys_user and setgid, so the docs-refresh reader (sys_user) can read runs.jsonl.
 install -d -o "$ctl" -g {{ sys_user }} -m 2750 "$ctl_home"
-# The exchange: the controller owns it, and the session's group may only traverse it. The runner
-# recreates its requests/ and out/ children each run, setgid and group-writable, so the session
-# writes there and the controller reads what it wrote; the session cannot replace either child.
+# The session's group may only traverse the exchange; requests/ and out/ are setgid and
+# group-writable, and the session cannot replace either child.
 install -d -o "$ctl" -g "$agent" -m 2750 {{ pins.exchange_dir }}
 # What the session reads through its group and cannot write.
 install -d -o "$ctl" -g "$agent" -m 2750 "$tools" "$clone"
 
-# The toolchain and the clone change only while no run holds the lock: a refresh under a live
-# session would reset the tree it reads. The unit runs this script before its ExecStart takes it.
+# Change the toolchain and clone only while no run holds the lock: a refresh under a live session
+# resets its tree.
 exec 9>>"$ctl_home/run.lock"
 chown "$ctl:$ctl" "$ctl_home/run.lock"
 if ! flock -n 9; then
@@ -103,12 +99,7 @@ fi
 (cd "$clone" && as_ctl env UV_PYTHON_INSTALL_DIR="$tools/python" \
   UV_CACHE_DIR="$ctl_home/uv-cache" "$tools/.local/bin/uv" sync --frozen --quiet)
 
-# The session reads all of it through its group. A file uv hardlinked from the controller's cache,
-# or an installer moved into place, keeps the group and mode it was made with, which the setgid
-# directory cannot change, so both trees are regrouped and opened to the group on every run.
-# Root regroups, because the controller is not in the session's group and chgrp refuses a group
-# its caller lacks. -h and -R without -L change each link itself and follow none, so a link in
-# the controller's tree regroups nothing outside it. The controller owns every file, so it sets
-# the modes.
+# Root regroups: the controller is not in the session's group, and chgrp refuses a group its caller
+# lacks. -h and -R without -L follow no link, so nothing outside the tree is regrouped.
 chgrp -R -h "$agent" "$tools" "$clone"
 as_ctl chmod -R g+rX,g-w "$tools" "$clone"

@@ -156,7 +156,7 @@ class Options:
 
 
 def parse_args(argv: list[str] | None, description: str) -> Options:
-    """The command line as Options; argparse exits 2 on a bad one, and prints `description` for --help."""
+    """The command line as Options; exits 64 on a bad one, and prints `description` for --help."""
     parser = ArgumentParser(
         prog="land.sh",
         description=description,

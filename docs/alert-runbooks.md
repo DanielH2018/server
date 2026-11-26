@@ -405,7 +405,9 @@ Alertmanager repeats it daily.
 
 - The scan fails when rkhunter raised a warning, a suspect file or a possible rootkit, or when
   it wrote no summary.
-- An account change clears on the next run.
+- rkhunter reports an account change only on daniel-pi. On a host that runs AIDE, the AIDE
+  check judges account changes and rkhunter's account tests are off. An account
+  change clears on the next run.
 - `sudo systemctl start homelab-rkhunter-check.service` re-runs the scan. A DOWN run exits 0,
   so the unit fails only when the run could not write its verdict.
 
