@@ -1,10 +1,8 @@
 {% from 'service.yml.j2' import service with context %}
 ---
 {{ service('freshrss', container_item.port) -}}
-{# The feed-cache Service below is deliberately NOT the service() macro: that macro sets
-   `selector.app` to the Service NAME, and this pair differs on purpose — the Service is
-   `feed-cache` while the sidecar's pod label is `freshrss-feed-cache`. Same disqualifier as
-   traefik's metrics-service. #}
+{# Deliberately NOT the service() macro: it sets `selector.app` to the Service name, but here the
+   Service is `feed-cache` and the pod label `freshrss-feed-cache`. #}
 ---
 # THE NAME IS LOAD-BEARING. FreshRSS stores subscription URLs in its database as
 # `http://feed-cache.homelab.svc.cluster.local/...`, and its internal-host allowlist names the

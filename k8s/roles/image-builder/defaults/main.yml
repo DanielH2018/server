@@ -1,11 +1,6 @@
 ---
-# BuildKit rather than kaniko. kaniko is the obvious first reach for building in-cluster, but
-# it is archived upstream. BuildKit is maintained and is what Docker itself builds with, so a
-# Dockerfile that works locally works here.
-#
-# The `-rootless` variant specifically: the daemonful one wants a privileged pod. This runs as
-# uid 1000 with no added capabilities. It is still the least-confined workload in the fleet —
-# see the securityContext comment in build-job.yaml.j2, which is the honest version of that.
+# BuildKit rather than kaniko (archived upstream); `-rootless` because the daemonful variant wants a
+# privileged pod.
 image_builder_k8s_image: moby/buildkit:v0.35.0-rootless@sha256:5987568f92dafbfb679879de59c1cd8d26597f5f6635c314e166164e2615870c
 
 # Renovate stance: whether an image bump here may automerge. `promote` deploys what merges.
@@ -18,22 +13,12 @@ image_builder_k8s_image: moby/buildkit:v0.35.0-rootless@sha256:5987568f92dafbfb6
 k8s_autodeploy: false
 k8s_autodeploy_reason: "renders a Job, no Deployment, nothing for rollout status to gate; not a services entry, so a promoted bump matches no play and deploys nothing while reporting success; builds the images other roles consume"
 
-# Caller-supplied; listed here so the contract is readable in one place rather than inferred
-# from the templates.
-#
-#   image_builder_name        image name pushed to the registry, e.g. n8n
-#   image_builder_tag         tag to push, e.g. latest
-#   image_builder_dockerfile  template rendered into the context as `Dockerfile`
-#   image_builder_context     extra templates in the context, {src: dest} — dest is the path
-#                             a COPY in the Dockerfile refers to
-#   image_builder_context_files  same shape, but embedded verbatim (lookup('file')) — for
-#                             sources Jinja must not touch (homelab-mcp's app.py embeds
-#                             PromQL whose {{...}} braces a template render would eat)
+# Caller-supplied: image_builder_name, _tag, _dockerfile (rendered as `Dockerfile`), _context {src:
+# dest} (dest is the COPY path), _context_files (same, verbatim, for sources Jinja must not touch).
 image_builder_tag: latest
 image_builder_context: {}
 image_builder_context_files: {}
 
-# A build pulls base layers over the internet and can be slow on a cold cache; a rebuild with
-# warm layers is quick. Bounds a wedged build so a deploy fails with a message instead of
-# hanging on the wait's own timeout.
+# Bounds a wedged build so a deploy fails with a message instead of hanging on the wait's own
+# timeout.
 image_builder_timeout: 900

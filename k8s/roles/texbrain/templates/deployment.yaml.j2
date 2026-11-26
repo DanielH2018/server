@@ -30,15 +30,12 @@ spec:
             - containerPort: {{ container_item.port }}
 {{ hardened_security_context(read_only=true, non_root=true) }}
           volumeMounts:
-            # The three paths nginx-unprivileged writes. Everything served is baked into the image
-            # and read-only; the app's own state lives in the browser, never here.
             - name: nginx-cache
               mountPath: /var/cache/nginx
             - name: nginx-tmp
               mountPath: /etc/nginx/tmp
-            # nginx-unprivileged's main nginx.conf puts proxy_temp, client_body_temp and the rest
-            # under /tmp and creates them at startup. Mounting only two paths crashloops the pod:
-            #   [emerg] mkdir() "/tmp/proxy_temp" failed (30: Read-only file system)
+            # Mount /tmp too: nginx creates proxy_temp there at startup, and the pod crashloops
+            # without it.
             - name: nginx-run
               mountPath: /tmp
           readinessProbe:

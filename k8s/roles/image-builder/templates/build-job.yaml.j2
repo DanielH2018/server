@@ -7,20 +7,16 @@ metadata:
   namespace: {{ k8s_namespace }}
 spec:
   activeDeadlineSeconds: {{ image_builder_timeout }}
-  # No retry. A failed build is a Dockerfile or a registry problem, and both fail again
-  # identically — a second attempt only doubles the time before the deploy says so.
+  # No retry: a failed build is a Dockerfile or registry problem and fails again identically.
   backoffLimit: 0
-  # Backstop cleanup: the deploy task always deletes this Job before re-applying it, but a day's
-  # TTL means a completed Job doesn't sit around indefinitely if that step is ever skipped.
+  # Backstop: the deploy task deletes this Job before re-applying; the TTL covers a skipped step.
   ttlSecondsAfterFinished: 86400
   template:
     metadata:
       labels:
         app: build-{{ image_builder_name }}
-        # Static, unlike `app` above which is per-image-name (build-n8n, build-code-server, ...).
-        # This is what the registry's NetworkPolicy admits on the push port, so every current
-        # and future caller of this role is covered without that policy having to enumerate
-        # image_builder_name values. See k8s/registry/templates/networkpolicy.yaml.j2.
+        # Static, unlike `app`: the registry's NetworkPolicy admits this label on the push port,
+        # covering every caller (k8s/registry/templates/networkpolicy.yaml.j2).
         netpol-role: image-builder
     spec:
       restartPolicy: Never
@@ -31,18 +27,10 @@ spec:
           image: {{ image_builder_k8s_image }}
           imagePullPolicy: IfNotPresent
           env:
-            # Upstream's own kubernetes/job.rootless.yaml sets exactly this. It drops the
-            # per-build-step nested user namespace, so a RUN step is not sandboxed from the
-            # buildkitd process beside it — the POD is the boundary instead, which is the trade
-            # upstream makes for k8s and is sound here: the pod is single-purpose, short-lived,
-            # and already running the arbitrary code in question.
-            #
-            # It does NOT remove the namespace rootlesskit sets up for the DAEMON, which is a
-            # separate thing that happens before buildkitd starts. See the securityContext.
+            # Drops the per-RUN user namespace (as upstream's job.rootless.yaml), so the POD is the
+            # sandbox boundary.
             - name: BUILDKITD_FLAGS
               value: --oci-worker-no-process-sandbox
-          # buildctl-daemonless.sh starts a buildkitd for the life of the command, which is what
-          # makes a one-shot Job possible without running a daemon Deployment nothing else uses.
           command:
             - buildctl-daemonless.sh
           args:
@@ -54,59 +42,23 @@ spec:
             - context=/workspace
             - --local
             - dockerfile=/workspace
-            # registry.insecure=true because the registry serves plain HTTP, which is only
-            # acceptable while it is unreachable off the node (hostPort on
-            # {{ k8s_registry_host_ip }}). Pushed to the SERVICE address — `localhost` in here
-            # would mean this pod. See group_vars/all.yml for the address pair.
-            #
-            # TWO NAMES for one build. `image_builder_content_tag` is the immutable
-            # `sha-<12 hex>` derived from the build inputs, `image_builder_tag` the mutable
-            # `latest` every consumer still references. One exporter, so the image is built and
-            # pushed once and both names resolve to the same digest — which is what keeps the
-            # drift gate reading one object.
-            #
-            # `"name=a,b"` is quoted because buildctl parses the exporter options as CSV: an
-            # unquoted second name would be read as another key=value pair and rejected. The
-            # quotes are literal characters in this argv element, which the CSV reader consumes.
+            # registry.insecure=true: plain-HTTP registry, acceptable only while unreachable off the
+            # node;
+            # push to the SERVICE address.
+            # Two names (sha-<12 hex>, latest) from one exporter, one digest; `"name=a,b"` is quoted
+            # because buildctl parses CSV.
             - --output
             - type=image,"name={{ k8s_registry_push_host }}/{{ image_builder_name }}:{{ image_builder_content_tag }},{{ k8s_registry_push_host }}/{{ image_builder_name }}:{{ image_builder_tag }}",push=true,registry.insecure=true
-            # Layer cache, kept in the registry beside the image it belongs to. buildkitd's
-            # own state is an emptyDir that dies with the Job, so without this EVERY build is
-            # cold, even when the Dockerfile is byte-identical to last time.
-            #
-            # mode=min, not max: max only adds the layers of intermediate BUILD STAGES, and
-            # every Dockerfile this role builds is single-stage, so min already exports every
-            # RUN layer. max would cost registry space for nothing.
-            #
-            # image-manifest+oci-mediatypes make the cache storable in a standard distribution
-            # registry (the `registry` image, pinned in k8s/roles/registry/defaults/main.yml).
-            #
-            # The `:buildcache` tag is a real tag, so registry GC — which only sweeps
-            # UNTAGGED blobs — will not reclaim it. The cache is therefore bounded by the
-            # number of built images, not by how often they are rebuilt.
+            # Registry layer cache: buildkitd state dies with the Job. mode=min suffices
+            # (single-stage);
+            # `:buildcache` is a real tag.
             - --import-cache
             - type=registry,ref={{ k8s_registry_push_host }}/{{ image_builder_name }}:buildcache,registry.insecure=true
             - --export-cache
             - type=registry,ref={{ k8s_registry_push_host }}/{{ image_builder_name }}:buildcache,mode=min,image-manifest=true,oci-mediatypes=true,registry.insecure=true
-          # Rootless BuildKit needs these two, and this is the least-confined workload in the
-          # fleet — everything else runs cap_drop: ALL and nothing else relaxes seccomp. Building
-          # an image means unpacking arbitrary base-image layers and running arbitrary RUN steps,
-          # so the builder is a code-execution surface by construction. Rootless buys that it is
-          # NOT privileged and does NOT run as uid 0.
-          #
-          # It runs only during a deploy, has no Service and no ingress, and the thing it builds
-          # is a Dockerfile from this repo. The exposure is the deploy path itself, which is
-          # already trusted with far more.
-          #
-          # allowPrivilegeEscalation is NOT set false here, the one place in this fleet that is
-          # true. False fails before buildkitd starts, with `newuidmap: Could not set caps`:
-          # rootlesskit puts the DAEMON in a user namespace, and mapping subuids into one goes
-          # through the setuid newuidmap helper, whose whole job is to raise capabilities.
-          # Blocking that makes rootless impossible, leaving only a root or privileged builder,
-          # which is strictly worse. Upstream's k8s example omits the field for this reason.
-          #
-          # What it does not grant: root on the node. The container is uid 1000, adds no
-          # capabilities, and is not privileged.
+          # Rootless BuildKit needs Unconfined seccomp and allowPrivilegeEscalation unset: false
+          # fails with `newuidmap: Could not set caps`. The one such workload; uid 1000, no added
+          # caps, runs only during a deploy.
           securityContext:
             seccompProfile:
               type: Unconfined
@@ -118,10 +70,8 @@ spec:
             - name: image-builder-context
               mountPath: /workspace
               readOnly: true
-            # buildkitd's state. An emptyDir, not a PVC: cross-build caching lives in the
-            # registry (see --export-cache above), so this only has to survive one build. A
-            # Longhorn volume would duplicate that at higher cost, and would pin builds to one
-            # node.
+            # An emptyDir, not a PVC: cross-build caching lives in the registry, and a Longhorn
+            # volume would cost more and pin builds to one node.
             - name: image-builder-buildkitd
               mountPath: /home/user/.local/share/buildkit
 {{ container_resources(cpu_limit="2", mem_limit="2048Mi", cpu_request="200m", mem_request="256Mi") }}

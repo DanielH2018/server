@@ -1,24 +1,16 @@
 ---
-# Daily backup of every Longhorn volume to B2.
-#
 {# DECIDED: groups: [default], and no recurringJobSelector on the StorageClass; Longhorn already
    assigns unlabelled volumes to default, and StorageClass parameters are immutable. #}
-# groups: [default] rather than a bespoke group label. Longhorn applies a `default`-group job
-# to any volume that has no job of its own, so a new PVC is backed up without anyone
-# remembering to label it — and the labels Longhorn reads live on its Volume CRs, not on the
-# PVC, so a PVC-level label would have been silently inert.
-#
-# The trade is that an opt-out is the explicit act: the media volumes are large, so they get
-# their own group to keep them out of this one.
+# groups: [default]: Longhorn applies it to volumes without their own job, and its labels live on
+# Volume CRs, not PVCs.
 apiVersion: longhorn.io/v1beta2
 kind: RecurringJob
 metadata:
   name: daily-backup
   namespace: longhorn-system
 spec:
-  # Required, and separate from metadata.name — Longhorn uses spec.name to label the volumes
-  # a job claims. Omitting it is rejected with "invalid job {Name: ...}", where the empty Name
-  # is the whole complaint.
+  # Required and separate from metadata.name: Longhorn uses spec.name to label volumes; omitting it
+  # is rejected.
   name: daily-backup
   cron: "{{ k3s_longhorn_backup_cron }}"
   task: backup
@@ -27,12 +19,8 @@ spec:
   retain: {{ k3s_longhorn_backup_retain }}
   concurrency: 1
 ---
-# The weekly tier, sharded across weekdays: one Sunday batch — stacked with the daily tier,
-# double retention pruning, and the 07:30 reboot resync — blows both B2 2,500/day caps. Each
-# B2-destined volume backs up once a week, on the weekday its entry's weekly_backup_claims
-# declares (k3s_longhorn_weekly_volumes); the label reconcile job (the `longhorn-reconcile`
-# role) assigns the matching weekly-backup-d<N> group. An hour after the daily run so the two
-# never overlap.
+# Sharded by weekday because one Sunday batch blows both B2 2,500/day caps. An hour after the daily
+# run so they never overlap.
 {% for shard in range(7) %}
 {% if not loop.first %}
 ---
@@ -52,12 +40,8 @@ spec:
   concurrency: 1
 {% endfor %}
 ---
-# Longhorn's own filesystem trim. It hands blocks that ext4 has already freed back to the
-# replicas.
-#
-# A volume joins this job through the per-job label `recurring-job.longhorn.io/trim: enabled`,
-# which `longhorn-reconcile` sets on a volume that is attached and has a Running ReplicaSet or
-# StatefulSet workload.
+# A volume joins through the per-job label `recurring-job.longhorn.io/trim: enabled`, set by
+# `longhorn-reconcile`.
 {# DECIDED: groups: [] and never a `trim` group. Four readers treat every
    `recurring-job-group.longhorn.io/` key on a Volume as a backup tier, so a `trim` group would put
    a `no-backup` volume back into the restore drill's IN_BACKUP_GROUP set and would replace
@@ -72,8 +56,6 @@ metadata:
   namespace: longhorn-system
 spec:
   name: trim
-  # 06:10 UTC follows both backup windows (03:30 daily, 04:30 weekly): a trim before the day's
-  # snapshot hands back blocks that the snapshot then pins again.
   cron: "{{ k3s_longhorn_trim_cron }}"
   task: filesystem-trim
   groups: []

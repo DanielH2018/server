@@ -1,6 +1,5 @@
 ---
-# The stable LSIO stream. Do not move to the nightly or plugins branch: Lidarr cannot go back to
-# stable without restoring its database.
+# Stable stream only: Lidarr cannot go back from nightly or plugins without restoring its database.
 lidarr_k8s_image: lscr.io/linuxserver/lidarr:3.1.6.5079-ls49@sha256:8fb40ada166dd1880cb1b166df5bcbb081107523f20ab60df05c313e2052a467
 
 # Renovate stance: whether an image bump here may automerge. `promote` deploys what merges.
@@ -11,8 +10,6 @@ k8s_autodeploy_reason: "migrating state — Recreate + RWO PVC, protected by the
 k8s_autodeploy_snapshot_pvcs: [lidarr-config]
 k8s_autodeploy_unreverted_claims: [media-data]
 
-# The rollout budget, declared once, as radarr's is: Flux reads the literal, and the template's
-# progressDeadlineSeconds reads it through lidarr_k8s_rollout_timeout.
 manifests_rollout_timeout: 660s
 lidarr_k8s_rollout_timeout: "{{ manifests_rollout_timeout }}"
 
@@ -21,8 +18,7 @@ lidarr_k8s_claim: lidarr-config
 lidarr_k8s_storage_class: longhorn
 lidarr_k8s_size: 2Gi
 
-# The WHOLE data tree at /data: imports hardlink from /data/torrents into /data/media/music, and
-# link() only works when one mount spans both.
+# Whole data tree: hardlinks from /data/torrents need one mount spanning both.
 lidarr_k8s_media_claim: media-data
 
 # No Docker mods.
@@ -33,13 +29,9 @@ lidarr_k8s_mem_limit: 1024Mi
 lidarr_k8s_cpu_request: "100m"
 lidarr_k8s_mem_request: 128Mi
 
-# Bound via LIDARR__LOG__*; see k8s/roles/sonarr/defaults/main.yml for why upstream's defaults
-# inflate the backup.
 lidarr_k8s_log_level: info
 lidarr_k8s_log_rotate: "10"
 
-# Pinned in lockstep with sonarr, radarr and prowlarr
-# (tests/services/test_exportarr_sidecars.py::test_the_image_pins_stay_in_lockstep).
 lidarr_k8s_exportarr_image: ghcr.io/onedr0p/exportarr:v2.3.0@sha256:af535d94061cf97a52e1661945ffba78c03f9443eae7c0da1a80a5a4be56b520
 
 # The image's s6 init drops to PUID 1000 (lsio_env).
@@ -77,8 +69,6 @@ k8s_claims:
     storage_class: "{{ lidarr_k8s_storage_class }}"
     size: "{{ lidarr_k8s_size }}"
 
-# Each entry renders k8s/templates/secret-default.yaml.j2 as secret-<name>.yaml:
-# its `string_data` maps a Secret field to the SOPS key its value comes from.
 render_secrets:
   # lidarr's API key. lidarr adopts it through LIDARR__AUTH__APIKEY, and the exportarr
   # sidecar authenticates with it.

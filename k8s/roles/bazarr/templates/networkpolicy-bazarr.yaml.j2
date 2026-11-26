@@ -1,24 +1,8 @@
 {% from 'networkpolicy.yml.j2' import networkpolicy with context %}
 ---
-# Admits monitor-bridge to bazarr's API, which the ingress default-deny otherwise refuses.
-#
-# `baseline-ingress` (netpol-baseline role) admits exactly four sources to every pod carrying
-# `netpol-baseline: enforced`: traefik, prometheus from the observability namespace, and the two
-# cni0 gateways. monitor-bridge is in none of them, so its Bazarr Health check got
-# `Connection refused` on bazarr.homelab.svc.cluster.local:6767 without this policy, though the
-# Service and endpoint are correct and the pod answers on its own IP. A check that cannot reach
-# its subject reports the fence, not the subject.
-#
-# Same shape and same reasoning as k8s/roles/prowlarr/templates/networkpolicy-prowlarr.yaml.j2.
-# PORT-SCOPED: the grant is this one port, not the pod.
-#
-# traefik is listed deliberately and is NOT redundant to remove. While bazarr carries the
-# baseline label the union is identical with or without it, because policies are additive. It
-# stays so this policy states its own complete caller set rather than depending on the baseline
-# continuing to admit traefik on every port — if that baseline rule is ever port-scoped, or this
-# pod template loses the label, this line is what keeps the UI reachable.
-#
-# The caller list is `netpol_from:` on this role's containers_list entry
-# (cluster/services.yml). The entry's `netpol_role_owned: true` keeps netpol-baseline
-# from rendering a second copy.
+# baseline-ingress admits only traefik, prometheus and the two cni0 gateways, so monitor-bridge
+# needs this policy. PORT-SCOPED.
+# traefik is listed so this policy states its complete caller set rather than relying on the
+# baseline.
+# Callers are `netpol_from:` on this role's entry; `netpol_role_owned: true` avoids a second copy.
 {{ networkpolicy(container_item.name, container_item.port, container_item | netpol_callers) }}

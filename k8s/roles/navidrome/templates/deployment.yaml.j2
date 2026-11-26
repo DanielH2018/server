@@ -8,9 +8,7 @@ metadata:
   name: navidrome
   namespace: {{ k8s_namespace }}
 spec:
-  # The data PVC is ReadWriteOnce and Longhorn runs one replica, so a rolling update would
-  # deadlock: the new pod waits for a volume the old pod still holds. Navidrome's index is
-  # sqlite besides, which wants one writer.
+  # An RWO volume deadlocks a rolling update, and sqlite wants one writer.
 {{ spec_shell('Recreate') }}
   replicas: {{ navidrome_k8s_replicas }}
   selector:
@@ -22,8 +20,8 @@ spec:
         app: navidrome
         netpol-baseline: enforced
     spec:
-      # Longhorn hands back a root-owned filesystem; without an fsGroup the non-root process
-      # cannot create its sqlite index on the fresh volume.
+      # Longhorn hands back a root-owned filesystem; without fsGroup the process cannot create its
+      # sqlite index.
 {{ pod_shell('homelab-best-effort', run_as_user=navidrome_k8s_uid, run_as_group=navidrome_k8s_uid, fs_group=navidrome_k8s_uid) }}
 {# DECIDED: no node affinity; the bound media-data local PV's nodeAffinity pins this pod to
    daniel-box, where the library lives, and a preference for any other node is dead. #}
@@ -41,18 +39,16 @@ spec:
               value: /data
             - name: ND_PORT
               value: "{{ container_item.port }}"
-            # On for ListenBrainz scrobbling and Deezer artist images. The same switch also turns
-            # on the anonymous insights collector and the Last.fm agent, so both are off below:
-            # Last.fm needs an API account this setup does not have.
+            # The same switch enables the insights collector and the Last.fm agent, so both are off
+            # below.
             - name: ND_ENABLEEXTERNALSERVICES
               value: "true"
             - name: ND_ENABLEINSIGHTSCOLLECTOR
               value: "false"
             - name: ND_LASTFM_ENABLED
               value: "false"
-            # /metrics on the UI port, no password: the namespace fence admits only traefik and
-            # prometheus, and the route keeps the path behind Authelia. Homepage's tile reads the
-            # library counts from Prometheus.
+            # No password: the fence admits only traefik and prometheus, and the route keeps the
+            # path behind Authelia.
             - name: ND_PROMETHEUS_ENABLED
               value: "true"
             - name: TZ

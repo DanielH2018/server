@@ -113,17 +113,15 @@ def test_import_pending_with_messages_is_not_a_candidate():
 
 
 def test_error_with_client_outage_phrase_in_errormessage_is_a_candidate():
-    # There is no CLIENT_ERROR_PATTERNS exemption: at the pinned Sonarr/Radarr a client
-    # outage empties the queue rather than flipping items to `error`, and no outage phrase
-    # reaches errorMessage. A bare `error` is a candidate whatever its errorMessage says;
-    # adding an exemption fails here.
+    # No CLIENT_ERROR_PATTERNS exemption: a bare `error` is a candidate whatever its errorMessage
+    # says.
     item = _item(status="error", error_message="qBittorrent is not responding")
     assert autofix.is_candidate(item, PATTERNS) is True
 
 
 def test_error_with_release_carried_phrase_in_statusmessage_still_candidate():
-    # A release named to carry a client-error phrase reaches statusMessages[].messages
-    # through the *arr's own import rejection text. It must not exempt itself.
+    # A release name carrying a client-error phrase reaches statusMessages through import rejection
+    # text; it must not exempt itself.
     item = _item(
         status="error",
         state="failedPending",
@@ -205,8 +203,7 @@ def test_item_key_distinct_across_apps_for_same_id():
 
 
 def test_item_key_numeric_download_id_does_not_collide_with_id_fallback():
-    # a numeric-string downloadId (e.g. a future NZBGet numeric id) must not alias the
-    # same-numbered queue `id` fallback of another item
+    # A numeric-string downloadId must not alias another item's same-numbered queue `id` fallback.
     dl_item = _item(download_id="7", qid=99)
     id_item = _item(download_id=None, qid=7)
     assert autofix.item_key("Sonarr", dl_item) == "Sonarr:dl:7"
@@ -409,11 +406,6 @@ def test_run_once_no_api_keys_is_disabled_with_no_requests(monkeypatch):
     ok, msg = autofix.run_once(autofix.CycleState())
 
     assert (ok, msg) == (True, "arr auto-block disabled (no API keys)")
-
-
-# The cap lives in monitor-bridge's bridge/common.py. This drives the real `post_discord` through
-# a stub of the stdlib `urlopen`, on a copy of the module loaded with the webhook in its
-# environment, so no first-party name is patched.
 
 
 class _NoBody:

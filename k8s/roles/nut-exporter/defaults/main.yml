@@ -12,12 +12,8 @@ nut_exporter_k8s_image: ghcr.io/druggeri/nut_exporter:3.3.0@sha256:276460d141c73
 k8s_autodeploy: true
 k8s_autodeploy_reason: "read-only NUT network client with a readinessProbe — no privilege, no volume, no node pin; a bad image bump costs UPS metrics, not the shutdown chain, which lives in the separate denylisted `nut` role"
 
-# The UPS name upsd knows is NOT a variable of this role, and neither is the metrics port. The
-# exporter scrapes one UPS per request and takes the name as a `ups=` query param, so the name
-# is set where the request is built: the `nut` metrics item on this role's services
-# entry, which the observability scrape job renders from. That item holds the port as well, and
-# the templates read it back with `metrics_port('nut')`. A copy here would be a second place to
-# drift.
+# The UPS name and metrics port live in the `nut` metrics item on this role's services entry; a copy
+# here would drift.
 
 # The variables coaxed into Prometheus series. Upstream's default list omits battery.runtime,
 # which is the one an operator reads during an outage — how long have I got — so the list is

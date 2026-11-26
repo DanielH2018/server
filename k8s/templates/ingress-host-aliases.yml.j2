@@ -19,13 +19,8 @@
       hostAliases:
         - ip: "{{ k3s_metallb_ingress_vip }}"
           hostnames:
-            # The fleet all-clear tile's probe host, and the ONLY name here that fronts no
-            # workload. It exists so the edge self-check path cannot be outranked: Traefik's
-            # router priority is rule length, and an app's Host() rule can be longer than
-            # `PathPrefix(`/.well-known/traefik-edge-selfcheck`)` (48 chars); littlelink's
-            # two-host rule is 68. A name with no IngressRoute anywhere has no Host() router to
-            # lose to, whatever gets added later. The *.local wildcard SAN covers it, so it adds
-            # no ACME order.
+            # Fronts no workload, so no Host() router outranks the edge self-check (priority is rule
+            # length).
             # test_the_all_clear_probe_host_fronts_no_route keeps it unrouted.
             - "edge-selfcheck.local.{{ domain }}"
 {%- for name in services | lan_hostnames %}

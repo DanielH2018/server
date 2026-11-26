@@ -35,8 +35,7 @@ LIGHTS = "light.bedroom_lights"
 # Test-only writers, exempt from the invariant. Keep this list as short as the reason is specific.
 ALLOWED_UNARMED = frozenset({"bedroom_preview_wake"})
 
-# Non-vacuity: the scan must still find these two scripts. A YAML reshape that empties the subject
-# set would otherwise pass an `all(...)` over nothing.
+# Non-vacuity: a YAML reshape that empties the subject set would pass `all(...)` over nothing.
 MUST_SCAN = frozenset({"bedroom_apply_wake", "bedroom_lights_set", "bedroom_blip"})
 
 SEQUENCE_KEYS = ("sequence", "action", "then", "else", "default")

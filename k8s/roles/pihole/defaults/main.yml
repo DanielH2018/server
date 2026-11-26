@@ -14,10 +14,7 @@ k8s_autodeploy: false
 k8s_autodeploy_reason: "platform — LAN DNS resolver; a failed deploy breaks name resolution fleet-wide, and host probes stay green through that kind of outage"
 
 pihole_k8s_claim: pihole-etc
-# Second instance, for deploy-time DNS continuity. Its own claim because /etc/pihole is RWO
-# and single-writer; the contents are fully derivable (see the note on pihole_k8s_claim), so
-# two independent copies reconciled from the same declaration stay equivalent without sharing
-# a volume.
+# Own claim: /etc/pihole is RWO and single-writer, and its contents are derivable.
 pihole_k8s_claim_2: pihole-etc-2
 # nobackup: every byte of /etc/pihole is derivable — gravity.db from the declared adlists
 # below, pihole.toml from the FTLCONF env, dnsmasq.d from the shared template. pihole-FTL.db
@@ -25,8 +22,6 @@ pihole_k8s_claim_2: pihole-etc-2
 pihole_k8s_storage_class: longhorn-nobackup
 pihole_k8s_size: 2Gi
 
-# Both instances' claims, which the renderer emits for this role and the pihole Kustomization
-# applies.
 k8s_claims:
   - name: "{{ pihole_k8s_claim }}"
     storage_class: "{{ pihole_k8s_storage_class }}"
@@ -35,23 +30,16 @@ k8s_claims:
     storage_class: "{{ pihole_k8s_storage_class }}"
     size: "{{ pihole_k8s_size }}"
 
-# Unbound listens here inside the pod — FTL owns :53 in the shared network namespace.
-# Consumed by the ConfigMap (unbound server config), the probes, and FTL's upstream env.
+# Unbound listens here because FTL owns :53 in the shared network namespace.
 pihole_k8s_unbound_port: 5335
 
-# The pinned DNS VIP handed to the LAN; global (group_vars) because daniel-server's wg-easy
-# and resolv.conf point at it too.
 pihole_k8s_lan_ip: "{{ dns_k8s_vip }}"
 
-# Pinned so CoreDNS can name it. Cluster DNS forwards to this address rather than to the LAN
-# VIP (see coredns_upstreams): kube-proxy reaches either Pi-hole pod through it, where
-# the VIP is subject to externalTrafficPolicy: Local. An unpinned clusterIP would be
-# reassigned if the Service were ever recreated, silently pointing cluster DNS at nothing.
-# Immutable once bound — changing it needs the Service deleted and recreated.
+# Pinned so cluster DNS forwards via kube-proxy to either pod, where the LAN VIP is subject to
+# externalTrafficPolicy: Local. Immutable once bound: changing it means recreating the Service.
 pihole_k8s_dns_cluster_ip: "{{ dns_k8s_cluster_ip }}"
 
-# Blast-radius caps. k8s-native units on purpose: "1.0"/"0.50" normalize server-side
-# ("1"/"500m") and make every `kubectl apply` report the Deployment "configured".
+# Use k8s-native units: "1.0" normalizes server-side and every apply reports "configured".
 pihole_k8s_cpu_limit: "1"
 pihole_k8s_mem_limit: 512Mi
 pihole_k8s_cpu_request: 100m
@@ -61,10 +49,8 @@ pihole_k8s_unbound_mem_limit: 256Mi
 pihole_k8s_unbound_cpu_request: 50m
 pihole_k8s_unbound_mem_request: 32Mi
 
-# Break-glass for the sibling guard. `false` leaves the guard Job and its ConfigMap out of
-# the render, so `pihole-precheck` holds only the guard's RBAC and `pihole` is no longer held by
-# a failing guard. Set it in a PR to push a revision past a guard that holds a fix to a down
-# pihole-2, then restore `true` in a second PR. CLAUDE.md has the procedure.
+# Break-glass: false leaves the guard Job out, so a failing guard no longer holds `pihole`.
+# Restore true in a second PR; CLAUDE.md has the procedure.
 pihole_k8s_sibling_guard: true
 
 # Desired blocklist state, reconciled into gravity.db by templates/verify/gravity.yaml.j2 (idempotent
@@ -83,9 +69,7 @@ pihole_k8s_regex_deny:
   - '(\.|^)logs\.roku\.com$'
   - '(\.|^)ads\.samsung\.com$'
 
-# Both Pi-holes are restart targets, so the renderer stamps `checksum/restart` on each
-# (scripts/renderer/renderer_lib/restart.py). Flux rolls instance 1 in `pihole` and instance 2
-# in `pihole-deferred`, after instance 1 is Ready. No Flux path runs a restart task.
+# Instance 2 rolls in `pihole-deferred` after instance 1 is Ready; no Flux path runs a restart task.
 manifests_rollout: ''
 
 manifests_self_rollouts:

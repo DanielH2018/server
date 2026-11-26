@@ -6,8 +6,6 @@ node_exporter_k8s_image: prom/node-exporter:v1.12.1@sha256:1b4e4438faca4dd7e001d
 k8s_autodeploy: true
 k8s_autodeploy_reason: "stateless DaemonSet, read-only hostPath mounts (including / via rootfs) and no PVC, readinessProbe gates the rollout, version-pinned image; runs hostNetwork+hostPID by design, for node-level metrics"
 
-# The stabilisation gate compares ready against desired for this DaemonSet (2 nodes). If
-# daniel-server goes NotReady mid-window, desired stays 2 while ready drops to 1 and the
-# gate rolls back — for a cause unrelated to this change. Accepted: it fails safe, and a
-# node going NotReady during a deploy is worth a rollback on its own.
+# Accepted: if daniel-server goes NotReady mid-window the gate (ready vs desired 2) rolls back for
+# an unrelated cause.
 manifests_rollout: node-exporter

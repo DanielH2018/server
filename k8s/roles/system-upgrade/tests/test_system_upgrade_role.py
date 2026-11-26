@@ -80,8 +80,6 @@ def test_an_empty_node_list_selects_no_node_and_a_named_node_selects_it(template
     assert _clause(_plan(template, ["daniel-box"]), "kubernetes.io/hostname")[
         "values"
     ] == ["daniel-box"]
-    # H6.3c widened the list to the server node, and H6.3d to daniel-server once its package
-    # shipped k3s_gates.py through the k3s-gates component.
     assert DEFAULTS["system_upgrade_nodes"] == ["daniel-box", "daniel-server"]
 
 
@@ -215,8 +213,6 @@ def test_the_namespace_denies_all_ingress():
 
 
 def test_a_policy_that_allows_ingress_or_drops_the_type_is_flagged():
-    # The red fixtures: a rule that admits a peer, a policy that governs nothing, and one that
-    # selects only some pods.
     [policy] = _rendered("networkpolicy.yaml.j2")
     assert not denies_all_ingress(
         {**policy, "spec": {**policy["spec"], "ingress": [{}]}}
@@ -278,9 +274,6 @@ def test_the_controller_patch_holds_the_image_pin():
 
 
 def test_the_controller_declares_no_container_port():
-    # H6 Open question 13: with no port, nothing in the namespace accepts a connection, and the
-    # render test of the policy is the whole proof. A release that adds a port needs a
-    # netpol-baseline `refused` row with `policy: default-deny-ingress`.
     [vendored] = [
         d
         for d in _upstream("system-upgrade-controller.yaml")
@@ -331,8 +324,6 @@ def _is_best_effort(pod: dict) -> bool:
 
 
 def test_the_patched_controller_pod_is_not_best_effort():
-    # The kubelet evicts a BestEffort pod first under memory pressure, whatever its
-    # priority class, and this pod applies the k3s upgrades to both nodes.
     assert not _is_best_effort(_patched_controller_pod())
 
 

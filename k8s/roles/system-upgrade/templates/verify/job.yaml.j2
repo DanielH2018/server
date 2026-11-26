@@ -42,8 +42,6 @@ data:
 {% set spec_text %}
 # A flaky check fails rather than passing on a retry.
 backoffLimit: 0
-# Below the 600s `manifests_rollout_timeout_default` every `<tag>-verify` Kustomization takes.
-# One API read with the helper's 60s of connect retries, then one hash of the binary.
 activeDeadlineSeconds: 180
 template:
   metadata:

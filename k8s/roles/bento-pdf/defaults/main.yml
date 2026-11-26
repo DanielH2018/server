@@ -13,7 +13,6 @@ bento_pdf_k8s_cpu_limit: "500m"
 bento_pdf_k8s_mem_limit: 256Mi
 bento_pdf_k8s_cpu_request: "50m"
 bento_pdf_k8s_mem_request: 32Mi
-# nginx-unprivileged runs as this UID. It is also the fsGroup: an emptyDir has no mode knob
-# and mounts 0755 root-owned, so without an fsGroup the container EPERMs on its own scratch
-# directories.
+# nginx-unprivileged's UID, also the fsGroup: an emptyDir mounts 0755 root-owned, so without it the
+# container EPERMs on its scratch directories.
 bento_pdf_k8s_uid: 101

@@ -9,16 +9,14 @@ GRACE = 600.0
 
 
 def test_no_running_pod_defers_rather_than_paging():
-    # k8s Workload Health owns "janitorr is not running" via
-    # kube_deployment_status_replicas_unavailable. Paging here too would be one outage, two alerts.
+    # k8s Workload Health owns "janitorr is not running"; paging here too would be one outage, two
+    # alerts.
     ok, msg = janitorr_errors_ok(None, None, WINDOW, GRACE)
     assert ok
     assert "no running janitorr pod" in msg
 
 
 def test_inside_startup_grace_is_ok_even_with_errors():
-    # The documented boot race: an @Scheduled cleanup fires before the *arrs are up and logs a
-    # generic ERROR indistinguishable from a real failure.
     ok, msg = janitorr_errors_ok(3, 120, WINDOW, GRACE)
     assert ok
     assert "startup grace" in msg
@@ -48,8 +46,8 @@ def test_message_points_at_kubectl_not_docker():
 
 
 def test_window_is_capped_to_the_post_startup_slice():
-    # A janitorr that restarted 20 minutes ago must not have its own boot-race errors counted for
-    # the next 12 hours: the slice ends where grace ended.
+    # The slice ends where grace ended: a janitorr restarted 20 minutes ago must not count its own
+    # boot-race errors.
     assert effective_window_s(20 * 60, WINDOW, GRACE) == 20 * 60 - GRACE
 
 

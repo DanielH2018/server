@@ -1,11 +1,7 @@
 {% from 'ingressroute.yml.j2' import ingressroute with context %}
 ---
-{#
-  The public `karma.<domain>` name renders when `k8s_public_route` is on. Karma can create silences
-  on every page, so the authelia role's hand-written `karma.<domain>` pair admits only
-  `group:admins` at two_factor and denies everyone else. No ClientIP fence: blackbox-exporter
-  probes the LAN route from a pod address.
-#}
+{# Admits only group:admins at two_factor; no ClientIP fence because blackbox-exporter probes from a
+   pod address. #}
 {{ ingressroute(
     container_item.name,
     container_item.hostname,

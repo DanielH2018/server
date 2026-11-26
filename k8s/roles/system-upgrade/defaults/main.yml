@@ -21,20 +21,11 @@ k3s_version: v1.37.2+k3s1
 #   uv run python scripts/validate/asset_pins.py --refresh k3s-io/k3s
 k3s_install_script_url: "https://raw.githubusercontent.com/k3s-io/k3s/{{ k3s_version }}/install.sh"
 k3s_install_script_sha256: ed01f89fd977bf20ac1516bbebf8370bf3ddbaa55dac8aba610956a4c78cc00b
-# The `k3s` line of that release's sha256sum-amd64.txt. The system-upgrade-verify Jobs
-# (files/system_upgrade_verify.py) compare each node's /usr/local/bin/k3s with it, and
-# scripts/validate/k3s_binary_sum.py refuses a change to k3s_version that leaves it. Finish it on
-# the version-bump PR with the line from
-#   gh release download <k3s_version> -R k3s-io/k3s -p sha256sum-amd64.txt -D <empty dir>
+# Must equal the k3s line of that release's sha256sum-amd64.txt; finish it on the version-bump PR.
 k3s_binary_sha256_amd64: 265b3ee6a3198ef14033c63ef46cbb32370d83795199fb6d1b01f21575eddbda
 
-# The controller manifest and the Plan CRD are in-tree copies under files/upstream/, byte for
-# byte what each item's `url` serves. No render may fetch a URL, so the renderer
-# attaches the copies to this tag's bundle verbatim. scripts/dev/vendor_manifest.py owns the
-# item's shape and the refresh:
-#   uv run python scripts/dev/vendor_manifest.py system-upgrade
-# A bump of the version is a hand refresh in the same PR, which also moves the controller image
-# below: k8s/roles/system-upgrade/tests/test_system_upgrade_role.py holds the image tag equal to this version.
+# In-tree copies under files/upstream/, byte for byte what `url` serves: no render fetches a URL.
+# Refresh with scripts/dev/vendor_manifest.py; the controller image tag must equal this version.
 # renovate: datasource=github-releases depName=rancher/system-upgrade-controller
 system_upgrade_controller_version: v0.20.2
 system_upgrade_vendored_manifests:
@@ -60,24 +51,14 @@ system_upgrade_controller_image: rancher/system-upgrade-controller:v0.20.2@sha25
 # and Renovate's k8s-images manager moves them in one PR.
 system_upgrade_gate_image: python:3.15-alpine@sha256:0f9552bb28711333da16915ec146f5e6bb44a7fdac9ced15dc17c2e0206346dd
 
-# The nodes the Plans select, by `kubernetes.io/hostname`. EMPTY SELECTS NO NODE: the Plans
-# render `[no-node-selected]`, a valid label value that no node carries. A PR widens the list
-# one node at a time, and setting it back to empty is
-# the durable pause. The immediate pause is an operator write: label a node
-# `homelab/k3s-upgrade-paused` and SUC skips it at once.
-# The agent Plan's `prepare` runs /host/usr/lib/homelab/k3s_gates.py, so every node listed here
-# installs the `k3s-gates` host package component first; a node without the file fails `prepare`.
+# Empty selects no node (durable pause); label `homelab/k3s-upgrade-paused` pauses a node at once.
+# Each listed node needs the `k3s-gates` host component, or the agent Plan's `prepare` fails.
 system_upgrade_nodes: [daniel-box, daniel-server]
 
-# Each Plan's Job deadline. SUC starts both Jobs when the Plans resolve, so the agent's deadline
-# covers the server's 60 minutes plus 30 for Longhorn's recovery and the agent's own upgrade.
-# The controller caps a Plan's deadline at SYSTEM_UPGRADE_JOB_ACTIVE_DEADLINE_SECONDS_MAX, which
-# files/patches/system-upgrade-controller-env.yaml sets to 5400.
+# Agent: server's 60 min plus 30; the controller caps a Plan's deadline at 5400 (patches env).
 system_upgrade_server_deadline_secs: 3600
 system_upgrade_agent_deadline_secs: 5400
 
-# Job pods a failing `prepare` may start before the Job reads Failed, minus one. See the
-# comment in files/patches/system-upgrade-controller-env.yaml.
 system_upgrade_job_backoff_limit: 2
 
 # DECIDED: this tag renders prune: false. Its render holds the Plan CRD, and the CRD census
@@ -93,17 +74,11 @@ flux_prune: false
 # each Plan's `prepare`.
 flux_forward_only: true
 
-# The Kustomization's timeout: the agent Plan's 90-minute deadline plus ten minutes. A healthy
-# bump ends well inside it, and a Job that fails or runs out its deadline turns the
-# Kustomization red first.
+# Agent deadline (90 min) plus ten, so a failing Job turns the Kustomization red first.
 flux_timeout: 100m
 
-# How Flux reads a Plan's status (H6, *The Plans' outcome reaches flux/system-upgrade*). SUC's
-# Plan status has no observedGeneration, so the expressions reject a status that predates the
-# apply by comparing `latestVersion` with the version SUC resolves from the pin. SUC stores that
-# version with `+` replaced by `-` (`MungeVersion`), so the renderer renders the literal below
-# from `k3s_version`. A missing field reads as stale, through has(). Flux evaluates `inProgress`,
-# then `failed`, then `current`, and the first true one decides.
+# No observedGeneration: compare latestVersion with the pin, which SUC stores with `+` as `-`.
+# Flux evaluates inProgress, then failed, then current; the first true one decides.
 flux_health_check_exprs:
   - apiVersion: upgrade.cattle.io/v1
     kind: Plan
@@ -121,8 +96,6 @@ flux_health_check_exprs:
       && c.status == 'True') && has(status.latestVersion)
       && status.latestVersion == '{{ k3s_version | replace('+', '-') }}'
 
-# Auto-deploy stance. Flux applies the tag, so this gates no apply; the reason records why a bad
-# merge here is not a routine bump.
 k8s_autodeploy: false
 k8s_autodeploy_reason: "platform — a merged change to a Plan, or to the k3s pin, upgrades the k3s binary on every node in `system_upgrade_nodes`; the gates, deadlines and forward-only hold are the protection"
 

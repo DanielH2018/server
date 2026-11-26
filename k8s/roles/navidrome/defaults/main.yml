@@ -15,24 +15,17 @@ k8s_autodeploy_snapshot_pvcs: [navidrome-data]
 # Mounted, never reverted: the library on the shared media volume, read-only here.
 k8s_autodeploy_unreverted_claims: [media-data]
 
-# Declarative rather than a live `kubectl scale`: Flux's drift correction resets a live scale
-# to the rendered `replicas`, and the read-only ServiceAccount cannot scale anything anyway.
-# Zero parks the role: the route drops out of `manifests_files` below, but the snapshot
-# declaration above must go with it (test_every_snapshot_role_restores_its_own_replicas).
+# Zero parks the role; the snapshot declaration must go with it
+# (test_every_snapshot_role_restores_its_own_replicas).
 navidrome_k8s_replicas: 1
 
-# The image's own entrypoint runs as root. Run it as the fleet's ubuntu uid instead, so the
-# Longhorn volume's files are owned by the same user everything else here writes as.
+# The entrypoint runs as root; run as the fleet uid so volume files share one owner.
 navidrome_k8s_uid: 1000
 
-# The library: `media/music` on the shared media volume, mounted read-only at this path.
-# daniel-box's homelab-media-volume tmpfiles line creates the directory.
 navidrome_k8s_music_dir: /music
 navidrome_k8s_media_claim: media-data
 navidrome_k8s_media_subpath: media/music
 
-# SQLite index plus the transcoding cache. 2Gi is headroom, not a measurement: the library
-# started empty, so there was nothing to size against.
 navidrome_k8s_claim: navidrome-data
 navidrome_k8s_storage_class: longhorn
 navidrome_k8s_size: 2Gi
@@ -48,8 +41,8 @@ k8s_claims:
     storage_class: "{{ navidrome_k8s_storage_class }}"
     size: "{{ navidrome_k8s_size }}"
 
-# The route is listed only while the workload has pods (see templates/ingressroute.yaml.j2).
-# Parking the workload drops the name, and the prune deletes the live IngressRoute.
+# Route listed only while replicas > 0: dropping the name makes the prune delete the live
+# IngressRoute.
 manifests_files: >-
   {{ ['deployment.yaml', 'service.yaml']
      + (['ingressroute.yaml'] if navidrome_k8s_replicas | int > 0 else []) }}

@@ -1,16 +1,7 @@
 ---
-# Longhorn holds every PVC. The app manifest is an in-tree copy, files/upstream/longhorn.yaml,
-# byte for byte what the item's `url` serves. No render may fetch a URL, so the renderer
-# attaches the copy to this tag's bundle verbatim, and `sha256` still describes what Flux applies.
-# scripts/dev/vendor_manifest.py owns the item's shape and the refresh:
-#   uv run python scripts/dev/vendor_manifest.py longhorn
-# Merging a bump of the version is the upgrade: land it through land.sh,
-# which runs the longhorn-upgrade gates, one minor per PR. Run the refresh in the same PR and read
-# docs/longhorn-upgrade.md.
-#
-# Longhorn holds every PVC, and a careless bump is worse than a stale one: Longhorn has
-# version-to-version upgrade constraints and does not support arbitrary version skips. Tracked
-# for the signal, never automerged.
+# Vendored byte for byte; refresh with `uv run python scripts/dev/vendor_manifest.py longhorn`.
+# A version bump is the upgrade: one minor per PR, refresh in the same PR, never automerged
+# (docs/longhorn-upgrade.md).
 # renovate: datasource=github-releases depName=longhorn/longhorn
 k3s_longhorn_version: v1.13.0
 longhorn_vendored_manifests:
@@ -19,31 +10,17 @@ longhorn_vendored_manifests:
     fetched_url: "https://raw.githubusercontent.com/longhorn/longhorn/v1.13.0/deploy/longhorn.yaml"
     sha256: "d0f99488e7b2789312d45b0127ce7388df71a971e6fca2085e88635303cc0a1f"
 
-# Memory REQUEST only (no limit) for longhorn-manager, applied by files/patches/longhorn-manager.yaml.
-# A kustomize patch is copied verbatim, so the patch holds the literal and
-# tests/longhorn/test_longhorn_control_plane_resources.py holds the two equal.
-# Upstream's deploy/longhorn.yaml ships longhorn-manager with an empty `resources: {}`, which gives
-# BestEffort QoS and oom_score_adj 1000 — the worst possible score, so the kernel eats the storage
-# control plane first under any memory pressure. A REQUEST alone moves the pod to Burstable and
-# drops oom_score_adj without adding a new kill path — a LIMIT set too low would trade "killed by
-# badness" for "killed by cgroup cap". 256Mi is roughly double the RSS seen at an OOM kill (137
-# MB anon-rss): enough to absorb ordinary growth without inflating node allocatable so far that
-# real pressure elsewhere goes unschedulable.
+# Request only: upstream's empty resources give BestEffort and oom_score_adj 1000, and a limit would
+# add a cgroup-cap kill path.
+# The patch holds the literal; tests/longhorn/test_longhorn_control_plane_resources.py holds the two
+# equal.
 k3s_longhorn_manager_memory_request: 256Mi
 
-# Memory REQUEST only (no limit) for longhorn-global-manager, the Deployment v1.13 added to run the
-# cluster-wide pod and PV controllers. Upstream ships it with no `resources` (BestEffort), so it
-# needs the request for the manager's reasons above. Applied by files/patches/
-# longhorn-global-manager.yaml, which a test holds equal to this key. The leader holds a 37Mi
-# working set and the two standbys 33-34Mi. 64Mi is about 1.7x the leader, rounded to a power
-# of two.
+# Request only, for the manager's reasons above; a test holds the patch equal to this key.
 k3s_longhorn_global_manager_memory_request: 64Mi
 
-# Replicas of longhorn-global-manager. Upstream ships 3; the replicas elect one leader through
-# the `longhorn-global-manager` lease and the rest stand by. Its anti-affinity is only
-# preferred, so on this two-node cluster the third replica lands beside another and adds no
-# failover a second one lacks. Two puts one standby on each node. Applied by the same patch,
-# which a test holds equal to this key.
+# Anti-affinity is only preferred, so a third replica adds no failover on two nodes; a test holds
+# the patch equal to this key.
 k3s_longhorn_global_manager_replicas: 2
 
 # Memory REQUEST only (no limit) for the four csi-* sidecar Deployments (csi-attacher,
@@ -78,30 +55,13 @@ k3s_longhorn_global_manager_replicas: 2
 # reads the Setting when it creates a Deployment, so a recreated one starts with the request.
 k3s_longhorn_csi_sidecar_memory_request: 96Mi
 
-# Memory REQUESTS only (no limit) for the longhorn-csi-plugin DaemonSet's three containers,
-# through the same Setting. The driver deployer creates the DaemonSet with no `resources`, so
-# its pods run BestEffort. The first key is for the `longhorn-csi-plugin`
-# container, the second for `node-driver-registrar` and `longhorn-liveness-probe`. Each container
-# gets a request, because a container without one in a Burstable pod keeps an oom_score_adj near
-# 1000. The 30-day peak working set is 47Mi for the plugin, 24Mi for the registrar and 28Mi for
-# the liveness probe; each request is the peak rounded up to a power of two.
-#
-# Changing either value rolls the plugin DaemonSet once. The roll is safe for RWX mounts: the
-# driver deployer gives the DaemonSet maxUnavailable 1, and with
-# `endpoint-network-for-rwx-volume` unset the plugin mounts each NFS share in the host's mount
-# namespace, so the share outlives the plugin pod (longhorn-manager v1.13.0,
-# csi/node_server.go:getMounter).
+# Changing either rolls the plugin DaemonSet once; safe for RWX because the NFS mount lives in the
+# host's mount namespace.
 k3s_longhorn_csi_plugin_memory_request: 64Mi
 k3s_longhorn_csi_node_sidecar_memory_request: 32Mi
 
-# Requests and limits for the containers upstream ships with no `resources`: longhorn-ui,
-# longhorn-driver-deployer and its wait-longhorn-manager init container, and the manager
-# DaemonSet's pre-pull-share-manager-image sidecar. Applied by
-# files/patches/longhorn-ui.yaml, longhorn-driver-deployer.yaml and
-# longhorn-manager-pre-pull.yaml; a test holds each patch equal to its key. Peak working set is
-# 6.6Mi UI, 18.7Mi driver deployer, 0.9Mi wait, 2.1Mi pre-pull; every peak CPU rate is under
-# 1m. Each memory limit is at least 3x its peak,
-# because an OOMKill restarts the container just as an eviction would.
+# Each memory limit is at least 3x its peak, since an OOMKill restarts the container like an
+# eviction; a test holds each patch equal to its key.
 k3s_longhorn_ui_resources:
   requests: {cpu: 10m, memory: 16Mi}
   limits: {cpu: 200m, memory: 64Mi}
@@ -129,18 +89,8 @@ k3s_longhorn_share_manager_pre_pull_resources:
 # evicted pod. Revisit this when upstream adds a Setting for engine-image resources; it then
 # belongs in templates/settings.yaml.j2 like the csi-* request above.
 
-# The Longhorn Settings this role renders (templates/settings.yaml.j2). Flux applies them, so a
-# change here is a change to the live Setting once the tag promotes. Longhorn-manager creates each with its upstream default and
-# keeps its own annotation and status on the object.
-
-# Two replicas, one per node, which is what makes replication, and therefore failover, exist.
-# More replicas than nodes would leave every volume permanently "degraded" — upstream's
-# StorageClass ships 3.
-#
-# This reaches volumes through the `default-replica-count` setting alone, which only applies
-# to StorageClasses that do not pin a count themselves. That is why the role replaces
-# upstream's class with the `longhorn` role's files/patches/longhorn-storageclass.yaml, which
-# deliberately omits numberOfReplicas — so changing this stays a Setting change.
+# Two replicas, one per node: more than nodes would leave every volume degraded.
+# Reaches volumes through the Setting only because the replaced StorageClass omits numberOfReplicas.
 k3s_longhorn_replica_count: 2
 
 # How hard Longhorn checks a snapshot disk file against its recorded checksum. Upstream's
@@ -161,52 +111,23 @@ k3s_longhorn_replica_count: 2
 # appear. Six minutes every seventh day at 00:00 UTC is acceptable.
 k3s_longhorn_snapshot_data_integrity: enabled
 
-# When the integrity check above runs. Upstream's default, restated here so the schedule is a
-# variable rather than a value only the cluster knows: `0 0 */7 * *` is a DAY-OF-MONTH step on
-# the manager's clock (UTC), so it fires at 00:00 on the 1st, 8th, 15th, 22nd and 29th, not
-# "every seven days". To fire a check early, land a change that sets this to a one-shot daily
-# minute such as `55 12 * * *`, then land its revert. Flux owns the Setting, so a hand patch is
-# reverted at the next reconcile. Never use a repeating `*/N` for it: a full-hash schedule
-# stranded by a dead session risks the memory pressure that OOM-kills the storage control plane.
-# Same DataEngineSpecific JSON-map shape as the mode above.
+# `0 0 */7 * *` is a day-of-month step (UTC): 1st, 8th, 15th, 22nd, 29th. To fire early, land a
+# one-shot daily minute, then revert.
+# Never use `*/N`: a stranded full-hash schedule risks OOM-killing the storage control plane.
 k3s_longhorn_snapshot_data_integrity_cronjob: "0 0 */7 * *"
 
-# Back up detached volumes too. pi-peer-backup-data is mounted only for the minutes its
-# nightly pull CronJob runs, so at the 03:30 daily-backup tick it is detached — and with
-# this off, Longhorn silently skips it, leaving the WireGuard peer copy with no off-site
-# backup. "true" attaches such a volume in maintenance mode for the
-# backup and detaches it after; the attach is brief and it is the only detached
-# default-group volume, so the global scope costs nothing.
+# true attaches a detached volume in maintenance mode for the backup; without it pi-peer-backup-data
+# is silently skipped.
 k3s_longhorn_backup_detached_volumes: "true"
 
-# Block size, in MiB, for volumes created from here on. Every B2 cost Longhorn incurs is priced
-# PER BLOCK: pruning a backup issues ~1.28 Class C LISTs per stored block (it walks the volume's
-# whole block tree), backing up issues one Class B HeadObject per changed block, and restoring
-# issues one Class B GET per block. Block size is the only lever that moves all three at once.
-#
-# Upstream's default is 2. At that size the store held 3,472 blocks, so a
-# full-cluster restore would need ~3,472 Class B against a 2,500/day free-tier cap — 139%, which
-# means a total-loss recovery CANNOT complete in a day. At 16 that is ~434 blocks, about a sixth
-# of one day's allowance, and disaster recovery stops being rationed by transactions.
-#
-# NEW VOLUMES ONLY, and this is the trap: the field is immutable per volume, so every PVC created
-# while this reads 2 is locked at 2 until it is destroyed and recreated. Flipping it costs nothing
-# and changes nothing that already exists — the saving accrues only as volumes are replaced.
-#
-# Longhorn accepts 2 or 16 and nothing between. Governed by the SETTING rather than the
-# StorageClass on purpose: a StorageClass parameter beats the setting and its parameters are
-# immutable, which is the trap `numberOfReplicas` springs (see
-# the `longhorn` role's files/patches/longhorn-storageclass.yaml and
-# tests/longhorn/test_longhorn_storageclass.py).
+# NEW VOLUMES ONLY: block size is immutable per volume, so PVCs created at 2 stay at 2 until
+# recreated. Accepts 2 or 16.
+# Governed by the Setting, not the StorageClass: a StorageClass parameter beats the setting and is
+# immutable.
 k3s_longhorn_backup_block_size: 16
 
-# How many volume engines Longhorn upgrades per node once the manager moves to a new version.
-# Upstream ships 0, which means engines NEVER follow the manager — after a version bump every
-# volume keeps running the old engine image until someone walks the UI. Across a multi-hop
-# ladder (docs/longhorn-upgrade.md) that lag compounds, and a manager more than one engine
-# version ahead is outside what upstream tests. 3 upgrades the
-# healthy volumes a few at a time rather than all at once; Longhorn skips any volume that
-# is degraded, so this cannot stampede a rebuild.
+# Upstream's 0 means engines never follow the manager; 3 upgrades healthy volumes a few at a time,
+# and Longhorn skips degraded ones.
 k3s_longhorn_concurrent_engine_upgrade: 3
 
 # What Longhorn does with a pod whose node goes down while the pod holds an RWO volume.
@@ -224,16 +145,9 @@ k3s_longhorn_concurrent_engine_upgrade: 3
 # when a third node or a fencing mechanism exists.
 k3s_longhorn_node_down_pod_deletion_policy: do-nothing
 
-# The longest the tag's Kustomization waits for longhorn-manager to roll. The DaemonSet rolls
-# with maxUnavailable 1 (files/patches/longhorn-manager-update-strategy.yaml), so the
-# pods are replaced one after the other and the wait is two pods' start times. The literal is
-# `manifests_rollout_timeout` because the renderer reads a role's Flux timeout from that key.
-# A restart with the image cached takes about 36s a pod (30s of it termination grace), so about
-# 72s for two in sequence. A version bump is slower: each node cold-pulls the new manager image
-# in turn, the manager runs its upgrade path, and the Kustomization renders `wait: true`, so the
-# timeout also covers longhorn-driver-deployer, longhorn-ui and longhorn-global-manager. A
-# timeout on a forward-only tag writes DEPLOY_HOLD, so the value is the manifests default of
-# 600s, not 2m.
+# Literal because the renderer reads a role's Flux timeout from `manifests_rollout_timeout`. A
+# timeout on a forward-only tag writes DEPLOY_HOLD, so 10m covers a cold-pull version bump across
+# two sequential pods plus driver-deployer, ui and global-manager (`wait: true`).
 manifests_rollout_timeout: 10m
 
 # DECIDED: never pruned. Under prune: true, a render that dropped the manager DaemonSet or a CRD
@@ -244,13 +158,10 @@ manifests_rollout_timeout: 10m
 # plan's *Plumbing tags are never pruned*.
 flux_prune: false
 
-# Forward-only (the H1 plan's *Forward-only tags and the promote rule*). Longhorn supports no
-# downgrade, so a promote that fails on a revision changing this tag holds without resetting
-# `prod`. scripts/deploy_tools/promote_lib/forward_only.py reads the flag from a top-level line.
+# Longhorn supports no downgrade, so a failed promote on this tag holds without resetting `prod`;
+# forward_only.py reads the flag from a top-level line.
 flux_forward_only: true
 
-# Auto-deploy stance. Flux applies the tag, so this gates no apply; the reason records why a bad
-# merge here is not a routine bump.
 k8s_autodeploy: false
 k8s_autodeploy_reason: "platform — Longhorn holds every PVC; a bad apply or a version skip detaches or corrupts the volumes under every stateful service, and host probes stay green through that outage"
 

@@ -30,8 +30,7 @@ spec:
         - name: influxdb
           image: {{ scrutiny_k8s_influxdb_image }}
           imagePullPolicy: IfNotPresent
-          # Entrypoint chowns the data dir then drops root via gosu before starting
-          # influxd.
+          # The entrypoint chowns the data dir, then drops root via gosu.
 {{ hardened_security_context(add=['CHOWN', 'SETUID', 'SETGID', 'DAC_OVERRIDE', 'FOWNER']) }}
           env:
             - name: DOCKER_INFLUXDB_INIT_MODE
@@ -54,13 +53,12 @@ spec:
           volumeMounts:
             - name: scrutiny-influxdb-data
               mountPath: /var/lib/influxdb2
-            # The image declares VOLUME /etc/influxdb2 (the CLI's influx-configs file,
-            # written only at first-run setup). emptyDir: the web talks token-auth over
-            # HTTP and never reads it; losing it costs nothing.
+            # emptyDir for the image's VOLUME /etc/influxdb2: the web uses token auth and never
+            # reads it.
             - name: scrutiny-influxdb-cli-config
               mountPath: /etc/influxdb2
-            # /etc, NOT /run/secrets — the Docker idiom shadows the ServiceAccount token
-            # projection there and runc cannot create its mountpoint (CrashLoopBackOff).
+            # /etc, not /run/secrets: the latter shadows the ServiceAccount token and runc cannot
+            # mount it.
             - name: scrutiny-influxdb-credentials
               mountPath: /etc/influxdb-secrets
               readOnly: true

@@ -20,8 +20,6 @@ from lib.proc_testing import fake_bin, run
 
 CONNACK_NOT_AUTHORISED = bytes([0x20, 0x02, 0x00, 0x05])
 
-# Connects to the port in FAKE_BROKER_PORT, whatever host and port it was given, records its
-# arguments, sends stdin, then copies the reply to stdout until the peer closes.
 NC_STUB = f"""#!{sys.executable}
 import os, socket, sys
 with open(os.environ["NC_ARGS_LOG"], "a") as log:

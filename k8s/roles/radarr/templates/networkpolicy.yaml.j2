@@ -1,36 +1,5 @@
 {% from 'networkpolicy.yml.j2' import networkpolicy with context %}
 ---
-# The baseline admits traefik, prometheus and the node bridges to every pod carrying
-# `netpol-baseline: enforced`. This file adds radarr's own callers, which are all direct
-# pod → ClusterIP and therefore invisible to the baseline.
-#
-# This rule is PORT-SCOPED: the baseline admits none of janitorr, configarr, monitor-bridge,
-# autofix-bridge, bazarr, prowlarr, radarr-verify, janitorr-verify or homepage, so they reach
-# radarr only through this rule and only on this one port.
-#
-# TRAEFIK IS LISTED DELIBERATELY — do not remove it as redundant. While radarr carries the
-# baseline label the union is the same with or without it. The entry matters for a pod that
-# lacks the label, which this policy alone selects, and it keeps this policy's caller set
-# complete if the baseline's traefik rule is ever port-scoped.
-#
-# bazarr addresses radarr by BARE NAME from its own application database, not from any manifest.
-#
-# prowlarr is here for the REVERSE direction: its Application Sync POSTs indexer definitions INTO
-# radarr over the ClusterIP, configured in prowlarr's own database. Fenced, radarr silently keeps
-# stale indexer definitions and nothing alerts, because monitor-bridge's "Prowlarr Indexers" check
-# reads prowlarr's own /api/v1/indexerstatus.
-#
-# homepage's widget reads /api/v3/queue over the ClusterIP, not through Traefik, because radarr's
-# public route is Authelia-gated and its monitoring IngressRoute exposes only one path; fencing it
-# out breaks the widget.
-#
-# radarr-verify is the pod label of the Jobs in templates/verify/ (arr-notification's seed Job);
-# without this entry the fence refuses their API calls.
-# janitorr-verify is janitorr's verify Job label. No pod carries it until janitorr's Flux flip,
-# and tests/k8s/test_netpol_from.py holds it in STAGED_CALLERS until then.
-#
-# The caller list is `netpol_from:` on this role's containers_list entry (cluster/services.yml),
-# each caller's reason beside it. `homepage_widget: true` adds homepage through the
-# `netpol_callers` filter, and `netpol_role_owned: true` keeps netpol-baseline from
-# rendering a second copy.
+# Keep traefik listed: it covers a pod lacking the baseline label, which only this policy selects.
+# prowlarr syncs indexers INTO radarr over the ClusterIP; fencing it out fails silently.
 {{ networkpolicy(container_item.name, container_item.port, container_item | netpol_callers) }}

@@ -29,19 +29,11 @@ from lib.k8s_roles import K8S_ROLES
 from renderer.renderer_lib import cluster
 
 DEFAULTS = K8S_ROLES / TAG / "defaults" / "main.yml"
-# A lever is a role default that ends in `enforced` or `scope`: each plane's on/off switch
-# and its label/namespace selector. A third plane's pair matches without an edit here.
 LEVER = re.compile(r"^netpol_baseline_(?:\w+_)?(?:enforced|scope)$")
 
 
-# The `that:` conditions of the lever assert. The levers are read where they coerce
-# differently:
-#   - `netpol_baseline_enforced` and `netpol_baseline_obs_enforced` go through `| bool` in the
-#     templates, so a typo such as `fasle` is False, the allow-all body renders and nothing is
-#     fenced behind a green deploy.
-#   - `netpol_baseline_scope` and `netpol_baseline_obs_scope` are compared with `== 'namespace'`
-#     and fall through to the label selector on any other value, so `Namespace` or `all` skips
-#     the whole-namespace default-deny.
+# `| bool` levers: a typo such as `fasle` is False, so the allow-all renders behind a green deploy.
+# Scope levers are compared with `== 'namespace'`, so any other value skips the default-deny.
 LEVER_ASSERTS = [
     "netpol_baseline_enforced | string | lower in ['true', 'false']",
     "netpol_baseline_scope in ['label', 'namespace']",

@@ -40,8 +40,6 @@ def test_send_pct_ceils_to_target_level():
 
 
 def test_reported_pct_recovers_level():
-    # pct_to_level maps the fan's REPORTED percentage back to its level (so bedroom_fan_manual_detect
-    # can compare our commanded level against the cloud echo). A 9-speed fan reports round(L*100/9)%.
     for level in range(1, 10):
         reported = _forgiving_round(level * 100 / 9)
         assert _level(reported) == level, f"reported% for L{level} does not recover it"
@@ -84,9 +82,8 @@ def test_night_cap_limits_to_level_4():
     assert _target(83.0, 0, True, False) == 4
 
 
-# Sleep-mode seasonal floor + fixed L5 ceiling, keyed off OUTDOOR temp: outdoor picks the floor band
-# (winter 2 / shoulder 3 / summer 4), the indoor curve modulates within [floor, 5]. Replaces the old
-# flat L2 sleep cap.
+# Outdoor temp picks the sleep-mode floor band (winter 2 / shoulder 3 / summer 4); the indoor curve
+# modulates within [floor, 5].
 def test_sleep_summer_floor_and_ceiling():
     # Summer (outdoor >= 68): floor L4, ceiling L5.
     assert (
@@ -123,10 +120,6 @@ def test_sleep_missing_outdoor_falls_back_to_winter_band():
     assert _target(83.0, 0, False, True) == 5  # hot room -> L5 ceiling
 
 
-# Migration safety net: the extracted macro must equal the ORIGINAL inline bedroom_apply_fan formula
-# for every NON-sleep input. This pins behavior-preservation of the curve + night cap. The sleep
-# branch intentionally diverges from the inline formula's flat L2 cap (seasonal floor/ceiling —
-# covered by the dedicated tests above), so it is excluded here.
 def _inline_target(t, cur_level, is_night):
     # The pre-extraction non-sleep formula, transcribed from scripts/fan.yaml's bedroom_apply_fan.
     ideal = (t - 71) / 1.3 if t >= 0 else 0

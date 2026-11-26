@@ -8,16 +8,8 @@ worktree's lock reason. Named `.j2`, not `.sh.j2`: it is not a script, and
 validate/shell_templates.py lints every `*.sh.j2` as one.
 #}
 {% macro prepare_tree_function(job) -%}
-# prepare_tree SHA -- leave $TREE checked out at SHA, holding no untracked or ignored file.
-#
-# `clean -ffdx` is the point: -x removes ignored files too, and a role directory that only
-# ignored files keep alive is what a filesystem walker reads as a role git does not have. The
-# double -f also removes a nested repository. The worktree is locked so that no
-# `git worktree prune` drops its registration, and `add -f -f` re-adds one whose directory went
-# missing while its registration stayed locked.
-#
-# A tree git no longer recognises is removed and added again; that is the only path that
-# deletes it.
+# `clean -ffdx`: -x drops ignored files that keep a role directory alive; -ff drops nested repos.
+# The worktree is locked against prune; `add -f -f` re-adds one whose directory went missing.
 prepare_tree() {
   if ! git -C "$TREE" rev-parse --git-dir >/dev/null 2>&1; then
     rm -rf -- "$TREE"

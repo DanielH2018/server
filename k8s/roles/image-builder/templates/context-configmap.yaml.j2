@@ -1,22 +1,13 @@
 ---
-# The build context, as a ConfigMap.
-#
-# The contexts are small: n8n's Dockerfile has no COPY at all, and the runners' Dockerfile
-# copies exactly one small file. A git-clone initContainer would fetch a whole repository to
-# reach two files already rendered, and would make the clone a SECOND source of truth for a
-# file this role templates. A hostPath would couple the build to whatever happens to be checked
-# out on the node.
-#
-# Rendering here also means the context is templated like every other file this role writes:
-# same variables, same secrets, one definition. The 1 MiB ConfigMap ceiling is not close.
+# A ConfigMap, not a git-clone initContainer (a second source of truth) or a hostPath (couples the
+# build to the node's checkout); templated like every other file here.
 apiVersion: v1
 kind: ConfigMap
 metadata:
   name: build-context-{{ image_builder_name }}
   namespace: {{ k8s_namespace }}
 data:
-  # `Dockerfile` is the literal name buildctl looks for under --local dockerfile=…, so this key
-  # is not free to rename.
+  # `Dockerfile` is the literal name buildctl looks for under --local dockerfile=; do not rename.
   Dockerfile: |
 {{ lookup('template', image_builder_dockerfile) | indent(4, true) }}
 {% for src, dest in image_builder_context | dictsort %}

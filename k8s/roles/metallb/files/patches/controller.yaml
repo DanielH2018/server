@@ -1,13 +1,8 @@
 ---
-# Gives the MetalLB controller a CPU and memory request and a CPU limit, and no memory limit, so
-# its pod is Burstable rather than BestEffort, the kubelet's first eviction under node memory
-# pressure. An OOM kill would drop the load balancer, so the memory limit stays unset by operator
-# ruling. Upstream ships the container with no `resources`, and
-# metallb-system has no LimitRange. The memory request is k3s_metallb_controller_memory_request
-# in defaults/main.yml; a kustomize patch is copied verbatim and cannot read a variable, so
-# tests/k8s/test_metallb_vendored_manifest.py holds the two equal. The patch touches `resources`
-# only: the controller writes the
-# webhook's `caBundle` and the `metallb-webhook-cert` Secret at runtime.
+# No memory limit by operator ruling: an OOM kill would drop the load balancer. The memory request
+# is in defaults/main.yml, held equal by tests/k8s/test_metallb_vendored_manifest.py.
+# The patch touches `resources` only: the controller writes the webhook's `caBundle` and
+# `metallb-webhook-cert` at runtime.
 apiVersion: apps/v1
 kind: Deployment
 metadata:

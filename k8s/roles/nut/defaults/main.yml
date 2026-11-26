@@ -1,11 +1,8 @@
 ---
-# Built in-cluster (k8s/image-builder) from this role's Dockerfile. Pulled on daniel-server
-# through the agent-side registries.yaml mirror (ClusterIP endpoint); see
-# k8s_registry_cluster_ip in group_vars/all.yml.
 nut_k8s_image: "{{ k8s_registry_pull_host }}/nut:{{ k8s_built_image_tags.get('nut', 'latest') }}"
 
-# The nut Service's pinned ClusterIP (templates/service.yaml.j2). daniel-box's host package renders
-# the same address into upsmon.conf, so a change here is a change to hosts/components/nut-secondary.
+# daniel-box's host package renders the same address into upsmon.conf; a change here changes
+# hosts/components/nut-secondary.
 nut_k8s_cluster_ip: 10.43.171.124
 
 # Renovate stance: whether an image bump here may automerge. `promote` deploys what merges.

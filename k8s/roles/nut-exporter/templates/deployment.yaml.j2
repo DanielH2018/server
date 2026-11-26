@@ -3,17 +3,9 @@
 {% from 'pod-affinity.yml.j2' import node_affinity_preference with context %}
 {% from 'workload-shell.yml.j2' import spec_shell, pod_shell with context %}
 ---
-# The Prometheus face of the UPS. It is a NUT network client, not a second UPS driver: it dials
-# upsd over the `nut` ClusterIP and reads variables anonymously, which upsd permits by default
-# (`upsc apc-ups@127.0.0.1` on daniel-server returns every variable with
-# no credentials, and the nut pod's own livenessProbe already relies on that). So this workload
-# holds no secret and no upsd.users entry.
-#
-# A SEPARATE Deployment rather than a sidecar in the nut pod, deliberately. That pod is
-# privileged, USB-passthrough, `Recreate`, and pinned to daniel-server because the UPS is
-# physically attached there; it is also the pod half of the emergency-shutdown chain. A sidecar
-# would inherit all of that and would restart the shutdown chain on every exporter image bump.
-# This pod needs none of it — it holds no device and can schedule on either node.
+# A NUT network client reading upsd anonymously, so no secret and no upsd.users entry.
+# A SEPARATE Deployment: the nut pod is privileged, Recreate and pinned, and a sidecar would restart
+# the shutdown chain on every exporter bump.
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -51,18 +43,9 @@ spec:
           ports:
             - name: metrics
               containerPort: {{ services | metrics_port('nut') }}
-          # tcpSocket, not httpGet, on both counts.
-          #
-          # Not /ups_metrics: that request fails whenever upsd is unreachable, so probing it
-          # would crash-loop this pod every time the nut pod restarts — turning a metrics gap
-          # into a second outage. Prometheus already reports an unreachable upsd as `up == 0` for
-          # the `nut` job, which is where that signal belongs.
-          #
-          # Not /metrics either, even though this exporter's own registry is small: a kubelet
-          # httpGet on a metrics route is the shape tests/k8s/_scrape_property_rows.py
-          # refuses below a 300s period, after node-exporter's probes produced 97% of the
-          # namespace's Loki ingest. A TCP connect proves the listener is up and serialises
-          # nothing, which is all a probe needs here.
+          # tcpSocket: not /ups_metrics (fails whenever upsd is unreachable, so it would crash-loop
+          # this pod on every nut restart), and not /metrics (tests/k8s/_scrape_property_rows.py
+          # refuses an httpGet on a metrics route below a 300s period).
           livenessProbe:
             tcpSocket:
               port: {{ services | metrics_port('nut') }}
