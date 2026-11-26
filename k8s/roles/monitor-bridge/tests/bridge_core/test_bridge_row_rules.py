@@ -35,10 +35,10 @@ from lib.repo_paths import K8S_ROLES
 RULES = K8S_ROLES / "observability" / "files" / "rules" / "bridge-exporter.yaml"
 DOCS = "https://docs.local.daniel-hunter.com"
 GRACE = "startup_grace"
-# Two bridge cycles (operator ruling 2026-10-31): a one-cycle blip must not fire.
+# Two bridge cycles (operator ruling): a one-cycle blip must not fire.
 GRACE_FOR = "10m"
-# The rows whose rules read 0 for two minutes at the weekly reboot on 2026-11-01 07:43 to
-# 07:44Z, and so carry `for: 10m` without being `startup_grace` rows (operator ruling 2026-11-02).
+# The rows whose rules read 0 for two minutes at the weekly reboot,
+# and so carry `for: 10m` without being `startup_grace` rows (operator ruling).
 # `b2_object_lock` joins its B2 siblings: it reads 0 whenever its gate does.
 # Named, not derived: another row that wants a `for:` has to be added here in a reviewed PR.
 REBOOT_ROWS = frozenset(
