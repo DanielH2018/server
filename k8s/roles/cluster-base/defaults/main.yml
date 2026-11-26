@@ -3,7 +3,7 @@
 # token, so a rebuilt cluster applies this tag by hand before installing Flux.
 
 # Mirrored because a k8s role's defaults are invisible to a host component and the reverse;
-# tests/k8s/test_cluster_base_mirrors_the_k3s_identity.py holds each pair equal.
+# tests/k8s/flux/test_cluster_base_mirrors_the_k3s_identity.py holds each pair equal.
 cluster_base_readonly_sa_name: homelab-readonly
 cluster_base_readonly_sa_namespace: kube-system
 

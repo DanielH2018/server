@@ -1,6 +1,6 @@
 ---
 # No memory limit by operator ruling: an OOM kill takes Traefik's edge and Pi-hole's DNS offline.
-# The request is in defaults/main.yml, held equal by tests/k8s/test_metallb_vendored_manifest.py.
+# The request is in defaults/main.yml, held equal by tests/k8s/edge/test_metallb_vendored_manifest.py.
 # The CPU limit is wide because a throttled speaker answers ARP and memberlist late.
 apiVersion: apps/v1
 kind: DaemonSet

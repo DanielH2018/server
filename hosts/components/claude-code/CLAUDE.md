@@ -324,7 +324,7 @@ runs `hosts/components/claude-code/templates/claude-guardrail-audit.sh.j2` as ro
   (`hosts/tests/test_claude_guardrail_audit.py::test_a_watch_that_will_not_load_is_flagged_by_path`).
   `ClaudeGuardrailAuditNotReporting` pages a timer that stopped. Each watched write lands in
   `/var/log/audit/audit.log`, which loki-homelab's Alloy ships as `{job="audit"}`
-  (`tests/k8s/test_alloy_ships_audit_log.py::test_the_source_tails_auditds_log_into_this_block`). Its SYSCALL line carries the key and the
+  (`tests/k8s/alloy/test_alloy_ships_audit_log.py::test_the_source_tails_auditds_log_into_this_block`). Its SYSCALL line carries the key and the
   writing process, so a Bash write shows apart from the Write tool's.
 - **Next-run review:** before adding a path, check that a write to it is rare. Every write to
   a watched path is a shipped record.

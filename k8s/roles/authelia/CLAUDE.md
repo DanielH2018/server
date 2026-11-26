@@ -18,7 +18,7 @@ redis incident, the notifier's history and the OIDC derivations are in
 - **Routes name the `authelia` Middleware, which is a chain, not the forwardAuth.** Its first member
   clears X-Forwarded-Host/-Uri/-Method so forwardAuth rebuilds them, and no route names
   `authelia-forwardauth` directly; the same unit is copied into the longhorn-ui and observability
-  namespaces. ENFORCED: `tests/k8s/test_forwardauth_rebuilds_request_target.py`.
+  namespaces. ENFORCED: `tests/k8s/edge/test_forwardauth_rebuilds_request_target.py`.
 
 ## Access control comes from containers_list
 

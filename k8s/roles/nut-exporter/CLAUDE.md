@@ -59,7 +59,7 @@ read back through `metrics_port('nut')`.
 **The probes are `tcpSocket` for two separate reasons.** Probing `/ups_metrics` would crash-loop
 this pod whenever upsd is unreachable, turning a metrics gap into a second outage — Prometheus
 already reports that as `up == 0`. Probing `/metrics` would trip
-`tests/k8s/_scrape_property_rows.py`, which refuses a kubelet httpGet on a
+`tests/k8s/rendered_properties/_scrape_property_rows.py`, which refuses a kubelet httpGet on a
 metrics route below a 300s period after node-exporter's probes produced 97% of the namespace's
 Loki ingest.
 

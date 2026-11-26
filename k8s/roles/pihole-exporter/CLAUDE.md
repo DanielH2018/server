@@ -83,7 +83,7 @@ holds the declared keys equal to the placeholders the pihole role's `pihole-env`
 ## Two things that bite
 
 **The probes are `tcpSocket`, not `httpGet` on `/metrics`.** A kubelet probe against a metrics
-route is the shape `tests/k8s/_scrape_property_rows.py` refuses below a 300s
+route is the shape `tests/k8s/rendered_properties/_scrape_property_rows.py` refuses below a 300s
 period, after node-exporter's probes produced 97% of this namespace's Loki ingest. Whether
 Pi-hole is reachable is Prometheus's `up{job="pihole"}` to report, not a reason to restart this
 pod.
@@ -96,7 +96,7 @@ bump; `promote`'s verification gates the apply.
 ## NetworkPolicy
 
 The pod carries `netpol-baseline: enforced`, which is what admits Prometheus to it
-(`tests/k8s/test_netpol_baseline_labels.py::test_exactly_the_fenced_roles_carry_the_baseline_label`).
+(`tests/k8s/edge/test_netpol_baseline_labels.py::test_exactly_the_fenced_roles_carry_the_baseline_label`).
 Its outbound polls are admitted by the `app: pihole-exporter` podSelector added to
 `k8s/roles/netpol-baseline/templates/networkpolicy-pihole.yaml.j2`, on port 80 — a podSelector and not an
 ipBlock, because pod → ClusterIP → pod traffic keeps the caller's pod IP.

@@ -63,7 +63,7 @@ spec:
             - name: metrics
               containerPort: {{ services | entry_port('gpu-exporter') }}
           # tcpSocket, not httpGet on /metrics: a kubelet probe against a metrics route is the
-          # shape tests/k8s/_scrape_property_rows.py refuses below a 300s period.
+          # shape tests/k8s/rendered_properties/_scrape_property_rows.py refuses below a 300s period.
           # Whether a GPU is present is `homelab_gpu_info`'s job to report, not a restart cause.
           livenessProbe:
             tcpSocket:

@@ -143,7 +143,7 @@ registry_k8s_netpol_cni_gateway: "{{ k3s_cni0_gateways[0] }}"
 # tied the three together — the pin is a nodeSelector in deployment.yaml.j2, these are two role
 # defaults — so repointing the pin at daniel-server would leave daniel-box's own pulls arriving as
 # 10.42.0.0 and denied, with the selftest job the only caller that says so (#1725). ENFORCED by
-# tests/k8s/test_registry_netpol_grants_follow_the_pinned_node.py.
+# tests/k8s/edge/test_registry_netpol_grants_follow_the_pinned_node.py.
 registry_k8s_netpol_agent_flannel: 10.42.1.0/32
 
 # The ghcr.io mirror (templates/ghcr-mirror.yaml.j2). `restart_on: []`, because it reads no

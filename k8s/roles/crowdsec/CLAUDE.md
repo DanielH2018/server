@@ -276,4 +276,4 @@ DaemonSet job attaches one, so a per-node selector on an engine or sidecar metri
 
 **A sidecar job also needs the pod's containerPort and a :6060 grant**, which netpol-baseline's
 `networkpolicy-crowdsec-sidecars.yaml.j2` renders from the same map (#4088). ENFORCED by
-`tests/k8s/test_crowdsec_sidecars_are_scraped.py`.
+`tests/k8s/workloads/test_crowdsec_sidecars_are_scraped.py`.

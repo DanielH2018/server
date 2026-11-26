@@ -174,7 +174,7 @@ spec:
                   key: REDISCLI_AUTH
           # read_only: the whole program is the shell loop above and it writes nothing. non_root
           # rather than leaning on the pod-level runAsUser, so the container carries its own
-          # assertion — tests/k8s/test_container_security_context.py requires one here.
+          # assertion — tests/k8s/workloads/test_container_security_context.py requires one here.
 {{ hardened_security_context(read_only=true, non_root=true) }}
 {{ container_resources(cpu_limit='100m', mem_limit='32Mi', cpu_request='10m', mem_request='16Mi') }}
 {% endif %}

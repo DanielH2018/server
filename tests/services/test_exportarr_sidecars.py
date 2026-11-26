@@ -12,7 +12,7 @@ shared var one directory up is invisible to it — the escape `crowdsec_k8s_imag
 in renovate.json. Duplication that a test keeps in lockstep beats a single copy nothing tracks.
 
 WHAT THIS FILE DELIBERATELY DOES NOT ASSERT. The sidecars carry a livenessProbe and no
-readinessProbe, and both rules live in `tests/k8s/test_readiness_coverage.py` alone: each
+readinessProbe, and both rules live in `tests/k8s/workloads/test_readiness_coverage.py` alone: each
 sidecar is a row in its `_NO_READINESS` record and a member of `_LIVENESS_REQUIRED`. Asserting
 either here as well would split one rule's rationale across two files. Do not add it here; add a
 row there.

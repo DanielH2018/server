@@ -45,7 +45,7 @@ spec:
       # DECIDED: `system-cluster-critical`, a system class, not a homelab tier. k3s ships it so,
       # and every tier and Flux's own controllers resolve names through this pod, so it outranks
       # every homelab class. The entry is untiered on purpose, because `tier: platform` would
-      # derive `homelab-critical` and lower it. tests/k8s/test_pod_template_hygiene.py
+      # derive `homelab-critical` and lower it. tests/k8s/workloads/test_pod_template_hygiene.py
       # lists it in `_SYSTEM_TIER` with this reason.
 {{ pod_shell('system-cluster-critical', service_account='coredns', run_as_user=65532, non_root=true) }}
       tolerations:

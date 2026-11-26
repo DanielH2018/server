@@ -53,7 +53,7 @@ manager. Flux's takeover leaves that manager alone, so the count survives the cu
 - **The cluster gets a second write path.** `promote` and Flux stay the only path for
   everything else, including these Deployments' images, config and claims. The second path is
   bounded by the Role: a holder of the token can start or stop a game server and nothing
-  more. `tests/k8s/_rbac_property_rows.py` holds that bound on every rendered Role and binding
+  more. `tests/k8s/rendered_properties/_rbac_property_rows.py` holds that bound on every rendered Role and binding
   that names the identity.
 - **Any pod in the cluster can reach the panel.** deploy-ui does no authentication, and a pod
   reaches it without Authelia, which was accepted for landings on 2026-09-10. Once the panel

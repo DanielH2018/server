@@ -103,7 +103,7 @@ data:
             # for a Cloudflare source, so everything after it sees `client` and every backend
             # sees `client, edge`. Gated with the bouncer because the startupProbe that catches
             # a failed plugin load is too.
-            # ENFORCED by tests/k8s/test_traefik_cloudflare_realip.py.
+            # ENFORCED by tests/k8s/edge/test_traefik_cloudflare_realip.py.
             - {{ k8s_namespace }}-cloudflare-realip@kubernetescrd
             # crowdsec next: a banned IP is rejected before any headers work is done.
             - {{ k8s_namespace }}-crowdsec@kubernetescrd

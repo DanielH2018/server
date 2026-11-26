@@ -3,7 +3,7 @@
 
 CI cannot query Prometheus, so the census that fails a tiered container whose memory
 request is under half its 7-day p95 working set reads its p95 figures from this table
-(`tests/k8s/_memory_property_rows.py`). The docs-refresh cron runs this generator twice a day
+(`tests/k8s/rendered_properties/_memory_property_rows.py`). The docs-refresh cron runs this generator twice a day
 from daniel-box, where Prometheus answers, and commits the table when a figure moves.
 
 A row is one container of a pod that ran at a `CENSUS_PRIORITY_CLASSES` class in the window,

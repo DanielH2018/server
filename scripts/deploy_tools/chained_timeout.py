@@ -24,7 +24,7 @@ ROOT_RETRY_S = 60
 # interval. test_chained_timeout.py fails a flag the flux role adds.
 REQUEUE_DEPENDENCY_S = 30
 # Workers kustomize-controller reconciles at once; a changed set larger than this queues in rounds.
-# tests/k8s/test_flux_role.py fails a drift from `k8s_rollout_batch_width` plus one.
+# tests/k8s/workloads/test_flux_role.py fails a drift from `k8s_rollout_batch_width` plus one.
 CONCURRENT = 5
 # The ceiling of every derived timeout, 5.5 hours. GitHub stops a hosted job at 6 hours, and a
 # `verify` stopped by its job limit leaves no verdict, so `settle` writes `<T> unverified`,

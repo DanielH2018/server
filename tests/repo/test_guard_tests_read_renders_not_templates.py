@@ -85,7 +85,7 @@ TEMPLATE_SOURCE_READERS = {
         "the tmpfiles `d` line's owner and mode are the subject, and the file is a one-line "
         "package path, not a shell script with a render to run"
     ),
-    "k8s/test_priority_class_is_derived_from_tier.py": (
+    "k8s/workloads/test_priority_class_is_derived_from_tier.py": (
         "whether a tiered role's `pod_shell(...)` call passes a literal class or the derived "
         "one — both render the same `priorityClassName`, so only the source tells them apart"
     ),
@@ -118,17 +118,17 @@ TEMPLATE_SOURCE_READERS = {
         "`_k8s_render` skips, all denylisted. Every role the render reaches reads its render, "
         "and `test_the_render_reaches_every_auto_deployable_role` holds the denylisted half"
     ),
-    "k8s/test_arr_deployments_share_one_macro.py": (
+    "k8s/workloads/test_arr_deployments_share_one_macro.py": (
         "whether radarr's and sonarr's templates CALL the shared macro or write its body out "
         "beside the call; both render the same Deployment, so only the source tells them "
         "apart. The macro's body itself is checked on the render"
     ),
-    "k8s/test_crowdsec_agent_sidecar_shares_one_macro.py": (
+    "k8s/workloads/test_crowdsec_agent_sidecar_shares_one_macro.py": (
         "whether traefik's and authelia's templates CALL the shared CrowdSec agent macros or "
         "write a container or volume out beside them; both render the same pod, so only the "
         "source tells them apart. The map the macros read is checked on the render"
     ),
-    "k8s/test_shared_manifest_defaults.py": (
+    "k8s/workloads/test_shared_manifest_defaults.py": (
         "whether two roles ship BYTE-IDENTICAL templates the shared default should replace; "
         "each renders with its own `container_item`, so two identical sources render "
         "differently and the duplication is visible only in the bytes"
@@ -140,7 +140,7 @@ TEMPLATE_SOURCE_READERS = {
         "with no claim at all. Reads the same synthetic role trees under `tmp_path` as "
         "`_autodeploy.py`, whose derivation it feeds"
     ),
-    "k8s/test_configmap_keys_not_absorbed.py": (
+    "k8s/workloads/test_configmap_keys_not_absorbed.py": (
         "the SOURCE key names written at the `data:` indent, which are one side of the "
         "comparison: absorption shows up as a key present in the source and absent from the "
         "PARSED render, so reading only the render erases the defect"
@@ -150,21 +150,21 @@ TEMPLATE_SOURCE_READERS = {
         "`.service.j2` and `.timer.j2` under `tmp_path` the red proofs write. A schedule is "
         "forbidden by name, so the source is the subject"
     ),
-    "k8s/test_root_needs_dac_capability.py": (
+    "k8s/workloads/test_root_needs_dac_capability.py": (
         "the fallback for the two templates no render reaches: `k8s/image-builder`'s build "
         "Job and context ConfigMap, both rendered by an `include_role` helper whose "
         "variables arrive on the caller's include task. The census itself spans "
         "all three planes off five renders, and "
         "`test_the_render_reaches_every_role_template` holds that nothing else falls back"
     ),
-    "k8s/test_volume_names_descriptive.py": (
+    "k8s/workloads/test_volume_names_descriptive.py": (
         "the fallback for the templates `_k8s_render` skips: every role it reaches is "
         "checked from its render, and the skipped ones from source, because image-builder's "
         "build Job declares volumes no render reaches. "
         "`test_the_source_fallback_is_only_the_templates_the_render_skips` holds the "
         "volume-bearing members of that fallback (#3224)"
     ),
-    "k8s/test_checksum_annotations_documented.py": (
+    "k8s/workloads/test_checksum_annotations_documented.py": (
         "the `*.yaml`/`*.yml` task files, which no render covers, plus the fallback for the "
         "four kinds of template `_k8s_render` skips — an unrendered role, a `*.sh.j2`, a "
         "`Dockerfile*` and a nested `templates/config/*.j2`. Every manifest template reads its "
@@ -200,15 +200,15 @@ KNOWN_MEMBERS = frozenset(
         "deploy/_autodeploy_claims.py",
         "deploy/test_k8s_autodeploy_rollout_gates.py",
         "k8s/_manifest_guards.py",
-        "k8s/test_arr_deployments_share_one_macro.py",
-        "k8s/test_configmap_keys_not_absorbed.py",
-        "k8s/test_checksum_annotations_documented.py",
-        "k8s/test_k8s_manifests.py",
-        "k8s/test_root_needs_dac_capability.py",
-        "k8s/test_volume_names_descriptive.py",
-        "k8s/test_shared_manifest_defaults.py",
-        "k8s/test_tls_cert_resolver_optional.py",
-        "k8s/test_vip_pins.py",
+        "k8s/workloads/test_arr_deployments_share_one_macro.py",
+        "k8s/workloads/test_configmap_keys_not_absorbed.py",
+        "k8s/workloads/test_checksum_annotations_documented.py",
+        "k8s/rendered_properties/test_k8s_manifests.py",
+        "k8s/workloads/test_root_needs_dac_capability.py",
+        "k8s/workloads/test_volume_names_descriptive.py",
+        "k8s/workloads/test_shared_manifest_defaults.py",
+        "k8s/edge/test_tls_cert_resolver_optional.py",
+        "k8s/edge/test_vip_pins.py",
         "staging/_fence_probe.py",
         "staging/test_etcd_drill_vm.py",
         "staging/test_staging_egress_fence.py",
@@ -404,7 +404,7 @@ def test_a_reverted_k8s_guard_is_named_as_an_offender():
     """
     found = offenders(
         {
-            "k8s/test_flaresolverr_disable_media.py": (
+            "k8s/workloads/test_flaresolverr_disable_media.py": (
                 'source = K8S_ROLES / "prowlarr" / "templates" / _TEMPLATE\n'
                 'assert "prowlarr_k8s_fs_disable_media" in source.read_text()\n'
             ),
@@ -414,4 +414,4 @@ def test_a_reverted_k8s_guard_is_named_as_an_offender():
             ),
         }
     )
-    assert list(found) == ["k8s/test_flaresolverr_disable_media.py"], found
+    assert list(found) == ["k8s/workloads/test_flaresolverr_disable_media.py"], found

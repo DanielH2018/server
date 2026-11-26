@@ -91,7 +91,7 @@ host packages and their components under `hosts/` goes in `hosts/tests/`. The sh
 `tests/`, which `pythonpath` puts in reach of `hosts/tests/` too. A new guard keeps a unique basename, since pytest names modules by basename alone.
 
 **A one-selector, one-predicate check is a row, not a file.**
-- A property of the rendered k8s manifests goes in `tests/k8s/test_rendered_properties.py`,
+- A property of the rendered k8s manifests goes in `tests/k8s/rendered_properties/test_rendered_properties.py`,
   or in one of the `_*_property_rows.py` files beside it once that file nears the line cap.
   Extra reject and accept cases go in `more_red` and `more_green`.
 - A textual census of the tracked tree goes in a `Census` row of
@@ -114,7 +114,7 @@ host packages and their components under `hosts/` goes in `hosts/tests/`. The sh
   refuses a module in any directory under `tests/` that reads tracked text, by a walk or by
   one file's path, and runs no code: no subprocess other than `git ls-files`, no render and
   no scratch tree, whatever its number of test functions. A call into the `renderer`
-  package or `tests/k8s/_property_table.py` counts as a render. A file that must stay
+  package or `tests/k8s/rendered_properties/_property_table.py` counts as a render. A file that must stay
   one goes in that row's `allow`, with a reason naming the join or the render that keeps it.
 
 ## A new check ships with a proof it can go red

@@ -28,7 +28,7 @@ k3s_metallb_pool: 10.0.0.241-10.0.0.250
 
 # Request only: BestEffort pods are evicted first, and an evicted speaker drops every VIP its node
 # announces; a memory limit would add an OOM-kill path (operator ruling).
-# A kustomize patch cannot read a variable, so tests/k8s/test_metallb_vendored_manifest.py holds
+# A kustomize patch cannot read a variable, so tests/k8s/edge/test_metallb_vendored_manifest.py holds
 # each patch equal to its key.
 k3s_metallb_controller_memory_request: 128Mi
 k3s_metallb_speaker_memory_request: 128Mi

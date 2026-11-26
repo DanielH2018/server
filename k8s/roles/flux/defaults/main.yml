@@ -1,7 +1,7 @@
 ---
 # The release files/gotk-components.yaml was generated at. A bump regenerates that file by
 # hand, with the pipeline its first line names (CLAUDE.md), because Renovate can rewrite this
-# line but cannot run `flux install`. tests/k8s/test_flux_role.py fails a bump whose
+# line but cannot run `flux install`. tests/k8s/workloads/test_flux_role.py fails a bump whose
 # vendored header still names the old release.
 # renovate: datasource=github-releases depName=fluxcd/flux2
 flux_version: v2.9.6
@@ -46,7 +46,7 @@ flux_volume_suffixes:
 
 # A worker on a health-waiting Kustomization is held until the check settles: the rollout batch
 # width keeps the play's concurrency, and one more worker is the soak's.
-# chained_timeout.py's CONCURRENT is the width alone; tests/k8s/test_flux_role.py fails a drift
+# chained_timeout.py's CONCURRENT is the width alone; tests/k8s/workloads/test_flux_role.py fails a drift
 # between the three.
 flux_controller_args:
   kustomize-controller:
@@ -68,7 +68,7 @@ flux_artifact_url: oci://ghcr.io/danielh2018/homelab-manifests
 flux_artifact_tag: prod
 
 # Go regular expressions for `matchOIDCIdentity`; forge.py holds the same identity as
-# SIGNER_IDENTITY/SIGNER_ISSUER and tests/k8s/test_flux_sync.py fails a drift.
+# SIGNER_IDENTITY/SIGNER_ISSUER and tests/k8s/flux/test_flux_sync.py fails a drift.
 flux_signer_subject: '^https://github\.com/DanielH2018/server/\.github/workflows/promote\.yml@refs/heads/master$'
 flux_signer_issuer: '^https://token\.actions\.githubusercontent\.com$'
 

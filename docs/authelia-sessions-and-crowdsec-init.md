@@ -32,7 +32,7 @@ not recognise, this pod rolls under `Recreate` in front of most public routes, a
 `config.template.yml` is the source —
 `https://raw.githubusercontent.com/authelia/authelia/v<tag>/config.template.yml` — and
 the `authelia-webauthn-is-a-checked-second-factor` row in
-`tests/k8s/_config_property_rows.py` holds the rendered block to the keys someone
+`tests/k8s/rendered_properties/_config_property_rows.py` holds the rendered block to the keys someone
 checked against that source — deliberately narrower than what 4.39.21 accepted when the keys were checked on 2026-09-29, so adding a key
 means editing `WRITTEN_WEBAUTHN_KEYS` there as well, which is where the check belongs.
 

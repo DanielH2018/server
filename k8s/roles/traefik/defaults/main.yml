@@ -7,7 +7,7 @@ traefik_k8s_image: traefik:v3.7.18@sha256:9c437ac4f09ce6f4980a8544902d3475fdf70a
 
 # The CRDs are a role of their own, `traefik-crds`, whose defaults pin its in-tree copy of
 # upstream's definitions. That copy's version must share this image's minor:
-# tests/k8s/test_traefik_crds.py fails a minor bump here until the copy is refreshed.
+# tests/k8s/edge/test_traefik_crds.py fails a minor bump here until the copy is refreshed.
 
 # Renovate stance: whether an image bump here may automerge. `promote` deploys what merges.
 # Platform: this is the ingress edge everything else routes through. A failed deploy removes
@@ -123,7 +123,7 @@ traefik_k8s_mem_request: 192Mi
 traefik_k8s_bouncer_plugin_version: v1.8.2
 
 # In-repo local plugin, no version to pin. The name and module must agree with the manifest's
-# `import`; tests/k8s/test_traefik_cloudflare_realip.py checks all four.
+# `import`; tests/k8s/edge/test_traefik_cloudflare_realip.py checks all four.
 traefik_k8s_realip_plugin_name: cloudflarerealip
 traefik_k8s_realip_plugin_module: homelab/cloudflarerealip
 traefik_k8s_agent_collections: >-

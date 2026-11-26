@@ -73,7 +73,7 @@ that bite from a config edit alone.
   `ingress: false` removes the call rather than permitting it; this cluster routes with
   `IngressRoute` CRDs and owns no `Ingress` object, so the grant would list an empty set
   forever. The two halves are asserted together by
-  `tests/k8s/test_k8s_manifests_rbac.py`.
+  `tests/k8s/rbac/test_k8s_manifests_rbac.py`.
 - **A widget's credential goes in `key:`, never in `url:`.** Each widget's `proxy.js` logs the
   full request URL on any non-2xx, so a credential in a query string is published to the pod log
   and to Loki on the target's next outage. `jellyfin_api_key` leaked that way during the
@@ -127,5 +127,5 @@ that bite from a config edit alone.
   `probe.py health homepage` exiting 0. The `lifecycle.postStart` hook in
   `templates/deployment.yaml.j2` calls `/api/revalidate` once at startup, which regenerates `/`
   from the config the pod can read. ENFORCED by the `homepage-revalidates-on-start` row of
-  `tests/k8s/_workload_property_rows.py`; a browser tab reading
+  `tests/k8s/rendered_properties/_workload_property_rows.py`; a browser tab reading
   `Homepage` is the symptom, and the measurements are on the docs page.

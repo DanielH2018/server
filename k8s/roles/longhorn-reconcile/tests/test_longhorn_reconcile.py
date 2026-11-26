@@ -7,7 +7,7 @@ would follow a rename and pass, and a one-byte change in a live label drops the 
 its RecurringJob with nothing failing.
 
 The CronJob's RBAC against these calls is in
-tests/k8s/test_rbac_against_rest_script.py, and the render in test_longhorn_reconcile_render.py.
+tests/k8s/rbac/test_rbac_against_rest_script.py, and the render in test_longhorn_reconcile_render.py.
 
 Run: uv run pytest k8s/roles/longhorn-reconcile/tests/test_longhorn_reconcile.py
 """

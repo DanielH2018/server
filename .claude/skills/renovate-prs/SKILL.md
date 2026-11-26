@@ -348,7 +348,7 @@ the skill's verdict table says what to do with the line each prints.
 - **An upstream version bump:** ask the app. `kubectl -n homelab logs deploy/<svc> | grep -i version`,
   or the service's own version endpoint.
 - **A built image** (`Dockerfile*.j2`): confirm the pod resolved the digest the registry serves.
-  The `built-images-pull-always` row of `tests/k8s/_workload_property_rows.py` guards
+  The `built-images-pull-always` row of `tests/k8s/rendered_properties/_workload_property_rows.py` guards
   the usual cause.
 - **A plugin or extension:** confirm the host loaded it, not just that the file is on disk.
 
