@@ -5,7 +5,7 @@
 The other four heartbeats only read and report. This one acts: pi-recovery-health runs `docker start` on any watched container it finds not running, every 5 minutes, unattended.
 
 - **Scope / exclusions:** exactly the containers this host deploys, which is every
-  compose_services entry in inventory/host_vars/daniel-pi.yml plus the
+  compose_services entry in hosts/daniel-pi/vars.yml plus the
   docker-proxy's sub-proxies. One `docker start` per watched container per cycle and nothing else: never a
   restart, recreate, `docker rm` or pull, and nothing on the other two hosts.
   docs/pi-host-tuning-record.md has why the watch set is the deploy list rather than
@@ -19,7 +19,7 @@ The other four heartbeats only read and report. This one acts: pi-recovery-healt
 - **Why it acts at all:** `restart: unless-stopped` covers a process exit, not a failed create
   at the OCI runtime, which is what this 512 MB board actually produces.
 - **Mode (explicit and reversible):** optimize_pi_recovery_restart_enabled arms the timer and
-  ships true. Setting it false in inventory/host_vars/daniel-pi.yml drops the timer's enable
+  ships true. Setting it false in hosts/daniel-pi/vars.yml drops the timer's enable
   link from the next package version; reconcile stops the timer on the install that drops it
   and leaves the script installed. docs/pi-host-tuning-record.md has the disarm walkthrough,
   including why disarming doubles as the heartbeat's own failure signal.

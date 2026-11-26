@@ -25,8 +25,9 @@ import pytest
 import yaml
 
 from lib.estate import Inventory
+from lib.inventory_lists import host_vars_file
 from lib.proc_testing import fake_bin, write_exec
-from lib.repo_paths import HOST_VARS
+from lib.render_guard import copy_host_files
 from renderer.renderer_lib import host as host_mode
 
 SCRIPT = "/usr/lib/homelab/claude-agent-home"
@@ -40,10 +41,8 @@ RUNUSER = '#!/bin/sh\n[ "$1" = -u ] && shift 2\n[ "$1" = -- ] && shift\nexec "$@
 
 def render_host(root, paths, claude_code_user: str):
     """daniel-box's package with the agent's paths under root, and sessions run as claude_code_user."""
-    host_vars = root / "host_vars"
-    shutil.rmtree(host_vars, ignore_errors=True)
-    shutil.copytree(HOST_VARS, host_vars)
-    path = host_vars / "daniel-box.yml"
+    host_vars = copy_host_files(root / "hosts")
+    path = host_vars_file("daniel-box", host_vars)
     overrides = {
         "claude_code_agent_user": getpass.getuser(),
         "claude_code_user": claude_code_user,

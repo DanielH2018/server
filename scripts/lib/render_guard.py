@@ -36,7 +36,7 @@ from lib import yaml_fast
 from lib.git import git
 from lib.role_files import cluster_vars_source, repo_file, role_file
 from lib.container_entry import ContainerEntry, parse_containers_list
-from lib.inventory_lists import K8S_HOST, host_names
+from lib.inventory_lists import K8S_HOST, host_names, host_vars_file
 from lib.repo_paths import (
     ALL_VARS,
     HOST_VARS,
@@ -224,22 +224,34 @@ def render_or_error(
 
 
 def host_files(host_vars: Path = HOST_VARS) -> list[Path]:
-    """Every host's ``host_vars`` file, in ``host_names`` order.
+    """Every host's vars file, in ``host_names`` order.
 
     The ``host_vars`` argument stays a parameter because every caller's tests inject a
     ``tmp_path`` through it.
     """
-    return [host_vars / f"{name}.yml" for name in host_names(host_vars)]
+    return [host_vars_file(name, host_vars) for name in host_names(host_vars)]
+
+
+def copy_host_files(dest: Path, host_vars: Path = HOST_VARS) -> Path:
+    """Copy every vars file under `host_vars`, ``_example`` included, into `dest`; return it.
+
+    A test edits the copy and points an ``Inventory`` at it, without copying the packages.
+    """
+    for src in host_vars.glob("*/vars.yml"):
+        target = host_vars_file(src.parent.name, dest)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(src.read_bytes())
+    return dest
 
 
 def services_file(host_vars: Path) -> Path:
-    """``k8s/services.yml`` in the tree whose ``inventory/host_vars`` is `host_vars`."""
-    return host_vars.resolve().parents[1] / K8S_SERVICES.relative_to(REPO)
+    """``k8s/services.yml`` in the tree whose hosts directory is `host_vars`."""
+    return host_vars.resolve().parent / K8S_SERVICES.relative_to(REPO)
 
 
 def host_layer(host_vars: Path, host: str) -> dict:
-    """`host`'s host_vars file, ``{}`` for a host without one."""
-    return load_yaml(host_vars / f"{host}.yml")
+    """`host`'s own vars file, ``{}`` for a host without one."""
+    return load_yaml(host_vars_file(host, host_vars))
 
 
 def k8s_services(path: Path = K8S_SERVICES) -> tuple[ContainerEntry, ...]:

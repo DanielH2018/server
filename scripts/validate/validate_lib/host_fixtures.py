@@ -28,6 +28,8 @@ from email.utils import formatdate
 from pathlib import Path
 
 from lib.estate import REPO_INVENTORY, Inventory
+from lib.inventory_lists import host_vars_file
+from lib.render_guard import copy_host_files
 from lib.repo_paths import REPO
 from renderer.renderer_lib import host as host_mode
 
@@ -135,13 +137,12 @@ def pi_dropin_variant(head: Path, out: Path) -> Path:
 def disarmed_inventory(directory: Path) -> Inventory:
     """The repo's inventory with daniel-pi's container-recovery timer disarmed, under `directory`.
 
-    The host_vars directory is copied and the Pi's file gains
+    The hosts' vars files are copied and the Pi's file gains
     `optimize_pi_recovery_restart_enabled: false`, the edit an operator makes to disarm it, so a
     render through this inventory takes the path a real disarm does.
     """
-    host_vars = directory / "host_vars"
-    shutil.copytree(REPO_INVENTORY.host_vars, host_vars)
-    pi = host_vars / f"{HOST}.yml"
+    host_vars = copy_host_files(directory / "hosts", REPO_INVENTORY.host_vars)
+    pi = host_vars_file(HOST, host_vars)
     pi.write_text(pi.read_text() + f"\n{RECOVERY_FLAG}: false\n")
     return dataclasses.replace(REPO_INVENTORY, host_vars=host_vars)
 

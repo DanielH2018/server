@@ -29,7 +29,9 @@ def host_dirs(tree: Path) -> set[str]:
     return {
         path.name
         for path in (tree / "hosts").iterdir()
-        if path.is_dir() and path.name not in NOT_HOSTS
+        if path.is_dir()
+        and path.name not in NOT_HOSTS
+        and not path.name.startswith("_")
     }
 
 

@@ -12,26 +12,28 @@ import pytest
 import yaml
 
 from lib.estate import Estate, Inventory
+from lib.inventory_lists import host_vars_file
 
 
 @pytest.fixture
 def estate(tmp_path: Path) -> Estate:
-    host_vars = tmp_path / "host_vars"
-    host_vars.mkdir()
+    host_vars = tmp_path / "hosts"
+    (host_vars / "box").mkdir(parents=True)
+    (host_vars / "pi").mkdir()
     (tmp_path / "services.yml").write_text(
         yaml.safe_dump({"containers_list": [{"name": "web"}, {"name": "db"}]})
     )
     (tmp_path / "all.yml").write_text(
         yaml.safe_dump({"port": 1, "has_fwupd": False, "alias": "{{ sys_user }}"})
     )
-    (host_vars / "box.yml").write_text(
+    host_vars_file("box", host_vars).write_text(
         yaml.safe_dump(
             {
                 "port": 2,
             }
         )
     )
-    (host_vars / "pi.yml").write_text(
+    host_vars_file("pi", host_vars).write_text(
         yaml.safe_dump(
             {
                 "has_fwupd": True,

@@ -388,7 +388,7 @@ OFF_THE_FLOOR = [
     "docs/landing.md",
     "hosts/components/claude-code/defaults/main.yml",
     "hosts/components/renovate-agent/defaults/main.yml",
-    "inventory/host_vars/daniel-box.yml",
+    "hosts/daniel-box/vars.yml",
 ]
 
 

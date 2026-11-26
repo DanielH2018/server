@@ -7,7 +7,7 @@ allowed-tools: Read, Write, Edit, Grep, Glob, Bash
 # Adding a k3s service
 
 A new service belongs in `k8s/roles/<name>/` unless it must run on `daniel-pi`
-(LAN-only utilities, WireGuard; `inventory/host_vars/daniel-pi.yml:compose_services`).
+(LAN-only utilities, WireGuard; `hosts/daniel-pi/vars.yml:compose_services`).
 `daniel-server` and `daniel-box` have no Docker at all (`hosts/daniel-server/package.yml:components`,
 `hosts/daniel-box/package.yml:components`), so a Compose role there deploys nothing — for
 the Pi, use the `new-container` skill instead.

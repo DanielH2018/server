@@ -16,7 +16,9 @@ from pathlib import PurePosixPath
 import yaml
 
 from lib.estate import Inventory
-from lib.repo_paths import HOST_VARS, REPO
+from lib.inventory_lists import host_vars_file
+from lib.render_guard import copy_host_files
+from lib.repo_paths import REPO
 from renderer.renderer_lib import host as host_mode
 
 REAL = REPO / "hosts" / "components" / "pi-compose"
@@ -161,15 +163,13 @@ class ComposeTree:
 
         Inventory beats a component's `defaults:`, so the list must come from the inventory.
         """
-        host_vars = self.scratch / "host_vars"
-        shutil.rmtree(host_vars, ignore_errors=True)
-        shutil.copytree(HOST_VARS, host_vars)
+        host_vars = copy_host_files(self.scratch / "hosts")
         listing = (
             [{"name": n} for n in self.services]
             if self.listing is None
             else self.listing
         )
-        path = host_vars / "daniel-pi.yml"
+        path = host_vars_file("daniel-pi", host_vars)
         lines, in_key = [], False
         for line in path.read_text().splitlines():
             if line.startswith("compose_services:"):

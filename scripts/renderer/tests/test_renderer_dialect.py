@@ -19,6 +19,7 @@ from lib import yaml_fast
 from lib.k8s_roles import role_dirs
 from lib.render_guard import SHARED_TPL
 from lib.estate import Estate
+from lib.inventory_lists import host_vars_file
 from lib.repo_paths import K8S_ROLES, REPO
 from renderer.renderer_lib.cluster import INCLUDE_KEYS, RenderError, render_tag
 from renderer.renderer_lib.dialect import (
@@ -162,7 +163,7 @@ def _variable_layers() -> dict[str, dict]:
         },
         str(inventory.all_vars): estate.group_vars,
         **{
-            str(inventory.host_vars / f"{host}.yml"): estate.own_vars(host)
+            str(host_vars_file(host, inventory.host_vars)): estate.own_vars(host)
             for host in estate.hosts()
         },
     }

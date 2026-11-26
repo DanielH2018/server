@@ -260,7 +260,7 @@ citation is checked. G5 therefore moves only prose that cites nothing.
   body lists it as deliberately dropped, with the reason.
 - The four non-path atoms in *Baseline* stay in their sections.
 - The citations that would otherwise travel with a moved paragraph, and so stay in the root:
-    - `inventory/host_vars/daniel-pi.yml`, from the `roles/containers/` paragraph;
+    - `hosts/daniel-pi/vars.yml`, from the `roles/containers/` paragraph;
     - `secrets/.sops.yaml`, `ansible/bootstrap.yml` and `secrets/secret_rotation.yml`, from
       the secrets mechanics;
     - `scripts/dev/new_k8s_service.py`, `k8s/templates/`, `ansible/deploy.yml` and
@@ -300,7 +300,7 @@ in the tree.
       caveat. `docs/reference/services.md` owns the count.
 - **Directory Structure**: 15 → 13.
     - Stays: the tree, and one line naming `roles/containers/` as the Pi's roles, with
-      `inventory/host_vars/daniel-pi.yml` as the source of truth.
+      `hosts/daniel-pi/vars.yml` as the source of truth.
     - Moves: the `roles/containers/` paragraph, to `.claude/rules/docker.md`.
 - **Where to Look**: 23 → 22.
     - Stays: one pointer per row, each with its citations.

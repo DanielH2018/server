@@ -6,7 +6,7 @@ variables are stubbed, so no access to the SOPS-encrypted ``secrets.yml`` is
 needed.
 
 The service set and per-service parameters are taken from the real
-``compose_services`` in each ``inventory/host_vars/*.yml`` file (the Pi package's Compose
+``compose_services`` in each ``hosts/<host>/vars.yml`` file (the Pi package's Compose
 project, H5), so each ``hosts/components/pi-compose/services/<name>/compose.yaml.j2`` is
 exercised with the same shape it is deployed with (port, hostname, networks,
 use_authelia). Commented-out services are skipped automatically (they are not in

@@ -117,7 +117,7 @@ def test_the_hook_runs_every_expected_module_and_each_exists():
         "scripts/dev/pytest_shard_runner_weights.json",
         "tests/repo/module_length_allowlist.txt",
         "k8s/roles/traefik/defaults/main.yml",
-        "inventory/host_vars/daniel-box.yml",
+        "hosts/daniel-box/vars.yml",
         "pyproject.toml",
         ".github/workflows/ci.yml",
         ".github/workflows/image-smoke.yml",

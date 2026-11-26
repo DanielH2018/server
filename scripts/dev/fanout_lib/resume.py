@@ -76,6 +76,7 @@ RESUME_SNAPSHOT_PATHS = (
     ".claude/rules",
     ".claude/agents",
     "inventory",
+    "hosts",
     "CLAUDE.md",
 )
 

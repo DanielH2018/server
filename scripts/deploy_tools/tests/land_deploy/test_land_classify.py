@@ -105,7 +105,7 @@ def test_classify_records_the_derived_tags(landing):
 _NEW_ROLE_PR = {
     "files": [
         {"path": "k8s/roles/pihole-exporter/tasks/main.yml"},
-        {"path": "inventory/host_vars/daniel-box.yml"},
+        {"path": "hosts/daniel-box/vars.yml"},
     ],
     "changedFiles": 2,
 }

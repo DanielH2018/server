@@ -531,7 +531,7 @@ The script and both units stay installed, so one cycle can still be run by hand 
 
 To disarm it:
 
-1. Set `optimize_pi_recovery_restart_enabled: false` in `inventory/host_vars/daniel-pi.yml`,
+1. Set `optimize_pi_recovery_restart_enabled: false` in `hosts/daniel-pi/vars.yml`,
    which beats the component default, and merge.
 2. Let the updater install the version without the link. Until H3.9b arms the updater's timer,
    start it by hand on the Pi with `sudo systemctl start homelab-updater.service`.

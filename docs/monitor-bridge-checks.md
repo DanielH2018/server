@@ -367,7 +367,7 @@ checks each gate suppresses.
   `SPEEDTEST_CONSECUTIVE` because an app restart under a deploy is a real transient, and
   `speedtest` is also `startup_grace`. This is the same split as `check_ha_heartbeat`.
   Reaching the app needs `monitor-bridge` in speedtest's `netpol_from` list in
-  `inventory/host_vars/daniel-box.yml`, because the baseline admits `traefik`,
+  `hosts/daniel-box/vars.yml`, because the baseline admits `traefik`,
   `prometheus` and two cni0 /32s, none of which is this pod.
   **The verdict stays on the REST API although Prometheus scrapes the same app.** #3105 asked for
   the switch, and the answer is marked `# DECIDED:` at the fetch in `checks/host_edge.py`. Three

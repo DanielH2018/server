@@ -205,7 +205,7 @@ def test_an_inventory_depends_on_edit_waits_on_the_dependent_tag(land_run_main):
             P: digests(bento_pdf="b", texbrain="t"),
         },
     )
-    rc, out, calls = _land(land_run_main, ["inventory/host_vars/daniel-box.yml"], sim)
+    rc, out, calls = _land(land_run_main, ["hosts/daniel-box/vars.yml"], sim)
     assert "VERDICT: settled" in out, out
     assert rc == 0
     assert sim.annotations == _annotation("texbrain")

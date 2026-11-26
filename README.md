@@ -11,7 +11,7 @@ secrets encrypted with **SOPS/age**, storage on **Longhorn**, and reverse-proxie
      (they read 44 and 49 while the real total was 52). -->
 
 ```bash
-grep -c '^  - name:' inventory/host_vars/*.yml   # the actual per-host tally
+grep -c '^  - name:' hosts/*/vars.yml   # the actual per-host tally
 ```
 
 > Day-to-day conventions and the agent contract live in [`CLAUDE.md`](CLAUDE.md). Most

@@ -9,13 +9,14 @@ Run: uv run pytest hosts/lib/tests/test_claude_code_on_daniel_box.py
 
 import json
 import re
-import shutil
 
 import pytest
 import yaml
 
 from lib.estate import Estate, Inventory
-from lib.repo_paths import HOST_VARS, REPO
+from lib.inventory_lists import host_vars_file
+from lib.render_guard import copy_host_files
+from lib.repo_paths import REPO
 from renderer.renderer_lib import host as host_mode
 
 COMPONENT = REPO / "hosts" / "components" / "claude-code" / "component.yml"
@@ -196,9 +197,8 @@ def test_daniel_box_declares_the_agent_with_its_own_uid(box):
 
 
 def render_box_with_rc_user(tmp_path, rc_user: str):
-    host_vars = tmp_path / "host_vars"
-    shutil.copytree(HOST_VARS, host_vars)
-    path = host_vars / "daniel-box.yml"
+    host_vars = copy_host_files(tmp_path / "hosts")
+    path = host_vars_file("daniel-box", host_vars)
     path.write_text(
         yaml.safe_dump(
             {**yaml.safe_load(path.read_text()), "claude_code_user": rc_user}
@@ -281,9 +281,8 @@ def retired_textfiles(package) -> set[str]:
 
 @pytest.mark.parametrize("toggle", sorted(TIMER_TEXTFILES))
 def test_disarming_a_timer_retires_its_textfiles(tmp_path, toggle):
-    host_vars = tmp_path / "host_vars"
-    shutil.copytree(HOST_VARS, host_vars)
-    path = host_vars / "daniel-box.yml"
+    host_vars = copy_host_files(tmp_path / "hosts")
+    path = host_vars_file("daniel-box", host_vars)
     path.write_text(yaml.safe_dump({**yaml.safe_load(path.read_text()), toggle: False}))
 
     off = host_mode.render_host("daniel-box", inventory=Inventory(host_vars=host_vars))
