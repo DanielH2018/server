@@ -19,10 +19,11 @@ k3s_cni0_gateways:
 # A host process reaching a baseline-selected pod on the other node is denied, with the pod's
 # node as the only variable: from daniel-box, sonarr's
 # ClusterIP (pod on daniel-box) answers 200 while prowlarr's (pod on daniel-server) times out,
-# and from daniel-server the two verdicts swap. The census found ONE host caller of that
-# shape, `get_via_service()` in scripts/diagnostics/postflight.py, and it already falls back to
-# the workload's Traefik route when the ClusterIP does not answer — which is why the
-# *arr `-monitoring` routes admit the flannel pair. Traefik itself is immune: its
+# and from daniel-server the two verdicts swap. The census found two host callers of that
+# shape. `get_via_service()` in scripts/diagnostics/postflight.py falls back to the workload's
+# Traefik route when the ClusterIP does not answer, which is why the *arr `-monitoring` routes
+# admit the flannel pair. `probe.py arr` runs its curl on the pod's node over ssh
+# (`curl_host` in scripts/diagnostics/probe_lib/arr.py). Traefik itself is immune: its
 # policy's first ingress rule carries ports 8000/8443 with no `from:`, so the three host crons
 # that dial it are unaffected by this list. Adding the flannel pair here would re-scope every pod
 # the namespace-scoped baseline selects, to buy a fast path that already has a working fallback.
