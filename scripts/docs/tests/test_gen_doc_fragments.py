@@ -275,16 +275,18 @@ def test_deadman_cadences_assembles_each_cron_from_its_variables():
         "worktree_sweep_cron_weekday": 0,
     }
     out = renderers.render_deadman_cadences(
-        k3s,
-        {"pi_peer_backup_k8s_schedule": "30 23 * * *"},
-        registry,
-        group_vars,
-        host_timers,
-        ["box", "pi"],
-        ["pi"],
-        {"observability_alertmanager_watchdog_repeat_seconds": 60},
-        ["box", "server"],
-        "0 6 * * *",
+        renderers.DeadmanInputs(
+            k3s=k3s,
+            pi_peer={"pi_peer_backup_k8s_schedule": "30 23 * * *"},
+            registry=registry,
+            group_vars=group_vars,
+            host_timers=host_timers,
+            hosts=["box", "pi"],
+            docker_hosts=["pi"],
+            observability={"observability_alertmanager_watchdog_repeat_seconds": 60},
+            sweep_hosts=["box", "server"],
+            warehouse_freshness="0 6 * * *",
+        )
     )
     assert "| `airflow-warehouse-fresh` | `0 6 * * *` |" in out
     assert "| `daniel-box-disk-health` | `*/5 * * * *` |" in out
@@ -301,38 +303,40 @@ def test_deadman_cadences_assembles_each_cron_from_its_variables():
 
 def test_deadman_cadences_gives_a_prune_slug_only_to_a_docker_host():
     out = renderers.render_deadman_cadences(
-        {
-            "k3s_longhorn_backup_health_cron_minute": "*/10",
-            "k3s_disk_health_cron_minute": "*/10",
-            "k3s_etcd_s3_cron_hour": "2",
-            "k3s_etcd_s3_cron_minute": "45",
-            "k3s_manifest_prune_cron_hour": "5",
-            "k3s_manifest_prune_cron_minute": "15",
-        },
-        {"pi_peer_backup_k8s_schedule": "0 23 * * *"},
-        {
-            "registry_k8s_gc_cron_weekday": "0",
-            "registry_k8s_gc_cron_hour": "4",
-            "registry_k8s_gc_cron_minute": "20",
-        },
-        {
-            "weekly_reboot_minute": 30,
-            "weekly_reboot_hour": 7,
-            "weekly_reboot_weekday": 0,
-            "ops_cron_host": "box",
-        },
-        {
-            "docker_prune_cron_minute": 30,
-            "docker_prune_cron_hour": 6,
-            "worktree_sweep_cron_minute": 20,
-            "worktree_sweep_cron_hour": 4,
-            "worktree_sweep_cron_weekday": 0,
-        },
-        ["box"],
-        [],
-        {"observability_alertmanager_watchdog_repeat_seconds": 60},
-        ["box"],
-        "0 6 * * *",
+        renderers.DeadmanInputs(
+            k3s={
+                "k3s_longhorn_backup_health_cron_minute": "*/10",
+                "k3s_disk_health_cron_minute": "*/10",
+                "k3s_etcd_s3_cron_hour": "2",
+                "k3s_etcd_s3_cron_minute": "45",
+                "k3s_manifest_prune_cron_hour": "5",
+                "k3s_manifest_prune_cron_minute": "15",
+            },
+            pi_peer={"pi_peer_backup_k8s_schedule": "0 23 * * *"},
+            registry={
+                "registry_k8s_gc_cron_weekday": "0",
+                "registry_k8s_gc_cron_hour": "4",
+                "registry_k8s_gc_cron_minute": "20",
+            },
+            group_vars={
+                "weekly_reboot_minute": 30,
+                "weekly_reboot_hour": 7,
+                "weekly_reboot_weekday": 0,
+                "ops_cron_host": "box",
+            },
+            host_timers={
+                "docker_prune_cron_minute": 30,
+                "docker_prune_cron_hour": 6,
+                "worktree_sweep_cron_minute": 20,
+                "worktree_sweep_cron_hour": 4,
+                "worktree_sweep_cron_weekday": 0,
+            },
+            hosts=["box"],
+            docker_hosts=[],
+            observability={"observability_alertmanager_watchdog_repeat_seconds": 60},
+            sweep_hosts=["box"],
+            warehouse_freshness="0 6 * * *",
+        )
     )
     assert "weekly-reboot-box" in out
     assert "box-docker-prune" not in out
@@ -341,7 +345,18 @@ def test_deadman_cadences_gives_a_prune_slug_only_to_a_docker_host():
 def test_deadman_cadences_fails_on_a_missing_variable_rather_than_guessing():
     with pytest.raises(KeyError):
         renderers.render_deadman_cadences(
-            {}, {"pi_peer_backup_k8s_schedule": "x"}, {}, {}, {}, [], [], {}, [], "x"
+            renderers.DeadmanInputs(
+                k3s={},
+                pi_peer={"pi_peer_backup_k8s_schedule": "x"},
+                registry={},
+                group_vars={},
+                host_timers={},
+                hosts=[],
+                docker_hosts=[],
+                observability={},
+                sweep_hosts=[],
+                warehouse_freshness="x",
+            )
         )
 
 
