@@ -56,10 +56,8 @@ def _is_gated_on_the_api_key(text: str) -> bool:
 
 
 def test_the_script_does_not_hold_the_api_key():
-    # Rendered at a SENTINEL. At inventory values an unset secret renders as the same empty
-    # string a wrong variable name would, so only a render at a value this variable alone holds
-    # separates the two. A key inside the script is printed by every grep, cat or diff
-    # over it.
+    # Rendered at a SENTINEL: an unset secret renders as the same empty string a wrong variable name
+    # would. A key inside the script is printed by every grep, cat or diff over it.
     script = render_shell_script(
         "components",
         "eval-sweep",
@@ -97,8 +95,8 @@ def _run_script(tmp_path, key_text: str | None):
         "eval-run.sh.j2",
         overrides={"sys_user": "eval-run-test-no-such-user"},
     )
-    # The script sources the check library from the host's install path, which CI lacks, so
-    # point it at the role's copy; the `write_check_textfile` its exit hook calls then exists.
+    # The script sources the check library from the host's install path, which CI lacks, so point it
+    # at the role's copy.
     assert _CHECK_LIB_PATH in body
     script.write_text(body.replace(_CHECK_LIB_PATH, str(_CHECK_LIB)))
     return run(

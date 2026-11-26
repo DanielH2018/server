@@ -33,16 +33,13 @@ NUT_SERVICE = K8S_ROLES / "nut" / "templates" / "service.yaml.j2"
 NUT_COMPONENT = REPO / "hosts" / "components" / "nut-secondary" / "component.yml"
 NUT_TIMER = NUT_COMPONENT.parent / "units" / "homelab-ups-watchdog.timer.j2"
 
-# Measured on daniel-server, `upsc apc-ups@127.0.0.1`: battery.runtime 987 at
-# battery.charge 100 and ups.load 43. A floor, not a guarantee — it falls with battery age and
-# with load, which is why the ceiling below reserves a large slice of it.
+# A floor, not a guarantee: runtime falls with battery age and load, so the ceiling below reserves a
+# large slice.
 MEASURED_RUNTIME_S = 987
-# Seconds the ONBATT timer must leave for every armed host to finish powering off. Deliberately
-# generous: it also covers the runtime this UPS will not have in two years.
+# Deliberately generous: it also covers the runtime this UPS will not have in two years.
 SHUTDOWN_RESERVE_S = 300
-# Seconds an armed control-plane node must ride out before stopping. Residential outages are
-# mostly shorter than this, and stopping inside that window trades a clean shutdown for a full
-# cluster restart on every flicker — a worse deal than the hard cut arming was meant to fix.
+# Residential outages are mostly shorter than this, and stopping inside that window trades a clean
+# shutdown for a full cluster restart.
 BLIP_RIDE_OUT_S = 300
 
 
@@ -89,12 +86,8 @@ def test_daniel_boxs_watchdog_unit_loads_no_credential(tmp_path):
     assert "ups_secondary_push_token" not in package.credentials
 
 
-# ── The ONBATT timer, once any host beyond ups_host is armed ────────────────────────────────
-#
-# Arming a host makes nut_onbatt_shutdown_delay a load-bearing availability number, and it can
-# fail in BOTH directions. Too short stops the control plane during a blip the battery would have
-# carried; too long spends the runtime the poweroffs themselves need. Neither shows until a real
-# outage, so the band is asserted here.
+# Too short stops the control plane during a blip the battery would have carried; too long spends
+# the runtime the poweroffs need.
 
 
 def onbatt_delay_verdict(delay: int, armed_beyond_ups_host: bool) -> str | None:
@@ -163,11 +156,8 @@ def test_the_band_binds_only_once_a_second_host_is_armed():
     assert onbatt_delay_verdict(120, False) is None
 
 
-# ── the runtime watchdog on the secondary's upsd link ────────────
-#
-# The `wait_for` above proves reachability once, at deploy. These guard the check that proves
-# it every 10 minutes afterwards. A watchdog reading the wrong address, or leaking the credential
-# on the line it reads, looks exactly like a working one.
+# The `wait_for` proves reachability once, at deploy; these guard the 10-minute check, where a wrong
+# address or leaked credential looks like a working one.
 
 WATCHDOG = rendered_shell_text(
     "components", "nut-secondary", "ups-secondary-health.sh.j2"
@@ -176,9 +166,7 @@ NUT_HOST_DEFAULTS = yaml_fast.safe_load(
     (NUT_COMPONENT.parent / "defaults" / "main.yml").read_text()
 )
 
-# A MONITOR line in the shape host-upsmon.conf.j2 renders. The fifth field is a fake stand-in
-# for the credential that sits there in the real file; it exists only to be searched for in the
-# extractor's output.
+# The fifth field is a fake stand-in for the credential, searched for in the extractor's output.
 _FAKE_CREDENTIAL = "not-a-real-value-xyz"
 _MONITOR_LINE = f"MONITOR apc-ups@10.43.171.124 1 upsmon {_FAKE_CREDENTIAL} secondary"
 
@@ -248,8 +236,6 @@ def test_the_watchdog_logs_above_the_journald_store_cap():
 def test_the_watchdog_is_armable_and_armed():
     assert NUT_HOST_DEFAULTS["nut_host_watchdog_armed"] is True
     assert NUT_HOST_DEFAULTS["nut_host_watchdog_interval_minutes"] == 10
-    # The timer follows the cadence variable, which `DEADLINE_S` in the watchdog also derives from
-    # (hosts/tests/test_b4_rule_literals.py pins that deadline).
     assert "*:0/{{ nut_host_watchdog_interval_minutes }}" in NUT_TIMER.read_text()
     enable = yaml_fast.safe_load(NUT_COMPONENT.read_text())["enable"]
     assert enable["homelab-ups-watchdog.timer"]["when"] == "nut_host_watchdog_armed"

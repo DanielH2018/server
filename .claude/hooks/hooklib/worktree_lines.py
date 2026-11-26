@@ -129,7 +129,10 @@ def remote_fanout_lines(manifest_dir: Path | None = None, local_host=None, now=N
     ]
 
 
-# Must equal the number in `scripts/lib/_claude_worktree.py`.
+# The dotfiles pruner interface this banner was written for. `scripts/lib/_claude_worktree.py`
+# holds the same number for the importers, and
+# `.claude/hooks/tests/session_health/test_session_health.py::test_the_banner_requires_the_interface_the_library_does`
+# holds the two equal.
 PRUNER_INTERFACE = 2
 
 

@@ -30,8 +30,7 @@ def listing_problems(shipped: set[str], files: list[dict]) -> list[str]:
 
 def test_every_shipped_module_is_installed() -> None:
     shipped = {p.name for p in (COMPONENT / "files").glob("*.py")}
-    # The census finds its subject by glob, so it names members it must find: the entry
-    # module and the two modules it splits into.
+    # The census finds its subject by glob, so it names the members it must find.
     for member in ("renovate_agent.py", "agent_toolbox.py", "renovate_session.py"):
         assert member in shipped, f"{member} is gone from the component's files/"
     assert listing_problems(shipped, SPEC["files"]) == []

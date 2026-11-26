@@ -32,10 +32,9 @@ defaults:
   common_resolver_nameservers: "{{ k3s_node_dns_upstreams }}"
   common_resolver_options: "{{ k3s_node_dns_options }}"
   common_resolver_timeout: "{{ k3s_node_dns_timeout }}"
-# Pod-to-host traffic terminates in a host process, so it meets UFW's default-deny INPUT. The second
-# rule admits a scrape from the other node: flannel masquerades a pod's traffic to any address outside
-# the pod CIDR, and Prometheus lands wherever the scheduler puts it. The live rules carry no comment,
-# so the arm adopts each by appending it again, which relabels it in place.
+# Pod-to-host traffic meets UFW's default-deny INPUT. The second rule admits the other node's
+# scrape, because flannel masquerades pod traffic outside the pod CIDR. The arm adopts live rules by
+# re-appending.
 ufw:
   rules:
     - {id: coredns-host-metrics-pods, spec: "allow from {{ k3s_pod_cidr }} to any port {{ k3s_host_dns_metrics_port }} proto tcp"}

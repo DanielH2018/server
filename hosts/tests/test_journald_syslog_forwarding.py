@@ -16,16 +16,12 @@ from _helpers import ALL_VARS, HOST_VARS
 from _host_packages import HOSTS, shipped_text
 from lib.repo_paths import REPO
 
-# The host-tuning component ships the journald drop-in in every host package. The rsyslog-filter
-# component ships the filter below on every has_rsyslog host.
 JOURNALD_DEST = "/etc/systemd/journald.conf.d/50-homelab.conf"
 FILTER_DEST = "/etc/rsyslog.d/49-homelab-info-filter.conf"
 FILTER_COMPONENT = "rsyslog-filter"
 
-# Facilities that must never be discarded by the filter. auth and authpriv carry the records
-# the whole change exists to deliver. kern and mail do NOT arrive through journald -- rsyslog
-# reads kernel messages itself via imklog, and postfix writes to its own listen socket -- so
-# dropping their info would remove lines from kern.log and mail.log that are present today.
+# kern and mail do NOT arrive through journald (rsyslog reads kernel messages via imklog; postfix
+# writes its own socket), so dropping their info would remove lines from kern.log and mail.log.
 MUST_BE_EXEMPT = {"auth", "authpriv", "kern", "mail"}
 
 
@@ -127,11 +123,6 @@ def test_the_filter_component_lists_exactly_on_hosts_with_rsyslog():
         "has_rsyslog has no true default in group_vars/all.yml, so a new host would list no "
         "filter while its rsyslog runs"
     )
-
-
-# ── The rejecting halves ──────────────────────────────────────────────────────────────────
-# A guard that fires on nothing and a guard that fires on everything look identical from the
-# passing side. Each of these feeds the checkers above the exact input they must reject.
 
 
 def test_a_notice_forwarding_level_is_detected():

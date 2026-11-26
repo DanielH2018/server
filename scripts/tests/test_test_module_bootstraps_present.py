@@ -288,7 +288,7 @@ def test_the_census_contains_the_modules_this_guard_exists_for():
     census = {p.relative_to(REPO).as_posix() for p in collect_test_modules()}
     required = frozenset(
         {
-            ".claude/hooks/tests/test_fanout_stop.py",
+            ".claude/hooks/tests/hook_contract/test_fanout_stop.py",
             "hosts/tests/test_claude_lander.py",
             "tests/conftest.py",
             "tests/_k8s_render.py",

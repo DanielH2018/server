@@ -288,8 +288,7 @@ def visudo_check(tmp_path, grant: bytes) -> subprocess.CompletedProcess:
 
 
 def test_the_packaged_sudoers_grant_parses(package, tmp_path):
-    # Ansible validated the grant with `visudo -cf`; dpkg validates nothing, and a grant sudo
-    # cannot parse breaks sudo on the host.
+    # dpkg validates nothing, and a grant sudo cannot parse breaks sudo on the host.
     grant = package.files["/etc/sudoers.d/homelab-rootq"][0]
     result = visudo_check(tmp_path, grant)
     assert result.returncode == 0, result.stdout + result.stderr

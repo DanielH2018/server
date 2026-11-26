@@ -5,7 +5,6 @@ from datetime import datetime, timezone
 
 import notify_logic as nl
 
-# The captured dashboard of 2026-09-09, whose Awaiting Schedule section names this branch.
 _DASHBOARD_2026_09_09 = (
     pathlib.Path(__file__).resolve().parent / "dashboard_body_2026-09-09.txt"
 ).read_text()

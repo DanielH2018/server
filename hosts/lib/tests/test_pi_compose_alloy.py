@@ -54,24 +54,20 @@ REQUIRED_FRAGMENTS = (
     'url = "https://loki-homelab.local." + sys.env("HOMELAB_DOMAIN") + "/loki/api/v1/push"',
 )
 
-# The flags whose defaults are ON in the pinned build (v1.19.2 internal/alloycli/cmd_run.go:
-# enablePprof true, disableSupportBundle false).
+# Flags whose defaults are ON in the pinned build: enablePprof true, disableSupportBundle false.
 REQUIRED_FLAGS = (
     "--server.http.enable-pprof=false",
     "--server.http.disable-support-bundle",
 )
 
-# The post-GC floor of `go_memstats_heap_alloc_bytes{job="alloy-pi"}`: 38.3-38.5 MB steady,
-# after a three-day climb from 29 MB. Re-measure with
-# `min_over_time(go_memstats_heap_alloc_bytes{job="alloy-pi"}[1d])` on a process older than
-# three days, never on a fresh one (22 MB in its first hour).
+# Post-GC floor of go_memstats_heap_alloc_bytes: re-measure on a process older than three days,
+# never a fresh one.
 MEASURED_LIVE_HEAP_MIB = 37
-# `go_memstats_sys_bytes` − `go_memstats_heap_sys_bytes`: stacks, GC metadata, mspan/mcache
-# and the profiling buckets. 8.3 MB.
+# go_memstats_sys_bytes minus go_memstats_heap_sys_bytes: stacks, GC metadata, mspan/mcache,
+# profiling buckets.
 NON_HEAP_RUNTIME_MIB = 8
-# With GOGC=off the limit is the only trigger, so the slack between the live set and the
-# limit is the whole cycle. Less than GOGC=50's half-heap of slack would give a shorter cycle
-# than GOGC=50 does. The forced two-minute cycle GOGC=off removes is why it is off at all.
+# With GOGC=off the limit is the only trigger; less slack than GOGC=50's half-heap gives a shorter
+# cycle than GOGC=50.
 MIN_SLACK_PERCENT_WHEN_OFF = 50
 _UNITS_MIB = {"MiB": 1, "M": 1, "GiB": 1024, "G": 1024}
 
@@ -258,8 +254,8 @@ def compose_gaps(body: str) -> list[str]:
     """Return the hardening properties `body` (a rendered compose file) lacks."""
     gaps = [flag for flag in REQUIRED_FLAGS if flag not in body]
     if ":12345:12345/tcp" not in body:
-        # Not a hardening property but the constraint the hardening exists to live with:
-        # the two off-box consumers need the published mapping.
+        # The constraint the hardening lives with: the two off-box consumers need the published
+        # mapping.
         gaps.append("published port")
     return gaps
 
@@ -269,15 +265,15 @@ def config_gaps(body: str) -> list[str]:
     gaps = []
     if "http {" not in body or "auth {" not in body or "basic {" not in body:
         gaps.append("auth block")
-    # The password is a SOPS value that reaches the container as an environment variable, so
-    # this keys on the field reading that variable, never on a value.
+    # The password is a SOPS value reaching the container as an env variable, so key on the field
+    # reading it, never a value.
     if not re.search(rf'password\s*=\s*sys\.env\("{PASSWORD_ENV}"\)', body):
         gaps.append("password from the environment")
     if '["/metrics"]' not in body:
         gaps.append("metrics exemption")
     if "authenticate_matching_paths = false" not in body:
-        # `true` (the Alloy default) authenticates the LISTED paths, which would put
-        # /metrics behind auth and leave the reload endpoint and the UI open.
+        # `true` (the Alloy default) authenticates the LISTED paths: /metrics behind auth, reload
+        # endpoint and UI open.
         gaps.append("inverted filter")
     return gaps
 
@@ -292,10 +288,8 @@ def test_a_compose_file_missing_a_flag_is_flagged(compose):
 
 
 def test_a_compose_file_that_stopped_publishing_is_flagged(compose):
-    # Binding to loopback is the obvious "fix" and it silently blinds the `alloy-pi` scrape job
-    # and monitor-bridge's detached arm. The whole published token goes, host IP included: the
-    # rendered file names the Pi's LAN address, so replacing the port halves alone would leave a
-    # mapping no operator would ever write.
+    # Loopback silently blinds the `alloy-pi` scrape job and monitor-bridge's detached arm. Replace
+    # the whole published token, host IP included.
     unpublished = re.sub(
         r'"[\d.]+:12345:12345/tcp"', '"127.0.0.1:12345:12345"', compose
     )

@@ -57,11 +57,9 @@ legacy:
   # daniel-box keeps the key file because its k3s health crons and worktree sweep read it.
   - {path: /etc/healthchecks/ping.env, when: "inventory_hostname != 'daniel-box'"}
   - {path: /etc/healthchecks, when: "inventory_hostname != 'daniel-box'"}
-  # 26.04 moved this file to cloud-init-base's logrotate.d/cloud-init-base and the release upgrade
-  # left the old one, an obsolete conffile of cloud-init. logrotate rejects the second stanza for
-  # /var/log/cloud-init.log, and logrotate.service fails every day.
+  # Obsolete conffile: logrotate rejects its duplicate /var/log/cloud-init.log stanza and fails
+  # daily.
   - {path: /etc/logrotate.d/cloud-init}
-  # Unowned backups that do-release-upgrade wrote; apt ignores the names. A shared package lists no
-  # legacy entry, so homelab-updater's homelab.sources backup is here too.
+  # Unowned do-release-upgrade backups that apt ignores; a shared package lists no legacy entry.
   - {path: /etc/apt/sources.list.d/homelab.sources.distUpgrade}
   - {path: /etc/apt/sources.list.d/ubuntu.sources.distUpgrade}

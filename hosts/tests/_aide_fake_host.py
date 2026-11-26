@@ -7,8 +7,6 @@ account files, and the host package's manifests.
 import hashlib
 import json
 
-# One installed package: each path's content, and whether dpkg records its digest in md5sums
-# (relative, under the pre-usrmerge name) or as a conffile in status.
 PACKAGE = {
     "/usr/bin/tool": ("tool v2\n", "md5sums"),
     "/usr/lib/x86_64-linux-gnu/libtool.so": ("lib v2\n", "md5sums"),
@@ -18,14 +16,12 @@ PACKAGE = {
     "/usr/lib/systemd/system/tool.service": ("[Unit]\n", "md5sums"),
     "/usr/lib/python3/dist-packages/toolpkg/mod.py": ("x = 1\n", "md5sums"),
 }
-# Package-owned symlinks, which dpkg lists with no digest, and where each points. The headers
-# link points into a package that is not installed, as the kernel headers' rust link does.
+# The headers link points into a package that is not installed, as the kernel headers' rust link
+# does.
 PACKAGE_LINKS = {
     "/usr/bin/tool-link": "tool",
     "/usr/src/tool-headers/rust": "../tool-lib-rust/rust",
 }
-# The host package's links to secrets in the tmpfs its secrets unit fills, which its secrets
-# manifest declares: one under /etc, and one under /usr/lib as the Pi's Compose env file sits.
 SECRET_LINK = "/etc/svc/config.env"
 SECRET_TARGET = "/run/homelab-secrets/etc/svc/config.env"
 SYSTEM_SECRET_LINK = "/usr/lib/homelab/compose/compose.env"
@@ -36,9 +32,6 @@ RENAMED_SECRET_TARGET = "/run/homelab-secrets/drill/s3.env"
 SECRETS_MANIFEST = "/usr/lib/homelab/secrets.json"
 # The host package's apt hook and a script root runs, which dpkg lists with no digest here.
 HOMELAB_FILES = ("/etc/apt/apt.conf.d/91homelab-hook", "/usr/lib/homelab/check")
-# The user and group databases as the last accepted run copied them: root, a login user, the
-# declared claude with the gid its group kept from before the 900-949 band, oldsvc, which the users
-# arm no longer declares, and a group the setup script manages.
 ACCOUNT_FILES = {
     "/etc/passwd": (
         "root:x:0:0:root:/root:/bin/bash\n"
@@ -57,9 +50,6 @@ ACCOUNT_FILES = {
     ),
     "/etc/gshadow": "root:*::\nubuntu:!::\nclaude:!::\noldsvc:!::\nssh-users:!::ubuntu\n",
 }
-# The host package's lines arm: a block in the package's conffile, as k3s-server adds one to
-# /etc/zsh/zshenv, and line edits to another conffile, as host-tuning makes to /etc/login.defs:
-# one replaces a shipped line, and two match none and are appended.
 BLOCK_MARKER = "# {mark} MANAGED — tool kubeconfig"
 LINE_EDITS = [
     {
@@ -81,8 +71,6 @@ LINE_EDITS = [
 ]
 # The conffile LINE_EDITS makes line edits to.
 DEFS = "/etc/tool.defs"
-# Where aide-originals keeps the installed tool version's copy of DEFS, under the directory
-# the harness repoints ORIGINALS at.
 TOOL_COPY = "tool/1.0/etc/tool.defs"
 # The host package's manifest, whose users arm declares claude and a service user svc.
 HOST_MANIFEST = "/usr/lib/homelab/manifest.json"
@@ -183,8 +171,6 @@ def _fake_host(root):
         + "\n".join(conffiles)
         + "\nDescription: a tool\n"
     )
-    # dpkg's diversions file: diverted path, its new name, the diverting package. tool's README
-    # now sits at the new name.
     (dpkg / "diversions").write_text(
         "/usr/share/doc/tool/README\n/usr/share/doc/tool/README.distrib\ntool-extra\n"
     )

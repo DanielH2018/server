@@ -18,8 +18,7 @@ PS = """\
  5001  5000    88 /x/python3 /x/ansible-playbook ansible/deploy.yml --tags homepage
  7000     1     3 grep land.py
 """
-# fuser: who has the tree lock OPEN. The second landing (4400) has it open exactly like the
-# holder, and its python child (4401) is blocked on it in /proc/locks.
+# The second landing (4400) has it open like the holder; its python child (4401) is blocked on it.
 OPENED = {TREE_LOCK: {4321, 4322, 4401}}
 LOCKS = {TREE_LOCK: reads.FileLock(True, frozenset({4401}))}
 TREE_LOCK_NAME = PurePath(TREE_LOCK).name

@@ -80,8 +80,6 @@ def test_a_tmpfiles_line_naming_an_undeclared_user_is_reported(packages):
 def test_every_tmpfiles_d_file_a_package_ships_is_applied_by_reconcile_on_install(
     packages,
 ):
-    # Reconcile runs `systemd-tmpfiles --create` on a file with the `tmpfiles` action when its
-    # hash changes, so a new line does not wait for the next boot.
     unapplied = {}
     for host, files in packages.items():
         activations = json.loads(files[MANIFEST][0]).get("activations", {})

@@ -93,8 +93,6 @@ def test_a_k3s_bump_the_script_did_not_follow_is_flagged():
 
 
 def test_renovate_finds_every_pin_the_script_holds():
-    # The tools manager needs the annotation, version and sha256 lines of each of the four
-    # blocks, and the k3s manager needs the annotated K3S_VERSION line.
     found = {}
     for manager in managers_reading_the_script():
         for pattern in manager["matchStrings"]:

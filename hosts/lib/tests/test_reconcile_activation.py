@@ -258,8 +258,6 @@ def sshd_refuses(node: Node) -> None:
 def test_a_failed_sshd_check_leaves_sshd_untouched_flags_the_host_and_fails_the_run(
     node,
 ):
-    # `result.ok` false is what homelab-updater turns into the hold
-    # (test_homelab_updater.py::test_a_run_that_did_not_reconcile_holds_the_host).
     sshd_refuses(node)
 
 

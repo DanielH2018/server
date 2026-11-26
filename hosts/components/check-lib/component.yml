@@ -9,5 +9,3 @@
 # copy of the same bytes.
 files:
   - {shared: homelab-check-lib.sh, dst: /usr/lib/homelab/homelab-check-lib.sh}
-# Each host package's legacy list retires the old copy at /usr/local/lib, once no
-# shipped script sources it.

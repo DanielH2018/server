@@ -427,13 +427,9 @@ def test_the_pis_real_manifest_runs_the_secrets_step_once_for_its_credentials(
     assert credentials == ["healthchecks_ping_key"]
     for key in credentials:
         node.credential(key)
-    # The Compose env file is an output, which the secrets unit renders before reconcile
-    # restarts homelab-compose.service.
     outputs = json.loads(package.files["/usr/lib/homelab/secrets.json"][0])["outputs"]
     for output in outputs:
         node.output_file(output["destination"], persist=output["persist"])
-    # The line arm edits conffiles that exist on a real host; the three daemons below restart
-    # when their edited files change.
     for unit in (
         "ssh.service",
         "systemd-journald.service",

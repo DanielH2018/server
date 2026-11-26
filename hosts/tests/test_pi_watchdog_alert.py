@@ -29,8 +29,7 @@ UNIT = re.compile(r"(?<![\w.-])watchdog\.service\b")
 STATE_ARM_EXCLUDES = ("absent_over_time", "time()")
 STOPPED = ["inactive", "failed"]
 
-# Enough of `systemctl` for any way a script reads one unit's state. The real one would read this
-# machine's units. Every other unit reads active.
+# The real systemctl would read this machine's units; every other unit reads active.
 SYSTEMCTL_STUB = """\
 #!/usr/bin/env bash
 args=" $* "

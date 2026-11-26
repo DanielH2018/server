@@ -21,7 +21,7 @@
 # To see a file's count, lower its entry here by 1 and run the guard -- the failure names
 # the real number:
 #   uv run pytest tests/repo/test_module_length_ratchet.py -k no_test_module_patches
-.claude/hooks/tests/test_block_footguns.py 2
+.claude/hooks/tests/bash_guards/test_block_footguns.py 2
 hosts/components/deploy-ui/tests/test_deploy_ui_app.py 3
 hosts/components/fake-remux/tests/test_fake_remux_replace_logic.py 2
 hosts/components/renovate-notify/tests/test_pending_soak_wiring.py 6

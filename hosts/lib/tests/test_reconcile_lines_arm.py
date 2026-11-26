@@ -267,9 +267,6 @@ def test_red_an_arm_that_creates_a_missing_owned_conffile_writes_a_stub(tmp_path
     )
 
 
-# The two owning-package upgrade cases (H7, *In-place edits*).
-
-
 def test_an_upgrade_that_keeps_the_local_conffile_keeps_the_line_and_one_that_restored_the_packages_copy_gets_it_back(
     node,
 ):
@@ -383,8 +380,8 @@ def test_red_an_arm_that_makes_the_ssh_directory_with_a_default_mode_would_break
 
 
 def test_the_activation_reads_the_file_the_arm_just_edited(node):
-    # `vm.swappiness 10` is not a sysctl line, so the activation's parse refuses it. It sees the
-    # edit only if the arm ran first; the unedited file parses.
+    # `vm.swappiness 10` is not a sysctl line, so the activation's parse refuses it, but only if the
+    # arm ran first.
     write(node, SYSCTL, "a=1\n")
     node.manifest["activations"] = {SYSCTL: "sysctl"}
     declare(node, {**SWAPPY, "line": "vm.swappiness 10", "regexp": "vm.swappiness"})

@@ -21,8 +21,6 @@ SEP = "\x1e"
 # What the stub `date +%s` prints, so the timestamp assertion reads no live clock.
 EPOCH = 1760000000
 
-# kuma_push records any call it receives; the cases assert it never runs. boot_grace_active
-# answers what the case sets, never the runner's real uptime.
 LIB_STUB = """\
 kuma_push() {
   printf '%s\\n%s\\x1e' "$1" "$2" >> "$KUMA_PUSH_OUT"

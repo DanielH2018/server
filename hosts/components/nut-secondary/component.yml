@@ -26,9 +26,8 @@
 # - The unit loads no credential. It keeps its homelab-secrets.service ordering, because it
 #   reads the upsmon.conf output that unit renders.
 defaults:
-  # The nut Service's pinned ClusterIP, which any host but ups_host (daniel-box) names in its
-  # MONITOR line. ups_host reads 127.0.0.1 instead, so daniel-server ignores the value.
-  # k8s/roles/nut/defaults/main.yml:nut_k8s_cluster_ip is the other copy; a test pins the two.
+  # Any host but ups_host (daniel-box) names this in MONITOR; ups_host reads 127.0.0.1.
+  # Other copy: the nut role's nut_k8s_cluster_ip (a test pins both).
   nut_host_upsd_clusterip: 10.43.171.124
 depends:
   - nut-client
@@ -43,13 +42,13 @@ outputs:
     link: false
     dependents: [nut-monitor.service]
 files:
-  # The drop-in that points upsmon at the rendered file. Its name must stay 50-homelab.conf: the
-  # manifest lists nut-monitor.service only for a drop-in of that name.
+  # The name must stay 50-homelab.conf: the manifest lists nut-monitor.service only for a drop-in of
+  # that name.
   - {src: units/50-homelab.conf, dst: /usr/lib/systemd/system/nut-monitor.service.d/50-homelab.conf}
   # A packaged rule, found by reconcile's udev arm. The /etc rule it replaces is a legacy entry.
   - {src: rules/99-homelab-nut-apc.rules, dst: /usr/lib/udev/rules.d/99-homelab-nut-apc.rules}
-  # A plain file, not a declared output: the script holds many shell `${...}` expansions and
-  # reads no secret in its packaged branch.
+  # A plain file, not a declared output: the script has many shell `${...}` expansions and reads no
+  # secret.
   - {src: templates/ups-secondary-health.sh.j2, dst: /usr/lib/homelab/ups-secondary-health, mode: "0755"}
   - {src: units/homelab-ups-watchdog.service.j2, dst: /usr/lib/systemd/system/homelab-ups-watchdog.service}
   - {src: units/homelab-ups-watchdog.timer.j2, dst: /usr/lib/systemd/system/homelab-ups-watchdog.timer}

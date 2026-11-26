@@ -1,6 +1,5 @@
 ---
-# Groups that let sys_user reach qemu:///system without sudo. Both are needed: libvirt for
-# the daemon socket, kvm for /dev/kvm itself.
+# libvirt for the daemon socket, kvm for /dev/kvm; both are needed.
 hypervisor_user_groups:
   - libvirt
   - kvm
@@ -19,8 +18,7 @@ hypervisor_staging_net_name: staging
 # the same value.
 hypervisor_staging_net_uuid: 255b2bc3-f6fa-4a2f-9d0c-8c14507eb82a
 hypervisor_staging_net_bridge: virbr-stage
-# The egress fence attached to the guest's interface. Named rather than inlined because two
-# places must agree on the string: the filter definition and the domain's <filterref>.
+# Named because the filter definition and the domain's <filterref> must agree on the string.
 hypervisor_staging_nwfilter_name: staging-egress-fence
 hypervisor_staging_net_gateway: 192.168.140.1
 hypervisor_staging_net_netmask: 255.255.255.0
@@ -66,34 +64,25 @@ hypervisor_base_image_path: /var/lib/libvirt/images/resolute-server-cloudimg-amd
 hypervisor_etcd_drill_armed: true
 # The drill's files, under a directory the package owns.
 hypervisor_etcd_drill_share_dir: /usr/lib/homelab/etcd-drill
-# The cadence (`etcd_drill_full_cron`) and the deadline derived from it
-# (`etcd_drill_full_deadline_s`) live in
-# group_vars/all.yml. The orchestrator renders the deadline as its textfile's DEADLINE_S.
 
-# Guest identity. The MAC is the staging network's one DHCP reservation (the guest attaches to
-# that NAT network and its egress fence — it needs internet for R2 and nothing on the LAN), fixed
-# so the orchestrator can name the address it waits for. Outside the dynamic range, and never in
-# the inventory: nothing but the orchestrator ever reaches it.
+# The MAC is the staging network's one DHCP reservation, fixed so the orchestrator knows the address
+# it waits for. It is outside the dynamic range and never in the inventory.
 hypervisor_etcd_drill_vm_hostname: etcd-drill
 hypervisor_etcd_drill_vm_mac: "52:54:00:5a:11:e1"
 hypervisor_etcd_drill_vm_ip: 192.168.140.11
 hypervisor_etcd_drill_vm_memory_mib: 2048
 hypervisor_etcd_drill_vm_vcpus: 2
 hypervisor_etcd_drill_vm_disk_size: 20G
-# Built from hypervisor_base_image_path, the one pinned cloud image on this host. The disk is the
-# per-run copy; the orchestrator creates and deletes it.
+# The disk is a per-run copy of hypervisor_base_image_path; the orchestrator creates and deletes it.
 hypervisor_etcd_drill_vm_disk: /var/lib/libvirt/images/{{ hypervisor_etcd_drill_vm_hostname }}.qcow2
 hypervisor_etcd_drill_vm_xml: "{{ hypervisor_etcd_drill_share_dir }}/{{ hypervisor_etcd_drill_vm_hostname }}.xml"
 hypervisor_etcd_drill_vm_seed_dir: /var/lib/libvirt/seed/{{ hypervisor_etcd_drill_vm_hostname }}
 hypervisor_etcd_drill_vm_seed: /var/lib/libvirt/images/{{ hypervisor_etcd_drill_vm_hostname }}-seed.iso
-# The guest's ssh HOST key is generated once here and seeded through cloud-init, so the
-# orchestrator can pin it. Every run is a fresh disk, so a guest-generated host key would change
-# every run and the orchestrator would have to accept any key — and anything else that ever lands
-# on this bridge could then answer for this address and be handed the cluster token and the R2
-# credentials. Pinning closes that.
+# Host key is seeded through cloud-init so the orchestrator can pin it; accepting a per-run key
+# would hand the cluster token and R2 credentials to anything that answers on this bridge.
 hypervisor_etcd_drill_vm_hostkey: "{{ hypervisor_etcd_drill_vm_seed_dir }}/ssh_host_ed25519_key"
-# What the rendered user-data carries in place of the three keys only the host holds.
-# etcd-drill-prepare swaps each for the host's value.
+# Placeholders for the three keys only the host holds; etcd-drill-prepare swaps in the host's
+# values.
 hypervisor_etcd_drill_vm_ssh_key: "@OPERATOR_PUBLIC_KEY@"
 hypervisor_etcd_drill_vm_hostkey_private: "@GUEST_HOST_KEY_PRIVATE@"
 hypervisor_etcd_drill_vm_hostkey_public: "@GUEST_HOST_KEY_PUBLIC@"
@@ -102,46 +91,26 @@ hypervisor_etcd_drill_vm_boot_timeout: 300
 # Where the orchestrator lives and what it writes.
 hypervisor_etcd_drill_runner_path: /usr/lib/homelab/etcd-restore-drill-vm
 hypervisor_etcd_drill_prepare_path: /usr/lib/homelab/etcd-drill-prepare
-# The guest-side half, a plain file copied into the guest beside the drill script; its header
-# says why the snapshot is fetched with curl and drilled as a local file.
 hypervisor_etcd_drill_guest_script_path: "{{ hypervisor_etcd_drill_share_dir }}/etcd-drill-guest-run.sh"
 # scripts/backup/etcd_restore_drill.sh, which the package ships. Reading it straight out of
 # /home/<user>/server would make the timer depend on whatever that checkout holds.
 hypervisor_etcd_drill_script_path: "{{ hypervisor_etcd_drill_share_dir }}/etcd-restore-drill.sh"
-# Read by the orchestrator, copied INTO the guest as /etc/rancher/k3s/etcd-s3.env for the drill's
-# run, and deleted with the guest. 0600 root: these are the R2 write credentials for the bucket
-# that also holds every Longhorn backup — the same residency daniel-box already carries in
-# /etc/rancher/k3s/etcd-s3.env, and on this host too because the drill has to fetch its snapshot
-# from somewhere and the guest cannot reach daniel-box through the fence. The token the guest also
-# needs is this host's own K3S_TOKEN from the k3s-agent unit's env file: k3s writes the same value
-# to server/token and server/node-token when no --agent-token is set, and the join copied
-# node-token here. A wrong token fails the restore stage loudly (the bootstrap blob cannot be
-# decrypted), so it cannot pass by accident.
+# Copied into the guest for a run, then deleted with it. 0600 root: these are R2 write credentials.
+# The token is this host's K3S_TOKEN (k3s-agent env file); a wrong one fails the restore stage
+# loudly.
 hypervisor_etcd_drill_s3_env: /etc/homelab/etcd-drill-s3.env
-# Same path and stamp format as daniel-box's /var/lib/etcd-restore-drill, so `last-success-full`
-# reads the same way on either host. Nothing in the cluster reads this one (monitor-bridge is
-# pinned to daniel-box's copy); the textfile verdict is the alarm, this is the local record.
+# Local record only: the textfile verdict is the alarm, and monitor-bridge reads daniel-box's copy.
 hypervisor_etcd_drill_stamp_dir: /var/lib/etcd-restore-drill
 hypervisor_etcd_drill_log_dir: /var/log/etcd-restore-drill
-# Longer than a year, so the evidence of the last pass is still
-# on disk for the whole window an operator might ask "when did this last work".
+# Longer than a year, so the last pass's evidence stays on disk.
 hypervisor_etcd_drill_log_retention_days: 400
-# One run at a time. A second `virsh create` of the same transient name fails anyway, but failing
-# on the lock says why.
 hypervisor_etcd_drill_lock: /var/lock/etcd-restore-drill-vm.lock
 
-# The orchestrator dials every range staging-nwfilter.xml.j2 drops, plus an internet control
-# target, from inside the guest — before the guest is handed the cluster token or the R2
-# credentials. It is the half of the fence a repo-side check cannot see: a filter that is
-# defined and unattached reads identical to a working one from this host. Its own header has
-# the four DECIDED trade-offs; tests/staging/test_staging_egress_fence.py enforces them.
-#
-# Per-target timeout: long enough that a slow-but-permitted answer is not read as a block,
-# short enough that every target timing out still fits the deadline below.
+# The orchestrator dials every dropped range from the guest: an unattached filter reads as working
+# here.
+# Per-target timeout: above a slow permitted answer, low enough that all targets fit the deadline.
 hypervisor_etcd_drill_fence_probe_timeout: 6
-# Whole-leg ceiling, covering one ssh session that dials every target. Sized for all six timing
-# out at once (6 x 6 s) with ssh setup on top, because the leg runs outside the orchestrator's
-# RUN_TIMEOUT and a wedged dial would otherwise hang the monthly timer.
+# Whole-leg ceiling: all six timing out (6 x 6 s) plus ssh setup; the leg runs outside RUN_TIMEOUT.
 hypervisor_etcd_drill_fence_deadline: 90
 # The Service-CIDR target: Longhorn's frontend Service, the thing known to be exposed from
 # the guest — answering unauthenticated on this ClusterIP with a mutating
@@ -156,18 +125,13 @@ hypervisor_etcd_drill_fence_deadline: 90
 # on daniel-box when the leg reports it stale.
 hypervisor_etcd_drill_fence_longhorn_url: http://10.43.152.244/v1/nodes
 
-# The SUC rehearsal mode of the orchestrator (`--rehearse-suc`). The host-side helper
-# reads the pins from a checkout and judges the guest, and the guest-side script is copied into
-# the guest for the run. The deadline is how long the Plan may take to reach its verdict after
-# the bundle is published: a server upgrade is about ten minutes, plus the pulls and the restart.
+# Plan deadline after the bundle is published: a ~10 minute server upgrade plus pulls and restart.
 hypervisor_suc_rehearsal_helper_path: "{{ hypervisor_etcd_drill_share_dir }}/suc_rehearsal.py"
 hypervisor_suc_rehearsal_guest_script_path: "{{ hypervisor_etcd_drill_share_dir }}/suc-rehearsal-guest-run.sh"
 hypervisor_suc_rehearsal_deadline: 2400
 
-# The bootstrap drill mode of the orchestrator (`--rehearse-bootstrap`). The
-# guest-side script is copied into the guest for the run. One detached step may take the step
-# deadline: the full bootstrap-host.sh run builds a venv, installs three packages and writes the
-# first AIDE baseline. The ready deadline bounds the check after k3s.service starts.
+# Step deadline covers one detached step (venv, three packages, AIDE baseline).
+# Ready deadline bounds the check after k3s.service starts.
 hypervisor_bootstrap_drill_guest_script_path: "{{ hypervisor_etcd_drill_share_dir }}/bootstrap-drill-guest-run.sh"
 hypervisor_bootstrap_drill_step_deadline: 5400
 hypervisor_bootstrap_drill_ready_deadline: 900

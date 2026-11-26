@@ -4,7 +4,7 @@
 Run: uv run python scripts/dev/gen_hook_settings.py [--check | --list]
 
 WHY. A hand-written `hooks` object in `.claude/settings.json` is watched from one side only
-by two tests: `.claude/hooks/tests/test_hook_scripts_executable.py` asserts that every
+by two tests: `.claude/hooks/tests/hook_contract/test_hook_scripts_executable.py` asserts that every
 REGISTERED script exists and is executable, and `test_project_settings_shape.py` that every
 entry declares a timeout. Nothing asserts the reverse -- that every hook file on disk is
 registered somewhere -- so a hook that exists but fires nowhere is a silent gap. Each hook

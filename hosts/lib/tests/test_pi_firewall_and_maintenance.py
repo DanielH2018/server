@@ -21,8 +21,6 @@ from lib.proc_testing import fake_bin, run, write_exec
 from lib.render_context import render_context
 from renderer.renderer_lib import host as host_mode
 
-# Each cron the role once installed on the Pi, and the packaged timer that replaces it. The Pi has
-# no fwupd, so the role never installed "Weekly firmware update" there.
 TIMERS = {
     "Weekly apt autoremove": "homelab-apt-autoremove.timer",
     "Weekly dpkg purge orphaned configs": "homelab-dpkg-purge.timer",
@@ -30,8 +28,7 @@ TIMERS = {
     "Clean unused Docker images": "homelab-docker-prune.timer",
     "Weekly rkhunter malware scan": "homelab-rkhunter-check.timer",
 }
-# Retired with no replacement: the Pi's AIDE scan outgrew its memory and reset the board, so its
-# package lists no aide-scan.
+# Retired with no replacement: the Pi's AIDE scan outgrew its memory and reset the board.
 UNSCHEDULED = {"Weekly AIDE file integrity check": "homelab-aide-check.timer"}
 LAN = "allow from {lan} to any port 22 proto tcp"
 

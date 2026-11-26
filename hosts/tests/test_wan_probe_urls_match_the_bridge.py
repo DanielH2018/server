@@ -37,13 +37,11 @@ def test_the_host_cron_endpoint_list_equals_the_bridge_default():
 
 
 def test_the_list_names_two_independent_providers():
-    # Non-vacuity, and the property the Python gate's docstring turns on: one provider's own
-    # outage must not silence a caller reading the other, so a single-entry list is a defect
-    # however well the equality above holds.
+    # One provider's own outage must not silence a caller reading the other, so a single-entry list
+    # is a defect.
     declared = yaml_fast.safe_load(ALL_VARS.read_text())["wan_probe_urls"]
     hosts = {re.sub(r"^https?://([^/]+).*$", r"\1", u) for u in declared}
     assert len(hosts) >= 2, hosts
-    # By hostname, never an anycast IP: a WAN outage can include DNS failure, and an
-    # IP-only probe stays green through a DNS-only outage while every dependent fails.
+    # By hostname, never an anycast IP: an IP-only probe stays green through a DNS-only WAN outage.
     for host in hosts:
         assert not re.fullmatch(r"[\d.]+", host), f"{host} is an IP, not a hostname"

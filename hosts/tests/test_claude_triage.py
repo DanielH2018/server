@@ -97,8 +97,8 @@ def test_the_template_pins_equal_the_defaults() -> None:
         assert pins()[name] == defaults()[var], name
 
 
-# Inventory values under the role's names, none of them the pinned ones. The package renderer
-# puts the inventory above a component's defaults, so only a template's own pin holds here.
+# The package renderer puts inventory above a component's defaults, so only a template's own pin
+# holds here.
 RAISED = {
     "claude_code_triage_agent_user": "triage-sentinel-user",
     "claude_code_agent_user": "agent-sentinel-user",

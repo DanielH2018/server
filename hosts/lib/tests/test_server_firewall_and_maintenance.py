@@ -91,8 +91,8 @@ def test_reconcile_adopts_the_ssh_and_join_rules_and_leaves_the_hand_added_rule(
     live_unit(node, "rsyslog.service")
     lan = context["lan_subnet"]
     server = "10.0.0.215"
-    # The live rules in `ufw status` order: the k3s agent's five join rules carry no
-    # comment, and the 45876 allow from the pod network has no writer in the repo.
+    # The 45876 allow from the pod network has no writer in the repo; the k3s agent's five join
+    # rules carry no comment.
     others = [
         ["allow from 10.42.0.0/16 to any port 45876", ""],
         [f"allow from {server} to any port 8472 proto udp", ""],

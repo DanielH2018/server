@@ -53,8 +53,8 @@ def test_the_unit_runs_the_command_as_the_operator_and_alerts_on_failure():
 
 
 def test_the_command_runs_in_a_checkout_the_operator_owns_not_the_agents_clone():
-    # On daniel-box `claude_code_rc_workdir` is the agent's clone, which `ubuntu` cannot write
-    # and git refuses as "dubious ownership".
+    # On daniel-box the agent's clone is not writable by `ubuntu`, and git refuses it as "dubious
+    # ownership".
     unit = _render(
         claude_code_rc_workdir="/var/lib/claude/server",
         claude_code_operator_checkout="/home/ubuntu/server",

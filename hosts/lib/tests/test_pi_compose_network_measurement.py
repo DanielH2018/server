@@ -29,8 +29,6 @@ from lib.proc_testing import run
 
 pytestmark = pytest.mark.image
 
-# The two answers the decision rests on. Either one leaves the existing network untouched, so
-# moving it into the project would need a recreate; anything else fails the measurement.
 ADOPTED = "adopted the unlabelled network"
 REFUSED = "refused the unlabelled network"
 
@@ -108,8 +106,8 @@ def test_compose_never_adopts_an_unlabelled_network_into_its_project(network, tm
             "ps", "-a", "-q", "--filter", f"label=com.docker.compose.project={project}"
         )
         assert created.stdout.strip(), "Compose exited 0 but created no container"
-        # `--no-start` leaves the container unattached until it starts, so the network's
-        # container list stays empty; the container's own config names the network.
+        # `--no-start` leaves the container unattached, so the network's container list stays empty;
+        # its config names the network.
         cid = created.stdout.split()[0]
         nets = _docker("inspect", "-f", "{{json .HostConfig.NetworkMode}}", cid)
         assert network in nets.stdout or network in str(attached), nets.stdout

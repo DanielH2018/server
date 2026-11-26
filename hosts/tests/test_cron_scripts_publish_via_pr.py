@@ -120,9 +120,8 @@ def test_the_regressed_suffix_strip_matches_what_the_publisher_prints():
     reads "PR opened for X with auto-merge; one or more eval cases REGRESSED", wrong and not
     obviously wrong.
     """
-    # Anchored on PUBLISH_PUBLISHED specifically: "PR opened for {branch}" is also the prefix of
-    # the auto-merge-failed message earlier in the same function, and an unanchored search
-    # matches that one first.
+    # Anchored on PUBLISH_PUBLISHED: "PR opened for {branch}" also prefixes the auto-merge-failed
+    # message earlier.
     match = re.search(
         r'PUBLISH_PUBLISHED,\s*f"PR opened for \{branch\}(.*?)"', PUBLISH_PR.read_text()
     )
@@ -158,9 +157,8 @@ _CRON_ENV = {
     "HOME": "Environment= of homelab-eval-sweep.service",
 }
 
-# Templates whose reads are checked, and one name each that the read census MUST contain. A
-# census that silently stops matching returns an empty set, and "no unsatisfied reads" is what
-# an empty set looks like -- the failure mode CLAUDE.md names as surviving the red-proof pair.
+# A census that silently stops matching returns an empty set, which reads as "no unsatisfied reads";
+# each name MUST be found.
 _READ_CENSUS_MUST_FIND = {
     DOCS_REFRESH: frozenset({"PUSH_STATUS", "PUSH_MSG", "PUB_MSG", "UV", "REPO"}),
     EVAL_RUN: frozenset({"PUSH_STATUS", "PUB_MSG", "UNLANDED_RC", "REPO", "TREND_RC"}),

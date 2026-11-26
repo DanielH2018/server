@@ -47,38 +47,24 @@ depends:
   - multipath-tools
   - zsh
 defaults:
-  # An agent has no apiserver and no admin kubeconfig. The kubeconfig names the server's
-  # apiserver rather than the agent's own proxy on 6444, so `kubectl` answers while k3s-agent is
-  # down, and the CA is the one the agent fetched at its join.
+  # An agent has no admin kubeconfig. This one names the server's apiserver, not the agent's proxy
+  # on 6444, so kubectl answers while k3s-agent is down.
   k3s_readonly_kubeconfig_server: "https://{{ hosts['daniel-box'].server_ip }}:6443"
   k3s_readonly_kubeconfig_ca_source: /var/lib/rancher/k3s/agent/server-ca.crt
-  # The log file k3s writes. The k3s-server component carries the same path, because Alloy tails
-  # one literal on every node; tests/k8s/test_alloy_ships_k3s_log.py holds all three equal.
+  # Same path in the k3s-server component, because Alloy tails one literal on every node.
   k3s_log_file: /var/log/k3s.log
-  # The k3s agent's flags. templates/50-homelab.yaml.j2 renders this mapping as
-  # /etc/rancher/k3s/config.yaml.d/50-homelab.yaml, and 50-homelab.conf runs a bare `k3s agent`.
-  # Each key is a flag name without `--`; a repeatable flag is a list. A change goes live at the
-  # agent's next start, because daniel-server's package lists no `k3s-restart`.
-  # ENFORCED: hosts/tests/test_k3s_agent_flags_migration.py.
+  # Each key is a flag name without `--`; a repeatable flag is a list.
+  # A change goes live at the agent's next start: daniel-server's package lists no `k3s-restart`.
   k3s_agent_config:
     node-ip: "{{ server_ip }}"
-    # INERT: Longhorn honors this label only when the cluster-level
-    # `create-default-disk-labeled-nodes` setting is true, which this cluster never sets, so a
-    # default disk appears anyway and the node schedules replicas. The label stays, because
-    # removing it changes the agent's flags for nothing.
+    # INERT: Longhorn honors this label only when `create-default-disk-labeled-nodes` is true, which
+    # this cluster never sets. The label stays: removing it changes the agent's flags for nothing.
     node-label:
       - node.longhorn.io/create-default-disk=false
-    # The image-gc pair starts image GC below Longhorn's 75% replica scheduling floor, which the
-    # root filesystem shares: at the kubelet's 85 every superseded image stays. The
-    # kubelet refuses a low threshold not below the high one, so the pair moves together.
-    # system-reserved lowers node allocatable by memory pods use without requesting it, and also
-    # caps kubepods.slice at capacity minus the reserve; the k3s-server component's flag comment
-    # says how. The 4Gi sums Longhorn instance-manager's 7-day p95 working set (1272 MiB),
-    # system.slice anon (0.65 GiB) and user.slice anon (1.8 GiB).
-    # seccomp-default gives the runtime's default seccomp profile to every container whose pod
-    # sets none. The kubelet applies it when it creates a container, so a pod that was running
-    # at the agent's start keeps what it had until it is recreated. A privileged container is
-    # never confined, and a pod that sets `Unconfined` keeps it.
+    # image-gc starts below Longhorn's 75% replica floor; the low threshold must stay below the high
+    # one.
+    # seccomp-default applies at container creation: running pods keep their profile until
+    # recreated.
     kubelet-arg:
       - allowed-unsafe-sysctls=net.ipv4.conf.all.src_valid_mark,net.ipv4.ip_forward
       - image-gc-high-threshold=65
@@ -109,13 +95,11 @@ files:
   - {src: "component:units/homelab-wired-gateway.timer", dst: /usr/lib/systemd/system/homelab-wired-gateway.timer, when: "k3s_node_static_link | length > 0"}
   - {src: templates/logrotate-k3s-agent.j2, dst: /etc/logrotate.d/k3s-agent}
   - {src: templates/tmpfiles-k3s-agent.conf.j2, dst: /usr/lib/tmpfiles.d/homelab-k3s-agent.conf}
-  # Longhorn's devices must stay out of multipathd's reach, or mounts fail. The older block in the
-  # owned /etc/multipath.conf stays as a harmless duplicate.
+  # Longhorn's devices must stay out of multipathd's reach, or mounts fail.
   - {src: templates/multipath-longhorn.conf, dst: /etc/multipath/conf.d/50-homelab-longhorn.conf, activate: "reload:multipathd.service"}
   - {src: "component:templates/netplan-static-address.yaml.j2", dst: /etc/netplan/90-homelab-static-address.yaml, mode: "0600", activate: "manual:systemd-networkd.service", when: "k3s_node_static_link | length > 0"}
   - {src: templates/static-link-sysctl.conf.j2, dst: /etc/sysctl.d/90-homelab-static-link.conf, activate: sysctl, when: "k3s_node_static_link | length > 0"}
-  # kubelet's log watchers and every root-uid container share the per-uid default of 128 inotify
-  # instances.
+  # kubelet watchers and root-uid containers share the per-uid default of 128 inotify instances.
   - {src: "component:templates/90-homelab-k3s-node.conf", dst: /etc/sysctl.d/90-homelab-k3s-node.conf, activate: sysctl}
   - {src: files/homelab-netplan-wifi, dst: /usr/lib/homelab/homelab-netplan-wifi, mode: "0755", when: "k3s_node_wifi_link | length > 0"}
   - {src: units/homelab-netplan-wifi.service, dst: /usr/lib/systemd/system/homelab-netplan-wifi.service, when: "k3s_node_wifi_link | length > 0"}
@@ -153,27 +137,23 @@ enable:
   homelab-netplan-wifi.service: {target: multi-user.target, when: "k3s_node_wifi_link | length > 0"}
 legacy:
   # Emptying a link is the way back from the pin: the next package drops the file and this retires
-  # any copy left in place. The link's live value stays until the next reboot, which is harmless.
+  # any left copy.
   - {path: /etc/netplan/90-homelab-static-address.yaml, when: "k3s_node_static_link | length == 0"}
   - {path: /etc/sysctl.d/90-homelab-static-link.conf, when: "k3s_node_static_link | length == 0"}
   # Both copies of the wifi credentials.
   - {path: /etc/netplan/80-homelab-wifi-fallback.yaml, when: "k3s_node_wifi_link | length == 0"}
   - {path: /var/lib/homelab-secrets/netplan/80-homelab-wifi-fallback.yaml, when: "k3s_node_wifi_link | length == 0"}
 lines:
-  # zsh does not read /etc/profile.d, and zshenv is the one startup file every invocation reads.
-  # `depends: zsh` installs the file first. The arm would create a missing /etc/zsh 0700, which
-  # hides the file from every user.
+  # zsh does not read /etc/profile.d; zshenv is the one file every invocation reads.
+  # `depends: zsh` installs it first, since the arm would create a missing /etc/zsh 0700.
   - path: /etc/zsh/zshenv
     marker: "# {mark} ANSIBLE MANAGED — k3s kubeconfig"
     block: |
       if [ -r /etc/profile.d/k3s-kubeconfig.sh ]; then
         . /etc/profile.d/k3s-kubeconfig.sh
       fi
-# The inter-node join rules, allowed FROM the server ON this agent. Each spec is the rule as `ufw
-# show added` prints it. `keep`: no revert and no floor ever deletes one, because the agent stops
-# being a node without them. The live rules carry no comment, so the arm adopts each by appending
-# it again, which relabels it in place. test_k3s_agent_component.py holds the ports equal to
-# k3s_join_agent_ports, whose symmetry with the server side is a test too.
+# Inter-node join rules from the server. `keep`: no revert or floor ever deletes one.
+# The live rules carry no comment, so the arm adopts each by appending it again, which relabels it.
 ufw:
   rules:
     - {id: k3s-join-vxlan, spec: "allow from {{ hosts['daniel-box'].server_ip }} to any port 8472 proto udp", keep: true}

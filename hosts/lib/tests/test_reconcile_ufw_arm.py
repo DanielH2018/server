@@ -150,8 +150,8 @@ def test_a_rule_that_predates_the_arm_is_adopted_in_place_by_appending_it_again(
 
 
 def second_run_writes_nothing(node: Node) -> None:
-    # `ufw default` on an active firewall stops and starts every chain even when the policy is
-    # unchanged, which is the window in which a kube-router sync wipes the before chains.
+    # `ufw default` on an active firewall stops and starts every chain even when unchanged, the
+    # window where kube-router wipes the before chains.
     have(node)
     declare(node, *RULES)
     node.run()
@@ -250,8 +250,8 @@ def test_a_legacy_rule_stays_when_its_replacement_could_not_be_added(node):
 
 
 def adopted_spec_survives(node: Node) -> None:
-    # The live hosts carry `limit 22/tcp` with no comment. The arm relabels it, and the legacy
-    # entry for the Ansible-era rule names the same spec, so deleting it would delete the keep rule.
+    # The legacy entry names the same spec as the relabelled `limit 22/tcp`, so deleting it would
+    # delete the keep rule.
     have(node, (LAN, ""), ("limit 22/tcp", ""))
     legacy = {"spec": "limit 22/tcp", "comment": "", "replaced_by": "ssh-limit"}
     declare(node, LAN_SSH, SSH_LIMIT, legacy=(legacy,))
@@ -285,8 +285,8 @@ def remove_legacy(node: Node, rules: list, legacy: list, current: list) -> None:
 
 
 def step_4_skips_an_adopted_spec(node: Node) -> None:
-    # Step 2 relabels the adopted rule before step 4 reads `ufw show added`, so a full run never
-    # shows step 4 the legacy pair; only a direct call reaches the declared-spec guard.
+    # Step 2 relabels the adopted rule before step 4 reads `ufw show added`; only a direct call
+    # reaches the declared-spec guard.
     have(node, ("limit 22/tcp", "homelab:keep:ssh-limit"))
     legacy = {"spec": "limit 22/tcp", "comment": "", "replaced_by": "ssh-limit"}
     current = [["limit 22/tcp", ""], ["limit 22/tcp", "homelab:keep:ssh-limit"]]

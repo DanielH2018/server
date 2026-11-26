@@ -24,9 +24,6 @@ from _setup_render import CLAUDE_CODE
 COMPONENT = REPO / "hosts" / "components" / "claude-code" / "component.yml"
 SCRIPT = CLAUDE_CODE / "files" / "claude-cgroup-metrics.sh"
 
-# claude-rc.service sits under the fleet's shared parent, user.slice, once its Slice= line has
-# taken effect, and in system.slice before. The script resolves between the two, so both paths
-# are exercised below.
 RC_UNDER_FLEET_PARENT = "user.slice/claude-rc.service"
 RC_UNDER_SYSTEM_SLICE = "system.slice/claude-rc.service"
 
@@ -39,8 +36,6 @@ CGROUPS = {
 
 def _write_cgroup_fixture(cgroot: Path, rel: str) -> Path:
     d = cgroot / rel
-    # exist_ok: the fleet parent (user.slice) and its two children are all fixtures here, so
-    # whichever is written second finds its directory already made.
     d.mkdir(parents=True, exist_ok=True)
     (d / "memory.current").write_text("399777792\n")
     (d / "memory.swap.current").write_text("0\n")
@@ -111,8 +106,6 @@ def test_emits_every_metric_family_for_both_cgroups(
                 f"{family} missing a sample for cgroup={label}: {out}"
             )
 
-    # The counter the script exists for: memory.events' `high` field, which counts every time
-    # MemoryHigh throttled the cgroup.
     assert 'claude_cgroup_memory_events_total{cgroup="claude-rc",event="high"} 3' in out
     # The local file, read apart: the fleet's own MemoryHigh, not its batches'.
     assert (

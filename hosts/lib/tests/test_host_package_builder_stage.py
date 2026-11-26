@@ -109,8 +109,6 @@ def test_a_run_that_fails_after_publishing_leaves_the_package_to_stage_again(lab
 
 
 def test_the_leftover_of_a_followed_copy_stages_the_package_again(lab):
-    # What production held after the failure above: published/ with every file but the link,
-    # `staged` naming an older set, staged/ empty because the signer took that set.
     origin, state, _, _ = lab
     edit(origin, "daniel-pi", "pi 1")
     assert go(lab) == 0

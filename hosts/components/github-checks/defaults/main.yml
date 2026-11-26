@@ -19,19 +19,12 @@ github_expected_ruleset_contexts:
   - pull + boot changed images
   - renovate config validator
   - flux-deletion-drill
-# The app every required context is pinned to: 15368 is GitHub Actions. GitHub matches an unpinned
-# required check by name alone, so a commit status of that name from any token with write access
-# satisfies it. tested_tree.py and slice B3 of docs/ci-throughput.md trust a check's creator,
-# which only the pin guarantees, so the drift check fails on a context with no pin or another app.
+# 15368 is GitHub Actions. An unpinned required check matches by name, so any write token can
+# satisfy it with a status; tested_tree.py trusts a check's creator, which only the pin fixes.
 github_actions_app_id: 15368
-# Nobody merges past the CI gate. A bypass actor added here could merge an un-CI'd PR, through
-# land.sh's REST merge or any other merge call it makes. Each entry is
-# `<actor_type>:<actor_id>:<bypass_mode>`, as the rulesets API names them.
+# A bypass actor could merge an un-CI'd PR. Entries are `<actor_type>:<actor_id>:<bypass_mode>`.
 github_ruleset_bypass_actors: []
-# The CI gate's pull_request rule: every change to master arrives as a PR, and none needs an
-# approving review. GitHub's auto-merge never applies a bypass, so a non-zero count leaves every
-# auto-merged PR BLOCKED. The update restriction below blocks every auto-merge for the same
-# reason, and land.sh's direct merge is the one way onto master.
+# Auto-merge never applies a bypass, so a non-zero approval count leaves auto-merged PRs BLOCKED.
 github_ruleset_required_approvals: 0
 
 # The branch-protection ruleset ("Default": `deletion` + `non_fast_forward` on every ref, admin
@@ -53,22 +46,16 @@ github_fence_ruleset_id: 24517167
 github_fence_ruleset_exclude:
   # github_update_restriction_rulesets owns master.
   - refs/heads/master
-  # EnterWorktree names a `claude/<slug>` worktree's branch `worktree-claude+<slug>`: it
-  # replaces `/` with `+`. `worktree-claude-*` would also match operator
-  # branches such as worktree-claude-agent-github-identity.
+  # EnterWorktree replaces `/` with `+`, naming the branch `worktree-claude+<slug>`.
+  # `worktree-claude-*` would also match operator branches.
   - refs/heads/worktree-claude+**
 github_fence_ruleset_bypass_actors:
   # `always`, because the operator's sessions and Renovate push branches, not only merge PRs.
   - RepositoryRole:5:always
   - Integration:2740:always
 
-# The update restrictions. Each
-# lets only its bypass actors update its refs: this repo's master, and the dotfiles repo's `main`
-# and every tag. Every landing path merges as the admin through land.sh or bin/land, which applies
-# the bypass; GitHub's auto-merge applies none, so an auto-merge on master stays BLOCKED for any
-# account. The drift check compares the target, the refs, the rules and the bypass list exactly.
-# The master one also carries `deletion` and `non_fast_forward`, which "Default" already applies
-# to every branch; they are pinned as they are live.
+# Only a ruleset's bypass actors may update its refs. land.sh and bin/land merge as admin, which
+# applies the bypass; GitHub's auto-merge applies none and stays BLOCKED.
 github_update_restriction_rulesets:
   - repo: DanielH2018/server
     id: 27167149
@@ -95,18 +82,11 @@ github_update_restriction_rulesets:
 github_ruleset_drift_cron_hour: "6"
 github_ruleset_drift_cron_minute: "40"
 
-# Whose fork pull requests wait for a collaborator's approval before any workflow runs. A runner
-# pod takes a job from any workflow run in this repo, so the policy that makes every author
-# outside the repo wait is a condition of ADR-0032. The drift check alerts when the live policy
-# differs; it never writes the setting. It is under Settings, Actions, General.
+# Runner pods take any run's job, so every outside author's PR must wait for approval.
 github_fork_approval_policy: all_external_contributors
 
-# The repo's GitHub interaction limit: who may comment, react, open issues and open PRs on a
-# repo that stays public. `collaborators_only` closes every one of those to anyone not listed
-# as a collaborator; `none` clears the limit. GitHub caps the setting at six months and lets it
-# lapse silently, so github-interaction-limit.sh re-applies it daily — a PUT with the same body
-# resets the expiry. Change the declaration here, never in the GitHub UI: the cron applies
-# whatever this says on its next run. Ten minutes after the ruleset check, same token budget.
+# GitHub lets the limit lapse after six months; the daily cron re-applies it, so edit it here, not
+# in the UI.
 github_interaction_limit_repos:
   - DanielH2018/server
   # Every operator session applies the dotfiles repo's main branch to its own home directory.

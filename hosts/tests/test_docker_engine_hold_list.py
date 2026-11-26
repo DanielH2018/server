@@ -17,8 +17,7 @@ from lib import yaml_fast
 from _helpers import ALL_VARS
 
 PACKAGES_VAR = "docker_engine_packages"
-# The census must keep finding these two. containerd.io is the one whose upgrade swaps the
-# shim; docker-ce is the one whose postinst restarts the daemon and the socket.
+# containerd.io's upgrade swaps the shim; docker-ce's postinst restarts the daemon and the socket.
 MUST_BE_HELD = frozenset({"docker-ce", "containerd.io"})
 
 
