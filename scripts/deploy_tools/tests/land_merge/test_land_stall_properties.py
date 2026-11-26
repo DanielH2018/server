@@ -2,8 +2,9 @@
 
 Each poll reports a head, the stall await_ci named on it, whether the PR is ready and whether a run
 that can still give a verdict exists. The machine checks every poll's action against what the
-landing turn owes the landings behind it. The property tests take a fixed seed and no example
-database, so a CI run cannot differ from a local one.
+landing turn owes the landings behind it. The seed and the example count come from
+`tests/hypothesis_profiles.py`; only the sequence length is set here, because a give-up needs two
+graces of polls.
 
 Run: uv run pytest scripts/deploy_tools/tests/land_merge/test_land_stall_properties.py
 """
@@ -22,13 +23,7 @@ from hypothesis.stateful import (
 from deploy_tools.land_lib import stall
 from deploy_tools.land_lib.stall import Act
 
-FIXED = settings(
-    derandomize=True,
-    database=None,
-    deadline=None,
-    max_examples=300,
-    stateful_step_count=40,
-)
+STEPS = settings(stateful_step_count=40)
 _POLLS = st.sampled_from([20, 60, stall.GRACE_S])
 _STARTS = {Act.TOGGLE, Act.RERUN}
 
@@ -109,7 +104,7 @@ class StallWait(RuleBasedStateMachine):
 
 
 TestStallWait = StallWait.TestCase
-TestStallWait.settings = FIXED
+TestStallWait.settings = STEPS
 
 
 def test_the_generated_polls_reach_every_action():
@@ -120,5 +115,5 @@ def test_the_generated_polls_reach_every_action():
         def record(self, act: Act) -> None:
             seen.add(act)
 
-    run_state_machine_as_test(Recording, settings=FIXED)
+    run_state_machine_as_test(Recording, settings=STEPS)
     assert seen == set(Act)
