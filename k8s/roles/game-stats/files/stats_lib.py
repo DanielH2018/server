@@ -35,6 +35,7 @@ reading a module-level constant, so this module carries no per-game state of its
 needs no test doubles patched onto it — a caller passes a fake `fetch`/`apply_fn` instead.
 """
 
+import argparse
 import json
 import os
 import sqlite3
@@ -377,6 +378,20 @@ class RunConfig:
         self.health_max_age = health_max_age
 
 
+def parse_args(argv):
+    """Parses the exporter's flags, exiting non-zero on an unknown one."""
+    parser = argparse.ArgumentParser(allow_abbrev=False)
+    parser.add_argument(
+        "--once", action="store_true", help="run a single poll cycle and exit"
+    )
+    parser.add_argument(
+        "--backfill",
+        action="store_true",
+        help="run a single cycle that reads the whole backfill window, then exit",
+    )
+    return parser.parse_args(argv)
+
+
 def run(config, store, fetch, apply_fn, render_metrics, on_poll_ok, argv=None):
     """Loads persisted state, starts the metrics server, and runs the poll loop.
 
@@ -389,9 +404,9 @@ def run(config, store, fetch, apply_fn, render_metrics, on_poll_ok, argv=None):
     and `apply_fn` as `run_cycle` documents them, `render_metrics(state, now) -> str` for
     /metrics, and `on_poll_ok(state) -> str` for the per-cycle log line.
     """
-    argv = sys.argv if argv is None else argv
-    once = "--once" in argv
-    backfill = "--backfill" in argv
+    args = parse_args(sys.argv[1:] if argv is None else argv)
+    once = args.once
+    backfill = args.backfill
     poll_state = PollState(store.load_state())
     cursor = initial_cursor(
         store.get_cursor(), backfill, time.time(), config.backfill_days

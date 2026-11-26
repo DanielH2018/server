@@ -250,6 +250,8 @@ data:
             labels: {service: zigbee2mqtt, module: tcp_connect, page_tier: warning}
           - targets: ['nut.{{ k8s_namespace }}.svc.cluster.local:3493']
             labels: {service: nut, module: tcp_connect, page_tier: warning}
+          - targets: ['http://airflow-scheduler.{{ k8s_namespace }}.svc.cluster.local:8974/health']
+            labels: {service: airflow, module: http_2xx, page_tier: own-rule}
         relabel_configs:
           - source_labels: [__address__]
             target_label: __param_target

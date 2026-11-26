@@ -251,9 +251,7 @@ class FakeHost:
             old = group(rf"  {tool}:\n    amd64:\n.*?sha256: (\w+)", script, re.DOTALL)
             self.pin(old, sha256(data))
 
-    def clone(
-        self, tmp_path: Path, pin_file: str = "inventory/group_vars/all.yml"
-    ) -> Path:
+    def clone(self, tmp_path: Path, pin_file: str = "estate/vars.yml") -> Path:
         """A one-commit git clone holding `pin_file`, which pins host_python_version."""
         clone = tmp_path / "clone"
         variables = clone / pin_file

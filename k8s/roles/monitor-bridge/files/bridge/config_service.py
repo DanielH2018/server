@@ -46,7 +46,6 @@ class ServiceConfig:
     HA_CONSECUTIVE: int
     HA_BAN_WINDOW: str
     HA_BAN_SELECTOR: str
-    AIRFLOW_SCHEDULER_URL: str
     DEPLOY_PIPELINE_GITHUB_TOKEN: str = field(repr=False)
     DEPLOY_PIPELINE_PORT: int
     CHECK_EXPORTER_PORT: int
@@ -148,7 +147,6 @@ def service_config(
         # and the arm reports no events forever.
         # Verify the selector against live Loki over a window containing a KNOWN ban.
         HA_BAN_SELECTOR='{namespace="homelab",container="home-assistant"} |~ "Banned IP"',
-        AIRFLOW_SCHEDULER_URL=_env("AIRFLOW_SCHEDULER_URL").rstrip("/"),
         # The token is read-only, so the env-secret carries it. Empty disables reads: the listener
         # still serves with no series, and DeployPipelineExporterAbsent pages.
         DEPLOY_PIPELINE_GITHUB_TOKEN=_env("DEPLOY_PIPELINE_GITHUB_TOKEN"),

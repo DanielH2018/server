@@ -12,7 +12,6 @@ render opens and fails on one under no member.
 
 HOST_INPUTS = (
     "hosts/",
-    "inventory/",
     "estate/",
     "k8s/vars.yml",
     "k8s/services.yml",  # every template's `services` (`render_guard.k8s_services`)

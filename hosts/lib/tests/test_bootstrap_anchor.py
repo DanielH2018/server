@@ -22,11 +22,8 @@ def refusal(sha, chain, runs, contexts) -> str:
     return problem
 
 
-@pytest.mark.parametrize(
-    "pin_file", ["estate/vars.yml", "inventory/group_vars/all.yml"]
-)
-def test_the_required_contexts_come_from_either_layout(tmp_path, pin_file):
-    path = tmp_path / pin_file
+def test_the_required_contexts_come_from_estate_vars(tmp_path):
+    path = tmp_path / "estate/vars.yml"
     path.parent.mkdir(parents=True)
     path.write_text("ci_required_contexts: [prek, pytest]\n")
     assert anchor.required_contexts(tmp_path) == {"prek", "pytest"}

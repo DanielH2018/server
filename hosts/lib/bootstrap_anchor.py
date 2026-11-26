@@ -4,7 +4,7 @@
 C5's anchor rule, as ADR-0021 states it for the builder: the commit is on origin/master's
 first-parent chain and its CI verdict is green. The script runs this from the archived tree
 under `uv run --frozen`, because it reads the required CI contexts from the tree's
-`estate/vars.yml`, or `inventory/group_vars/all.yml` in a tree from before ADR-0042's move. It reads the clone and writes nothing under its working tree: the fetch
+`estate/vars.yml`. It reads the clone and writes nothing under its working tree: the fetch
 touches `.git` only.
 
 Usage: bootstrap_anchor.py <clone> <sha> --repo OWNER/NAME
@@ -63,9 +63,7 @@ def check_runs(
 
 def required_contexts(tree: Path) -> frozenset[str]:
     """`ci_required_contexts` from the tree the script archived."""
-    estate = tree / "estate/vars.yml"
-    source = estate if estate.exists() else tree / "inventory/group_vars/all.yml"
-    variables = yaml.safe_load(source.read_text())
+    variables = yaml.safe_load((tree / "estate/vars.yml").read_text())
     return frozenset(variables["ci_required_contexts"])
 
 

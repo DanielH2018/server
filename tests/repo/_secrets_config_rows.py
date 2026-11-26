@@ -69,9 +69,10 @@ SOPS_CONFIG = "secrets/.sops.yaml"
 _SECRETS, _CLUSTER_FILE = "secrets.yml", "cluster-vars.sops.env"
 _CLUSTER_MANIFEST = "cluster-manifests/pi-peer-backup.sops.yaml"
 _OUTSIDE_SECRETS = (
-    "inventory/group_vars/all.yml",
-    "../inventory/group_vars/all.yml",
-    f"{REPO}/inventory/group_vars/all.yml",
+    "estate/vars.yml",
+    "../estate/vars.yml",
+    f"{REPO}/estate/vars.yml",
+    f"{REPO}/hosts/daniel-pi/vars.yml",
     f"{REPO}/hosts/daniel-pi.sops.yaml",
     f"{REPO}/k8s/roles/traefik/defaults/main.yml",
 )
@@ -251,8 +252,8 @@ SECRETS_CONFIG_ROWS = (
         name="sops-creation-rules-match-no-yaml-file-outside-secrets",
         reason=(
             "`--config secrets/.sops.yaml` from the repo root must not encrypt a file elsewhere, "
-            "so no rule's `path_regex` matches an inventory, host or role YAML file. "
-            "`inventory/` is not auto-encrypted, and an encrypted copy there would hide a diff."
+            "so no rule's `path_regex` matches a vars, host or role YAML file. "
+            "A vars file is not auto-encrypted, and an encrypted copy there would hide a diff."
         ),
         files=lambda: [SOPS_CONFIG],
         offence=_rules_matching_outside_secrets,

@@ -84,8 +84,8 @@ move. The order is ADR-0030's. As built:
 | `cluster_pins.py:VARS_YAML` | scans `estate/**/*.yml`, `hosts/vars.yml` and `hosts/*/vars.yml` too | open: a pin override is accepted |
 | `host_inputs.py:HOST_INPUTS` | adds `estate/` and `k8s/vars.yml` | open: no host package is built for the change |
 | `render_diff_gates.py:RENDER_TREES` | adds `estate` | closed: the render reads no estate |
-| `builder_python.py:PYTHON_PINS` | reads `estate/vars.yml`, then the old path | falls back to the unit's interpreter |
-| `bootstrap_anchor.py`, `bootstrap-host.sh`, `bootstrap_case.py` | read `estate/vars.yml`, then the old path | closed: bootstrap stops |
+| `builder_python.py:PYTHON_PIN` | reads `estate/vars.yml`, then the old path until step 7 | falls back to the unit's interpreter |
+| `bootstrap_anchor.py`, `bootstrap-host.sh`, `bootstrap_case.py` | read `estate/vars.yml`, then the old path until step 7 | closed: bootstrap stops |
 | `render-diff.yml`, `image-leg.yml`, `image-smoke.yml` | match the new paths too | open: a check does not run |
 
 The T2 approval floor and the claude-land approval list stay as they are. Neither lists
@@ -109,9 +109,8 @@ each installed file names the new path. Check with `grep` on the host, not from 
 ContainerCreating, so this follows step 3's merge and `checkout-sync`'s next pull on
 `k8s_primary_node`. `k8s` is served in full, so it covers `k8s/vars.yml`.
 
-The tool docstrings in `app.py` and the jail comment in `safe_reads.py` still list `k8s/`,
-`inventory/` and `tests/`. They change in step 7, when `inventory` leaves the list, because a
-fan-out issue held those files when step 4 landed.
+The tool docstrings in `app.py` and the jail comment in `safe_reads.py` changed in step 7, not
+here, because a fan-out issue held those files when step 4 landed.
 
 **Done when** the pod lists `estate/CLAUDE.md`.
 
@@ -187,6 +186,24 @@ it until no open PR and no `promote` revision predates step 6.
 
 **Done when** the census row of step 1 finds no `inventory/` reader outside `docs/archive` and
 the decision records.
+
+As built, step 7 is two PRs. The first moves the rendered comments, and lands one restart per
+role. The second drops every fallback and every name of the old path:
+
+- `builder_python.py`, `bootstrap_anchor.py`, `bootstrap-host.sh` and `bootstrap_case.py` read
+  `estate/vars.yml` alone.
+- `render_diff_gates.py:CLUSTER_VARS` reads `k8s/vars.yml` alone, and `RENDER_TREES` drops
+  `inventory`. `cluster_pins.py:VARS_YAML` drops the `inventory/` globs. Both compare against
+  `HEAD^1` of CI's merge commit, which is post-step-6 master, and the last promoted revision
+  postdates step 6 too.
+- `host_inputs.py` and `land_renovate_pr.py:VARS_FILE` drop `inventory/`.
+- `lib.repo_paths.INVENTORY` goes. The census row
+  `tests-take-inventory-paths-from-repo-paths` names `ESTATE_VARS`, `K8S_VARS` and
+  `HOSTS_SHARED_VARS` in place of `ALL_VARS` and `HOST_VARS`.
+- homelab-mcp's tool docstrings and jail comment name `estate/`, which restarts homelab-mcp once.
+
+`scripts/dev/affected_tests.json` keys rows on the old paths until `docs-refresh` regenerates it.
+The generated pages under `docs/reference/` follow on the `docs-refresh` cron.
 
 ## Undoing a step
 

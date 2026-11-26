@@ -255,8 +255,6 @@ def stock_uv_cache(cases, clone: Path, kit: Path, uv: str, run=run_logged) -> No
     release download sits in the bootstrap cases.
     """
     pin_file = clone / "estate/vars.yml"
-    if not pin_file.exists():
-        pin_file = clone / "inventory/group_vars/all.yml"
     found = re.search(
         r'^host_python_version: "(.*)"$', pin_file.read_text(), re.MULTILINE
     )

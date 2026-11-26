@@ -26,18 +26,18 @@ _PATH_ANCHORS = {
     "_REPO": (),
     "REPO_ROOT": (),
     "K8S_ROLES": ("k8s", "roles"),
-    "INVENTORY": ("inventory",),
     "K3S_SERVER": ("hosts", "components", "k3s-server"),
     "K3S_HOST_CHECKS": ("hosts", "components", "k3s-host-checks"),
 }
 # The k3s entries run most specific first, and a chain reports only its first match.
 _OWNED_PATHS = (
-    (("group_vars", "all.yml"), "ALL_VARS"),
-    (("host_vars",), "HOST_VARS"),
+    (("estate", "vars.yml"), "ESTATE_VARS"),
+    (("k8s", "vars.yml"), "K8S_VARS"),
     (("components", "k3s-server", "defaults", "main.yml"), "K3S_DEFAULTS"),
     (("components", "k3s-host-checks", "files"), "K3S_FILES"),
     (("components", "k3s-server"), "K3S_SERVER"),
     (("components", "k3s-host-checks"), "K3S_HOST_CHECKS"),
+    (("hosts", "vars.yml"), "HOSTS_SHARED_VARS"),
 )
 
 Segments = tuple[str, ...]
@@ -320,7 +320,7 @@ def inline_inventory_paths(
     module's text in place of the file on disk. A chain counts only for the
     segments it spells itself, so `K3S_SERVER / "templates"` passes. Only the outermost chain is
     read, so one expression is one hit. A repo-relative STRING
-    (`"inventory/group_vars/all.yml"`) is not a chain and not a hit: the deploy
+    (`"estate/vars.yml"`) is not a chain and not a hit: the deploy
     classifiers' tests hand those to the code under test as inputs.
     """
     tree = parse(source)
@@ -352,11 +352,6 @@ def inline_inventory_paths(
         if chain is None:
             continue
         spelled_from, segments = chain
-        # A module binding its own `INVENTORY` hides every chain built from it, so the binding is a
-        # hit too.
-        if segments == ["inventory"] and spelled_from < 2:
-            found.append(f"{ast.unparse(node)} (import INVENTORY from lib.repo_paths)")
-            continue
         found += [
             f"{ast.unparse(node)} (import {constant} from lib.repo_paths)"
             for needle, constant in _OWNED_PATHS
