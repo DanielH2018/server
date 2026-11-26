@@ -32,6 +32,7 @@ Grafana
 Loki
 MkDocs
 Portainer
+Pylance
 Prometheus
 Renovate
 prek
