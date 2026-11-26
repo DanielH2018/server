@@ -54,11 +54,29 @@ serves read-only (`k8s/roles/navidrome/defaults/main.yml:navidrome_k8s_media_sub
 - **Lidarr's own state lives in `lidarr.db`:** the root folder and the qBittorrent download
   client are configured in the UI and survive through the snapshot, not git. The quality
   profiles are declared by the seed Job above and survive the same way.
-- **Import lists are the discovery feed, and they live in `lidarr.db` too.** Settings, Import
-  Lists offers Last.fm tags, Lidarr's curated lists, MusicBrainz series and Spotify. A Last.fm
-  tag list needs no Last.fm account. Set each list's monitoring to new albums only, or none: a
-  list that monitors every album of every artist it adds can fill `/srv/media`, which shares
-  daniel-box's root disk. Soularr then fetches whatever the lists leave wanted.
+- **Import lists live in `lidarr.db` too.** Settings, Import Lists offers Last.fm tags,
+  Lidarr's curated lists, MusicBrainz series and Spotify. A Last.fm tag list needs no Last.fm
+  account. Soularr fetches whatever the lists leave wanted.
+- **A list's Monitor setting decides whether it downloads anything.** The choices are None,
+  Specific Album and All Artist Albums. A discovery list (Last.fm, curated, Spotify Followed
+  Artists) takes None, with Monitor New Albums set to None or New Albums. A library list
+  (Spotify Saved Albums, Spotify Playlists) takes Specific Album, because None adds the
+  artists and downloads nothing. No list takes All Artist Albums: it monitors every album of
+  every artist the list adds and can fill `/srv/media`, which shares daniel-box's root disk.
+  Library lists use the `Standard` quality profile, since a lossless album runs 300-500 MB.
+- **Spotify Playlists turns each track into its album.** A 300-track playlist can add up to
+  300 wanted albums, compilations included. Liked Songs is not offered as a playlist; copy it
+  into an ordinary playlist first.
+- **The Spotify lists sign in through Lidarr's own proxy, `spotify.lidarr.audio`.** Lidarr
+  has no field for a Spotify client ID of its own, so no Spotify developer app or SOPS secret
+  is involved. The refresh token sits in each list's settings in `lidarr.db`, and it renews
+  only while that proxy answers. When it stops, every sync fails until the proxy returns and
+  someone re-authenticates in the list's settings.
+- **A failing list reaches Discord only when every list fails.** Lidarr's import-list health
+  check is an Error when all enabled lists fail and a Warning when some do, and
+  `k8s/roles/arr-notification/defaults/main.yml:arr_notification_include_health_warnings`
+  keeps warnings out of `Discord (health)`. With a Last.fm list beside the Spotify ones, an
+  expired Spotify token shows only on Lidarr's System, Status page.
 
 ## Editing
 - Manifest: `templates/deployment.yaml.j2`, a single call to
