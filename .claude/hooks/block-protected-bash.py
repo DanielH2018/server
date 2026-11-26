@@ -71,9 +71,10 @@ _WRITE_SHAPES = (
     re.compile(r">[>|]?\s*([^\s;&|<>()]+)"),
     # `tee path`, `tee -a path` — a pipe's write end
     re.compile(r"\btee\s+(?:-[^\s]+\s+)*([^\s;&|<>()]+)"),
-    # `sed -i … path`, `perl -pi -e … path` — in-place editors, target last
+    # `sed -i … path`, `perl -pi -e … path` — in-place editors, target last in their stage
     re.compile(
-        r"\b(?:sed|perl)\b[^;&|]*?\s-[A-Za-z]*i(?:\.[^\s]*)?\s[^;&|]*?([^\s;&|<>()]+)\s*$"
+        r"\b(?:sed|perl)\b[^;&|]*?\s-[A-Za-z]*i(?:\.[^\s]*)?\s[^;&|]*?"
+        r"([^\s;&|<>()]+)\s*(?=[;&|]|$)"
     ),
 )
 
@@ -83,7 +84,7 @@ def written_paths(command):
     found = []
     for line in command.splitlines():
         for shape in _WRITE_SHAPES:
-            found.extend(m.group(1) for m in shape.finditer(line))
+            found.extend(m.group(1).strip("'\"") for m in shape.finditer(line))
     # A heredoc delimiter and a process substitution are not paths; neither is a bare `-`.
     return [p for p in found if p not in ("-",) and not p.startswith(("$", "<", "("))]
 
