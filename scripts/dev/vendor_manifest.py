@@ -14,7 +14,7 @@ tree. Its `defaults/main.yml` pins each file in a list whose key ends `vendored_
 `url` renders from the same defaults file, so a Renovate bump of the version key changes it.
 `fetched_url` and `sha256` record what the tool last fetched. A bump that nobody refreshed
 therefore leaves `url` and `fetched_url` apart, and `check_tree` names that as well as a file
-whose bytes differ from `sha256`. `tests/k8s/test_vendored_manifests_match_their_pins.py`
+whose bytes differ from `sha256`. `tests/k8s/flux/test_vendored_manifests_match_their_pins.py`
 runs `check_tree` over the real tree.
 
 The item also matches `asset_pins.py`'s list shape (`url` beside `sha256`), so its fetch-and-check

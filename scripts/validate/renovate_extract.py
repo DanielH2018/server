@@ -111,7 +111,7 @@ PARTIAL_VALUE_DEPS = frozenset(
 # Version keys a pinned download renders from that no manager tracks, on purpose.
 UNTRACKED_BY_DECISION = {
     # Covers traefik's in-tree CRD copy, which Renovate cannot rewrite: the image pin is the
-    # tracked one, and tests/k8s/test_traefik_crds.py fails a minor image bump until the copy,
+    # tracked one, and tests/k8s/edge/test_traefik_crds.py fails a minor image bump until the copy,
     # this key and the hash are refreshed together.
     "traefik_crds_k8s_version": "follows traefik_k8s_image's minor; refreshed by hand",
 }

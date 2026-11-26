@@ -1,6 +1,6 @@
 """`vendor_manifest.py`: the refresh against a fake fetcher, and its removed-object report.
 
-The pin check itself is `tests/k8s/test_vendored_manifests_match_their_pins.py`.
+The pin check itself is `tests/k8s/flux/test_vendored_manifests_match_their_pins.py`.
 
 Run: uv run pytest scripts/dev/tests/repo_tools/test_vendor_manifest.py
 """

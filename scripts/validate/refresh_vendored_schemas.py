@@ -23,7 +23,7 @@ snapshot on disk, and the network cost is paid deliberately by running this scri
 
 WHAT AGES, AND WHAT CATCHES IT. A vendored schema drifts from the CRD the cluster actually
 serves, with no signal — the failure mode this repo has a memory entry for. Two things bound it.
-The `rendered-kinds-have-vendored-schemas` row of ``tests/k8s/test_rendered_properties.py``
+The `rendered-kinds-have-vendored-schemas` row of ``tests/k8s/rendered_properties/test_rendered_properties.py``
 fails the moment a manifest renders a kind, core or CRD, with no schema here, so a NEW kind cannot
 arrive unvalidated. And this script is idempotent: run it, and a non-empty `git diff` under
 schemas/ is the drift.
@@ -52,7 +52,7 @@ SCHEMA_DIR = Path(__file__).resolve().parent / "schemas"
 KUBERNETES_OPENAPI = "https://raw.githubusercontent.com/kubernetes/kubernetes/{tag}/api/openapi-spec/v3/{name}"
 
 # The apiVersions this repo renders, as upstream names their files. Kept in step with the tree by
-# the `rendered-kinds-have-vendored-schemas` row of tests/k8s/test_rendered_properties.py,
+# the `rendered-kinds-have-vendored-schemas` row of tests/k8s/rendered_properties/test_rendered_properties.py,
 # which reads the manifests, so a manifest in a new group fails there until its group is added
 # here. apiextensions.k8s.io is listed ahead of its first manifest, for the Flux
 # CustomResourceDefinitions that slice D1's flux role renders
@@ -70,7 +70,7 @@ CORE_GROUP_FILES = [
 ]
 
 # (group, kind, version) for every CRD this repo renders. Kept in step with the tree by the
-# `rendered-kinds-have-vendored-schemas` row of tests/k8s/test_rendered_properties.py,
+# `rendered-kinds-have-vendored-schemas` row of tests/k8s/rendered_properties/test_rendered_properties.py,
 # which reads the manifests rather than this list — so adding a kind here without a manifest is
 # harmless, and adding a manifest without a kind here fails that row.
 VENDORED = [

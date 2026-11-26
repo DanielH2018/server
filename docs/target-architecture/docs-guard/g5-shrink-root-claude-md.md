@@ -196,7 +196,7 @@ section says. The sweep command in *Verification* prints 125 such lines outside 
 - `test_setup_cron_roles_have_a_contract.py` (deleted, #8027) cites the *Where to Look*
   cron row in an assertion message.
 - `docs/break-glass.md` cites *Project Overview* for "Ansible runs from daniel-box".
-- `tests/k8s/test_uncovered_roles_justifications_resolve.py`,
+- `tests/k8s/workloads/test_uncovered_roles_justifications_resolve.py`,
   `scripts/diagnostics/tests/probe_landing/test_probe_registry.py` and `scripts/validate/asset_pins.py`
   cite the non-vacuity rule in *Python & Tests*.
 - `scripts/secrets_mgmt/consumers.py` cites *Common Commands*.

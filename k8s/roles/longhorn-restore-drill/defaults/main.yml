@@ -15,7 +15,7 @@ k8s_autodeploy_reason: "the drill restores a real Volume, PV and PVC under a fix
 
 # The namespace the stamp ConfigMap, the script ConfigMap, the CronJob and the RBAC live in. It
 # mirrors `k3s_longhorn_restore_drill_namespace`, which backup health's readers read.
-# tests/k8s/test_restore_drill_stamps.py holds the pair equal, so a rename changes both
+# tests/k8s/flux/test_restore_drill_stamps.py holds the pair equal, so a rename changes both
 # sides in one PR.
 longhorn_drill_namespace: homelab
 

@@ -7,7 +7,7 @@ everything else is here once.
 
 Three tables use it:
 
-- `tests/k8s/_property_table.py` selects from the rendered k8s manifests. Its `check`
+- `tests/k8s/rendered_properties/_property_table.py` selects from the rendered k8s manifests. Its `check`
   ends in `verdict` below.
 - `Census` below selects from the tracked tree: `git ls-files` or `role_dirs()`. Its rows live
   in `tests/repo/test_census_rows_*.py`, one file per domain, because

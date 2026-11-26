@@ -32,7 +32,7 @@ every caller, where it would drift. See repo-root `CLAUDE.md` for shared convent
     and a comment edit in that template does not rebuild the images.
   - The renderer computes `k8s_built_image_tags` (name → tag) for the roles that deploy these
     images. **All nine `*_k8s_image` pins read it**
-    (`tests/k8s/test_built_images_name_the_content_tag.py` requires it).
+    (`tests/k8s/flux/test_built_images_name_the_content_tag.py` requires it).
   - `scripts/lib/render_guard.py:BUILT_IMAGE_TAG_STUBS` seeds one for every rendered-manifest
     guard, which would otherwise check `:latest` while production renders the hash.
 

@@ -35,6 +35,8 @@ spec:
               # Stdlib-only script: nothing installs at start, so the root filesystem stays
               # read-only.
               image: {{ karakeep_k8s_tagger_image }}
+              # Built in-cluster: see the `built-images-pull-always` row of
+              # tests/k8s/rendered_properties/_workload_property_rows.py.
               imagePullPolicy: Always
               command:
                 - python3

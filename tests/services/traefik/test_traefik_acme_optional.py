@@ -14,7 +14,7 @@ Every rule here is a pair — one input it must accept, one it must reject — b
 has only ever been observed passing carries no evidence it can fail.
 
 The checks every opt-out flag shares — both branches parse, every mount resolves, the flag
-defaults on — are `tests/k8s/test_staging_opt_out_flags_render.py`'s.
+defaults on — are `tests/k8s/flux/test_staging_opt_out_flags_render.py`'s.
 """
 
 from lib import yaml_fast

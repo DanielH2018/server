@@ -15,7 +15,7 @@
   copies in observability's and longhorn-ui's middlewares.yaml.j2 document. Every namespace with a
   public route renders both: traefik for k8s_namespace, observability for the observability
   namespace (grafana's public name). ENFORCED by
-  tests/k8s/test_public_routes_require_cloudflare_origin_pull.py.
+  tests/k8s/edge/test_public_routes_require_cloudflare_origin_pull.py.
 
   Two properties of Traefik make the per-host split sound rather than a bypass waiting to be
   found, both from v3's pkg/server/router/tcp and pkg/middlewares/snicheck:

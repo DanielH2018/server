@@ -100,7 +100,7 @@ def test_the_tree_s_indirect_k8s_render_readers_are_charged_the_render():
     """Non-vacuity over the real tree: one module per path that loads `_k8s_render` without
     naming it, as a collection with an import trace on `_k8s_render` showed."""
     for indirect in (
-        "tests/k8s/test_container_port_name_property.py",
+        "tests/k8s/rendered_properties/test_container_port_name_property.py",
         "tests/deploy/test_k8s_autodeploy_guard.py",
         "k8s/roles/monitor-bridge/tests/test_b2_storage.py",
     ):

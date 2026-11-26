@@ -64,7 +64,7 @@ The filters advanced setup would buy cannot express what the remaining noise nee
 `paths-ignore` drops a file from *every* query and `query-filters` filters a query across
 *every* file; there is no path×query intersection. The 13 remaining
 `py/incomplete-url-substring-sanitization` alerts are `assert "name" in list_of_strings`
-membership checks in tests — `tests/k8s/test_k8s_manifests_rbac.py`,
+membership checks in tests — `tests/k8s/rbac/test_k8s_manifests_rbac.py`,
 `scripts/dev/tests/test_gen_hosts_block.py` and siblings. Ignoring those paths would also
 strip `py/clear-text-logging-sensitive-data` from them, which is the query covering the secret
 discipline this repo cares most about; and one of the paths,

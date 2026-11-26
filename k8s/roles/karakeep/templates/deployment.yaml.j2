@@ -27,6 +27,9 @@ spec:
       initContainers:
         # Gates on readiness, not start order: a Service has no endpoints until its probe passes.
         - name: wait-for-deps
+          # The time-tagger's in-cluster-built image, reused because it is the only image this
+          # role has with a python3 and no s6 init. `Always` because it is built here — see the
+          # `built-images-pull-always` row of tests/k8s/rendered_properties/_workload_property_rows.py.
           image: {{ karakeep_k8s_tagger_image }}
           imagePullPolicy: Always
           command:
@@ -67,7 +70,7 @@ spec:
           #   1. PID 1 is s6-overlay's `/init` (upstream `docker/Dockerfile`'s ENTRYPOINT, and the
           #      process was measured as s6-svscan at uid 0 — see the ("karakeep",
           #      "karakeep") entry in _ENTRYPOINT_DROPS,
-          #      tests/k8s/test_container_security_context.py). s6 rebuilds its whole
+          #      tests/k8s/workloads/test_container_security_context.py). s6 rebuilds its whole
           #      service tree under /run on every start. /run is already an emptyDir, but a
           #      read-only root also needs S6_READ_ONLY_ROOT=1, which changes how the init
           #      itself boots.

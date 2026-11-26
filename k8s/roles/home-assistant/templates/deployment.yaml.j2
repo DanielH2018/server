@@ -43,7 +43,7 @@ spec:
       # a second node whose loss breaks SSO and home automation. Pinning them costs no
       # availability the VIP pins had not already spent, and the pin moves with
       # k8s_primary_node. The `home-critical-workloads-pinned-to-the-vip-node`
-      # row in tests/k8s/_edge_property_rows.py derives the set from `tier`.
+      # row in tests/k8s/rendered_properties/_edge_property_rows.py derives the set from `tier`.
       nodeSelector:
         kubernetes.io/hostname: {{ k8s_primary_node }}
 {{ pod_shell(services | tier_priority_class('home-assistant')) }}

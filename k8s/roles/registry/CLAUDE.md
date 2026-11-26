@@ -92,7 +92,7 @@ karakeep, which no consumer pulls. See repo-root `CLAUDE.md` for shared conventi
       and panics on a refused connection. As a peer container, `ghcr-resume` lost that race,
       so the mirror restarted on every rollout and failed `probe.py health registry` (#7792).
       The startupProbe holds the mirror's start until the port answers.
-      `tests/k8s/test_registry_ghcr_mirror.py::test_the_resume_sidecar_listens_before_the_mirror_starts`
+      `tests/k8s/edge/test_registry_ghcr_mirror.py::test_the_resume_sidecar_listens_before_the_mirror_starts`
       holds it.
     - The sidecar relays every request to ghcr.io, and rewrites a 401 challenge's
       `https://ghcr.io/token` realm to its own `http://127.0.0.1:<port>/token`, which it

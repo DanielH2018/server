@@ -399,6 +399,7 @@ extra-paths = [
   "scripts/deploy_tools/tests",
   "scripts/dev/tests",
   "scripts/diagnostics/tests",
+  "tests/k8s",
   "scripts/docs/tests",
 ]
 

@@ -44,7 +44,7 @@ spec:
             - name: metrics
               containerPort: {{ services | metrics_port('nut') }}
           # tcpSocket: not /ups_metrics (fails whenever upsd is unreachable, so it would crash-loop
-          # this pod on every nut restart), and not /metrics (tests/k8s/_scrape_property_rows.py
+          # this pod on every nut restart), and not /metrics (tests/k8s/rendered_properties/_scrape_property_rows.py
           # refuses an httpGet on a metrics route below a 300s period).
           livenessProbe:
             tcpSocket:
