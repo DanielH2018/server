@@ -150,8 +150,6 @@ tests:
             exp_annotations:
               summary: 'flux-system/bursty-abc: pinned at its CPU limit.'
               description: "bursty-abc had 50% of its CFS periods throttled over 15 minutes, for 15 minutes running. Raise the limit in its role or accept it; short bursts never reach this alert."
-  # CAdvisorCoverageShortfall, zero-series case: no cAdvisor series at all. All three arms fire,
-  # each with its `arm` label, because `or vector(0)` turns an empty count into 0 < 20.
   - interval: 1m
     input_series: []
     alert_rule_test:
@@ -179,8 +177,6 @@ tests:
                 observability: cAdvisor covers 0 pods for the cpu check, under the floor of 20.
               description: "The cpu check reads a per-pod cAdvisor vector that holds 0 pods where the estate holds about 70 to 100. The kubernetes-cadvisor job or a selector is broken, so the restart, OOM and CPU rules read green. Read the kubernetes-cadvisor targets on Prometheus."
               runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#cadvisorcoverageshortfall
-  # CAdvisorCoverageShortfall, the boundary: 20 pods for the restart and OOM vectors is the
-  # floor and stays silent, 19 pods for the CPU vector is under it and fires alone.
   - interval: 1m
     input_series:
       - series: 'container_start_time_seconds{namespace="homelab", pod="census-00", container="app"}'

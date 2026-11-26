@@ -35,8 +35,7 @@
 groups:
   - name: extra-probes
     rules:
-      # `for: 2m` at the job's 60s interval is three strikes. The critical tier is the edge
-      # all-clear and the mosquitto and pihole probes while their entries are home-critical.
+      # `for: 2m` at the job's 60s interval is three strikes.
       - alert: ExtraProbeFailedCritical
         expr: probe_success{job="blackbox-extra", page_tier="critical"} == 0
         for: 2m
@@ -74,8 +73,6 @@ groups:
             {{ $labels.instance }} refused a TCP connect for 10 minutes. A container that is up
             with no port mapping after a Pi restart is detached and needs a RECREATE, not a
             restart. `ssh daniel-pi docker ps` tells a stopped container from a detached one.
-      # `up{job="node-pi"}` is the scrape of the Pi's node_exporter, so it reads 0 when the
-      # host is down or its exporter is, and the exporter is a host unit.
       - alert: PiHostDown
         expr: up{job="node-pi"} == 0
         for: 2m

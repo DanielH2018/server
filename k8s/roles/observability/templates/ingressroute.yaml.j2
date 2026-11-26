@@ -1,13 +1,7 @@
 {% from 'ingressroute.yml.j2' import ingressroute with context %}
 ---
-{#
-  The Service is `grafana`, not the services entry name (`observability`) — the macro's
-  first argument names both the IngressRoute and the Service it targets, and this role runs
-  several workloads under one entry.
-
-  `namespace` is passed explicitly: the route must live beside the Service, and Traefik has
-  allowCrossNamespace off.
-#}
+{# The Service is `grafana`, not the services entry `observability`; `namespace` is explicit because
+   Traefik has allowCrossNamespace off. #}
 {{ ingressroute(
     'grafana',
     container_item.hostname,

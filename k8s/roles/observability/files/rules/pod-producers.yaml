@@ -23,10 +23,8 @@
 groups:
   - name: pod-producers
     rules:
-      # THE SIDECAR'S THREE VERDICTS. Each job exits non-zero for its fault, and the sidecar
-      # records that exit as `homelab_check_success` 0. A missing series stays quiet here:
-      # CrowdSecJobStale owns a job that stopped running, and the exporter-absent rule owns a
-      # scrape job that is gone.
+      # A missing series stays quiet: CrowdSecJobStale owns a stopped job, the exporter-absent rule
+      # a gone scrape job.
       - alert: CrowdSecRemoteAllowlistFailed
         expr: homelab_check_success{job="crowdsec-jobs", check="crowdsec-remote-allowlist"} == 0
         labels:
@@ -63,10 +61,8 @@ groups:
             CronJob is not running and the crowdsec-home-ips ConfigMap has gone three periods
             unwritten. Read the crowdsec-home-allowlist lines in the crowdsec-jobs container log,
             then the crowdsec-home-ips Job logs.
-      # A job whose last run ended longer ago than its own deadline: the scheduler hung, or the
-      # job is skipped every slot. The timestamp starts at the exporter's start, so a restart
-      # does not fire this, and a job that never runs does. The two sides carry the same labels,
-      # so the comparison matches one series to one. `for: 5m` rides out a rolled pod.
+      # The timestamp starts at the exporter's start, so a restart does not fire this and a job that
+      # never runs does. `for: 5m` rides out a rolled pod.
       - alert: CrowdSecJobStale
         expr: |
           time() - homelab_check_last_run_timestamp_seconds{job="crowdsec-jobs"}
@@ -83,8 +79,6 @@ groups:
             sidecar's scheduler is hung or the job is skipped at every slot. Read the
             crowdsec-jobs container log in the crowdsec pod.
           runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#crowdsecjobstale
-      # The scrape job is gone from prometheus.yml. A failed scrape (up 0) is ScrapeTargetDown's
-      # page (M1 convention 5), so only the missing series fires here.
       - alert: CrowdSecJobsExporterAbsent
         expr: absent(up{job="crowdsec-jobs"})
         for: 10m
@@ -98,9 +92,8 @@ groups:
             prometheus.yml and the three crowdsec sidecar verdicts are UNMONITORED, which is not
             the same as healthy.
           runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#crowdsecjobsexporterabsent
-      # THE TWO CRONJOBS' VERDICTS. The reader patches `homelab/check-verdict` to `up` or
-      # `down` each run. The series is absent until the first run, and stays at its last value
-      # after, which is why the NotReporting rules below measure the run clock.
+      # The reader patches `homelab/check-verdict` to `up` or `down` each run; the series keeps its
+      # last value, so the NotReporting rules measure the run clock.
       - alert: ConfigarrSyncFailed
         expr: >-
           kube_configmap_annotations{namespace="homelab", configmap="configarr-health-verdict", annotation_homelab_check_verdict="down"} == 1
@@ -127,9 +120,9 @@ groups:
             scheduled task" line in the janitorr pod log over its window, or could not read the
             pod. Read the annotation `homelab/check-message` on the janitorr-health-verdict
             ConfigMap, then `kubectl -n homelab logs deploy/janitorr`.
-      # A reader that stopped running or stopped exiting 0 (it exits 1 when its export fails).
       # 1800s is three periods of the `*/10` schedule. The second arm is a CronJob that never
-      # succeeded, or one gone. `unless` leaves a dead kube-state-metrics to ScrapeTargetDown.
+      # succeeded or is gone;
+      # `unless` leaves a dead kube-state-metrics to ScrapeTargetDown.
       - alert: ConfigarrHealthNotReporting
         expr: |
           (

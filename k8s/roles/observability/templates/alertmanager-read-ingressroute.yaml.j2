@@ -32,8 +32,8 @@ spec:
     - https
   routes:
     - kind: Rule
-      # OR'd ClientIP matchers, NOT ClientIP(a, b): the multi-arg form fails rule parsing on
-      # this Traefik and the router vanishes (prometheus-ingressroute.yaml.j2).
+      # OR'd ClientIP matchers, NOT ClientIP(a, b): the multi-arg form fails rule parsing on this
+      # Traefik and the router vanishes.
       match: "Host(`alertmanager.local.{{ domain }}`) && Method(`GET`) && (PathPrefix(`/api/v2/alerts`) || PathPrefix(`/api/v2/silences`)) && ({% for cidr in clients %}ClientIP(`{{ cidr }}`){% if not loop.last %} || {% endif %}{% endfor %})"
       middlewares:
         - name: rate-limit

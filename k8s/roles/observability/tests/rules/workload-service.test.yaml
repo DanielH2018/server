@@ -200,8 +200,6 @@ tests:
           - labels: 'homelab:pod_service:info{namespace="homelab", pod="cache-0", service="unmapped"}'
             value: 1
 
-  # kube_replicaset_owner is absent. A ReplicaSet-owned pod outside the add-on namespaces falls
-  # to unmapped. One inside them still maps to k3s.
   - interval: 1m
     input_series:
       - series: 'kube_deployment_status_replicas_unavailable{job="kube-state-metrics", instance="kube-state-metrics:8080", namespace="homelab", deployment="valheim"}'

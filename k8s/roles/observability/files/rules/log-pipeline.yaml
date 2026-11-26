@@ -43,8 +43,8 @@ groups:
             Alloy gave up on more than 3000 log entries in an hour, so those lines never reached
             Loki. Read loki_write_dropped_entries_total by reason and instance, then the Alloy
             pod's log. A burst right after a shipper restart is a re-tail and not loss.
-      # Server side: entries the homelab Loki discarded, which a shipper never attributes to
-      # itself. A `too_far_behind` count is held for 6h (SHIPPER_BACKLOG_GRACE_S) after a reboot.
+      # Entries the homelab Loki discarded, which a shipper never attributes to itself;
+      # `too_far_behind` is held 6h (SHIPPER_BACKLOG_GRACE_S) after a reboot.
       - alert: LokiDiscardingEntries
         expr: >-
           (
@@ -114,8 +114,8 @@ groups:
             The collector gave up on exporting telemetry in the last 15 minutes, so the data
             reaches neither Loki, Prometheus nor Tempo and no other counter records the loss.
             Read otelcol_exporter_send_failed_* by exporter, then the collector pod's log.
-      # Tempo's blocklist poll arm. A failed poll leaves the blocklist empty after a restart,
-      # so every stored trace is unsearchable while the pod stays Ready.
+      # A failed poll leaves the blocklist empty after a restart, so every stored trace is
+      # unsearchable while the pod stays Ready.
       - alert: TempoBlocklistPollFailing
         expr: sum(increase(tempodb_blocklist_tenant_index_errors_total[15m])) > 0
         for: 5m

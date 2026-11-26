@@ -10,8 +10,6 @@ rule_files:
   - ../../files/rules/ingress-probes.yaml
 evaluation_interval: 1m
 tests:
-  # The zero-series case: no input at all, so the scrape job is missing from the config.
-  # IngressProbesMissing fires once its 10m hold has passed, and not before.
   - interval: 1m
     input_series: []
     alert_rule_test:
@@ -32,8 +30,6 @@ tests:
                 gone from prometheus.yml or renders no target. No ingress probe can fire until
                 the series is back.
 
-  # A warning-tier ingress fails from minute 3. IngressProbeFailed fires once its
-  # 2m hold has passed, and the critical rule, which selects the other tier, stays quiet.
   - interval: 1m
     input_series:
       - series: 'probe_success{job="blackbox-ingress", instance="https://homepage.local.example.com", service="homepage", module="http_sso_302", page_tier="warning"}'
@@ -71,8 +67,6 @@ tests:
         alertname: IngressProbesMissing
         exp_alerts: []
 
-  # A home-critical ingress fails from minute 3. IngressProbeFailedCritical fires,
-  # and the warning rule stays quiet.
   - interval: 1m
     input_series:
       - series: 'probe_success{job="blackbox-ingress", instance="https://auth.local.example.com", service="authelia", module="http_2xx", page_tier="critical"}'
@@ -134,8 +128,6 @@ tests:
         alertname: IngressProbesMissing
         exp_alerts: []
 
-  # One target's scrape fails while the other's works. That is a single failed scrape, which
-  # ScrapeTargetDown pages, so BlackboxExporterDown stays quiet.
   - interval: 1m
     input_series:
       - series: 'up{job="blackbox-ingress", instance="https://homepage.local.example.com", service="homepage", module="http_sso_302", page_tier="warning"}'

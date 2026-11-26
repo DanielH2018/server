@@ -15,9 +15,7 @@ data:
 {% set observability_grafana_config %}
   datasources.yaml: |
     apiVersion: 1
-    # Provisioning keys on NAME, so the old lowercase `loki` alias record must be deleted or
-    # the loki-homelab insert hits "same uid already exists" and crash-loops the pod. The
-    # stack's own `Loki` (uid loki) is untouched.
+    # Old lowercase `loki` datasource must go: its uid collides with loki-homelab and crash-loops.
     deleteDatasources:
       - name: loki
         orgId: 1
@@ -72,11 +70,8 @@ data:
         url: http://prometheus:9090
         jsonData:
           httpMethod: POST
-          # Load-bearing, and the reason to have a second datasource rather than one shared:
-          # daniel-server's series are scraped at 1m, this cluster's at 15s. Grafana derives
-          # $__rate_interval from this, and at the 15s default every rate() panel over
-          # 1m-scraped data returns EMPTY. The cluster-native datasource above correctly leaves
-          # it unset.
+          # Load-bearing: daniel-server scrapes at 1m; at Grafana's 15s default every rate() panel
+          # returns EMPTY.
           timeInterval: "1m"
       - name: loki-homelab
         uid: bf4q19tuivta8e
@@ -197,12 +192,8 @@ spec:
             # reaches it in-cluster.
             - name: GF_USERS_ALLOW_SIGN_UP
               value: "false"
-            # --- Authelia OIDC (generic_oauth) -----------------------------------------
-            # Grafana derives the OAuth callback from root_url alone and does not vary it by
-            # request Host, so ONE of the two routes can carry the OIDC login. The LAN name
-            # wins: it is the name the `-m ui` suite drives, and sending a LAN browser out to
-            # Cloudflare and back to reach a service on the same switch is a worse default
-            # than the reverse. The public route keeps working — see the login form below.
+            # root_url alone sets the OAuth callback, so only one route (the LAN name) can carry
+            # OIDC login.
             - name: GF_SERVER_ROOT_URL
               value: "https://grafana.local.{{ domain }}/"
             - name: GF_AUTH_GENERIC_OAUTH_ENABLED
@@ -216,36 +207,30 @@ spec:
                 secretKeyRef:
                   name: grafana-admin
                   key: oidc_client_secret
-            # `groups` is what role_attribute_path reads. Drop it and every user lands
-            # Viewer with nothing saying the claim went missing.
+            # `role_attribute_path` reads `groups`; without the scope every user silently lands
+            # Viewer.
             - name: GF_AUTH_GENERIC_OAUTH_SCOPES
               value: "openid profile email groups"
-            # Authelia derives its issuer from the request host, so these three must all be
-            # the LAN portal name — the same one the browser is redirected to. The token and
-            # userinfo calls are made by the Grafana POD, which reaches the name through
-            # Pi-hole and the ingress VIP exactly as the homepage pod reaches its widgets.
+            # Authelia derives its issuer from the request host: all three URLs must use the LAN
+            # portal name.
             - name: GF_AUTH_GENERIC_OAUTH_AUTH_URL
               value: "https://auth.local.{{ domain }}/api/oidc/authorization"
             - name: GF_AUTH_GENERIC_OAUTH_TOKEN_URL
               value: "https://auth.local.{{ domain }}/api/oidc/token"
             - name: GF_AUTH_GENERIC_OAUTH_API_URL
               value: "https://auth.local.{{ domain }}/api/oidc/userinfo"
-            # Paired with `require_pkce: true` on the Authelia client. Set one without the
-            # other and the authorize call is rejected.
+            # Must pair with `require_pkce: true` on the Authelia client, or authorize is rejected.
             - name: GF_AUTH_GENERIC_OAUTH_USE_PKCE
               value: "true"
             - name: GF_AUTH_GENERIC_OAUTH_LOGIN_ATTRIBUTE_PATH
               value: "preferred_username"
-            # The Authelia `admins` group maps to Grafana Admin; every other authenticated
-            # user gets Viewer rather than nothing, so a group change cannot lock someone out
-            # of reading the dashboards.
+            # Authelia `admins` maps to Admin; everyone else gets Viewer, so a group change cannot
+            # lock out.
             - name: GF_AUTH_GENERIC_OAUTH_ROLE_ATTRIBUTE_PATH
               value: "contains(groups[*], 'admins') && 'Admin' || 'Viewer'"
-            # DELIBERATELY ABSENT: GF_AUTH_DISABLE_LOGIN_FORM and auto-login. The public
-            # route grafana.<domain> cannot complete an OAuth round trip while root_url
-            # names the LAN host, so the admin form is the public path in and the
-            # break-glass path when Authelia itself is down. Reach it at
-            # /login?disableAutoLogin= if auto-login is ever turned on.
+            # DELIBERATELY ABSENT: GF_AUTH_DISABLE_LOGIN_FORM and auto-login. The public route
+            # cannot complete OAuth while root_url names the LAN host, so the form is its way in and
+            # the break-glass path.
             - name: GF_ANALYTICS_REPORTING_ENABLED
               value: "false"
             - name: GF_ANALYTICS_CHECK_FOR_UPDATES
@@ -258,10 +243,7 @@ spec:
               mountPath: /etc/grafana/provisioning/datasources
             - name: grafana-provisioning-dashboards
               mountPath: /etc/grafana/provisioning/dashboards
-            # The provisioner re-reads each board ConfigMap here every updateIntervalSeconds, so
-            # a board edit rolls nothing. These carry no checksum/config, and the renderer's
-            # checksum/restart skips them (RELOADED_IN_PLACE in
-            # scripts/renderer/renderer_lib/restart.py).
+            # The provisioner re-reads board ConfigMaps in place; they carry no checksum/config.
 {% for folder in observability_dashboard_folders %}
             - name: dashboards-{{ folder | lower }}
               mountPath: /var/lib/grafana/dashboards/homelab/{{ folder }}
@@ -282,20 +264,12 @@ spec:
             periodSeconds: 30
             timeoutSeconds: 5
             failureThreshold: 6
-          # 2Gi. Idle is ~390 MiB, but a browser opening four dashboards OOMKills the container
-          # (exit 137) at 512Mi and at 1Gi, with nothing but ordinary 200s in the log, so the
-          # pod reads CrashLoopBackOff for a memory ceiling rather than a fault. Four dashboards
-          # is an ordinary afternoon, and the working set peaks at 1084 MiB, past 1Gi.
-          # daniel-box carries 28.2 GiB and sits at 44%, so the headroom is free. The request is
-          # the 7-day p95 working set (563Mi) rounded up to 64Mi.
+          # 2Gi: a browser opening four dashboards OOMKills (exit 137) at 512Mi and 1Gi with a clean
+          # log.
 {{ container_resources(cpu_limit='1', mem_limit='2Gi', cpu_request='50m', mem_request='576Mi') }}
       volumes:
-        # The provisioning ConfigMap carries both files, but they mount at different paths,
-        # so it is projected twice with a subPath-style item selector rather than mounted
-        # whole — a whole-ConfigMap mount would put datasources.yaml into the dashboards
-        # provisioning directory, where Grafana tries to parse it as a dashboard provider.
-        # Projected with the warehouse datasource, which carries a password and so lives in a
-        # Secret (grafana-warehouse-datasource-secret.yaml.j2) rather than this ConfigMap.
+        # Projected, not mounted whole: a whole mount puts datasources.yaml where dashboards are
+        # parsed.
         - name: grafana-provisioning-datasources
           projected:
             sources:
@@ -315,10 +289,7 @@ spec:
             items:
               - key: dashboards.yaml
                 path: dashboards.yaml
-        # One ConfigMap per dashboard folder, not one for all of them. A ConfigMap is capped at
-        # 1 MiB and the set is ~730 KB, with Infrastructure alone at 538 KB — a single object
-        # would silently stop fitting the first time a large board is added. grafana-dashboards.yaml.j2 renders them from the JSON files, one per
-        # `observability_dashboard_folders` entry.
+        # One ConfigMap per folder: a ConfigMap caps at 1 MiB and Infrastructure alone is 538 KB.
 {% for folder in observability_dashboard_folders %}
         - name: dashboards-{{ folder | lower }}
           configMap:

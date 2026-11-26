@@ -24,9 +24,9 @@ groups:
             No up{job="loki-homelab"} series exists, so the loki-homelab job is gone from
             prometheus.yml or its target was renamed. No rule that reads the homelab Loki's
             metrics can fire until the series is back.
-      # Each evaluation is a Loki query, so this also catches a Loki that answers its scrape
-      # but fails its queries. A one-off failure
-      # holds the 10m increase above zero for 10 minutes, less than the 15m hold, so only a
+      # Each evaluation is a Loki query, so this catches a Loki that answers its scrape but fails
+      # queries.
+      # A one-off failure holds the 10m increase above zero for 10m, under the 15m hold, so only a
       # recurring failure fires.
       - alert: LokiRulerEvaluationFailing
         expr: >-
@@ -42,10 +42,9 @@ groups:
             The homelab-logs group has failed an evaluation in each of the last 15 minutes'
             10-minute windows, so its log rules are not being checked. Each evaluation is a
             Loki query: read the loki-homelab pod's log for the query error.
-      # The `up == 1` conjunct leaves a Loki outage to
-      # ScrapeTargetDown. The last-evaluation gauge reads 0 from a Loki start until the
-      # group's first evaluation, which waits for the group's offset inside its 5m interval: at
-      # most one interval plus startup. The 10m hold, two intervals, outlasts that gap.
+      # The `up == 1` conjunct leaves a Loki outage to ScrapeTargetDown. The last-evaluation gauge
+      # reads 0 from start until the group's first evaluation (at most one 5m interval plus
+      # startup); the 10m hold outlasts that.
       - alert: LokiRulerNotEvaluating
         expr: >-
           (

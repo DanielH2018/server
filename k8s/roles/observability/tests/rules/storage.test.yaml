@@ -9,8 +9,6 @@ rule_files:
   - ../../files/rules/storage.yaml
 evaluation_interval: 1m
 tests:
-  # The zero-series case: no input at all, so the longhorn job is missing from the config.
-  # LonghornVolumesMissing fires through its first arm once its 15m hold has passed.
   - interval: 1m
     input_series: []
     alert_rule_test:
@@ -46,8 +44,6 @@ tests:
                 per node.
               runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#pvccoverageshortfall
 
-  # The scrape works and the volume series are gone. LonghornVolumesMissing fires through its
-  # second arm. A failed scrape (up 0) leaves it quiet: ScrapeTargetDown owns that page.
   - interval: 1m
     input_series:
       - series: 'up{job="longhorn", instance="10.42.0.10:9500"}'
@@ -337,8 +333,6 @@ tests:
         alertname: LonghornSnapshotNearCap
         exp_alerts: []
 
-  # The capped claim has a capacity series and no snapshot series: LonghornSnapshotCapUnmonitored
-  # fires after its 15m hold.
   - interval: 1m
     input_series:
       - series: 'longhorn_volume_capacity_bytes{job="longhorn", volume="pvc-jf", pvc="jellyfin-config"}'
@@ -362,8 +356,6 @@ tests:
                 series, so its snapshot headroom is UNMONITORED, which is not the same as empty.
               runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#longhornsnapshotcapunmonitored
 
-  # A CSI global mount remounted read-only fires after the 1m hold. A writable mount and a
-  # read-only mount outside the plugins directory do not.
   - interval: 1m
     input_series:
       - series: 'node_filesystem_readonly{job="node", instance="box:9100", mountpoint="/var/lib/kubelet/plugins/kubernetes.io/csi/driver.longhorn.io/abc/globalmount"}'
@@ -396,8 +388,6 @@ tests:
                 detach, and scale back.
               runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#kubeletcsimountreadonly
 
-  # A remount that clears after 3 minutes still pages while it lasts. It resolves once the
-  # mount is writable again.
   - interval: 1m
     input_series:
       - series: 'node_filesystem_readonly{job="node", instance="server:9100", mountpoint="/var/lib/kubelet/plugins/kubernetes.io/csi/driver.longhorn.io/ghi/globalmount"}'

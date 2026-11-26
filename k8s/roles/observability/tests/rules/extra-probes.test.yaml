@@ -10,8 +10,6 @@ rule_files:
   - ../../files/rules/extra-probes.yaml
 evaluation_interval: 1m
 tests:
-  # The zero-series case: no input at all, so both scrape jobs are missing from the config.
-  # ExtraProbesMissing fires once per job after its 10m hold, and not before.
   - interval: 1m
     input_series: []
     alert_rule_test:
@@ -41,8 +39,6 @@ tests:
                 prometheus.yml or renders no target. No probe in it can fire until the series is
                 back.
 
-  # A warning-tier probe fails from minute 3. ExtraProbeFailed fires once its 2m hold has
-  # passed, and the critical rule, which selects the other tier, stays quiet.
   - interval: 1m
     input_series:
       - series: 'probe_success{job="blackbox-extra", instance="http://10.0.0.139:51821", service="wg-easy", module="http_2xx", page_tier="warning"}'
@@ -78,8 +74,6 @@ tests:
         alertname: ExtraProbesMissing
         exp_alerts: []
 
-  # The critical-tier edge all-clear fails from minute 3. ExtraProbeFailedCritical fires, and
-  # the warning rule stays quiet.
   - interval: 1m
     input_series:
       - series: 'probe_success{job="blackbox-extra", instance="https://edge-selfcheck.local.example.com/.well-known/traefik-edge-selfcheck", service="traefik", module="http_body_OK", page_tier="critical"}'
@@ -110,8 +104,6 @@ tests:
         alertname: ExtraProbeFailed
         exp_alerts: []
 
-  # A Pi port closes at minute 3 and stays closed. PiPortDead fires after its 10m hold and not
-  # before.
   - interval: 1m
     input_series:
       - series: 'probe_success{job="blackbox-pi-ports", instance="10.0.0.139:51821", service="wg-easy", module="tcp_connect"}'

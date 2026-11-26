@@ -463,8 +463,6 @@ tests:
                 observability: Prometheus holds fewer than 11 DaemonSets from kube-state-metrics.
               description: "11 is the estate's DaemonSet count, fixed in the rule, so a DaemonSet has gone or kube-state-metrics stopped collecting daemonsets. Held 5 minutes where the bridge paged one sample."
 
-  # Every input family present: no zero-series alert fires. Each case after this one drops one
-  # family from this list and asserts the alert that family's absence fires.
   - interval: 1m
     input_series:
       - &unavailable
@@ -537,8 +535,6 @@ tests:
                 observability: Prometheus holds fewer than 11 DaemonSets from kube-state-metrics.
               description: "11 is the estate's DaemonSet count, fixed in the rule, so a DaemonSet has gone or kube-state-metrics stopped collecting daemonsets. Held 5 minutes where the bridge paged one sample."
 
-  # kube_node_status_allocatable has no series. The GPU alert cannot tell this from a healthy
-  # cluster, so it stays silent and the node alert pages instead.
   - interval: 1m
     input_series: [*unavailable, *daemonset_unavailable, *spec, *available, *updated, *restarts, *pod_owner, *replicaset_owner, *deployment_labels, *daemonset_labels]
     alert_rule_test:
@@ -644,8 +640,6 @@ tests:
               summary: 'observability: Prometheus holds no kube_daemonset_labels series.'
               description: "An alert or mapping in k8s-workloads that reads kube_daemonset_labels evaluates to nothing. Check kube-state-metrics' --resources and its scrape job's metric_relabel_configs."
 
-  # A dead kube-state-metrics: no input series at all. Every per-workload alert goes quiet, and
-  # the four zero-series alerts fire in their place, all with service="observability".
   - interval: 1m
     input_series: []
     alert_rule_test:

@@ -5,8 +5,6 @@ rule_files:
   - ../../files/rules/loki-homelab.yaml
 evaluation_interval: 1m
 tests:
-  # The zero-series case: no input at all, so the scrape job is missing from the config.
-  # LokiHomelabMetricsMissing fires once its 10m hold has passed, and not before.
   - interval: 1m
     input_series: []
     alert_rule_test:
@@ -27,8 +25,6 @@ tests:
                 prometheus.yml or its target was renamed. No rule that reads the homelab Loki's
                 metrics can fire until the series is back.
 
-  # A failed scrape. The job still exists, so LokiHomelabMetricsMissing stays quiet.
-  # ScrapeTargetDown pages the failed scrape (scrape-targets.test.yaml).
   - interval: 1m
     input_series:
       - series: 'up{job="loki-homelab", instance="loki-homelab.homelab.svc:3100"}'
@@ -48,8 +44,6 @@ tests:
         alertname: LokiHomelabMetricsMissing
         exp_alerts: []
 
-  # The ruler fails an evaluation every 5m. The 10m increase never falls to zero, so
-  # LokiRulerEvaluationFailing fires once its 15m hold has passed.
   - interval: 1m
     input_series:
       - series: 'loki_prometheus_rule_evaluation_failures_total{job="loki-homelab", instance="loki-homelab.homelab.svc:3100", user="fake", rule_group="/loki/rules-scratch/fake/homelab-logs.yaml;homelab-logs"}'
@@ -75,8 +69,6 @@ tests:
                 10-minute windows, so its log rules are not being checked. Each evaluation is a
                 Loki query: read the loki-homelab pod's log for the query error.
 
-  # One failed evaluation holds the increase above zero for less than the 15m hold, so it
-  # never fires.
   - interval: 1m
     input_series:
       - series: 'loki_prometheus_rule_evaluation_failures_total{job="loki-homelab", instance="loki-homelab.homelab.svc:3100", user="fake", rule_group="/loki/rules-scratch/fake/homelab-logs.yaml;homelab-logs"}'
@@ -106,8 +98,6 @@ tests:
         alertname: LokiRulerNotEvaluating
         exp_alerts: []
 
-  # The group stopped evaluating at 10m while Loki answers its scrape. The gauge is older than
-  # 10 minutes from 21m, so the alert fires after its 10m hold.
   - interval: 1m
     input_series:
       - series: 'up{job="loki-homelab", instance="loki-homelab.homelab.svc:3100"}'
@@ -164,8 +154,6 @@ tests:
                 the ruler, and compare `probe.py metric loki_prometheus_rule_group_rules` with the
                 rule_group this alert selects.
 
-  # Loki is down, so the ruler's series are gone. That is ScrapeTargetDown's condition, and the
-  # `up == 1` conjunct keeps LokiRulerNotEvaluating from paging it a second time.
   - interval: 1m
     input_series:
       - series: 'up{job="loki-homelab", instance="loki-homelab.homelab.svc:3100"}'
@@ -227,8 +215,6 @@ tests:
       - series: 'loki_prometheus_notifications_errors_total{job="loki-homelab", instance="loki-homelab.homelab.svc:3100", user="fake", alertmanager="http://alertmanager.observability.svc:9093/api/v2/alerts"}'
         values: '4x9 0x4 1x30'
     alert_rule_test:
-      # Both steps sit inside the 15m window from 15m to 24m, so without resets() the
-      # alert would be firing at 21m.
       - eval_time: 21m
         alertname: LokiRulerNotificationsFailing
         exp_alerts: []

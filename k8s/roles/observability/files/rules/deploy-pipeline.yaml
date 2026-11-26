@@ -11,9 +11,9 @@
 groups:
   - name: deploy-pipeline
     rules:
-      # A hold stops every promotion until it clears, and only the operator clears one while the
-      # revert rule stays off. The 15m hold rides over a hold that settle writes and the next run
-      # clears. Its escalate label sends it to Alertmanager's daily repeat rather than every 6h.
+      # A hold stops every promotion until the operator clears it; the 15m hold rides over a hold
+      # that settle writes and the next run clears.
+      # `escalate` sends it to Alertmanager's daily repeat.
       - alert: DeployHoldActive
         expr: homelab_deploy_hold_active{job="deploy-pipeline"} == 1
         for: 15m
@@ -59,9 +59,8 @@ groups:
             promote.yml`; docs/flux-deploy-plane.md, The deploy-pipeline alerts, covers a run
             that never settles or ends without its settle job.
           runbook_url: https://docs.local.daniel-hunter.com/flux-deploy-plane/#the-deploy-pipeline-alerts
-      # promote writes PROD_DIGEST each time it moves prod, so a digest that differs for longer
-      # than the gap between a move and its write, plus one exporter cycle, means prod moved
-      # some other way. Flux follows prod, so whatever moved it is what production runs.
+      # promote writes PROD_DIGEST each time it moves prod, so a digest that differs longer than a
+      # move-to-write gap plus one exporter cycle means prod moved some other way.
       - alert: ProdMovedOutsidePromote
         expr: homelab_deploy_prod_digest_match{job="deploy-pipeline"} == 0
         for: 15m
@@ -77,12 +76,10 @@ groups:
             probe.py landing's prod line with gh variable get PROD_DIGEST, and read the
             package's version history for who pushed the tag.
           runbook_url: https://docs.local.daniel-hunter.com/flux-deploy-plane/#the-deploy-pipeline-alerts
-      # The family's zero-series alert (M1 convention 2). The first arm pages a missing scrape
-      # job, which no other check can see. The second pages a scrape that works but lacks any one
-      # gauge: a failed GitHub or GHCR read, an empty token, or a deleted variable each export no
-      # series for what they feed, never a 0. It is conjoined with up == 1, because
-      # ScrapeTargetDown already pages a failed scrape of the job (M1 convention 5). The 15m
-      # hold rides over two failed cycles.
+      # Missing-series arm: a failed GitHub or GHCR read, an empty token or a deleted variable
+      # exports no series, never a 0.
+      # Conjoined with up == 1 so ScrapeTargetDown owns a failed scrape; the 15m hold rides over two
+      # failed cycles.
       - alert: DeployPipelineExporterAbsent
         expr: >-
           absent(up{job="deploy-pipeline"})
