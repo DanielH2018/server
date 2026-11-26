@@ -255,7 +255,6 @@ def write_check_textfile(
     write_textfile(path, "\n".join([*lines, *detail]) + "\n")
 
 
-_RFC3339_FMT = "%Y-%m-%dT%H:%M:%SZ"
 _FRACTIONAL_SECONDS_RE = re.compile(r"\.\d+")
 
 
@@ -272,8 +271,8 @@ def rfc3339_to_epoch(ts: str) -> float | None:
     seconds-precision UTC with a trailing Z). `date -d` accepts fractional seconds and a numeric
     UTC offset for either, so this must too, or a sub-second stamp reads as unparseable and pages
     a false RED on every tick. Fractional digits are dropped (bash's `date -d` truncates them
-    too, and every caller here compares at whole-second resolution) before falling back to the
-    strict seconds-only path for plain `...Z` input.
+    too, and every caller here compares at whole-second resolution) before parsing. A stamp with
+    no UTC offset is unparseable, because `fromisoformat` reads a bare date as naive local time.
 
     Callers that need bash's `|| echo 0` sentinel behaviour (an epoch of exactly 0 treated as
     unparseable, since no real Longhorn object carries a 1970-01-01 timestamp) apply that on top
@@ -283,17 +282,10 @@ def rfc3339_to_epoch(ts: str) -> float | None:
         return None
     normalized = _FRACTIONAL_SECONDS_RE.sub("", ts)
     try:
-        return _dt.datetime.fromisoformat(normalized.replace("Z", "+00:00")).timestamp()
-    except ValueError:
-        pass
-    try:
-        return (
-            _dt.datetime.strptime(normalized, _RFC3339_FMT)
-            .replace(tzinfo=_dt.timezone.utc)
-            .timestamp()
-        )
+        when = _dt.datetime.fromisoformat(normalized)
     except ValueError:
         return None
+    return when.timestamp() if when.tzinfo else None
 
 
 def parse_env_file(path: str) -> dict[str, str]:
