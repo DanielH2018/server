@@ -356,7 +356,7 @@ def test_a_kit_whose_nfpm_differs_from_its_pin_is_refused_naming_the_file(tmp_pa
     assert [c for c in host.apt_calls() if c.startswith("install")] == []
 
 
-SCANS = "rkhunter --propupd --nocolors", "aideinit -y"
+SCANS = "rkhunter --propupd --nocolors", "aideinit -y -c /usr/lib/homelab/aide.conf"
 MASK = "systemctl mask --now dailyaidecheck.timer"
 RKHUNTER_DB, AIDE_DB = "var/lib/rkhunter/db/rkhunter.dat", "var/lib/aide/aide.db"
 

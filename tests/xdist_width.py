@@ -65,7 +65,10 @@ Three cases leave xdist's own choice alone, by returning None:
 - An argument is the repository root, whose walk would reach `.venv`.
 - The weight table is missing or unreadable.
 
-`-n <N>` and `-n0` never reach this hook: xdist asks it only for `auto`.
+xdist asks the width hook only for `auto`, so an explicit `-n <N>` never reaches it.
+`pytest_cmdline_main` bounds that case instead: it lowers xdist's `--maxprocesses` to the
+ceiling before xdist reads it, so `-n 8` under a ceiling of 4 starts 4 workers. A run that
+needs more raises `PYTEST_XDIST_AUTO_NUM_WORKERS` for itself. `-n0` stays 0.
 """
 
 import json
@@ -158,3 +161,15 @@ def pytest_xdist_auto_num_workers(config: pytest.Config) -> int | None:
     if modules is None or weights is None:
         return None
     return workers_for(module_seconds(modules, root, weights), ceiling())
+
+
+@pytest.hookimpl(wrapper=True)
+def pytest_cmdline_main(config: pytest.Config):
+    """Bound an explicit `-n` to the ceiling through xdist's `--maxprocesses`.
+
+    A wrapper, because xdist's own `tryfirst` impl turns `-n` into workers and a plain impl of
+    this plugin's would run after it.
+    """
+    given = getattr(config.option, "maxprocesses", None)
+    config.option.maxprocesses = min(given or ceiling(), ceiling())
+    return (yield)

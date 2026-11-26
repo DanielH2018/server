@@ -163,19 +163,12 @@ extras from `unattended_upgrades_origins_patterns`, which is `[]` for security-o
 - **The Pi's swap file is bring-up, not tuning.** Step 4 of `hosts/bootstrap-host.sh` creates
   it, ahead of its first heavy apt, because heavy apt on a 512 MB Zero 2 W OOMs without disk
   swap. The Pi's package depends on `linux-raspi` and `wireguard`.
-- **The AIDE exclusions deploy as `/etc/aide/aide.conf.d/98_aide_local`, with no dot.**
-  Debian's `aide.conf` includes that directory with the name pattern `^[a-zA-Z0-9_-]+$`, so a
-  dotted name is skipped silently and `aide --config-check` still passes. The file was
-  `98_aide_local.conf` from 2026-05-31 to 2026-10-20, and AIDE read none of its rules: the
-  weekly check hashed Longhorn replicas, kubelet volumes and every container root filesystem
-  (#5785). `aide --path-check=f:<path>` shows whether a path is in or out.
-- Two templates carry host-specific config: `templates/98_aide_local.conf.j2`, the AIDE
-  exclusions for high-churn paths (the Pi's Docker tree, app data, pseudo filesystems, on
-  the cluster nodes the Longhorn, containerd, etcd, pod-volume, CSI-mount and pod-log paths,
-  every running container's root filesystem mounted under `/run/k3s/`, daniel-box's
-  `/srv/media` library and the swap files, and on every host the Claude Code worktrees and the
-  per-user caches), and `templates/fail2ban_homelab.conf.j2`, the fail2ban
-  jail. Pi-only tasks are individually `when:`-guarded rather than block-scoped, so a server run
+- **AIDE reads the `aide-scan` component's own `/usr/lib/homelab/aide.conf`, never Debian's.**
+  It selects only the trees the check pages on, so the high-churn paths (Longhorn, containerd,
+  kubelet volumes, container root filesystems, worktrees and caches) are never scanned, and
+  no exclusion list has to name them. `aide --path-check=f:<path>` with that `--config`
+  shows whether a path is in or out.
+- `templates/fail2ban_homelab.conf.j2`, the fail2ban jail, carries host-specific config. Pi-only tasks are individually `when:`-guarded rather than block-scoped, so a server run
   simply skips them.
 
 ## Setup-plane drift reader (retired in H7.63)

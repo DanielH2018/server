@@ -163,8 +163,7 @@ def _run_check(
     """Render aide-check.sh and run it with aide stubbed to print `report` and exit `rc`.
 
     Only absolute paths are repointed: the lock file, the nice/ionice/aide invocation, the AIDE database directory, and the dpkg
-    database and filesystem root `_fake_host` writes. The aide stub writes `fd8` to `tmp_path / "ran"` when
-    it inherits the lock's descriptor. `lock_held` holds the lock from this
+    database and filesystem root `_fake_host` writes. The aide stub creates `tmp_path / "ran"`. `lock_held` holds the lock from this
     process for the run, as a scan still running from the previous week would. The aide stub
     writes aide.db.new as `--update` does; `baseline` says whether aide.db exists beforehand.
     `rewrite` replaces a path on the fake host with a regular file holding the given content, and
@@ -258,7 +257,7 @@ def _run_check(
     report_file.write_text(report)
     aide = write_exec(
         tmp_path / "aide",
-        f'{{ [ -e /dev/fd/8 ] && echo fd8; true; }} > "$AIDE_RAN"\ncat {report_file}\n'
+        f': > "$AIDE_RAN"\ncat {report_file}\n'
         + "".join(
             f"printf '%s' {shlex.quote(text)} >> {fs / path.lstrip('/')}\n"
             for path, text in (during_scan or {}).items()

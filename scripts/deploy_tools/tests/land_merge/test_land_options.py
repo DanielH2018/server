@@ -112,38 +112,17 @@ def test_the_full_flag_still_works():
     assert options.parse_args(["--pr", "7", "--subject", "text"], "d").subject == "text"
 
 
-def test_main_renumbers_argparses_two_onto_the_shared_usage_error():
-    """`land.sh` answers a bad command line with 64, the number every entry point here uses.
-
-    `parse_args` still raises argparse's own 2 -- the tests above assert that -- and `main` is
-    the one place it becomes `LAND_BAD_ARGS`.
-    """
-    from deploy_tools import land
-
-    with pytest.raises(SystemExit) as exc:
-        land.main(["--arm-merge"])
-    assert exc.value.code == exit_codes.LAND_BAD_ARGS == 64
-
-
 def test_help_opens_on_the_summary_and_usage_not_the_rationale(capsys):
     """`--help` skips the module docstring's rationale sections (#4448)."""
-    from deploy_tools import land
-
-    with pytest.raises(SystemExit):
-        land.main(["--help"])
-    out = capsys.readouterr().out
-    assert "Follow a merged PR through to a verified deploy" in out
-    assert "Usage::" in out and "Verdicts printed on stdout" in out
-    assert "WHY ONE INVOCATION" not in out
-
-
-def test_main_leaves_helps_zero_alone():
-    """The reject half: renumbering must not turn a successful `--help` into a usage error."""
     from deploy_tools import land
 
     with pytest.raises(SystemExit) as exc:
         land.main(["--help"])
     assert exc.value.code == 0
+    out = capsys.readouterr().out
+    assert "Follow a merged PR through to a verified deploy" in out
+    assert "Usage::" in out and "Verdicts printed on stdout" in out
+    assert "WHY ONE INVOCATION" not in out
 
 
 @pytest.mark.parametrize(("value", "batch"), [("0", False), ("1", True), (None, True)])

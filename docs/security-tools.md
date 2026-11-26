@@ -24,7 +24,7 @@ No verdict for a week and 2 hours also pages, through `RkhunterScanNotReporting`
 
 Every warning pages (#4638). Before that change, every host warned every week from two benign causes. rkhunter reported `/etc/.updated` and `/etc/.resolv.conf.systemd-resolved.bak` as hidden files on all three hosts. It also reported `PermitRootLogin` unset on daniel-pi, because rkhunter reads only the main `/etc/ssh/sshd_config` and the Pi hardens a drop-in. `initial_setup` renders `/etc/rkhunter.conf.local` to allowlist both causes, so a healthy week has no warnings. The `DECIDED:` marker in `hosts/components/integrity-scans/templates/rkhunter-check.sh.j2` holds the evidence. The script's verdict goes to syslog tagged `rkhunter-check` as `status=<up|down> <message>`.
 
-To clear a warning, find its cause first. rkhunter reports a user or group added to `/etc/passwd` or `/etc/group` once, the week after a package or the operator adds it. Once you have confirmed the account is yours, run `sudo /usr/lib/homelab/rkhunter-check` again; rkhunter stored the new account list on the run that warned, so the rerun reads UP. A benign warning that recurs every week needs an `ALLOW*` line in `hosts/components/integrity-scans/templates/rkhunter.conf.local.j2`, applied with `--tags rkhunter`.
+To clear a warning, find its cause first. On daniel-pi, rkhunter reports a user or group added to `/etc/passwd` or `/etc/group` once, the week after a package or the operator adds it. On daniel-box and daniel-server, the `aide-scan` component ships `/etc/rkhunter.d/homelab-aide-owns-accounts.conf`, which turns rkhunter's `passwd_changes` and `group_changes` tests off: the AIDE check judges every account change there against the accounts the host package declares. Once you have confirmed the account is yours, run `sudo /usr/lib/homelab/rkhunter-check` again; rkhunter stored the new account list on the run that warned, so the rerun reads UP. A benign warning that recurs every week needs an `ALLOW*` line in `hosts/components/integrity-scans/templates/rkhunter.conf.local.j2`, applied with `--tags rkhunter`.
 
 To prove the alert pages, make rkhunter fail to start on one host and run the script by hand. `ionice` then cannot execute it and exits 126 without touching the log, so the verdict goes DOWN within seconds:
 
@@ -74,7 +74,7 @@ Running it to silence a warning you haven't explained re-blesses whatever caused
 
 **Schedule:** Weekly, Monday at 3:00 AM, on daniel-box and daniel-server, whose host packages list the `aide-scan` component. daniel-pi runs no AIDE: a whole-root scan outgrew its 456 MB and the watchdog reset the board twice on 2026-11-12 ([#8084](https://github.com/DanielH2018/server/issues/8084)). `homelab-aide-check.timer` runs `/usr/lib/homelab/aide-check`, which writes the report to syslog tagged `aide` and writes a verdict textfile that `AideCheckFailed` and `AideCheckNotReporting` read. A Kuma tile took the verdict until M6 batch B9 retired it.
 
-Every `aide` command needs `--config=/etc/aide/aide.conf`. AIDE 0.18 has no default config path, so without it the command exits with `ERROR: missing configuration` and checks nothing.
+Every `aide` command needs `--config=/usr/lib/homelab/aide.conf`. AIDE 0.18 has no default config path, so without it the command exits with `ERROR: missing configuration` and checks nothing. That file is the `aide-scan` component's own config, and AIDE reads nothing else: not Debian's `/etc/aide/aide.conf`, and none of the snippets in `/etc/aide/aide.conf.d`. It selects only the trees the check pages on: the system trees, `/etc`, `/var/spool/cron`, root's shell startup files and every `authorized_keys`. Homes, `/var`, `/run` and `/srv` are not scanned. Its groups and the few relaxed rules it carries are Debian's, copied verbatim, so the baseline's entries keep their attributes. `hosts/tests/host_checks/test_aide_config.py` holds the selection to the check's paged regexes. `aide --config=/usr/lib/homelab/aide.conf --path-check=f:<path>` shows whether a path is in.
 
 **What the verdict means.** The script runs `aide --update`, reads its exit code (#4594), and classifies each difference against the package database (#4599):
 
@@ -84,8 +84,6 @@ Every `aide` command needs `--config=/etc/aide/aide.conf`. AIDE 0.18 has no defa
 | 1-7 | every one explained, or outside the paged trees | UP, with the counts | advanced |
 | 1-7 | at least one no package explains | DOWN, naming the first three | kept |
 | anything else | not read | DOWN, with AIDE's first error line | kept |
-
-A file under `/etc/aide` that a group or anyone can write also reads DOWN, and no scan runs.
 
 No verdict for a week and 6 hours also pages, through `AideCheckNotReporting`, which means the timer stopped running or the scan never finished.
 
@@ -97,7 +95,7 @@ A difference pages when it falls in one of these and no package explains it:
 - An added or changed `/usr/local/bin` entry named like a command a package installs, because root's `PATH` reaches `/usr/local/bin` first. The roles' own scripts there have no such twin and are logged.
 - An entry in any of those, or a package-owned `/etc` file, whose owner, group or permissions changed. A package digest cannot see a mode change. An `install` or `upgrade` entry in `dpkg.log` for a package that owns the path explains the change, but never for a login, privilege or startup file, and for a `homelab-*` package only under `/etc`, because those packages upgrade several times a day. The content is still checked against the package's digest.
 
-Files that package triggers regenerate are explained by the `dpkg.log` entries since the previous baseline, not by a package run of any kind. The initial RAM disk, the kernel links and the module index need a kernel, `initramfs-tools` or `kmod` entry. GRUB's files need a GRUB or kernel entry. The EFI loaders under `/boot/efi/EFI/` need a `grub-efi` or `shim` entry. Their inode number is not checked, because vfat assigns new ones at every mount. A compiled `.pyc` needs an entry for the package that owns its source, or for Python itself. Other trigger caches need any package entry. The window opens 6 hours before the previous baseline was written, so a package run during that scan counts. `/boot/grub/grubenv` is the one exact path exempt from the requirement, because GRUB rewrites it at every boot. The top-level links `/bin`, `/sbin` and `/lib*` page unless they point at their `/usr` counterpart. A path at either end of a package diversion (`dpkg-divert`) must match the digest one of the two packages records. Homes, `/var`, `/opt` and the rest of `/usr/local` are logged and never page: the first two change with ordinary use, and the last two hold files that deploys rewrite. The script's header has the full lists, and its `DECIDED:` marker has the measurement behind them.
+Files that package triggers regenerate are explained by the `dpkg.log` entries since the previous baseline, not by a package run of any kind. The initial RAM disk, the kernel links and the module index need a kernel, `initramfs-tools` or `kmod` entry. GRUB's files need a GRUB or kernel entry. The EFI loaders under `/boot/efi/EFI/` need a `grub-efi` or `shim` entry. Their inode number is not checked, because vfat assigns new ones at every mount. A compiled `.pyc` needs an entry for the package that owns its source, or for Python itself. Other trigger caches need any package entry. The window opens 6 hours before the previous baseline was written, so a package run during that scan counts. `/boot/grub/grubenv` is the one exact path exempt from the requirement, because GRUB rewrites it at every boot. The top-level links `/bin`, `/sbin` and `/lib*` page unless they point at their `/usr` counterpart. A path at either end of a package diversion (`dpkg-divert`) must match the digest one of the two packages records. The rest of `/usr/local` is logged and never pages, because deploys rewrite it. Homes, `/var` and `/opt` are not scanned beyond the files listed above. The script's header has the full lists, and its `DECIDED:` marker has the measurement behind them.
 
 Advancing the baseline after every UP run makes each report cover one week. A DOWN keeps the old baseline, so the change stays in every report until someone reviews it.
 
@@ -131,7 +129,7 @@ It refuses when `aide.db` is missing, because a deleted baseline must stay an er
 
 The script logs at most 2000 report lines. A longer report ends with a `report truncated` line. To see the rest, run the check by hand. Its verdict goes to syslog tagged `aide-check` as `status=<up|down> <message>`.
 
-Before the report, the script logs a `report by tree:` count line under `aide-check`, then the 15 trees with the most entries. A tree is the entry's directory, cut to its first three levels. Each tree line carries its added, removed and changed counts, which show where a new exclude in `98_aide_local.conf` would cut the most:
+Before the report, the script logs a `report by tree:` count line under `aide-check`, then the 15 trees with the most entries. A tree is the entry's directory, cut to its first three levels. Each tree line carries its added, removed and changed counts, which show which tree a report's volume comes from:
 
 ```bash
 sudo journalctl -t aide-check --since -7d | grep -A15 'report by tree'
@@ -154,7 +152,7 @@ The verdict stays DOWN until the next run. To clear it, run `sudo /usr/lib/homel
 sudo journalctl -t aide -t aide-check --since -7d
 
 # Run a manual check, which leaves the baseline alone
-sudo aide --config=/etc/aide/aide.conf --check
+sudo aide --config=/usr/lib/homelab/aide.conf --check
 ```
 
 Output shows exactly what changed:
@@ -333,7 +331,7 @@ sudo unattended-upgrade --dry-run --debug
 |---------|---------|
 | Sensitive file modified | `sudo ausearch -k identity` or `-k sshd` |
 | Rootkit / backdoor suspicion | `sudo rkhunter --check` |
-| Unexpected file change | `sudo aide --config=/etc/aide/aide.conf --check` |
+| Unexpected file change | `sudo aide --config=/usr/lib/homelab/aide.conf --check` |
 | `RkhunterScanFailed` | `sudo journalctl -t rkhunter-check -t rkhunter --since -7d` and `/var/log/rkhunter.log` |
 | `AideCheckFailed` | `sudo journalctl -t aide-check -t aide --since -7d` |
 | Unusual commands run as root | `sudo lastcomm` |

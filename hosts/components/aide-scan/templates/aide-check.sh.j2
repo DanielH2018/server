@@ -69,7 +69,8 @@
 #   those upgrade several times a day. Its content is then judged as for any other change.
 # A symlink is explained when it resolves to a package-owned path (alternatives, systemd enable
 # links, /boot/vmlinuz), to a unit in ROLE_WRITTEN, or to /dev/null (a mask), or is one of the
-# two exceptions above. Homes, /var, /opt and the rest of /usr/local are logged and never page.
+# two exceptions above. The rest of /usr/local is logged and never pages. AIDE_CONF scans no
+# other tree: homes, /var, /opt and /srv only for the PERSIST files they hold.
 set -uo pipefail
 
 MODE=check
@@ -100,7 +101,10 @@ REPORT_MAX_LINES=2000
 # How many trees the per-tree count of the report names; its count line covers every tree.
 SUMMARY_TREES=15
 
-# database_in and database_out in Debian's /etc/aide/aide.conf.
+# The component's own config, not Debian's /etc/aide/aide.conf: it scans only the trees this
+# script pages on. AIDE has no default config path.
+AIDE_CONF={{ aide_scan_host_lib_dir }}/aide.conf
+# database_in and database_out in AIDE_CONF.
 AIDE_DIR=/var/lib/aide
 # Read for the package file lists (info/*.list), their digests (info/*.md5sums), the conffile
 # digests (status), which *.md5sums leaves out, and the diversions.
@@ -165,7 +169,7 @@ PKGS_KERNEL='^(linux-(image|modules|generic|raspi|firmware|base)|initramfs-tools
 # grub.cfg and GRUB's modules: update-grub runs from GRUB's and the kernel packages' scripts.
 DERIVED_GRUB='^/boot/grub/'
 PKGS_GRUB='^(grub|os-prober|shim|linux-(image|modules|generic|raspi)|initramfs-tools)'
-# The EFI loaders: grub-install, from the grub-efi and shim packages' scripts. 98_aide_local
+# The EFI loaders: grub-install, from the grub-efi and shim packages' scripts. aide.conf
 # skips their inode, which vfat renumbers at every mount.
 DERIVED_EFI='^/boot/efi/EFI/'
 PKGS_EFI='^(grub-efi|shim)'
@@ -630,26 +634,14 @@ unexplained_entries() {
 
 # Captured whole rather than piped, because a pipeline's exit status is its last command's, which
 # would lose AIDE's. nice and ionice exit with the status of the command they run.
-# --config is required: AIDE 0.18 has no default config path, and a bare `aide --check` exits
-# with "missing configuration" and checks nothing. --update reports exactly as --check
-# does and also writes aide.db.new, which advance_baseline moves into place. A stale aide.db.new
-# from a run nobody accepted goes first, so the database moved is always this run's.
-# 8>&- keeps the lock fd from AIDE's config helpers: AIDE 0.19 fails the run (exit 20) on the
-# leaked-descriptor warning LVM's pvs, vgs and lvs print for it.
+# --update reports exactly as --check does and also writes aide.db.new, which advance_baseline
+# moves into place. A stale aide.db.new from a run nobody accepted goes first, so the database
+# moved is always this run's.
 rm -f "$AIDE_DIR/aide.db.new"
 copy_accounts
 line_edit_paths | "$AIDE_ORIGINALS" seed "$ORIGINALS" "$DPKG_DIR/status" 2>&1 | logger -p daemon.notice -t aide-check
-# AIDE reads every file under /etc/aide as root, and its own ownership test covers only the
-# executable ones. A file another user can write would choose what root runs, so no scan starts.
-WRITABLE=$(find "$FS_ROOT/etc/aide" ! -type l -perm /022 2>/dev/null | head -n 3 | paste -sd ' ' -)
-if [[ -n "$WRITABLE" ]]; then
-  STATUS=down
-  MSG="no scan ran, because the AIDE config is group- or world-writable: ${WRITABLE}; read each file, then run chmod go-w on it"
-  report || exit 1
-  exit 0
-fi
 START=$SECONDS
-REPORT=$(/usr/bin/nice -n19 /usr/bin/ionice -c3 /usr/bin/aide --config=/etc/aide/aide.conf --update 2>&1 8>&-)
+REPORT=$(/usr/bin/nice -n19 /usr/bin/ionice -c3 /usr/bin/aide --config="$AIDE_CONF" --update 2>&1)
 RC=$?
 RUN_TIME="$(((SECONDS - START) / 60))m"
 
@@ -691,7 +683,7 @@ TREES=$(tree_summary)
 REPORT_LINES=$(printf '%s\n' "$REPORT" | wc -l)
 printf '%s\n' "$REPORT" | awk -v max="$REPORT_MAX_LINES" 'NR <= max' | logger -t aide
 if ((REPORT_LINES > REPORT_MAX_LINES)); then
-  logger -t aide "report truncated: logged ${REPORT_MAX_LINES} of ${REPORT_LINES} lines; run aide --config=/etc/aide/aide.conf --check by hand for the rest"
+  logger -t aide "report truncated: logged ${REPORT_MAX_LINES} of ${REPORT_LINES} lines; run aide --config=${AIDE_CONF} --check by hand for the rest"
 fi
 
 # One count from the report's Summary block. The match requires a number after the colon,

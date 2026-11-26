@@ -273,8 +273,11 @@ come from Prometheus, and the pressure and fault rows are two-minute rates:
 - **`HostMemoryAvailableLow` fired from 15:13 to 15:21, and a pod was OOM-killed inside it.**
   That is the condition the ruling above set for systemd-oomd on `user.slice`
   ([#10000](https://github.com/DanielH2018/server/issues/10000)).
-- **The worker cap does not reach these sessions.** `PYTEST_XDIST_AUTO_NUM_WORKERS` is unset in
-  an `ssh host cmd` shell, and `pytest -n 8` sets its own count anyway.
+- **The worker cap did not reach these sessions.** `PYTEST_XDIST_AUTO_NUM_WORKERS` was unset in
+  an `ssh host cmd` shell, because `pam_env` reads no `environment.d` file, and `pytest -n 8` set
+  its own count. An sshd `SetEnv` drop-in carries the cap to every ssh session, and
+  `tests/xdist_width.py` lowers an explicit `-n` to it
+  ([#10127](https://github.com/DanielH2018/server/issues/10127)).
 
 The OOM bias alone cannot keep k3s running. The first exit came 92 seconds before the first OOM
 kill. The operator decides what keeps k3s in memory

@@ -3,8 +3,8 @@
 The package runs a `launch --review` batch: the implementer, the review, the fix round and
 the landing (`review.py` has the phases and why). Everything else under this
 directory serves `Pipeline` and is private to the package.
-`scripts/tests/test_scripts_import_direction.py` refuses a production module outside it that
-imports any other module here.
+The `protected` import-linter contract in `pyproject.toml` refuses a production module outside
+it that imports any other module here.
 """
 
 from dev.fanout_lib.review.batch_run import STATE_DIR
