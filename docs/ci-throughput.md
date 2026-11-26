@@ -139,7 +139,7 @@ To rerun only the tests a local edit can affect, install the `local` dependency 
 run testmon:
 
 ```bash
-TESTMON_DATAFILE=/tmp/testmondata uv run --group local pytest tests --testmon --testmon-forceselect
+TESTMON_DATAFILE="/tmp/testmondata-$(basename "$PWD")" uv run --group local pytest tests --testmon --testmon-forceselect
 ```
 
 CI never loads testmon, because `local` is not in `default-groups` and the recorded table
@@ -155,8 +155,9 @@ above stays the CI selector. Never pass `--tmnet`.
 - **The pin.** `pyproject.toml` caps testmon below 2.4.0, which shipped on 2026-11-25.
 - **Why `--testmon-forceselect`.** `addopts` carries `-m 'not ui and not image'`, and a
   `-m` expression disables testmon's selection unless this flag is set.
-- **Keep the data file outside the checkout.** `TESTMON_DATAFILE` points at a path under
-  `/tmp`, so the recording is not committed and each worktree can keep its own.
+- **One data file per worktree, outside the checkout.** `TESTMON_DATAFILE` names a path
+  under `/tmp` that ends in the worktree's directory name. The recording is not
+  committed, and a session in another worktree never selects against it.
 
 ## A nightly sweep runs every module
 
