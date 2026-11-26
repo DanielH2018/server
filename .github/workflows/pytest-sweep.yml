@@ -56,11 +56,14 @@ jobs:
       - uses: $/.github/actions/pytest-tools
 
       # No file arguments, so pytest collects `testpaths` from pyproject.toml: the census
-      # ci.yml's legs split.
+      # ci.yml's legs split. `--with pytest-randomly` shuffles the order for this run only, so
+      # a test that depends on an earlier test's state fails here and in no leg. The plugin
+      # prints `Using --randomly-seed=N` in the log's header, and a rerun with
+      # `--randomly-seed=N` reproduces that order.
       - name: Run the whole test suite
         run: |
           set -euo pipefail
-          uv run python -m pytest --github-report | tee "$RUNNER_TEMP/sweep.log"
+          uv run --with pytest-randomly python -m pytest --github-report | tee "$RUNNER_TEMP/sweep.log"
 
       # `-m image` replaces addopts' deselection. No paths: collecting the tree costs about
       # 25 seconds and finds a marked test wherever it lives. It runs after a red suite too,
