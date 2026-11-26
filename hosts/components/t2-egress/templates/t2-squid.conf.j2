@@ -7,21 +7,8 @@
   {"name": "am", "host": "alertmanager.local." ~ domain, "paths": "^/api/v2/(alerts|silences)(\\?|$)"},
   {"name": "loki", "host": "loki-homelab.local." ~ domain, "paths": "^/loki/api/v1/(labels|query_range)(\\?|$)"},
 ] -%}
-# The fence in t2-egress.nft lets the session uids reach this port and nothing else, so this
-# allowlist is everything a session can reach. Anything it does not admit gets a 403, which the
-# access log records. The hosts are literals here, not inventory values, so no host_vars entry
-# widens the list. They are what the B3-1 shadow run measured on 2026-11-19, as the operator ruled.
-#
-# Two kinds of request pass:
-# - A CONNECT to an outside host on its port. squid cannot see inside the tunnel.
-# - A plain-HTTP GET to an in-cluster read host, on that host's paths. squid itself opens the TLS
-#   connection to Traefik, with the host's own name as SNI and Host, so the session cannot pick
-#   another route behind the same VIP. No `.local` name is ever a CONNECT destination, because
-#   a tunnel to Traefik's VIP would let the session choose any route inside it.
-# The observability Loki, which holds the T1 transcripts, is on neither list.
-#
-# Its logs go to files under /var/log/squid only. Alloy ships none of them, and the unit's drop-in
-# starts squid without -s, so no request text a session shaped reaches syslog or loki-homelab (I6).
+# Literal hosts, so no host_vars entry widens the list. Logs stay in /var/log/squid (no -s). No
+# .local name is a CONNECT destination: a tunnel to Traefik's VIP lets a session pick any route.
 
 http_port {{ t2_egress_proxy }}
 
@@ -51,12 +38,8 @@ http_access allow loopback read_method {{ read.name }}_host {{ read.name }}_path
 {% endfor %}
 http_access deny all
 
-# Each read host goes to its own peer over TLS, which sends the peer's name as SNI and verifies
-# Traefik's certificate. forceddomain rewrites the Host header to the peer's name, so a session's
-# own Host header cannot steer Traefik to another route. The OpenSSL build is required: the
-# GnuTLS one sends no SNI to a peer, and Traefik answers 421.
-# All three peers share Traefik's VIP, and squid pools server connections by address, so a
-# kept connection opened for one host would carry another host's request: none is kept.
+# forceddomain rewrites Host to the peer's name, so a session cannot steer Traefik to another route.
+# The peers share Traefik's VIP and squid pools connections by address, so none are kept.
 server_persistent_connections off
 {% for read in reads %}
 cache_peer {{ read.host }} parent 443 0 originserver no-query no-digest tls forceddomain={{ read.host }} name={{ read.name }}

@@ -149,8 +149,8 @@ class CheckoutSync:
             self.write_prom(exc.reason, dirty)
             return 0
         except RuntimeError as exc:
-            # A git error, most often a fetch GitHub did not answer. No verdict is written, so
-            # a failure that persists ages out the check's deadline instead of paging every run.
+            # A git error writes no verdict, so a persistent failure ages out the check's deadline
+            # instead of paging every run.
             log(f"no verdict: {exc}", err=True)
             return 0
         self.write_prom(None, dirty)

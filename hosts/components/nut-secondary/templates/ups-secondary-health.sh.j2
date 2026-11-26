@@ -51,8 +51,8 @@ source /usr/lib/homelab/homelab-check-lib.sh || {
   exit 1
 }
 
-# The longest legitimate gap between two textfile writes: two timer periods plus 300s. It renders from the same variable as the timer, and
-# hosts/tests/test_b4_rule_literals.py pins the rules' literals to this value.
+# Two timer periods plus 300s; it renders from the timer's variable (test_b4_rule_literals.py pins
+# the rules).
 DEADLINE_S={{ 2 * 60 * (nut_host_watchdog_interval_minutes | int) + 300 }}
 TEXTFILE_DIR=${TEXTFILE_DIR:-/var/lib/node-exporter-textfile}
 
@@ -62,15 +62,13 @@ UPSMON_CONF=/var/lib/homelab-secrets/etc/nut/upsmon.conf
 ENDPOINT="$(awk '$1 == "MONITOR" { print $2; exit }' "$UPSMON_CONF" 2>/dev/null)"
 UNIT_STATE="$(systemctl is-active nut-monitor 2>/dev/null || true)"
 
-# stdout and stderr are kept APART. upsc writes "Init SSL without certificate database" to
-# stderr on every successful call here, so folding the two with 2>&1 puts that line inside the
-# value: the logged message goes multi-line, and the empty-status branch below becomes
-# unreachable because the noise is never empty.
+# Keep stdout and stderr APART: upsc writes 'Init SSL without certificate database' to stderr on
+# every success, so `2>&1` makes the message multi-line and the empty-status branch unreachable.
 UPSC_STDERR="$(mktemp)"
 UPS_STATUS="$(upsc "$ENDPOINT" ups.status 2>"$UPSC_STDERR")"
 UPSC_RC=$?
-# Collapsed to one line: ups.status is legitimately multi-token ("OL CHRG"), and a newline in
-# either half would break the syslog line.
+# Collapsed to one line: ups.status is multi-token ("OL CHRG"), and a newline would break the syslog
+# line.
 UPS_STATUS="$(printf '%s' "$UPS_STATUS" | tr '\n' ' ' | sed 's/  */ /g; s/^ //; s/ $//')"
 UPSC_ERR="$(tr '\n' ' ' < "$UPSC_STDERR" | sed 's/  */ /g; s/^ //; s/ $//')"
 rm -f "$UPSC_STDERR"
@@ -91,16 +89,14 @@ elif [[ -z "$UPS_STATUS" ]]; then
   STATUS=down
   MSG="upsd at ${ENDPOINT} returned an empty ups.status"
 else
-  # Deliberately does NOT page on OB/LB. Battery state is the UPS* rules' job; alerting on it here
-  # would double-page the same event from two mechanisms. This check is about the LINK.
+  # Deliberately no page on OB/LB: battery state is the UPS* rules' job. This check is about the
+  # LINK.
   STATUS=up
   MSG="nut-monitor active, upsd reachable at ${ENDPOINT} (ups.status=${UPS_STATUS})"
 fi
 
-# Unconditional: this line is the durable record of the verdict's message, and Loki keeps it.
-# NOTICE rather than INFO: journald here is capped at MaxLevelStore=notice, so an
-# info-level line is dropped from the journal AND from forwarding to rsyslog, never reaching
-# Loki.
+# Unconditional: the durable record of the verdict message, which Loki keeps.
+# NOTICE, not INFO: journald caps MaxLevelStore=notice, dropping info lines before rsyslog.
 logger -p daemon.notice -t ups-secondary-health "status=${STATUS} ${MSG}"
 
 # The textfile carries the verdict. A failed write logs.

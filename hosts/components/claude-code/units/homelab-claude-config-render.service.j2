@@ -9,8 +9,8 @@ OnFailure=homelab-alert@%n.service
 
 [Service]
 Type=oneshot
-# The render runs the dotfiles repo's templates, which can run commands, so it runs as its own
-# user with no network and nothing writable but its runtime directory. Root never runs chezmoi.
+# The render runs the dotfiles repo's templates, which can run commands, so it has its own user, no
+# network and nothing writable but its runtime directory. Root never runs chezmoi.
 User=claude-triage-render
 Group=claude-triage-render
 RuntimeDirectory=homelab-claude-config-render
@@ -34,15 +34,14 @@ CapabilityBoundingSet=
 TimeoutStartSec=10min
 SyslogLevel=notice
 SyslogIdentifier=claude-config-render
-# The pinned interpreter homelab-claude-dotfiles-mirror installs (0755): this unit has no network
-# to install one. Each step keeps its own uv cache, so root never writes where the render user can.
+# The interpreter the dotfiles mirror installs (0755): this unit has no network to install one.
+# Each step keeps its own uv cache, so root never writes where the render user can.
 Environment=UV_PYTHON_INSTALL_DIR=/var/lib/homelab-claude-dotfiles-mirror/python
 Environment=UV_PYTHON_DOWNLOADS=never
 ExecStart=/usr/bin/env UV_CACHE_DIR=/run/homelab-claude-config-render/uv-cache \
   /usr/lib/homelab/bin/uv run --no-project --no-python-downloads --python {{ host_python_version }} \
   /usr/lib/homelab/claude-config-render/claude_config_render.py render
-# `+` runs the publish as root outside the sandbox: it reads the stage without following a link
-# and writes the root-owned directory the sessions read.
+# `+` publishes as root outside the sandbox; reads the stage without following a link.
 ExecStartPost=+/usr/bin/env UV_CACHE_DIR=/var/cache/homelab-claude-config-publish \
   /usr/lib/homelab/bin/uv run --no-project --no-python-downloads --python {{ host_python_version }} \
   /usr/lib/homelab/claude-config-render/claude_config_render.py publish

@@ -6,18 +6,11 @@
 # Takes no arguments. Running it by hand as {{ claude_code_agent_user }} applies every step below.
 #
 {% if claude_code_agent_homelab_ui_enabled %}
-# Gives the agent its own homelab-ui MCP server: the pinned Node {{ claude_code_agent_node_version }}
-# under {{ claude_code_agent_node_dir }}, @playwright/mcp {{ claude_code_agent_playwright_mcp_version }}
-# and the Chromium that package pins, and a user-scope `homelab-ui` entry in ~/.claude.json that
-# launches its clone's scripts/diagnostics/ui_mcp.sh. The login that wrapper reads is a
-# homelab-secrets output. Only the pinned Node tree stays: a bump removes the previous one.
+# Only the pinned Node tree stays: a bump removes the previous one.
 {% else %}
-# The homelab-ui browser is switched off here: removes the agent's `homelab-ui` registration, its
-# Node trees and its Chromium cache.
+# Switched off here: removes the agent's `homelab-ui` registration, Node trees and Chromium cache.
 {% endif %}
-#
-# Every step is idempotent: a step whose result exists already changes nothing. Root never runs
-# this, so no step acts as root on a path the agent controls.
+# Root never runs this, so no step acts as root on a path the agent controls.
 set -euo pipefail
 
 case "${1-}" in
@@ -31,8 +24,8 @@ claude="$home/.local/bin/claude"
 export HOME="$home" TMPDIR=/tmp PATH="$node_bin:/usr/bin:/bin"
 cd "$home"
 
-# The registration as `claude mcp` reads it back, or nothing. Read from the file rather than with
-# `claude mcp get`, which launches the server: a Chromium and an Authelia login on every run.
+# Read from the file, not `claude mcp get`, which launches the server: a Chromium and an Authelia
+# login each run.
 registered() {
   [ -f "$home/.claude.json" ] || return 0
   jq -cS '.mcpServers["homelab-ui"] // empty | {command, env: (.env // {})}' \
@@ -63,7 +56,6 @@ if [ "$installed" != "{{ claude_code_agent_playwright_mcp_version }}" ]; then
   npm install --global --no-fund --no-audit "@playwright/mcp@{{ claude_code_agent_playwright_mcp_version }}"
 fi
 # The playwright CLI nested under @playwright/mcp, so the browser revision is the one it drives.
-# It skips a revision already in ~/.cache/ms-playwright.
 node "$package/node_modules/playwright/cli.js" install chromium
 
 launcher={{ claude_code_agent_user_clone_dir }}/scripts/diagnostics/ui_mcp.sh

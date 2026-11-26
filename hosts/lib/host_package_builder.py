@@ -61,10 +61,8 @@ PROM = "homelab_builder.prom"
 # Where the keyring sits in homelab-updater's render, relative to the render's --out.
 KEYRING = "packages/homelab-updater/root/usr/share/keyrings/homelab-archive-keyring.gpg"
 
-# The `reason` label of the unbuilt-since series. `canary` is an open rollout gate.
-# `build` is a render or an nfpm run that failed at the chosen commit, `token` a missing token or
-# one the check-runs read refused, and `tools` a `homelab-tools` pin that failed to
-# download or whose digest differs from the pin. ADR-0021 removed `trust`.
+# `canary` is an open rollout gate; `build` a failed render or nfpm run; `token` a missing or
+# refused token; `tools` a homelab-tools pin that failed to download or whose digest differs.
 REASONS = frozenset(
     {
         "ok",
@@ -216,14 +214,14 @@ class Builder(RolloutGate):
         self.config = parse_env_file(str(self.config_path))
         self.state = self._load("state.json")
         # A cached `fail` would block a SHA a re-run turned green, so only a `pass` survives the
-        # load, and so does no value that is not a verdict.
+        # load.
         self.cache = {
             sha: CIVerdict.PASS
             for sha, v in self._load("ci-cache.json").items()
             if v == CIVerdict.PASS
         }
-        # 1. No token, no request: anonymous reads share one quota with the tick's gate. The stub
-        # `run` keeps `gh auth token` out of it. LoadCredential= supplies the token, never the file.
+        # No token, no request: anonymous reads share one quota with the tick's gate.
+        # LoadCredential= supplies the token.
         cred = Path(os.environ.get("CREDENTIALS_DIRECTORY", "/-"), "github_token")
         if cred.is_file():
             self.config["GITHUB_TOKEN"] = cred.read_text()
@@ -235,8 +233,8 @@ class Builder(RolloutGate):
         try:
             tip = self.fetch()
         except RuntimeError as exc:
-            # The fetch-age series is the signal for a fetch that keeps failing, so a
-            # failed fetch writes no metric and pages nothing on its own.
+            # The fetch-age series signals a failing fetch, so a failed fetch writes no metric and
+            # pages nothing itself.
             log(f"fetch failed, nothing built: {exc}")
             return 0
         self.state["last_fetch"] = self.now()
@@ -275,8 +273,7 @@ class Builder(RolloutGate):
                 exc.reason, tip, describe(exc, self.token), last, err=True
             )
         except (RuntimeError, OSError) as exc:
-            # A git, worktree or filesystem error. Left uncaught it would exit 1 on every run,
-            # and OnFailure= would page every 2 minutes for one condition.
+            # Left uncaught this would exit 1 every run, and OnFailure= would page every 2 minutes.
             return self._fail("build", tip, describe(exc, self.token), last, err=True)
         self.state["last_built"] = chosen
         return self._finish("ok", tip, chosen)
@@ -288,8 +285,8 @@ class Builder(RolloutGate):
         except ValueError as exc:
             raise Failure("ci", str(exc)) from exc
         walk = settings.walk_max
-        # A gate that just closed leaves deferred packages to build at the last commit, which
-        # is green, so they need no newer green commit.
+        # A gate that just closed leaves deferred packages to build at the last commit, which is
+        # green.
         owed = (
             last if self.state.get("deferred") and not self.state.get("gate") else None
         )
@@ -314,8 +311,7 @@ class Builder(RolloutGate):
                         f"building {sha[:12]}, the newest green commit below {tip[:12]}"
                     )
                 return sha
-        # The line names the bound beside the count graded: "the 1 newest" alone reads as a walk
-        # bound of 1 when one commit is unbuilt.
+        # Names the bound beside the count graded: "the 1 newest" alone reads as a walk bound of 1.
         since = f"since the last build {last[:12]}" if last else "on master"
         log(
             f"no green commit: graded {min(len(candidates), walk)} of the "
@@ -339,8 +335,8 @@ class Builder(RolloutGate):
             )
 
         try:
-            # A ValueError here includes a read short of total_count, so a partial listing
-            # reads as pending below rather than grading page 1 alone.
+            # A ValueError includes a read short of total_count, so a partial listing reads as
+            # pending, not graded on page 1.
             runs = parse_check_runs(read_check_pages(fetch_page, "check_runs"))
         except urllib.error.HTTPError as exc:
             if token_refused(exc):
@@ -385,8 +381,8 @@ class Builder(RolloutGate):
             count = int(self.git("rev-list", "--count", "--first-parent", chosen))
             self.stage(chosen, out, debs, version(count, chosen))
         except BaseException:
-            # A cleanup that fails must not replace the error in flight, or a keyring refusal
-            # reads as reason=build. The next run's prune clears what it left.
+            # A failing cleanup must not replace the error in flight, or a keyring refusal reads as
+            # reason=build.
             try:
                 self._remove_tree(tree)
             except (RuntimeError, OSError) as exc:
@@ -401,8 +397,8 @@ class Builder(RolloutGate):
             shutil.rmtree(self.work, ignore_errors=True)
 
     def render(self, tree: Path, out: Path) -> None:
-        # The tree's own pin, never the unit's: the unit carrying a new pin ships in a
-        # package only this render builds.
+        # The tree's own pin, never the unit's: a unit carrying a new pin ships in a package only
+        # this render builds.
         python = render_python(tree, self.python, self.uv, self.run)
         proc = self.run(
             [
@@ -447,8 +443,8 @@ class Builder(RolloutGate):
         packages = sorted(
             spec.parent.relative_to(out) for spec in out.rglob("nfpm.yaml")
         )
-        # A staged set the signer has not taken yet is rebuilt at the new commit too, because
-        # the signer refuses a staged/ whose versions name more than one commit.
+        # A staged set the signer has not taken is rebuilt at the new commit: the signer refuses a
+        # staged/ naming more than one commit.
         unconsumed = (
             set(self.state.get("staged", [])) if any(self.staged.iterdir()) else set()
         )
@@ -477,23 +473,23 @@ class Builder(RolloutGate):
         # that raises or gets SIGTERM leaves `staged` naming every package whose deb may be
         # unsigned. The role's CLAUDE.md, *The builder's run*, has the full reasoning.
         for package in unconsumed & set(deferred):
-            # The gate defers a package whose deb the next lines delete. Its published/ copy
-            # must go too, or nothing would ever rebuild it.
+            # The gate defers a package whose deb is deleted below; its published/ copy must go too
+            # or nothing rebuilds it.
             shutil.rmtree(self.published / package, ignore_errors=True)
         self.state["staged"] = changed
         self._save("state.json", self.state)
         for entry in self.staged.iterdir():
             entry.unlink()
-        # A copy, never a move: a file created in the setgid staged/ takes its homelab-signer
-        # group, while a rename keeps the builder's, and the builder is not in that group to
-        # chgrp it. The signer reads each .deb through that group (UMask=0027 gives 0640).
+        # A copy, never a move: a file in the setgid staged/ takes the homelab-signer group, a
+        # rename keeps the builder's, which cannot chgrp it. The signer reads each .deb through that
+        # group.
         for deb in sorted(debs.glob("*.deb")):
             shutil.copyfile(deb, self.staged / deb.name)
         atomic_write(str(self.staged / "chosen"), chosen[:12] + "\n")
         for package in changed:
             shutil.rmtree(self.published / package, ignore_errors=True)
-            # symlinks=True keeps a link as a link. Followed, a link that dangles inside its
-            # own render raises after the rest is copied, and tree_files then compares equal.
+            # symlinks=True: a followed link that dangles in its own render raises after the rest is
+            # copied.
             shutil.copytree(out / package, self.published / package, symlinks=True)
         self.note_rollout(deferred, gate)
         log(f"staged {', '.join(changed)} at {ver}")
@@ -530,9 +526,8 @@ class Builder(RolloutGate):
     ) -> int:
         # `err` marks a failure that came from an exception: stderr carries it to the journal.
         log(f"{reason}: {message}", err=err)
-        # The failure is recorded before the metric, whose git reads can fail for the reason
-        # that ended the run. A raise there must not skip the record, or every run would
-        # exit 1 and page.
+        # Record the failure before the metric: its git reads can fail for the same reason, and a
+        # raise would exit 1 and page.
         record = {"reason": reason, "tip": tip}
         repeat = self.state.get("failure") == record
         self.state["failure"] = record

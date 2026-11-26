@@ -65,10 +65,9 @@ class FileLock:
     waiters: frozenset[int]
 
 
-# `56: FLOCK  ADVISORY  WRITE 1930784 fc:00:6564011 0 EOF` is a granted flock;
-# `56: -> FLOCK …` under it is a process blocked on the same lock. The pid on a granted
-# line can be dead: a lock taken by a `flock` CHILD on an inherited descriptor outlives the
-# child. The pid on a `->` line is alive by construction, blocked inside flock(2).
+# A `->` line is a process blocked on the granted lock above it; its pid is alive, blocked in
+# flock(2).
+# A granted line's pid can be dead: a lock taken by a `flock` child outlives the child.
 _PROC_LOCK_RE = re.compile(
     r"^\d+:\s*(->\s*)?FLOCK\s+\S+\s+(?:READ|WRITE)\s+(\d+)\s+"
     r"([0-9a-f]+):([0-9a-f]+):(\d+)\s"
@@ -232,8 +231,7 @@ def parse_prs(raw: str) -> list[dict]:
     return rows
 
 
-# A landing's log: `land<pr>-<YYYYmmdd-HHMMSS>.log` from `land.sh --detach`, or
-# `land-<YYYYmmddTHHMMSSZ>-<rand>.log` from the daemon's own `spawn_logged`.
+# A landing's log from `land.sh --detach` or the daemon's `spawn_logged`.
 LANDING_LOG = re.compile(r"land\d*-\d{8}[-T]\d{6}Z?(-\w+)?\.log")
 # The most of one log the viewer reads: the first stage headers matter more than the tail.
 MAX_LOG_BYTES = 1_000_000
@@ -241,8 +239,7 @@ _STAGE = re.compile(r"^== (?:(\d+)/(\d+)|arm)\s+(.*)$")
 _VERDICT_LINE = re.compile(r"^VERDICT: (\S+)(?: \((.*)\))?\s*$")
 _PR_IN_LOG = re.compile(r"PR #(\d+)")
 
-# Every verdict `land_lib/outcome.py:Verdict` prints, with a tone for the banner and what to
-# do next. The daemon cannot import land_lib; a test pins these keys to `VERDICTS`.
+# The daemon cannot import land_lib; a test pins these keys to `VERDICTS`.
 VERDICT_HINTS: dict[str, tuple[str, str]] = {
     "settled": (
         "ok",

@@ -6,8 +6,7 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-# apt trusts the signature on InRelease, not the transport, so the server needs no identity
-# of its own: a throwaway user that can only read the tree.
+# apt trusts the InRelease signature, so the server needs no identity: a throwaway read-only user.
 DynamicUser=yes
 ProtectSystem=strict
 ProtectHome=yes

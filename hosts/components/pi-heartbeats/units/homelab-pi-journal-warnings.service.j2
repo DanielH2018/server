@@ -13,15 +13,13 @@ Description=Copy the Pi journal's warning-and-above lines to the log Alloy ships
 
 [Service]
 Type=oneshot
-# This host's journald stores notice and above (MaxLevelStore=notice); stdout goes to the file
-# below, so this covers journalctl's stderr.
+# journald stores notice and above (MaxLevelStore=notice); this covers journalctl's stderr.
 SyslogLevel=notice
 User={{ sys_user }}
 # The journal is readable by `adm`. The unit names the group, so a rebuilt Pi needs no group task.
 SupplementaryGroups=adm
-# Without read access to the system journal, journalctl -q prints only this user's journal and
-# exits 0. Fail the unit instead, so systemd-units-check reports it. Not `test -r`: uutils'
-# test ignores the journal's ACL and reports a readable file as unreadable.
+# Without read access journalctl -q prints only this user's journal and exits 0, so fail the unit.
+# Not `test -r`: uutils' test ignores the journal's ACL.
 ExecStartPre=/usr/bin/head -c0 /var/log/journal/%m/system.journal
 ExecStart=/usr/bin/journalctl -b -p warning -q --no-pager -o short-iso --cursor-file=/run/pi-journal-warnings/cursor
 StandardOutput=append:/var/log/pi-health/journal.log

@@ -10,6 +10,5 @@ GITHUB_REPO={{ builder_github_repo }}
 # (reason="ci").
 CI_CONTEXTS={{ ci_required_contexts | join(',') }}
 CI_ANCESTOR_WALK_MAX={{ ci_ancestor_walk_max }}
-# Prometheus, loopback first and then the pinned ClusterIP, space-separated. The rollout gate
-# asks the first that answers whether the canary applied its version (*Staged rollout*).
+# Loopback first, then the pinned ClusterIP; the rollout gate asks the first that answers.
 PROMETHEUS_URLS={{ builder_prom_urls | join(' ') }}

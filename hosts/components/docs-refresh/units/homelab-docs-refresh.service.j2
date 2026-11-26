@@ -6,12 +6,10 @@ Description=Regenerate the docs, rebuild the site and publish the diff through a
 SyslogLevel=notice
 Type=oneshot
 User={{ sys_user }}
-# The `+` runs this one command as root; the service runs as {{ sys_user }}. It creates the docs
-# site directory and the stamp directory (tmpfiles.d/homelab-docs-site.conf.j2).
+# `+` runs this command as root; the service runs as {{ sys_user }}.
 ExecStartPre=+/usr/bin/systemd-tmpfiles --create /usr/lib/tmpfiles.d/homelab-docs-site.conf
 ExecStart=/usr/lib/homelab/docs-refresh
-# The cron's PATH and KUBECONFIG. Without them gen_infra_map renders the topology declared-only.
-# The journal replaces the cron's `| logger -t docs-refresh`.
+# The cron's PATH and KUBECONFIG: without them gen_infra_map renders the topology declared-only.
 Environment=PATH=/usr/local/bin:/usr/bin:/bin
 Environment=KUBECONFIG=/home/{{ sys_user }}/.kube/config
 SyslogIdentifier=docs-refresh

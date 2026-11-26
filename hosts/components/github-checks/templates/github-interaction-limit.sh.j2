@@ -50,9 +50,7 @@ for arg in "$@"; do
 done
 
 export PATH=/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin # cron ships a bare PATH
-# What scripts/lib/gh.py sets for every Python caller, and this cron calls `gh` directly. A `gh`
-# that prompts hangs an unattended run forever, and the update notifier writes to stderr on the
-# first call of the day — which a caller reading stderr as an error message then reports as one.
+# A prompting `gh` hangs an unattended run, and the update notifier's stderr reads as an error.
 export GH_PROMPT_DISABLED=1 GH_NO_UPDATE_NOTIFIER=1
 
 # shellcheck source=/dev/null
@@ -66,9 +64,6 @@ source /usr/lib/homelab/homelab-check-lib.sh || {
 # tests/services/alert_rules/test_gitops_check_rule_literals.py pins the rules' literals to it.
 DEADLINE_S=90000
 
-# Records the verdict: the journal line first, so `journalctl -t github-interaction-limit` reads the
-# outcome the way it does for github-ruleset-drift, then the textfile. A failed write logs and
-# the run goes on to its exit.
 push() { # up|down msg
   logger -t github-interaction-limit "status=$1 $2"
   write_check_textfile github-interaction-limit "$([[ "$1" == up ]] && echo 1 || echo 0)" "$(date +%s)" "$DEADLINE_S" \
@@ -78,24 +73,19 @@ push() { # up|down msg
 WANT_LIMIT="{{ github_interaction_limit }}"
 WANT_EXPIRY="{{ github_interaction_limit_expiry }}"
 
-# This cron runs as root; the gh login belongs to the deploy user, so the lookup drops to that
-# user. `-H` matters: gh finds its login under $HOME, and a plain runuser/sudo keeps root's.
+# The cron runs as root and the gh login belongs to the deploy user; `-H` makes gh read that user's
+# $HOME.
 TOKEN=$(sudo -n -u "{{ sys_user }}" -H gh auth token 2>/dev/null || true)
 if [ -z "$TOKEN" ]; then
-  # Unlike the ruleset check there is no anonymous fallback: the endpoint needs the repo's
-  # admin, so without a token the limit cannot be re-armed AND cannot be read.
+  # No anonymous fallback: the endpoint needs admin, so no token means no read and no re-arm.
   push down "no gh login for {{ sys_user }} — interaction limit NOT re-armed, state UNVERIFIED"
   exit 1
 fi
 AUTH_CONFIG=$(printf 'header = "Authorization: Bearer %s"\n' "$TOKEN")
 
-# apply REPO — applies the declared limit to REPO and sets RESULT to its one-line outcome.
-# Returns non-zero when the limit is not in its declared state, so one repo's failure never stops
-# the next repo's re-arm.
 apply() {
   local repo=$1 url="https://api.github.com/repos/$1/interaction-limits" body live expires
-  # `none` means "no limit": the API expresses that as a DELETE, and a DELETE returns 204 with
-  # no body. Everything else is a PUT that answers with the limit it stored.
+  # `none` is a DELETE (204, no body); anything else is a PUT that answers with the stored limit.
   if [ "$WANT_LIMIT" = "none" ]; then
     if ! curl -sf --max-time 20 -X DELETE -K <(printf '%s\n' "$AUTH_CONFIG") \
       -H "Accept: application/vnd.github+json" "$url" >/dev/null; then
@@ -110,8 +100,7 @@ apply() {
   if ! body=$(curl -sf --max-time 20 -X PUT -K <(printf '%s\n' "$AUTH_CONFIG") \
     -H "Accept: application/vnd.github+json" -H "Content-Type: application/json" \
     -d "{\"limit\":\"${WANT_LIMIT}\",\"expiry\":\"${WANT_EXPIRY}\"}" "$url"); then
-    # Unreachable, 401, 403 (token lacks the scope) and 422 (a value the API rejects) all land
-    # here. None of them is "armed": a re-arm that never happened must say so.
+    # Unreachable, 401, 403 and 422 all land here; none is armed.
     RESULT="${repo}: failed to set interaction limit ${WANT_LIMIT} — NOT re-armed, state UNVERIFIED"
     return 1
   fi
@@ -119,15 +108,12 @@ apply() {
   live=$(printf '%s' "$body" | jq -r '.limit // empty')
   expires=$(printf '%s' "$body" | jq -r '.expires_at // empty')
   if [ -z "$live" ]; then
-    # A 200 carrying something that is not an interaction-limit object — an error object, an
-    # HTML interstitial, a truncated body. Reported as a bad response, never as "armed".
+    # A 200 that is not an interaction-limit object is a bad response, never armed.
     RESULT="${repo}: interaction-limits response had no .limit — bad response, state UNVERIFIED"
     return 1
   fi
   if [ "$live" != "$WANT_LIMIT" ]; then
-    # The API accepted the PUT and stored something else. Not a shape GitHub is documented to
-    # produce, which is exactly why it is checked: this is the one branch that would otherwise
-    # read "armed" while the setting was wrong.
+    # The API stored something other than the PUT body; without this branch that reads as armed.
     RESULT="${repo}: interaction limit is '${live}' after PUT of '${WANT_LIMIT}' — declared state NOT applied"
     return 1
   fi

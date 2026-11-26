@@ -10,31 +10,18 @@ Type=oneshot
 # This host's journald stores notice and above (MaxLevelStore=notice), so stdout logs at notice.
 SyslogLevel=notice
 User={{ sys_user }}
-# Sandbox: a narrow notifier — queries open PRs over HTTPS and writes only its state dir and its
-# gh-quota ledger — so it can be confined, unlike the gitops-deploy unit which deploys the whole
-# fleet. Limits blast radius because it parses attacker-influenceable API JSON. The script +
-# config are read-only (reads are always allowed under ProtectSystem).
+# Confined because it parses attacker-influenceable API JSON; the script and config are read-only.
 NoNewPrivileges=true
 ProtectSystem=strict
 ProtectHome=read-only
 PrivateTmp=true
 StateDirectory=renovate-notify
 StateDirectoryMode=0750
-# github_rest.github_get counts each read in the gh-quota ledger there. The directory is sticky,
-# so the notifier cannot rewrite another user's ledger. The gh-quota component creates it, and
-# `-` lets the notifier start on a host without that component.
+# The directory is sticky; `-` lets the notifier start on a host without the gh-quota component.
 ReadWritePaths=-/var/lib/gh-quota
 Environment=PYTHONDONTWRITEBYTECODE=1
-# uv opens its cache for WRITE at startup on every invocation, warm or cold, and the cache
-# defaults to $HOME/.cache/uv — which ProtectHome=read-only above makes unwritable. Without this
-# the unit dies with exit 2 before Python starts, at every tick, and OnFailure pages for it.
-# Point the cache at the private /tmp that PrivateTmp already gives this unit, rather than at
-# ReadWritePaths: this is the unit that parses attacker-influenceable API JSON, so a cache that
-# survives between runs is state one compromised run could poison for the next. PrivateTmp is
-# destroyed at exit, and a cold cache costs nothing here — the script is stdlib-only and
-# --no-project means there are no packages to fetch.
-# NB the interpreter itself lives under $HOME (~/.local/share/uv/python) and is only *read*,
-# which ProtectHome=read-only permits.
+# uv opens its cache for write on every run; $HOME/.cache is unwritable under ProtectHome.
+# PrivateTmp, not ReadWritePaths: a surviving cache is state a compromised run could poison.
 Environment=UV_CACHE_DIR=/tmp/uv-cache
 ExecStart=/usr/bin/uv run --no-project --no-python-downloads --python {{ host_python_version }} /usr/lib/homelab/renovate-notify/renovate_notify.py
 # The same run's verdict for node_exporter's textfile collector (M6 batch B4). It runs only when

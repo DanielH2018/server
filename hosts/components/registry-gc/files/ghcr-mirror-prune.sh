@@ -77,8 +77,8 @@ blob_path() {
   printf '%s/blobs/sha256/%s/%s/data' "$V2" "$(printf '%s' "$hex" | cut -c1-2)" "$hex"
 }
 
-# The lines of file $2 that are, or are not, lines of file $1. awk rather than `grep -xF -f`,
-# because busybox grep reads an empty pattern file as one empty pattern that matches every line.
+# awk, not `grep -xF -f`: busybox grep reads an empty pattern file as one pattern matching every
+# line.
 lines_in() { awk 'FILENAME == ARGV[1] { set[$0] = 1; next } $0 in set' "$1" "$2"; }
 lines_not_in() { awk 'FILENAME == ARGV[1] { set[$0] = 1; next } !($0 in set)' "$1" "$2"; }
 
@@ -106,15 +106,14 @@ while read -r manifests; do
       echo "$digest" >> "${WORK}/keep"
       continue
     fi
-    # An index or manifest list names its children in `manifests[]`. Every digest in its body
-    # is taken as a child, which can only keep more than strictly needed.
+    # Every digest in the body is taken as a child, which can only keep more than needed.
     if grep -q '"manifests"' "$body"; then
       grep -o "$DIGEST_RE" "$body" | grep -vxF "$digest" | sed "s|^|${digest} |" >> "${WORK}/edges"
     fi
   done
 
-  # A kept tag keeps the revision its current link names. A tag name holds no `/`, so one that
-  # does could only climb out of the tags directory and is ignored.
+  # A tag name holds no `/`; one that does could only climb out of the tags directory, so it is
+  # ignored.
   awk -v p="${repo}:" 'index($0, p) == 1 { print substr($0, length(p) + 1) }' "$KEEP_FILE" \
     | while read -r tag; do
         case "$tag" in */* | "" | . | ..) continue ;; esac
@@ -136,8 +135,6 @@ while read -r manifests; do
   done < "${WORK}/tops"
   sort -k1,1nr -k2,2 "${WORK}/ranked" | head -n "$KEEP_NEWEST" | cut -d' ' -f2 >> "${WORK}/keep"
 
-  # A kept index keeps its children, and a child that is itself an index keeps its own, so
-  # repeat until the set stops growing.
   before=-1
   after=$(sort -u "${WORK}/keep" | wc -l)
   while [ "$after" -ne "$before" ]; do

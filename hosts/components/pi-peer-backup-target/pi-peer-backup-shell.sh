@@ -46,19 +46,12 @@ reject() {
 
 read -ra WORDS <<<"$CMD"
 n=${#WORDS[@]}
-# `sudo rsync --server --sender <opts...> . <dir>` — at least the four verb words plus `.` and
-# the directory. An empty command (an interactive login) fails this first.
 [[ $n -ge 6 ]] || reject "not an rsync request"
 [[ ${WORDS[0]} == sudo && ${WORDS[1]} == rsync ]] || reject "not sudo rsync"
 [[ ${WORDS[2]} == --server && ${WORDS[3]} == --sender ]] || reject "not a sender"
 [[ ${WORDS[n - 2]} == . && ${WORDS[n - 1]} == "$SRC" ]] || reject "path is not $SRC"
-# A short-option blob is letters, then optionally `e` and the protocol capability list
-# (`e.iLsfxCIvu` in the nightly). The letters before `e` are real options and may not include
-# `s`: `-s` is --secluded-args, which makes rsync re-read the path from the protocol stream
-# and would bypass the pinned SRC below. The `s` INSIDE the capability list is a
-# capability, not an option, which is why the letters and the list are matched apart — the
-# same split rrsync makes. `e` itself is excluded from the letters so the list is where the
-# blob's first `e` is.
+# Letters before `e` may not include `s` (--secluded-args re-reads the path, bypassing SRC). The `s`
+# inside the capability list is a capability, so the two parts match apart.
 short_opts='^-[A-Za-df-rt-z]*(e[0-9]*\.[A-Za-z]*)?$'
 for opt in "${WORDS[@]:4:n-6}"; do
   [[ $opt != - && $opt =~ $short_opts || $opt =~ ^--timeout=[0-9]+$ ]] || reject "option $opt"

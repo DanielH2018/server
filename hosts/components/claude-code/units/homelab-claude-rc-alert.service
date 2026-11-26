@@ -6,8 +6,7 @@ Wants=homelab-secrets.service
 
 [Service]
 Type=oneshot
-# The webhook arrives as a credential and appears in no unit text (homelab-alert@.service has
-# why). homelab-secrets writes /run/credstore/<sops key>.
+# The webhook arrives as a credential, so it appears in no unit text.
 LoadCredential=discord_webhook:/run/credstore/discord_alert_webhook
 Restart=on-failure
 RestartSec=5min
@@ -24,9 +23,9 @@ ExecStart=/usr/bin/curl -fsS -m 10 --retry 5 --retry-delay 10 --retry-all-errors
   --expand-url '{{webhook:trim}}'
 SyslogLevel=notice
 ExecStartPost=/bin/echo homelab-claude-rc failure alert delivered
-# A delivered page silences the next 360 minutes. The host's Restart=always fires OnFailure= on
-# every exit of its restart loop, so a host that cannot start would page about every 10 seconds.
-# The stamp marks a delivery, never an attempt, and the check fails open.
+# A delivered page silences the next 360 minutes: Restart=always fires OnFailure= on every exit,
+# which would page every 10 seconds. The stamp marks a delivery, never an attempt; the check fails
+# open.
 StateDirectory=homelab-claude-rc-alert
 ExecCondition=/bin/sh -c 'test -z "$$(find %S/homelab-claude-rc-alert/delivered -mmin -360 2>/dev/null)"'
 ExecStartPost=/usr/bin/touch %S/homelab-claude-rc-alert/delivered

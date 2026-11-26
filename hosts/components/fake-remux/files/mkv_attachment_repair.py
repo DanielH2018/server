@@ -190,8 +190,7 @@ def main(argv=None) -> int:
     if not args.dry_run:
         write_state(state_file, ok, msg)
         flush_queued_posts(cfg)
-    # 0 even on a DOWN verdict, matching fake_remux_scan.py: the state file is the signal, and the
-    # cron's `|| logger` arm is for a wrapper that could not run at all. A DOWN is data to report.
+    # Return 0 even on a DOWN verdict, as fake_remux_scan.py does: the state file is the signal.
     return 0
 
 

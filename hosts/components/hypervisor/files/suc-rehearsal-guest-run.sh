@@ -33,22 +33,17 @@ fetch_checked() {
   echo "$2  $3" | sha256sum -c --strict - >/dev/null || die "$1 does not match its pinned sha256"
 }
 
-# A fresh k3s answers the API before its controllers have created everything a manifest names: the
-# token controller adds each namespace's `default` ServiceAccount seconds later, and a CRD that was
-# just applied is not served until it is Established. The apply or wait then fails with one of the
-# errors RACE_RE names. Any other error is real and is never retried.
+# A fresh k3s answers before its controllers finish (default ServiceAccounts, CRDs not Established).
+# Apply or wait then fails with a RACE_RE error; any other error is real and never retried.
 RACE_RE='not found|NotFound|no matches for kind|unable to recognize|ensure CRDs are installed first'
 # SUC_RACE_WAIT_S and SUC_POLL_S exist for tests.
 RACE_WAIT_S="${SUC_RACE_WAIT_S:-240}"
 
-# retry_race CMD ARGS...: run the command until it succeeds, retrying only on a RACE_RE error and
-# only for RACE_WAIT_S. RACE_INPUT, when set, is the command's stdin on every attempt. The output
-# of the last attempt goes to stdout on success and to stderr on failure.
+# Retries only on a RACE_RE error, for RACE_WAIT_S; RACE_INPUT is stdin on every attempt.
 retry_race() {
   local deadline=$((SECONDS + RACE_WAIT_S)) out rc
   while :; do
-    # A here-string, not a pipe: a command that never reads stdin would otherwise race the writer,
-    # and under pipefail the writer's SIGPIPE fails the attempt.
+    # A here-string, not a pipe: under pipefail the writer's SIGPIPE fails the attempt.
     out="$("$@" 2>&1 <<<"${RACE_INPUT:-}")"
     rc=$?
     if ((rc == 0)); then
@@ -63,8 +58,7 @@ retry_race() {
   done
 }
 
-# apply_stdin: `kubectl apply -f -` of the manifest on stdin, retried like retry_race. Stdin cannot
-# be replayed, so it is read once here.
+# Stdin cannot be replayed, so it is read once.
 apply_stdin() {
   local manifest
   manifest="$(cat)"
@@ -133,8 +127,7 @@ EOF
     '  name: homelab-critical' 'value: 100000' | apply_stdin || die "no PriorityClass"
   retry_race "${KUBECTL[@]}" apply --server-side -f "$STAGE/hand/components.yaml" \
     || die "Flux's components were not applied"
-  # `apply` returns when a CRD is stored, not when it is served. The OCIRepository and the
-  # Kustomization that `publish` applies need both of these Established.
+  # `apply` returns when a CRD is stored, not served; `publish` needs both Established.
   retry_race "${KUBECTL[@]}" wait --for=condition=Established --timeout=60s \
     crd/ocirepositories.source.toolkit.fluxcd.io crd/kustomizations.kustomize.toolkit.fluxcd.io \
     || die "Flux's CRDs never became Established"
@@ -164,8 +157,7 @@ EOF
   echo "digest=$digest"
 }
 
-# One object, or the JSON `null`: a missing object is an answer, and so is an API server that is
-# restarting under the Plan's own upgrade.
+# A missing object is an answer, and so is an API server restarting under the Plan's upgrade.
 get_json() { "${KUBECTL[@]}" get "$@" -o json 2>/dev/null || echo null; }
 
 cmd_snapshot() {

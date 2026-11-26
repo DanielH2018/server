@@ -80,37 +80,17 @@ TEXTFILE_DIR=${TEXTFILE_DIR:-/var/lib/node-exporter-textfile}
 
 export KUBECONFIG=/home/{{ sys_user }}/.kube/config
 
-# Skip the first run after a boot. This script carries the longhorn-backup-health healthchecks.io
-# dead-man and sends `/fail` on a failed run, which pages immediately whatever grace the check is
-# configured with — so this guard, not a grace value, is what makes a restart quiet. Exit 0, not 1:
-# a skipped run must not itself read as a failure.
-#
-# The skipped run writes no textfile and pings no healthchecks.io slug, so the previous file stays
-# as it was. DEADLINE_S above already covers one skipped slot, and the dead-man's grace is sized
-# for exactly one (docs/healthchecks-io-deadman.md): a success ping for a run that did not happen
-# would be a lie the dead-man exists to catch.
+# Skip the first run after boot: `/fail` pages at once whatever the dead-man's grace. Exit 0, so the
+# skip is no failure.
+# A skipped run writes and pings nothing; DEADLINE_S and the dead-man's grace cover exactly one
+# skipped slot.
 if boot_grace_active {{ k3s_health_cron_boot_grace_s }} longhorn-backup-health; then
   exit 0
 fi
 
-# Every Jinja-templated role default the reader needs, exported as env vars — the reader is a
-# plain host script and takes no other input.
-#
-# The arm state of each BackupTarget and the daily and weekly run times are not among them. The
-# reader reads the arm state off each target's live `spec.backupTargetURL` and the run times off
-# the live RecurringJobs' `spec.cron`. The `longhorn-backup` tag writes both, and
-# Flux applies it with no host apply in between. A value
-# baked here would go stale the moment either changed: a stale disarm leaves the monitor
-# permanently red, and a stale arm leaves a new target unchecked.
-#
-# The three transport settings are exported here for the same reason as the thresholds below
-# them: the reader requires every LONGHORN_* var it reads, so a value only this shim knows
-# cannot sit in the reader as a hardcoded default that a wrong export would silently shadow.
-# The kubectl binary is absolute rather than the bare `k3s kubectl`:
-# cron's PATH omits /usr/local/bin, and validate/render_lib/shell.py fails a cron target that
-# names it bare (host_lib.kubectl_runner also prepends that directory, so this is the second of
-# two guards, not the only one). The 30s timeout is the per-call deadline this file's header
-# sizes the worst-case run against.
+# Arm state and run times are read live, not exported: a baked value goes stale after a Flux apply.
+# The reader requires every LONGHORN_* var; kubectl is absolute because cron's PATH omits
+# /usr/local/bin.
 export LONGHORN_BACKUP_NAMESPACE="{{ k8s_longhorn_namespace }}"
 export LONGHORN_BACKUP_KUBECTL="/usr/local/bin/k3s kubectl"
 export LONGHORN_BACKUP_KUBECTL_TIMEOUT_S="30"
@@ -121,26 +101,18 @@ export LONGHORN_DAILY_BACKUP_BUDGET="{{ k3s_longhorn_daily_backup_budget }}"
 export LONGHORN_RESTORE_DRILL_NAMESPACE="{{ k3s_longhorn_restore_drill_namespace }}"
 export LONGHORN_RESTORE_DRILL_MAX_AGE_DAYS="{{ k3s_longhorn_restore_drill_max_age_days }}"
 export LONGHORN_RESTORE_DRILL_COVERAGE_SLACK_DAYS="{{ k3s_longhorn_restore_drill_coverage_slack_days }}"
-# Check 9's B2 transport. Absolute for the reason LONGHORN_BACKUP_KUBECTL is: cron's PATH is
-# /usr/bin:/bin here, and a reader that cannot spawn the binary reports "could not read" rather
-# than a verdict. Its own 10s timeout rather than the 30s kubectl one — journalctl answers from a
-# local file in milliseconds, so 10s is a wedged-journald deadline, and reusing 30s would push
-# the worst-case run past this script's 600s cron period (see the header's arithmetic).
-# Cron sets nothing, so it is the default there; a test running this shim can point it at a stub.
+# Absolute, as cron's PATH is /usr/bin:/bin. Its own 10s timeout: 30s would push the worst-case run
+# past the 600s cron period.
 export LONGHORN_JOURNALCTL="${LONGHORN_JOURNALCTL:-/usr/bin/journalctl}"
 export LONGHORN_JOURNAL_TIMEOUT_S="10"
 export LONGHORN_CRON_EVIDENCE_WINDOW_HOURS="{{ k3s_longhorn_cron_evidence_window_hours }}"
-# Check 10's B2 timer, by the unit file the package ships — exported here rather than hardcoded
-# in the reader for the reason the transport settings above are. The `_EXPECTED` flag mirrors the
-# timer's own `when:`: it is installed only where the host holds a repo checkout, so a host
-# without one must not be paged for a timer it was never given.
+# `_EXPECTED` mirrors the timer's own `when:`: it is installed only with a repo checkout, so other
+# hosts must not be paged.
 export LONGHORN_B2_DELETIONS_CRON_FILE="/usr/lib/systemd/system/homelab-b2-deletion-accounting.timer"
 export LONGHORN_B2_DELETIONS_CRON_EXPECTED="{{ has_repo_checkout | bool }}"
-# The file the service touches before its job runs. The stamp says whether the timer fired, and
-# the stat above says only whether it is installed.
+# The stamp says whether the timer fired; the stat says only whether it is installed.
 export LONGHORN_B2_DELETIONS_CRON_FIRED_STAMP="{{ k3s_cron_fired_stamp_dir }}/b2-deletion-accounting"
-# The budget listing's timer and stamp, read the same way. Its `OVER BUDGET:` line is the one
-# forward-looking reading of a B2 Class C cap breach.
+# Its `OVER BUDGET:` line is the one forward-looking reading of a B2 Class C cap breach.
 export LONGHORN_B2_BUDGET_CRON_FILE="/usr/lib/systemd/system/homelab-b2-budget-listing.timer"
 export LONGHORN_B2_BUDGET_CRON_EXPECTED="{{ has_repo_checkout | bool }}"
 export LONGHORN_B2_BUDGET_CRON_FIRED_STAMP="{{ k3s_cron_fired_stamp_dir }}/b2-budget-listing"
@@ -151,25 +123,10 @@ export LONGHORN_B2_RETENTION_CRON_FIRED_STAMP="{{ k3s_cron_fired_stamp_dir }}/b2
 # Check 12's bound and arm state, which the `homelab-daniel-box` package writes here.
 export LONGHORN_ETCD_DROP_IN="/etc/rancher/k3s/config.yaml.d/50-homelab.yaml"
 
-# The reader prints `up<TAB>msg` or `down<TAB>msg` on its LAST stdout line, after one
-# `detail<TAB><class>` line per problem class, and always exits 0,
-# having already logged the full (unranked) verdict to syslog itself. A nonzero exit or empty
-# output therefore means the reader ITSELF broke — report that rather than pushing nothing, which
-# would leave the monitor to time out with no explanation.
-#
-# Stdout and stderr are captured SEPARATELY (not `2>&1` into one pipe): this reader spawns a
-# subprocess of its own — it shells out to `logger` to write the full verdict before
-# printing the ranked one. `logger: socket /dev/log: ...`, or any uv/Python warning, landing on
-# stderr ahead of Python's own stdout flush would become STATUS if `2>&1` merged the two
-# streams, silently turning an `up` into whatever garbage text preceded it — which the textfile
-# records as down, and which pings healthchecks.io `/fail` on a backup plane that is fine. Taking the verdict from
-# the LAST LINE of stdout (rather than the whole capture) is a second, independent guard against
-# the same class of contamination: even a stray stdout line ahead of the reader's own print
-# doesn't reach STATUS/MSG. longhorn_backup_health.py additionally redirects its own `logger`
-# subprocess's stdout/stderr to /dev/null so this can't happen even from inside the reader.
-# A mktemp failure is checked: an empty ERR_FILE would make `2>"$ERR_FILE"` below fail
-# the whole command substitution (a full or read-only /tmp), which would read as RC nonzero —
-# STATUS=down and a /fail push for a backup plane that never got a chance to run.
+# Last stdout line is `up|down<TAB>msg`; the reader exits 0, so nonzero or empty output means it
+# broke.
+# Stdout and stderr are captured separately: a merged stderr warning could become STATUS and ping
+# `/fail`.
 DETAILS=()
 if ! ERR_FILE=$(mktemp /tmp/longhorn-backup-health.XXXXXX); then
   STATUS=down
@@ -180,12 +137,9 @@ else
   RC=$?
   ERR=$(cat "$ERR_FILE" 2>/dev/null || true)
   rm -f "$ERR_FILE"
-  # The verdict is the last stdout line that OPENS with `up<TAB>` or `down<TAB>`, not simply the
-  # last line. A verdict whose message carried a newline leaves its `(+N more ...)` tail as the
-  # last line, and the verdict reads "unrecognized status:" with the real cause cut off. With no
-  # such line, the last line still decides and is flagged below.
-  # A `detail<TAB><class>` line names one problem class. The class is a slug the reader fixes,
-  # and the pattern refuses anything else, so no label value needs escaping.
+  # Verdict = last line opening with `up<TAB>`/`down<TAB>`: a multi-line message leaves its tail
+  # last.
+  # The class is a slug the reader fixes, so no label value needs escaping.
   LAST_LINE="${OUT##*$'\n'}"
   while IFS= read -r line; do
     if [[ "$line" == up$'\t'* || "$line" == down$'\t'* ]]; then
@@ -194,46 +148,38 @@ else
       DETAILS+=("${BASH_REMATCH[1]}")
     fi
   done <<< "$OUT"
-  # STATUS must be `up` or `down` before anything downstream trusts it: a reader that
-  # exits 0 with a last stdout line carrying no tab (a stray print, a warning that slipped past
-  # the separate-stderr guard above) makes STATUS the whole line, which is neither "up" nor
-  # "down" — `[[ "$STATUS" == "up" ]]` reads false and pings a healthchecks.io /fail on a status
-  # string nothing defines. Treat that the same as a reader crash.
+  # STATUS must be `up` or `down` before anything trusts it: a tab-less last line would ping `/fail`
+  # on an undefined status, so treat it as a reader crash.
   if [[ $RC -ne 0 || -z "$LAST_LINE" ]]; then
     STATUS=down
     DETAILS=()
     MSG="longhorn backup health reader failed: ${ERR:-${OUT:-(no output)}}"
-    # The reader logs its own verdict on a normal run; on THIS path it never got that far, so log
-    # here instead — otherwise the one failure mode where the local trail matters most (the reader
-    # itself broke) is the one case with no journalctl record at all.
+    # The reader never logged its verdict on this path, so log here: it is the failure with no other
+    # journalctl record.
     logger -t longhorn-backup-health "status=${STATUS} ${MSG}"
   else
     STATUS="${LAST_LINE%%$'\t'*}"
     MSG="${LAST_LINE#*$'\t'}"
     if [[ "$STATUS" != "up" && "$STATUS" != "down" ]]; then
-      # The whole output, flattened, rather than the last line alone: whatever the reader did
-      # print ahead of it is the only explanation this path has.
+      # The whole output, flattened: what the reader printed ahead of the last line is the only
+      # explanation.
       FLAT_OUT="${OUT//$'\n'/ | }"
       logger -t longhorn-backup-health "status=down reader printed an unrecognized status: ${FLAT_OUT}"
       MSG="longhorn backup health reader printed an unrecognized status: ${FLAT_OUT}"
       STATUS=down
       DETAILS=()
     elif [[ -n "$ERR" ]]; then
-      # A green run's stderr is not necessarily empty — a kubectl RBAC warning or a uv resolution
-      # warning can land here on an otherwise-successful tick. Only the failure branch used to
-      # call `logger`, so this was silently dropped on every clean run with something on stderr.
+      # A green run's stderr may hold a kubectl RBAC or uv warning; log it too.
       logger -t longhorn-backup-health "status=${STATUS} stderr: ${ERR}"
     fi
   fi
 fi
 
-# The textfile, before the ping: the verdict must not wait on the network. The producer metric
-# contract is docs/archive/monitoring/m3-textfile-timer.md, and homelab-check-lib.sh
-# writes the file atomically. A failed write logs and the run goes on to its ping.
+# Textfile before the ping: the verdict must not wait on the network. A failed write logs and the
+# ping still runs.
 SUCCESS=0
 [[ "$STATUS" == "up" ]] && SUCCESS=1
-# One series per problem class on a down verdict, so LonghornBackupHealthFailed fires once per
-# class: a second problem during a red window opens its own alert instead of hiding in the first.
+# One series per problem class on a down verdict, so a second problem opens its own alert.
 DETAIL_LINES=()
 if [[ "$STATUS" == "down" && -n "${DETAILS[*]}" ]]; then
   DETAIL_LINES+=(
@@ -247,27 +193,20 @@ fi
 write_check_textfile longhorn-backup-health "$SUCCESS" "$(date +%s)" "$DEADLINE_S" "${DETAIL_LINES[@]}" \
   || logger -t longhorn-backup-health "textfile write to ${TEXTFILE_DIR} failed (status=${STATUS})"
 
-# Off-premises dead-man's switch. The textfile above is read by Prometheus, which runs ON the
-# cluster this script watches — a cluster or WAN outage kills the scrape AND the rules waiting for
-# it, so nothing alerts and the failure is invisible until someone looks. hc-ping.com is off-site
-# and alerts on SILENCE, the one signal an on-prem monitor structurally cannot produce. Optional:
-# with no key configured this renders empty and the block is skipped, leaving the host unchanged.
-# A credential rather than inlined: this script is 0755, which would make an inlined key
-# readable by every local account.
+# Off-site dead-man's switch: Prometheus runs on this cluster, so hc-ping.com alerts on the silence.
+# Skipped with no key. A credential, not inlined: this script is 0755.
 HC_PING_KEY=""
 if [[ -r "${CREDENTIALS_DIRECTORY:-/nonexistent}/healthchecks_ping_key" ]]; then
   HC_PING_KEY="$(<"$CREDENTIALS_DIRECTORY/healthchecks_ping_key")"
 fi
 if [[ -n "$HC_PING_KEY" ]]; then
-  # Bare slug, deliberately NOT ?create=1 — auto-provisioning turns a typo'd slug into a brand
-  # new check that nobody is watching and that reads green forever.
+  # Bare slug, not ?create=1: auto-provisioning turns a typo into an unwatched check that reads
+  # green forever.
   HC_URL="https://hc-ping.com/${HC_PING_KEY}/longhorn-backup-health"
   [[ "$STATUS" == "up" ]] || HC_URL="${HC_URL}/fail"
-  # `-fs` without `-S`, and stderr discarded on top of it: `--retry` writes
-  # `Warning: ... Will retry` to stderr for an attempt a later one recovers, and cron mails
-  # that from a run that succeeded. Whether `-s` alone silences it varies by curl version, so
-  # the redirect is the guarantee. Nothing is lost — the `|| logger` below is the report, and
-  # it fires on the failure this hides the chatter of.
+  # `-fs` without `-S`, stderr discarded: `--retry` warnings would be cron-mailed from a successful
+  # run.
+  # The `|| logger` below reports a real failure.
   curl -fs --max-time 10 --retry 3 --data-raw "$MSG" "$HC_URL" >/dev/null 2>&1 \
     || logger -t longhorn-backup-health "healthchecks ping failed (status=${STATUS})"
 fi

@@ -16,31 +16,24 @@ kind: AuthenticationConfiguration
 jwt:
 {% for issuer_url in k3s_oidc_issuer_urls %}
   - issuer:
-      # Compared EXACTLY against the token's `iss`, with no normalisation: a trailing slash
-      # here rejects every token from this issuer, and the failure is a login that completes
-      # at Authelia and is then refused by the API server.
+      # Compared EXACTLY against the token's `iss`: a trailing slash rejects every token, so a login
+      # completes at Authelia and is refused by the API server.
       url: "{{ issuer_url }}"
-      # The audience. Authelia's default `id_token_audience_mode: specification` puts only the
-      # client id in `aud`, so this is the Authelia client id — the same value Headlamp sends
-      # as `-oidc-client-id`. `audiences` is required and must be non-empty.
+      # Authelia's default audience mode puts only the client id in `aud`, so this is the client id
+      # Headlamp sends.
+      # `audiences` must be non-empty.
       audiences:
         - "{{ k3s_oidc_client_id }}"
     claimMappings:
       username:
         claim: "{{ k3s_oidc_username_claim }}"
-        # EMPTY STRING, and this is where the structured config differs from the flag it
-        # replaces. `--oidc-username-prefix=-` was the sentinel meaning "no prefix", because
-        # the flag path prefixes the username with the issuer URL plus `#` for any claim other
-        # than `email`. Structured config has no such implicit prefixing and no `-` sentinel:
-        # `prefix` is REQUIRED whenever `claim` is set, and `""` is how prefixing is disabled
-        # ("prefix is required when claim is set. It can be set to an empty string to disable
-        # prefixing", apiserver/pkg/apis/apiserver/validation/validation.go). Writing `-` here
-        # would produce usernames literally prefixed `-`.
+        # Empty string, not `-`: structured config has no `-` sentinel, and `prefix` is required
+        # whenever `claim` is set.
+        # `-` would produce usernames literally prefixed `-`.
         prefix: ""
       groups:
         claim: "{{ k3s_oidc_groups_claim }}"
-        # Groups DO carry a prefix, and it is what stops an Authelia group name from being
-        # read as a built-in `system:` group. `headlamp_k8s_oidc_group`
-        # (k8s/roles/headlamp/defaults) is this prefix plus the Authelia group.
+        # Groups DO carry a prefix, so an Authelia group name is not read as a built-in `system:`
+        # group.
         prefix: "{{ k3s_oidc_groups_prefix }}"
 {% endfor %}

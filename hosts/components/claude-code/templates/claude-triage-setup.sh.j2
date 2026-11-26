@@ -31,12 +31,11 @@ as_ctl() {
 
 systemd-tmpfiles --create /usr/lib/tmpfiles.d/homelab-claude-triage.conf
 
-# What sessions wrote to the home before it became a per-run tmpfs. The mount would hide it, not
-# remove it. find -delete follows no link, and the session's tmpfs exists only in its own unit.
+# What sessions wrote to the home before it became a per-run tmpfs; the mount would hide it, not
+# remove it.
 find "{{ pins.session_home }}" -xdev -mindepth 1 -delete
 
-# The records a run wrote while triage ran as the agent, copied once. find does not follow links,
-# so a link the agent planted there is skipped rather than read as root.
+# find does not follow links, so a link the agent planted there is skipped rather than read as root.
 old={{ claude_code_agent_user_home }}/triage
 if [[ -d "$old" && ! -L "$old" && ! -e "$state/.copied-from-agent" ]]; then
   for sub in inbox runs "done"; do
@@ -53,17 +52,16 @@ if [[ -d "$old" && ! -L "$old" && ! -e "$state/.copied-from-agent" ]]; then
   install -o "$ctl" -g "$ctl" -m 0640 /dev/null "$state/.copied-from-agent"
 fi
 
-# The session's kubeconfig: the operator's read-only one, root-owned, readable by the session's
-# group, outside every home the session writes. Copied on every run so a re-issued token reaches it.
-# It names the API by the host's LAN address, so the session reaches it through the T2 egress
-# proxy like any other destination, and no loopback port stays open to the session.
+# Copied every run so a re-issued token reaches it; root-owned, readable by the session's group.
+# It names the API by LAN address: the session goes through the T2 egress proxy, no loopback port
+# opens.
 if [[ -f "$operator/.kube/config" ]]; then
   install -o root -g "$session" -m 0640 "$operator/.kube/config" {{ pins.kubeconfig }}
   sed -i 's#^\([[:space:]]*server: \)https://127\.0\.0\.1:6443$#\1https://{{ server_ip }}:6443#' {{ pins.kubeconfig }}
 fi
 
-# The toolchain and the clone change only while no run holds the lock: a refresh under a live
-# session would reset the tree it reads. The runner starts this script before it takes the lock.
+# A refresh under a live session would reset the tree it reads; the runner starts this script before
+# it takes the lock.
 exec 9>>"$state/run.lock"
 chown "$ctl:$ctl" "$state/run.lock"
 if ! flock -n 9; then
@@ -117,12 +115,8 @@ fi
 (cd "$clone" && as_ctl env UV_PYTHON_INSTALL_DIR="$tools/python" \
   UV_CACHE_DIR="{{ pins.ctl_home }}/uv-cache" "$tools/.local/bin/uv" sync --frozen --quiet)
 
-# The session reads all of it through its group. A file uv hardlinked from the controller's cache,
-# or an installer moved into place, keeps the group and mode it was made with, which the setgid
-# directory cannot change, so both trees are regrouped and opened to the group on every run.
-# Root regroups, because the controller is not in the session's group and chgrp refuses a group
-# its caller lacks. -h and -R without -L change each link itself and follow none, so a link in
-# the controller's tree regroups nothing outside it. The controller owns every file, so it sets
-# the modes.
+# Hardlinked or moved files keep their group and mode, so both trees are regrouped every run.
+# Root regroups because chgrp refuses a group its caller lacks; -h and no -L means no link is
+# followed.
 chgrp -R -h "$session" "$tools" "$clone"
 as_ctl chmod -R g+rX,g-w "$tools" "$clone"

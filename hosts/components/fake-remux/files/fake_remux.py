@@ -14,8 +14,7 @@ logic lives in fake_remux_lib/ beside this file; each module's docstring describ
 import argparse
 import sys
 
-# Run directly, this file's own directory is on sys.path. That directory holds fake_remux_lib/
-# and, on the host, the sibling host_lib.py the libraries import.
+# Run directly, sys.path has this directory: fake_remux_lib/ and, on the host, host_lib.py.
 from fake_remux_lib import fake_remux_replace, fake_remux_scan
 
 SUBCOMMANDS = {"scan": fake_remux_scan, "replace": fake_remux_replace}

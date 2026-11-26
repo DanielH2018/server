@@ -15,19 +15,13 @@ mirrors:
   "{{ k8s_registry_pull_host }}":
     endpoint:
       - "http://{{ k8s_registry_cluster_ip }}:{{ k8s_registry_port }}"
-  # The ghcr.io pull-through mirror, the registry pod's second listener.
-  # containerd tries it first and then ghcr.io itself, because k3s keeps the default endpoint
-  # after every mirror endpoint. A mirror that is down or GC-scaled to zero therefore never
-  # blocks a pull while the WAN is up. lscr.io shares it: lscr.io serves ghcr.io's
-  # linuxserver repositories under ghcr.io's token realm, so the same proxy answers its paths
-  # with the same digests.
+  # containerd tries the mirror first, then ghcr.io, because k3s keeps the default endpoint: a down
+  # mirror never blocks a pull. lscr.io shares it, as it serves ghcr.io's linuxserver repositories.
 {% for upstream in ["ghcr.io", "lscr.io"] %}
   "{{ upstream }}":
     endpoint:
       - "http://{{ k8s_registry_cluster_ip }}:{{ k8s_registry_ghcr_mirror_port }}"
 {% endfor %}
-  # The docker.io pull-through mirror, its own Deployment behind the same Service. Same
-  # fallback as the entries above.
   "docker.io":
     endpoint:
       - "http://{{ k8s_registry_cluster_ip }}:{{ k8s_registry_dockerhub_mirror_port }}"

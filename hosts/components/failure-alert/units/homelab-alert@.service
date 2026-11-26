@@ -7,31 +7,22 @@ Wants=homelab-secrets.service
 
 [Service]
 Type=oneshot
-# The webhook arrives as a credential and appears in no unit text: systemd serves unit content
-# over the system bus, so an embedded value would print for any local user. homelab-secrets
-# writes /run/credstore/<sops key>.
+# A credential, not unit text: systemd serves unit content over the system bus, so an embedded
+# webhook would print for any local user.
 LoadCredential=discord_webhook:/run/credstore/discord_alert_webhook
-# Retries every failure, a refused connection and a failed DNS lookup included. Two minutes of
-# curl retries do not cover an outage, so systemd re-runs a failed delivery every five minutes
-# until it succeeds. While a retry is pending the unit reads `activating (auto-restart)`.
-# `systemctl stop homelab-alert@<unit>` abandons the retry, and so does a reboot.
-#
-# RestartPreventExitStatus= lists the one exit another attempt cannot fix: curl exits 3 on a
-# malformed URL, as an empty webhook gives. Exit 22 is not final, because curl -f exits 22 on
-# any status of 400 or more, and a Discord 429 or a Cloudflare 502 looks the same as a revoked
-# webhook. Retrying a revoked webhook costs one error line every five minutes.
+# systemd re-runs a failed delivery every five minutes: curl's retries do not cover an outage.
+# Only exit 3 (empty webhook) is final; exit 22 covers any 400+, so a 429 or 502 must retry.
 Restart=on-failure
 RestartSec=5min
 RestartPreventExitStatus=3
-# A page that arrives hours late says when the failure happened. The first attempt records the
-# time under the instance's own runtime directory, and every retry posts that same time.
-# RuntimeDirectoryPreserve=restart keeps the directory across a retry, and systemd removes it
-# when the unit stops for good, so the next failure records a fresh time.
+# The first attempt records the failure time and every retry posts it, so a late page stays
+# accurate.
+# RuntimeDirectoryPreserve=restart keeps it across retries; it goes when the unit stops for good.
 RuntimeDirectory=homelab-alert/%i
 RuntimeDirectoryPreserve=restart
 ExecStartPre=/bin/sh -c 'test -s %t/homelab-alert/%i/failed-at || date --utc "+%%Y-%%m-%%d %%H:%%M UTC" > %t/homelab-alert/%i/failed-at'
-# curl builds the payload and JSON-escapes the instance and the time, so no shell wrapper
-# re-quotes it. The page names `%i`, the instance as written: `%I` unescapes every `-` to `/`.
+# curl JSON-escapes the instance and the time, so no shell wrapper re-quotes it.
+# The page names `%i`, the instance as written: `%I` unescapes every `-` to `/`.
 ExecStart=/usr/bin/curl -fsS -m 10 --retry 5 --retry-delay 10 --retry-all-errors \
   -H "Content-Type: application/json" \
   --variable 'failed_at@%t/homelab-alert/%i/failed-at' \
@@ -40,8 +31,7 @@ ExecStart=/usr/bin/curl -fsS -m 10 --retry 5 --retry-delay 10 --retry-all-errors
   --variable 'webhook@%d/discord_webhook' \
   --expand-data '{"content":"{{instance:json}} failed on {{host:json}}. journalctl -u {{instance:json}} has the run. Failed at {{failed_at:trim:json}}."}' \
   --expand-url '{{webhook:trim}}'
-# A delivered page leaves no on-host record by itself: curl is silent on success, and systemd's
-# own lines are info-level, which this host's journald drops (MaxLevelStore=notice). The echo at
-# notice level records a delivery. ExecStartPost runs only after a successful ExecStart.
+# curl is silent on success and systemd's info-level lines are dropped (MaxLevelStore=notice), so
+# the notice-level echo records a delivery.
 SyslogLevel=notice
 ExecStartPost=/bin/echo homelab-alert delivered for %i

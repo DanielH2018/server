@@ -42,9 +42,7 @@ source "${HOMELAB_LIB_DIR:-/usr/lib/homelab}/homelab-check-lib.sh" || {
   exit 1
 }
 
-# The longest legitimate gap between two textfile writes: three 5-minute timer runs. Move it
-# with homelab-systemd-units.timer. hosts/tests/test_systemd_units_check.py pins the rules'
-# literals to it.
+# Three 5-minute timer runs; move it with homelab-systemd-units.timer.
 DEADLINE_S=900
 
 # --plain drops the bullet column, so the unit name is the first field.
@@ -63,10 +61,8 @@ SUCCESS=$((COUNT == 0))
 # Prints the value of property $1 from the `systemctl show` output on stdin.
 prop() { awk -v key="$1" 'index($0, key "=") == 1 { print substr($0, length(key) + 2); exit }'; }
 
-# Succeeds when the `systemctl show -p OnFailure -p InactiveEnterTimestampMonotonic` output in $1
-# names a Discord hook, homelab-alert@ or homelab-<name>-alert.service, that has paged since the
-# unit failed: inactive with Result=success or Result=exec-condition, and inactive since a time
-# after the unit's own failure. A hook still retrying, or one that never ran, fails this.
+# Delivered means inactive with Result=success or exec-condition since after the unit's failure;
+# a hook still retrying, or one that never ran, fails.
 hook_delivered() {
   local hook failed_at props delivered_at
   hook=$(prop OnFailure <<<"$1" | tr ' ' '\n' | grep -m1 -E '^homelab-(alert@|[a-z0-9-]+-alert\.service$)') || return 1
@@ -82,15 +78,13 @@ hook_delivered() {
 }
 
 # One line per failed unit: "<boot ID>:<InactiveEnterTimestampMonotonic> <paged|unpaged> <unit>".
-# The packaged unit's StateDirectory= sets STATE_DIRECTORY.
 STATE_FILE="${STATE_DIRECTORY:-/var/lib/homelab-systemd-units}/paged-by"
 PREVIOUS_STATE=$(cat "$STATE_FILE" 2>/dev/null)
 BOOT_ID=$(cat /proc/sys/kernel/random/boot_id)
 STATE=()
 
-# One series per failed unit, so SystemdUnitsFailed can name each unit in its summary. Unit
-# names carry systemd's \x2d escapes, and node_exporter rejects the whole file on a label value
-# with a backslash or quote the text format does not escape.
+# node_exporter rejects the whole file on an unescaped backslash or quote in a label value, and unit
+# names carry systemd's \x2d escapes.
 PER_UNIT=()
 if ((COUNT > 0)); then
   PER_UNIT+=(
@@ -123,8 +117,7 @@ if ! {
   logger -t systemd-units "cannot write ${STATE_FILE}"
 fi
 
-# A failed unit is the verdict, not this unit's failure: exiting 1 for it would list the checker
-# under `systemctl --failed` beside the unit it found.
+# A failed unit is the verdict, not this unit's failure: exiting 1 would list the checker beside it.
 write_check_textfile systemd-units "$SUCCESS" "$(date +%s)" "$DEADLINE_S" \
   "# HELP homelab_systemd_failed_units System units in the failed state at the check's last run." \
   "# TYPE homelab_systemd_failed_units gauge" \
