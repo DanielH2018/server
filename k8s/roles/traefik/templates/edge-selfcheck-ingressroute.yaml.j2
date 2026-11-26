@@ -39,23 +39,14 @@ spec:
     - https
   routes:
     - kind: Rule
-      # Path-only, and deliberately NOT a Host() rule. A kubelet httpGet probe connects to
-      # the pod IP, so it sends no TLS SNI, and Traefik answers a matched Host() router whose
-      # SNI does not agree with the Host header with `421 Misdirected Request`. A probe that
-      # can only ever return 421 or 404 never passes, so the edge would crashloop on a change
-      # meant to protect it. With no Host matcher there is nothing to disagree.
-      #
-      # The path is unroutable by any app here and the handler returns the literal `OK`, so
-      # matching it on every hostname — including the public ones — costs nothing. Rule
-      # priority is rule length, so this only ever wins for requests to this exact path.
+      # Path-only, not Host(): a kubelet probe sends no SNI, so a Host() router answers it 421 and
+      # the probe never passes, crashlooping the edge on the change it protects.
       match: "PathPrefix(`/.well-known/traefik-edge-selfcheck`)"
       services:
         # kind + absent port are both load-bearing. See the header.
         - name: ping@internal
           kind: TraefikService
-  # An https router with no tls block is a NON-TLS router and is never a candidate for an
-  # HTTPS request — see dashboard-ingressroute.yaml.j2. The SAN set is the existing wildcard,
-  # so this adds no ACME order.
+  # No tls block means a non-TLS router, never matched by HTTPS requests.
   tls:
 {% if k8s_tls_cert_resolver %}
     certResolver: {{ k8s_tls_cert_resolver }}

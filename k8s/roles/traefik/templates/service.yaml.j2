@@ -5,22 +5,8 @@ metadata:
   name: traefik
   namespace: {{ k8s_namespace }}
   annotations:
-    # The annotation, not spec.loadBalancerIP: that field is deprecated upstream and MetalLB
-    # reads this. This is the only way to claim an address out of the autoAssign: false
-    # ingress-pool (k8s/roles/metallb/templates/metallb-pool.yaml.j2).
-    #
-    # metallb.io/, NOT metallb.universe.tf/: MetalLB v0.15 introduced metallb.io/ for Service
-    # annotations and deprecated metallb.universe.tf/, and this cluster runs v0.16.0
-    # (k3s_metallb_version). Both prefixes are still read (controller/service.go
-    # valueForAnnotation, metallb.io wins), but the deprecated one emits a
-    # `deprecatedAnnotation` Warning Event per Service on every reconcile.
-    #
-    # Kubernetes accepts any annotation key, and MetalLB ignores ones it does not recognise,
-    # so a wrong prefix is silent: the Service is created, an address is assigned from the
-    # auto-assign pool instead of the reserved VIP, and nothing anywhere reports a problem.
-    # That is why observability's TraefikIngressAddressNotPinned alert checks the landed
-    # address rather than trusting the annotation. Every pinned-address Service has such an
-    # alert (observability's files/rules/k8s-services.yaml).
+    # Prefix metallb.io/, not deprecated metallb.universe.tf/: it claims the VIP from the pool.
+    # A wrong key is silent: it auto-assigns; TraefikIngressAddressNotPinned checks the result.
     metallb.io/loadBalancerIPs: {{ k3s_metallb_ingress_vip }}
 spec:
   type: LoadBalancer
@@ -35,14 +21,8 @@ spec:
   # what makes that binding — a VIP-backed pod on the non-announcing node makes the announcer
   # drop all forwarded LAN traffic.
   externalTrafficPolicy: Local
-  # The node's OWN address as a second front door. The router's
-  # port-forward UI only targets devices from its DHCP/ARP list, and the MetalLB VIP has no
-  # lease and never will, so the 80/443 forward points at the DEVICE daniel-box, and
-  # kube-proxy answers on the node IP for this Service. The VIP stays the LAN-facing name
-  # (Pi-hole overrides, wg-easy, bridge transports all keep using .240); this field exists
-  # for the WAN path only. Local policy applies to externalIPs the same way, so client
-  # addresses stay real. The forward follows whichever node this IP belongs to, which is why
-  # it renders from k8s_primary_node rather than a literal.
+  # Node address as a second front door: the router forwards only to DHCP/ARP devices, not the VIP.
+  # Renders from k8s_primary_node because the forward follows whichever node owns this IP.
   externalIPs:
     - {{ hosts[k8s_primary_node].server_ip }}
   selector:

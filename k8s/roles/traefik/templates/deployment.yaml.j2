@@ -9,8 +9,7 @@ metadata:
   name: traefik
   namespace: {{ k8s_namespace }}
 spec:
-  # acme.json is a ReadWriteOnce volume and two Traefiks racing to write it corrupt the
-  # account registration, so the rollout must stop the old pod before starting the new one.
+  # Recreate: two Traefiks racing on the RWO acme.json corrupt the account registration.
 {{ spec_shell('Recreate') }}
   replicas: 1
   selector:
@@ -34,22 +33,14 @@ spec:
    token to reach the API server. #}
       # Edge/auth/DNS eviction ordering — see k8s/roles/cluster-base/templates/priorityclass.yaml.j2.
 {{ pod_shell(services | tier_priority_class('traefik'), service_account='traefik-ingress-controller', run_as_user=traefik_k8s_uid, run_as_group=traefik_k8s_uid, fs_group=traefik_k8s_uid) }}
-{# Both init containers below are conditional, and a cluster with neither ACME nor CrowdSec
-   leaves the key with no list under it. Gate the key so it is absent rather than empty. #}
+{# Gated so the key is absent, not empty, when neither ACME nor CrowdSec is on. #}
 {% if traefik_k8s_manage_acme or traefik_k8s_manage_crowdsec %}
       initContainers:
 {% endif %}
 {% if traefik_k8s_manage_acme %}
-        # Traefik creates acme.json 0600, but kubelet's fsGroup handling ORs group bits into every
-        # file on the volume at mount time, so it comes back 0660 on every start. Traefik then
-        # refuses the ACME account and drops the entire resolver:
-        #   unable to get ACME account: permissions 660 for /data/acme.json are too open,
-        #   please use 600
-        # Every router asking for that resolver then fails with "Router uses a nonexistent
-        # certificate resolver" and nothing serves TLS, while the deploy stays green.
-        #
-        # This runs on every start because the mount is what widens the file. It reuses the
-        # Traefik image (it carries /bin/sh), so there is no second image to pin.
+        # kubelet's fsGroup makes acme.json 0660 at every mount; Traefik then drops the whole
+        # resolver and nothing serves TLS while the deploy stays green. Runs every start: the mount
+        # widens it.
         - name: fix-acme-permissions
           image: {{ traefik_k8s_image }}
           imagePullPolicy: IfNotPresent
@@ -80,9 +71,8 @@ spec:
             - name: ping
               containerPort: {{ traefik_k8s_ping_port }}
 {% if traefik_k8s_manage_acme %}
-{# The whole env: key is gated, not just its entries — an env: with no list under it parses as
-   null, which the API server rejects on a container spec. This comment sits at column 0 on
-   purpose: lstrip_blocks is off, so an indented tag leaves its leading spaces in the output. #}
+{# The whole env: key is gated: an empty env: parses as null, which the API server rejects.
+   Column 0 on purpose: lstrip_blocks is off, so an indented tag leaves spaces in the output. #}
           env:
             # Not sensitive — the token itself is file-mounted below.
             - name: CF_API_EMAIL
@@ -100,23 +90,18 @@ spec:
               mountPath: /etc/traefik-file
               readOnly: true
 {% endif %}
-            # NOT /run/secrets: /var/run/secrets symlinks to it, and Kubernetes projects the
-            # ServiceAccount token there. Mounting a read-only Secret over it leaves runc unable
-            # to create /run/secrets/kubernetes.io and the container never starts:
-            #   mkdirat .../rootfs/run/secrets/kubernetes.io: read-only file system
+            # Not /run/secrets: it holds the ServiceAccount token, and a Secret mount over it stops
+            # runc.
 {% if traefik_k8s_manage_acme %}
             - name: traefik-cloudflare
               mountPath: /secrets
               readOnly: true
 {% endif %}
 {% if traefik_k8s_manage_crowdsec %}
-            # The bouncer plugin reads its LAPI key from here (crowdsecLapiKeyFile in the
-            # crowdsec Middleware) — a file, so the key never appears in the CRD.
             - name: crowdsec-key
               mountPath: /secrets/crowdsec
               readOnly: true
-            # The cloudflare-realip local plugin's source. Traefik resolves
-            # ./plugins-local/src/<moduleName>/ against its working directory, which is /.
+            # Traefik resolves ./plugins-local/src/<moduleName>/ against its working directory, /.
             - name: cloudflare-realip-plugin
               mountPath: /plugins-local
               readOnly: true
@@ -128,10 +113,8 @@ spec:
             # Shared with the crowdsec-agent sidecar, which tails access.log.
             - name: traefik-logs
               mountPath: /var/log/traefik
-            # Traefik downloads experimental plugins (the crowdsec bouncer) here at start. With the
-            # read-only rootfs it cannot mkdir this itself, and when that fails it does not fail
-            # the pod: it DISABLES plugins, the crowdsec Middleware never materializes, and every
-            # router referencing it 404s.
+            # Plugin download dir: with a read-only rootfs Traefik cannot mkdir it and silently
+            # DISABLES plugins, so the crowdsec Middleware never exists and its routers 404.
             - name: traefik-plugins-storage
               mountPath: /plugins-storage
             - name: traefik-tmp
@@ -172,9 +155,8 @@ spec:
               scheme: HTTPS
             periodSeconds: 5
             failureThreshold: 36
-            # 3s, not kubelet's 1s default. Each attempt is a full TLS handshake plus the crowdsec,
-            # default-headers and compress chain, and at cold boot on a loaded node 1s can expire
-            # on a healthy Traefik, burning all 36 attempts and restarting it.
+            # 3s, not 1s: each attempt is a full TLS handshake plus the middleware chain, and 1s can
+            # expire on a healthy cold-booting Traefik, burning all attempts.
             timeoutSeconds: 3
 {% endif %}
           readinessProbe:
@@ -191,29 +173,12 @@ spec:
             periodSeconds: 30
 {{ container_resources(cpu_limit=traefik_k8s_cpu_limit, mem_limit=traefik_k8s_mem_limit, cpu_request=traefik_k8s_cpu_request, mem_request=traefik_k8s_mem_request) }}
 {% if traefik_k8s_manage_crowdsec %}
-        # Tails this pod's access log into the in-cluster LAPI. The bouncer middleware fails
-        # open per its own config, so a dead agent costs detection, not serving.
+        # The bouncer fails open, so a dead agent costs detection, not serving.
 {{ crowdsec_agent_sidecar('traefik', collections=traefik_k8s_agent_collections, log_volume='traefik-logs', log_dir='/var/log/traefik', cpu_limit=traefik_k8s_agent_cpu_limit, mem_limit=traefik_k8s_agent_mem_limit, cpu_request=traefik_k8s_agent_cpu_request, mem_request=traefik_k8s_agent_mem_request, parsers=traefik_k8s_agent_parsers) }}
 {% endif %}
-        # Ships the access log to Loki (tails it to stdout, which promtail's k8s-pods job
-        # auto-discovers by container name — no scrape-config change needed) and keeps the
-        # traefik-logs emptyDir off the eviction path (copytruncate before traefik_k8s_access_log_size
-        # is ever reached).
-        #
-        # copytruncate, NOT a SIGUSR1 reopen signal: signalling traefik's PID 1 from a sibling
-        # container needs shareProcessNamespace: true on the pod, which stays unset so no
-        # sidecar can see or signal another container's process on this security-critical pod.
-        # copytruncate copies the log aside, then truncates the SAME inode, so traefik's
-        # already-open fd keeps writing. That works because traefik opens the access log
-        # O_APPEND, so the first write after a truncate lands at the new offset 0. The rotate()
-        # function below checks this held. CrowdSec's acquis.yaml (crowdsec-secret.yaml.j2)
-        # names the exact file /var/log/traefik/access.log, not a glob, so the rotated .1/.2
-        # generations are never re-ingested and old requests never get re-banned.
-        #
-        # Deliberately NO readinessProbe, as with crowdsec-agent above: a sidecar's readiness
-        # gates the whole pod's Service endpoints, so a tail or rotation hiccup here must never
-        # pull the EDGE out of rotation. No livenessProbe either: the loop below watchdogs the
-        # child `tail`, and a container restart would gain nothing.
+        # copytruncate, not SIGUSR1: signalling needs shareProcessNamespace, unset on this pod on
+        # purpose. No readinessProbe: a sidecar's readiness would pull the whole edge out of the
+        # Service.
         - name: access-log-rotate
           image: {{ traefik_k8s_logrotate_image }}
           imagePullPolicy: IfNotPresent
@@ -229,17 +194,14 @@ spec:
 
               log() { echo "access-log-rotate: $*"; }
 
-              # BusyBox's tail is not known to reseek to 0 on a detected truncation the way GNU
-              # coreutils does, so the child is killed and restarted across every rotation.
-              # `-n +1` follows from byte 0: right after a truncate/restart the file is ~empty,
-              # so nothing is lost by not seeking to the (now stale) end.
+              # BusyBox tail may not reseek after truncation, so it restarts on every rotation
+              # (`-n +1`).
               start_tail() {
                 tail -f -n +1 "$LOG" &
                 TAIL_PID=$!
               }
 
-              # stat is O(1); wc -c re-reads the whole file, which matters at 100MB+ on a
-              # once-a-minute poll. Falls back if this image's stat lacks -c.
+              # stat is O(1); wc -c re-reads the whole file. Falls back if stat lacks -c.
               file_size() {
                 stat -c%s "$LOG" 2>/dev/null || wc -c < "$LOG"
               }
@@ -259,9 +221,7 @@ spec:
                 wait "$TAIL_PID" 2>/dev/null || true
                 start_tail
 
-                # Did the truncate take? If traefik does not open the log O_APPEND, its write offset
-                # stays at the pre-rotate size and the file re-grows to it on the next write, so
-                # copying it in full every cycle would thrash the disk. Fail loud and stop rotating.
+                # Without O_APPEND the file regrows to its old size, so fail loud and stop rotating.
                 size_after=$(file_size)
                 if [ "$size_after" -ge "$MAX_BYTES" ]; then
                   log "truncate did not shrink $LOG (still ${size_after}B) — disabling further rotation"
@@ -306,8 +266,7 @@ spec:
         - name: traefik-cloudflare
           secret:
             secretName: traefik-cloudflare
-            # 0440, not 0400: the kubelet owns secret files as root:fsGroup, so the container user
-            # reaches them through the GROUP bit, which 0400 does not grant.
+            # 0440, not 0400: the container user reads secret files through the group bit.
             defaultMode: 0440
         - name: traefik-acme
           persistentVolumeClaim:
@@ -317,8 +276,7 @@ spec:
           emptyDir: {}
 {% if traefik_k8s_manage_crowdsec %}
 {{ crowdsec_agent_volumes('traefik') }}
-        # The traefik container gets ONLY the key file from traefik-crowdsec; the whole Secret
-        # (agent password, acquis, whitelists) is projected for the sidecar's seed above.
+        # The traefik container gets only the key file; the sidecar's seed gets the whole Secret.
         - name: crowdsec-key
           secret:
             secretName: traefik-crowdsec
@@ -326,8 +284,7 @@ spec:
             items:
               - key: lapi_key
                 path: lapi_key
-        # Projects the plugin into the GOPATH layout Traefik reads. The manifest's ConfigMap key
-        # is `traefik-plugin.yml` and only the projected name carries the leading dot.
+        # ConfigMap key is `traefik-plugin.yml`; only the projected name carries the leading dot.
         - name: cloudflare-realip-plugin
           configMap:
             name: traefik-cloudflare-realip
@@ -339,9 +296,6 @@ spec:
 {% endif %}
         - name: traefik-plugins-storage
           emptyDir: {}
-        # sizeLimit is a BACKSTOP against pod eviction, not the rotation mechanism: the
-        # access-log-rotate sidecar copytruncates the log well before it is reached (see
-        # traefik_k8s_access_log_rotate_mb / _keep in defaults/main.yml).
         - name: traefik-logs
           emptyDir:
             sizeLimit: {{ traefik_k8s_access_log_size }}

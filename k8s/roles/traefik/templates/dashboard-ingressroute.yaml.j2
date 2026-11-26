@@ -45,9 +45,7 @@ spec:
       # session, so don't add it back to make the SPA work again.
       match: "Host(`traefik.local.{{ domain }}`) && PathPrefix(`/dashboard`)"
       middlewares:
-        # rate-limit is per-router on this edge, not on the https entrypoint. default-headers
-        # is NOT listed: it is already global on the entrypoint (static-config.yaml.j2), so
-        # repeating it here would be a no-op.
+        # rate-limit is per-router; default-headers is already global on the entrypoint.
         - name: rate-limit
         - name: authelia
       services:

@@ -1,13 +1,6 @@
 {% from 'origin-pull.yml.j2' import origin_pull_tlsoption with context %}
-{#
-  The edge's middlewares and TLS options.
-
-  Deliberately NOT here:
-    csp-karakeep        lives in the karakeep role instead, beside the Service it applies to
-  The crowdsec Middleware is at the bottom of this file, pointed at the in-cluster LAPI.
-  No TLSStore either: every IngressRoute states its own tls.domains via the ingressroute()
-  macro, so a store's defaultGeneratedCert would be a second source of truth for the SAN set.
-#}
+{# Not here: csp-karakeep (karakeep role). No TLSStore: every IngressRoute states its own
+   tls.domains, so a store's defaultGeneratedCert would be a second source for the SAN set. #}
 ---
 apiVersion: traefik.io/v1alpha1
 kind: Middleware
@@ -18,53 +11,20 @@ spec:
   headers:
     customResponseHeaders:
       Permissions-Policy: "geolocation=(self), microphone=(), camera=(), fullscreen=(self), usb=()"
-      # No global Content-Security-Policy: customResponseHeaders REPLACES the backend's header, so
-      # a blanket CSP clobbers the stricter per-app ones (FreshRSS even detects the weakened
-      # header and warns). Clickjacking is covered by X-Frame-Options SAMEORIGIN below; set CSP
-      # per-app where the origins are known-good.
+      # No global CSP: customResponseHeaders replaces the backend's header and clobbers per-app
+      # CSPs.
     referrerPolicy: "strict-origin-when-cross-origin"
     browserXssFilter: true
     contentTypeNosniff: true
     forceSTSHeader: true
     stsIncludeSubdomains: true
-    # No stsPreload: browsers only honour preload at max-age >= 1 year, so at 180 days it
-    # advertises an intent we do not fulfil — and preloading is a hard-to-reverse commitment
-    # across every subdomain.
+    # No stsPreload: it needs max-age >= 1 year and is hard to reverse across every subdomain.
     stsSeconds: 15552000
     customFrameOptionsValue: SAMEORIGIN
     customRequestHeaders:
       X-Forwarded-Proto: https
-{#
-  Two limiter profiles, each rendered TWICE: once keyed on the connection's remote address
-  (the plain name) and once keyed on the client Cloudflare forwarded (`-proxied`). Which one a
-  router attaches is decided by its Host rule, not by the service:
-
-    Host(`x.{{ domain }}`)        Cloudflare-proxied. The connection is FROM a Cloudflare edge,
-                                  so the remote address is the edge and Traefik's default
-                                  keying shares one bucket between every client behind it —
-                                  a guessing loop against one route would throttle every other
-                                  client on that edge, and the attacker could rotate edges.
-                                  `ipStrategy.depth: 1` keys on the rightmost X-Forwarded-For
-                                  entry, which Cloudflare APPENDS (a client-supplied XFF is
-                                  left in front of it), and the entrypoint keeps XFF only from
-                                  `forwardedHeaders.trustedIPs`, so a direct client cannot
-                                  choose its key.
-    Host(`x.local.{{ domain }}`)  Direct. `*.local.` is DNS-only (a public resolver returns the
-                                  MetalLB VIP) and externalTrafficPolicy: Local preserves the
-                                  client address, so the remote address IS the client. It
-                                  sends no XFF, and Traefik's DepthStrategy returns "" for a
-                                  missing header rather than falling back to the remote
-                                  address — so depth here would pool the whole LAN into one
-                                  bucket. That is why the two hosts are separate Rules with
-                                  separate middlewares (k8s/templates/ingressroute.yml.j2)
-                                  rather than one Rule with one sourceCriterion.
-
-  Not `excludedIPs: cloudflare_ips` (the PoolStrategy): it walks XFF right-to-left skipping
-  the excluded ranges, which is depth 1 with a 22-entry dependency on the range list, and it
-  returns the same "" for a missing header. ENFORCED: tests/k8s/
-  test_rate_limit_keys_on_the_client.py fails a public Host rule attached to a plain limiter,
-  a `.local.` rule attached to a `-proxied` one, and a Rule mixing the two.
-#}
+{# Two keyings per profile: plain keys on the remote address (`.local.` hosts, direct), `-proxied`
+   on XFF depth 1 (public, via Cloudflare); test_rate_limit_keys_on_the_client.py forbids mixing. #}
 {% for profile in [
      {'name': 'rate-limit', 'average': 300, 'burst': 150,
       'why': 'The default per-client budget every route carries (ingressroute.yml.j2 attaches it unconditionally).'},
@@ -95,19 +55,13 @@ spec:
 apiVersion: traefik.io/v1alpha1
 kind: Middleware
 metadata:
-  # Response compression, attached ENTRYPOINT-WIDE in static-config.yaml.j2 rather than
-  # per-router: no service here wants its HTML/JSON shipped uncompressed, so an opt-in list
-  # would only ever be a list of everything, drifting one service at a time.
+  # Attached entrypoint-wide in static-config.yaml.j2: no service wants uncompressed HTML/JSON.
   name: compress
   namespace: {{ k8s_namespace }}
 spec:
   compress:
-    # An ALLOW-list, not excludedContentTypes: Traefik compares excludedContentTypes by parsed
-    # media type EQUALITY, so the obvious-looking `video/` prefix entry matches nothing and
-    # Jellyfin's streams would be gzipped, burning CPU to make already-compressed bytes larger.
-    # Enumerating every video/image/archive type instead silently rots as new types appear.
-    # Naming what compresses well is the closed set; everything else is excluded by
-    # construction.
+    # An allow-list: excludedContentTypes matches by equality, so a `video/` prefix excludes nothing
+    # and Jellyfin's streams would be gzipped.
     includedContentTypes:
       - text/html
       - text/plain
@@ -120,25 +74,17 @@ spec:
       - application/xml
       - application/rss+xml
       - image/svg+xml
-    # Below this the Content-Encoding/Vary header overhead costs more than the saving.
-    # Matches Traefik's own default; stated because it is a tuning knob, not a constant.
     minResponseBodyBytes: 1024
 ---
 apiVersion: traefik.io/v1alpha1
 kind: TLSOption
 metadata:
-  # NOT `default`. That name is reserved: Traefik registers a TLSOption called `default` as
-  # the global default options rather than under <namespace>-default@kubernetescrd, so an
-  # IngressRoute that names it explicitly can never resolve it and every affected router
-  # fails to build:
-  #   error "unknown TLS options: homelab-default@kubernetescrd"
-  # The object exists and is valid; the reference looks up a key the provider never
-  # registered.
+  # Not `default`: Traefik registers that TLSOption globally, not as
+  # <namespace>-default@kubernetescrd, so naming it fails with `unknown TLS options`.
   name: modern
   namespace: {{ k8s_namespace }}
 spec:
-  # Referenced by name from the ingressroute() macro. Keep that reference and this name in
-  # step — a mismatch is caught by test_k8s_manifests.py, not by the deploy.
+  # Referenced by name from the ingressroute() macro; test_k8s_manifests.py catches a mismatch.
   minVersion: VersionTLS12
   cipherSuites:
     - TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256
@@ -148,17 +94,11 @@ spec:
     - TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305
     - TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305
 ---
-# The public-Host twin of `modern`: same policy plus a required Cloudflare client certificate.
-# The macro file carries the reasoning; origin-pull-secret.yaml.j2 renders the CA it
-# verifies against.
 {{ origin_pull_tlsoption(k8s_namespace) }}
 {% if traefik_k8s_manage_crowdsec %}
 ---
-# The CrowdSec bouncer. The LAPI is the in-cluster engine (Service `crowdsec`), and the key is
-# a FILE path, not an inline value: a Middleware CRD is readable by the read-only kubeconfig,
-# so an inline crowdsecLapiKey would hand the ban-management API to anything holding that
-# kubeconfig. The file lives in the traefik-crowdsec Secret, mounted into the traefik container
-# only.
+# The key is a file path, not inline: a Middleware CRD is readable by the read-only kubeconfig, so
+# an inline crowdsecLapiKey would expose the ban-management API.
 apiVersion: traefik.io/v1alpha1
 kind: Middleware
 metadata:
@@ -172,18 +112,10 @@ spec:
       crowdsecLapiHost: "crowdsec:{{ crowdsec_k8s_lapi_port }}"
       crowdsecMode: stream
       updateIntervalSeconds: 60
-      # Consecutive failed stream polls tolerated before the plugin declares the stream
-      # unhealthy. The plugin's default is 0: ONE missed poll flips it, and an unhealthy
-      # stream is a blanket 403 for every IP (bouncer.go ServeHTTP: "if we cannot join the
-      # stream we forbid the request to go on"), a self-inflicted edge outage rather than a
-      # security control. This Deployment is replicas:1 + strategy:Recreate on an RWO PVC, so a
-      # LAPI gap on every roll is EXPECTED, not exceptional.
-      #
-      # 5 ≈ 6 min of tolerance. Safe because the cache lookup happens BEFORE this health gate:
-      # an IP already in the decision cache is still blocked, and AppSec below still inspects
-      # inline. Only a NEWLY added ban is delayed by up to the tolerance window. Not -1 (never
-      # flip): a permanently dead LAPI must still eventually fail closed rather than serve a
-      # silently frozen ban-list forever.
+      # Default 0 turns one missed stream poll into a blanket 403 for every IP; every roll gaps the
+      # LAPI.
+      # 5 (~6 min) is safe: cached bans and AppSec still apply. Not -1: a dead LAPI must fail
+      # closed.
       updateMaxFailure: 5
       # DECIDED: no usage-metrics ticker. Nothing here reads the bouncer's usage metrics, which
       # only fill the dropped-request counts in `cscli metrics`. 0 passes the plugin's
@@ -191,13 +123,8 @@ spec:
       # Traefik, because the ticker is a package global, and needs a two-hour watch of the
       # LAPI's decisions/stream log for 600s or 1200s gaps.
       metricsUpdateIntervalSeconds: 0
-      # AppSec Component — inline L7 WAF. stream mode above is the reactive ban-list (bans
-      # an IP after a pattern of log lines); this inspects each request inline BEFORE the
-      # backend, so a first-hit malicious payload (CVE string / SQLi / path traversal) is
-      # blocked, not merely banned-after-the-fact. UnreachableBlock:false = FAIL OPEN: an
-      # appsec hiccup keeps the edge serving (deferring to the ban-list) instead of 500ing
-      # the fleet — the add-on must not become a new edge SPOF. FailureBlock keeps its
-      # secure default (a rule-eval error on a request blocks that one request).
+      # AppSec: inline WAF that blocks a first-hit payload, unlike the reactive stream ban-list.
+      # UnreachableBlock false fails open so an appsec outage cannot take down the edge.
       crowdsecAppsecEnabled: true
       crowdsecAppsecHost: "crowdsec:{{ crowdsec_k8s_appsec_port }}"
       crowdsecAppsecUnreachableBlock: false
