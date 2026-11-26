@@ -41,7 +41,7 @@ from bridge.types import Check, CheckFn, CheckResult, VerdictRecorder
 # Longhorn Storage dashboard's B2 and R2 panels regex their figures out of b2_storage's
 # "B2 storage ..." and r2_usage's "R2 month-to-date: ..." messages in this container's log;
 # quiet either line and its panels go blank.
-# ENFORCED: tests/test_check.py::test_every_dashboard_parsed_check_is_logged_when_up.
+# ENFORCED: tests/bridge_core/test_check.py::test_every_dashboard_parsed_check_is_logged_when_up.
 LOGGED_WHEN_UP = frozenset({"b2_storage", "r2_usage"})
 
 # What a dependent row logs while its gate row reads down, keyed by the gate's name. A key is

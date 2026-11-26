@@ -46,7 +46,7 @@ from bridge.sources import Sources
 from bridge.types import JsonValue, as_object, as_object_list
 
 # The names `promote` uses, restated because the pod ships only this role's files/ and cannot
-# import scripts/deploy_tools/forge.py. tests/test_deploy_pipeline.py holds each one to forge's.
+# import scripts/deploy_tools/forge.py. tests/check_bodies/test_deploy_pipeline.py holds each one to forge's.
 REPOSITORY = "DanielH2018/server"
 ARTIFACT = "danielh2018/homelab-manifests"
 REGISTRY = "ghcr.io"
@@ -79,7 +79,7 @@ NO_HOLD = "none"
 # `chained_timeout.VERIFY_CAP_S`, the ceiling of every target's verify timeout, restated for the
 # same reason as the names above. The reboot window opens one target's timeout before the
 # reboot, and the exporter holds no target, so it reports the widest window any target has, as
-# `land-wait` does. tests/test_deploy_pipeline_reboot_window.py holds it to chained_timeout's.
+# `land-wait` does. tests/check_bodies/test_deploy_pipeline_reboot_window.py holds it to chained_timeout's.
 VERIFY_CAP_S = 330 * 60
 
 GAUGES = (
@@ -226,7 +226,7 @@ def in_reboot_window(cfg: Config, now: float) -> bool:
     the pod cannot import: it opens `VERIFY_CAP_S` before the reboot and closes, exclusive, when
     M2's mute ends, so the scheduled `promote` run at the end promotes rather than defers. The
     schedule is UTC, as `reboot_window.read_schedule` requires, and the pod's `TZ` is not, so
-    the clock is read in UTC explicitly. tests/test_deploy_pipeline_reboot_window.py sweeps a
+    the clock is read in UTC explicitly. tests/check_bodies/test_deploy_pipeline_reboot_window.py sweeps a
     week against `reboot_window.window` to hold the two equal.
     """
     clock = datetime.fromtimestamp(now, UTC)

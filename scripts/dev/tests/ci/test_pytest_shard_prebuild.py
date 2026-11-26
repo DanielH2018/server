@@ -102,7 +102,7 @@ def test_the_tree_s_indirect_k8s_render_readers_are_charged_the_render():
     for indirect in (
         "tests/k8s/rendered_properties/test_container_port_name_property.py",
         "tests/deploy/test_k8s_autodeploy_guard.py",
-        "k8s/roles/monitor-bridge/tests/test_b2_storage.py",
+        "k8s/roles/monitor-bridge/tests/check_bodies/test_b2_storage.py",
     ):
         assert "k8s" in shard_prebuild.prebuild_kinds(indirect), indirect
 

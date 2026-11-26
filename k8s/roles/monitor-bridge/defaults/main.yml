@@ -118,7 +118,7 @@ monitor_bridge_healthchecks_expected:
 
 # The Uptime Robot monitors checks/uptime_robot.py requires to exist and not be paused. `id` is
 # a string, as the doc's table writes it. The table in docs/uptime-robot-monitors.md is the
-# record; k8s/roles/monitor-bridge/tests/test_check_uptime_robot.py holds this list to it.
+# record; k8s/roles/monitor-bridge/tests/check_bodies/test_check_uptime_robot.py holds this list to it.
 monitor_bridge_uptime_robot_monitors:
   - {id: "803868101", name: Auth Health}
   - {id: "803868270", name: Jellyfin Health}

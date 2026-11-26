@@ -216,5 +216,5 @@ warning that holds for 48 hours escalates to a page through `WarningUnresolved`.
 
 No single line. The settings live in the two buckets, outside the tree. The `b2_object_lock`
 row reads the B2 one, the `r2_etcd_lock` row proves the R2 one, and
-`k8s/roles/monitor-bridge/tests/test_check_bucket_locks.py` holds both verdicts to this
+`k8s/roles/monitor-bridge/tests/check_bodies/test_check_bucket_locks.py` holds both verdicts to this
 record.

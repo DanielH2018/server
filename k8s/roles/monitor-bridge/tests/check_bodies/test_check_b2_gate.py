@@ -8,7 +8,7 @@ B2 itself, and caches the outcome so
 that watching a TRANSACTION cap does not spend it — but caches a transport failure for only
 one cycle, because a connection that never landed was never billed.
 
-Run: uv run pytest k8s/roles/monitor-bridge/tests/test_check_b2_gate.py
+Run: uv run pytest k8s/roles/monitor-bridge/tests/check_bodies/test_check_b2_gate.py
 """
 
 import email.message

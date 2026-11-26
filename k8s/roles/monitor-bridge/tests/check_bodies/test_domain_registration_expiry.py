@@ -5,7 +5,7 @@ whose name or expression mentions the domain registration, RDAP or whois. The py
 install no promtool, so the firing tests read the rules' promtool cases, which the
 validate-alert-rules hook runs.
 
-Run: uv run pytest k8s/roles/monitor-bridge/tests/test_domain_registration_expiry.py
+Run: uv run pytest k8s/roles/monitor-bridge/tests/check_bodies/test_domain_registration_expiry.py
 """
 
 import re

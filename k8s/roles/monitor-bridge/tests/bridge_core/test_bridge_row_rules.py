@@ -18,7 +18,7 @@ The rules file is hand-written, and this test joins it to `check_table.CHECKS`. 
 The rules that read no row (DomainRegistrationExpiring*, MonitorBridgeDown, BridgeCheckStale)
 are not checked here.
 
-Run: uv run pytest k8s/roles/monitor-bridge/tests/test_bridge_row_rules.py
+Run: uv run pytest k8s/roles/monitor-bridge/tests/bridge_core/test_bridge_row_rules.py
 """
 
 import copy

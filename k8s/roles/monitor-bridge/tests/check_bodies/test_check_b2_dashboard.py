@@ -24,7 +24,7 @@ import checks.b2
 _TICK = chr(96)
 
 _BOARD = (
-    Path(__file__).resolve().parents[2]
+    Path(__file__).resolve().parents[3]
     / "observability"
     / "files"
     / "dashboards"

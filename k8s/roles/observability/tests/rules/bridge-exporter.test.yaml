@@ -13,7 +13,7 @@ evaluation_interval: 1m
 tests:
   # THE WAN FAMILY (A6-3). Every gauge is 0 from the first sample, so the gate and its seven
   # dependents all fire at once, with no `for:`. promtool does not run Alertmanager's inhibit
-  # rule, so all eight reach exp_alerts; monitor-bridge's tests/test_bridge_row_rules.py holds the
+  # rule, so all eight reach exp_alerts; monitor-bridge's tests/bridge_core/test_bridge_row_rules.py holds the
   # inhibit against the rule labels. Each dependent carries `requires: wan`, the gate does not.
   - interval: 1m
     input_series:
@@ -472,7 +472,7 @@ tests:
   # THE B2 FAMILY. Both rules are `for: 10m`, so a gauge
   # that reads 0 from the first sample fires both rules at the 10m evaluation and not before.
   # promtool does not run Alertmanager's inhibit rule, so both reach exp_alerts;
-  # monitor-bridge's tests/test_bridge_row_rules.py holds the inhibit against the rule labels.
+  # monitor-bridge's tests/bridge_core/test_bridge_row_rules.py holds the inhibit against the rule labels.
   # The dependent carries `requires: b2`, the gate does not.
   - interval: 1m
     input_series:

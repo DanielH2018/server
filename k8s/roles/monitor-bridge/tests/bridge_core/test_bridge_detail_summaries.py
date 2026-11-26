@@ -6,7 +6,7 @@ series with a template `query`, scoped to its own `check`, and falls back to its
 text when the row exports none: a raising body, or an exporter that predates the series.
 promtool's bridge-exporter cases render the expansion; this holds the wiring for every row.
 
-Run: uv run pytest k8s/roles/monitor-bridge/tests/test_bridge_detail_summaries.py
+Run: uv run pytest k8s/roles/monitor-bridge/tests/bridge_core/test_bridge_detail_summaries.py
 """
 
 import re

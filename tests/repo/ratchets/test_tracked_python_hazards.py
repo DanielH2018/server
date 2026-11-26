@@ -128,7 +128,7 @@ SUBPROCESS_DRIVEN: frozenset[str] = frozenset(
 KNOWN_TEST_FILES = frozenset(
     {
         "scripts/dev/tests/findings/test_findings_claim_staleness.py",
-        "k8s/roles/monitor-bridge/tests/test_check_r2.py",
+        "k8s/roles/monitor-bridge/tests/check_bodies/test_check_r2.py",
         "hosts/components/k3s-host-checks/tests/test_longhorn_backup_health_reader.py",
     }
 )
