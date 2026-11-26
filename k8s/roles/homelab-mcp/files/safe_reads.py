@@ -83,12 +83,22 @@ def _envelope_list(resp: object, key: str) -> list[dict]:
 
 
 def parse_metric(resp: dict) -> list[dict]:
-    """Flatten a Prometheus instant-query response to {labels, value} rows."""
+    """Flatten a Prometheus instant-query response to {labels, value} rows.
+
+    Raises:
+        ValueError: the envelope is malformed, or a series' `metric` is not an object or its
+            `value` is not a `[timestamp, value]` pair.
+    """
     result = _envelope_list(resp, "result")
     rows = []
     for series in result:
+        metric = series.get("metric") or {}
+        if not isinstance(metric, dict):
+            raise ValueError("a series' metric is not an object")
         value = series.get("value") or [None, None]
-        rows.append({"metric": series.get("metric") or {}, "value": value[-1]})
+        if not isinstance(value, list) or len(value) != 2:
+            raise ValueError("a series' value is not a [timestamp, value] pair")
+        rows.append({"metric": metric, "value": value[-1]})
     return rows
 
 
@@ -128,12 +138,31 @@ def redact_log_secrets(text: str) -> str:
 
 
 def parse_loki(resp: dict) -> list[dict]:
-    """Flatten a Loki query_range response to {stream, ts, line} rows, credentials redacted."""
+    """Flatten a Loki query_range response to {stream, ts, line} rows, credentials redacted.
+
+    Raises:
+        ValueError: the envelope is malformed, or a stream's labels are not an object, its
+            `values` are not a list, or an entry is not a `[ts, line]` pair with a string line.
+    """
     result = _envelope_list(resp, "result")
     rows = []
     for stream in result:
         labels = stream.get("stream") or {}
-        for ts, line in stream.get("values") or []:
+        if not isinstance(labels, dict):
+            raise ValueError("a stream's labels are not an object")
+        values = stream.get("values") or []
+        if not isinstance(values, list):
+            raise ValueError("a stream's values are not a list")
+        for entry in values:
+            if (
+                not isinstance(entry, list)
+                or len(entry) != 2
+                or not isinstance(entry[1], str)
+            ):
+                raise ValueError(
+                    "a stream value is not a [ts, line] pair with a string line"
+                )
+            ts, line = entry
             rows.append({"labels": labels, "ts": ts, "line": redact_log_secrets(line)})
     return rows
 
@@ -220,7 +249,10 @@ def bearer_token_valid(header: str | None, expected: str) -> bool:
         return False
     # DECIDED: the app validates its own bearer; the Traefik Header() rule is defence in depth,
     # not the only gate.
-    return hmac.compare_digest(header[len(prefix) :], expected)
+    return hmac.compare_digest(
+        header[len(prefix) :].encode("utf-8", "surrogatepass"),
+        expected.encode("utf-8", "surrogatepass"),
+    )
 
 
 def cert_target_allowed(host: str, port: int, domains: str, ports: str = "443") -> bool:

@@ -89,6 +89,11 @@ files:
   # until removed.
   - {src: templates/apt-daily-quiet-hour.conf, dst: /usr/lib/systemd/system/apt-daily.timer.d/50-homelab.conf}
   - {src: templates/apt-daily-upgrade-quiet-hour.conf, dst: /usr/lib/systemd/system/apt-daily-upgrade.timer.d/50-homelab.conf}
+  - {src: templates/logrotate-hourly.conf, dst: /usr/lib/systemd/system/logrotate.timer.d/50-homelab.conf}
+  # log2ram 1.7.2 ships its stanza inside a /etc/logrotate.d/log2ram directory, which logrotate's
+  # include skips. A second stanza for the same log fails the logrotate run, so this file goes once
+  # a log2ram version ships its stanza as a file.
+  - {src: templates/homelab-log2ram.logrotate, dst: /etc/logrotate.d/homelab-log2ram}
   - {src: templates/needrestart-homelab.conf, dst: /etc/needrestart/conf.d/50-homelab.conf}
   - {src: templates/apt-archives.conf, dst: /etc/apt/apt.conf.d/60homelab-pi-archives}
   # vm.swappiness above 100 is valid on kernel 5.8+: compressing idle anon pages beats re-reading
@@ -116,9 +121,13 @@ lines:
   - {path: /etc/watchdog.conf, line: "max-load-5 = 24", regexp: '^#?max-load-5\s*=', activate: "try-restart:watchdog.service"}
   - {path: /etc/watchdog.conf, line: "max-load-15 = 24", regexp: '^#?max-load-15\s*=', activate: "try-restart:watchdog.service"}
   - {path: /etc/sysstat/sysstat, line: "HISTORY=2", regexp: '^#?HISTORY='}
-  # acct keeps pacct, an uncompressed pacct.0 and N-1 gzipped generations. The packaged line is
-  # tab-indented, and a regexp that missed it would append the line after the stanza's `}`.
+  # acct keeps pacct, an uncompressed pacct.0 and N-1 gzipped generations. The packaged lines are
+  # tab-indented, and a regexp that missed one would append its line after the stanza's `}`.
   - {path: /etc/logrotate.d/acct, line: "\trotate 3", regexp: '^\s*rotate\s'}
+  # `size` replaces `daily`. logrotate's state file is on the card and pacct is in the tmpfs, so a
+  # reset that restores the tmpfs undoes a rotation the state file still records. A size check
+  # reads only the file; the hourly logrotate.timer drop-in runs it.
+  - {path: /etc/logrotate.d/acct, line: "\tsize 10M", regexp: '^\s*(daily|size)\b'}
   # auditd reports CanReload=no, so the action is a restart.
   - {path: /etc/audit/auditd.conf, line: "max_log_file = 4", regexp: '^max_log_file\s*=', activate: "try-restart:auditd.service"}
   - {path: /etc/audit/auditd.conf, line: "num_logs = 3", regexp: '^num_logs\s*=', activate: "try-restart:auditd.service"}

@@ -110,11 +110,12 @@ journald could see the real size of its archives and vacuumed them to `SystemMax
 
 The journal cap had assumed the other half of `SIZE` held everything else. On 2026-11-14 the
 SD copy was 99 MB: 45 MB of journal and 37 MB of pacct, mostly the uncompressed 22 MB
-`pacct.0`. With 2 MiB archives the worst case was about 154 MB. 1 MiB archives bring it to
-about 120 MB, which leaves about 8 MB of headroom, most of it set by the 28 MB/day pacct
-estimate. `test_the_whole_sd_copy_fits_under_the_log2ram_boot_guard` in
-`hosts/lib/tests/host_baselines/test_pi_tuning_component.py` sums the journal, pacct, auditd and sysstat caps
-and the measured rest of the tree against `SIZE`.
+`pacct.0`. With 2 MiB archives the worst case was about 154 MB, and 1 MiB archives brought
+it to about 120 MB. Rotating pacct at `size 10M` (below) brings it to about 80 MB, which
+leaves about 48 MB of headroom.
+`test_the_whole_sd_copy_fits_under_the_log2ram_boot_guard` in
+`hosts/lib/tests/host_baselines/test_pi_log_tmpfs.py` sums the journal, pacct, auditd and
+sysstat caps and the measured rest of the tree against `SIZE`.
 
 **A smaller archive size needs a one-time vacuum by hand.** journald never resizes an archive
 it has written. It deletes the oldest only once `SystemMaxFiles` newer ones exist, so the
@@ -279,15 +280,24 @@ The caps themselves, set when the tmpfs was 81% full on 2026-06-11:
   and user journals, and each journald restart and boot adds more. An archive held about
   270 KB, so 1 MiB holds one, and 32 archives keep about a week of history. That covers the
   weekly rkhunter report, which logs to the journal.
-- `rotate 3` in `/etc/logrotate.d/acct` cuts pacct retention from 30 daily generations
-  (about 28 MB/day of healthcheck exec churn) to 3: `pacct.0`, `pacct.1.gz` and
-  `pacct.2.gz`. The stanza's `start 0` and `delaycompress` leave `pacct.0` uncompressed,
-  so pacct holds about 62 MB at its daily peak. Ubuntu 26.04's acct 6.6.4 rotates pacct
-  only through that logrotate stanza. A scratch logrotate run on daniel-pi on 2026-11-26
-  confirmed the generation count `rotate 3` keeps.
+- `rotate 3` in `/etc/logrotate.d/acct` cuts pacct retention from 30 generations to 3:
+  `pacct.0`, `pacct.1.gz` and `pacct.2.gz`. The stanza's `start 0` and `delaycompress`
+  leave `pacct.0` uncompressed. Ubuntu 26.04's acct 6.6.4 rotates pacct only through that
+  logrotate stanza. A scratch logrotate run on daniel-pi on 2026-11-26 confirmed the
+  generation count `rotate 3` keeps.
   **HISTORY —** On 24.04, savelog in `/etc/cron.daily/acct` rotated pacct and read
   `ACCT_LOGGING="3"` from `/etc/default/acct`. 26.04's acct ships no cron script and reads
   nothing from that file, so the line left there does nothing.
+- `size 10M` replaces the stanza's `daily`, and a drop-in runs `logrotate.timer` hourly.
+  pacct grows about 28 MB/day from healthcheck exec churn, so it rotates about every nine
+  hours, and the three generations cover about a day and a half. Each file stops at about
+  11 MB, the cap plus an hour's growth, so pacct holds about 24 MB at its peak.
+  A `daily` stanza decides by the date in `/var/lib/logrotate/status`, which is on the
+  card. A reset before log2ram's 23:55 sync restores the tmpfs from the card and loses the
+  night's rotation, while the state file keeps recording it as done (#10233). pacct then
+  went without a rotation from 2026-11-23 and filled `/var/log` to 88% by 2026-11-26. A
+  `size` check reads only the file, so the first hourly run after the reset rotates it.
+  Every other `daily` stanza still rotates once a day, by its date in the state file.
 - auditd is capped to a 12 MB ceiling. Its free-space thresholds have their own section below.
 - `HISTORY=2` cuts sysstat's shipped 7 days — 18 sa/sar files, 9.9 MB — to 2.
 
@@ -451,6 +461,13 @@ sudo reboot
 The boot remounts `/var/log` as a tmpfs and re-holds the package. A new upstream version also
 needs a new vendored copy of the script and a re-diff, as the `DECIDED:` marker in
 `hosts/components/pi-tuning/component.yml` says.
+
+log2ram 1.7.2 ships its logrotate stanza inside a `/etc/logrotate.d/log2ram` directory.
+logrotate reads no subdirectory of `/etc/logrotate.d`, so the pi-tuning component ships the
+stanza as `/etc/logrotate.d/homelab-log2ram`. An upgrade that ships
+`/etc/logrotate.d/log2ram` as a file gives logrotate two stanzas for
+`/var/log/log2ram.log`, which fails the logrotate run. To prevent that, drop
+`homelab-log2ram` from the component in the change that vendors the new version.
 
 Three things about the integrity verdict:
 
