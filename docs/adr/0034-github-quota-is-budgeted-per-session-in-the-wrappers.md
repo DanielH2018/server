@@ -15,6 +15,13 @@ Accepted. The operator accepted the design on 2026-11-14 and asked for its first
 [GitHub API quota](../github-quota.md) holds the design in full, the measurements behind it
 and the state of each slice.
 
+Amended on 2026-11-26. The ledger does not answer an identical read from a short cache, and
+the repo keeps no mirror of GitHub state either. A measurement found that sessions rarely
+ask the same question within seconds, and that the quota exhaustion came from one runaway
+poller, since removed. The rest of the decision stands. The design page's
+[Issue and board state is read live](../github-quota.md#issue-and-board-state-is-read-live)
+holds the measurement.
+
 ## Context
 
 GitHub meters API calls per identity, per hour, and counts every token of one user against
