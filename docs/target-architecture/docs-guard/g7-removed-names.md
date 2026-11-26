@@ -99,7 +99,7 @@ hook, and the hook names both lines.
 +  mv <old> <new> [--root <dir>] [--dry-run]
  prek: facts-lint-changed
 +  its files pattern follows is_fact_doc
- tests/repo/test_documented_paths_exist.py
+ tests/repo/docs/test_documented_paths_exist.py
 +  every heading pointer in the live docs names a part that exists
 ```
 

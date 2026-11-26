@@ -3,7 +3,7 @@
 # Format: `<repo-relative-path> <max_code_lines>`, one line per file, in `LC_ALL=C sort` order
 # (codepoint order, which is what Python's own `sorted()` gives). Caps are 450 code lines for
 # a module and 400 for a test module; a line here raises the bar for that one file. An entry may
-# only fall or be deleted -- tests/repo/test_module_length_ratchet.py enforces that
+# only fall or be deleted -- tests/repo/ratchets/test_module_length_ratchet.py enforces that
 # against origin/master. A file back at or under its cap must lose its line; the list records
 # remaining work and the conjoined modules below, nothing else.
 #

@@ -412,7 +412,7 @@ into two destinations.
  scripts/dev/findings.py (help text, if missing)   + claim and close semantics
  scripts/dev/fanout_lib/review/held_hooks.py       + rules matching a held phase's range
  scripts/dev/fanout_lib/review/review.py           ~ appends them beside project_claude_md
- tests/repo/test_claude_md_paragraphs_have_one_home.py   ~ MIN_GRADED_PARAGRAPHS
+ tests/repo/docs/test_claude_md_paragraphs_have_one_home.py   ~ MIN_GRADED_PARAGRAPHS
  docs/, .claude/, scripts/, tests/   ~ pointers whose content moved
 ```
 

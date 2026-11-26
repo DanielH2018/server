@@ -37,7 +37,7 @@ generated_sha: 9a60147e9
 | [target-architecture/docs-guard/g3-freshness-reviewer.md](../target-architecture/docs-guard/g3-freshness-reviewer.md) | 2026-11-21 | 24 | 8 | `CLAUDE.md` (2026-11-23) |
 | [headlamp-oidc-and-plugins.md](../headlamp-oidc-and-plugins.md) | 2026-11-13 | 9 | 7 | `k8s/roles/authelia/templates/config-secret.yaml.j2` (2026-11-24) |
 | [qbittorrent-vpn-and-prefs.md](../qbittorrent-vpn-and-prefs.md) | 2026-11-14 | 9 | 7 | `secrets/secrets.yml` (2026-11-22) |
-| [adr/0030-the-ansible-tree-is-renamed-for-what-it-holds.md](../adr/0030-the-ansible-tree-is-renamed-for-what-it-holds.md) | 2026-11-20 | 20 | 7 | `tests/repo/test_census_rows_roles.py` (2026-11-25) |
+| [adr/0030-the-ansible-tree-is-renamed-for-what-it-holds.md](../adr/0030-the-ansible-tree-is-renamed-for-what-it-holds.md) | 2026-11-20 | 20 | 7 | `tests/repo/census_rows/test_census_rows_roles.py` (2026-11-25) |
 | [adr/0036-a-selected-run-proves-its-tree-and-a-nightly-sweep-is-the-net.md](../adr/0036-a-selected-run-proves-its-tree-and-a-nightly-sweep-is-the-net.md) | 2026-11-20 | 8 | 7 | `scripts/dev/affected_tests.json` (2026-11-25) |
 | [target-architecture/docs-guard/handoff.md](../target-architecture/docs-guard/handoff.md) | 2026-11-20 | 14 | 7 | `cluster/services.yml` (2026-11-25) |
 | [claude-shell-permissions.md](../claude-shell-permissions.md) | 2026-11-21 | 10 | 7 | `CLAUDE.md` (2026-11-23) |
@@ -48,7 +48,7 @@ generated_sha: 9a60147e9
 | [adr/0025-suc-upgrades-k3s-and-homelab-k3s-restart-restarts-it.md](../adr/0025-suc-upgrades-k3s-and-homelab-k3s-restart-restarts-it.md) | 2026-11-19 | 6 | 5 | `hosts/components/k3s-server/defaults/main.yml` (2026-11-22) |
 | [target-architecture/docs-guard/g9-blocking-gate.md](../target-architecture/docs-guard/g9-blocking-gate.md) | 2026-11-19 | 8 | 5 | `CLAUDE.md` (2026-11-23) |
 | [claude-code-root-helpers.md](../claude-code-root-helpers.md) | 2026-11-20 | 13 | 5 | `hosts/packages/homelab-tools/package.yml` (2026-11-25) |
-| [failure-classes.md](../failure-classes.md) | 2026-11-21 | 21 | 5 | `tests/repo/test_census_rows_roles.py` (2026-11-25) |
+| [failure-classes.md](../failure-classes.md) | 2026-11-21 | 21 | 5 | `tests/repo/census_rows/test_census_rows_roles.py` (2026-11-25) |
 | [k3s-etcd-restore.md](../k3s-etcd-restore.md) | 2026-11-21 | 15 | 5 | `hosts/bootstrap-host.sh` (2026-11-25) |
 | [networkpolicy-slice-answers.md](../networkpolicy-slice-answers.md) | 2026-11-21 | 10 | 5 | `cluster/services.yml` (2026-11-25) |
 | [wireguard-private-homelab-access.md](../wireguard-private-homelab-access.md) | 2026-11-21 | 9 | 5 | `inventory/host_vars/daniel-box.yml` (2026-11-23) |

@@ -87,7 +87,7 @@ loop to auto-tag bookmarks
 - `karakeep-chrome` is listed too, with `restart_on: []` (#4564). The drain waits on the roll
   a `karakeep_k8s_chrome_image` bump makes, and no karakeep edit restarts chrome mid-crawl.
   The renderer honours the empty list, so chrome gets no restart checksum.
-  The `extra-rollouts-restart-as-declared` row of `tests/repo/test_census_rows_roles.py` pins
+  The `extra-rollouts-restart-as-declared` row of `tests/repo/census_rows/test_census_rows_roles.py` pins
   both.
 - **The time-tagger's image is built in-cluster**, from `templates/Dockerfile.j2`, since #2672
   — one `chown` layer over the pinned `ghcr.io/astral-sh/uv` digest, plus

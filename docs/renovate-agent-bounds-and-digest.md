@@ -368,7 +368,7 @@ traceback that says what broke. ENFORCED:
 `hosts/components/renovate-agent/tests/test_crash_report.py::test_a_crash_posts_the_exception_text_to_discord_and_the_runs_file`.
 
 **The unit and `config.env` carry no Kuma push.** ENFORCED: the
-`nothing-shipped-pushes-to-uptime-kuma` row of `tests/repo/test_census_rows_text.py`.
+`nothing-shipped-pushes-to-uptime-kuma` row of `tests/repo/census_rows/test_census_rows_text.py`.
 
 The verdict's deadline is 28h, not the 25h the other daily checks use, because the verdict lands
 at the end of the run: a fast run followed by one that draws the full jitter and runs to the

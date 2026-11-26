@@ -16,7 +16,7 @@ The verdict is `_row_table.verdict`, so a heading that went, or a selector that 
 fails as `subject gone: delete this row`. Every rule carries `red`: edits of its own section
 that the rule must flag. The real section is its green half.
 
-Run: uv run pytest tests/repo/test_runbook_rules.py
+Run: uv run pytest tests/repo/census_rows/test_runbook_rules.py
 """
 
 import re

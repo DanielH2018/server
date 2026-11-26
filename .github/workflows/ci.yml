@@ -202,14 +202,14 @@ jobs:
     # runs these hooks on it first. The same reasoning covers the `python-version:` and
     # `node-version:` pins in .github/actions/setup/action.yml.
     # Every `runs-on` in .github/workflows is a versioned label, ENFORCED by
-    # the `workflow-runners-are-pinned` row of tests/repo/test_census_rows_workflows.py.
+    # the `workflow-runners-are-pinned` row of tests/repo/census_rows/test_census_rows_workflows.py.
     runs-on: ubuntu-26.04
     timeout-minutes: 20  # cap a wedged network hook so it can't burn to the 6h default
     env:
       # The Vale release the `vale` hook runs. The custom manager in renovate.json reads this
       # annotation and moves the version and the digest in one PR. The digest is the sha256 of
       # vale_<version>_Linux_64-bit.tar.gz, equal to the amd64 `vale` pin in
-      # hosts/packages/homelab-tools/package.yml (tests/repo/test_vale_matches_the_ci_pin.py).
+      # hosts/packages/homelab-tools/package.yml (tests/repo/ci_workflows/test_vale_matches_the_ci_pin.py).
       # renovate: datasource=github-release-attachments depName=vale-cli/vale
       VALE_VERSION: v3.27.0
       VALE_SHA256: c80d62f6bce87b81843ac5b512a26e63213927b957adba0a64fc594570da2000
@@ -245,8 +245,8 @@ jobs:
       # so it runs once per version bump and a release outage fails only the bump's run.
       # The cache holds the download, never the installed binary, and each run checks its digest
       # where it has one. A pinned binary with a sha256 comes through .github/actions/pinned-tool.
-      # ENFORCED by tests/repo/test_release_fetches_use_pinned_tool.py and the
-      # a-downloading-script-runs-after-its-cache row of tests/repo/test_census_rows_workflows.py.
+      # ENFORCED by tests/repo/ci_workflows/test_release_fetches_use_pinned_tool.py and the
+      # a-downloading-script-runs-after-its-cache row of tests/repo/census_rows/test_census_rows_workflows.py.
       - name: Fetch the pinned Vale and check its sha256
         uses: $/.github/actions/pinned-tool
         with:
@@ -1014,7 +1014,7 @@ jobs:
       # name and the runner pushes through the published port. Its image is read from the
       # registry role's pin, registry_k8s_image, so this job holds no copy of it. The node
       # image is one the pinned kind release lists, on k3s_version's Kubernetes minor:
-      # tests/repo/test_kind_node_image_follows_k3s.py holds the minor, and Renovate
+      # tests/repo/ci_workflows/test_kind_node_image_follows_k3s.py holds the minor, and Renovate
       # offers it patch and digest bumps only.
       - name: Create the kind cluster, the registry and the pinned Flux controllers
         if: github.event_name == 'workflow_dispatch' || steps.scope.outputs.changed == 'true'
@@ -1194,7 +1194,7 @@ jobs:
       # names, an edit to a host package job, or a differing render of the cases' fixture.
       # CASE_INPUTS is the one list of the cases' own inputs: the test image's build context
       # and fixture specs, and the cases' own code.
-      # tests/repo/test_host_package_case_inputs_census.py holds it to every `validate`
+      # tests/repo/ci_workflows/test_host_package_case_inputs_census.py holds it to every `validate`
       # module the cases script imports. The renderer is a render input, so it reaches the
       # cases through `changed` when it alters a real render.
       #

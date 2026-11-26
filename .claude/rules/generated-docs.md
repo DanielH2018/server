@@ -29,7 +29,7 @@ around it, stage the doc and commit again. The hook corrects a count, never the 
 beside it. A row whose sentence was reworded fails until the row or the sentence changes. To
 add a row, add it to `scripts/docs/doc_values_lib/rows_hosts.py` or
 `scripts/docs/doc_values_lib/rows_roles.py`, and add its doc and source to the hook's `files`
-pattern, one path per line; `tests/repo/test_doc_values_hook.py` holds the pattern against the
+pattern, one path per line; `tests/repo/ci_workflows/test_doc_values_hook.py` holds the pattern against the
 rows. A value Renovate bumps gets no row, and neither does a path the
 docs-refresh cron stages.
 

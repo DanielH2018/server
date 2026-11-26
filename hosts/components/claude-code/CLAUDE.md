@@ -172,7 +172,7 @@ directory.
   drops every `homelab_check_*` series whose file omits the HELP and TYPE lines the other
   check files declare. The file's mtime still reaches Prometheus, so the only symptom is the
   check's `NotReporting` alert. The `host-check-textfiles-go-through-host-lib` row of
-  `tests/repo/test_census_rows_python.py` refuses a hand-written series.
+  `tests/repo/census_rows/test_census_rows_python.py` refuses a hand-written series.
 
 ## The fleet bound, and why it lives on `user.slice`
 

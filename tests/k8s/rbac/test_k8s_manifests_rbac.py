@@ -149,7 +149,7 @@ def test_the_lease_role_stays_read_only_and_a_wider_one_is_flagged():
 
 def test_the_clusterrole_reads_the_upgrade_plans():
     groups = {g for rule in _readonly_rules() for g in rule.get("apiGroups", [])}
-    # Exact match, not `in`: see tests/repo/test_census_rows_python.py (row `no-host-shaped-membership-literal`)
+    # Exact match, not `in`: see tests/repo/census_rows/test_census_rows_python.py (row `no-host-shaped-membership-literal`)
     assert any(g == "upgrade.cattle.io" for g in groups)
 
 
@@ -372,7 +372,7 @@ def test_homepage_kubernetes_widget_wiring_holds_together():
     ]
     rules = [rule for d in rbac if d["kind"] == "ClusterRole" for rule in d["rules"]]
     assert _grant_violations(rules) == []
-    # Exact match, not `in`: see tests/repo/test_census_rows_python.py (row `no-host-shaped-membership-literal`)
+    # Exact match, not `in`: see tests/repo/census_rows/test_census_rows_python.py (row `no-host-shaped-membership-literal`)
     assert any(
         g == "metrics.k8s.io" for rule in rules for g in rule.get("apiGroups", [])
     ), "no metrics.k8s.io read: every CPU/memory figure in the widget would be blank"
@@ -397,7 +397,7 @@ def test_readonly_role_covers_the_crd_groups_this_homelab_deploys():
         if doc["kind"] in {"IngressRoute", "Middleware"}
     }
     assert traefik_groups, "no IngressRoute or Middleware rendered — check the census"
-    # Exact match, not `in`: see tests/repo/test_census_rows_python.py (row `no-host-shaped-membership-literal`)
+    # Exact match, not `in`: see tests/repo/census_rows/test_census_rows_python.py (row `no-host-shaped-membership-literal`)
     unreadable = sorted(g for g in traefik_groups if not any(g == x for x in groups))
     assert unreadable == [], (
         f"IngressRoute/Middleware under {unreadable} unreadable without sudo"

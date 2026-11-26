@@ -6,7 +6,7 @@ name: image-leg
 # places those tests run.
 #
 # A separate workflow, not a ci.yml job: every ci.yml job must be read by the `prek` gate
-# (tests/repo/test_every_ci_job_is_gated.py), which would make this one a merge blocker through
+# (tests/repo/ci_workflows/test_every_ci_job_is_gated.py), which would make this one a merge blocker through
 # that required context. A red run is visible on the PR and blocks nothing.
 #
 # It runs on a PR that touches what the image tests read or this file, and on a dispatch.

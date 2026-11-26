@@ -56,7 +56,7 @@ def test_the_reset_moves_prod_under_a_settled_hold(world):
     moves `prod`. That the reset ignores the reboot window is a property of the workflow:
     its jobs need none of the jobs that read the window
     (the `promote-reset-jobs-need-no-window-job` row of
-    `tests/repo/test_census_rows_workflows.py`).
+    `tests/repo/census_rows/test_census_rows_workflows.py`).
     """
     c1, t = _verified(world)
     world.run.hold = f"{t} stateful=bento-pdf"

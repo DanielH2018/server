@@ -8,7 +8,7 @@ pure module rather than inside the test module so the `--tighten` writer
 Importing a `test_*.py` from a script would work under pytest and nowhere else.
 
 The reads of the merge base with `origin/master`, and the tests for all of this, stay in
-`tests/repo/test_module_length_ratchet.py`.
+`tests/repo/ratchets/test_module_length_ratchet.py`.
 """
 
 import subprocess

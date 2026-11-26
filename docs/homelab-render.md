@@ -785,7 +785,7 @@ installed in an xdist worker would outlive the test.
 
 The same subprocess sets `sys.modules['ansible'] = None`, so `import ansible` raises wherever the
 renderer reaches for it, and the four modules together render every tag that way.
-`tests/repo/test_ansible_core_census.py` reads every tracked Python file for an import of
+`tests/repo/census_rows/test_ansible_core_census.py` reads every tracked Python file for an import of
 `ansible`, executed or not, which holds the validator and the host packages to the same rule.
 
 In CI, each module writes one `digest_line` per directory it rendered to two places. Each

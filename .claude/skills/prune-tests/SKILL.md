@@ -116,10 +116,10 @@ For each test the operator agreed to:
    the set of subjects it covers, so a subject that drops out fails the test.
 2. Delete any fixture, helper or constant that nothing else uses.
 3. Delete production code that only the removed test called. `uv run pytest
-   tests/repo/test_vulture_test_only_names.py` names it.
+   tests/repo/ratchets/test_vulture_test_only_names.py` names it.
 4. Find every document that cites the node id with `git grep -nF "<file>::<name>" -- '*.md'`.
    Re-point each one, or drop the citation.
-   `tests/repo/test_documented_paths_exist.py::test_every_cited_test_exists` fails on a cited
+   `tests/repo/docs/test_documented_paths_exist.py::test_every_cited_test_exists` fails on a cited
    node id that no longer resolves.
 
 Then run `uv run pytest <path>` and `uv run python scripts/dev/repo_guards.py`.

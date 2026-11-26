@@ -45,7 +45,7 @@ ENV container=docker
 # `validate_lib/node_package_case.py` installs each cluster node's real package, so the rest of
 # each node's Depends downloads in that node's own transaction, as the case resolves it. Only an
 # amd64 leg runs the case, so the arm64 image skips these.
-# tests/repo/test_host_test_image_predownloads.py fails on a case Depends this list lacks. `age` generates the throwaway key the
+# tests/repo/ci_workflows/test_host_test_image_predownloads.py fails on a case Depends this list lacks. `age` generates the throwaway key the
 # secrets-unit case encrypts to (H4.1c). `git`, `gnupg` and `curl` are on an Ubuntu server
 # install, and bootstrap-host.sh calls each before it installs anything (H7.15a). `gcc`,
 # `libc6-dev` and `libyaml-dev` build PyYAML's C extension for the repo venv. They are

@@ -28,7 +28,7 @@ def _rows(tmp_path):
 
 def _adr_marker(adr: str) -> str:
     """A marker line citing an ADR, assembled so this file's own source never carries the
-    marker and the ADR token on one line: `tests/repo/test_adr_links.py` scans .py
+    marker and the ADR token on one line: `tests/repo/docs/test_adr_links.py` scans .py
     sources for exactly that pair and would demand an ADR entry for a fixture.
     """
     return "# " + "DECIDED: one lock. See " + adr + ".\n"
@@ -483,7 +483,7 @@ def test_a_counterexample_pointer_is_not_flagged(tmp_path):
     """
     _write(
         tmp_path,
-        "tests/repo/test_documented_paths_exist.py",
+        "tests/repo/docs/test_documented_paths_exist.py",
         "# DECIDED: a suffix, never a bare basename. scripts/gen_infra_map.py is not a suffix.\n",
     )
     (tmp_path / "scripts").mkdir()
@@ -494,7 +494,7 @@ def test_the_counterexample_exemption_is_by_token_not_by_file(tmp_path):
     """The red-proof pair: a different dangling pointer in the same file is still flagged."""
     _write(
         tmp_path,
-        "tests/repo/test_documented_paths_exist.py",
+        "tests/repo/docs/test_documented_paths_exist.py",
         "# DECIDED: a suffix, never a bare basename. See scripts/nowhere.py.\n",
     )
     (tmp_path / "scripts").mkdir()

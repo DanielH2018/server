@@ -23,7 +23,7 @@ siblings of a named file, which pytest would build and then discard, are skipped
 runs first, so a skipped sibling costs a set lookup and a cached ancestor check rather than a
 conftest lookup and a node.
 
-Run: uv run pytest tests/repo/test_named_files.py
+Run: uv run pytest tests/repo/suite/test_named_files.py
 """
 
 import functools

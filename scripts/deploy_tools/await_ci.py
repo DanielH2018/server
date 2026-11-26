@@ -69,7 +69,7 @@ CI_REPO = "DanielH2018/server"
 # commit carries no check-run of that name, and the daily renovate-config-canary.yml schedule
 # validates master instead. `ci_required_contexts` deliberately excludes it because a red
 # renovate.json changes nothing a deploy renders. Requiring it here would park every landing waiting
-# on a check-run that master never gets. tests/repo/test_ci_contexts_match_workflows.py pins both
+# on a check-run that master never gets. tests/repo/ci_workflows/test_ci_contexts_match_workflows.py pins both
 # directions.
 REQUIRED_CONTEXTS = frozenset({"prek (lint + validate + tests + secrets)"})
 

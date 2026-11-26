@@ -22,7 +22,7 @@ summary, and the CI log showed no annotation naming the failed test.
   subprocess inherits CI's environment, and an environment check would let that inner run's
   deliberate failures reach the real job summary.
 
-Run: uv run pytest tests/repo/test_failure_report.py
+Run: uv run pytest tests/repo/suite/test_failure_report.py
 """
 
 import os
