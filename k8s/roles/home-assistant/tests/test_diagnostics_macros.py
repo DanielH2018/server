@@ -9,7 +9,6 @@ DISMISS_LOGGER = (
     "homeassistant.components.automation"
     ".bedroom_display_go_ambient_when_dark_or_sleeping"
 )
-# The two records a failed Cast turn_off logged live on 2026-11-12.
 CAST_STEP_ERROR = (
     "Bedroom display go ambient when dark or sleeping: Error executing script. Error for "
     "call_service at pos 1: CastMediaPlayerEntity.turn_off Failed: Execution of quit app "

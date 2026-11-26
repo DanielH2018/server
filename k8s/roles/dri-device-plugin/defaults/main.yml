@@ -19,8 +19,8 @@ dri_device_plugin_k8s_image: ghcr.io/squat/generic-device-plugin:latest@sha256:8
 k8s_autodeploy: false
 k8s_autodeploy_reason: "no rollout gate proves the plugin works — the soak reads the K8sExtendedResourceMissing alert instead; even a /health readinessProbe would only prove the HTTP listener, not that the plugin registered its gRPC socket with the kubelet, and an unregistered plugin makes jellyfin and tdarr unschedulable"
 
-# How many pods may hold the render node at once. It is one physical device; this is a scheduling
-# allowance, not a hardware fact — jellyfin and tdarr both want it, and the GPU multiplexes fine.
+# A scheduling allowance, not a hardware fact: jellyfin and tdarr both want the render node and the
+# GPU multiplexes fine.
 dri_device_plugin_count: 4
 
 # After a reboot the kubelet can re-admit a GPU pod before this plugin re-registers, and the
@@ -41,8 +41,7 @@ dri_device_plugin_reaper_image: python:3.15-alpine@sha256:0f9552bb28711333da1691
 dri_device_plugin_reaper_schedule: "*/15 * * * *"
 # One list and a delete or two take seconds; `open_url` retries a refused connect for 60s.
 dri_device_plugin_reaper_deadline_seconds: 120
-# The job's own runs age out too, so a run the reboot interrupts does not become the next
-# tombstone. The output is in Loki past this.
+# The job's own runs age out too, so a run the reboot interrupts does not become the next tombstone.
 dri_device_plugin_reaper_job_ttl_seconds: 1800
 
 manifests_rollout: ''

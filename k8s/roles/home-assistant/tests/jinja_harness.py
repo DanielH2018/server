@@ -73,10 +73,6 @@ def _forgiving_bool(value, default=_SENTINEL):
     return bool(value) if default is _SENTINEL else default
 
 
-# Built once and reused: the env's loader caches the parsed macro files, and _wrapper caches the
-# compiled call templates. Rebuilding both per render_macro() call made the 8.8k-point fan
-# equivalence grid take ~143s on its own. FileSystemLoader stats mtimes (auto_reload defaults on),
-# so an edited .jinja is still picked up.
 @lru_cache(maxsize=None)
 def _env() -> Environment:
     env = Environment(loader=FileSystemLoader(str(_MACRO_DIR)))

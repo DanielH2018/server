@@ -442,9 +442,6 @@ class TestSafePath:
         (root / "daniel-box" / "sub").mkdir()
         assert srv.safe_path(root, "daniel-box", "sub") is None
 
-    # The four below pin what the realpath + startswith check could get wrong
-    # that a pathlib `parents` check could not: a prefix match that is not a directory
-    # boundary, the host directory itself, a symlink that stays inside, and a NUL byte.
     def test_a_sibling_sharing_the_host_prefix_is_refused(self, root):
         (root / "daniel-box2").mkdir()
         write(root, "daniel-box2", "a.html", "x")
@@ -473,9 +470,8 @@ class TestServing:
 
         srv.Handler.cache = srv.IndexCache(root)
         server = ThreadingHTTPServer(("127.0.0.1", 0), srv.Handler)
-        # shutdown() blocks until serve_forever notices, which it does once per poll interval —
-        # 0.5s by default, paid by every test in this class as teardown. Each test still gets
-        # its own server, because each mutates its own `root`.
+        # shutdown() waits one poll interval (0.5s default) per test, so serve with a short
+        # poll_interval.
         threading.Thread(
             target=server.serve_forever, kwargs={"poll_interval": 0.01}, daemon=True
         ).start()

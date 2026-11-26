@@ -8,11 +8,6 @@
   )
 }}
 ---
-{#
-  Homepage's UPS widget (session-less, peanut's own basic auth) — same shape as the
-  speedtest/karakeep/freshrss monitoring routes. Callers: the homepage pod (pod CIDR)
-  and daniel-server (monitor-bridge era tooling).
-#}
 {{ monitoring_route(
     container_item.name,
     container_item.hostname | default(container_item.name),

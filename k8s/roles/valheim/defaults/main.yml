@@ -8,39 +8,13 @@
 # is the wrapper's own release.
 valheim_k8s_image: ghcr.io/community-valheim-tools/valheim-server:1.4.1@sha256:f34d67ba8023e343b10ffda0144759a8c8d986f276510460315a01051bed8a6d
 
-# The first-boot budget for this server, declared ONCE, as `manifests_rollout_timeout` below.
-# Two readers take it. The renderer sets it as the valheim Kustomization's `timeout`, Flux's
-# health-check wait (C3's per-role fields, `role_defaults` in scripts/lib/k8s_roles.py). The
-# renderer reads only a literal role default, so the value cannot be an include var or a Jinja
-# expression: that would render the 600s default, below the startupProbe's own 60 x 15s.
-# `progressDeadlineSeconds` in
-# templates/deployment.yaml.j2 reads it through `valheim_k8s_rollout_timeout`. Flux's
-# wait and the deadline have to move together: at a deadline below the budget, the wait fails
-# on ProgressDeadlineExceeded whatever its timeout says, and at a budget below the deadline the
-# wait gives up first and the extra deadline is never reached.
-#
-# 1800s rather than 900s because nothing in the repo records a first boot completing inside
-# 900s. A measured rollout was still pulling this image at 10 minutes and was marked
-# ProgressDeadlineExceeded at the 600s Kubernetes default, while the pod carried on fine
-# underneath. Between that pull and the ~1.8 G SteamCMD download into an empty install PVC,
-# first boot needs the room; a cached restart rolls in seconds and never spends it.
-#
-# Under Flux, raising it costs a genuinely stuck rollout a slower failure: the Kustomization
-# holds one of kustomize-controller's workers for the whole budget, and `verify`'s derived
-# wait grows on a revision that changes valheim (docs/flux-deploy-plane.md, *The timeout
-# follows the chain*).
+# One budget for Flux's wait and progressDeadlineSeconds; they must move together.
+# Literal, as the renderer reads no expression; 1800s covers first-boot pull plus SteamCMD.
 manifests_rollout_timeout: 1800s
 valheim_k8s_rollout_timeout: "{{ manifests_rollout_timeout }}"
 
-# The budget of the valheim-prepull Kustomization, whose Job pulls the server image and the mods
-# image onto daniel-box before the valheim Kustomization applies
-# (scripts/renderer/renderer_lib/prepull.py). The Deployment is `Recreate`, so without it the
-# server is down for the whole pull. The pinned amd64 server image
-# is 369.78 MB compressed from GHCR, which has served this homelab at 0.145-0.53 MB/s; the mods
-# image is alpine plus two plugin DLLs. 2700s covers the full re-pull down to 0.137 MB/s. The Job
-# has no deadline, so a pull slower still costs that revision its verdict, the Job keeps pulling,
-# and Flux applies valheim on a later retry. Only Flux reads it: the renderer adds the
-# Kustomization for a published tag alone, so an Ansible deploy ignores it.
+# Pre-pull budget for the server and mods images; 2700s covers a full re-pull down to 0.137 MB/s.
+# The Job has no deadline: a slower pull costs that revision its verdict; Flux applies on retry.
 flux_prepull_timeout: 2700s
 
 # ── BepInEx and the mod set ─────────────────────────────────────────────────────────────
@@ -54,12 +28,8 @@ flux_prepull_timeout: 2700s
 # list means a modded launch path carrying nothing.
 valheim_k8s_bepinex: "{{ 'true' if valheim_k8s_mods | length > 0 else 'false' }}"
 
-# The plugin DLLs are baked into an image built by k8s/image-builder from templates/Dockerfile.j2
-# and copied into the plugins tree by the `mods` initContainer. Built rather than downloaded at
-# boot so a Thunderstore outage cannot silently bring the server up vanilla — see the Dockerfile.
-#
-# `valheim`, not `valheim-mods`: `k8s_built_image_tags` holds the content tag under the built
-# image's name, so this lookup and the build must agree on it.
+# Baked into an image so a Thunderstore outage cannot silently bring the server up vanilla. Name
+# `valheim`, not `valheim-mods`: k8s_built_image_tags keys the tag by the built image's name.
 valheim_k8s_mods_image: "{{ k8s_registry_pull_host }}/valheim:{{ k8s_built_image_tags.get('valheim', 'latest') }}"
 
 # Every entry is a Thunderstore release, pinned by version AND sha256 — the build verifies the
@@ -95,9 +65,8 @@ valheim_k8s_mods_image: "{{ k8s_registry_pull_host }}/valheim:{{ k8s_built_image
 # invisible to any string check, so the boot log is what decides. Add one entry AT A TIME and
 # read the log between its own `Loading [...]` line and the next before adding another.
 valheim_k8s_mods:
-  # Vetted by checking that neither DLL references ZRoutedRpc.Everybody, the field l-1.0.7
-  # removed. Necessary, not sufficient — confirm by the boot log's `Loading [...]` lines, not
-  # by pod Ready.
+  # Vetted: neither DLL references ZRoutedRpc.Everybody, which l-1.0.7 removed. Necessary, not
+  # sufficient: confirm by the boot log's `Loading [...]` lines, not pod Ready.
   - name: Server_devcommands
     version: 1.113.0
     url: https://thunderstore.io/package/download/JereKuusela/Server_devcommands/1.113.0/
@@ -114,18 +83,12 @@ valheim_k8s_mods:
 k8s_autodeploy: false
 k8s_autodeploy_reason: "two reasons: (1) probe-less — no readinessProbe at all; (2) migrating state — Recreate + RWO PVC holding worlds"
 
-# ── two volumes, deliberately on different backup postures ──────────────────────────────
-# /config is the irreplaceable half: worlds_local (the Dedicated world, ~7 M live plus the
-# image's own rotating .db/.fwl backups), adminlist/bannedlist/permittedlist, and prefs.
-# BACKED UP — this is the only reason the service is worth restoring at all.
+# /config is the irreplaceable half (world, lists, prefs): backed up.
 valheim_k8s_claim: valheim-config
 valheim_k8s_size: 5Gi
 valheim_k8s_storage_class: longhorn
-# The hourly zips go to /opt/valheim/backups on the nobackup claim (BACKUPS_DIRECTORY in
-# the deployment), so this claim carries only the world and the lists.
-# The seed files are root-owned but world-readable (644/755), so unlike terraria's 600 worlds
-# this needs no sudo staging; the seed pod's `tar -p --numeric-owner` restores uid 0, which
-# is also the uid the server runs as (PUID/PGID default to 0).
+# Hourly zips go to the nobackup claim, so this claim carries only the world and the lists.
+# The seed pod's `tar -p --numeric-owner` restores uid 0, which the server runs as.
 
 # /opt/valheim is the SteamCMD install — a 1.8 G download that unpacks to 2.2 G — and
 # entirely re-downloadable.
@@ -147,13 +110,8 @@ valheim_k8s_server_claim: valheim-server
 valheim_k8s_server_size: 20Gi
 # nobackup: every byte here is re-downloadable from Steam, and B2 is the scarce resource.
 valheim_k8s_server_storage_class: longhorn-nobackup
-# The largest single transient an update writes to the claim: the fourth install copy in
-# bepinex.tmp, 2.2 G measured, declared as 3 GiB so the floor fires before the
-# copy is refused rather than at it. The PVCBelowFreeFloor rule names this claim with this
-# value: the percentage arm cannot warn before a step-shaped peak, so the rule pages
-# while free bytes are below the transient, whatever the percentage reads. The number lives
-# here because the workload's own updater is the only thing that knows it; nothing exports
-# it. tests/services/test_storage_rule_literals.py fails when the two declarations drift.
+# Largest update transient (2.2 G) as 3 GiB; PVCBelowFreeFloor pages below it.
+# tests/services/test_storage_rule_literals.py fails when the two declarations drift.
 valheim_k8s_server_update_transient_bytes: 3221225472
 
 # ── server identity ─────────────────────────────────────────────────────────────────────
@@ -161,43 +119,25 @@ valheim_k8s_server_update_transient_bytes: 3221225472
 # in SOPS as valheim_server_pass; an earlier value is in this PUBLIC repo's history, so it is
 # treated as disclosed and never reused.
 valheim_k8s_server_name: "DBoy's Server"
-# Created on first boot because no worlds_local entry of this name exists.
-#
-# The `Dedicated` world is NOT deleted, and nothing in the image touches it once this name
-# changes: the server is launched with `-world "$WORLD_NAME"` (valheim-server), and the hourly
-# backup archives `$WORLDS_DIR/$WORLD_NAME` rather than the worlds_local directory
-# (valheim-backup). Both read at v1.2.0. So reverting is this one line back to `Dedicated` —
-# worth keeping, because it is the VANILLA save and a modded world is not reliably readable by
-# a vanilla server afterwards.
+# Created on first boot. `Dedicated` is untouched, so reverting this line restores the VANILLA save;
+# a modded world is not reliably readable by a vanilla server.
 valheim_k8s_world_name: Midgard
-# Listed in the in-game community browser. Steam's server query (port 2457) only
-# answers for public servers; a private server is join-by-IP only.
+# Public lists in the community browser; Steam's query (2457) answers only for public servers.
 valheim_k8s_server_public: "true"
 
-# Space-separated SteamID64 list. The image's `common` script (write_adminlist) rewrites
-# /config/adminlist.txt from this var on every boot when it is non-empty, so the list here is
-# the source of truth rather than anything edited in-place on the PVC.
+# Rewrites /config/adminlist.txt on every boot, so this var is the source of truth.
 valheim_k8s_admin_ids: "76561198091839404"
 
-# Extra Valheim CLI arguments, appended to the launch line by the image's `SERVER_ARGS`.
-#
-# `portals casual` lets ore and metal through portals. It is a VANILLA world modifier — the game gained these with the world-modifier system, so
-# this needs no mod at all, which is why AdvancedPortals being disabled costs nothing here.
-# The other values are `hard` (the default: no metals) and `veryhard` (no items at all).
-#
-# A modifier applies at launch and is not written into the world, so changing this line and
-# redeploying is the whole procedure, in both directions.
+# `portals casual` lets ore and metal through portals; a vanilla world modifier, so no mod needed.
+# Applied at launch, not stored in the world: edit and redeploy, either direction.
 valheim_k8s_server_args: "-modifier portals casual"
 
-# The dedicated server simulates the whole world in RAM and wants headroom, not a tight cap.
-# The request is the 7-day p95 working set before the park (3675Mi) rounded up.
+# Needs headroom, not a tight cap: the server simulates the whole world in RAM.
 valheim_k8s_cpu_limit: "6"
 valheim_k8s_mem_limit: 9216Mi
 valheim_k8s_cpu_request: "750m"
 valheim_k8s_mem_request: 3712Mi
 
-# The claims the renderer emits for this role, which the valheim Kustomization applies: the
-# backed-up world claim and the nobackup SteamCMD install.
 k8s_claims:
   - name: "{{ valheim_k8s_claim }}"
     storage_class: "{{ valheim_k8s_storage_class }}"
@@ -209,15 +149,11 @@ k8s_claims:
 image_builder_builds:
   - image_builder_name: valheim
     image_builder_dockerfile: "{{ role_file('templates/Dockerfile.j2') }}"
-    # Skipped when no mod is enabled: the Dockerfile would produce an image holding no DLLs and
-    # the initContainer's `cp /mods/*.dll` would fail on the unmatched glob. The deployment
-    # template drops the initContainer under the same condition.
+    # Skipped with no mods: the initContainer's `cp /mods/*.dll` would fail on the unmatched glob.
     when: valheim_k8s_mods | length > 0
 
 manifests_rollout: valheim
 
-# Each entry renders k8s/templates/secret-default.yaml.j2 as secret-<name>.yaml:
-# its `string_data` maps a Secret field to the SOPS key its value comes from.
 render_secrets:
   # The join password, kept out of the Deployment manifest.
   - name: valheim-env

@@ -1,16 +1,7 @@
 ---
-# Two pools, not one. The ingress VIP has to be an address no ordinary LoadBalancer
-# Service can take, and autoAssign: false is the only thing that actually enforces that —
-# MetalLB will never hand this address out except to a Service that names it via the
-# metallb.io/loadBalancerIPs annotation. A comment saying "don't use .240" would not
-# survive the next service that asks for a LoadBalancer.
-#
-# ORDER MATTERS. `kubectl apply -f` processes documents in file order, and MetalLB's
-# validating webhook rejects any pool overlapping an already-defined one. homelab-pool has to
-# narrow FIRST: while it still covers 10.0.0.240-250, applying ingress-pool is denied with
-#   CIDR "10.0.0.240/32" in pool "ingress-pool" overlaps with already defined CIDR "10.0.0.240/29"
-# Narrowing homelab-pool first makes the ingress /32 free by the time it is validated, on a fresh
-# cluster and on the upgrade path alike.
+# ORDER MATTERS: the validating webhook rejects overlapping pools, and `kubectl apply` goes in file
+# order, so homelab-pool must narrow FIRST or ingress-pool is denied.
+# autoAssign: false is what keeps ordinary Services off the ingress address.
 apiVersion: metallb.io/v1beta1
 kind: IPAddressPool
 metadata:

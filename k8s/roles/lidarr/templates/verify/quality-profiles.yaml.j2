@@ -17,8 +17,6 @@
 {% set script = 'seed_lidarr_quality_profiles.py' %}
 {% set deployment_digest8 = (lookup('template', 'deployment.yaml.j2') | hash('sha256'))[:8] %}
 {% set head %}
-# One retry. The seed adopts by name and never deletes, so a second run reads the profiles again
-# and writes only what is still missing.
 backoffLimit: 1
 # Below the 600s `manifests_rollout_timeout_default` every `<tag>-verify` Kustomization takes.
 # One list, then at most one schema read and one write per profile, 30s each, plus the
@@ -26,8 +24,6 @@ backoffLimit: 1
 activeDeadlineSeconds: 300
 {% endset %}
 {% set label_note %}
-# The verify Jobs' label, so the one `lidarr-verify` peer in lidarr's `netpol_from`
-# admits this Job too.
 {% endset %}
 {% set env %}
 # The Service by its cluster name; the script appends /api/v1.

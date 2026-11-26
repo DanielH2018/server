@@ -2,18 +2,9 @@
 # The cluster home of autofix-bridge's containerized *arr remediation loop.
 autofix_bridge_k8s_image: python:3.15-alpine@sha256:0f9552bb28711333da16915ec146f5e6bb44a7fdac9ced15dc17c2e0206346dd
 
-# The Python files that make up the running bridge, mirroring monitor-bridge's ship list
-# (defaults/main.yml there) and the same risk: a module missing here never reaches the
-# ConfigMap, and the pod dies at import with ModuleNotFoundError the next time it rolls, on a
-# workload that fixes *arr issues with no page of its own if it silently stops.
-#
-# autofix.py is this role's own file. bridge/common.py is monitor-bridge's canonical copy and
-# jobs_metrics.py is crowdsec's, both shipped cross-role, never a second edited copy under this
-# role's files/.
-# ENFORCED by tests/services/test_autofix_bridge_modules.py.
-# `name` is the ConfigMap key (no slash allowed); `path` is where the Deployment mounts it
-# under /app. templates/script-configmap.yaml.j2 embeds each `src`. The shared module is `bridge/common.py` in
-# both roles' pods, so `autofix.py` imports it the same way monitor-bridge's modules do.
+# A module missing here never reaches the ConfigMap and the pod dies at import. bridge/common.py and
+# jobs_metrics.py are shipped cross-role, never a second copy; `name` is the ConfigMap key (no
+# slash), `path` the mount under /app.
 autofix_bridge_modules:
   - name: autofix.py
     path: autofix.py
@@ -21,9 +12,6 @@ autofix_bridge_modules:
   - name: bridge_common.py
     path: bridge/common.py
     src: "{{ role_file('files/bridge/common.py', role='monitor-bridge') }}"
-  # crowdsec's check exporter: the stdlib `homelab_check_*` gauge server, shipped
-  # cross-role like bridge/common.py so the verdict has one implementation. autofix.py serves the
-  # cycle's verdict through it on CHECK_EXPORTER_PORT.
   - name: jobs_metrics.py
     path: jobs_metrics.py
     src: "{{ role_file('files/jobs_metrics.py', role='crowdsec') }}"
@@ -38,11 +26,9 @@ k8s_autodeploy_reason: "observability — auto-remediation loop; a broken deploy
 
 manifests_rollout: autofix-bridge
 
-# Each entry renders k8s/templates/secret-default.yaml.j2 as secret-<name>.yaml:
-# its `string_data` maps a Secret field to the SOPS key its value comes from.
 render_secrets:
-  # The sidecar's API keys and webhook. Every other setting is a plain `env:` value in
-  # deployment.yaml.j2, because a Secret's quoted numeric literal fails Flux's typed patch.
+  # Every other setting is a plain `env:` value, because a Secret's quoted numeric literal fails
+  # Flux's typed patch.
   - name: autofix-bridge-env
     string_data:
       SONARR_API_KEY: sonarr_api_key

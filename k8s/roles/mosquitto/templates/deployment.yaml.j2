@@ -29,11 +29,8 @@ spec:
       nodeSelector:
         kubernetes.io/hostname: {{ k8s_primary_node }}
 {{ pod_shell(services | tier_priority_class('mosquitto'), run_as_user=puid, run_as_group=pgid, fs_group=pgid) }}
-      # mosquitto 2.1's password-file plugin refuses the pwfile straight off a Secret mount
-      # ("Unable to open pwfile") even though a plain open() of the same path succeeds — the
-      # root-owned ..data symlink farm fails whatever ownership/symlink check the plugin does.
-      # A cp'd uid-1000 copy starts clean, so an init container copies both files into an emptyDir
-      # the pod owns.
+      # The password-file plugin refuses the pwfile on a Secret mount; an init container copies both
+      # files into an emptyDir the pod owns.
       initContainers:
         - name: config-copy
           image: {{ mosquitto_k8s_image }}
@@ -41,8 +38,8 @@ spec:
           command:
             - sh
             - -c
-            # install -m 400: mosquitto also refuses a world-readable password file, and cp
-            # would create one via the default umask.
+            # install -m 400: mosquitto refuses a world-readable password file, and cp would create
+            # one.
             - install -m 444 /secret/mosquitto.conf /config/ &&
               install -m 400 /secret/passwordfile /config/
 {{ hardened_security_context(read_only=true, non_root=true) }}
@@ -69,13 +66,12 @@ spec:
               readOnly: true
             - name: mosquitto-data
               mountPath: /mosquitto/data
-            # Image declares VOLUME /mosquitto/log; mount scratch over it so the read-only
-            # rootfs doesn't block the implicit volume. Stays empty (log_dest is stdout).
+            # Image declares VOLUME /mosquitto/log; scratch over it keeps the read-only rootfs
+            # working.
             - name: mosquitto-log
               mountPath: /mosquitto/log
-          # TCP probes rather than an authenticated $SYS subscribe: an exec probe would embed
-          # the SOPS MQTT password in the pod spec, which the read-only
-          # kubeconfig can read. A listener that accepts TCP is what the clients need anyway.
+          # TCP probes: an exec probe would embed the MQTT password in the pod spec, readable via
+          # the read-only kubeconfig.
           readinessProbe:
             tcpSocket:
               port: 1883
@@ -91,8 +87,7 @@ spec:
         - name: mosquitto-config-secret
           secret:
             secretName: mosquitto-config
-            # 288 = 0440 (decimal — the YAML-1.1 parser behind kubectl reads 0o440 as a
-            # string). Only the init container reads this; the broker gets the owned copy.
+            # 288 = 0440 in decimal: the YAML-1.1 parser behind kubectl reads 0o440 as a string.
             defaultMode: 288
         - name: mosquitto-config
           emptyDir: {}

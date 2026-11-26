@@ -1,13 +1,6 @@
 ---
-# How many autodeploy- snapshots to keep per volume. Three, not one: k8s/volume-revert reverts to the
-# most recent, and a spare keeps a rollback possible if the newest snapshot is corrupt or still
-# coalescing.
-#
-# Clamped to a floor of 2 where it is used (claim.yml): a rollback run takes its OWN snapshot and
-# prunes BEFORE k8s/volume-revert reads the chain, so the chain holds that new snapshot AND the
-# earlier pre-deploy one the revert needs. A floor of 1 would delete that recovery point. See this
-# role's CLAUDE.md ("The revert needs two, not one"). A caller passing `0` or `1` still keeps
-# both.
+# A spare keeps rollback possible if the newest snapshot is corrupt or still coalescing. Floor of 2
+# (claim.yml): a rollback snapshots and prunes first; 1 would delete the recovery point.
 volume_snapshot_retain: 3
 
 # Seconds to wait for a snapshot to report `readyToUse`. A Longhorn snapshot is a marker in the
@@ -20,8 +13,6 @@ volume_snapshot_retain: 3
 # is snapshotted on the ordinary path").
 volume_snapshot_timeout: 120
 
-# How often the readiness wait polls. The retries above are derived from this and
-# volume_snapshot_timeout, so the timeout budget is unchanged by the cadence.
 volume_snapshot_poll_interval: 2
 
 # Renovate stance: whether an image bump here may automerge. `promote` deploys what merges.
@@ -32,9 +23,6 @@ volume_snapshot_poll_interval: 2
 k8s_autodeploy: false
 k8s_autodeploy_reason: "deploys no workload of its own — a pre-apply snapshot step other roles include; it renders no manifest and pins no image for Renovate to bump"
 
-# Fraction of a volume's `spec.snapshotMaxSize` at which claim.yml warns that the snapshot
-# space is nearly full. When the cap is REACHED, Longhorn refuses new snapshots instead of
-# pruning, and this role snapshots before it prunes, so the deploy that first hits the cap fails
-# and every later one fails identically until snapshots are deleted by hand. Only volumes with a
-# non-zero cap are measured: `"0"` is Longhorn's uncapped value and the fleet default.
+# At the cap Longhorn refuses snapshots, and this role snapshots before pruning, so deploys fail.
+# Only volumes with a non-zero cap are measured ("0" is uncapped).
 volume_snapshot_cap_warn_ratio: 0.9

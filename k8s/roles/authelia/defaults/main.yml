@@ -24,45 +24,23 @@ k8s_autodeploy_reason: "platform — SSO/OIDC gate; a failed deploy locks out ac
 # an emptyDir under the pod's fsGroup is group-writable and Authelia runs in that group.
 authelia_k8s_manage_crowdsec: true
 
-# The OpenID Connect provider block, and the relying parties it serves — Jellyfin and
-# Grafana. False for a cluster whose subset holds no OIDC client: the block is then dead
-# configuration whose only effect is to demand four credentials
-# (`authelia_oidc_hmac_secret`, `authelia_oidc_rsa_key_content`,
-# `authelia_client_password_hash`, `grafana_oidc_client_secret_hash`) that such a cluster has
-# no reason to hold. Turning it off keeps staging's secrets file small.
-#
-# It gates the config block, not the portal: forward-auth, the session store and the user
-# database are unaffected, so a cluster with this false still proves the middleware chain
-# every Authelia-fronted IngressRoute depends on.
+# False for a cluster with no OIDC client: the block would demand four credentials it has no use
+# for.
+# It gates the config block only, not forward-auth, sessions or users.
 authelia_k8s_manage_oidc: true
 
-# The manifest whose Secret holds the OIDC signing key, a multi-line PEM block that no Flux
-# placeholder can carry. A placeholder render leaves it out; it ships as a SOPS-encrypted
-# manifest instead, rendered and applied when authelia_k8s_manage_oidc is true.
-# `sops-manifest-entries` in scripts/renderer/renderer_lib/sops_entries.py holds the entry to
-# one Secret of `SOPS_MANIFEST_KEYS` keys.
+# A multi-line PEM no Flux placeholder can carry, so it ships as a SOPS-encrypted manifest, applied
+# when authelia_k8s_manage_oidc is true.
 render_sops_manifests: [oidc-jwk-secret.yaml]
 
-# Deliver identity-verification codes by email rather than to a file inside the pod. False
-# falls back to the filesystem notifier. Leave it true; false is the break-glass path for a
-# cluster with no usable `smtp_notify_app_password`.
+# False falls back to the filesystem notifier: break-glass for no usable smtp_notify_app_password.
 authelia_k8s_smtp_notifier: true
 
-# Session cookie name. This is a cookie NAME, not a credential. The session secret is `authelia_secret`, which
-# the rotation registry tracks under that name — see this role's CLAUDE.md.
+# A cookie NAME, not a credential; the session secret is `authelia_secret`.
 authelia_k8s_cookie_name: authelia_session_k8s
 
-# --- Redis session store ----------------------------------------------------------------
-# Authelia's session provider is IN-MEMORY unless a `session.redis` block exists — v4.39.21's
-# own config.template.yml says "Memory is the provider unless redis is defined". So every roll
-# of this Deployment destroys every session, remember-me ones included: `remember_me` only
-# overrides the cookie lifetime and disables the inactivity timer, it does not change where the
-# session lives. This pod rolls whenever its rendered manifests change. Redis moves the
-# sessions out of the process so a roll does not log the fleet out.
-#
-# The rollback lever: set false and redeploy. Authelia goes back to memory sessions and the
-# redis Deployment and Service stay applied but unused. Flipping it either way logs everyone
-# out once, because the sessions live on the side being left.
+# Without a `session.redis` block sessions are in-memory, so every pod roll logs everyone out.
+# Set false to roll back to memory sessions; flipping either way logs everyone out once.
 authelia_k8s_redis_sessions: true
 
 # repo:tag with no digest — the same shape as authelia_k8s_image above, so Renovate's docker
@@ -78,19 +56,15 @@ authelia_k8s_redis_mem_limit: 128Mi
 authelia_k8s_redis_cpu_request: 10m
 authelia_k8s_redis_mem_request: 16Mi
 
-# `maxmemory` sits UNDER the container memory limit so redis evicts its oldest sessions instead
-# of being OOM-killed, which would drop all of them at once. allkeys-lru because every key here
-# is a session and Authelia simply re-authenticates a user whose key is gone.
+# `maxmemory` sits under the container limit so redis evicts old sessions instead of OOM-killing.
 authelia_k8s_redis_maxmemory: 96mb
-# Its own SQLite database on its own volume. This role is the only consumer of the storage encryption key (authelia_storage), so the key
-# rotates on its own. The procedure is in docs/secret-rotation.md under `pinned`; it is not a
-# `sops set`.
+# This role alone consumes the storage key (authelia_storage), so it rotates on its own:
+# docs/secret-rotation.md under `pinned`, not a `sops set`.
 authelia_k8s_storage: 1Gi
 
-# Plain `longhorn`, so the claim rides the daily R2 tier. It holds the SQLite database with TOTP
-# secrets, WebAuthn devices and regulation records, which unlike Traefik's acme.json is not
-# regenerable. A recurring-job-group label on the claim would do nothing: Longhorn reads those
-# labels on its own Volume CRs, and PVC labels do not propagate to them.
+# Plain `longhorn` so the claim rides the daily R2 tier; the SQLite data is not regenerable.
+# A recurring-job-group label on the claim does nothing: PVC labels do not reach Longhorn's Volume
+# CRs.
 authelia_k8s_storage_class: longhorn
 
 # The claim the renderer emits for this role, which the authelia Kustomization applies.
@@ -99,23 +73,17 @@ k8s_claims:
     storage_class: "{{ authelia_k8s_storage_class }}"
     size: "{{ authelia_k8s_storage }}"
 
-# "1", not "1.0" — see the same note in the traefik role. Kubernetes canonicalises quantities, so
-# 1.0 in the manifest and 1 in the live object never match in last-applied-configuration and every
-# apply reports the Deployment "configured".
+# "1", not "1.0": Kubernetes canonicalises quantities, so 1.0 reports "configured" on every apply.
 authelia_k8s_cpu_limit: "1"
 authelia_k8s_mem_limit: 512Mi
 authelia_k8s_cpu_request: "100m"
 authelia_k8s_mem_request: 144Mi
 
-# Authelia's startup checks report "Errors occurred performing startup checks" and nothing
-# else at info — the per-provider failures only surface at debug. Raise it for a run with
-# `-e authelia_k8s_log_level=debug` rather than committing a noisy default.
+# Raise with `-e authelia_k8s_log_level=debug`: per-provider startup failures surface only at debug.
 authelia_k8s_log_level: info
 
-# The CrowdSec agent sidecar that parses this portal's auth log.
-# Collections are the authelia-specific subset (the traefik/http ones belong to the agents
-# reading those logs). The machine NAME is crowdsec_k8s_sidecar_agents.authelia in group_vars —
-# the k8s/crowdsec role registers it, and only group_vars crosses that role boundary.
+# The machine NAME is crowdsec_k8s_sidecar_agents.authelia in group_vars, which the crowdsec role
+# registers.
 authelia_k8s_agent_collections: LePresidente/authelia
 authelia_k8s_agent_cpu_limit: "0.5"
 authelia_k8s_agent_mem_limit: 256Mi
@@ -160,13 +128,8 @@ authelia_k8s_claude_groups:
 # time and the seed is idempotent in effect.
 authelia_k8s_manage_claude_user: true
 
-# Empty stand-ins, NOT values. SOPS supplies both on a cluster that manages the user, and
-# play vars outrank role defaults, so these are what a cluster with the flag off resolves
-# instead of failing on an undefined name. An empty one reaching a cluster with the flag ON
-# is a misconfiguration, and `cluster_vars.py write` refuses exactly that: an empty value for
-# a key the render places, which covers the digest and the TOTP shared secret. The plaintext
-# `authelia_claude_password` has no stand-in, because this role does not read it;
-# scripts/diagnostics/ui_login.py does.
+# Empty stand-ins, not values: SOPS supplies both where the user is managed.
+# `cluster_vars.py write` refuses an empty one on a cluster with the flag on.
 authelia_claude_password_argon2: ''
 authelia_claude_totp_secret: ''
 
@@ -191,8 +154,7 @@ authelia_claude_totp_secret: ''
 authelia_k8s_agent_user: claude-agent
 authelia_k8s_agent_groups: []
 
-# Follows claude-ui's switch: a cluster that does not run the headless UI tier (staging) holds
-# neither credential, and a user whose password is the empty string must never be rendered.
+# A user whose password is the empty string must never be rendered.
 authelia_k8s_manage_agent_user: "{{ authelia_k8s_manage_claude_user }}"
 
 # Empty stand-in, NOT a value, for the reason authelia_claude_password_argon2's is.
@@ -204,30 +166,13 @@ authelia_agent_password_argon2: ''
 # keep. The prune is armed by default, so this line is the opt-out.
 manifests_prune: false
 
-# The redis pair is concatenated rather than listed, for the same reason crowdsec-secret is
-# below: authelia_k8s_redis_sessions is a rollback lever, and dropping the names here is
-# what stops a `false` run staging manifests whose config nothing reads. The LIVE redis
-# Deployment and Service survive that — `kubectl apply` does not prune — which is the
-# intent: flipping the lever back on does not have to recreate them.
-#
-# networkpolicy-redis.yaml rides the same lever as the pair above, and it is listed HERE
-# rather than in netpol-baseline on purpose. Authelia cannot start without its
-# session store, so the policy admitting it to redis is part of this workload rather than
-# part of the fleet baseline — shipped one role away, `--tags authelia` would stage a portal
-# that CrashLoopBackOffs and returns 500 on every forwardAuth route. Gated with the pair so the three cannot
-# drift apart: with the lever off there is no redis pod for the policy to select.
-#
-# `kubectl apply -f <dir>` is alphabetical, so on a cluster with no redis yet
-# deployment.yaml lands before networkpolicy-redis.yaml and the portal may crashloop once
-# before the policy admits it. It self-heals within a backoff because the policy arrives
-# in the same deploy.
-#
-# crowdsec-secret.yaml is concatenated rather than listed: it reads
-# crowdsec_k8s_agent_password, which a cluster not running the crowdsec role never
-# defines, and the Secret has no template branch to gate. oidc-jwk-secret.yaml rides
-# authelia_k8s_manage_oidc, the lever that gates the `jwks` block reading it: a passed list
-# wins whole, so a template named nowhere here is never rendered, and the Deployment would
-# mount a Secret no deploy wrote.
+# The redis pair is concatenated so the rollback lever drops its names; live redis objects survive
+# (apply does not prune).
+# networkpolicy-redis.yaml rides the same lever and is listed here, not in netpol-baseline:
+# authelia cannot start without it.
+# Alphabetical apply may crashloop the portal once before the policy lands; it self-heals.
+# crowdsec-secret.yaml is concatenated (it reads crowdsec_k8s_agent_password); an unlisted template
+# is never rendered.
 manifests_files: >-
   {{ ['deployment.yaml', 'service.yaml', 'ingressroute.yaml',
       'forwardauth-middleware.yaml', 'config-secret.yaml']

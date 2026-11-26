@@ -11,7 +11,7 @@ k8s_autodeploy_reason: "renders no Deployment — route-only (Service + Endpoint
 
 manifests_rollout: ''
 
-# The Games panel's scale-only identity (templates/games-rbac.yaml.j2, ADR-0033). It lives in the
-# workload namespace, not kube-system, so no `system:serviceaccounts:kube-system` group binding
-# can widen it, and outside cluster-base, which a rebuilt cluster applies before `homelab` exists.
+# In the workload namespace, not kube-system, so no `system:serviceaccounts:kube-system` binding can
+# widen it;
+# outside cluster-base, which a rebuilt cluster applies before `homelab` exists.
 deploy_ui_games_sa_name: homelab-games

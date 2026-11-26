@@ -92,14 +92,13 @@ def test_amdgpu_frequency_is_converted_from_hwmon_hz_to_mhz(tmp_path):
 
 
 def test_amdgpu_emits_no_rc6_counter(tmp_path):
-    # amdgpu has no RC6 residency; emitting 0 would read as a permanently 100%-busy GPU
-    # through `1 - rate()`.
+    # Emitting 0 for amdgpu would read as a permanently 100%-busy GPU through `1 - rate()`.
     assert gpu_exporter._RC6 not in _by_name(gpu_exporter.collect(_amd_tree(tmp_path)))
 
 
 def test_i915_rc6_residency_is_reported_in_seconds(tmp_path):
-    # The file is MILLISECONDS and the series is named _seconds_total. Getting this backwards
-    # scales every derived utilization figure by 1000 and still plots a plausible line.
+    # The file is MILLISECONDS and the series is _seconds_total; backwards scales every utilization
+    # figure by 1000 and still plots plausibly.
     samples = _by_name(gpu_exporter.collect(_intel_tree(tmp_path, rc6_ms=3_418_772)))
     assert samples[gpu_exporter._RC6][1] == 3418.772
 

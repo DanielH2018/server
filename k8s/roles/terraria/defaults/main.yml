@@ -19,13 +19,10 @@ terraria_k8s_image: "{{ k8s_registry_pull_host }}/terraria:{{ k8s_built_image_ta
 k8s_autodeploy: false
 k8s_autodeploy_reason: "two reasons: (1) probe-less — no readinessProbe; (2) migrating state — Recreate + RWO PVC holding irreplaceable worlds"
 
-# 36 M of worlds + config — `longhorn`, BACKED UP: this is the one irreplaceable dataset in
-# the service.
+# 36 M of worlds and config, backed up: the one irreplaceable dataset.
 terraria_k8s_claim: terraria-config
 terraria_k8s_size: 1Gi
 terraria_k8s_storage_class: longhorn
-# The live volume's files are owned 1000:1000 (drwxr-xr-x), so the server needs no
-# DAC_OVERRIDE grant.
 
 terraria_k8s_cpu_limit: "2"
 terraria_k8s_mem_limit: 2048Mi

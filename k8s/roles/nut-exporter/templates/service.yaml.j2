@@ -1,5 +1,4 @@
 {% from 'service.yml.j2' import service with context %}
 ---
-# Scrape target only — no IngressRoute. The exporter's pages are unauthenticated and carry
-# nothing a human reads; the UPS board in Grafana is the operator surface.
+# Scrape target only: the pages are unauthenticated and carry nothing a human reads.
 {{ service('nut-exporter', (services | metrics_port('nut')), port_name='metrics') -}}

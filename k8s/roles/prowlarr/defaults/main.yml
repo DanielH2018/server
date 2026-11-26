@@ -13,16 +13,13 @@ prowlarr_k8s_image: lscr.io/linuxserver/prowlarr:3.0.2.5780-ls169@sha256:45117ba
 # reverted instead of leaving the indexer definitions and API keys unreadable by the old image.
 k8s_autodeploy: true
 k8s_autodeploy_reason: "migrating state — Recreate + RWO PVC, protected by the prowlarr-snapshot Job before each revision and an operator revert to it after a failed one; -lsNN versioning still hides a breaking bump. NOT about gatedness: both rendered Deployments (prowlarr + flaresolverr) gate correctly. WEIGHED: prowlarr pushes indexer config to the *arr apps, which store Prowlarr-assigned indexer IDs back; a revert desyncs those IDs until the next reconciliation or a manual re-sync. UNATTENDED RECOVERY DOES NOT APPLY HERE: sonarr, radarr, bazarr and jellyfin all self-heal a revert (rescan / re-download / existence check), so an operator reading the rollback alert for prowlarr should expect to re-sync indexers by hand"
-# The claim snapshotted before each revision applies. Under Flux the renderer turns this
-# list into the prowlarr-snapshot Kustomization, whose Job snapshots it before prowlarr applies
-# Only the seeded config claim: flaresolverr runs on an emptyDir and has no claim.
-# The snapshot is the recovery point this role's auto-deploy depends on.
+# Only the config claim; flaresolverr uses an emptyDir. The snapshot is auto-deploy's recovery
+# point.
 k8s_autodeploy_snapshot_pvcs: [prowlarr-config]
 
 # 84 M. Holds the indexer definitions and their API keys.
 prowlarr_k8s_claim: prowlarr-config
-# `longhorn` — backed up. `longhorn-nobackup` would leave this volume with a single frozen
-# restore point.
+# `longhorn`, backed up: `longhorn-nobackup` would leave a single frozen restore point.
 prowlarr_k8s_storage_class: longhorn
 prowlarr_k8s_size: 2Gi
 
@@ -43,9 +40,7 @@ prowlarr_k8s_size: 2Gi
 manifests_rollout_timeout: 780s
 prowlarr_k8s_rollout_timeout: "{{ manifests_rollout_timeout }}"
 
-# The tags `prowlarr-verify` also waits on. Its app-keys seed reads their `<app>-exportarr`
-# Secrets and has Prowlarr test each app with its stored key, so it runs against their rolled
-# pods. Only Flux reads it (`RoleDefaults.verify_after`).
+# The app-keys seed tests each app with its stored key, so verify waits on these rolled pods.
 flux_verify_after:
   - lidarr
   - radarr
@@ -54,12 +49,10 @@ flux_verify_after:
 # ── the app-keys seed (templates/app-keys-cronjob.yaml.j2) ──────────────────────────────────
 # The same python:3.15-alpine digest flux_job_image pins; Renovate moves both in one PR.
 prowlarr_k8s_app_keys_image: python:3.15-alpine@sha256:0f9552bb28711333da16915ec146f5e6bb44a7fdac9ced15dc17c2e0206346dd
-# Hourly. Prowlarr raises ApplicationLongTermStatusCheck, which ProwlarrAppSyncFailing reads,
-# only after 6 hours of failed syncs, so a key a revert left stale is rewritten before it pages.
+# Hourly: Prowlarr pages (ApplicationLongTermStatusCheck) only after 6h of failed syncs, so a stale
+# key is rewritten before it pages.
 prowlarr_k8s_app_keys_schedule: "23 * * * *"
-# How long a finished prowlarr-app-keys Job, and so its pod, stays visible: one period plus the
-# 300s deadline and a margin, so the newest run is always there to read. A run at :23 ends
-# before the weekly reboot's shutdown minute (tests/k8s/test_reboot_window_cronjobs_age_out.py).
+# TTL: one period plus the 300s deadline and a margin, so the newest run is always visible.
 prowlarr_k8s_app_keys_job_ttl_seconds: 4200
 # The renderer copies the seed's jobTemplate into `prowlarr-verify` as
 # `prowlarr-app-keys-deploy-gate-<spec digest8>`, a real run once per revision. A second run
@@ -91,49 +84,8 @@ prowlarr_k8s_mem_limit: 1024Mi
 prowlarr_k8s_cpu_request: "100m"
 prowlarr_k8s_mem_request: 128Mi
 
-# flaresolverr's memory pair is sized from measurement. It launches a fresh headless Chromium per
-# solve, so its footprint tracks how many solves overlap, and a full deploy restarts most of the
-# *arr stack at once: prowlarr then re-syncs its indexers and a cold flaresolverr pod takes that
-# whole burst.
-#
-# A burst at a 1024Mi limit OOM-kills it (exit 137) minutes after a rollout restarts it, which
-# fails the whole deploy at the post-deploy stabilisation gate. The highest SURVIVING pod's
-# 30-day peak working set was 934Mi, against 74-676Mi for the nine others, so 1024Mi is a cap the
-# steady fleet already brushes. 934Mi is a sampled figure and therefore a lower bound on real
-# demand. 2048Mi is one doubling over the highest observation, and daniel-server carries it.
-#
-# Upstream exposes NO concurrency cap: FlareSolverr documents no env var for concurrent sessions
-# or browser-pool size and tells the operator to size RAM instead. Sizing is therefore the only
-# lever on how MANY browsers run at once; prowlarr_k8s_fs_disable_media below is the second
-# lever, on how expensive each one is.
-#
-# The REQUEST deliberately stops well short of the peak. It reserves node memory permanently,
-# and 2048Mi held out of a scheduler that only sees 128Mi used steady-state would hoard a
-# gigabyte to cover minutes per deploy. 512Mi covers the observed steady range so the scheduler
-# stops placing this pod as if it were 128Mi, and the pod stays Burstable either way.
-# Stops the headless browser loading images, CSS and other media while it solves a challenge.
-# The lever the memory limit above works around: the limit absorbs a burst of
-# overlapping solves, while this makes each solve cheaper.
-#
-# HONESTLY SCOPED — upstream documents DISABLE_MEDIA as a BANDWIDTH saving, not a memory one
-# ("To disable loading images, CSS, and other media in the web browser to save network
-# bandwidth"), and it buys no memory headroom here: pods that ran with the flag peaked at
-# 714-1112Mi over a week, above the 934Mi baseline and the 1024Mi limit above, with the high
-# peaks on a day of repeated redeploys, which matches the cold-pod burst described above.
-# The limit stays at 2048Mi, about 1.8x the highest observation. Do not lower it on this flag's
-# account.
-#
-# The flag stays on because it cost nothing measurable: no indexer failed over the same week.
-#
-# THE REGRESSION IT RISKS points at the indexers, not at this pod. A Cloudflare interstitial is
-# a rendered widget, and the flag strips STYLESHEETS as well as images — upstream gives no
-# separate switch — so a challenge type that needs either would start failing. The readout is
-# monitor-bridge's `prowlarr_indexers` check (registered in
-# k8s/roles/monitor-bridge/files/registry.py, reading Prowlarr's /api/v1/indexerstatus
-# in files/checks/service.py), which pages rather than sitting silent.
-#
-# THE REVERT is this var, not an edit to the template: set it false and deploy. Record the
-# refutation here when you do, so the next reader does not re-propose it.
+# Limit 2048Mi: a burst of overlapping solves OOM-kills the pod (137) at 1024Mi. DISABLE_MEDIA saves
+# bandwidth, not memory, and strips stylesheets too; revert by setting it false.
 prowlarr_k8s_fs_disable_media: true
 
 prowlarr_k8s_fs_cpu_limit: "2"
@@ -141,10 +93,7 @@ prowlarr_k8s_fs_mem_limit: 2048Mi
 prowlarr_k8s_fs_cpu_request: "100m"
 prowlarr_k8s_fs_mem_request: 512Mi
 
-# See k8s/roles/sonarr/defaults/main.yml for the full rationale: upstream defaults are
-# LogLevel=debug / Rotate=50 / SizeLimit=1MB, and the churn that produces is what inflates the
-# backup, not the capped size. Bound via PROWLARR__LOG__* — Prowlarr's Bootstrap.cs binds
-# LogOptions to the "Prowlarr:Log" section and registers AddEnvironmentVariables() unprefixed.
+# Upstream log defaults (debug, 50 files) churn the backup; see sonarr's defaults.
 prowlarr_k8s_log_level: info
 prowlarr_k8s_log_rotate: "10"
 
@@ -155,27 +104,18 @@ prowlarr_k8s_log_rotate: "10"
 # fails if the three drift apart.
 prowlarr_k8s_exportarr_image: ghcr.io/onedr0p/exportarr:v2.3.0@sha256:af535d94061cf97a52e1661945ffba78c03f9443eae7c0da1a80a5a4be56b520
 
-# The claim the renderer emits for this role. The prowlarr Kustomization applies it after the
-# prowlarr-snapshot Job.
 k8s_claims:
   - name: "{{ prowlarr_k8s_claim }}"
     storage_class: "{{ prowlarr_k8s_storage_class }}"
     size: "{{ prowlarr_k8s_size }}"
 
-# The drain gives the flaresolverr entry below the budget of `manifests_rollout_timeout`.
-# flaresolverr rolls under maxUnavailable: 0 rather than Recreate, so a rollout that
-# never goes Ready leaves the OLD pod serving indefinitely — the failure is invisible
-# unless something actually runs `rollout status` on it. manifests_rollout above only
-# watches the Deployment named `prowlarr`; without this entry flaresolverr is never
-# queued into k8s_pending_rollouts and the batch drain never checks it.
+# flaresolverr rolls with maxUnavailable: 0: a failed rollout leaves the OLD pod serving unseen.
+# manifests_rollout watches only `prowlarr`, so this entry queues flaresolverr for the drain check.
 manifests_extra_rollouts:
   - name: flaresolverr
 
-# Each entry renders k8s/templates/secret-default.yaml.j2 as secret-<name>.yaml:
-# its `string_data` maps a Secret field to the SOPS key its value comes from.
 render_secrets:
-  # The exportarr sidecar's credential: prowlarr's own API key, since prowlarr offers no
-  # scoped read-only key.
+  # Prowlarr offers no scoped read-only key, so exportarr uses its own API key.
   - name: prowlarr-exportarr
     string_data:
       api_key: prowlarr_api_key

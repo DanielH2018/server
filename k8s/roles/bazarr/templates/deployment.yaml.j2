@@ -9,9 +9,8 @@ metadata:
   name: bazarr
   namespace: {{ k8s_namespace }}
 spec:
-  # The config PVC is ReadWriteOnce on single-replica Longhorn, so a rolling update deadlocks:
-  # the new pod waits for a volume the old pod has not released. (The media PVC is RWX and does
-  # not have this problem — this is about /config.)
+  # The config PVC is ReadWriteOnce: a rolling update deadlocks waiting for a volume the old pod has
+  # not released.
 {{ spec_shell('Recreate') }}
   replicas: 1
   selector:
@@ -23,8 +22,8 @@ spec:
         app: bazarr
         netpol-baseline: enforced
     spec:
-      # No fsGroup: the LSIO image chowns /config itself on startup, and an fsGroup here would
-      # make the kubelet recursively chown the 19 G media volume on every mount.
+      # No fsGroup: the LSIO image chowns /config itself, and fsGroup would chown the whole media
+      # volume on every mount.
 {{ pod_shell('homelab-standard') }}
       containers:
         - name: bazarr
@@ -32,19 +31,15 @@ spec:
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: {{ container_item.port }}
-          # The s6 privilege-drop set. No NET_BIND_SERVICE: bazarr listens on
-          # {{ container_item.port }} (>1024), which needs no
-          # privilege.
+          # The s6 privilege-drop set; no NET_BIND_SERVICE, since the port is above 1024.
 {{ hardened_security_context(add=['CHOWN', 'SETUID', 'SETGID', 'FOWNER', 'DAC_OVERRIDE']) }}
           env:
 {{ lsio_env() }}
           volumeMounts:
             - name: bazarr-config
               mountPath: /config
-            # /data/media ONLY, via subPath — narrower than the \*arrs on purpose. bazarr
-            # writes subtitle files beside the media it
-            # subtitles; it never imports, so it has no reason to see /data/torrents and no
-            # hardlink seam to preserve.
+            # /data/media ONLY, via subPath: bazarr writes subtitles beside the media and never
+            # imports.
             - name: media
               mountPath: /data/media
               subPath: media

@@ -28,9 +28,8 @@ spec:
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 80
-          # Read-only rootfs: root nginx writes only its pidfile (/var/run) — the cache is
-          # its own volume (use_temp_path=off) and logs go to the image's stdout symlinks.
-          # nginx binds :80 and forks workers — needs NET_BIND_SERVICE + SETUID/SETGID/CHOWN.
+          # Read-only rootfs: nginx writes only its pidfile; the cache is its own volume.
+          # NET_BIND_SERVICE for :80, SETUID/SETGID/CHOWN for workers.
 {{ hardened_security_context(read_only=true, add=['CHOWN', 'SETUID', 'SETGID', 'NET_BIND_SERVICE']) }}
           volumeMounts:
             - name: feed-cache-nginx-conf

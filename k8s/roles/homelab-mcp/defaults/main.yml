@@ -1,6 +1,4 @@
 ---
-# Built in-cluster by k8s/image-builder (same rolling tier as n8n/code-server:
-# imagePullPolicy Always + build-on-deploy refreshes the base image).
 homelab_mcp_k8s_image: "{{ k8s_registry_pull_host }}/homelab-mcp:{{ k8s_built_image_tags.get('homelab-mcp', 'latest') }}"
 
 # Renovate stance: whether an image bump here may automerge. `promote` deploys what merges.
@@ -16,8 +14,7 @@ homelab_mcp_k8s_mem_limit: 256Mi
 homelab_mcp_k8s_cpu_request: 50m
 homelab_mcp_k8s_mem_request: 32Mi
 
-# The checkout directories read_file/list_files serve, each a read-only hostPath mount from the
-# pinned node's /home/<sys_user>/server. secrets/ stays out.
+# Each is a read-only hostPath mount from the pinned node's checkout; secrets/ stays out.
 homelab_mcp_source_dirs:
   - k8s
   - inventory
@@ -26,22 +23,16 @@ homelab_mcp_source_dirs:
 image_builder_builds:
   - image_builder_name: homelab-mcp
     image_builder_dockerfile: "{{ role_file('templates/Dockerfile.j2') }}"
-    # Raw files, not templates: app.py embeds PromQL whose {{...}} braces Jinja would
-    # eat (the reason image_builder_context_files exists).
+    # Raw files, not templates: app.py embeds PromQL whose {{...}} braces Jinja would eat.
     image_builder_context_files:
       "{{ role_file('files/app.py') }}": app.py
       "{{ role_file('files/safe_reads.py') }}": safe_reads.py
       "{{ role_file('files/k8s_reads.py') }}": k8s_reads.py
-      # The Prometheus/Loki client probe.py shares. It lives outside this role. An edit to it
-      # moves the content tag, so promote rebuilds the image.
+      # Outside this role: an edit moves the content tag, so promote rebuilds the image.
       "{{ repo_file('scripts/diagnostics/probe_lib/obs_api.py') }}": obs_api.py
 
-# Flux prunes by its own inventory, which holds the ClusterRole and ClusterRoleBinding in
-# rbac.yaml, so dropping one deletes it live.
 manifests_rollout: homelab-mcp
 
-# Each entry renders k8s/templates/secret-default.yaml.j2 as secret-<name>.yaml:
-# its `string_data` maps a Secret field to the SOPS key its value comes from.
 render_secrets:
   - name: homelab-mcp-secrets
     string_data:
