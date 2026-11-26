@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/hosts.py
-generated_at: 2026-11-23 06:17 UTC
-generated_sha: 2933fca28
+generated_at: 2026-11-26 06:17 UTC
+generated_sha: f2e8e29f8
 ---
 
 !!! warning "Generated file — do not edit"
@@ -12,7 +12,7 @@ generated_sha: 2933fca28
 
 # Hosts
 
-3 host(s) in `inventory/host_vars/`.
+3 host(s) in `hosts/`.
 
 
 ## daniel-box

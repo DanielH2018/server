@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/crons.py
-generated_at: 2026-11-24 06:17 UTC
-generated_sha: 76aa3d52a
+generated_at: 2026-11-26 06:17 UTC
+generated_sha: f2e8e29f8
 ---
 
 !!! warning "Generated file — do not edit"
@@ -48,7 +48,7 @@ generated_sha: 76aa3d52a
 | homelab-docker-prune.timer | `OnCalendar=*-*-* 06:30:00` | daniel-pi | `root` | yes (prune) | `hosts/components/pi-docker/units/homelab-docker-prune.timer.j2` |
 | homelab-docs-refresh.timer | `OnCalendar=*-*-* 06,18:17:00` | daniel-box | `ubuntu` | read the script | `hosts/components/docs-refresh/units/homelab-docs-refresh.timer` |
 | homelab-dpkg-purge.timer | `OnCalendar=Sun *-*-* 02:15:00` | daniel-box, daniel-pi, daniel-server | `root` | read the script | `hosts/components/host-maintenance/units/homelab-dpkg-purge.timer` |
-| homelab-etcd-restore-drill.timer | `OnCalendar=Mon *-*-* 10:20:00` | daniel-box | `root` | yes (backup) | `hosts/components/k3s-host-checks/units/homelab-etcd-restore-drill.timer.j2` |
+| homelab-etcd-restore-drill.timer | `OnCalendar=Mon *-*-* 10:20:00` | daniel-box | `root` | read the script | `hosts/components/k3s-host-checks/units/homelab-etcd-restore-drill.timer.j2` |
 | homelab-etcd-restore-drill.timer | `OnCalendar=*-*-01 11:20:00` | daniel-server | `root` | read the script | `hosts/components/k3s-host-checks/units/homelab-etcd-restore-drill.timer.j2` |
 | homelab-etcd-token-drift.timer | `OnCalendar=*-*-* 2:45:00` | daniel-box | `root` | read the script | `hosts/components/k3s-host-checks/units/homelab-etcd-token-drift.timer.j2` |
 | homelab-eval-sweep.timer | `OnCalendar=Sun *-*-* 02:00:00` | daniel-box | `ubuntu` | read the script | `hosts/components/eval-sweep/units/homelab-eval-sweep.timer` |

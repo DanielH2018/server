@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/state.py
-generated_at: 2026-11-25 18:17 UTC
-generated_sha: 9a60147e9
+generated_at: 2026-11-26 06:17 UTC
+generated_sha: f2e8e29f8
 ---
 
 !!! warning "Generated file — do not edit"
@@ -12,15 +12,15 @@ generated_sha: 9a60147e9
 
 # State of the lab
 
-4 of 5 loops within cadence.
+5 of 5 loops within cadence.
 
 !!! warning "Status is a heuristic over the last recorded state"
     `late` means the loop's last recorded run is more than 2x its expected cadence old. `unreadable` means this generator could not reach the loop's state at all (wrong host, permission, or unparseable content) -- not that the loop is unhealthy. `never` means the state is reachable and simply has no run recorded yet.
 
 | Loop | Last run | Age | Cadence | Status | Last outcome |
 |---|---|---|---|---|---|
-| renovate-agent | 2026-11-25T12:05:32+0000 | 6h12m | 1d | ok | session completed |
-| renovate-notify | 2026-11-25T13:04:42+0000 | 5h12m | 1d | ok | notified |
-| docs-refresh | 2026-11-25T06:18:00+0000 | 11h59m | 12h | ok | generators: ok |
-| longhorn-restore-drill | 2026-11-23T04:10:39+0000 | 2d14h | 1d | late | PVC restore proven |
-| etcd-restore-drill | 2026-11-23T10:20:04+0000 | 2d7h | 7d | ok | list-only restore proven (snapshot offbox-daniel-box-1795392005.zip) |
+| renovate-agent | 2026-11-25T12:05:32+0000 | 18h12m | 1d | ok | session completed |
+| renovate-notify | 2026-11-25T13:04:42+0000 | 17h12m | 1d | ok | notified |
+| docs-refresh | 2026-11-25T18:18:00+0000 | 11h59m | 12h | ok | generators: ok |
+| longhorn-restore-drill | 2026-11-26T04:11:05+0000 | 2h6m | 1d | ok | PVC restore proven |
+| etcd-restore-drill | 2026-11-23T10:20:04+0000 | 2d19h | 7d | ok | list-only restore proven (snapshot offbox-daniel-box-1795392005.zip) |
