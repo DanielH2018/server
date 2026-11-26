@@ -10,6 +10,7 @@ import pytest
 
 from lib.proc_testing import path_with, write_exec
 from renderer import shadow_diff
+from renderer.renderer_lib import tree_diff
 
 # Each file keyed by its place in the C1 layout.
 FILES = {
@@ -177,3 +178,77 @@ def test_diff_without_dyff_on_path_is_refused(trees, run, monkeypatch, tmp_path)
     code, _, err = run("diff", base, head)
     assert code == 2
     assert "shadow_diff diff: refused" in err
+
+
+DEPLOYMENT = """\
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: app
+  labels: {app: app, tier: web}
+spec:
+  replicas: 1
+  template:
+    spec:
+      containers:
+        - name: app
+          image: app:1
+          ports: [{name: http, containerPort: 8080}]
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: app
+spec:
+  ports: [{name: http, port: 80}]
+"""
+REORDERED = """\
+kind: Deployment
+metadata:
+  labels: {tier: web, app: app}
+  name: app
+apiVersion: apps/v1
+spec:
+  template:
+    spec:
+      containers:
+        - image: app:1
+          ports: [{containerPort: 8080, name: http}]
+          name: app
+  replicas: 1
+---
+metadata:
+  name: app
+kind: Service
+apiVersion: v1
+spec:
+  ports: [{port: 80, name: http}]
+"""
+needs_dyff = pytest.mark.skipif(
+    shutil.which("dyff") is None,
+    reason="needs the pinned dyff, which pytest-tools installs",
+)
+
+
+def _pair(tmp_path, base_text: str, head_text: str):
+    for side, text in (("base", base_text), ("head", head_text)):
+        (tmp_path / side / "cluster/app").mkdir(parents=True)
+        (tmp_path / side / "cluster/app/app.yaml").write_text(text)
+    return tmp_path / "base", tmp_path / "head"
+
+
+@needs_dyff
+def test_real_dyff_prints_nothing_for_reordered_keys(tmp_path):
+    found = tree_diff.diff_trees(*_pair(tmp_path, DEPLOYMENT, REORDERED))
+    assert found == tree_diff.TreeDiff()
+
+
+@needs_dyff
+def test_real_dyff_names_the_path_of_a_changed_field(tmp_path):
+    changed = DEPLOYMENT.replace("replicas: 1", "replicas: 2")
+    found = tree_diff.diff_trees(*_pair(tmp_path, DEPLOYMENT, changed))
+    assert found.changed == ["cluster/app/app.yaml"]
+    assert any(line.lstrip().startswith("spec.replicas") for line in found.lines), (
+        found.lines
+    )
+    assert found.errors == []
