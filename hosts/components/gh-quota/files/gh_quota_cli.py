@@ -10,6 +10,7 @@ import json
 import os
 import sys
 from collections.abc import Sequence
+from collections import Counter
 from datetime import UTC, datetime
 
 # Appended, so a checkout's copy found earlier on the path wins in a test run.
@@ -40,7 +41,9 @@ def render(
     """The lines `gh-quota status` prints.
 
     A count line per window, naming every identity that shares it, with the sessions to look
-    at under it, then each identity's
+    at under it. With `every`, the window also lists each `api rest` path template with its
+    count across all sessions, so the polling endpoints show whatever a session's top three
+    holds. Then each identity's
     recent writes against GitHub's secondary limits, then the ledger's failures.
     """
     lines = [] if windows else ["no GitHub call recorded in an open quota window"]
@@ -64,6 +67,13 @@ def render(
             top = ", ".join(f"{name} x{n}" for name, n in calls.most_common(3))
             lines.append(
                 f"  {session[:36]}  {_count(sum(calls.values()), 'call')}  {top}"
+            )
+        if every:
+            rest = sum((c for c in window.sessions.values()), Counter())
+            lines.extend(
+                f"  {name} x{n}"
+                for name, n in rest.most_common()
+                if name.startswith("api rest ")
             )
     lines.extend(
         f"{w.identity} writes: {w.minute}/{WRITES_PER_MINUTE} in the last minute, "
