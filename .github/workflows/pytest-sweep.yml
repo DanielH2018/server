@@ -59,11 +59,13 @@ jobs:
       # a test that depends on an earlier test's state fails here and in no leg. The plugin
       # prints `Using --randomly-seed=N` in the log's header. `--randomly-seed=N`
       # fixes the collection order, not which xdist worker runs which module; `-n 0` on the
-      # whole suite replays one serial order for the seed.
+      # whole suite replays one serial order for the seed. `--hypothesis-profile=sweep` draws
+      # fresh property-test inputs; a failure prints a `@reproduce_failure` blob to pin as an
+      # `@example` (tests/hypothesis_profiles.py).
       - name: Run the whole test suite
         run: |
           set -euo pipefail
-          uv run --with pytest-randomly python -m pytest --github-report | tee "$RUNNER_TEMP/sweep.log"
+          uv run --with pytest-randomly python -m pytest --hypothesis-profile=sweep --github-report | tee "$RUNNER_TEMP/sweep.log"
 
       # `-m image` replaces addopts' deselection; no paths, because collecting the tree finds a
       # marked test wherever it lives.

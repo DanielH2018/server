@@ -2,14 +2,14 @@
 
 A head is a list of check-runs drawn from the gate's real job names, spread over three suites so
 that one name often carries several runs, as a draft run beside a ready run does. The property
-tests take a fixed seed and no example database, so a CI run cannot differ from a local one.
+tests run under the profile `tests/hypothesis_profiles.py` loads.
 
 Run: uv run pytest hosts/lib/tests/host_lib/test_ci_verdict_properties.py
 """
 
 from collections.abc import Sequence
 
-from hypothesis import given, settings
+from hypothesis import given
 from hypothesis import strategies as st
 
 from ci_verdict import (
@@ -22,7 +22,6 @@ from ci_verdict import (
     jobs_verdict,
 )
 
-FIXED = settings(derandomize=True, database=None, deadline=None, max_examples=400)
 
 _NAMES = sorted({CI_GATE_NAME, CI_PROVE_JOB, *CI_GATE_NEEDS_JOBS})
 _REQUIRED = frozenset({CI_GATE_NAME})
@@ -52,7 +51,6 @@ def _head_and_cancelled_run(draw) -> tuple[list[CheckRun], CheckRun]:
     return head, CheckRun(decided.name, *outcome, draw(st.integers(1, 3)))
 
 
-@FIXED
 @given(_head_and_cancelled_run())
 def test_a_cancelled_run_beside_a_decided_one_leaves_the_verdict_alone(case):
     head, cancelled = case
@@ -120,7 +118,6 @@ def test_the_generated_heads_reach_every_verdict():
     """Non-vacuity: a generator that only ever produced pending heads would pass the property."""
     seen: set[str] = set()
 
-    @FIXED
     @given(_head_and_cancelled_run())
     def collect(case):
         seen.add(ci_verdict(case[0], _REQUIRED))

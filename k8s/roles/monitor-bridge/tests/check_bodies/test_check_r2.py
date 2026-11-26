@@ -132,7 +132,11 @@ def test_r2_query_parses_storage_and_operations(cfg):
         operations=_ops(PutObject=2, GetObject=8),
     )
     src = FakeSources(post_json=lambda *a, **k: payload)
-    assert checks.r2.r2_query_usage(cfg, src, R2_NOW) == (1000, 3, 2, 8, [])
+    usage = checks.r2.r2_query_usage(cfg, src, R2_NOW)
+    assert usage.storage_bytes == 1000
+    assert usage.uploads == 3
+    assert (usage.class_a, usage.class_b) == (2, 8)
+    assert usage.unknown_actions == []
 
 
 def test_r2_query_treats_an_empty_bucket_as_zero_not_a_fault(cfg):

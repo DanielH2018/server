@@ -64,7 +64,7 @@ dev = [                              # `dev` is uv's default group for `uv run`/
   "lxml",                           # scripts/freshrss/scrape_feed.py runs XPath 1.0 with functions
   "lxml-stubs",                     # lxml.etree is a C extension; ty resolves it only from these
   "loguru",                         # karakeep's test_time_tagger_logging.py runs the tagger's real handler setup
-  "hypothesis>=6.170",              # property tests (test_fake_remux_ledger.py)
+  "hypothesis>=6.170",              # property tests; profiles in tests/hypothesis_profiles.py
   "icalendar",                      # ical-proxy ical_proxy.py parses and writes every feed with it (test_app.py)
   "import-linter>=2.17",            # [tool.importlinter] contracts (test_scripts_import_direction.py)
 ]
@@ -103,7 +103,7 @@ testpaths = [                        # single source of truth for WHAT runs
 ]
 # `-n auto` is set here so a bare `uv run pytest` gets it; the suite is order-independent, so fix a
 # test that writes shared state rather than dropping it.
-addopts = "-n auto --dist loadscope -m 'not ui and not image' --strict-markers --strict-config -p leakguard -p xdist_width -p render_share -p phase_timing -p named_files -p failure_report"
+addopts = "-n auto --dist loadscope -m 'not ui and not image' --strict-markers --strict-config -p leakguard -p xdist_width -p render_share -p phase_timing -p named_files -p failure_report -p hypothesis_profiles"
 # Every warning is a failure: a DeprecationWarning from a dependency bump surfaces on the PR that
 # bumps it.
 filterwarnings = [

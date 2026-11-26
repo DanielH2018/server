@@ -29,6 +29,7 @@ import os
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
+from typing import NamedTuple
 
 from agent_toolbox import AgentTools
 from host_lib import read_regular, start_unit
@@ -123,44 +124,54 @@ def _rerun(pr: str, repo: str, tools: AgentTools) -> tuple[bool, str]:
     return True, f"re-ran {len(runs)} failed run(s)"
 
 
-def grade(result: str, verdict: str) -> tuple[bool, bool, str]:
-    """(landed, go_on, detail) for a lander unit that ended with `result` and wrote `verdict`.
+class LandGrade(NamedTuple):
+    """How a lander ended: whether it landed, whether the run goes on, and why."""
+
+    landed: bool
+    go_on: bool
+    detail: str
+
+
+def grade(result: str, verdict: str) -> LandGrade:
+    """Grade a lander unit that ended with `result` and wrote `verdict`.
 
     `success` and `exit-code` mean the lander finished and wrote its file; any other systemd
     `Result`, or a file still reading `PENDING`, means it was stopped before it wrote an outcome.
     """
     line = verdict.strip().splitlines()[-1] if verdict.strip() else ""
     if result not in ("success", "exit-code"):
-        return (
+        return LandGrade(
             False,
             False,
             f"systemd stopped the lander (Result={result or 'unknown'})",
         )
     if line.startswith("REFUSED:"):
-        return False, True, line
+        return LandGrade(False, True, line)
     state = (
         line.removeprefix("VERDICT: ").split(" ", 1)[0]
         if line.startswith("VERDICT: ")
         else ""
     )
     if state in GOES_ON:
-        return True, True, line
-    return False, False, line or "the lander left no verdict"
+        return LandGrade(True, True, line)
+    return LandGrade(False, False, line or "the lander left no verdict")
 
 
 def _land(
     pr: int,
     tools: AgentTools,
     timeout: int,
-) -> tuple[bool, bool, str]:
+) -> LandGrade:
     """Start the lander for `pr`, wait for it, and grade how it ended."""
     end = start_unit(f"renovate-agent-land@{pr}.service", tools.run, timeout)
     if end.result == "deadline":
         # The lander keeps running in its own unit; only this wait ended.
-        return False, False, "still running at the run's deadline"
+        return LandGrade(False, False, "still running at the run's deadline")
     verdict = tools.read_file(os.path.join(VERDICT_DIR, f"{pr}.verdict"))
     if not verdict:
-        return False, False, "the lander's verdict file is missing, empty or unreadable"
+        return LandGrade(
+            False, False, "the lander's verdict file is missing, empty or unreadable"
+        )
     return grade(end.result, verdict[:4096])
 
 
@@ -187,10 +198,11 @@ def _land_all(
             detail = f"not landed: {stopped}"
         else:
             started += 1
-            landed, go_on, detail = _land(pr, tools, left)
-            if not go_on:
+            graded = _land(pr, tools, left)
+            detail = graded.detail
+            if not graded.go_on:
                 stopped = f"#{pr} stopped the run: {detail}"
-            outcomes.append(Outcome(name, landed, detail, "land", pr))
+            outcomes.append(Outcome(name, graded.landed, detail, "land", pr))
             continue
         outcomes.append(Outcome(name, False, detail, "land", pr))
     return outcomes
