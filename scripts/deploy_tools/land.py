@@ -210,20 +210,11 @@ def main(
 ) -> int:
     """Parse, run, print the outcome, and annotate every run that became a landing."""
     tools = tools or Tools()
-    # DECIDED: a usage error is not a landing, so it annotates nothing. argparse raises
-    # SystemExit(2) before a Landing or a Ledger exists, so the only line this could write is
+    # DECIDED: a usage error is not a landing, so it annotates nothing. `parse_args` exits
+    # `LAND_BAD_ARGS` before a Landing or a Ledger exists, so the only line this could write is
     # `pr=unknown verdict=aborted` -- a row meaning "you typed the command wrong" in the same
-    # stream the Landings board counts. The wrapper below annotates
-    # nothing: it only renumbers the code, and `--help` (exit 0) passes through untouched.
-    #
-    # WHY IT IS WRAPPED AGAIN. argparse's 2 collided with two other meanings a caller sees
-    # through this same pipeline -- `CI_DISARMED` and `PUBLISH_PUSHED_NO_PR`
-    # -- so `land.sh` alone answered a bad command line with a different number from every
-    # other entry point here. `LAND_BAD_ARGS` is the shared 64.
-    try:
-        opts = parse_args(argv, help_text(__doc__ or ""))
-    except SystemExit as exc:
-        raise SystemExit(LAND_BAD_ARGS if exc.code == 2 else exc.code) from None
+    # stream the Landings board counts.
+    opts = parse_args(argv, help_text(__doc__ or ""))
     if opts.regate:
         return _regate(opts, tools)
     unit = os.environ.get(HANDOFF_ENV)
@@ -403,16 +394,10 @@ def _land(
             graded_here = False
         except fresh.CheckoutFailed as failed:
             rerun = f"land.sh {shlex.join(moved.argv)} {fresh.FRESH_FLAG}"
-            refused = Outcome(
-                1,
-                f"PR #{opts.pr} — {moved}, but {failed}; this landing graded nothing; "
-                f"re-run it as `{rerun}`",
+            rc, line = _refuse_unstarted(
+                ln,
+                f"{moved}, but {failed}; this landing graded nothing; re-run it as `{rerun}`",
             )
-            ln.ledger.verdict = refused.verdict or ""
-            rc = refused.rc
-            print(result_line(ln.ledger, refused))
-            refused.emit()
-            line = refused.file_line()
     except (fresh.LandFresh, turn.HandOver) as moved:
         # A `LandFresh` holds no turn: its check runs before the landing asks for one.
         fd = moved.fd if isinstance(moved, turn.HandOver) else None
@@ -421,16 +406,10 @@ def _land(
             rc = tools.fresh_landing(opts.primary, child, fd)
             graded_here = False
         except fresh.CheckoutFailed as failed:
-            refused = Outcome(
-                1,
-                f"PR #{opts.pr} — {moved}, but {failed}; nothing is merged; re-run the "
-                "same land.sh command",
+            rc, line = _refuse_unstarted(
+                ln,
+                f"{moved}, but {failed}; nothing is merged; re-run the same land.sh command",
             )
-            ln.ledger.verdict = refused.verdict or ""
-            rc = refused.rc
-            print(result_line(ln.ledger, refused))
-            refused.emit()
-            line = refused.file_line()
         finally:
             if fd is not None:
                 os.close(fd)
@@ -449,6 +428,22 @@ def _land(
         if graded_here:
             _record(opts, tools, ln, rc, line)
     return rc
+
+
+def _refuse_unstarted(ln: Landing, why: str) -> tuple[int, str]:
+    """End `ln` refused, because the landing its fresh checkout was to run never started.
+
+    Prints the VERDICT line and the outcome's detail, and sets the ledger's verdict, so the
+    annotation `_record` writes reads `refused`.
+
+    Returns:
+      The exit code and the verdict-file line.
+    """
+    refused = Outcome(1, f"PR #{ln.opts.pr} — {why}")
+    ln.ledger.verdict = refused.verdict or ""
+    print(result_line(ln.ledger, refused))
+    refused.emit()
+    return refused.rc, refused.file_line()
 
 
 def _record(opts: Options, tools: Tools, ln: Landing, rc: int, line: str) -> None:
