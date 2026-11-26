@@ -107,7 +107,7 @@ jobs:
           # not --find-renames pairs the move.
           diff="$(git diff --find-renames "origin/$BASE_REF"...HEAD -- \
             'k8s/roles/*/defaults/main.yml' \
-            'inventory/group_vars/all.yml')"
+            'inventory/group_vars/all.yml' 'estate/vars.yml' 'k8s/vars.yml')"
           images="$(printf '%s' "$diff" | python scripts/dev/smoke_extract.py)"
           {
             echo "list<<EOF"

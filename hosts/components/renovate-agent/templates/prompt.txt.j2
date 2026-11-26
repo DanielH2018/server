@@ -40,7 +40,7 @@ How a PR lands, which replaces every `land.sh` step in the skill:
   place, such as `1-<n>-land.json`. Do not start the lander yourself.
 - After this session ends, the runner lands the nominations one at a time through
   `renovate-agent-land@<n>`, which re-checks each PR itself: Renovate's author, a `renovate/`
-  branch into master, no denied role, no `inventory/` change, a passed stability soak and a
+  branch into master, no denied role, no change to a variables file (`inventory/`, `estate/`, a `vars.yml`), a passed stability soak and a
   bounded file count. The runner goes on to the next nomination after a settled landing, a
   landing with nothing to deploy, or the lander's own refusal, and stops after anything else.
 - So nominate only PRs you have checked are ready, and say in the summary which you nominated
