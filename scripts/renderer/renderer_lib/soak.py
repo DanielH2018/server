@@ -38,7 +38,7 @@ from pathlib import Path
 
 import yaml
 
-from lib import yaml_fast
+from lib import prom_duration, yaml_fast
 from lib.git import git_stdout
 from renderer.renderer_lib.documents import parse_documents
 from lib.estate import shared_vars
@@ -87,8 +87,6 @@ SCRAPE_AND_EVAL_SECONDS = 120
 # deadline less W its Kustomization wait ends, so each fails with its own message first.
 DEADLINE_MARGIN_S = 60
 _SHA = re.compile(r"[0-9a-f]{40}")
-_DURATION = re.compile(r"(\d+)([smhdw])")
-_UNITS = {"s": 1, "m": 60, "h": 3600, "d": 86400, "w": 604800}
 
 
 def resolve_revision(given: str | None, repo: Path = REPO) -> str:
@@ -119,11 +117,10 @@ def prometheus_seconds(duration: str) -> int:
     Raises:
         ValueError: any other form, milliseconds included.
     """
-    text = str(duration)
-    parts = _DURATION.findall(text)
-    if not parts or "".join(n + u for n, u in parts) != text:
+    found = prom_duration.seconds(str(duration), units=frozenset("smhdw"))
+    if found is None:
         raise ValueError(f"the rule duration {duration!r} is not one the soak reads")
-    return sum(int(n) * _UNITS[u] for n, u in parts)
+    return int(found)
 
 
 def longest_for(rules: Path = RULES) -> dict[str | None, int]:

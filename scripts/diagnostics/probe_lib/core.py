@@ -23,6 +23,7 @@ import sys as _sys
 
 from lib.estate import shared_vars
 from lib.inventory_lists import LANDING_HOST, PI_HOST
+from lib.prom_duration import UNIT_SECONDS
 from lib.render_guard import load_yaml
 from lib.exit_codes import PROBE_UNREADABLE, PROBE_USAGE_ERROR
 from lib.repo_paths import REPO
@@ -236,9 +237,6 @@ def prom_endpoint():
     return k8s_endpoint("prometheus")
 
 
-_DURATION_UNITS = {"m": 60, "h": 3600, "d": 86400, "w": 604800}
-
-
 def age_phrase(seconds):
     """`"45 min"` under two hours, `"7h"` above it. A negative age reads as zero."""
     seconds = max(0.0, seconds)
@@ -257,7 +255,7 @@ def parse_duration_seconds(text):
     m = re.fullmatch(r"(\d+)([mhdw])", text.strip())
     if not m:
         raise UsageError(f"bad duration {text!r} — use forms like 30m, 6h, 2d, 1w")
-    return int(m.group(1)) * _DURATION_UNITS[m.group(2)]
+    return int(m.group(1)) * UNIT_SECONDS[m.group(2)]
 
 
 def since_window_ns(since, until=None):
