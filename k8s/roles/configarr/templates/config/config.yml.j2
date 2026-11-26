@@ -16,22 +16,14 @@ trashGuideUrl: https://github.com/TRaSH-Guides/Guides
 # repo (the guide-backed WEB-1080p / HD Bluray + WEB profiles recyclarr v8 dropped from `include:`
 # but configarr still pulls).
 recyclarrConfigUrl: https://github.com/recyclarr/config-templates
-# PINNED, and this is a hold rather than a preference. Upstream master (9faf65ff, `feat(radarr)!:
-# convert to guide-backed templates`) DELETED the entire `includes/` tree — so all four template
-# ids below are gone and every sync fails with
-# `ENOENT: ... scandir '/app/repos/recyclarr-config/sonarr/includes/custom-formats'`.
-# 4ae377b is the last commit that still has them.
-#
-# EXIT CONDITION: the replacements are `web-1080p` (sonarr) and `hd-bluray-web` (radarr), in
-# upstream's new lean guide-backed format; the two `custom-formats` ids have no direct successor.
-# Adopting them changes what is written to the live profiles, so it is a deliberate grab-policy
-# decision, not a version bump — make it, then drop this pin. Until then the guides stop tracking
-# upstream, which is the cost of the hold and the reason it should not be left indefinitely.
+# PINNED as a hold: upstream master deleted the `includes/` tree, so all four template ids are gone
+# and every sync fails with ENOENT; 4ae377b is the last commit that has them.
+# EXIT: adopt `web-1080p` (sonarr) and `hd-bluray-web` (radarr). That changes live profiles, so it
+# is a grab-policy decision, not a version bump; make it, then drop this pin.
 recyclarrRevision: 4ae377bb704fc7fd69a544ad04e91357e0b09f62
 
 customFormatDefinitions:
-  # Reject mislabeled "fake remux" groups. With the Anime profile's minFormatScore=0,
-  # a -10000 assigned score drops the release below the floor -> rejected outright.
+  # With minFormatScore=0, a -10000 score drops the release below the floor and rejects it.
   - trash_id: local-fake-remux-groups
     name: "Fake/Mislabeled Remux Groups"
     includeCustomFormatWhenRenaming: false
@@ -79,8 +71,6 @@ customFormatDefinitions:
         fields:
           value: "^(SubsPlease|Erai-raws|ASW|EMBER|ToonsHub)$"
 
-  # Title-level English-subtitle signal for subbed releases from groups not in the list above:
-  # multi-sub / dual-audio tags in the release name strongly correlate with an English track.
   - trash_id: local-anime-multisub-tags
     name: "Anime Multi-Sub / Dual-Audio (title)"
     includeCustomFormatWhenRenaming: false
@@ -97,9 +87,8 @@ sonarr:
     base_url: http://sonarr:8989
     api_key: {{ sonarr_api_key }}
 
-    # Guide-backed WEB-1080p profile. Syncs onto the
-    # existing "WEB-1080p" Sonarr profile by name — no duplicate. delete_unmanaged_custom_formats
-    # stays OFF (default) so the 52 bespoke "Anime Profile N_N_N" CFs are never touched.
+    # Syncs onto the existing profile by name; delete_unmanaged_custom_formats stays OFF so the 52
+    # bespoke "Anime Profile N_N_N" CFs are never touched.
     quality_definition:
       type: series
     include:
@@ -135,9 +124,6 @@ radarr:
     base_url: http://radarr:7878
     api_key: {{ radarr_api_key }}
 
-    # Guide-backed HD Bluray + WEB profile. Syncs onto the
-    # existing "HD Bluray + WEB" Radarr profile by name. No local CFs here — Radarr has no bespoke
-    # scheme to protect, but delete_unmanaged stays OFF (default) for symmetry/safety.
     quality_definition:
       type: movie
     include:

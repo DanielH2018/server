@@ -16,10 +16,7 @@ from __future__ import annotations
 
 import re
 
-# An error-LEVEL line: an optional run of non-word chars (log brackets / stripped ANSI) then the
-# ERROR/FATAL level token on a word boundary. Anchored at line start so a benign "0 errors" summary
-# or "Checking for errors..." never trips it (a bare `"error" in output` substring would). Tune the
-# token set against real configarr output in Task 9 if a clean run pages.
+# Anchored at line start so a benign "0 errors" summary never trips it, as a bare substring would.
 _ERROR_LINE = re.compile(r"(?im)^[^\w]*(?:error|fatal)\b")
 
 
