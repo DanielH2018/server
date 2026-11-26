@@ -4,7 +4,7 @@ They were the claude_code role's two crons. The package ships each as
 a `homelab-*` timer on `claude_code_artifacts_node` alone and creates the directories the artifacts pod mounts.
 
 The scripts read values the k8s roles also read: the node the artifacts pod pins, the trees it
-mounts, and the OTLP door the collector binds. A shared key in group_vars/all.yml would route as
+mounts, and the OTLP door the collector binds. A key in a shared vars file would route as
 a deploy-plane change only, so each value is a key pair, and this module holds each pair equal,
 resolved the way a deploy resolves it.
 

@@ -8,7 +8,7 @@ Decision 5 exists to avoid.
 The two surfaces are asymmetric and each has its own flag. Traefik carries the bouncer
 plugin, the entrypoint Middleware that invokes it, an agent sidecar and five volumes;
 Authelia carries only an agent, its seed init container and four volumes. Neither flag is
-shared, because one variable would have to live in group_vars/all.yml — a path every k8s
+shared, because one variable would have to live in k8s/vars.yml — a path every k8s
 role's render reads.
 
 Two shapes are what the pairs below exist to catch, and neither is visible from a passing

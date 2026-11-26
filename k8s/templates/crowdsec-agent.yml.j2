@@ -9,7 +9,7 @@
   containers of its own (traefik's fix-acme-permissions, authelia's wait-for-redis).
 
   WHAT ADDING A THIRD PROTECTED APP TAKES. An entry in `crowdsec_k8s_sidecar_agents`
-  (group_vars/all.yml), which is the machine name. The crowdsec role's LAPI registration loop,
+  (k8s/vars.yml), which is the machine name. The crowdsec role's LAPI registration loop,
   the observability role's `crowdsec-<app>-agent` scrape job and netpol-baseline's :6060
   prometheus grant (`networkpolicy-crowdsec-sidecars.yaml.j2`) all derive from that map. The
   sidecar carries the HOST pod's labels, so Prometheus reaches it as `app=<app>`, which is why

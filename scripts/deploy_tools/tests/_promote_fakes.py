@@ -317,7 +317,7 @@ class World:
         self.repo.mkdir()
         self.tmp_path = tmp_path
         _git(self.repo, "init", "-q", "-b", "master")
-        # The contexts and the reboot schedule are both keys of group_vars/all.yml since H7.2e.
+        # The contexts and the reboot schedule are both keys of estate/vars.yml.
         assert promote.CI_CONTEXTS_SOURCE == str(reboot_window.SOURCE)
         source = self.repo / promote.CI_CONTEXTS_SOURCE
         source.parent.mkdir(parents=True)

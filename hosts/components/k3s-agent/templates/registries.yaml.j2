@@ -9,7 +9,7 @@
 # The mirror KEYS equal the k3s-server component's, so one image reference
 # ({{ k8s_registry_pull_host }}/<name>:<tag>) is node-portable. The ENDPOINT differs: an agent
 # reaches the registry Service's pinned ClusterIP over flannel, plain HTTP inside the vxlan (an
-# accepted trade-off, see k8s_registry_cluster_ip in group_vars/all.yml), where the registry node
+# accepted trade-off, see k8s_registry_cluster_ip in k8s/vars.yml), where the registry node
 # reaches the loopback hostPort.
 mirrors:
   "{{ k8s_registry_pull_host }}":

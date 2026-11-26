@@ -118,7 +118,7 @@ tests:
                 cloudflare: the published IP ranges differ from the repo's cloudflare_ips list, or
                 fetching them failed.
               description: >-
-                cloudflare_ips in group_vars/all.yml sets Traefik's trustedIPs and the netpol
+                cloudflare_ips in estate/vars.yml sets Traefik's trustedIPs and the netpol
                 allow-list. Update it and redeploy traefik, netpol-baseline and monitor-bridge.
                 A failed fetch is retried every cycle; a match is re-checked daily.
       - eval_time: 1m

@@ -75,7 +75,7 @@ def cloudflare_ips_verdict(
     return CheckResult(
         False,
         "cloudflare_ips DRIFTED from upstream — added:[%s] stale:[%s] — update "
-        "cloudflare_ips in group_vars/all.yml and redeploy traefik and netpol-baseline"
+        "cloudflare_ips in estate/vars.yml and redeploy traefik and netpol-baseline"
         % (" ".join(added), " ".join(stale)),
         ["added %s" % cidr for cidr in added] + ["stale %s" % cidr for cidr in stale],
     )
