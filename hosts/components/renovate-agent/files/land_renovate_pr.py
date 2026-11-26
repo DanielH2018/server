@@ -15,8 +15,9 @@ A PR is landed only when all of these hold:
 - It is open.
 - Its branch carries no `k8s_autodeploy-false` slug, and no changed path sits under a k8s role
   the denylist names. The title is never read, because the session can edit it.
-- It changes nothing under `inventory/`. A pin there, such as `crowdsec_k8s_image` in
-  `group_vars/all.yml`, reaches every role that reads it, denylisted ones included, and no path
+- It changes no shared variables file: nothing under `inventory/` or `estate/`, and no
+  `k8s/vars.yml`, `hosts/vars.yml` or `hosts/<host>/vars.yml`. A pin there, such as
+  `crowdsec_k8s_image`, reaches every role that reads it, denylisted ones included, and no path
   check can see which those are. An interactive session lands that class.
 - Its `renovate/stability-days` status, when it carries one, reads success and was posted by
   `renovate[bot]`. GitHub's auto-merge waits only on the required checks, so without this a PR
@@ -84,7 +85,10 @@ LAND_TIMEOUT_S = 63660
 PR_FIELDS = (
     "number,author,isCrossRepository,baseRefName,state,headRefName,headRefOid,files"
 )
-INVENTORY = "inventory/"
+# ADR-0042's variables files, and the inventory they replace.
+VARS_FILE = re.compile(
+    r"^(?:inventory/|estate/|k8s/vars\.yml$|hosts/(?:[^/]+/)?vars\.yml$)"
+)
 # `lib/exit_codes.py:USAGE_ERROR`, which this host-shipped script cannot import.
 USAGE_ERROR = 64
 REFUSED_EXIT = 3
@@ -136,8 +140,8 @@ def refusals(pr: dict, denied: frozenset[str]) -> list[str]:
     if not _SHA.fullmatch(pr.get("headRefOid") or ""):
         reasons.append("GitHub returned no head SHA to pin the landing to")
     paths = sorted({f.get("path", "") for f in pr.get("files") or []})
-    if any(path.startswith(INVENTORY) for path in paths):
-        reasons.append("it changes the inventory, which can reach a denylisted role")
+    if any(VARS_FILE.match(path) for path in paths):
+        reasons.append("it changes a variables file, which can reach a denylisted role")
     if not paths or len(paths) >= FILE_CAP:
         reasons.append(f"its changed-file list is empty or at gh's {FILE_CAP}-file cap")
     for path in paths:

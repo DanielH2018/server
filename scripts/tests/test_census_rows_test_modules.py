@@ -351,11 +351,6 @@ ROWS = (
                 "`lib.estate` reads the files through it",
             ),
             **dict.fromkeys(
-                ("hosts/components/renovate-agent/files/land_renovate_pr.py",),
-                "a host package ships it without `scripts/lib`, so it cannot import "
-                "`lib.estate`; ADR-0042 step 3 teaches it the new paths",
-            ),
-            **dict.fromkeys(
                 (
                     "hosts/lib/tests/test_bootstrap_host_pins.py",
                     "hosts/lib/tests/test_builder_component.py",

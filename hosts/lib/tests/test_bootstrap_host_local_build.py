@@ -42,6 +42,18 @@ def test_the_local_build_installs_three_packages_in_one_call_and_leaves_the_clon
     assert status.stdout == ""
 
 
+def test_the_local_build_reads_the_python_pin_from_estate_vars(tmp_path):
+    host = FakeHost(tmp_path, hostname="daniel-box")
+    host.stock_kit()
+    clone = host.clone(tmp_path, pin_file="estate/vars.yml")
+
+    result = host.run(
+        "daniel-box", "--local-build", str(clone), "--offline", str(host.kit)
+    )
+
+    assert result.returncode == 0, result.stderr
+
+
 def test_the_local_build_creates_the_users_the_host_deb_declares_before_the_install(
     tmp_path,
 ):

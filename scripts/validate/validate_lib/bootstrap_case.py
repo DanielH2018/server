@@ -254,13 +254,14 @@ def stock_uv_cache(cases, clone: Path, kit: Path, uv: str, run=run_logged) -> No
     The sync skips the lint group, as the script's own `uv run` does, so no lint tool's GitHub
     release download sits in the bootstrap cases.
     """
+    pin_file = clone / "estate/vars.yml"
+    if not pin_file.exists():
+        pin_file = clone / "inventory/group_vars/all.yml"
     found = re.search(
-        r'^host_python_version: "(.*)"$',
-        (clone / "inventory/group_vars/all.yml").read_text(),
-        re.MULTILINE,
+        r'^host_python_version: "(.*)"$', pin_file.read_text(), re.MULTILINE
     )
     expect(
-        found is not None, "the clone's group_vars/all.yml sets no host_python_version"
+        found is not None, f"the clone's {pin_file.name} sets no host_python_version"
     )
     python = found[1] if found else ""
     env = {k: v for k, v in os.environ.items() if not k.startswith("UV_")}

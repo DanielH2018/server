@@ -65,6 +65,9 @@ VARS_YAML = (
     ":(glob)k8s/**/*.yaml",
     ":(glob)inventory/**/*.yml",
     ":(glob)inventory/**/*.yaml",
+    ":(glob)estate/**/*.yml",
+    "hosts/vars.yml",
+    ":(glob)hosts/*/vars.yml",
 )
 # Every file a render reads variables from. Inventory files take any extension or none.
 VARS_FILES = (*VARS_YAML, ":(glob)inventory/**")
