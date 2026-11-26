@@ -3,6 +3,11 @@
 # even with sha256 only and no /usr/src. The operator chose to leave AIDE off the Pi.
 # integrity-scans ships rkhunter, and its legacy entries retire the old AIDE cron, on every host.
 #
+# DECIDED: AIDE owns account changes on a host that runs it. The AIDE check pages on a passwd or
+# group change the users arm does not declare, so this component turns off rkhunter's own
+# passwd and group tests there, which paged on every declared change and on every package that
+# adds or removes a system user. daniel-pi, with no AIDE, keeps them.
+#
 # No unit loads a credential: the scan writes a textfile, and that is its only verdict.
 #
 # What the component leaves to bootstrap: hosts/bootstrap-host.sh step 7 runs these once on a
@@ -25,13 +30,16 @@ depends:
   # The AIDE check reads homelab-secrets' manifest for the secret links it accepts.
   - jq
 files:
-  # No dot in the name: aide.conf includes conf.d names matching ^[a-zA-Z0-9_-]+$ only.
-  - {src: templates/98_aide_local.conf.j2, dst: /etc/aide/aide.conf.d/98_aide_local}
+  - {src: files/aide.conf, dst: /usr/lib/homelab/aide.conf}
   - {src: templates/aide-check.sh.j2, dst: /usr/lib/homelab/aide-check, mode: "0755"}
   # Imports reconcile_lib from its own directory, which the reconcile component ships.
   - {src: files/aide_originals.py, dst: /usr/lib/homelab/aide-originals, mode: "0755"}
-  - {src: tmpfiles.d/homelab-aide-scan.conf, dst: /usr/lib/tmpfiles.d/homelab-aide-scan.conf}
   - {src: units/homelab-aide-check.service.j2, dst: /usr/lib/systemd/system/homelab-aide-check.service}
   - {src: units/homelab-aide-check.timer, dst: /usr/lib/systemd/system/homelab-aide-check.timer}
+  # A regular file, not a link: rkhunter skips a symlinked one, and reads only names ending .conf.
+  - {src: files/rkhunter-aide-owns-accounts.conf, dst: /etc/rkhunter.d/homelab-aide-owns-accounts.conf}
 enable:
   homelab-aide-check.timer: timers.target
+legacy:
+  # Exclusions for Debian's aide.conf, which aide-check no longer reads.
+  - {path: /etc/aide/aide.conf.d/98_aide_local}

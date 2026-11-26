@@ -754,8 +754,9 @@ if [ -e "$ROOT$UNIT_DIR/homelab-aide-check.timer" ]; then
     if [ ! -e "$ROOT/var/lib/aide/aide.db" ]; then
         first_baseline aide-baseline /var/lib/aide/aide.db /var/log/aide/aideinit.log
         echo "bootstrap-host: writing the first AIDE database, which takes over an hour on the Pi"
-        # -y overwrites an aide.db.new that an interrupted run left behind.
-        aideinit -y || die "aideinit failed"
+        # -y overwrites an aide.db.new that an interrupted run left behind. -c names the config
+        # aide-check scans with, so the first baseline holds the same trees.
+        aideinit -y -c /usr/lib/homelab/aide.conf || die "aideinit failed"
         baseline_written aide-baseline
         # The report is dead RAM under log2ram. aideinit.log stays: first_baseline reads it.
         rm -f "$ROOT/var/log/aide/aide.log"
