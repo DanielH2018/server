@@ -43,6 +43,9 @@ BORN_FENCED_ROLES = {
     "artifacts",
     "docs",
     "texbrain",
+    # Serves one static page it builds from Riot's API. Traefik is its only caller, and its calls
+    # out are egress, which the baseline does not fence.
+    "tft-assistant",
     "navidrome",
     "nut-exporter",
     "pihole-exporter",

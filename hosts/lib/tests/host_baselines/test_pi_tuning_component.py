@@ -2,10 +2,11 @@
 
 `pi-tuning`, `pi-node-exporter`, `pi-resolver` and `pi-peer-backup-target` replace the
 `optimize_pi` and `config_files` roles and `k8s_host_files`' two Pi tasks. These tests hold what
-the move added: each edit adopts the line Ansible wrote, the memory and log numbers still fit the
-128 MB log2ram tmpfs, the patched Log2Ram differs from upstream only by `--sparse`, and the
-textfile directory exists with M3's owner contract. The unit tests of the node exporter and the
-forced command stay beside the code they read: `hosts/tests/` and `tests/services/`.
+the move added: each edit adopts the line Ansible wrote, the patched Log2Ram differs from upstream
+only by `--sparse`, and the textfile directory exists with M3's owner contract.
+`test_pi_log_tmpfs.py` holds what fills the 128 MB log2ram tmpfs. The unit tests of the node
+exporter and the forced command stay beside the code they read: `hosts/tests/` and
+`tests/services/`.
 
 Run: uv run pytest hosts/lib/tests/host_baselines/test_pi_tuning_component.py
 """
@@ -27,7 +28,6 @@ from renderer.renderer_lib import host as host_mode
 
 COMPONENTS = REPO / "hosts" / "components"
 LOG2RAM_CONF = "/etc/log2ram.conf"
-JOURNALD_CAP = "/etc/systemd/journald.conf.d/60-homelab-pi.conf"
 AUDITD_CONF = "/etc/audit/auditd.conf"
 ACCT_LOGROTATE = "/etc/logrotate.d/acct"
 WATCHDOG_RESTART = "try-restart:watchdog.service"
@@ -36,7 +36,6 @@ APT_DROPINS = {
     "apt-daily-upgrade.timer": "/usr/lib/systemd/system/apt-daily-upgrade.timer.d/50-homelab.conf",
 }
 QUIET_WINDOW = range(3, 6)  # 03:00-05:59 UTC, between the midnight cluster and 06:00
-_MB = {"K": 1 / 1024, "M": 1, "G": 1024}
 
 
 @pytest.fixture(scope="module")
@@ -51,12 +50,6 @@ def _text(package: host_mode.Package, dst: str) -> str:
 def _edits(package: host_mode.Package, path: str) -> dict[str, dict]:
     """The package's edits of `path`, by the line each declares."""
     return {e["line"]: e for e in package.lines if e["path"] == path}
-
-
-def _mb(value: str) -> float:
-    match = re.fullmatch(r"(\d+)([KMG])", value.strip())
-    assert match, f"cannot read {value!r} as a size"
-    return int(match.group(1)) * _MB[match.group(2)]
 
 
 # Log2Ram's patched copy.
@@ -175,6 +168,7 @@ ADOPTED = [
     (AUDITD_CONF, "admin_space_left_action = SUSPEND", "try-restart:auditd.service"),
     ("/etc/locale.gen", "# en_US.UTF-8 UTF-8", "locale-gen"),
     (ACCT_LOGROTATE, "\trotate 30", None),  # 26.04's acct stanza, tab-indented
+    (ACCT_LOGROTATE, "\tdaily", None),
 ]
 
 
@@ -267,70 +261,6 @@ def test_the_zram_swappiness_prefers_swap(package):
     text = _text(package, "/etc/sysctl.d/90-homelab-pi-tuning.conf")
     swappiness = re.search(r"^vm\.swappiness=(\d+)$", text, re.M)
     assert swappiness and int(swappiness[1]) > 100
-
-
-# The log RAM budget.
-
-
-def journal_caps(text: str) -> tuple[float, float, float]:
-    """The journal's SystemMaxUse, SystemMaxFiles x SystemMaxFileSize, and SystemMaxFileSize.
-
-    `text` is a journald drop-in. Raises AssertionError when it lacks one of the three keys.
-    """
-    use = re.search(r"^SystemMaxUse=(\d+[KMG])$", text, re.M)
-    size = re.search(r"^SystemMaxFileSize=(\d+[KMG])$", text, re.M)
-    files = re.search(r"^SystemMaxFiles=(\d+)$", text, re.M)
-    assert use and size and files, (
-        "the cap needs SystemMaxUse, SystemMaxFileSize and SystemMaxFiles"
-    )
-    file_mb = _mb(size.group(1))
-    return _mb(use.group(1)), int(files.group(1)) * file_mb, file_mb
-
-
-# Each budget counts today's file beside the kept ones.
-PACCT_MB_PER_DAY = 28
-PACCT_GZIP_RATIO = 0.2
-SYSSTAT_MB_PER_DAY = 1.4
-UNCAPPED_REST_MB = 3
-JOURNAL_ACTIVE_FILES = 2  # system.journal and user-1000.journal
-
-
-def _edit_value(package: host_mode.Package, path: str, key: str) -> str:
-    """The value the package's edit of `path` sets for `key`."""
-    for line in _edits(package, path):
-        match = re.fullmatch(rf"\s*{re.escape(key)}(?:\s*=\s*|\s+)\"?([^\"]+)\"?", line)
-        if match:
-            return match.group(1)
-    raise AssertionError(f"no edit of {path} sets {key}")
-
-
-def sd_copy_worst_mb(package: host_mode.Package) -> float:
-    """The largest the log2ram SD copy grows to under the package's caps, in MB."""
-    _, journal_archives, file_mb = journal_caps(_text(package, JOURNALD_CAP))
-    journal = journal_archives + JOURNAL_ACTIVE_FILES * file_mb
-    # `start 0` and delaycompress keep pacct.0 uncompressed and gzip the generations after it.
-    generations = int(_edit_value(package, ACCT_LOGROTATE, "rotate"))
-    pacct = PACCT_MB_PER_DAY * (2 + (generations - 1) * PACCT_GZIP_RATIO)
-    audit = int(_edit_value(package, AUDITD_CONF, "max_log_file")) * int(
-        _edit_value(package, AUDITD_CONF, "num_logs")
-    )
-    days = int(_edit_value(package, "/etc/sysstat/sysstat", "HISTORY")) + 1
-    return journal + pacct + audit + days * SYSSTAT_MB_PER_DAY + UNCAPPED_REST_MB
-
-
-def test_the_whole_sd_copy_fits_under_the_log2ram_boot_guard(package):
-    tmpfs = _mb(_edits(package, LOG2RAM_CONF)["SIZE=128M"]["line"].split("=")[1])
-    use, _, _ = journal_caps(_text(package, JOURNALD_CAP))
-    assert use < tmpfs
-    # log2ram's boot guard `du`s the SD copy against SIZE and refuses to start when over; `--sparse`
-    # is patched out.
-    assert sd_copy_worst_mb(package) <= tmpfs
-
-
-def test_a_journal_cap_without_system_max_files_is_flagged():
-    """Without SystemMaxFiles the archive count, and so the SD copy, has no bound."""
-    with pytest.raises(AssertionError, match="SystemMaxFiles"):
-        journal_caps("[Journal]\nSystemMaxUse=48M\nSystemMaxFileSize=8M\n")
 
 
 # The apt timers.

@@ -1,4 +1,11 @@
 ---
+# DECIDED: stock python, and the five hand-written Prometheus exporters (this role's stats_lib.py,
+# gpu_exporter.py, crowdsec's jobs_metrics.py, monitor-bridge's deploy_pipeline.py and
+# verdict_export.py) keep their stdlib exposition rather than prometheus_client. The library
+# removes about 75 net lines across them, but it needs one image that six pods share
+# (autofix-bridge ships jobs_metrics.py too), and `images.py:role_tags` hands a role only the
+# images it builds. That costs a render-contract change, a Dockerfile, a uv.lock pin test and
+# six pin moves, more than it removes. Revisit only when a second reason needs a shared image.
 game_stats_k8s_image: python:3.15-alpine@sha256:0f9552bb28711333da16915ec146f5e6bb44a7fdac9ced15dc17c2e0206346dd
 
 # Renovate stance: whether an image bump here may automerge. `promote` deploys what merges.
