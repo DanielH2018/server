@@ -52,7 +52,7 @@ def _expected() -> dict[str, dict]:
 
 
 def _crons() -> dict[str, str]:
-    rows = deadman_crons(*deadman_inputs())
+    rows = deadman_crons(deadman_inputs())
     return {slug: cron for slug, cron, _ in rows}
 
 
