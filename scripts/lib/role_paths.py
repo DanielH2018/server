@@ -9,8 +9,7 @@ Run: uv run pytest scripts/lib/tests/test_role_paths.py
 import re
 from typing import NamedTuple
 
-# The second group takes a TRAILING SLASH, so a file at a role's own root reports no
-# subdirectory rather than its own basename.
+# The second group takes a TRAILING SLASH, so a file at a role's root reports no subdirectory.
 _ROLE_PATH = re.compile(r"^k8s/roles/([^/]+)/(?:([^/]+)/)?")
 
 SECRETS_FILE = "secrets/secrets.yml"

@@ -28,6 +28,8 @@ on:
       # crowdsec's two images: the role pins the jobs image, all.yml pins the engine image.
       - "k8s/roles/crowdsec/**"
       - "inventory/group_vars/all.yml"
+      - "estate/vars.yml"
+      - "k8s/vars.yml"
       - "hosts/lib/tests/test_pi_compose_network_measurement.py"
       - "pyproject.toml"
       - "uv.lock"

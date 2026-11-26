@@ -25,8 +25,8 @@ a given name keeps it exactly as it is.
 import json
 
 
-# The name is the idempotency key. Renaming it re-injects alongside the old one rather than
-# replacing it, so treat each as a fixed identifier rather than a label to tune.
+# The name is the idempotency key: renaming it re-injects alongside the old one, so treat it as a
+# fixed identifier.
 ANNOTATION_NAME = "Deploys"
 FLUX_ANNOTATION_NAME = "Flux deploys"
 

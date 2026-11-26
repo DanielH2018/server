@@ -23,9 +23,8 @@ HOMELAB_NAMESPACE = "homelab-namespace"
 LIMITRANGE = "default-container-limits"
 NAMESPACE_FILE = "namespace.yaml"
 LIMITRANGE_FILE = "limitrange.yaml"
-# `prune_label.PRUNE_LABEL` and `PRUNE_DISABLED`. That module imports Jinja through
-# `cluster.py`, so this one spells them out, and a renderer test holds the two equal by running
-# `prune_label.label` over the render and finding nothing to add.
+# That module imports Jinja through `cluster.py`, so these are spelled out and a renderer test holds
+# the two equal.
 PRUNE_EXEMPT = {"kustomize.toolkit.fluxcd.io/prune": "disabled"}
 
 
@@ -54,8 +53,8 @@ def namespace_documents() -> dict[str, dict]:
         }
     }
     if settings["limitrange"]:
-        # Defaults only: see k8s_default_limitrange in group_vars/all.yml for why there is no
-        # min or max here and no ResourceQuota anywhere.
+        # Defaults only: see k8s_default_limitrange in group_vars/all.yml for why no min, max or
+        # ResourceQuota.
         documents[LIMITRANGE_FILE] = {
             "apiVersion": "v1",
             "kind": "LimitRange",

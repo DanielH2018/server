@@ -21,8 +21,6 @@ syntax, which is the only difference these patterns use.
 
 import re
 
-# The capture groups that make a manager an annotation reader: the datasource comes from the
-# matched text instead of a `datasourceTemplate`.
 _ANNOTATION_GROUP = "(?<datasource>"
 
 # The pinned variable is the last line of an annotation match: `<name>_version: <value>`.

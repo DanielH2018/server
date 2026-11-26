@@ -75,12 +75,8 @@ __all__ = [
     "services_file",
 ]
 
-# k8s/image-builder publishes `k8s_built_image_tags` as a play fact at deploy time (image name ->
-# content tag), and every built-image pin reads it as `k8s_built_image_tags.get('<name>',
-# 'latest')`. A render here has no play, so without a seed the fallback fires: every
-# rendered-manifest guard would check `:latest` while production renders the hash — passing, and
-# no longer reading the ref the cluster gets. The digests are arbitrary; their SHAPE and this
-# map's keys are asserted by tests/k8s/test_built_images_name_the_content_tag.py.
+# A render has no play, so without a seed built-image pins fall back to `:latest` while production
+# renders the hash.
 BUILT_IMAGE_TAG_STUBS: dict[str, str] = {
     "airflow": "sha-a1f10e0aaaaa",
     "code-server": "sha-c0de5e2e7000",
@@ -95,8 +91,7 @@ BUILT_IMAGE_TAG_STUBS: dict[str, str] = {
     "valheim": "sha-a1de17ab8888",
 }
 
-# Non-secret fallbacks for values `group_vars/all.yml` does not hold. Anything still missing
-# (SOPS secrets, role vars) renders via StubUndefined — fine for a STRUCTURAL parse/lint check.
+# Anything still missing renders via StubUndefined, which suffices for a structural check.
 BASE_CONTEXT = {
     "email": "stub@example.com",
     "server_ip": "10.0.0.1",
@@ -150,14 +145,11 @@ def load_yaml(path: Path) -> dict:
     """
     if not path.is_file():
         return {}
-    # A copy, because callers build context dicts from the values and must not reach the
-    # cached one.
+    # A copy, so callers cannot mutate the cached value.
     return copy.deepcopy(_parsed_mapping(path.read_text()))
 
 
-# Keyed on the text rather than the path, so an edit between two renders reaches the second
-# one even inside the same mtime tick. Reading the file costs little; parsing it is what a
-# render paid for again on every render_context call.
+# Keyed on the text, not the path, so an edit between two renders reaches the second.
 @functools.lru_cache(maxsize=512)
 def _parsed_mapping(text: str) -> dict:
     loaded = yaml_fast.parse_yaml(text)
@@ -259,8 +251,7 @@ def k8s_services(path: Path = K8S_SERVICES) -> tuple[ContainerEntry, ...]:
     return parse_containers_list(load_yaml(path).get("containers_list"))
 
 
-# host_vars as git names it: ``git show`` and ``git ls-tree`` address a path in a tree, not on
-# disk.
+# As git names it: `git show` and `git ls-tree` address a path in a tree, not on disk.
 HOST_VARS_IN_TREE = HOST_VARS.relative_to(REPO).as_posix()
 SERVICES_IN_TREE = K8S_SERVICES.relative_to(REPO).as_posix()
 

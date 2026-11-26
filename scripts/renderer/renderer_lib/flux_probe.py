@@ -47,8 +47,6 @@ SUBSTITUTE, PLAIN, STRICT, TYPES = (
     "probe-types",
 )
 
-# Each ConfigMap key of the substituting fixture: the value as passes 2 and 3 write it, and
-# the value Flux must return.
 ESCAPE_CASES = {
     "escaped-brace": ("$${HOME}", "${HOME}"),
     "bare-double": ("$$$", "$$"),
@@ -60,20 +58,13 @@ PLAIN_CASES = {"literal-reference": ("${HOME}", "${HOME}")}
 # The key `--red-proof` expects and no fixture holds.
 RED_PROOF_KEY = "red-proof-absent"
 
-# The type each `probe_n` value comes back as, measured against the pinned CLI v2.9.6 and
-# recorded in docs/homelab-render.md. Flux substitutes into a resource it
-# has already serialised without the template's quotes, so `0123` comes back as the YAML 1.1
-# octal integer 83 and `true` as a boolean. The round trip's second pass exists because of
-# this. A pin bump that keeps the quotes fails here, and that pass can then go. None measures
-# without asserting.
+# Flux substitutes into an already serialised resource without the template's quotes, so `0123`
+# returns as int 83 and `true` as bool. The round trip's second pass exists for this; a pin bump
+# that keeps the quotes fails here.
 EXPECTED_TYPES: dict[str, str | None] = {"0123": "int", "true": "bool"}
 
-# The values the probe builds as a standalone `stringData` field to hold the guard's resolver
-# to the pinned CLI. The five values the plan measured, the integer, null and timestamp forms
-# around them, `08`, `1.e3` and `y`, which only the go-yaml port types, and three strings the
-# CLI keeps. Against v2.9.6, `2001-12-14` comes back
-# as the string `2001-12-14T00:00:00Z`, so a value counts as kept only when it comes back as
-# the identical string, and `.inf` fails the build.
+# A value counts as kept only when it comes back as the identical string (`2001-12-14` returns as a
+# timestamp); `.inf` fails the build.
 RESOLVER_CORPUS = (
     "0123",
     "true",
@@ -95,15 +86,13 @@ RESOLVER_CORPUS = (
     "a.b-c.example",
     "0123a",
 )
-# The corpus values the CLI keeps and the resolver still refuses. PyYAML's YAML 1.1 reader
-# types a sexagesimal number such as `1:20` as the integer 80, where go-yaml v2 reads a
-# string. The resolver refuses on the union of the two readers, so it fails closed here.
+# PyYAML types `1:20` as int 80 where go-yaml v2 reads a string; the resolver refuses the union, so
+# it fails closed.
 FLUX_KEEPS_BUT_REFUSED = frozenset({"1:20"})
 
 
 def _configmap(name: str, data: dict[str, str]) -> str:
-    # Written by hand, double-quoted, as a template writes them: no value holds a quote or a
-    # backslash, so each scalar is exactly the string between its quotes.
+    # No value holds a quote or backslash, so each scalar is exactly the string between its quotes.
     lines = [f'  {key}: "{value}"' for key, value in data.items()]
     return (
         "apiVersion: v1\nkind: ConfigMap\nmetadata:\n"
@@ -115,8 +104,8 @@ TYPES_FIXTURE_MANIFEST = (
     "apiVersion: v1\nkind: Secret\nmetadata:\n  name: probe-types\n  namespace: probe\n"
     'type: Opaque\nstringData:\n  probe_n: "${probe_n}"\n'
 )
-# Not the plan's bare `n`: Go's YAML 1.1 reader takes the unquoted key `n` in
-# `postBuild.substitute` for the boolean false, so the build found no variable `n` at all.
+# Not bare `n`: Go's YAML 1.1 reader takes an unquoted `n` key in `postBuild.substitute` as boolean
+# false.
 TYPE_VAR = "probe_n"
 
 

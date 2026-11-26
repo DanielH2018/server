@@ -22,18 +22,14 @@ renderer runs. `lib.guard_jinja_env` registers each so a `ValueError` reaches th
 
 from lib.container_entry import SERVICE_TIERS
 
-# Names that select several tiers at once. `home-critical` is what the house and SSO stop
-# working without, and is the set the daily R2 backup tier derives from.
+# `home-critical` is what the house and SSO stop working without, and the set the daily R2 backup
+# tier derives from.
 TIER_GROUPS = {"home-critical": ("home-edge", "home-automation")}
 
 
-# The untiered plumbing tags the lost-node break-glass must never scale down: H1's Flux-born
-# roles whose `defaults/main.yml` sets `flux_prune: false`. CoreDNS at zero replicas stops
-# cluster DNS, and Flux then cannot fetch the bundle that restores it. A tier is no substitute,
-# because it derives a PriorityClass these roles do not run at. Each tag joins in the PR that
-# adds its entry, and `tests/k8s/test_shed_set_is_derived_from_tier.py` holds the set
-# equal to the untiered `flux_prune: false` roles, so a plumbing tag cannot land without it.
-# The full reasoning is the H1 plan's *Six Flux-born tags*.
+# Plumbing tags the lost-node break-glass must never scale down: CoreDNS at zero stops cluster DNS,
+# so Flux cannot fetch the bundle that restores it. A test holds the set equal to the untiered
+# `flux_prune: false` roles.
 NEVER_SHED = frozenset(
     {"cluster-base", "coredns", "longhorn", "longhorn-backup", "metallb"}
 )

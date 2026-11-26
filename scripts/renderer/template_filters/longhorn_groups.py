@@ -104,7 +104,7 @@ def longhorn_weekly_claims(containers_list, namespace: str) -> dict:
     for entry in containers_list or []:
         for claim, shard in (entry.get("weekly_backup_claims") or {}).items():
             pvc = f"{entry.get('namespace') or namespace}/{claim}"
-            # YAML's `true` is a bool, and a bool is an int. Not `type(shard) is int`: Ansible
+            # YAML's `true` is a bool and a bool is an int; not `type(shard) is int`, since Ansible
             # passes its own tagged int subclass.
             if (
                 isinstance(shard, bool)

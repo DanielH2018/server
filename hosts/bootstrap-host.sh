@@ -613,8 +613,9 @@ else
     # git archive reads the clone and writes nothing into it.
     sha=$(git -C "$clone" rev-parse HEAD) || die "cannot read HEAD of $clone"
     git -C "$clone" archive HEAD | tar -x -C "$work/tree" || die "cannot archive HEAD of $clone"
-    python_version=$(sed -n 's/^host_python_version: "\(.*\)"$/\1/p' \
-        "$work/tree/inventory/group_vars/all.yml")
+    pin_file=$work/tree/estate/vars.yml
+    [ -f "$pin_file" ] || pin_file=$work/tree/inventory/group_vars/all.yml
+    python_version=$(sed -n 's/^host_python_version: "\(.*\)"$/\1/p' "$pin_file")
     [ -n "$python_version" ] || die "cannot read host_python_version from the clone"
     phase "the git archive of the clone"
 

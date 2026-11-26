@@ -14,8 +14,9 @@ from typing import Any
 
 from homelab_tool_fetch import Failure
 
-# Where a tree pins its interpreter, relative to the tree's root.
-PYTHON_PIN = "inventory/group_vars/all.yml"
+# Where a tree pins its interpreter, relative to the tree's root: ADR-0042's file first, then
+# the file a tree from before the move carries.
+PYTHON_PINS = ("estate/vars.yml", "inventory/group_vars/all.yml")
 _PIN_LINE = re.compile(r"""^host_python_version:\s*["']?([^"'\s#]*)["']?\s*(?:#.*)?$""")
 _PIN_VALUE = re.compile(r"\d+\.\d+(?:\.\d+)?")
 
@@ -29,11 +30,13 @@ def tree_python(tree: Path) -> str | None:
         Failure: reason `build`, for a pin that is not a dotted version, before it reaches an
           argv.
     """
-    try:
-        text = (tree / PYTHON_PIN).read_text()
-    except OSError:
-        return None
-    return _pin(text, PYTHON_PIN)
+    for name in PYTHON_PINS:
+        try:
+            text = (tree / name).read_text()
+        except OSError:
+            continue
+        return _pin(text, name)
+    return None
 
 
 def _pin(text: str, name: str) -> str | None:

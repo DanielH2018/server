@@ -93,8 +93,7 @@ class LintFinding:
     warn: bool
 
     def __post_init__(self) -> None:
-        # `_f` reads WARN_RULES to set `warn`, so a rule missing from RULES would also be
-        # missing from WARN_RULES and silently grade as an error.
+        # `_f` reads WARN_RULES, so a rule missing from RULES would silently grade as an error.
         if self.rule not in RULES:
             raise ValueError(f"{self.rule!r} is not in RULES")
 
@@ -137,10 +136,8 @@ def lint_sections(
     for doc in repo_docs(repo):
         rel = doc.relative_to(repo).as_posix()
         secs = sections(rel, doc.read_text(encoding="utf-8"))
-        # Two sections with one heading text share one key, so every keyed reader
-        # (`citations.repo_citations`, `changed_units`) keeps the last one: the first
-        # section's atoms are never read. Nothing downstream can
-        # tell the two apart, so the document is what has to change.
+        # Two sections with one heading share a key and keyed readers keep only the last, so the
+        # document must change.
         for key, n in Counter(s.key for s in secs).items():
             if n > 1 and (unit_keys is None or key in unit_keys):
                 out.append(
@@ -153,11 +150,8 @@ def lint_sections(
         for sec in secs:
             if unit_keys is not None and sec.key not in unit_keys:
                 continue
-            # `citations._FENCE` pairs markers left to right, so an unclosed fence leaves its
-            # stray marker unmasked and everything after it live: a `#` line inside it
-            # becomes a heading and an example citation becomes support. A balanced
-            # document leaves an even count in every section body, so the section holding
-            # the odd one is where the stray marker is.
+            # An unclosed fence leaves its stray marker unmasked; the section with an odd marker
+            # count holds it.
             if len(_FENCE_MARK.findall(sec.body)) % 2:
                 out.append(
                     _f(
@@ -167,10 +161,8 @@ def lint_sections(
                     )
                 )
             cites, rejects = parse_citations(sec.body)
-            # Out-of-tree spans are prose, not broken support: `origin/master` and an
-            # untracked or gitignored file parse as paths and name nothing this checkout
-            # tracks. A REJECTED form is not filtered — a line number is a claim about this
-            # tree whatever its prefix — so the rejects list below is the unfiltered one.
+            # Out-of-tree spans (origin/master, untracked files) are prose; a REJECTED form is not
+            # filtered.
             cites = [c for c in cites if in_tree(c, tracked)]
             out.extend(
                 _f(
@@ -285,13 +277,6 @@ def _version_facts(
             detail = f"`{raw}` is stale: {where} pins `{name}:{pin_tag}`; name the variable instead"
         found.append(_f(key, "version-as-fact", detail))
     return found
-
-
-# ── vanished-identifier ──────────────────────────────────────────────────────────────────
-#
-# A commit that removes the last occurrence of an identifier a CLAUDE.md still names leaves a
-# stale sentence whatever the lock says. A replay of the 1,026 commits from 2026-09-19 to
-# 8181ee59f found six such sentences this way, against at most one catch by the lock.
 
 
 def vanished_identifiers(

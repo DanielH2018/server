@@ -49,16 +49,9 @@ def toposort_containers(containers_list, deps_map):
     return result
 
 
-# A role's own IngressRoute/Middleware templates either write `apiVersion: traefik.io/...`
-# directly or pull it in through the one shared `ingressroute.yml.j2` macro (`{% from
-# 'ingressroute.yml.j2' import ingressroute %}`) -- there is no third way in this repo to
-# emit one from a file inside the role.
-#
-# This scan is the SECOND of the two routed tests below, not the only one. It is not sufficient
-# alone: 16 roles' IngressRoute is rendered from `k8s/templates/`, and a route rendered
-# from there leaves no string in the role, so a scan-only derivation would drop the traefik
-# edge for all 16 and apply their routes before the CRDs exist. The entry's `hostname` is the
-# first test and the one that covers them.
+# A role writes `apiVersion: traefik.io/...` directly or via the shared `ingressroute.yml.j2`
+# macro. This scan alone is not enough: routes rendered from `k8s/templates/` leave no string in the
+# role, so the entry's `hostname` is the first test.
 _TRAEFIK_CRD_MARKERS = ("traefik.io", "ingressroute.yml.j2")
 
 # Roles exempted from the derived "renders a Traefik CRD -> depends on traefik" edge.
@@ -76,13 +69,8 @@ K8S_CRD_EDGE_EXEMPT = {
 }
 
 
-# Roles the derived map applies after every other k8s entry, each with the reason it must run
-# last. An edge onto every other entry, not list position: a hand-added entry goes wherever
-# its author puts it, so a position-held "last" lasted only until the next role was added
-# after it. A role that declares `depends_on:` onto one of these makes a cycle, and
-# toposort_containers raises. The scaffolder (scripts/dev/new_k8s_service.py:append_entry)
-# still writes a new entry ahead of the first one, so the hand-ordered list stays a
-# topological order. The plan is docs/archive/deploy/d4-ordering.md (D4.1).
+# An edge onto every other entry, not list position; a role depending on one of these makes a cycle
+# and `toposort_containers` raises.
 K8S_APPLIES_LAST = {
     "netpol-baseline": (
         "its first task drains the rollouts queued earlier in its batch, then fences the "
