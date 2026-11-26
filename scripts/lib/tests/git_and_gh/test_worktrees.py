@@ -124,9 +124,9 @@ def test_worktree_facts_ok_is_false_when_the_git_call_fails(monkeypatch):
         "lib.worktrees.git",
         lambda *a, **k: subprocess.CompletedProcess(a, 1, stdout="", stderr="fatal\n"),
     )
-    trees, _dirty, _merged, ok = worktree_facts()
-    assert ok is False
-    assert trees == []
+    facts = worktree_facts()
+    assert facts.ok is False
+    assert facts.trees == []
 
 
 def test_worktree_facts_ok_is_true_when_git_succeeds_with_no_worktrees(monkeypatch):
@@ -136,9 +136,9 @@ def test_worktree_facts_ok_is_true_when_git_succeeds_with_no_worktrees(monkeypat
         "lib.worktrees.git",
         lambda *a, **k: subprocess.CompletedProcess(a, 0, stdout="", stderr=""),
     )
-    trees, _dirty, _merged, ok = worktree_facts()
-    assert ok is True
-    assert trees == []
+    facts = worktree_facts()
+    assert facts.ok is True
+    assert facts.trees == []
 
 
 def _project_tree(path):

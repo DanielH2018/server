@@ -12,6 +12,7 @@ import time
 import urllib.error
 import urllib.parse
 from datetime import datetime, timedelta, timezone
+from typing import NamedTuple
 
 from bridge import sigv4
 from bridge.config import Config
@@ -62,10 +63,18 @@ def _count(value: JsonValue) -> float:
     return value
 
 
-def r2_query_usage(
-    cfg: Config, src: Sources, now: float
-) -> tuple[float, float, float, float, list[str]]:
-    """(storage_bytes, uploads, class_a, class_b, unknown_actions) for the current month.
+class R2Usage(NamedTuple):
+    """The R2 bucket's usage this month, as `r2_query_usage` reads it."""
+
+    storage_bytes: float
+    uploads: float
+    class_a: float
+    class_b: float
+    unknown_actions: list[str]
+
+
+def r2_query_usage(cfg: Config, src: Sources, now: float) -> R2Usage:
+    """Read the R2 bucket's usage for the current month.
 
     One POST for both datasets — same account scope, so splitting it would double the calls and
     the error paths for nothing.
@@ -128,7 +137,7 @@ def r2_query_usage(
     class_a, class_b, unknown = r2_classify_operations(
         as_object_list(account.get("operations") or [], "Cloudflare operations")
     )
-    return storage_bytes, uploads, class_a, class_b, unknown
+    return R2Usage(storage_bytes, uploads, class_a, class_b, unknown)
 
 
 def check_r2_usage(

@@ -32,7 +32,6 @@ import dataclasses
 import subprocess
 from collections.abc import Callable, Collection, Mapping
 from dataclasses import dataclass
-from typing import Any
 
 from dev.fanout_lib.batch_holds import BatchHold, running_batch_holds
 from dev.findings_lib.board import sync_board
@@ -43,12 +42,10 @@ from dev.fanout_lib.target import REGISTER_CHECKOUTS
 from dev.findings_lib.peer_trees import peer_worktree_list
 from dev.findings_lib.tracked_paths import tracked_files
 from lib.repo_paths import REPO
-from lib.worktrees import Worktree, primary_checkout
+from lib.worktrees import Worktree, WorktreeFacts, primary_checkout
 from lib.worktrees import worktree_facts as read_worktree_facts
 from lib.gh import gh, gh_json
 from lib.json_types import JsonValue
-
-WorktreeFacts = tuple[list[Any], Callable[[str], bool], Callable[[Any], bool], bool]
 
 
 def read_peer_worktrees(repo: str | None) -> list[Worktree] | None:

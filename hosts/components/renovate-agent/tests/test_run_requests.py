@@ -363,3 +363,10 @@ def test_a_session_result_larger_than_a_request_is_read_whole(tmp_path):
     result = json.dumps({"type": "result", "result": "x" * (64 * 1024)})
     (tmp_path / "out" / renovate_session.OUTPUT_FILE).write_text(result)
     assert renovate_agent.session_output(out) == result
+
+
+def test_grade_names_what_it_decided():
+    graded = run_requests.grade("success", "VERDICT: refused (PR #71 is merged)")
+    assert graded.landed is False
+    assert graded.go_on is False
+    assert graded.detail == "VERDICT: refused (PR #71 is merged)"
