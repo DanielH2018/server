@@ -110,14 +110,14 @@ def test_builds_in_defaults_are_read_in_order_with_their_when(tmp_path):
     ]
 
 
-def test_include_vars_reads_only_the_render_keys_from_defaults(tmp_path):
+def test_render_defaults_reads_only_the_render_keys_from_defaults(tmp_path):
     role = _role(tmp_path, "manifests_rollout: demo\nmanifests_rollout_timeout: 900s\n")
-    assert task_inputs.include_vars(role) == {"manifests_rollout": "demo"}
+    assert task_inputs.render_defaults(role) == {"manifests_rollout": "demo"}
 
 
 def test_a_role_with_no_defaults_file_raises(tmp_path):
     role = _role(tmp_path, None, BARE_INCLUDE)
     with pytest.raises(ValueError, match=r"has no defaults/main\.yml"):
-        task_inputs.include_vars(role)
+        task_inputs.render_defaults(role)
     with pytest.raises(ValueError, match=r"has no defaults/main\.yml"):
         task_inputs.image_builder_sites(role)
