@@ -25,7 +25,7 @@ from dataclasses import dataclass, field, replace
 from dev.findings_lib.issue_model import DOMAINS, LABELS, Issue, parse_issue
 from dev.fanout_lib.batch_holds import BatchHold
 from dev.findings_lib.boundaries import FindingsTools
-from lib.worktrees import Worktree, held_by_readable_process
+from lib.worktrees import Worktree, WorktreeFacts, held_by_readable_process
 
 CREATED_URL = "https://github.com/o/r/issues/42"
 
@@ -174,7 +174,7 @@ def facts(trees=(), *, dirty=False, merged=False, ok=True):
     a worktree still holding work and `facts([tree], merged=True)` is one whose PR landed.
     `ok=False` is a FAILED git read, which every caller treats differently from an empty list.
     """
-    return lambda: (list(trees), lambda _p: dirty, lambda _t: merged, ok)
+    return lambda: WorktreeFacts(list(trees), lambda _p: dirty, lambda _t: merged, ok)
 
 
 def live_worktree(branch: str):
