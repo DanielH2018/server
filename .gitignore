@@ -1,5 +1,5 @@
-# Ignore everything except the allow-listed trees below. ADR 0030 names k8s/, inventory/,
-# secrets/ and tests/.
+# Ignore everything except the allow-listed trees below. ADR 0030 names k8s/, secrets/ and
+# tests/; ADR-0042 adds estate/.
 /*
 !/k8s
 !/estate

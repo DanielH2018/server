@@ -30,7 +30,7 @@ class Recorder:
 
 
 def tree_pinning(
-    tmp_path: Path, line: str | None, pin_file: str = "inventory/group_vars/all.yml"
+    tmp_path: Path, line: str | None, pin_file: str = "estate/vars.yml"
 ) -> Path:
     tree = tmp_path / "tree"
     pin = tree / pin_file
@@ -57,16 +57,6 @@ def test_a_tree_pinning_another_python_installs_and_renders_on_the_trees_pin(tmp
     i = render_argv.index("--python")
     assert render_argv[i + 1] == "3.15.2"
     assert "--no-python-downloads" in render_argv
-
-
-def test_a_tree_pinning_in_estate_vars_reads_that_pin(tmp_path):
-    run = Recorder()
-    builder = hb.Builder(
-        state_dir=tmp_path / "state", python=UNIT_PIN, uv="uv", run=run
-    )
-    tree = tree_pinning(tmp_path, 'host_python_version: "3.15.2"', "estate/vars.yml")
-    builder.render(tree, tmp_path / "out")
-    assert run.calls[0][0][-1] == "3.15.2"
 
 
 def test_a_tree_with_no_pin_renders_on_the_units_python(tmp_path):

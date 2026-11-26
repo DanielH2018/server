@@ -12,7 +12,7 @@ SHIPPED_FILES_CITE_NO_TARGET_ARCHITECTURE_STUB = Census(
         "manifest or a package, so a citation of a stub path there cannot be repointed "
         "without restarting the workload. Cite the archived path from the start."
     ),
-    files=lambda: tracked("k8s/*", "hosts/*", "inventory/*"),
+    files=lambda: tracked("k8s/*", "hosts/*", "estate/*"),
     offence=lines_matching(re.compile(r"docs/target-architecture/(?!docs-guard/)")),
     red=(
         Subject(

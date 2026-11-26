@@ -472,7 +472,7 @@ pod rolls, and the old credential still works. The registry marks them `source: 
 Verify against the app, not the deploy: a login, an API call, a monitor past its grace window.
 `audit` cannot tell the cases apart — it derives `last_rotated` from the git history of
 `secrets.yml`, so committing the copy advances the date either way. Before calling any
-rotation done, grep the key across `k8s/`, `hosts/`, `inventory/` and `scripts/`, and ask whether
+rotation done, grep the key across `k8s/`, `hosts/`, `estate/` and `scripts/`, and ask whether
 a hit *writes* it to the app or only reads it; a single reader means SOPS is a record. Mark that key `source: record` in the
 registry and add its mechanism bullet above.
 
