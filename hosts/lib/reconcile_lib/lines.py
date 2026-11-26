@@ -64,7 +64,7 @@ def valid_edit(edit: object) -> bool:
         return (
             "{mark}" in anchor
             and not {"\n", "\r"} & set(anchor)
-            and not set(markers(edit)) & set(map(bare, split(text)))
+            and not set(markers(anchor)) & set(map(bare, split(text)))
         )
     try:
         # A line its own regexp misses would be appended again on every run.
@@ -146,8 +146,8 @@ def bare(line: str) -> str:
     return line.rstrip("\n").removesuffix("\r")
 
 
-def markers(edit: dict) -> tuple[str, str]:
-    begin, end = (edit["marker"].replace("{mark}", word) for word in ("BEGIN", "END"))
+def markers(marker: str) -> tuple[str, str]:
+    begin, end = (marker.replace("{mark}", word) for word in ("BEGIN", "END"))
     return begin, end
 
 
@@ -165,7 +165,7 @@ def with_line(text: str, edit: dict) -> str:
 
 def with_block(text: str, edit: dict) -> str:
     """`text` with the marked block replaced, or the block appended after the last line."""
-    begin, end = markers(edit)
+    begin, end = markers(edit["marker"])
     block = f"{begin}\n{edit['block'].rstrip(chr(10))}\n{end}\n"
     lines = split(text)
     first = None
