@@ -112,49 +112,33 @@ off_names = st.from_regex(r"[a-z][a-z_]{0,11}", fullmatch=True).filter(
 )
 
 
-def _off_piece(kind: str, name: str) -> st.SearchStrategy[Piece]:
+def _off_text(kind: str, name: str) -> st.SearchStrategy[str]:
     positions = {
         "filter": _FILTER_POSITIONS,
         "test": _TEST_POSITIONS,
         "lookup": (_lookup,),
     }[kind]
-    return st.sampled_from(positions).map(lambda place: place(name))
+    return st.sampled_from(positions).map(lambda place: place(name).text)
 
 
-off_pieces = st.tuples(
+off_by_name = st.tuples(
     st.sampled_from(["filter", "test", "lookup"]), off_names
-).flatmap(lambda pair: st.tuples(st.just(Construct(*pair)), _off_piece(*pair)))
+).flatmap(lambda pair: st.tuples(st.just(Construct(*pair)), _off_text(*pair)))
 
-dynamic_pieces = st.sampled_from(
+off_by_variable = st.sampled_from(
     [
-        (
-            Construct("filter", "<dynamic>"),
-            Piece("{{ xs | map(f) | list }}", frozenset()),
-        ),
-        (
-            Construct("test", "<dynamic>"),
-            Piece("{{ xs | reject(t) | list }}", frozenset()),
-        ),
-        (
-            Construct("test", "<dynamic>"),
-            Piece("{{ xs | selectattr('a', t) | list }}", frozenset()),
-        ),
-        (
-            Construct("lookup", "<dynamic>"),
-            Piece("{{ lookup(kind, 'p') }}", frozenset()),
-        ),
+        (Construct("filter", "<dynamic>"), "{{ xs | map(f) | list }}"),
+        (Construct("test", "<dynamic>"), "{{ xs | reject(t) | list }}"),
+        (Construct("test", "<dynamic>"), "{{ xs | selectattr('a', t) | list }}"),
+        (Construct("lookup", "<dynamic>"), "{{ lookup(kind, 'p') }}"),
     ]
 )
-
-
-def _source(pieces: list[Piece]) -> str:
-    return "\n".join(piece.text for piece in pieces)
 
 
 @FIXED
 @given(st.lists(in_subset_pieces, min_size=1, max_size=6))
 def test_a_template_inside_the_subset_names_its_constructs_and_passes(pieces):
-    source = _source(pieces)
+    source = "\n".join(piece.text for piece in pieces)
     assert constructs(source) == set().union(*(piece.names for piece in pieces))
     assert off_the_list(source) == set()
 
@@ -162,12 +146,13 @@ def test_a_template_inside_the_subset_names_its_constructs_and_passes(pieces):
 @FIXED
 @given(
     st.lists(in_subset_pieces, max_size=5),
-    st.one_of(off_pieces, dynamic_pieces),
+    st.one_of(off_by_name, off_by_variable),
     st.data(),
 )
 def test_a_template_one_construct_outside_the_subset_is_refused_by_that_construct(
     pieces, off, data
 ):
-    construct, piece = off
-    at = data.draw(st.integers(0, len(pieces)))
-    assert off_the_list(_source([*pieces[:at], piece, *pieces[at:]])) == {construct}
+    construct, text = off
+    texts = [piece.text for piece in pieces]
+    texts.insert(data.draw(st.integers(0, len(texts))), text)
+    assert off_the_list("\n".join(texts)) == {construct}
