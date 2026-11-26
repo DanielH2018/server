@@ -40,6 +40,3 @@ files:
   - {src: files/rkhunter-aide-owns-accounts.conf, dst: /etc/rkhunter.d/homelab-aide-owns-accounts.conf}
 enable:
   homelab-aide-check.timer: timers.target
-legacy:
-  # Exclusions for Debian's aide.conf, which aide-check no longer reads.
-  - {path: /etc/aide/aide.conf.d/98_aide_local}

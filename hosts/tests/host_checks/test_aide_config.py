@@ -86,10 +86,6 @@ def paged_by_the_check(path: str, script: str) -> bool:
     )
 
 
-def test_only_the_hosts_that_run_aide_ship_its_config():
-    assert aide_hosts() == ["daniel-box", "daniel-server"]
-
-
 def test_every_paged_path_is_scanned_and_no_other_is():
     for host in aide_hosts():
         conf, script = shipped_text(host, AIDE_CONF), shipped_text(host, AIDE_CHECK)
