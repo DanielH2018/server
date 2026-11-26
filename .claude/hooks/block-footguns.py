@@ -68,6 +68,7 @@ from urllib.parse import urlsplit
 from _hook_common import (
     BashCall,
     Unsplittable,
+    command_substitutions,
     emit_pretooluse_decision,
     gh_repo,
     invokes,
@@ -481,18 +482,38 @@ def problem(command: str) -> str | None:
     keep the call — it is idempotent, and a rule that only works when its caller strips first
     is a trap for whoever reuses it.
     """
-    return _first_problem(split_stages(command), command=command)
+    return _first_problem(_runs(command))
+
+
+def _runs(command: str, split=split_stages) -> list[tuple[str, list[list[str]]]]:
+    """`command` and each `$( )`, backtick and process-substitution body in it, with its stages.
+
+    `split` reads only the top level, so `echo $(kubectl rollout restart deploy/x)` is one
+    `echo` stage. The parser lists nested bodies flat, so this is every command the text runs.
+
+    Raises:
+        Unsplittable: `split` or the segmenter cannot read the text.
+    """
+    return [(text, split(text)) for text in (command, *command_substitutions(command))]
 
 
 def _first_problem(
-    stages: list[list[str]], cwd: str | None = None, command: str = ""
+    runs: list[tuple[str, list[list[str]]]], cwd: str | None = None
 ) -> str | None:
-    """The first footgun across `stages`, or None.
+    """The first footgun across the stages of `runs`, or None.
 
     `cwd` is where the command starts, the hook payload's own. A `cd <dir>` stage moves it for
-    the stages after it, which is what `pr_body_problem` resolves a relative body file against.
+    the later stages of the same text, which is what `pr_body_problem` resolves a relative body
+    file against. A substitution body runs in a subshell, so each text starts at `cwd`.
     """
-    here = Path(cwd or Path.cwd())
+    for command, stages in runs:
+        found = _stages_problem(stages, Path(cwd or Path.cwd()), command)
+        if found:
+            return found
+    return None
+
+
+def _stages_problem(stages: list[list[str]], here: Path, command: str) -> str | None:
     for stage in stages:
         words = strip_shell_keywords(stage)
         if len(words) == 2 and words[0] == "cd":
@@ -524,7 +545,7 @@ def decide(
     unreadable command, or wherever the package is not deployed, is one the operator turns off.
     """
     try:
-        stages = split(command)
+        runs = _runs(command, split)
     except Unsplittable as exc:
         if not could_fire(command):
             return None, None
@@ -540,10 +561,10 @@ def decide(
             f"block-footguns cannot read this command ({exc.status}), so none of its rules "
             f"ran. Fix the quoting, or review the command against the rules yourself.",
         )
-    found = _first_problem(stages, cwd=cwd, command=command)
+    found = _first_problem(runs, cwd=cwd)
     if found:
         return "deny", found
-    asked = next(filter(None, map(deploy_plane_variable_ask, stages)), None)
+    asked = next(filter(None, map(deploy_plane_variable_ask, runs[0][1])), None)
     return ("ask", asked) if asked else (None, None)
 
 
