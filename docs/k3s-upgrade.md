@@ -169,7 +169,7 @@ carries the CoreDNS port in the same PR as the `k3s_version` move:
    index digest, run
    `curl -fsS https://hub.docker.com/v2/repositories/rancher/mirrored-coredns-coredns/tags/<tag> | jq -r .digest`.
 3. Move the excerpt and its label in
-   `hosts/tests/test_coredns_image_follows_bundled_manifest.py` to the new tag, and record the
+   `hosts/tests/k3s/test_coredns_image_follows_bundled_manifest.py` to the new tag, and record the
    new tag's digest in its `_DIGESTS`. The test fails until the label equals `k3s_version`,
    the excerpt's tag has a recorded digest, and the pin equals that tag at that digest.
 4. Read the image the new pod runs for a uid change. The Deployment pins

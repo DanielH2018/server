@@ -105,7 +105,7 @@ process inside that uid's login slice.
 **A host with no pruner, or a stale one, fails loudly.** The timer exits 127 with no launcher,
 69 with no library and 78 when the deployed copy is older than `--require` names, and each
 reaches Healthchecks.io as a failure
-(`hosts/tests/test_worktree_sweep_cron_reports_its_exit.py::test_a_host_with_no_pruner_fails_the_run_and_pings_the_failure`).
+(`hosts/tests/repo_crons/test_worktree_sweep_cron_reports_its_exit.py::test_a_host_with_no_pruner_fails_the_run_and_pings_the_failure`).
 The fix is `chezmoi apply` on that host, after a `git pull --ff-only` of its dotfiles checkout.
 
 ## Deleting the branch afterwards

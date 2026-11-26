@@ -147,7 +147,7 @@ tree. [#8372](https://github.com/DanielH2018/server/issues/8372) dropped that la
 
 The `DECIDED:` marker on `PRE_RENAME_DIR` in `scripts/secrets_mgmt/git_dates.py` keeps the
 secret-rotation walk reading both paths. The tests that hold the installed readers to the new
-paths are `hosts/tests/test_claude_lander.py`,
+paths are `hosts/tests/claude_code/test_claude_lander.py`,
 `hosts/components/renovate-agent/tests/test_land_renovate_pr.py`,
 `hosts/lib/tests/test_host_package_builder_python.py` and
 `hosts/components/hypervisor/tests/test_suc_rehearsal.py`.

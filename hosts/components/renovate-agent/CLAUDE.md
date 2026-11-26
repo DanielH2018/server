@@ -18,7 +18,7 @@ modules `files/` ships, the lander, and the denylist marker's own history are in
 The package ships the scripts, config, prompt and units whatever the flag says.
 `renovate_agent_enabled` alone decides whether the timer's enable link ships, and setting
 it back to `false` makes reconcile stop **and** disable the timer. That is the rollback, and
-`hosts/tests/test_renovate_agent_unit.py` pins that both directions stay wired.
+`hosts/tests/repo_crons/test_renovate_agent_unit.py` pins that both directions stay wired.
 
 **A disarmed agent tells Prometheus so.** The package ships `renovate-agent-disarmed.prom` in
 node_exporter's textfile directory. `RenovateAgentNotReporting` and `HostCheckOverdue` stay
@@ -94,7 +94,7 @@ the caps or the schedule cannot quietly widen it.
   (ENFORCED twice: the lander's own author check, and its unit's
   `LAND_REQUIRE_AUTHOR=app/renovate`, which `land.sh --arm-merge` reads —
   `scripts/deploy_tools/land_lib/merge.py:_require_author`;
-  `hosts/tests/test_renovate_agent_unit.py::test_the_lander_pins_land_sh_to_renovates_prs`
+  `hosts/tests/repo_crons/test_renovate_agent_unit.py::test_the_lander_pins_land_sh_to_renovates_prs`
   pins both, and the wrapper's census, to `hosts/lib/renovate_identity.py`, the one module
   that names Renovate's GitHub logins). **Never** a landing of a PR that changes a path on
   `files/t2-approval-floor`, the one list every T2 lander reads, other than by a digest-only
@@ -105,7 +105,7 @@ the caps or the schedule cannot quietly widen it.
   `hosts/components/renovate-agent/tests/test_renovate_floor.py`).
   **Never** a push or merge by the session: its token has no
   contents write, so a `manual —` work order ends as a hand-off in the digest
-  (`hosts/tests/test_renovate_agent_identity.py` pins the user and the token's route).
+  (`hosts/tests/repo_crons/test_renovate_agent_identity.py` pins the user and the token's route).
   **Never** a session in the primary
   checkout or in a tree it can write: it works in the controller's clone, read-only, and **never a PR whose title OR BRANCH carries `k8s_autodeploy: false`**
   (#1939). That phrase is renovate.json's denylist marker, not a work order: the roles behind it
@@ -115,7 +115,7 @@ the caps or the schedule cannot quietly widen it.
   `headRefName` beside the title because the marker can survive in the branch alone (#2641).
   The lander reads the denied roles from `scripts/dev/k8s_autodeploy_counts.py --denylist` in
   the primary checkout, and refuses when that command fails or prints no list.
-  `hosts/tests/test_renovate_agent_unit.py` pins that the prompt names the same marker
+  `hosts/tests/repo_crons/test_renovate_agent_unit.py` pins that the prompt names the same marker
   the rule's `groupName` carries, and
   `tests/deploy/test_renovate_automerge_follows_the_autodeploy_denylist.py` asserts the
   marker sits on exactly the per-package rules whose pin a denied role owns. Which rules carry
@@ -132,7 +132,7 @@ the caps or the schedule cannot quietly widen it.
   `templates/renovate-agent-pins.j2`, which is on the lander's approval list, so a host_vars
   edit moves none of them. The same file pins both users, the controller's home and the
   exchange directory. The defaults hold the same values for the docs fragments
-  (`hosts/tests/test_renovate_agent_unit.py::test_an_inventory_value_moves_no_cap`).
+  (`hosts/tests/repo_crons/test_renovate_agent_unit.py::test_an_inventory_value_moves_no_cap`).
   `docs/renovate-agent-bounds-and-digest.md` has why each is the var it is and why the budget
   must never be the one that binds.
 - **Required evidence:** a Discord digest whose headline is the before/after PR delta, plus the

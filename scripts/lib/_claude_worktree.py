@@ -11,7 +11,7 @@ the library from there.
 `REQUIRED_INTERFACE` is the `claude_worktree.INTERFACE` this repo was written for. A deployed
 copy older than that raises here, and the weekly sweep passes the same number to the pruner
 as `--require`
-(`hosts/tests/test_worktree_sweep_cron_reports_its_exit.py::test_the_sweep_requires_the_interface_this_repo_was_written_for`).
+(`hosts/tests/repo_crons/test_worktree_sweep_cron_reports_its_exit.py::test_the_sweep_requires_the_interface_this_repo_was_written_for`).
 
 # DECIDED: no fallback to a stale local copy when the deploy is missing or old. Raise instead.
 # The same reasoning as `.claude/hooks/_claude_guard.py`: a private fallback keeps

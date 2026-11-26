@@ -159,7 +159,7 @@ ROWS = (
         must_find=frozenset(
             {
                 ".claude/hooks/tests/conftest.py",
-                "hosts/tests/test_github_ruleset_drift.py",
+                "hosts/tests/repo_crons/test_github_ruleset_drift.py",
                 "tests/staging/_fence_probe.py",
                 "scripts/deploy_tools/tests/land_merge/test_land_detach.py",
                 "scripts/validate/tests/repo_checks/test_vale_sync_guard.py",
@@ -359,8 +359,8 @@ ROWS = (
             **dict.fromkeys(
                 (
                     "hosts/lib/tests/test_bootstrap_host_pins.py",
-                    "hosts/tests/test_etcd_metrics_single_switch.py",
-                    "hosts/tests/test_unattended_origins_pattern.py",
+                    "hosts/tests/k3s/test_etcd_metrics_single_switch.py",
+                    "hosts/tests/host_config/test_unattended_origins_pattern.py",
                     "tests/deploy/test_renovate_automerge_follows_the_autodeploy_denylist.py",
                 ),
                 "it reads the file's text or asserts which file declares a key, which "

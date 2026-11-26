@@ -103,7 +103,7 @@ The `claude` agent reuses that shape: its own identity script in
   per-host copy of the agent users that host's package declares under `users:` (#4295, #6831), and
   the helper refuses a uid the map does not name. Adding or removing a host's agent edits that host's
   list in `hosts/components/worktree-holders/component.yml` too, and
-  `hosts/tests/test_worktree_holders_install.py` fails while the two differ.
+  `hosts/tests/repo_crons/test_worktree_holders_install.py` fails while the two differ.
   `claude-agent-setup` puts each present agent in the group. A session started before its user joined the group falls back to the
   unprivileged scan until it restarts. `sudo -n true` still fails.
 
@@ -276,7 +276,7 @@ truth, with a reason beside each entry. It holds:
 - the code two CI jobs run while a step holds the job's write-scoped token: `prek` in `ci.yml`
   runs `scripts/dev/tested_tree.py`, and `images` in `promote.yml` runs
   `scripts/deploy_tools/ci_images.py`. The list names each script and every module it imports.
-  `hosts/tests/test_ci_token_code_needs_approval.py::test_code_run_with_a_write_token_is_listed`
+  `hosts/tests/repo_crons/test_ci_token_code_needs_approval.py::test_code_run_with_a_write_token_is_listed`
   derives the set from the two jobs. The operator added them on 2026-11-20.
 - `hosts/components/host-hardening/` and `hosts/components/sshd/`, which hold the sudo cache,
   ssh and the operator's login
@@ -739,7 +739,7 @@ The code is root-owned under `/opt/claude-triage`, like the runner's.
   session can write a syslog line with any tag, so any rule that counts log lines, whatever it
   filters on, would let it open the next episode.
   `test_no_routed_alert_counts_log_lines_a_session_can_write` in
-  `hosts/tests/test_claude_triage_alert_inputs.py` runs once per routed alert. It fails when a
+  `hosts/tests/claude_code/test_claude_triage_alert_inputs.py` runs once per routed alert. It fails when a
   `loki-homelab` rule for the alert counts lines over any stream, or when a Prometheus rule for
   it reads a log-volume series: a count Alloy makes from log lines, or Loki's own
   `loki_distributor_lines_received` or `loki_distributor_bytes_received`. `absent_over_time` is
@@ -750,7 +750,7 @@ The code is root-owned under `/opt/claude-triage`, like the runner's.
   forwards any metric name it receives, and `K8sDeploymentZeroAvailable` selects its series by
   name alone. Prometheus therefore keeps only the `claude_code_*` names from the
   `otel-collector` job, and
-  `hosts/tests/test_claude_triage_alert_inputs.py::test_no_routed_alert_reads_a_series_a_session_can_send_is_clean`
+  `hosts/tests/claude_code/test_claude_triage_alert_inputs.py::test_no_routed_alert_reads_a_series_a_session_can_send_is_clean`
   fails a routed rule that reads one of them.
 - **A storm is one run.** More than three routed keys of one profile falling in one poll make
   a single storm episode that lists them all. Unrouted falls never count towards a storm.
@@ -816,7 +816,7 @@ any `poll_routes` key. A poll that cannot read that key fails and pages, because
 would route a listed service again. While any service is listed, a fall whose `service` is
 `unmapped` opens nothing either: a workload alert carries that label while its mapping series
 is missing, so the fall may be the restarted workload's. `WorkloadServiceUnmapped` still pages
-a mapping that stays missing. `hosts/tests/test_claude_restart_allowlist.py` holds each entry to the
+a mapping that stays missing. `hosts/tests/claude_code/test_claude_restart_allowlist.py` holds each entry to the
 list below, and fails when `poll_routes` names a listed service (#8259).
 
 The allowlist holds `docs`.
@@ -833,7 +833,7 @@ An allowlist entry must be:
   listing one Deployment takes the whole role out of triage;
 - outside the alert plane, where a failed restart removes the thing that reports it. The test
   derives the alert plane from the render
-  (`hosts/tests/test_claude_restart_allowlist.py:alert_plane`). A role joins it when its
+  (`hosts/tests/claude_code/test_claude_restart_allowlist.py:alert_plane`). A role joins it when its
   config sends alerts to Alertmanager, as `observability` and `loki-homelab` do. A role
   joins it when it renders a Service that an Alertmanager receiver names as its host; every
   receiver is outside the cluster. A role also joins it when it owns a scrape job that a rule
@@ -982,7 +982,7 @@ A further agent's account is two entries:
    arm creates the account.
 1. The same name and its clone directory in `worktree_holders_agents_by_host` in
    `hosts/components/worktree-holders/component.yml`, so the worktree holder scan answers
-   it. `hosts/tests/test_worktree_holders_install.py` fails while a host's
+   it. `hosts/tests/repo_crons/test_worktree_holders_install.py` fails while a host's
    `users:` names an agent its list does not.
 
 Everything that gives the account an identity is still the primary's alone: the setup script,

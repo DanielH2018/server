@@ -273,7 +273,7 @@ A half-done bump is a normal code change: worktree, fix, test, PR. Three rules s
   the guard the rule points at; it is the completion criterion.
 - **The unattended run cannot finish a work order.** It runs as its own user with a token
   that cannot push, merge or file an issue, so it opens no superseding PR
-  (`hosts/tests/test_renovate_agent_identity.py::test_the_session_holds_only_the_read_token_and_the_controller_the_write_one`). Its prompt has it
+  (`hosts/tests/repo_crons/test_renovate_agent_identity.py::test_the_session_holds_only_the_read_token_and_the_controller_the_write_one`). Its prompt has it
   put the work order in the digest instead. An interactive session finishes the work order and
   lands its own superseding PR as usual. Land it before the next Renovate PR for the same pin:
   Renovate cuts that PR from a master still carrying the old pin, and it conflicts.
@@ -335,7 +335,7 @@ run as written there. Its `--arm-merge` merges inside the script
 itself, so no session answers the permission prompt a bare `gh pr merge` raises (issue #979).
 The unattended daily run lands through `renovate-agent-land@<n>.service` instead, as its
 prompt says, because its own token cannot merge
-(`hosts/tests/test_renovate_agent_identity.py::test_the_runner_lands_through_the_lander_the_polkit_rule_admits`).
+(`hosts/tests/repo_crons/test_renovate_agent_identity.py::test_the_runner_lands_through_the_lander_the_polkit_rule_admits`).
 
 **Serialize.** One landing at a time holds the landing turn, and the others wait for it
 (`scripts/deploy_tools/tests/land_merge/test_land_turn.py::test_a_landing_waits_while_another_holds_the_turn`);
