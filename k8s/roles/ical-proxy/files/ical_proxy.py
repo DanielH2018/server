@@ -23,16 +23,19 @@ Environment (all optional; the deployment sets them from env-secret and the mani
 
 import sys
 
-# Answer --help before the imports below, which need Flask and requests installed.
+# Answer --help before the imports below, which need Flask, requests and icalendar installed.
 if __name__ == "__main__":
     if any(arg in ("-h", "--help") for arg in sys.argv[1:]):
         print(__doc__.strip())
         sys.exit(0)
 
 from flask import Flask, Response
+import icalendar
+from icalendar.parser import Contentlines
 import requests, threading, time, os, re, hashlib
 
 from datetime import UTC, datetime, timedelta
+from itertools import pairwise
 
 app = Flask(__name__)
 
@@ -52,120 +55,68 @@ OBSIDIAN_URI_RE = re.compile(r'obsidian://[^\s"]+')
 # Tags drive Obsidian's Tasks queries and are calendar noise; the leading \s* avoids a double space.
 TOD_TAG_RE = re.compile(r"\s*#tod/\S+")
 
-
-def parse_vevent_blocks(ics_text):
-    """Split ICS into header, list of VEVENT strings, and footer."""
-    blocks = re.split(r"(?=BEGIN:VEVENT)", ics_text)
-    header = blocks[0]
-    footer = ""
-    events = []
-    for block in blocks[1:]:
-        match = re.search(r"(BEGIN:VEVENT.*?END:VEVENT)(.*)", block, re.DOTALL)
-        if match:
-            events.append(match.group(1))
-            trailing = match.group(2).strip()
-            if trailing:
-                footer += trailing
-    if not footer:
-        footer = "END:VCALENDAR"
-    return header, events, footer
+RAW_TODO_TEXT_RE = re.compile(r"(SUMMARY|DESCRIPTION)(?:;[^:]*)?:(.*)")
 
 
-def get_prop(vevent, prop):
-    """Extract a property value from a VEVENT block, handling folded lines."""
-    unfolded = re.sub(r"\r?\n[ \t]", "", vevent)
-    match = re.search(rf"^{prop}(?:;[^:\n]*)?:(.+)$", unfolded, re.MULTILINE)
-    return match.group(1).strip() if match else None
+def wire_value(component, name):
+    """Returns a property's re-serialised value, without parameters, stripped; "" if absent."""
+    if name not in component:
+        return ""
+    return component[name].to_ical().decode().strip()
 
 
-def normalize_dt(dt_value):
-    """Strip a timezone prefix, e.g. 'America/New_York:20210120T113000' -> '20210120T113000'."""
-    if dt_value and ":" in dt_value:
-        return dt_value.split(":")[-1]
-    return dt_value
+def drop_superseded_masters(calendar):
+    """Removes each recurring master whose DTSTART an override of the same UID re-schedules.
+
+    Compares the wire DTSTART and RECURRENCE-ID values, without their TZID, so a feed mixing
+    all-day, floating and zoned times never compares a date with a datetime.
+    """
+    overridden = {
+        (str(e["UID"]), wire_value(e, "RECURRENCE-ID"))
+        for e in calendar.walk("VEVENT")
+        if "UID" in e and "RECURRENCE-ID" in e
+    }
+    calendar.subcomponents = [
+        c
+        for c in calendar.subcomponents
+        if not (
+            c.name == "VEVENT"
+            and "RECURRENCE-ID" not in c
+            and (str(c.get("UID")), wire_value(c, "DTSTART")) in overridden
+        )
+    ]
 
 
-def filter_superseded_occurrences(events):
-    """Remove occurrences of recurring events that have been overridden."""
-    overrides = {}
-    for vevent in events:
-        uid = get_prop(vevent, "UID")
-        recurrence_id = get_prop(vevent, "RECURRENCE-ID")
-        if uid and recurrence_id:
-            normalized = normalize_dt(recurrence_id)
-            overrides.setdefault(uid, set()).add(normalized)
-
-    filtered = []
-    for vevent in events:
-        uid = get_prop(vevent, "UID")
-        recurrence_id = get_prop(vevent, "RECURRENCE-ID")
-        dtstart = get_prop(vevent, "DTSTART")
-
-        if recurrence_id:
-            filtered.append(vevent)
-            continue
-
-        if uid and dtstart and uid in overrides:
-            normalized_dtstart = normalize_dt(dtstart)
-            if normalized_dtstart in overrides[uid]:
-                continue
-
-        filtered.append(vevent)
-    return filtered
-
-
-def dedup_overlapping_recurrences(events):
+def cap_overlapping_series(calendar):
     """Caps the earlier of two recurring series that share the same SUMMARY and RRULE.
 
     Sets UNTIL to the day before the later series starts, so the two don't overlap.
     """
-    # Group recurring events by (SUMMARY, RRULE)
     groups = {}
-    for vevent in events:
-        rrule = get_prop(vevent, "RRULE")
-        summary = get_prop(vevent, "SUMMARY")
-        if not rrule or not summary:
-            continue
-        key = (summary, rrule)
-        groups.setdefault(key, []).append(vevent)
+    for event in calendar.walk("VEVENT"):
+        rrule, summary = wire_value(event, "RRULE"), wire_value(event, "SUMMARY")
+        if rrule and summary:
+            groups.setdefault((summary, rrule), []).append(event)
 
-    # For any group with more than one series, cap all but the latest
-    to_cap = {}  # vevent index -> UNTIL value
-    for _key, group in groups.items():
-        if len(group) < 2:
-            continue
-
-        # Sort by DTSTART
-        def get_dtstart(v):
-            raw = normalize_dt(get_prop(v, "DTSTART"))
-            return raw or ""
-
-        group.sort(key=get_dtstart)
-        # Cap each earlier series at the day before the next one starts
-        for i in range(len(group) - 1):
-            later_dtstart = normalize_dt(get_prop(group[i + 1], "DTSTART"))
-            dt = datetime.strptime(later_dtstart[:8], "%Y%m%d").replace(tzinfo=UTC)
-            until = (dt - timedelta(days=1)).strftime("%Y%m%dT235959Z")
-            to_cap[id(group[i])] = until
-
-    patched = []
-    for vevent in events:
-        if id(vevent) in to_cap:
-            until = to_cap[id(vevent)]
-            vevent = re.sub(r"(RRULE:[^\r\n]+)", rf"\1;UNTIL={until}", vevent)
+    for group in groups.values():
+        group.sort(key=lambda e: wire_value(e, "DTSTART"))
+        for earlier, later in pairwise(group):
+            start = datetime.strptime(
+                wire_value(later, "DTSTART")[:8], "%Y%m%d"
+            ).replace(tzinfo=UTC)
+            until = start - timedelta(seconds=1)
+            earlier["RRULE"]["UNTIL"] = [until]
             print(
-                f"Capped recurring event UNTIL={until}: SUMMARY={get_prop(vevent, 'SUMMARY')}"
+                f"Capped recurring event UNTIL={until:%Y%m%dT%H%M%SZ}: SUMMARY={earlier['SUMMARY']}"
             )
-        patched.append(vevent)
-    return patched
 
 
 def process_ics(raw_ics):
-    """Parse, filter, and reassemble the ICS."""
-    header, events, footer = parse_vevent_blocks(raw_ics)
-    filtered = filter_superseded_occurrences(events)
-    filtered = dedup_overlapping_recurrences(filtered)
-    return header + "\r\n".join(filtered) + "\r\n" + footer
+    """Drops superseded recurrence masters and caps overlapping series in one ICS feed."""
+    calendar = icalendar.Calendar.from_ical(raw_ics)
+    drop_superseded_masters(calendar)
+    cap_overlapping_series(calendar)
+    return calendar.to_ical().decode()
 
 
 def obsidian_deep_link(uri):
@@ -184,7 +135,25 @@ def obsidian_deep_link(uri):
     return head + path.replace("&", "%26")
 
 
-def stable_uid(block):
+def raw_todo_text(raw_ics):
+    """Yields each VTODO's SUMMARY and DESCRIPTION as the feed wrote them, in feed order.
+
+    The values are unfolded but still escaped. icalendar's parsed values are unescaped,
+    and re-serialising them escapes a bare ',' or ';' the feed left raw, so only these
+    reproduce the text stable_uid has always hashed.
+    """
+    values = None
+    for line in Contentlines.from_ical(raw_ics):
+        if line == "BEGIN:VTODO":
+            values = {}
+        elif line == "END:VTODO":
+            yield values
+            values = None
+        elif values is not None and (match := RAW_TODO_TEXT_RE.match(line)):
+            values.setdefault(match[1], match[2].strip())
+
+
+def stable_uid(raw_text):
     """Deterministic UID for a VTODO, derived from its note link + summary.
 
     The obsidian-to-ical-plugin (v2.0.1, what this feed uses) emits a fresh random
@@ -194,9 +163,11 @@ def stable_uid(block):
     reload (a full page load remounts and clears the state, which is why dupes only
     show up between refreshes). Rewriting the UID to a hash of the note + summary
     (what newer plugin versions do) keeps the key stable so refetches overwrite.
+
+    Takes one raw_todo_text entry, and hashes the summary with its time-block tags removed.
     """
-    summary = get_prop(block, "SUMMARY") or ""
-    description = get_prop(block, "DESCRIPTION") or ""
+    summary = TOD_TAG_RE.sub("", raw_text.get("SUMMARY", "")).strip()
+    description = raw_text.get("DESCRIPTION", "")
     return hashlib.sha1(f"{description}::{summary}".encode()).hexdigest()
 
 
@@ -215,33 +186,19 @@ def process_obsidian_ics(raw_ics):
     derives from the summary, so retagging a task would otherwise mint a new UID and
     leave the old row behind as a duplicate.
     """
-
-    def rewrite_todo(match):
-        """Applies the tag-strip, stable-UID, LOCATION-drop and URL fixups to one VTODO block."""
-        block = match.group(0)
-        source = get_prop(block, "DESCRIPTION") or get_prop(block, "LOCATION") or ""
+    calendar = icalendar.Calendar.from_ical(raw_ics)
+    todos = calendar.walk("VTODO")
+    for todo, raw_text in zip(todos, raw_todo_text(raw_ics), strict=True):
+        source = str(todo.get("DESCRIPTION") or todo.get("LOCATION") or "")
         link = OBSIDIAN_URI_RE.search(source)
-        block = re.sub(
-            r"^SUMMARY:[^\r\n]*",
-            lambda m: TOD_TAG_RE.sub("", m.group(0)),
-            block,
-            count=1,
-            flags=re.MULTILINE,
-        )
-        block = re.sub(
-            r"^UID:[^\r\n]*",
-            f"UID:{stable_uid(block)}",
-            block,
-            count=1,
-            flags=re.MULTILINE,
-        )
-        block = re.sub(r"^LOCATION:[^\r\n]*\r?\n", "", block, flags=re.MULTILINE)
-        if link and not get_prop(block, "URL"):
-            url = obsidian_deep_link(link.group(0))
-            block = block.replace("END:VTODO", f"URL:{url}\r\nEND:VTODO", 1)
-        return block
-
-    return re.sub(r"BEGIN:VTODO.*?END:VTODO", rewrite_todo, raw_ics, flags=re.DOTALL)
+        if "SUMMARY" in todo:
+            todo["SUMMARY"] = icalendar.vText(TOD_TAG_RE.sub("", str(todo["SUMMARY"])))
+        if "UID" in todo:
+            todo["UID"] = stable_uid(raw_text)
+        todo.pop("LOCATION", None)
+        if link and "URL" not in todo:
+            todo.add("URL", obsidian_deep_link(link.group(0)))
+    return calendar.to_ical().decode()
 
 
 # The cap stops a hostile or broken upstream ballooning the parse past the container's memory limit.
