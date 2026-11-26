@@ -88,7 +88,7 @@ def test_a_key_scoped_to_several_buckets_names_no_bucket():
 
 def test_storage_disabled_without_credentials(cfg):
     cfg = replace(cfg, B2_PROBE_KEY_ID="")
-    ok, msg = checks.b2.b2_storage_usage(cfg, FakeSources())
+    ok, msg = checks.b2.check_b2_storage(cfg, FakeSources())
     assert ok
     assert "disabled" in msg
 

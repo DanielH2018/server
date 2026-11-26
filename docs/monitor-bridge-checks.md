@@ -169,7 +169,7 @@ checks each gate suppresses.
   the probe name up. Backblaze's endpoint docs list 403/`transaction_cap_exceeded` among the
   errors of both calls. If a future breach leaves this monitor green, the probe needs a call
   B2 cannot answer before it checks the cap.)
-- **`b2_storage`** (`files/checks/b2.py:b2_storage_usage`. Lists every file version
+- **`b2_storage`** (`files/checks/b2.py:check_b2_storage`. Lists every file version
   in the bucket the `B2_PROBE_*` key is scoped to, sums `contentLength` including hidden
   versions and unfinished large-file parts, and compares the total with `B2_STORAGE_CAP_BYTES`
   (10 GB). `down` past `B2_STORAGE_MAX_PCT` (80). Those hidden bytes bill as stored data, so a
