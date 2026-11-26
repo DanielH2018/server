@@ -621,7 +621,7 @@ name = "The host rule groups match their tables"
 entry = "uv run --frozen python scripts/dev/gen_host_rules.py --check"
 language = "system"
 pass_filenames = false
-files = "^(k8s/roles/observability/(files/rule-tables/.*|files/rules/(host-checks|hosts)\\.yaml|defaults/main\\.yml)|hosts/[^/]+/package\\.yml|inventory/host_vars/[^/]+\\.yml|scripts/dev/gen_host_rules\\.py|scripts/lib/(cli_help|exit_codes|inventory_lists|repo_paths|yaml_fast)\\.py)$"
+files = "^(k8s/roles/observability/(files/rule-tables/.*|files/rules/(host-checks|hosts)\\.yaml|defaults/main\\.yml)|hosts/[^/]+/package\\.yml|inventory/host_vars/[^/]+\\.yml|scripts/dev/gen_host_rules\\.py|scripts/lib/(cli_help|container_entry|estate|exit_codes|git|inventory_lists|render_guard|repo_paths|role_files|yaml_fast)\\.py)$"
 
 # `files` names pyproject.toml and uv.lock too: a commit that only enables a rule changes what every
 # .py must satisfy, and `uv run --frozen` runs the ruff pinned in the lock.

@@ -13,10 +13,10 @@ from functools import cache
 import pytest
 from lib import yaml_fast
 
-from lib.repo_paths import ALL_VARS
+from lib.estate import shared_vars
 from renderer.renderer_lib import host as host_mode
 
-VARS = yaml_fast.safe_load(ALL_VARS.read_text())
+VARS = shared_vars()
 
 
 @cache

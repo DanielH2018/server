@@ -9,7 +9,7 @@ from functools import cache
 
 from renderer.template_filters.service_tier import tier_entries
 
-from _helpers import ALL_VARS, HOST_VARS, load_yaml
+from lib.estate import host_vars, shared_vars
 from _k8s_render import k8s_entries, pod_spec
 from _property_table import Property
 
@@ -123,7 +123,7 @@ def _home_critical_roles() -> frozenset[str]:
 
 @cache
 def _primary_node() -> str:
-    return load_yaml(ALL_VARS)["k8s_primary_node"]
+    return shared_vars()["k8s_primary_node"]
 
 
 def _home_critical_workloads(role: str, tpl: str, doc: dict):
@@ -169,7 +169,7 @@ def _metallb_prefix_offence(role: str, subject: dict) -> str | None:
 def _pi_ip() -> str:
     # The Pi's own literal, not `k8s_pi_client_ip`: a derivation that lost the Pi's entry resolves
     # to None without raising.
-    return load_yaml(HOST_VARS / "daniel-pi.yml")["server_ip"]
+    return host_vars("daniel-pi")["server_ip"]
 
 
 def _pi_push_routes(role: str, tpl: str, doc: dict):
@@ -189,7 +189,7 @@ def _pi_push_offence(role: str, route: dict) -> str | None:
 def _host_ip(host: str) -> str:
     # The host's own literal, not the derived `k8s_*_client_ip`: a derivation that lost the entry
     # resolves to None, and the guard would compare the render with itself.
-    return load_yaml(HOST_VARS / f"{host}.yml")["server_ip"]
+    return host_vars(host)["server_ip"]
 
 
 # Named so the row fails `subject gone` if either stops rendering.

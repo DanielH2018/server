@@ -12,8 +12,8 @@ Run: uv run pytest tests/services/test_warning_escalation_exemptions.py
 
 import re
 
+from lib.estate import shared_vars
 from lib import yaml_fast
-from lib.repo_paths import ALL_VARS
 from _helpers import K8S_ROLES
 from test_alertmanager_host_check_inhibit import (
     MATCHER,
@@ -109,7 +109,7 @@ def test_an_escalation_pages_discord_and_email():
 
 
 def test_an_escalation_links_karma_filtered_to_the_warning_it_escalates():
-    domain = yaml_fast.safe_load(ALL_VARS.read_text())["domain"]
+    domain = shared_vars()["domain"]
     link = f"Karma: https://karma.{domain}/?q=alertname%3DSystemdUnitsFailed\n"
     renders = K8S_ROLES / "observability" / "tests" / "alertmanager"
     for body in ("message", "email"):

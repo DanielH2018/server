@@ -22,7 +22,8 @@ from lib.render_guard import (
     k8s_services_at,
     service_tags_at_or_none,
 )
-from lib.repo_paths import ALL_VARS, INVENTORY, K8S_ROLES, SECRETS
+from lib.estate import shared_vars
+from lib.repo_paths import INVENTORY, K8S_ROLES, SECRETS
 from lib import yaml_fast
 from lib.container_entry import ContainerEntryError
 from lib.git_testing import commit, init_repo
@@ -216,4 +217,4 @@ def test_load_yaml_raises_the_one_parse_failure_for_an_impossible_date(tmp_path)
 
 
 def test_no_base_stub_shadows_a_group_vars_value():
-    assert BASE_CONTEXT.keys() & load_yaml(ALL_VARS).keys() == set()
+    assert BASE_CONTEXT.keys() & shared_vars().keys() == set()

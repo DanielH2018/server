@@ -23,12 +23,13 @@ import xml.etree.ElementTree as ET
 import os
 from pathlib import Path
 
+from lib.estate import shared_vars
 from lib import yaml_fast
 from jinja2 import Undefined
 from lib.proc_testing import run, write_exec
 from renderer.renderer_lib import host as host_mode
 from lib.guard_jinja_env import make_env, register_ansible_filters, template_env
-from _helpers import ALL_VARS, REPO
+from _helpers import REPO
 from _setup_render import rendered_component_text
 from _shell_render import rendered_shell_text
 
@@ -38,7 +39,7 @@ STUB_SSH_KEY = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAI000000000000000000000000000
 
 
 def _group_vars() -> dict:
-    return yaml_fast.safe_load(ALL_VARS.read_text())
+    return shared_vars()
 
 
 def _vars() -> dict:

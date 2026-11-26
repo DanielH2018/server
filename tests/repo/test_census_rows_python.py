@@ -259,9 +259,6 @@ ROWS = (
             "scripts/diagnostics/probe_lib/health_docker.py": (
                 "one function-local call on a path that runs once"
             ),
-            "hosts/tests/test_host_python_invocations.py": (
-                "one function-local call on a path that runs once"
-            ),
             "hosts/tests/test_github_ruleset_drift.py": (
                 "one function-local call on a path that runs once"
             ),

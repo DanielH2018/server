@@ -23,15 +23,12 @@ is prose about the route, not an argument to it.
 import html
 import re
 from pathlib import Path
-from typing import Any
 
 import yaml
 
-from lib import yaml_fast
-
+from lib.estate import REPO_INVENTORY, Estate, Inventory
 from lib.jinja_comments import strip_jinja_comments
 from lib.k8s_roles import manifest_template
-from lib.repo_paths import ALL_VARS as GROUP_VARS
 
 # Matched against comment-stripped text: comments may explain the argument without passing it.
 _PUBLIC_FALSE_RE = re.compile(r"public\s*=\s*false")
@@ -65,22 +62,21 @@ def ingressroute_templates(role_dir: Path, entry: dict | None = None) -> list[Pa
     return own
 
 
-def public_route_enabled(group_vars: Path = GROUP_VARS) -> bool:
-    """Whether the cluster-wide public Host rule is on.
+def public_route_enabled(inventory: Inventory = REPO_INVENTORY) -> bool:
+    """Whether the cluster-wide public Host rule is on in `inventory`'s group variables.
 
     Reads the plaintext group_vars rather than assuming. A missing or unreadable file is
     treated as OFF, because claiming a route is public when it is not sends a reader to a
     name that does not resolve -- the safer error is under-reporting reachability.
     """
     try:
-        loaded: Any = yaml_fast.safe_load(group_vars.read_text())
+        return bool(Estate(inventory).group_vars.get("k8s_public_route"))
     except OSError, yaml.YAMLError:
         return False
-    return bool(isinstance(loaded, dict) and loaded.get("k8s_public_route"))
 
 
 def reachability(
-    role_dir: Path, group_vars: Path = GROUP_VARS, entry: dict | None = None
+    role_dir: Path, inventory: Inventory = REPO_INVENTORY, entry: dict | None = None
 ) -> str:
     """PUBLIC or LAN for a role that has a route. Callers check for a route first.
 
@@ -96,7 +92,7 @@ def reachability(
     )
     if not _INGRESSROUTE_CALL_RE.search(text) or _PUBLIC_FALSE_RE.search(text):
         return LAN
-    return PUBLIC if public_route_enabled(group_vars) else LAN
+    return PUBLIC if public_route_enabled(inventory) else LAN
 
 
 def route_cell(label: str, reach: str) -> str:

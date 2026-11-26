@@ -29,8 +29,7 @@ Run: uv run pytest tests/services/test_pihole_node_host_records.py
 from functools import lru_cache
 
 from _k8s_render import render_role_template
-from lib.repo_paths import HOST_VARS
-from lib.render_guard import load_yaml
+from lib.estate import host_vars
 
 REQUIRED = ("daniel-box", "daniel-server")
 
@@ -66,7 +65,7 @@ def host_records(conf: str) -> dict[str, str]:
 
 def _hosts(address_overrides: dict[str, str] | None = None) -> dict[str, dict]:
     """`host_vars/` for the three hosts as a play's `hostvars` fact, one address replaceable."""
-    hosts = {host: load_yaml(HOST_VARS / f"{host}.yml") for host in HOSTS}
+    hosts = {host: host_vars(host) for host in HOSTS}
     for host, address in (address_overrides or {}).items():
         hosts[host] = {**hosts[host], "server_ip": address}
     return hosts

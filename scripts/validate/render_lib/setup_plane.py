@@ -36,11 +36,10 @@ import yaml
 from jinja2 import meta
 
 from lib import yaml_fast
+from lib.estate import Estate
 from lib.render_context import render_context
 from lib.render_guard import (
-    ALL_VARS,
     dump_numbered,
-    host_files,
     load_yaml,
     StubUndefined,
     make_env,
@@ -98,9 +97,10 @@ def secret_names(registry: Path = SECRET_REGISTRY) -> frozenset[str]:
 
 def inventory_names() -> frozenset[str]:
     """Every variable name the plaintext inventory defines, group_vars plus every host."""
-    names = set(load_yaml(ALL_VARS))
-    for host in host_files():
-        names.update(load_yaml(host))
+    estate = Estate()
+    names = set(estate.group_vars)
+    for host in estate.hosts():
+        names.update(estate.own_vars(host))
     return frozenset(names)
 
 

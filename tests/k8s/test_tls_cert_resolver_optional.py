@@ -16,12 +16,12 @@ but it renders with prod's variables only. Nothing else exercises the empty-reso
 which is the one where the mistake is reachable.
 """
 
+from lib.estate import shared_vars
 from lib import yaml_fast
 from jinja2 import Undefined
 
 from lib.guard_jinja_env import make_env, register_ansible_filters
 from lib.repo_paths import SHARED_TPL
-from _helpers import ALL_VARS
 
 # Imported through the loader so the call renders the macro as a role's template does.
 _IMPORT = "{% from 'ingressroute.yml.j2' import ingressroute, monitoring_route with context %}\n"
@@ -130,7 +130,7 @@ def test_the_tls_options_are_named_on_both_branches():
 
 def test_production_still_declares_a_resolver():
     """An empty default would disable prod's certificate issuance everywhere, silently."""
-    value = yaml_fast.safe_load(ALL_VARS.read_text())[RESOLVER_VAR]
+    value = shared_vars()[RESOLVER_VAR]
     assert value == "cloudflare", (
         f"{RESOLVER_VAR} in group_vars/all.yml is {value!r}. Production issues through the "
         f"`cloudflare` ACME resolver defined in the traefik role's static config; emptying the "

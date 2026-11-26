@@ -17,7 +17,7 @@ Run: uv run pytest tests/repo/test_ci_contexts_match_workflows.py
 import pytest
 from lib import yaml_fast
 from _helpers import REPO
-from lib.repo_paths import ALL_VARS
+from lib.estate import shared_vars
 
 
 from deploy_tools import await_ci
@@ -35,13 +35,10 @@ def _workflow_job_names(workflow: str | None = None) -> set[str]:
     return {str(job.get("name", job_id)) for job_id, job in jobs.items()}
 
 
-GROUP_VARS = ALL_VARS
-
-
-def _contexts_in(path, key: str) -> set[str]:
-    """`key`'s list in the YAML file at `path`, asserting it is a literal list."""
-    contexts = yaml_fast.safe_load(path.read_text()).get(key)
-    assert isinstance(contexts, list), f"{key} is not a literal list in {path.name}"
+def _contexts_in(variables: dict, key: str) -> set[str]:
+    """`key`'s list in the parsed variables, asserting it is a literal list."""
+    contexts = variables.get(key)
+    assert isinstance(contexts, list), f"{key} is not a literal list"
     return {str(c) for c in contexts}
 
 
@@ -49,7 +46,7 @@ def _gate_contexts() -> set[str]:
     """The gate every deploy path grades by, read from the YAML rather than from the rendered
     settings file, which is root-owned and only exists on daniel-box. It is
     `ci_required_contexts` in group_vars/all.yml since H7.2e."""
-    return _contexts_in(GROUP_VARS, "ci_required_contexts")
+    return _contexts_in(shared_vars(), "ci_required_contexts")
 
 
 def test_await_ci_requires_exactly_what_the_gate_requires():
@@ -93,4 +90,4 @@ def test_a_reference_in_place_of_the_list_is_flagged(tmp_path):
     path = tmp_path / "all.yml"
     path.write_text('ci_required_contexts: "{{ other_contexts }}"\n')
     with pytest.raises(AssertionError, match="not a literal list"):
-        _contexts_in(path, "ci_required_contexts")
+        _contexts_in(yaml_fast.safe_load(path.read_text()), "ci_required_contexts")

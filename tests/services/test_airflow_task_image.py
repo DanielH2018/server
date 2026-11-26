@@ -6,8 +6,8 @@ writes the GHCR ref itself (`k8s/roles/airflow/defaults/main.yml:airflow_k8s_tas
 
 from _k8s_render import rendered_docs
 
+from lib.estate import shared_vars
 from lib import yaml_fast
-from lib.repo_paths import ALL_VARS
 from renderer.renderer_lib.images import GHCR
 
 
@@ -40,6 +40,6 @@ def test_the_task_pod_template_names_the_schedulers_image_at_ghcr():
 
 
 def test_the_ghcr_pull_host_variable_is_the_renderers_ghcr_host():
-    group_vars = yaml_fast.safe_load(ALL_VARS.read_text())
+    group_vars = shared_vars()
 
     assert group_vars["k8s_ghcr_pull_host"] == GHCR

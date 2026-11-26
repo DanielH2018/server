@@ -18,7 +18,7 @@ import re
 
 import pytest
 
-from _helpers import ALL_VARS, load_yaml
+from lib.estate import shared_vars
 from _k8s_render import rendered_docs
 from lib import yaml_fast
 from lib.repo_paths import REPO
@@ -118,7 +118,7 @@ def test_the_source_tails_the_file_k3s_writes_into_this_block(
     for component in ("k3s-server", "k3s-agent"):
         spec = REPO / "hosts" / "components" / component / "component.yml"
         assert m[1] == yaml_fast.safe_load(spec.read_text())["defaults"]["k3s_log_file"]
-    assert m[2] == load_yaml(ALL_VARS)["loki_streams"]["host_k3s"]["job"]
+    assert m[2] == shared_vars()["loki_streams"]["host_k3s"]["job"]
     src = re.search(
         r'loki\.source\.file "k3s" \{[^}]*forward_to\s*=\s*\[([^\]]*)\]', alloy_config
     )

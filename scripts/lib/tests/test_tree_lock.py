@@ -7,13 +7,12 @@ Python readers would each serialise against a different file (#3276).
 Run: uv run pytest scripts/lib/tests/test_tree_lock.py
 """
 
-from lib import yaml_fast
-from lib.repo_paths import ALL_VARS
+from lib.estate import shared_vars
 from lib.tree_lock import TREE_LOCK
 
 
 def _group_var() -> str:
-    return yaml_fast.safe_load(ALL_VARS.read_text())["server_git_tree_lock"]
+    return shared_vars()["server_git_tree_lock"]
 
 
 def test_the_template_var_and_the_python_constant_agree_is_clean():

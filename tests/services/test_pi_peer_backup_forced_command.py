@@ -13,9 +13,10 @@ import os
 import re
 
 import pytest
+from lib.estate import host_vars
 from lib import yaml_fast
 from lib.proc_testing import fake_bin, path_with, run
-from lib.repo_paths import HOST_VARS, REPO
+from lib.repo_paths import REPO
 from renderer.renderer_lib import host as host_mode
 from _helpers import stub_logger_on_path
 from _k8s_render import rendered_docs
@@ -135,7 +136,7 @@ def test_the_pull_target_is_the_role_default_user_at_the_pis_server_ip():
     defaults = yaml_fast.safe_load(
         (REPO / "k8s/roles/pi-peer-backup/defaults/main.yml").read_text()
     )
-    pi = yaml_fast.safe_load((HOST_VARS / "daniel-pi.yml").read_text())
+    pi = host_vars("daniel-pi")
     target = f"{defaults['pi_peer_backup_ssh_user']}@{pi['server_ip']}:{SRC}"
     values = [
         env["value"]

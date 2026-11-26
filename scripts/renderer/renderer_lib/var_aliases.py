@@ -23,7 +23,8 @@ import jinja2
 from jinja2 import nodes
 
 from lib import yaml_fast
-from lib.repo_paths import INVENTORY, K8S_ROLES
+from lib.estate import REPO_INVENTORY
+from lib.repo_paths import K8S_ROLES
 from renderer.renderer_lib.jinja_uses import lookup_argument, vars_lookup
 
 
@@ -82,15 +83,9 @@ def not_alias_problems(
     return problems
 
 
-def rule5_var_files(roles: Path = K8S_ROLES, inventory: Path = INVENTORY) -> list[Path]:
+def rule5_var_files() -> list[Path]:
     """The k8s roles' `defaults/main.yml` and every inventory vars file."""
-    return sorted(
-        [
-            *roles.glob("*/defaults/main.yml"),
-            *inventory.glob("group_vars/**/*.yml"),
-            *inventory.glob("host_vars/**/*.yml"),
-        ]
-    )
+    return sorted([*K8S_ROLES.glob("*/defaults/main.yml"), *REPO_INVENTORY.var_files()])
 
 
 def var_tag(path: Path) -> str:

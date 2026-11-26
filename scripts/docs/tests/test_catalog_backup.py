@@ -8,7 +8,7 @@ Run: uv run pytest scripts/docs/tests/test_catalog_backup.py
 """
 
 from docs import service_catalog
-from _catalog_fixtures import make_repo, write
+from _catalog_fixtures import catalog_args, make_repo, write
 from docs.catalog_lib import catalog_backup
 from docs.catalog_lib.catalog_backup import (
     LonghornTiers,
@@ -32,7 +32,11 @@ def test_backup_tier_literal_pvc_name_in_r2_list(tmp_path):
           name: authelia-config
         """,
     )
-    row = next(r for r in service_catalog.build_rows(**paths) if r.name == "authelia")
+    row = next(
+        r
+        for r in service_catalog.build_rows(**catalog_args(paths))
+        if r.name == "authelia"
+    )
     assert row.backup_tier == "daily -> R2"
 
 
@@ -48,7 +52,11 @@ def test_backup_tier_literal_pvc_name_in_weekly_list(tmp_path):
           name: jellyfin-config
         """,
     )
-    row = next(r for r in service_catalog.build_rows(**paths) if r.name == "jellyfin")
+    row = next(
+        r
+        for r in service_catalog.build_rows(**catalog_args(paths))
+        if r.name == "jellyfin"
+    )
     assert row.backup_tier == "weekly -> B2 (default target)"
 
 
@@ -66,13 +74,21 @@ def test_backup_tier_longhorn_class_in_no_list_is_the_default_group(tmp_path):
           storageClassName: longhorn
         """,
     )
-    row = next(r for r in service_catalog.build_rows(**paths) if r.name == "jellyfin")
+    row = next(
+        r
+        for r in service_catalog.build_rows(**catalog_args(paths))
+        if r.name == "jellyfin"
+    )
     assert row.backup_tier == "daily -> B2 (default group)"
 
 
 def test_backup_tier_no_pvc_is_stateless_not_unknown(tmp_path):
     paths = make_repo(tmp_path)
-    row = next(r for r in service_catalog.build_rows(**paths) if r.name == "authelia")
+    row = next(
+        r
+        for r in service_catalog.build_rows(**catalog_args(paths))
+        if r.name == "authelia"
+    )
     assert row.backup_tier == "no PVC (stateless)"
     entry = {"name": "authelia"}
     tier = backup_tier(entry, "homelab", LonghornTiers(), paths["k8s_roles"])
@@ -92,7 +108,11 @@ def test_backup_tier_unresolvable_var_is_unknown(tmp_path):
         """,
     )
     # No defaults/main.yml giving jellyfin_k8s_claim a literal value.
-    row = next(r for r in service_catalog.build_rows(**paths) if r.name == "jellyfin")
+    row = next(
+        r
+        for r in service_catalog.build_rows(**catalog_args(paths))
+        if r.name == "jellyfin"
+    )
     assert row.backup_tier.startswith("unknown")
 
 
@@ -112,7 +132,11 @@ def test_backup_tier_var_resolved_from_role_defaults(tmp_path):
         paths["k8s_roles"] / "jellyfin" / "defaults" / "main.yml",
         "jellyfin_k8s_claim: jellyfin-config\n",
     )
-    row = next(r for r in service_catalog.build_rows(**paths) if r.name == "jellyfin")
+    row = next(
+        r
+        for r in service_catalog.build_rows(**catalog_args(paths))
+        if r.name == "jellyfin"
+    )
     assert row.backup_tier == "weekly -> B2 (default target)"
 
 
@@ -128,7 +152,11 @@ def test_backup_tier_finds_pvc_referenced_only_by_claimname(tmp_path):
               claimName: jellyfin-config
         """,
     )
-    row = next(r for r in service_catalog.build_rows(**paths) if r.name == "jellyfin")
+    row = next(
+        r
+        for r in service_catalog.build_rows(**catalog_args(paths))
+        if r.name == "jellyfin"
+    )
     assert row.backup_tier == "weekly -> B2 (default target)"
 
 
@@ -149,7 +177,11 @@ def test_multiple_pvcs_report_each_tier_deduplicated(tmp_path):
           name: authelia-config
         """,
     )
-    row = next(r for r in service_catalog.build_rows(**paths) if r.name == "jellyfin")
+    row = next(
+        r
+        for r in service_catalog.build_rows(**catalog_args(paths))
+        if r.name == "jellyfin"
+    )
     assert row.backup_tier == "weekly -> B2 (default target); daily -> R2"
 
 
@@ -162,7 +194,11 @@ def _pvc_block(name, storage_class=None):
 
 def _jellyfin_tier(paths, template_text):
     write(paths["k8s_roles"] / "jellyfin" / "templates" / "pvc.yaml.j2", template_text)
-    row = next(r for r in service_catalog.build_rows(**paths) if r.name == "jellyfin")
+    row = next(
+        r
+        for r in service_catalog.build_rows(**catalog_args(paths))
+        if r.name == "jellyfin"
+    )
     return row.backup_tier
 
 
@@ -236,7 +272,9 @@ def test_backup_tier_derives_the_r2_set_from_the_injected_service_list(tmp_path)
         paths["k8s_roles"] / "svc" / "templates" / "pvc.yaml.j2",
         _pvc_block("svc-config", "longhorn"),
     )
-    row = next(r for r in service_catalog.build_rows(**paths) if r.name == "svc")
+    row = next(
+        r for r in service_catalog.build_rows(**catalog_args(paths)) if r.name == "svc"
+    )
     assert row.backup_tier == "daily -> R2"
 
 
@@ -297,7 +335,11 @@ def test_backup_tier_claimname_reference_finds_the_class_in_the_declaring_role(
               claimName: media-data
         """,
     )
-    row = next(r for r in service_catalog.build_rows(**paths) if r.name == "jellyfin")
+    row = next(
+        r
+        for r in service_catalog.build_rows(**catalog_args(paths))
+        if r.name == "jellyfin"
+    )
     assert row.backup_tier == "not Longhorn (media-local)"
 
 

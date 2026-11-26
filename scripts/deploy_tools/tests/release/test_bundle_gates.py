@@ -13,6 +13,7 @@ import pytest
 from _bundle_fixtures import bundle, route
 
 from deploy_tools import bundle_gates
+from lib.estate import Inventory
 from renderer.renderer_lib.bundle import write_bundle
 
 DOMAIN = "example.test"
@@ -33,7 +34,7 @@ def inputs(tmp_path):
     secrets.write_text("domain: ENC[x]\nemail: ENC[x]\nsops:\n  version: 3\n")
     all_vars = tmp_path / "all.yml"
     all_vars.write_text(f"domain: {DOMAIN}\n")
-    return {"secrets": secrets, "all_vars": all_vars}
+    return {"secrets": secrets, "inventory": Inventory(all_vars=all_vars)}
 
 
 def _gates(tmp_path, inputs, files, published=("bento-pdf",), kinds=()):

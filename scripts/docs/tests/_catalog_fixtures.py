@@ -8,6 +8,8 @@ pytest's `pythonpath` (pyproject.toml) the way scripts/deploy_tools/tests is for
 
 import textwrap
 
+from lib.estate import Inventory
+
 
 def write(path, content):
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -50,4 +52,13 @@ def make_repo(tmp_path):
         "all_vars": all_vars,
         "k3s_defaults": k3s_defaults,
         "k8s_roles": k8s_roles,
+    }
+
+
+def catalog_args(paths):
+    """`service_catalog.build_rows`'s keyword arguments over the synthetic repo `paths`."""
+    return {
+        "inventory": Inventory(all_vars=paths["all_vars"], services=paths["services"]),
+        "k8s_roles": paths["k8s_roles"],
+        "k3s_defaults": paths["k3s_defaults"],
     }

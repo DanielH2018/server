@@ -20,6 +20,7 @@ import re
 import tomllib
 
 import pytest
+from _inventory_read_rules import inventory_reads
 from _row_table import (
     Census,
     Subject,
@@ -27,6 +28,7 @@ from _row_table import (
     lines_matching,
     proof_problems,
     share,
+    tracked,
 )
 from _test_module_rules import (
     GIT_SCRUB,
@@ -281,6 +283,92 @@ ROWS = (
             "tests/services/test_alert_runbook_urls.py": (
                 "its `CITED_PAGE` pattern excludes a design-doc citation from the runbook "
                 "rule, and its fixture is an alert description; it reads no plan"
+            ),
+        },
+    ),
+    Census(
+        name="inventory-files-are-read-through-lib-estate",
+        reason=(
+            "ADR-0042 moves the inventory's files, so a module that opens one by path reads "
+            "nothing after the move. Read a value through `lib.estate.shared_vars()` or "
+            "`host_vars(host)`, or an `Estate`. A hit is a call that takes an inventory path "
+            "as its receiver or an argument, or a function whose parameter defaults to one; "
+            "`relative_to` and `copytree` only name the path. Every Python file is in the "
+            "census, not only the tests."
+        ),
+        files=lambda: tracked("*.py"),
+        offence=lambda s: inventory_reads(s.text, REPO / s.rel),
+        red=(
+            Subject(
+                "a.py", "from lib.repo_paths import ALL_VARS\nload_yaml(ALL_VARS)\n"
+            ),
+            Subject(
+                "b.py",
+                "from lib.repo_paths import HOST_VARS\n"
+                'vars_of(HOST_VARS / "daniel-pi.yml")\n',
+            ),
+            Subject(
+                "c.py",
+                "from lib.repo_paths import INVENTORY\n"
+                'GROUP = INVENTORY / "group_vars" / "all.yml"\n'
+                "GROUP.read_text()\n",
+            ),
+            Subject(
+                "d.py",
+                "from lib.repo_paths import HOST_VARS\n"
+                "def names(host_vars=HOST_VARS):\n    pass\n",
+            ),
+            Subject(
+                "f.py",
+                "from lib.repo_paths import HOST_VARS\n"
+                "def f(host_vars: dict):\n    pass\n"
+                'HOST_VARS.glob("*")\n',
+            ),
+            Subject(
+                "e.py", 'from lib.repo_paths import HOST_VARS\nHOST_VARS.glob("*")\n'
+            ),
+        ),
+        green=(
+            Subject("a.py", "from lib.estate import shared_vars\nshared_vars()\n"),
+            Subject(
+                "b.py",
+                "from lib.repo_paths import HOST_VARS, REPO\n"
+                "HOST_VARS.relative_to(REPO)\n"
+                'shutil.copytree(HOST_VARS, tmp / "host_vars")\n',
+            ),
+            Subject(
+                "c.py",
+                "from lib.estate import Inventory\n"
+                "def render(template: str, host_vars: dict):\n"
+                "    return render_text(template, host_vars)\n",
+            ),
+        ),
+        min_matches=2000,
+        must_find=frozenset({"scripts/lib/estate.py"}),
+        allow={
+            **dict.fromkeys(
+                ("scripts/lib/render_guard.py", "scripts/lib/inventory_lists.py"),
+                "`lib.estate` reads the files through it",
+            ),
+            **dict.fromkeys(
+                ("hosts/components/renovate-agent/files/land_renovate_pr.py",),
+                "a host package ships it without `scripts/lib`, so it cannot import "
+                "`lib.estate`; ADR-0042 step 3 teaches it the new paths",
+            ),
+            **dict.fromkeys(
+                (
+                    "hosts/lib/tests/test_bootstrap_host_pins.py",
+                    "hosts/lib/tests/test_builder_component.py",
+                    "hosts/lib/tests/test_t2_egress_component.py",
+                    "hosts/tests/test_etcd_metrics_single_switch.py",
+                    "hosts/tests/test_k3s_control_plane_hardening.py",
+                    "hosts/tests/test_nut_host_secondary.py",
+                    "hosts/tests/test_unattended_origins_pattern.py",
+                    "tests/deploy/test_renovate_automerge_follows_the_autodeploy_denylist.py",
+                    "tests/services/test_strangler_bridge.py",
+                ),
+                "it reads the file's text or asserts which file declares a key, which "
+                "ADR-0042 step 6 decides per key",
             ),
         },
     ),

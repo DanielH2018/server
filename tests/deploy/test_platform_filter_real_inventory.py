@@ -9,10 +9,10 @@ Run: uv run pytest tests/deploy/test_platform_filter_real_inventory.py
 
 import functools
 
+from lib.estate import host_vars
 from lib import yaml_fast
 
 from renderer.renderer_lib import host as host_mode
-from _helpers import HOST_VARS
 
 
 # Each pair is (upstream, downstream): both ends must be packaged, and the downstream carries
@@ -44,7 +44,7 @@ def _order_violations(packaged, edges, depends_on=None):
 
 
 def _pi_services():
-    pi = yaml_fast.safe_load((HOST_VARS / "daniel-pi.yml").read_text())
+    pi = host_vars("daniel-pi")
     return [c["name"] for c in pi["compose_services"] or []]
 
 

@@ -12,7 +12,8 @@ import pytest
 from lib import yaml_fast
 from lib.exit_codes import RENDER_OK
 from lib.proc_testing import run
-from lib.repo_paths import ALL_VARS, REPO
+from lib.estate import shared_vars
+from lib.repo_paths import REPO
 from renderer import homelab_render, shadow_diff
 from lib.k8s_roles import k8s_tags
 from renderer.renderer_lib import cluster as cluster_mod
@@ -71,7 +72,7 @@ def test_cluster_renders_littlelink_in_the_c1_layout(out, stub_file):
     assert "STUB" not in text and "{{" not in text
     # `domain` is published, so the stub file holds no value for it and the route renders
     # its inventory value.
-    domain = yaml_fast.safe_load(ALL_VARS.read_text())["domain"]
+    domain = shared_vars()["domain"]
     assert f"value: https://www.{domain}\n" in text
 
 

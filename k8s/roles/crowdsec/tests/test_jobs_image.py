@@ -39,7 +39,7 @@ from types import SimpleNamespace
 import pytest
 from _helpers import K8S_ROLES
 from lib.proc_testing import write_exec
-from lib.repo_paths import ALL_VARS
+from lib.estate import shared_vars
 from _k8s_render import render_role_template
 from lib import yaml_fast
 
@@ -79,7 +79,7 @@ def _image(key: str, path) -> str:
 
 
 JOBS_IMAGE = _image("crowdsec_k8s_jobs_image", K8S_ROLES / "crowdsec/defaults/main.yml")
-CROWDSEC_IMAGE = _image("crowdsec_k8s_image", ALL_VARS)
+CROWDSEC_IMAGE = shared_vars()["crowdsec_k8s_image"]
 
 
 # The ConfigMap the stub kubectl returns. The leg cannot set the container's clock, so it
@@ -252,7 +252,7 @@ def _seed_etc(etc) -> None:
 
 
 def _lapi_machines() -> set[str]:
-    group_vars = yaml_fast.safe_load(ALL_VARS.read_text())
+    group_vars = shared_vars()
     defaults = yaml_fast.safe_load(
         (K8S_ROLES / "crowdsec/defaults/main.yml").read_text()
     )

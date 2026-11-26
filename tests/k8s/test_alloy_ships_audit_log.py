@@ -13,10 +13,10 @@ import re
 
 import pytest
 
-from _helpers import ALL_VARS, load_yaml
+from lib.estate import shared_vars
 from _k8s_render import rendered_docs
 
-JOB = load_yaml(ALL_VARS)["loki_streams"]["host_audit"]["job"]
+JOB = shared_vars()["loki_streams"]["host_audit"]["job"]
 GS = "\x1d"  # auditd's ENRICHED format appends the translated fields after this byte.
 
 KEPT = (

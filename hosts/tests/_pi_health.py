@@ -17,7 +17,9 @@ The scripts are the `pi-heartbeats` host component's (H3.8b), and `COMPONENT_DEF
 
 import re
 
-from _helpers import HOST_VARS, REPO, load_yaml
+from _helpers import REPO, load_yaml
+from lib.estate import host_vars
+from lib.inventory_lists import PI_HOST
 from _shell_render import render_shell_script
 from lib.proc_testing import fake_bin, path_with, write_exec
 from lib.proc_testing import run as launch
@@ -99,7 +101,7 @@ SD_COUNTER = "/sys/fs/ext4/mmcblk0p2/errors_count"
 GZ_STATE_VAR = "optimize_pi_gz_integrity_state_file"
 
 
-PI_HOST_VARS = load_yaml(HOST_VARS / "daniel-pi.yml")
+PI_HOST_VARS = host_vars(PI_HOST)
 
 
 def render(name, tmp_path, jinja_vars=None):

@@ -31,7 +31,8 @@ from pathlib import Path
 import yaml
 
 from lib import yaml_fast
-from lib.repo_paths import ALL_VARS, SECRETS as SECRETS_DIR
+from lib.estate import REPO_INVENTORY, Estate, Inventory
+from lib.repo_paths import SECRETS as SECRETS_DIR
 from renderer.renderer_lib.bundle import (
     CLUSTER_DIR,
     FLUX_DIR,
@@ -74,19 +75,20 @@ def secret_keys(secrets: Path = SECRETS) -> frozenset[str]:
     return frozenset(keys)
 
 
-def inventory_domain(all_vars: Path = ALL_VARS) -> str:
-    """The literal `domain` that `all_vars` defines.
+def inventory_domain(inventory: Inventory = REPO_INVENTORY) -> str:
+    """The literal `domain` that `inventory`'s group variables define.
 
     Raises:
         ValueError: the file does not parse, or `domain` is missing or is not a literal.
     """
     try:
-        data = yaml_fast.safe_load(all_vars.read_text())
+        value = Estate(inventory).group_vars.get("domain")
     except (OSError, yaml.YAMLError) as err:
-        raise ValueError(f"{all_vars}: {err}") from err
-    value = data.get("domain") if isinstance(data, dict) else None
+        raise ValueError(f"{inventory.all_vars}: {err}") from err
     if not isinstance(value, str) or not value or "{" in value or "$" in value:
-        raise ValueError(f"{all_vars} defines no literal domain, got {value!r}")
+        raise ValueError(
+            f"{inventory.all_vars} defines no literal domain, got {value!r}"
+        )
     return value
 
 
@@ -221,13 +223,13 @@ def gates(
     out: Path,
     published: Iterable[str],
     secrets: Path = SECRETS,
-    all_vars: Path = ALL_VARS,
+    inventory: Inventory = REPO_INVENTORY,
     kinds=SHARED_KINDS,
 ) -> list[str]:
     """Every problem the three gates find in the bundle at `out`, one line each."""
     published = list(published)
     try:
-        keys, domain = secret_keys(secrets), inventory_domain(all_vars)
+        keys, domain = secret_keys(secrets), inventory_domain(inventory)
     except ValueError as err:
         return [f"gates: {err}"]
     return (

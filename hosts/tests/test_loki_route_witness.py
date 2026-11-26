@@ -19,11 +19,11 @@ Run: uv run pytest hosts/tests/test_loki_route_witness.py
 import os
 
 from lib.proc_testing import fake_bin, path_with, run, write_exec
-from _helpers import ALL_VARS, REPO
+from _helpers import REPO
 from _shell_render import render_shell_script, rendered_shell_text
-from lib import yaml_fast
+from lib.estate import shared_vars
 
-ALL_VARS_VALUES = yaml_fast.safe_load(ALL_VARS.read_text())
+ALL_VARS_VALUES = shared_vars()
 WITNESS = ("components", "loki-route-witness", "loki-read-route-health.sh.j2")
 
 # The deadline the verdict's textfile carries, and the timer period it has to cover.

@@ -21,13 +21,10 @@ import yaml
 
 from lib import yaml_fast
 from validate.validate_lib.shipped_render import render_shipped
+from lib.estate import Estate
 from lib.render_context import render_context
 from lib.repo_paths import REPO
-from lib.render_guard import (
-    HOST_VARS,
-    dump_numbered,
-    host_layer,
-)
+from lib.render_guard import dump_numbered
 
 COMPONENT_SERVICES = REPO / "hosts" / "components" / "pi-compose" / "services"
 
@@ -292,27 +289,29 @@ def _check_rendered(
     return None
 
 
-def run(ok: Callable[[str], None], host_vars_dir: Path = HOST_VARS) -> tuple[int, int]:
+def run(ok: Callable[[str], None]) -> tuple[int, int]:
     """Render every host's `compose_services` entries and report render/parse failures.
 
     Args:
         ok: Prints one clean template's `[ok]` line.
-        host_vars_dir: The inventory's `host_vars` directory.
 
     Returns:
         (templates checked, failures). A tree with no host_vars file is one failure.
     """
-    host_files = sorted(host_vars_dir.glob("*.yml"))
-    if not host_files:
-        print(f"  [FAIL] no host_vars found under {host_vars_dir}", file=sys.stderr)
+    estate = Estate()
+    hosts = estate.hosts()
+    if not hosts:
+        print(
+            f"  [FAIL] no host_vars found under {estate.inventory.host_vars}",
+            file=sys.stderr,
+        )
         return 0, 1
 
     failures = 0
     checked = 0
-    for host_file in host_files:
-        host_vars = host_layer(host_file.parent, host_file.stem)
-        for ci in host_vars.get("compose_services") or []:
-            err = check_component_service(host_file.stem, ci)
+    for host in hosts:
+        for ci in estate.own_vars(host).get("compose_services") or []:
+            err = check_component_service(host, ci)
             checked += 1
             if err:
                 failures += 1

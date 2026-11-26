@@ -9,10 +9,10 @@ about what a selector selects.
 
 import re
 
-from _helpers import ALL_VARS, load_yaml
+from lib.estate import shared_vars
 from lib.repo_paths import REPO
 
-LOKI_STREAMS = load_yaml(ALL_VARS)["loki_streams"]
+LOKI_STREAMS = shared_vars()["loki_streams"]
 
 # The k8s pod stream vocabulary. `app` is NOT in it: a selector with app="home-assistant" matches no
 # stream, and a fail-open arm reads that as nothing to report.

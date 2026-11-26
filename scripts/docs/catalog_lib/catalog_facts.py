@@ -11,7 +11,7 @@ from typing import Any
 
 from docs.catalog_lib.catalog_model import K8S_ROLES, UNKNOWN
 from lib.k8s_roles import manifest_template
-from lib.render_guard import ALL_VARS
+from lib.estate import REPO_INVENTORY, Inventory
 from docs.catalog_lib.route_facts import reachability, route_cell
 
 __all__ = [
@@ -26,14 +26,14 @@ __all__ = [
 def k8s_route(
     entry: dict[str, Any],
     k8s_roles: Path = K8S_ROLES,
-    all_vars: Path = ALL_VARS,
+    inventory: Inventory = REPO_INVENTORY,
 ) -> str:
     """Derive a k8s service's route cell from its role's IngressRoute template, if any.
 
     Args:
         entry: The service's `containers_list` entry.
         k8s_roles: Root directory of the k8s roles.
-        all_vars: Path to `group_vars/all.yml`, read for the public-route default.
+        inventory: The inventory whose group variables hold the public-route default.
 
     Returns:
         A route cell string, or "no route (infra role)" when the role has no IngressRoute.
@@ -46,7 +46,7 @@ def k8s_route(
         return "no route (infra role)"
     label = entry.get("hostname") or name
     # Reachability comes from route_facts so this page and networking.md cannot disagree.
-    return route_cell(label, reachability(role_dir, all_vars, entry))
+    return route_cell(label, reachability(role_dir, inventory, entry))
 
 
 # `use_authelia` is a direct field read; `auth_tier` is what the authelia role renders into
