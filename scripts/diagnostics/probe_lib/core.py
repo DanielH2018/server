@@ -615,18 +615,18 @@ def ha_curl_argv(url, timeout=DEFAULT_TIMEOUT, resolve=None):
     return argv + [url]
 
 
-def config_get(url, config_body, resolve=None, host=None):
+def config_get(url, config_body, resolve=None, host=None, timeout=DEFAULT_TIMEOUT):
     """Authenticated GET whose auth header is fed via curl `--config -` stdin (never argv).
 
     `host` runs curl on that host over ssh instead of locally. The header still travels on
-    stdin, so it reaches neither host's argv.
+    stdin, so it reaches neither host's argv. `timeout` is curl's `--max-time` in seconds.
 
     Returns the response body.
 
     Raises:
         Unreadable: curl or ssh exited non-zero.
     """
-    argv = ha_curl_argv(url, resolve=resolve)
+    argv = ha_curl_argv(url, timeout=timeout, resolve=resolve)
     if host:
         argv = [
             "ssh",
