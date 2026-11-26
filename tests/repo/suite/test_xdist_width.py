@@ -7,6 +7,7 @@ import json
 import os
 from pathlib import Path
 from types import SimpleNamespace
+from typing import cast
 
 import pytest
 
@@ -121,3 +122,23 @@ def test_a_whole_suite_run_from_testpaths_is_left_to_xdist(tmp_path):
         ["suite/tests"], pytest.Config.ArgsSource.TESTPATHS, tmp_path, tmp_path
     )
     assert xdist_width.pytest_xdist_auto_num_workers(config) is None
+
+
+def _cmdline_main(maxprocesses: int | None) -> int:
+    """`--maxprocesses` as the wrapper leaves it, before xdist turns `-n` into workers."""
+    config = SimpleNamespace(option=SimpleNamespace(maxprocesses=maxprocesses))
+    wrapper = xdist_width.pytest_cmdline_main(cast(pytest.Config, config))
+    next(wrapper)
+    return config.option.maxprocesses
+
+
+def test_an_explicit_n_above_the_session_ceiling_is_bounded_to_it(monkeypatch):
+    """`pytest -n 8` under a ceiling of 4 ran 8 workers beside k3s on daniel-box."""
+    monkeypatch.setenv("PYTEST_XDIST_AUTO_NUM_WORKERS", "4")
+    assert _cmdline_main(None) == 4
+    assert _cmdline_main(8) == 4
+
+
+def test_a_lower_maxprocesses_the_run_passed_is_kept(monkeypatch):
+    monkeypatch.setenv("PYTEST_XDIST_AUTO_NUM_WORKERS", "4")
+    assert _cmdline_main(2) == 2

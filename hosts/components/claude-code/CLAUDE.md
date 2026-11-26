@@ -161,9 +161,14 @@ directory.
   `PYTEST_XDIST_AUTO_NUM_WORKERS` in the unit. **chezmoi's `settings.json` carries
   the same variable** for both users, so keep the two equal.
 - **A session started with `claude agents` reads none of the unit's directives**: it lands in
-  `user-<uid>.slice`. `login-slice-caps.conf.j2` and `pytest-fanout-cap.conf.j2` carry
-  the unit's caps there for each uid in `claude_code_login_uids` and the agent's. A uid that
-  leaves the list loses both.
+  `user-<uid>.slice`. `login-slice-caps.conf.j2` carries the unit's memory caps there for each
+  uid in `claude_code_login_uids` and the agent's. A uid that leaves the list loses them.
+- **The pytest cap reaches three more places, each through its own file.**
+  `pytest-fanout-cap.conf.j2` sets it in every user manager's environment, which
+  `systemd-run --user` fan-out batches inherit. `sshd-pytest-cap.conf.j2` sets it with sshd's
+  `SetEnv` for every ssh session, `ssh host cmd` and the desktop app's remote server included.
+  pam_env reads no `environment.d` file, so the first never reaches an ssh session.
+  `tests/xdist_width.py` lowers an explicit `-n` above the cap to the cap.
 - **The background-shell pressure reaper is off** (`claude_code_rc_disable_bg_shell_pressure_reap`):
   Node reads the **cgroup**, so `free -m` reads clean while it kills backgrounded Bash tasks.
 - **The weekly restart uses `try-restart`**, which never starts a host kept stopped on purpose.
