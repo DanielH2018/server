@@ -34,6 +34,8 @@ FRESH_S = 120
 MERGED = "merged"
 ALONE = "alone"
 SPLIT = "split"
+# The holder found the PR's head conflicts with master, so its landing ends `merge-conflict`.
+CONFLICT = "conflict"
 _SSH_TIMEOUT_S = 30
 
 # One operation on the line, by name: its arguments as strings, its result as text.

@@ -151,12 +151,6 @@ def test_a_draft_a_rule_bars_is_left_out_of_the_batch(batch_of, capsys, fakes, w
             {"isDraft": False}, {}, "it is no longer an open draft", id="a-ready-pr"
         ),
         pytest.param(
-            {"mergeable": "CONFLICTING"},
-            {},
-            "it conflicts with master",
-            id="a-conflict",
-        ),
-        pytest.param(
             {"reviewDecision": "CHANGES_REQUESTED"},
             {},
             "PR #7 has changes requested",
@@ -164,7 +158,7 @@ def test_a_draft_a_rule_bars_is_left_out_of_the_batch(batch_of, capsys, fakes, w
         ),
         pytest.param(
             {},
-            {"conflicts": [head_of("7")]},
+            {"stack_conflicts": [head_of("7")]},
             "it does not merge onto the PRs stacked before it",
             id="a-conflict-with-the-stack",
         ),
@@ -180,6 +174,31 @@ def test_a_draft_the_landing_may_not_stack_is_left_in_the_line(
     assert hub.labels["7"] == set()
     assert f"leaving PR #7 out of the batch: {why}" in capsys.readouterr().out
     assert answers(the_line, "9") == [line.MERGED]
+
+
+@pytest.mark.parametrize(
+    ("over", "github"),
+    [
+        pytest.param(
+            {"mergeable": "CONFLICTING"}, {}, id="github-reads-it-conflicting"
+        ),
+        pytest.param(
+            {}, {"conflicts": [head_of("7")]}, id="it-does-not-merge-onto-master"
+        ),
+    ],
+)
+def test_a_draft_that_conflicts_with_master_is_told_its_landing_ends(
+    batch_of, capsys, over, github
+):
+    ln, hub, the_line = batch_of(drafts=("7", "9"), over={"7": over}, **github)
+    land(ln)
+    assert hub.merged == [OWN, "9"]
+    assert "leaving PR #7 out of the batch: it conflicts with master" in (
+        capsys.readouterr().out
+    )
+    assert answers(the_line, "7", "9") == [line.CONFLICT, line.MERGED]
+    # The branch the conflict check built is gone with the batch's.
+    assert hub.branches == {}
 
 
 @pytest.mark.parametrize(

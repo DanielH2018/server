@@ -363,6 +363,13 @@ jobs. Every landing that merges its PR directly takes the turn.
   drafts wait in the line for the next holder to stack. Otherwise each of them prints `a
   batch that tested PR #N was not green; it lands alone`, leaves the line and gets a run of
   its own.
+- A holder tells a draft in the line that it conflicts with master. A draft that GitHub
+  reads as `CONFLICTING`, or that does not stack and then does not merge onto master by
+  itself on a throwaway branch, gets `conflict` in its place (`batch._stack`). Its landing
+  ends `merge-conflict` on its next poll, instead of waiting out the line to learn it at
+  its turn. On 2026-11-26 PR 10235 conflicted from 14:53, one minute before its landing
+  started, and waited until 17:23 to learn it. GitHub's `mergeable` alone did not read
+  `CONFLICTING` for it when a holder checked at 15:24, so the holder also tries the merge.
 - A holder whose landing code is older than master's, found when it forms its batch, hands
   the turn to a landing of its PR from a fresh checkout of origin/master (`turn.HandOver`).
   Its log prints `land: this landing holds the landing turn, and its landing code is older
@@ -392,7 +399,11 @@ jobs. Every landing that merges its PR directly takes the turn.
   names. It merges as it stands, except an approved head that master moved past on a path
   the PR changes, which is refused with a rebase remedy (`stale_base.refuse_stale_approved`). A refused update marks the PR ready again.
   An update in the turn that GitHub refuses does not stop the landing: the PR keeps the run
-  the ready flip started.
+  the ready flip started. The exception is a refusal that names a merge conflict, which ends
+  the landing `merge-conflict` at once, in the turn and when a ready head rejoins the line
+  (`stale_base.refuse_conflict`). GitHub's merge follows no rename, so a PR that edits a
+  file master moved conflicts here although a local `git merge` of the same commits is
+  clean.
 - The turn is a lock on one file on daniel-box. A landing there locks the file itself, and a
   landing on daniel-server holds the same lock through an ssh session that lasts as long as
   the landing.
