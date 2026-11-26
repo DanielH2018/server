@@ -15,6 +15,7 @@ What is defined here is only what this repo adds: the fan-out lock pattern bound
 
 import functools
 from collections.abc import Callable, Sequence
+from typing import NamedTuple
 from pathlib import Path
 
 
@@ -74,6 +75,7 @@ __all__ = [
     "read_answer",
     "remove",
     "session_is_alive",
+    "WorktreeFacts",
     "worktree_facts",
 ]
 
@@ -231,10 +233,17 @@ def memoised_merged(
     return merged
 
 
-def worktree_facts(
-    checkout: str | None = None,
-) -> tuple[list[Worktree], Callable[[str], bool], Callable[[Worktree], bool], bool]:
-    """(worktrees, dirty, merged, ok): the staleness inputs, plus whether the read worked.
+class WorktreeFacts(NamedTuple):
+    """The staleness inputs `worktree_facts` reads, plus whether the read worked."""
+
+    trees: list[Worktree]
+    dirty: Callable[[str], bool]
+    merged: Callable[[Worktree], bool]
+    ok: bool
+
+
+def worktree_facts(checkout: str | None = None) -> WorktreeFacts:
+    """Read the worktrees and the verdict functions that judge them.
 
     `ok` is False only when the git call itself failed, never merely because it found no
     worktrees — `findings.py`'s `reap` needs that distinction to avoid releasing every claim
@@ -257,9 +266,9 @@ def worktree_facts(
         repo, base = checkout, default_ref(checkout)
     merged = memoised_merged(repo, functools.partial(is_merged, base=base or ""))
     if base is None:
-        return [], is_dirty, merged, False
+        return WorktreeFacts([], is_dirty, merged, False)
     result = git("worktree", "list", "--porcelain", cwd=repo, check=False)
     if result.returncode != 0:
-        return [], is_dirty, merged, False
+        return WorktreeFacts([], is_dirty, merged, False)
     trees = parse_worktree_list(result.stdout)
-    return trees, is_dirty, merged, True
+    return WorktreeFacts(trees, is_dirty, merged, True)
