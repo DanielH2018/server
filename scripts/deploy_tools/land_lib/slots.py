@@ -37,7 +37,7 @@ from typing import NoReturn
 
 
 from deploy_tools.land_lib import live_limit, pin_gate, turn
-from deploy_tools.land_lib.landing import Landing
+from deploy_tools.land_lib.landing import BRANCH, Landing
 from deploy_tools.land_lib.outcome import Verdict, say
 from deploy_tools.land_lib.serial_lock import SERIAL_NAME, record_holder
 from lib.path_kinds import moves_the_bundle
@@ -56,6 +56,9 @@ SLOT_NAMES = tuple(f"homelab-land-slot-{n}.lock" for n in range(COUNT))
 # merge to its verdict (the `landing-annotation` records' wait_ci plus deploy). A landing stuck
 # on a soak for longer would otherwise hold the turn for two merge budgets.
 DRAIN_S = 2400
+# How often a landing waiting for the serial landing reads whether its PR conflicts. One REST
+# read each, so 15 waiting landings spend 180 core calls an hour.
+CONFLICT_READ_S = 300
 _SERIAL_LIVE = f"landing of a PR that changes {live_limit.SERIAL_WHAT} is live"
 # The kinds of PR that change a k8s role, which a hold and the no-promotion window bar.
 _RENDERS = (live_limit.K8S, live_limit.SERIAL)
@@ -263,6 +266,34 @@ def _unless(in_window: bool, clears: Clears) -> Clears:
     return Clears.NEVER if in_window else clears
 
 
+def _conflict_reads(ln: Landing) -> Callable[[int], None]:
+    """The call a wait for the serial landing makes each poll, with the seconds it has waited.
+
+    It reads GitHub's `mergeable` for `ln`'s PR at once and every `CONFLICT_READ_S` after,
+    and again on the next poll after a CONFLICTING read, because master moving flips the field
+    for one read. Two CONFLICTING reads in a row end the landing `merge-conflict`. A read that
+    fails reads as no conflict.
+    """
+    due, conflicting = 0, False
+
+    def read(waited: int) -> None:
+        nonlocal due, conflicting
+        if waited < due and not conflicting:
+            return
+        view = live_limit.fail_open(lambda: ln.view("mergeable"))
+        now = bool(view) and view.get("mergeable") == "CONFLICTING"
+        if now and conflicting:
+            ln.die(
+                f"PR #{ln.opts.pr} conflicts with {BRANCH}, read while it waited in line for "
+                "the serial landing to end — rebase it, push, then re-run this",
+                1,
+                Verdict.MERGE_CONFLICT,
+            )
+        conflicting, due = now, waited + CONFLICT_READ_S
+
+    return read
+
+
 def _wait_out(ln: Landing, kind: str, lock: Locker, bar: Bar) -> Bar | None:
     """Wait while the bar on `ln`'s PR stays one that `bar.clears` clears.
 
@@ -270,19 +301,28 @@ def _wait_out(ln: Landing, kind: str, lock: Locker, bar: Bar) -> Bar | None:
     the latest, because no other landing merges while it lasts. A wait for the serial landing
     gives the turn back, so it holds nothing another landing needs, and only the budgets
     bound it: the serial lock is held from the serial draft's turn, through its CI run, its
-    merge and its deploy, which is longer than `DRAIN_S` measures.
+    merge and its deploy, which is longer than `DRAIN_S` measures. No holder of the turn
+    reads such a landing's head, so that wait reads its own PR's mergeability
+    (`_conflict_reads`).
 
     Returns:
         The bar the wait ended on: None once nothing bars the PR, a bar of another kind as
         soon as one applies, and `Clears.NEVER` with the reason when time ran out.
+
+    Raises:
+        Outcome: `merge-conflict`, when the PR conflicts with master during a wait for the
+            serial landing.
     """
     o = ln.opts
     budget = _budget_left(ln)
     if bar.clears is Clears.VERDICTS:
         budget = min(DRAIN_S, budget)
+    conflicts = _conflict_reads(ln) if bar.clears is Clears.SERIAL_ENDS else None
     waiting = OnChange(say)
     waited = 0
     while waited + o.merge_poll <= budget:
+        if conflicts:
+            conflicts(waited)
         waiting(f"{_WAITING[bar.clears]}: {bar.why}")
         ln.tools.sleep(o.merge_poll)
         waited += o.merge_poll
@@ -383,7 +423,8 @@ def refuse_before_merge(ln: Landing, head: str) -> None:
     - a k8s or serial PR waits while `DEPLOY_HOLD` holds;
     - every PR but a `live_limit.QUIET` one waits while another landing holds the serial
       lock. Outside the no-promotion window it waits in line, with the landing turn given
-      back, for that landing to end, and refuses only once its merge budgets run out. A
+      back, for that landing to end, and refuses only once its merge budgets run out. A PR
+      that conflicts with master during that wait ends `merge-conflict` there. A
       quiet PR waits on no promotion, so the serial landing's cannot fail it;
     - a serial PR waits while another landing holds a slot, and keeps the serial lock until
       its process ends, a fresh grading included, so every other PR waits for it. While it

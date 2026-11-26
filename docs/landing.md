@@ -241,7 +241,12 @@ is waited out first, as the bullets below say. A refused landing exits 75 with
   measures merge to verdict: the serial lock is held from the serial draft's turn, through
   its CI run, its merge and its deploy. A draft waits before its run, so it spends no run beside
   the serial landing. Inside the no-promotion window the serial landing cannot reach its
-  verdict, so a k8s PR there is still refused at once. On 2026-11-20, 20 of the day's 28
+  verdict, so a k8s PR there is still refused at once. No holder of the turn reads the head of
+  a landing that waits for the serial landing, so the wait reads its own PR's `mergeable`
+  every `slots.CONFLICT_READ_S`, and two CONFLICTING reads in a row end it `merge-conflict`
+  (`slots._conflict_reads`). On 2026-11-26, 6 of the 15 landings that waited behind a serial
+  landing ended `merge-conflict`, each only once it took the turn again
+  ([#10281](https://github.com/DanielH2018/server/issues/10281)). On 2026-11-20, 20 of the day's 28
   `refused` verdicts came from landing under a live serial landing
   ([#10010](https://github.com/DanielH2018/server/issues/10010)).
 - A PR that changes a k8s role is refused inside the no-promotion window around the weekly
