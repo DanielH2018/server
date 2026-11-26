@@ -309,10 +309,10 @@ The exporter explained most of the floor while it sent unconditional reads, abou
 hour. The table's other callers spend too little to explain the rest of the busy-hour residual. By elimination, that rest is a session's bare `gh` writes
 and the operator's own calls. Nothing has counted either of them.
 
-**`github_rest.github_get` records each authenticated read** as `api rest`, under the token the
+**`github_rest.github_get` records each authenticated read** as `api rest <path template>`, such as `api rest repos/{o}/{r}/actions/runs`, under the token the
 read sends and against the caller's session key. A systemd timer such as the builder or
 checkout-sync therefore shows under its own service name, and the builder's token gets a
-ledger file of its own. `gh-quota status` joins the identities whose windows in a bucket
+ledger file of its own. `gh-quota status --all` also totals each `api rest` template across the sessions of a window, below the session lines. `gh-quota status` joins the identities whose windows in a bucket
 share GitHub's limit and a reset within `RESET_DRIFT_S`, because every token one user owns
 spends that user's one quota. It prints one count line per joined window, named by its
 identities joined with `+`, and that line's spend beyond the ledger subtracts the recorded

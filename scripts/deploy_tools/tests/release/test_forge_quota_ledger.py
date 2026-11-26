@@ -36,4 +36,9 @@ def test_each_rest_request_is_counted_under_the_token_it_sends(monkeypatch, tmp_
     github.delete_package_version(7)
 
     (window,) = ledger.windows()
-    assert window.sessions == {"promote-session": {"api rest": 1, "api write": 1}}
+    assert window.sessions == {
+        "promote-session": {
+            "api rest users/{u}/packages/container/homelab-manifests/versions": 1,
+            "api write": 1,
+        }
+    }
