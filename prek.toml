@@ -525,10 +525,10 @@ files = "(\\.py$|^scripts/.*\\.sh$|^(prek\\.toml|pyproject\\.toml|uv\\.lock)$)"
 [[repos.hooks]]
 id = "static-ratchet-tests-lander"
 name = "Lander deadlines cover the soak"
-entry = "uv run --frozen pytest -q -n0 -p no:cacheprovider hosts/tests/test_lander_deadlines_cover_the_soak.py"
+entry = "uv run --frozen pytest -q -n0 -p no:cacheprovider hosts/tests/repo_crons/test_lander_deadlines_cover_the_soak.py"
 language = "system"
 pass_filenames = false
-files = "^(k8s/services\\.yml|\\.github/workflows/promote\\.yml|estate/.*|k8s/vars\\.yml|hosts/([^/]+/)?vars\\.yml|k8s/roles/[^/]+/(tasks|templates|defaults|files)/.*|hosts/lib/.*\\.py|hosts/components/(claude-code|renovate-agent|gh-quota)/.*|scripts/renderer/template_filters/[^/]+\\.py|scripts/(deploy_tools|renderer|lib|secrets_mgmt|validate)/.*\\.py|scripts/diagnostics/probe_lib/(core|host_reader|obs_api|health_checkout)\\.py|tests/_[^/]+\\.py|hosts/tests/[^/]+\\.py|pyproject\\.toml|uv\\.lock)$"
+files = "^(k8s/services\\.yml|\\.github/workflows/promote\\.yml|estate/.*|k8s/vars\\.yml|hosts/([^/]+/)?vars\\.yml|k8s/roles/[^/]+/(tasks|templates|defaults|files)/.*|hosts/lib/.*\\.py|hosts/components/(claude-code|renovate-agent|gh-quota)/.*|scripts/renderer/template_filters/[^/]+\\.py|scripts/(deploy_tools|renderer|lib|secrets_mgmt|validate)/.*\\.py|scripts/diagnostics/probe_lib/(core|host_reader|obs_api|health_checkout)\\.py|tests/_[^/]+\\.py|hosts/tests/(repo_crons/)?[^/]+\\.py|pyproject\\.toml|uv\\.lock)$"
 
 [[repos.hooks]]
 id = "static-ratchet-tests-checksum"

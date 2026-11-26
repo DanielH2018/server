@@ -15,7 +15,7 @@
 #
 # daniel-pi stays out until its release upgrade to 26.04 has finished.
 #
-# hosts/tests/test_who_apparmor_override.py holds the hosts and the expanded profile.
+# hosts/tests/host_config/test_who_apparmor_override.py holds the hosts and the expanded profile.
 depends:
   - apparmor
 files:

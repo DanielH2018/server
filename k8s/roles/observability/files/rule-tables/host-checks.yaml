@@ -356,7 +356,7 @@ groups:
       # AIDE scan (integrity_scans_aide_unscheduled_hosts in
       # hosts/components/integrity-scans/component.yml). A NotReporting rule's two literals
       # equal the DEADLINE_S its script renders:
-      # hosts/tests/test_integrity_scan_rule_literals.py pins them. daniel-pi's rules read
+      # hosts/tests/host_checks/test_integrity_scan_rule_literals.py pins them. daniel-pi's rules read
       # the `node-pi` job. The rules are `warning`, so Discord alone. Each NotReporting rule
       # fires from its deploy until the scan's first run writes the file, up to a week.
       # DECIDED: a failed scan holds until someone reviews it by hand, so each Failed rule carries
@@ -444,7 +444,7 @@ groups:
       # retention). A file that vanishes after a run pages from its deadline until 28 days after
       # its last sample; a cron that stops but leaves its file pages through the stale arm for as
       # long as it stays stopped. Both literals of each NotReporting rule
-      # equal the script's DEADLINE_S, and hosts/tests/test_host_maintenance.py pins
+      # equal the script's DEADLINE_S, and hosts/tests/host_checks/test_host_maintenance.py pins
       # them to it and the rule set to the hosts that run each cron.
       - alert: AptAutoremoveFailed
         hosts: {component: host-maintenance}
@@ -558,7 +558,7 @@ groups:
       # second arm covers a failed check that named no unit. The NotReporting absent arm carries
       # the same 28-day history guard as the weekly jobs above, because no file exists until a
       # host's package installs the timer, and the Pi updates once a day. Both 900s literals equal the script's
-      # DEADLINE_S, and hosts/tests/test_systemd_units_check.py pins them to it.
+      # DEADLINE_S, and hosts/tests/host_checks/test_systemd_units_check.py pins them to it.
       - alert: SystemdUnitsFailed
         hosts: {component: host-maintenance}
         expr: |
@@ -610,7 +610,7 @@ groups:
       # *.ucf-dist and *.dpkg-dist copies under /etc every hour, and writes success 0 once one is
       # older than a day. The day's grace lives in the script, so the rule needs no `for`. The
       # NotReporting absent arm carries the same 28-day history guard as the weekly jobs above. Both 10800s
-      # literals equal the script's DEADLINE_S, and hosts/tests/test_ucf_dist_check.py pins
+      # literals equal the script's DEADLINE_S, and hosts/tests/host_checks/test_ucf_dist_check.py pins
       # them to it.
       - alert: UcfDistPending
         hosts: {component: host-maintenance}

@@ -1,0 +1,230 @@
+"""The B2 host checks write a homelab_check_* textfile (M6 batch B2).
+
+ADR-0026 records the decision. Docs-refresh, the eval sweep and the
+secret-rotation audit each write `<check>.prom` through
+homelab-check-lib.sh, which the rules in `initial-setup-checks.yaml` read. (The Loki witness's
+cases are in test_loki_route_witness.py.) Each case runs the rendered script, or the rendered
+`on_exit` trap for the two scripts too large to run whole, with the real library and a `date`
+stub.
+
+Each case pins that the file carries success 1 for an up verdict and 0 for a down one, and the
+stamped time.
+
+Run: uv run pytest hosts/tests/host_checks/test_host_check_textfiles.py
+"""
+
+import re
+
+import pytest
+from _helpers import REPO
+from _shell_render import render_shell_script
+from lib.proc_testing import fake_bin, path_with, run, write_exec
+
+COMPONENTS = REPO / "hosts" / "components"
+CHECK_LIB = COMPONENTS / "check-lib" / "files" / "homelab-check-lib.sh"
+EPOCH = 1760000000
+OVERRIDES = {
+    "domain": "example.test",
+    "k3s_metallb_ingress_vip": "10.0.0.240",
+    "sys_user": "ubuntu",
+}
+
+
+def _render(template: str) -> str:
+    """The script as its host component renders it."""
+    (path,) = COMPONENTS.glob(f"*/templates/{template}")
+    return render_shell_script(
+        "components", path.parents[1].name, template, overrides=OVERRIDES
+    )
+
+
+def _series(textfile_dir, check) -> dict[str, str]:
+    """`name{labels}` -> value for every sample line in `<check>.prom`."""
+    lines = (textfile_dir / f"{check}.prom").read_text().splitlines()
+    return dict(line.rsplit(" ", 1) for line in lines if not line.startswith("#"))
+
+
+def _env(tmp_path, **extra):
+    textfile_dir = tmp_path / "textfile"
+    textfile_dir.mkdir(exist_ok=True)
+    bin_dir = fake_bin(
+        tmp_path / "bin", date=f"echo {EPOCH}\n", logger='echo "$@" >> "$LOGGED"\n'
+    )
+    env = {
+        "TEXTFILE_DIR": str(textfile_dir),
+        "LOGGED": str(tmp_path / "logged"),
+        "PATH": path_with(bin_dir),
+        **extra,
+    }
+    return textfile_dir, env
+
+
+def _logged(tmp_path) -> str:
+    logged = tmp_path / "logged"
+    return logged.read_text() if logged.exists() else ""
+
+
+# --- docs-refresh and eval-run: the on_exit trap, lifted out of the render -----------------
+
+
+def _on_exit(script: str, name: str) -> tuple[str, int]:
+    """(the trap's body, the DEADLINE_S the script renders) for a rendered script."""
+    match = re.search(r"^on_exit\(\) \{\n.*?^\}$", script, re.M | re.S)
+    assert match, f"on_exit() is gone from {name}; this module lifts it by name"
+    [deadline] = re.findall(r"^DEADLINE_S=(\d+)$", script, re.M)
+    return match.group(0), int(deadline)
+
+
+TRAP_SCRIPTS = {
+    "docs-refresh": "docs-refresh.sh.j2",
+    "eval-run": "eval-run.sh.j2",
+}
+
+
+def _run_trap(tmp_path, check, status):
+    template = TRAP_SCRIPTS[check]
+    body, deadline = _on_exit(_render(template), template)
+    textfile_dir, env = _env(tmp_path)
+    driver = tmp_path / "driver.sh"
+    write_exec(
+        driver,
+        "set -uo pipefail\n"
+        f"source {CHECK_LIB}\n"
+        f"{body}\n"
+        f"DEADLINE_S={deadline}\n"
+        'PUSH_MSG="a message"\n'
+        f"PUSH_STATUS={status}\n"
+        "on_exit\n",
+    )
+    run(["bash", str(driver)], env=env, check=True)
+    return textfile_dir, deadline
+
+
+@pytest.mark.parametrize("check", sorted(TRAP_SCRIPTS))
+def test_an_up_exit_writes_success_one_with_the_deadline(tmp_path, check):
+    textfile_dir, deadline = _run_trap(tmp_path, check, "up")
+
+    series = _series(textfile_dir, check)
+    assert series[f'homelab_check_success{{check="{check}"}}'] == "1"
+    assert series[
+        f'homelab_check_last_run_timestamp_seconds{{check="{check}"}}'
+    ] == str(EPOCH)
+    assert series[f'homelab_check_deadline_seconds{{check="{check}"}}'] == str(deadline)
+    assert "status=up a message" in _logged(tmp_path)
+
+
+@pytest.mark.parametrize("check", sorted(TRAP_SCRIPTS))
+def test_a_down_exit_writes_success_zero_and_logs_its_status_line(tmp_path, check):
+    textfile_dir, _ = _run_trap(tmp_path, check, "down")
+
+    assert (
+        _series(textfile_dir, check)[f'homelab_check_success{{check="{check}"}}'] == "0"
+    )
+    assert "status=down a message" in _logged(tmp_path)
+
+
+# --- secret-rotation-audit: the audit's exit code is the verdict ------------------------------
+
+
+def _run_audit(tmp_path, audit_rc=0, kit_rc=0):
+    """Run the rendered wrapper in a scratch checkout with `uv` standing in for the audit.
+
+    The stub records its argv, so a case can read which flag the wrapper asked for. Asked for
+    `recovery_kit.py check`, it prints a reason and exits `kit_rc`.
+    """
+    repo = tmp_path / "server"
+    (repo / "secrets").mkdir(parents=True)
+    (repo / "secrets" / "secrets.yml").write_text("a: 1\n")
+    (repo / "secrets" / "secret_rotation.yml").write_text("b: 1\n")
+    uv = write_exec(
+        tmp_path / "uv",
+        '#!/usr/bin/env bash\necho "$*" >> "$UV_ARGV"\n'
+        'case "$*" in *recovery_kit.py*) echo "the kit is stale"; exit $STUB_KIT_RC ;; esac\n'
+        "exit $STUB_AUDIT_RC\n",
+    )
+    body = _render("secret-rotation-audit.sh.j2")
+    audit_check_lib = "/usr/lib/homelab/homelab-check-lib.sh"
+    for needle in (
+        audit_check_lib,
+        "/home/ubuntu/server",
+        "/home/ubuntu/.local/bin/uv",
+    ):
+        assert needle in body, f"secret-rotation-audit no longer references {needle}"
+    body = (
+        # The checkout path first: the library path substituted below sits under /home/ubuntu/server.
+        body.replace("/home/ubuntu/server", str(repo))
+        .replace("/home/ubuntu/.local/bin/uv", str(uv))
+        .replace(audit_check_lib, str(CHECK_LIB))
+    )
+    script = write_exec(tmp_path / "secret-rotation-audit.sh", body)
+    textfile_dir, env = _env(
+        tmp_path,
+        STUB_AUDIT_RC=str(audit_rc),
+        STUB_KIT_RC=str(kit_rc),
+        UV_ARGV=str(tmp_path / "uv-argv"),
+    )
+    # `gh` answers the token check.
+    stubs = fake_bin(tmp_path / "bin", gh="exit 0\n")
+    env["PATH"] = path_with(stubs)
+    result = run([str(script)], env=env, check=False)
+    return textfile_dir, result.returncode
+
+
+def test_a_clean_audit_writes_success_one_and_exits_zero(tmp_path):
+    textfile_dir, code = _run_audit(tmp_path, audit_rc=0)
+
+    series = _series(textfile_dir, "secret-rotation-audit")
+    assert series['homelab_check_success{check="secret-rotation-audit"}'] == "1"
+    assert (
+        series['homelab_check_deadline_seconds{check="secret-rotation-audit"}']
+        == "90000"
+    )
+    assert code == 0
+    assert "secret_rotation.py audit --verdict" in (tmp_path / "uv-argv").read_text()
+
+
+def test_a_fresh_recovery_kit_is_clean(tmp_path):
+    textfile_dir, _ = _run_audit(tmp_path, kit_rc=0)
+
+    assert "secrets_mgmt/recovery_kit.py check" in (tmp_path / "uv-argv").read_text()
+    assert (
+        _series(textfile_dir, "recovery-kit")[
+            'homelab_check_success{check="recovery-kit"}'
+        ]
+        == "1"
+    )
+
+
+def test_a_stale_recovery_kit_is_flagged(tmp_path):
+    """The kit writes its own down verdict and leaves the audit's verdict and exit code alone."""
+    textfile_dir, code = _run_audit(tmp_path, audit_rc=0, kit_rc=1)
+
+    assert (
+        _series(textfile_dir, "recovery-kit")[
+            'homelab_check_success{check="recovery-kit"}'
+        ]
+        == "0"
+    )
+    assert "-t recovery-kit status=down the kit is stale" in _logged(tmp_path)
+    assert "--extra-down" not in (tmp_path / "uv-argv").read_text()
+    assert (
+        _series(textfile_dir, "secret-rotation-audit")[
+            'homelab_check_success{check="secret-rotation-audit"}'
+        ]
+        == "1"
+    )
+    assert code == 0
+
+
+def test_a_failed_audit_writes_success_zero_and_keeps_its_exit_code_for_the_timer(
+    tmp_path,
+):
+    textfile_dir, code = _run_audit(tmp_path, audit_rc=1)
+
+    assert (
+        _series(textfile_dir, "secret-rotation-audit")[
+            'homelab_check_success{check="secret-rotation-audit"}'
+        ]
+        == "0"
+    )
+    assert code == 1

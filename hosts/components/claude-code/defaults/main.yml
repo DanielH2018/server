@@ -411,7 +411,7 @@ claude_code_guardrail_audit_minute: "*/5"
 # Watched under the key `claude-guardrail`: what decides what a session may do. Write and attribute
 # changes only (`-p wa`). A directory watch covers its whole subtree. The renovate-agent home is a
 # literal because that component's defaults do not reach this one;
-# hosts/tests/test_claude_guardrail_audit.py holds it equal to renovate_agent_home.
+# hosts/tests/repo_crons/test_claude_guardrail_audit.py holds it equal to renovate_agent_home.
 claude_code_guardrail_audit_paths:
   - /etc/claude-land/approval-paths
   - /usr/lib/homelab/claude-agent-setup

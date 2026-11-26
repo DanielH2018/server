@@ -23,5 +23,5 @@ the result into `evals/history.json`, then publishes it.
   detail* has the REGRESSED-case commit rule and why there is no non-hermetic fallback.
 
 ENFORCED: hosts/lib/tests/test_eval_sweep_component.py, and the tests in
-hosts/tests/test_eval_sweep_cron.py and test_eval_run_failure_path.py, which read the
+hosts/tests/repo_crons/test_eval_sweep_cron.py and test_eval_run_failure_path.py, which read the
 rendered script.

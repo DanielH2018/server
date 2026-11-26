@@ -513,7 +513,7 @@ among them.
 `tests/services/alert_rules/test_storage_rule_literals.py` holds `PVCBelowFreeFloor` to the transient
 valheim declares, `LonghornSnapshotNearCap` to the jellyfin snapshot cap, and
 `LonghornVolumeDegraded` to `longhorn_robustness.SAFE_ROBUSTNESS`.
-`hosts/tests/test_etcd_quota_and_its_monitor_agree.py` holds `EtcdDBNearQuota`'s
+`hosts/tests/k3s/test_etcd_quota_and_its_monitor_agree.py` holds `EtcdDBNearQuota`'s
 quota to the one k3s runs. The reasoning behind each rule (the one-hot `state` label, the
 `max by` that reads a doubled scrape once, the claim census, why an absent etcd series is
 `ScrapeTargetDown`'s) is in `k8s/roles/observability/files/rules/storage.yaml`.

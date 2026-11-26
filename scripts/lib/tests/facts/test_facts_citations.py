@@ -235,8 +235,8 @@ def test_a_non_line_numbered_span_is_flagged_as_no_citation(line):
         ),
         ("ENFORCED: `tests/repo/_render_gate.py:28`", ["tests/repo/_render_gate.py"]),
         (
-            "pinned by `hosts/tests/test_aide_check.py::test_x`",
-            ["hosts/tests/test_aide_check.py"],
+            "pinned by `hosts/tests/host_checks/test_aide_check.py::test_x`",
+            ["hosts/tests/host_checks/test_aide_check.py"],
         ),
     ],
 )
