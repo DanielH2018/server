@@ -22,6 +22,7 @@ EXPECTED_IGNORED = frozenset(
         ".fanout",  # the issue-fanout bus (scripts/dev/fanout_*.py)
         ".remember",  # the remember plugin's session store
         ".pytest_cache",
+        ".hypothesis",  # constants Hypothesis reads from the source, rebuilt on demand
         ".ruff_cache",
         ".ansible",  # ansible's own tmp/collections cache when it runs from the root
         # A checkout that ran ansible with a `log_path` keeps its file until the `ansible-log` tasks

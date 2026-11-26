@@ -63,6 +63,7 @@ dev = [                              # `dev` is uv's default group for `uv run`/
   "lxml",                           # scripts/freshrss/scrape_feed.py runs XPath 1.0 with functions
   "lxml-stubs",                     # lxml.etree is a C extension; ty resolves it only from these
   "loguru",                         # karakeep's test_time_tagger_logging.py runs the tagger's real handler setup
+  "hypothesis>=6.170",              # property tests (test_fake_remux_ledger.py)
 ]
 # Tools only prek hooks and hand-run commands call, never a test. The CI jobs that run no lint
 # hook set UV_NO_GROUP=lint, so a lint tool's install (actionlint-py downloads its binary from
