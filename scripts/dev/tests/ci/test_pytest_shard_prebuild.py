@@ -19,7 +19,7 @@ CENSUS_FILES = [
     "scripts/tests/test_census_rows_test_modules.py",
     "scripts/tests/test_census_rows_test_renders.py",
 ]
-FLEET_CONSUMER = "scripts/renderer/tests/test_renderer_standalone_map.py"
+FLEET_CONSUMER = "scripts/renderer/tests/bundle/test_renderer_standalone_map.py"
 PLAIN = "scripts/dev/tests/ci/test_pytest_shard_durations.py"
 
 

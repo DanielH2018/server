@@ -1,0 +1,221 @@
+"""The documents the bootstrap procedure applies by hand (D5 steps 28 and 29, R4 PR 7b).
+
+Scope of "applied by hand": the OCIRepository and the root from `cluster/flux-deferred/` (steps 5
+and 9) and every `flux/<tag>.yaml` Kustomization (step 6). Step 3 applies `components.yaml`
+alone, and the test does not scan it: `components.yaml` quotes `${var:=default}` in a CRD
+description. `cluster/flux/secret.yaml` is not applied by hand either. It holds `${...}`
+placeholders and arrives through the `flux` tag's own Kustomization, with substitution, once
+cluster-vars is up.
+
+From D5 step 29 the flux role is flux-owned, so its render also writes `flux/flux.yaml`: the
+Kustomization `flux` at `prune: false` and `flux-deferred` at `prune: true`. The sync objects
+`flux-deferred` applies keep D1's source, so a change to it fails here rather than cutting
+Flux off from its artifact.
+
+Run: uv run pytest scripts/renderer/tests/manifests/test_renderer_bootstrap_documents.py
+"""
+
+import copy
+
+import pytest
+
+from deploy_tools import bootstrap_drill as drill
+from deploy_tools.bundle_census import NAMED_MEMBERS
+from lib import yaml_fast
+from lib.exit_codes import RENDER_OK
+from lib.k8s_roles import k8s_tags
+from renderer import homelab_render
+
+SYNC = ("cluster", "flux-deferred", "sync.yaml")
+# The two names a hand-applied closure must never reach: `flux-deferred` applies the root.
+FORBIDDEN_IN_CLOSURE = frozenset({"flux-deferred", "homelab"})
+
+
+def closure_problems(depends: dict[str, list[str]], plumbing: set[str]) -> list[str]:
+    """Name each plumbing tag whose closure reaches `flux-deferred` or the root."""
+    return [
+        f"{tag}: the dependsOn closure reaches {sorted(hit)}"
+        for tag in sorted(plumbing)
+        if (hit := drill.dependson_closure(depends, {tag}) & FORBIDDEN_IN_CLOSURE)
+    ]
+
+
+def sync_problems(docs: list[dict]) -> list[str]:
+    """Name what `cluster/flux-deferred/` lacks of the objects steps 5 and 9 apply."""
+    held = {(d.get("kind"), d.get("metadata", {}).get("name")) for d in docs}
+    return [
+        f"flux-deferred holds no {kind} {name}"
+        for kind, name in (("OCIRepository", "homelab"), ("Kustomization", "homelab"))
+        if (kind, name) not in held
+    ]
+
+
+def _strings(node):
+    if isinstance(node, str):
+        yield node
+    elif isinstance(node, dict):
+        for value in node.values():
+            yield from _strings(value)
+    elif isinstance(node, list):
+        for value in node:
+            yield from _strings(value)
+
+
+def placeholder_problems(docs: list[dict]) -> list[str]:
+    """Name each string of a hand-applied document that holds `${` or `$$`.
+
+    A hand apply runs no substitution, so such a string reaches the API server verbatim.
+    """
+    return [
+        f"{d.get('kind')} {d.get('metadata', {}).get('name')}: {s!r} holds a placeholder"
+        for d in docs
+        for s in _strings(d)
+        if "${" in s or "$$" in s
+    ]
+
+
+def _docs(path):
+    return [d for d in yaml_fast.safe_load_all(path.read_text()) if d]
+
+
+def _sync(out):
+    return _docs(out.joinpath(*SYNC))
+
+
+@pytest.fixture(scope="module")
+def flux_render(tmp_path_factory):
+    """`homelab-render cluster --role flux` at the head, where `flux` is flux-owned."""
+    out = tmp_path_factory.mktemp("flux") / "out"
+    assert homelab_render.cluster(out, ["flux"], None) == RENDER_OK
+    return out
+
+
+@pytest.fixture(scope="module")
+def published_render(tmp_path_factory):
+    """Two flux-owned tags with a `dependsOn` chain, plus every plumbing tag already owned."""
+    out = tmp_path_factory.mktemp("published") / "out"
+    plumbing = set(NAMED_MEMBERS) & k8s_tags()
+    roles = sorted({"traefik", "traefik-crds"} | plumbing)
+    assert homelab_render.cluster(out, roles, None) == RENDER_OK
+    return out, plumbing
+
+
+def test_the_flux_role_renders_the_sync_directory(flux_render):
+    assert sync_problems(_sync(flux_render)) == []
+
+
+def test_a_renderer_that_gates_the_sync_directory_on_the_owner_is_caught():
+    assert sync_problems([]) == [
+        "flux-deferred holds no OCIRepository homelab",
+        "flux-deferred holds no Kustomization homelab",
+    ]
+
+
+def test_the_documents_applied_by_hand_hold_no_placeholder(
+    flux_render, published_render
+):
+    by_hand = [d for d in _sync(flux_render) if d["metadata"]["name"] == "homelab"]
+    for path in sorted((published_render[0] / "flux").glob("*.yaml")):
+        if path.name != "kustomization.yaml":
+            by_hand += _docs(path)
+    assert len(by_hand) >= 5
+    assert placeholder_problems(by_hand) == []
+
+
+@pytest.mark.parametrize("owner", ["${owner}", "$$owner"])
+def test_an_ocirepository_url_holding_a_placeholder_is_caught(flux_render, owner):
+    docs = _sync(flux_render)
+    docs[0]["spec"]["url"] = f"oci://ghcr.io/{owner}/homelab-manifests"
+    assert placeholder_problems(docs)
+
+
+def test_no_plumbing_closure_reaches_flux_deferred_or_the_root(published_render):
+    out, plumbing = published_render
+    depends = {}
+    for path in (out / "flux").glob("*.yaml"):
+        for doc in _docs(path):
+            if doc["kind"] == "Kustomization" and "spec" in doc:
+                names = doc["spec"].get("dependsOn", [])
+                depends[doc["metadata"]["name"]] = [d["name"] for d in names]
+    # The floor: traefik's chain is non-empty, so a renderer that dropped dependsOn fails here.
+    assert drill.dependson_closure(depends, {"traefik"}) >= {
+        "traefik-crds",
+        "cluster-vars",
+    }
+    # Every rendered Kustomization, a superset of the plumbing tags that are flux-owned.
+    assert closure_problems(depends, set(depends)) == []
+    assert plumbing <= set(depends)
+
+
+def test_a_closure_reaching_flux_deferred_or_the_root_is_caught():
+    assert closure_problems({"a": ["cluster-vars"], "cluster-vars": []}, {"a"}) == []
+    assert closure_problems({"a": ["b"], "b": ["homelab"]}, {"a"})
+    assert closure_problems({"a": ["flux-deferred"]}, {"a"})
+
+
+def test_flux_renders_prune_false_and_flux_deferred_prune_true(flux_render):
+    """Flux's own CRDs are never pruned, and `flux-deferred`'s prune deletes `verify-drill`."""
+    docs = _docs(flux_render / "flux" / "flux.yaml")
+    assert [(d["metadata"]["name"], d["spec"]["prune"]) for d in docs] == [
+        ("flux", False),
+        ("flux-deferred", True),
+    ]
+
+
+# D1's values, written out rather than read from the role's defaults or from `forge.py`, so a
+# change to either fails here instead of moving the pin with it.
+SOURCE_URL = "oci://ghcr.io/danielh2018/homelab-manifests"
+VERIFY = {
+    "provider": "cosign",
+    "matchOIDCIdentity": [
+        {
+            "issuer": r"^https://token\.actions\.githubusercontent\.com$",
+            "subject": (
+                r"^https://github\.com/DanielH2018/server/\.github/workflows/"
+                r"promote\.yml@refs/heads/master$"
+            ),
+        }
+    ],
+}
+PINNED = {"homelab": {"tag": "prod"}, "last-good": {"tag": "last-good"}}
+
+
+def sync_pin_problems(docs: list[dict]) -> list[str]:
+    """Each way the sync OCIRepositories differ from D1's URL, `ref` and `verify` block."""
+    repos = {
+        d["metadata"]["name"]: d["spec"] for d in docs if d["kind"] == "OCIRepository"
+    }
+    problems = [f"no OCIRepository {name}" for name in sorted(set(PINNED) - set(repos))]
+    for name, ref in sorted(PINNED.items()):
+        spec = repos.get(name)
+        if spec is None:
+            continue
+        for field, want in (("url", SOURCE_URL), ("ref", ref), ("verify", VERIFY)):
+            if spec.get(field) != want:
+                problems.append(f"{name}.{field} is {spec.get(field)!r}, not {want!r}")
+    return problems
+
+
+def test_sync_pin_problems_is_clean_on_the_render(flux_render):
+    assert sync_pin_problems(_sync(flux_render)) == []
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("url", "oci://ghcr.io/someone-else/homelab-manifests"),
+        ("ref", {"tag": "latest"}),
+        ("verify", None),
+    ],
+    ids=["url", "ref", "verify"],
+)
+def test_sync_pin_problems_is_flagged_on_a_moved_source(flux_render, field, value):
+    docs = copy.deepcopy(_sync(flux_render))
+    repo = next(
+        d
+        for d in docs
+        if d["metadata"]["name"] == "homelab" and d["kind"] == "OCIRepository"
+    )
+    repo["spec"][field] = value
+    [problem] = sync_pin_problems(docs)
+    assert problem.startswith(f"homelab.{field} is ")

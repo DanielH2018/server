@@ -2,7 +2,7 @@
 
 `docs/adr/0028-the-renderer-supports-a-closed-jinja-subset.md` is the specification.
 `environment.renderer_env` refuses any filter, test or lookup these literals do not name, and
-`scripts/renderer/tests/test_renderer_dialect.py` holds every template and variable value of
+`scripts/renderer/tests/manifests/test_renderer_dialect.py` holds every template and variable value of
 the k8s roles, and the ADR's tables, to them.
 """
 

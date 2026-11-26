@@ -1,0 +1,329 @@
+"""The manifest a host package carries: the schema reconcile parses, and what feeds it.
+
+Each render reads a fixture tree under `tmp_path`, written by `conftest.py`'s `hosts`.
+
+Run: uv run pytest scripts/renderer/tests/host/test_renderer_host_manifest.py
+"""
+
+import importlib.machinery
+import json
+import types
+
+import pytest
+
+from lib.repo_paths import REPO
+from renderer.renderer_lib import host as host_mode
+from renderer.renderer_lib.cluster import RenderRefused
+from renderer.renderer_lib.environment import RenderError
+from renderer.renderer_lib.host_manifest import MANIFEST
+
+
+UNITS = "/usr/lib/systemd/system"
+
+
+def _reconcile():
+    """`hosts/lib/homelab-reconcile` as a module, so its own parser judges the manifest."""
+    path = REPO / "hosts" / "lib" / "homelab-reconcile"
+    loader = importlib.machinery.SourceFileLoader("homelab_reconcile", str(path))
+    module = types.ModuleType(loader.name)
+    loader.exec_module(module)
+    return module
+
+
+def _manifest(package) -> dict:
+    return json.loads(package.files[MANIFEST][0])
+
+
+def test_a_host_manifest_lists_units_links_policies_and_legacy_entries(hosts):
+    component = {
+        "files": [
+            {"src": "u", "dst": f"{UNITS}/homelab-beat.service"},
+            {"src": "u", "dst": f"{UNITS}/homelab-beat.timer"},
+            {"src": "u", "dst": f"{UNITS}/homelab-updater.timer.d/50-homelab.conf"},
+        ],
+        "enable": {"homelab-beat.timer": "timers.target"},
+        "units": {"homelab-beat.service": {"policy": "manual"}},
+        "legacy": [
+            {"path": "/usr/local/bin/beat.sh"},
+            {"cron": "Beat heartbeat", "user": "{{ sys_user }}"},
+        ],
+    }
+    root = hosts({"components": ["beat"]}, {"beat": component}, {"u": ""})
+    updater = hosts(
+        {"files": [{"src": "u", "dst": f"{UNITS}/homelab-updater.service"}]},
+        where="packages/homelab-updater",
+    )
+    (updater / "packages" / "homelab-updater" / "u").write_text("")
+
+    package = host_mode.render_host("daniel-pi", root)
+
+    text = package.files[MANIFEST][0].decode()
+    reconcile = _reconcile()
+    parsed = reconcile.parse_manifest(text)
+    legacy = (
+        reconcile.LegacyPath("/usr/local/bin/beat.sh"),
+        reconcile.LegacyCron("Beat heartbeat", "ubuntu"),
+    )
+    assert parsed == reconcile.Manifest(
+        units={
+            "homelab-beat.service": "manual",
+            "homelab-beat.timer": None,
+            "homelab-updater.service": None,
+            "homelab-updater.timer": None,
+        },
+        enable_links=frozenset({"homelab-beat.timer"}),
+        legacy=legacy,
+        handoffs=(
+            reconcile.Handoff(
+                (
+                    "homelab-beat.service",
+                    "homelab-beat.timer",
+                    "homelab-updater.timer",
+                ),
+                legacy,
+            ),
+        ),
+        unknown_arms=(),
+        activations={},
+        arms=dict.fromkeys(("libvirt", "lines", "ufw", "users")),
+        secrets_digest=None,
+    )
+    assert [
+        json.loads(reconcile.legacy_key(e)) for e in parsed.legacy
+    ] == package.legacy
+
+
+@pytest.mark.parametrize("on", [True, False])
+def test_a_units_entry_records_its_policy_only_while_its_when_holds(hosts, on):
+    component = {
+        "defaults": {"beat_on": on},
+        "files": [
+            {"src": "u", "dst": f"{UNITS}/homelab-beat.service", "when": "beat_on"}
+        ],
+        "units": {
+            "homelab-beat.service": {"policy": "manual", "when": "beat_on"},
+        },
+    }
+    root = hosts({"components": ["beat"]}, {"beat": component}, {"u": ""})
+
+    units = _manifest(host_mode.render_host("daniel-pi", root))["units"]
+
+    assert units.get("homelab-beat.service") == ({"policy": "manual"} if on else None)
+
+
+def test_the_real_updater_s_units_join_a_host_manifest(tmp_path):
+    hosts = tmp_path / "hosts"
+    (hosts / "packages").mkdir(parents=True)
+    (hosts / "packages" / "homelab-updater").symlink_to(
+        REPO / "hosts/packages/homelab-updater"
+    )
+    (hosts / "components").mkdir()
+    (hosts / "components" / "reconcile").symlink_to(REPO / "hosts/components/reconcile")
+    (hosts / "lib").symlink_to(REPO / "hosts/lib")
+    (hosts / "keys").symlink_to(REPO / "hosts/keys")
+    (hosts / "daniel-pi").mkdir()
+    (hosts / "daniel-pi" / "package.yml").write_text("components: [reconcile]\n")
+
+    units = _manifest(host_mode.render_host("daniel-pi", hosts))["units"]
+
+    assert {
+        "homelab-reconcile.service",
+        "homelab-updater.service",
+        "homelab-updater.timer",
+    } <= set(units)
+
+
+def test_a_shared_package_ships_no_manifest(hosts):
+    root = hosts({"description": "x"}, where="packages/homelab-updater")
+    assert host_mode.render_package("homelab-updater", root).files == {}
+
+
+@pytest.mark.parametrize(
+    ("package", "where", "message"),
+    [
+        (
+            {"legacy": [{"path": "/usr/local/bin/x"}]},
+            "packages/homelab-updater",
+            "a shared package lists no legacy entry",
+        ),
+        (
+            {"units": {"homelab-gone.timer": {"policy": "manual"}}},
+            "daniel-pi",
+            "no package installs them",
+        ),
+        (
+            {"enable": {"ssh.service": "multi-user.target"}},
+            "daniel-pi",
+            r"enable links name \['ssh.service'\]",
+        ),
+        (
+            {"files": [{"src": "u", "dst": f"{UNITS}/foo.mount.d/50-homelab.conf"}]},
+            "daniel-pi",
+            r"drop-ins target \['foo.mount'\]",
+        ),
+    ],
+)
+def test_a_manifest_entry_no_package_backs_is_flagged(hosts, package, where, message):
+    root = hosts(package, where=where)
+    (root / where / "u").write_text("")
+    render = host_mode.render_host if where == "daniel-pi" else host_mode.render_package
+    with pytest.raises(RenderRefused, match=message):
+        render(where.rsplit("/", 1)[-1], root)
+
+
+def test_a_legacy_entry_reading_a_secret_is_flagged(hosts):
+    root = hosts({"legacy": [{"path": "/srv/{{ email }}/x"}]})
+    with pytest.raises(RenderError, match="email is a secret key"):
+        host_mode.render_host("daniel-pi", root)
+
+
+def _gated(when: str) -> dict:
+    """A host package installing one timer, linked only while `when` is true."""
+    return {
+        "files": [{"src": "u", "dst": f"{UNITS}/homelab-beat.timer"}],
+        "enable": {"homelab-beat.timer": {"target": "timers.target", "when": when}},
+    }
+
+
+@pytest.mark.parametrize(("when", "linked"), [("true", True), ("false", False)])
+def test_an_enable_link_ships_only_while_its_when_is_true(hosts, when, linked):
+    root = hosts(_gated(when))
+    (root / "daniel-pi" / "u").write_text("")
+    package = host_mode.render_host("daniel-pi", root)
+    assert (package.enable_links() == ["homelab-beat.timer"]) is linked
+    assert _manifest(package)["enable_links"] == package.enable_links()
+
+
+def test_an_enable_when_reads_the_host_context(hosts):
+    # daniel-pi's host_vars carry sys_user, so the expression sees the inventory, not a stub.
+    root = hosts(_gated("sys_user == 'ubuntu'"))
+    (root / "daniel-pi" / "u").write_text("")
+    assert host_mode.render_host("daniel-pi", root).enable_links() == [
+        "homelab-beat.timer"
+    ]
+
+
+@pytest.mark.parametrize(
+    ("when", "error", "message"),
+    [
+        ("'false'", RenderRefused, "not a boolean"),
+        ("no_such_flag", RenderError, "no_such_flag"),
+    ],
+)
+def test_an_enable_when_that_is_no_boolean_is_flagged(hosts, when, error, message):
+    root = hosts(_gated(when))
+    (root / "daniel-pi" / "u").write_text("")
+    with pytest.raises(error, match=message):
+        host_mode.render_host("daniel-pi", root)
+
+
+@pytest.mark.parametrize("on", [True, False])
+def test_a_legacy_entry_ships_without_its_when_only_while_it_holds(hosts, on):
+    root = hosts(
+        {
+            "defaults": {"beat_on": on},
+            "legacy": [{"path": "/x.prom", "when": "not beat_on"}],
+        }
+    )
+
+    package = host_mode.render_host("daniel-pi", root)
+
+    expected = [] if on else [{"path": "/x.prom"}]
+    assert package.legacy == expected
+    reconcile = _reconcile()
+    parsed = reconcile.parse_manifest(json.dumps(_manifest(package)))
+    assert [json.loads(reconcile.legacy_key(e)) for e in parsed.legacy] == expected
+
+
+def test_each_handoff_holds_only_its_own_specs_units_and_entries(hosts):
+    components = {
+        "one": {
+            "files": [{"src": "u", "dst": f"{UNITS}/homelab-one.timer"}],
+            "legacy": [{"path": "/etc/cron.d/one"}],
+        },
+        "two": {
+            "files": [{"src": "u", "dst": f"{UNITS}/homelab-two.timer"}],
+            "legacy": [{"path": "/etc/cron.d/two"}],
+        },
+        "files-only": {"legacy": [{"path": "/usr/local/bin/stale"}]},
+        "link-only": {
+            "enable": {"homelab-updater.timer": "timers.target"},
+            "legacy": [{"path": "/usr/local/bin/other"}],
+        },
+    }
+    root = hosts({"components": list(components)}, components, {"u": ""})
+    updater = hosts(
+        {"files": [{"src": "u", "dst": f"{UNITS}/homelab-updater.timer"}]},
+        where="packages/homelab-updater",
+    )
+    (updater / "packages" / "homelab-updater" / "u").write_text("")
+
+    assert host_mode.render_host("daniel-pi", root).handoffs == [
+        {"units": ["homelab-one.timer"], "legacy": [{"path": "/etc/cron.d/one"}]},
+        {"units": ["homelab-two.timer"], "legacy": [{"path": "/etc/cron.d/two"}]},
+    ]
+
+
+@pytest.mark.parametrize(
+    "handoffs",
+    [
+        {},
+        [{"units": ["homelab-x.timer"]}],
+        [{"units": ["not a unit"], "legacy": []}],
+        [{"units": [], "legacy": [{"nope": "x"}]}],
+    ],
+)
+def test_reconcile_refuses_malformed_handoffs(handoffs):
+    reconcile = _reconcile()
+
+    with pytest.raises(reconcile.ManifestError, match="handoffs"):
+        reconcile.parse_manifest(json.dumps({"handoffs": handoffs}))
+
+
+@pytest.mark.parametrize(
+    "entry",
+    [
+        "/x",
+        {"path": "/etc/../x"},
+        {"path": "rel"},
+        {"path": "/a", "x": 1},
+        {"cron": "a\nb", "user": "u"},
+        {"cron": "", "user": "u"},
+        {"path": "/a", "unit": "a.service"},
+    ],
+)
+def test_reconcile_refuses_a_legacy_entry_of_no_known_kind(entry):
+    reconcile = _reconcile()
+
+    with pytest.raises(reconcile.ManifestError, match="no known kind"):
+        reconcile.parse_manifest(json.dumps({"legacy": [entry]}))
+
+
+def test_a_legacy_path_outside_the_unit_directory_is_clean(hosts):
+    root = hosts({"legacy": [{"path": "/etc/systemd/x.conf"}]})
+
+    text = host_mode.render_host("daniel-pi", root).files[MANIFEST][0].decode()
+
+    assert _reconcile().parse_manifest(text).legacy[0].path == "/etc/systemd/x.conf"
+
+
+@pytest.mark.parametrize(
+    ("entry", "message"),
+    [
+        ({"unit": "x.service"}, "is not one of"),
+        ({"path": "/etc/systemd/system/x.service"}, "reconcile has no hand-off"),
+    ],
+)
+def test_a_legacy_entry_reconcile_does_not_retire_is_flagged(hosts, entry, message):
+    root = hosts({"legacy": [entry]})
+    with pytest.raises(RenderRefused, match=message):
+        host_mode.render_host("daniel-pi", root)
+    reconcile = _reconcile()
+    with pytest.raises(reconcile.ManifestError, match="no known kind"):
+        reconcile.parse_manifest(json.dumps({"legacy": [entry]}))
+
+
+def test_a_legacy_when_that_is_no_boolean_is_flagged(hosts):
+    root = hosts({"legacy": [{"path": "/x.prom", "when": "'false'"}]})
+    with pytest.raises(RenderRefused, match="not a boolean"):
+        host_mode.render_host("daniel-pi", root)

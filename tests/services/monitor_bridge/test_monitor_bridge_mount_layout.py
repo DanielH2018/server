@@ -10,7 +10,7 @@ in the pod, on the one workload that cannot page about its own failure.
 WHAT THIS PINS, exactly: the RENDERED `items:` list against `monitor_bridge_modules`, and that
 the result imports. The key half of the mapping is RE-DERIVED here (`m.replace("/", "_")`)
 rather than read back from the rendered ConfigMaps;
-`scripts/renderer/tests/test_renderer_monitor_bridge_script.py` holds those to the source
+`scripts/renderer/tests/manifests/test_renderer_monitor_bridge_script.py` holds those to the source
 files. `tests/services/monitor_bridge/test_monitor_bridge_modules.py` is what keeps the ship list
 itself honest against the tree.
 

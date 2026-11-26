@@ -456,7 +456,7 @@ The Kustomization `flux-deferred` applies these objects in `flux-system` from th
   Kustomization and from the `OCIRepository` `homelab` to the `discord_alert_webhook` channel.
 
 A renderer test pins the two `OCIRepository` objects' URL, `ref` and `verify` block to these values
-(`scripts/renderer/tests/test_renderer_bootstrap_documents.py`), so a change to them fails CI
+(`scripts/renderer/tests/manifests/test_renderer_bootstrap_documents.py`), so a change to them fails CI
 rather than cutting Flux off from its source. The renderer refuses `flux_sync_suspend: true`:
 Flux would apply the suspend to its own source and could never fetch the commit that clears
 it. To stop all reconciliation, suspend the `OCIRepository` `homelab` by hand, as *Recovering
@@ -762,7 +762,7 @@ step 6 applies.
    Kustomization in their `dependsOn` closure, `flux/cluster-vars.yaml` and
    `flux/homelab-namespace.yaml`. The closure never holds
    `flux-deferred` or the root, because `flux-deferred` applies the root.
-   `scripts/renderer/tests/test_renderer_bootstrap_documents.py` fails a plumbing tag whose
+   `scripts/renderer/tests/manifests/test_renderer_bootstrap_documents.py` fails a plumbing tag whose
    closure reaches either.
 
     ```bash
@@ -1499,7 +1499,7 @@ escaping*).
 - **The projection is `spec.postBuild`.** A reader that sees only the written bundle reads
   that field: the publish gate *source* below, and `promote.py verify`'s timeout.
 
-`scripts/renderer/tests/test_renderer_bundle.py` holds the predicate: a fixture with a
+`scripts/renderer/tests/bundle/test_renderer_bundle.py` holds the predicate: a fixture with a
 placeholder gets both fields, one without gets neither and keeps `${HOME}` as written.
 
 ### Ordering: `dependsOn`
@@ -1541,7 +1541,7 @@ Flux would hold every Kustomization on it at `DependencyNotReady`. An edge gover
 revision after the one that adds it, so a PR that adds an edge does not also change the
 dependent's render. The plan is `docs/archive/deploy/d4-ordering.md`, and
 `scripts/renderer/renderer_lib/ordering.py` derives the edges, and
-`scripts/renderer/tests/test_renderer_bundle_ordering.py` holds the rules.
+`scripts/renderer/tests/bundle/test_renderer_bundle_ordering.py` holds the rules.
 
 ### Restart triggers: `checksum/restart`
 
@@ -1583,12 +1583,12 @@ the type Flux substitutes into it.
 
 Two tests keep the annotation honest:
 
-- **The outside-role reference test**, in `scripts/renderer/tests/test_renderer_restart.py`,
+- **The outside-role reference test**, in `scripts/renderer/tests/manifests/test_renderer_restart.py`,
   fails when a flux-owned pod template names a Secret or ConfigMap that its own role does not
   render. The annotation sees only the role's own render, so such a reference would roll
   nothing. peanut is its named member.
 - **The self-rollouts census**, in
-  `scripts/renderer/tests/test_renderer_self_rollout_restart.py`, renders every role that
+  `scripts/renderer/tests/manifests/test_renderer_self_rollout_restart.py`, renders every role that
   sets `manifests_self_rollouts` as flux-owned. It fails on an entry whose pod template
   names a ConfigMap or Secret and carries no `checksum/restart`. pihole and observability
   are its named members, and pihole-2 with its annotation removed is its red fixture. flux's
@@ -1616,7 +1616,7 @@ manifests rather than as placeholders. `cluster_vars.py write` (operator-only) k
 - **The publish job's `ciphertext` step covers the copies**, because each ends in
   `.sops.yaml` under `out/cluster/`.
 
-`scripts/renderer/tests/test_renderer_bundle.py` holds the pair: pi-peer-backup with a fixture
+`scripts/renderer/tests/bundle/test_renderer_bundle.py` holds the pair: pi-peer-backup with a fixture
 manifest gets the copy and `decryption`, bento-pdf beside it gets neither, and a manifest
 without the annotation fails the render.
 

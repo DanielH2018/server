@@ -77,7 +77,7 @@ digest, and Flux rolls the pod when it applies that revision (#5416).
 The declaration also makes `secret_rotation.py consumers pihole_password` list this role,
 because the census greps role files for the key name. A stale password still shows as
 `up{job="pihole"}` at 0.
-`scripts/renderer/tests/test_renderer_restart.py::test_every_outside_secret_declares_the_keys_its_owning_role_renders`
+`scripts/renderer/tests/manifests/test_renderer_restart.py::test_every_outside_secret_declares_the_keys_its_owning_role_renders`
 holds the declared keys equal to the placeholders the pihole role's `pihole-env` renders.
 
 ## Two things that bite

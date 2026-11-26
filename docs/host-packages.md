@@ -353,7 +353,7 @@ Each limit exceeds the longest gap between two of the host's updater fires plus 
 `homelab-docker-engine.timer` also covers the engine run's mask. The run can hold
 `homelab-updater.timer` masked for its whole `TimeoutStartSec` (#6613). daniel-pi's daily 03:05
 fire comes after the 00:30 engine run's worst case, so its limit is one day plus one run.
-`scripts/renderer/tests/test_renderer_host_update_limits.py` fails a limit the host's rendered
+`scripts/renderer/tests/host/test_renderer_host_update_limits.py` fails a limit the host's rendered
 schedule outgrows. The map lists daniel-pi (job `node-pi`, 90000 seconds), added by H3.9c and raised by H3.13 (#6911).
 
 ## Clearing a host's hold

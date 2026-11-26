@@ -17,10 +17,10 @@ them on the test's report, and the `pytest_terminal_summary` hook in this direct
 its directory's files alone, so the modules' lines together hold the full set, whichever
 shards they ran on. None writes the `total` line, which only a full render can compute.
 
-Run: uv run pytest scripts/renderer/tests/test_renderer_determinism_0.py \\
-         scripts/renderer/tests/test_renderer_determinism_1.py \\
-         scripts/renderer/tests/test_renderer_determinism_2.py \\
-         scripts/renderer/tests/test_renderer_determinism_3.py
+Run: uv run pytest scripts/renderer/tests/bundle/test_renderer_determinism_0.py \\
+         scripts/renderer/tests/bundle/test_renderer_determinism_1.py \\
+         scripts/renderer/tests/bundle/test_renderer_determinism_2.py \\
+         scripts/renderer/tests/bundle/test_renderer_determinism_3.py
 """
 
 import json

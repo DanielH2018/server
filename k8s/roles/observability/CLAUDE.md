@@ -109,7 +109,7 @@ restart annotation hashes the ConfigMaps a pod mounts, but it skips every name i
 `scripts/renderer/renderer_lib/restart.py:RELOADED_IN_PLACE`. Without that list, a board edit
 would restart the `Recreate` grafana pod once the dashboards join the bundle, and a rule edit
 would restart Prometheus.
-`scripts/renderer/tests/test_renderer_self_rollout_restart.py::test_a_board_or_rule_edit_after_the_flip_moves_no_restart_value`
+`scripts/renderer/tests/manifests/test_renderer_self_rollout_restart.py::test_a_board_or_rule_edit_after_the_flip_moves_no_restart_value`
 renders the flipped role and holds both values still across such an edit.
 
 Every entry declares `restart_on: []`, which the renderer ignores for a self-rollout entry.

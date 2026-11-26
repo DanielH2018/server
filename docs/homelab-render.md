@@ -30,7 +30,7 @@ steps, and this page describes each piece once its PR has merged.
   (*Derived values*), and `scripts/renderer/renderer_lib/targets.py:render_targets` lists the
   tags a host renders.
 - `scripts/renderer/renderer_lib/jinja_filters.py` holds the Ansible-dialect filters, so the renderer
-  imports no ansible-core. `scripts/renderer/tests/test_renderer_filters.py` holds each to the
+  imports no ansible-core. `scripts/renderer/tests/manifests/test_renderer_filters.py` holds each to the
   value ansible-core 2.22 returned for the same call.
 - `scripts/renderer/shadow_diff.py digest` hashes a render (*Hash a render tree*).
   `scripts/renderer/renderer_lib/shadow.py` holds its library.
@@ -288,7 +288,7 @@ only those filters and tests and refuses any other lookup, so a template off the
 render with an error naming the construct. To add a construct, add it to the literal, the ADR's
 table and a case in `scripts/renderer/tests/_dialect_cases.py`, in one PR.
 
-`scripts/renderer/tests/test_renderer_dialect.py` compares each construct with its literal, and
+`scripts/renderer/tests/manifests/test_renderer_dialect.py` compares each construct with its literal, and
 holds every template, variable value and render-key value of the k8s roles to the list. Host and package modes
 render through `strict_env`, which the subset does not bind.
 
@@ -471,7 +471,7 @@ Secret, rule 2 the escaped `$${` in qbittorrent's `qbittorrent-netns-reset` Conf
 name a key and two accepted uses. A `--role` render asserts a member of rules 1 to 4 only
 for the tags it rendered. Rule 5 reads the whole tree on every run.
 
-`scripts/renderer/tests/test_renderer_secret_checks.py` holds each rule's `_is_clean` and
+`scripts/renderer/tests/secrets/test_renderer_secret_checks.py` holds each rule's `_is_clean` and
 `_is_flagged` pair, and `test_renderer_secret_checks_tree.py` the fleet render and the named
 members.
 
@@ -524,7 +524,7 @@ filter. The set is closed and empty. Its two members, `homepage_href` and
 was published. As members they would accept a later secret passed to either filter.
 
 A member must pass a membership test in
-`scripts/renderer/tests/test_renderer_secret_checks.py`. The test calls the filter in every
+`scripts/renderer/tests/secrets/test_renderer_secret_checks.py`. The test calls the filter in every
 call shape the templates write, once with the sentinel `r2-sentinel` for the key and once with
 `a.b-c.example`. The first output, serialised as JSON, must hold the sentinel. Replacing the
 sentinel there with `a.b-c.example` must give the second output exactly. A fixture filter that
@@ -681,7 +681,7 @@ template shape fixes it, so the guard checks the values where the cluster file i
   member was `mullvad_account`, whose real value is all digits, until R2's PR 7b moved that
   key into the dedicated SOPS-encrypted Secret `qbittorrent-mullvad-account`, which
   placeholder mode leaves out.
-- **The coverage test**, `scripts/renderer/tests/test_renderer_standalone_map.py`, renders the
+- **The coverage test**, `scripts/renderer/tests/bundle/test_renderer_standalone_map.py`, renders the
   fleet in placeholder mode and holds the committed map equal to it. It also fails on a
   mapped key absent from `secrets/secrets.yml`. Its named members are `email` and
   `wireguard_interface_private_key`, mapped under `traefik` and `qbittorrent`.
@@ -702,12 +702,12 @@ the secret keys.
 
 Two checks hold this:
 
-- `scripts/renderer/tests/test_renderer_stub_file.py` requires the stub file's key set to be
+- `scripts/renderer/tests/bundle/test_renderer_stub_file.py` requires the stub file's key set to be
   the secret keys plus the sentinel. A stub writer that adds one other key fails it.
 - `scripts/renderer/renderer_lib/dialect.py` refuses every lookup plugin but `b64file`,
   `file`, `template` and `vars`, so a template cannot shell out with `pipe` or query the
   cluster
-  (`scripts/renderer/tests/test_renderer_dialect.py::test_an_off_the_list_lookup_fails_the_render_and_the_census`).
+  (`scripts/renderer/tests/manifests/test_renderer_dialect.py::test_an_off_the_list_lookup_fails_the_render_and_the_census`).
   A `vars` lookup reads only the variable layers, and every layer comes from the tree.
 
 A value a template needs from the cluster has no way in. Move it into the tree instead: a SOPS
@@ -929,6 +929,6 @@ and escapes `$`.
 - A `${` in a host template is shell, and renders byte for byte. Host mode imports nothing
   from `placeholders.py`.
 
-`scripts/renderer/tests/test_renderer_host_mode.py` proves both halves. The secret pair goes
+`scripts/renderer/tests/host/test_renderer_host_mode.py` proves both halves. The secret pair goes
 red when the withholding is removed, because each fixture gives the secret's name a value in a
 layer.

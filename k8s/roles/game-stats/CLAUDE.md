@@ -53,7 +53,7 @@ claims are unchanged.
 - **A script edit rolls the pods with no annotation of the role's own.** The edit changes the
   render, and the renderer's restart checksum hashes the ConfigMap each pod
   mounts (`docs/flux-deploy-plane.md`, *Restart triggers*).
-  `scripts/renderer/tests/test_renderer_game_stats_restart.py` holds both ConfigMaps to that.
+  `scripts/renderer/tests/manifests/test_renderer_game_stats_restart.py` holds both ConfigMaps to that.
 
 ## terraria-stats
 
@@ -105,7 +105,7 @@ Both exporters run as stock `python` pods with `stats_lib.py` mounted alongside 
 own entry script by a ConfigMap, because a directly-invoked script gets only its own
 directory on `sys.path`. Each game's ConfigMap template carries the copy as a second key.
 `docs/game-stats-internals.md` has the mechanism and the guard that holds it,
-`scripts/renderer/tests/test_renderer_game_stats_restart.py`.
+`scripts/renderer/tests/manifests/test_renderer_game_stats_restart.py`.
 
 ## Editing
 
@@ -113,4 +113,4 @@ directory on `sys.path`. Each game's ConfigMap template carries the copy as a se
   `k8s/roles/game-stats/files/stats_lib.py`. Tests: `k8s/roles/game-stats/tests/`
   (`uv run pytest k8s/roles/game-stats/tests`). A change in `stats_lib.py` affects
   both games
-  (`scripts/renderer/tests/test_renderer_game_stats_restart.py::test_a_stats_lib_edit_moves_both_pods_checksums`).
+  (`scripts/renderer/tests/manifests/test_renderer_game_stats_restart.py::test_a_stats_lib_edit_moves_both_pods_checksums`).

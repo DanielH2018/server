@@ -189,12 +189,12 @@ def test_with_no_run_id_one_process_computes_once_and_copies_each_call(
 # A consumer whose import moved stops being prebuilt only with a red test.
 KNOWN_CONSUMERS = frozenset(
     {
-        "scripts/renderer/tests/test_renderer_collision_census.py",
-        "scripts/renderer/tests/test_renderer_env_secret_restart.py",
-        "scripts/renderer/tests/test_renderer_restart.py",
-        "scripts/renderer/tests/test_renderer_secret_checks_tree.py",
-        "scripts/renderer/tests/test_renderer_standalone_map.py",
-        "scripts/renderer/tests/test_renderer_string_values_census.py",
+        "scripts/renderer/tests/bundle/test_renderer_collision_census.py",
+        "scripts/renderer/tests/secrets/test_renderer_env_secret_restart.py",
+        "scripts/renderer/tests/manifests/test_renderer_restart.py",
+        "scripts/renderer/tests/secrets/test_renderer_secret_checks_tree.py",
+        "scripts/renderer/tests/bundle/test_renderer_standalone_map.py",
+        "scripts/renderer/tests/bundle/test_renderer_string_values_census.py",
         "scripts/secrets_mgmt/tests/test_cluster_vars_check.py",
         "scripts/secrets_mgmt/tests/test_cluster_vars_tree.py",
     }
