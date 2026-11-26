@@ -13,10 +13,8 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 import json
 
-# The WAN gate's default endpoints. They live here rather than in checks/wan.py because
-# `bridge/` is a leaf every check imports, and reading the default off the check module would
-# invert that. Two independent providers, by hostname; checks/wan.py's header has the reasoning
-# and the measured latency of each.
+# Defaults live here, not in checks/wan.py, because `bridge/` is a leaf every check imports. Two
+# independent providers, by hostname.
 WAN_PROBE_DEFAULT = (
     "https://cloudflare.com/cdn-cgi/trace,https://www.google.com/generate_204"
 )
@@ -128,31 +126,18 @@ def io_config(
         return tuple(parsed)
 
     return IoConfig(
-        # B2 REACHABILITY (docs/archive/b2-transaction-cap-monitoring-gaps.md). B2 caps
-        # TRANSACTIONS separately from storage bytes. A check that reports the last successful
-        # cron run rather than current B2 health reads green while B2 refuses every request —
-        # worse than absent, since an operator triaging the one true alert is told B2 is fine.
-        # Longhorn needs B2 reachable, so this probe watches it directly.
-        #
-        # The probe authenticates against B2's native API (b2_authorize_account, Class C), then
-        # makes one Class B call (checks/b2.py:b2_authorize), because B2 caps the two classes
-        # separately and Longhorn's backup reads are Class B. A cap breach answers either call
-        # with HTTP 403 and error code `transaction_cap_exceeded`, which _get_json's HTTPError
-        # detail carries verbatim into the alert message, naming the cause directly.
-        #
-        # ASSUMPTION, stated because it is load-bearing and cannot be tested without a live
-        # breach: that each call is subject to its class's cap. Backblaze's endpoint
-        # documentation lists 403/transaction_cap_exceeded among the errors of both. A Class A
-        # cap has no probe: Class A calls are free and B2 sets no cap on them.
+        # B2 caps TRANSACTIONS separately from bytes, so a check reporting the last cron run reads
+        # green while B2 refuses every request.
+        # The probe makes one Class C call (b2_authorize_account) then one Class B call
+        # (checks/b2.py:b2_authorize); a cap breach answers either with 403
+        # `transaction_cap_exceeded`.
+        # ASSUMPTION, untestable without a live breach: each call is subject to its class's cap.
+        # Class A is free and uncapped, so it has no probe.
         B2_PROBE_URL=_env(
             "B2_PROBE_URL", "https://api.backblazeb2.com/b2api/v4/b2_authorize_account"
         ),
-        # Read through _env_file for the same reason as HA_TOKEN: envFrom has no per-key filter,
-        # so a secret in monitor-bridge-env is a secret in every process's environment
-        # Named B2_PROBE_* rather than LONGHORN_B2_* even though the k8s
-        # Secret feeds it the `longhorn_b2_*` values (ADR-0014). This probe
-        # only needs to authenticate, so swapping in a scoped read-only key later is an
-        # inventory edit, not a code one.
+        # Read through _env_file: `envFrom` has no per-key filter. Named B2_PROBE_*, not
+        # LONGHORN_B2_*, so a scoped read-only key can replace it as an inventory edit.
         B2_PROBE_KEY_ID=_env_file("B2_PROBE_KEY_ID"),
         B2_PROBE_APPLICATION_KEY=_env_file("B2_PROBE_APPLICATION_KEY"),
         # DECIDED: both outcomes cache for B2_PROBE_INTERVAL_S, and only a genuinely successful
@@ -166,41 +151,23 @@ def io_config(
         # flat, and detection lands within 30 min of a breach that last time went 9.5 hours
         # unactioned.
         B2_PROBE_INTERVAL_S=_num("B2_PROBE_INTERVAL_S"),
-        # The TTL for a failure that never reached B2 (DNS, connect, timeout). Deliberately NOT
-        # B2_PROBE_INTERVAL_S: the whole reason that interval is long is that a probe costs a
-        # transaction, and a connection that never landed costs nothing, so the argument above
-        # does not apply to it. One INTERVAL, so the next cycle re-probes and the recovery is
-        # not held back — see b2_reachable.
+        # The TTL for a failure that never reached B2 is one INTERVAL, not B2_PROBE_INTERVAL_S: a
+        # connection that never landed costs no transaction, so the next cycle re-probes.
         B2_TRANSPORT_RETRY_S=_num("B2_TRANSPORT_RETRY_S"),
-        # B2 free-tier STORAGE headroom — the other half of the B2 budget, billed separately
-        # from the transaction cap b2_reachable watches. Longhorn is B2's only client, and no
-        # other metric reports its billable bytes.
-        #
-        # Listing versions is the only way to see the real number: hidden and unfinished
-        # versions bill as stored bytes and do NOT appear in a plain object listing, which is
-        # how the cap can fill unnoticed.
+        # Listing versions is the only way to see the real number: hidden and unfinished versions
+        # bill as stored bytes but do not appear in a plain object listing.
         B2_STORAGE_CAP_BYTES=_num("B2_STORAGE_CAP_BYTES", str(10 * 1000**3)),
         B2_STORAGE_MAX_PCT=_num("B2_STORAGE_MAX_PCT"),
-        # Daily rather than B2_PROBE_INTERVAL_S: a full listing costs one Class C call per 1000
-        # versions, and a check that guards a budget must not be a meaningful part of the spend.
-        # At ~5k versions that is ~5 calls/day against a 2500/day Class C allowance.
+        # Daily, because a full listing costs one Class C call per 1000 versions and a budget guard
+        # must not be a meaningful part of the spend.
         B2_STORAGE_INTERVAL_S=_num("B2_STORAGE_INTERVAL_S"),
-        # Stop paging rather than walk forever if the bucket is far larger than expected.
-        # Hitting this is itself reported, because a truncated sum under-reports usage — the
-        # direction that reads as headroom we do not have.
+        # Stop paging at this bound; hitting it is reported, because a truncated sum under-reports
+        # usage.
         B2_STORAGE_MAX_PAGES=_int("B2_STORAGE_MAX_PAGES", "50"),
-        # Cloudflare R2 free-tier headroom, via the GraphQL Analytics API. Cloudflare offers NO
-        # spending cap or usage limit on R2 — on any plan — so the only boundary is one we watch
-        # and act on. The Usage-Based Billing notification that would do this natively needs a
-        # Pro plan; this account is on Free. Overage is cheap ($0.015/GB-month, $4.50/M Class A,
-        # $0.36/M Class B, egress free), so this is a headroom guard, not a bill-shock alarm: it
-        # exists to notice a runaway client (the shape of a Longhorn retry storm,
-        # ~2.5k B2 Class B/day against a cap) while the fix is still a config edit.
-        #
-        # CF_ANALYTICS_TOKEN is file-mounted like HA_TOKEN and the B2 key, for the same reason
-        # (H2): an account-scoped credential must not sit inline in the container Env. Its ONLY
-        # permission is Account Analytics: Read — it cannot touch bucket data, which is why the
-        # check reads usage and pages rather than revoking anything itself.
+        # A headroom guard, not a bill-shock alarm: Cloudflare offers no spending cap on R2, so this
+        # notices a runaway client while the fix is a config edit.
+        # CF_ANALYTICS_TOKEN is file-mounted; its only permission is Account Analytics: Read, so the
+        # check pages and never revokes.
         CF_GRAPHQL_URL=_env(
             "CF_GRAPHQL_URL", "https://api.cloudflare.com/client/v4/graphql"
         ),
@@ -211,105 +178,71 @@ def io_config(
         R2_CLASS_A_MAX=_num("R2_CLASS_A_MAX"),
         R2_CLASS_B_MAX=_num("R2_CLASS_B_MAX"),
         R2_USAGE_MAX_PCT=_num("R2_USAGE_MAX_PCT"),
-        # Outstanding incomplete multipart uploads. These bill as stored bytes but do NOT appear
-        # in a normal object listing, so they are the quiet way a 10 GB budget fills. The
-        # durable fix is a bucket lifecycle rule (AbortIncompleteMultipartUpload) — a one-time
-        # operator step, see this role's CLAUDE.md — and this arm is the backstop that notices
-        # when it is absent or not working.
+        # Incomplete multipart uploads bill as stored bytes but do not appear in a normal listing;
+        # the durable fix is a bucket lifecycle rule (see this role's CLAUDE.md), and this arm
+        # notices its absence.
         R2_UPLOADS_MAX=_num("R2_UPLOADS_MAX"),
-        # SUCCESSES are cached for this long; a failure re-probes next cycle. The opposite of
-        # B2_PROBE_INTERVAL_S's cache-both, and deliberately so: the fault B2 detects is a spend
-        # cap that retrying makes worse, whereas GraphQL analytics calls are free and count
-        # against no R2 budget. So this follows EMAIL_PROBE_INTERVAL_S's cache-successes-only
-        # idiom, and rides out a transient Cloudflare blip through STARTUP_GRACE rather than
-        # through a stale cached failure.
-        #
-        # The Class A / Class B / free ACTION LISTS are not here. They read no env var —
-        # Cloudflare's pricing page decides them, not this deployment — so they live in
-        # verdicts/storage.py beside r2_classify_operations, their only reader.
+        # SUCCESSES are cached, a failure re-probes next cycle: opposite of B2's cache-both, because
+        # GraphQL analytics calls are free and count against no R2 budget.
+        # The action class lists are not env vars; they live in verdicts/storage.py beside
+        # r2_classify_operations.
         R2_PROBE_INTERVAL_S=_num("R2_PROBE_INTERVAL_S", "1800"),
-        # How long checks/b2.py:check_b2_object_lock holds a verdict, either outcome. A lock
-        # setting changes only by hand, and each read costs two Class C calls.
+        # A lock setting changes only by hand, and each read costs two Class C calls.
         B2_LOCK_PROBE_INTERVAL_S=_num("B2_LOCK_PROBE_INTERVAL_S"),
-        # The R2 S3 key Longhorn and k3s write with, which checks/r2.py:check_r2_etcd_lock
-        # uses to upload and delete its lock canaries under etcd-snapshots/.
         R2_S3_KEY_ID=_env_file("R2_S3_KEY_ID"),
         R2_S3_SECRET_KEY=_env_file("R2_S3_SECRET_KEY"),
         # How long check_r2_etcd_lock holds a verdict, either outcome: one canary a day.
         R2_LOCK_PROBE_INTERVAL_S=_num("R2_LOCK_PROBE_INTERVAL_S"),
         # The Age of ADR-0041's R2 lock rule over etcd-snapshots/, in days.
         R2_ETCD_LOCK_DAYS=_int("R2_ETCD_LOCK_DAYS"),
-        # The `cloudflare_ips` allowlist traefik trusts and netpol-baseline admits, as the env
-        # secret renders it (comma-separated CIDRs). Empty disables the drift check. Daily
-        # because Cloudflare moves these ranges on a multi-year cadence; the interval caches
-        # SUCCESSES only, so a red verdict re-probes every cycle (checks/cloudflare_ips.py).
+        # Empty disables the drift check; the interval caches SUCCESSES only, so a red verdict
+        # re-probes every cycle.
         CLOUDFLARE_IPS_EXPECTED=frozenset(
             c.strip() for c in _env("CLOUDFLARE_IPS_EXPECTED").split(",") if c.strip()
         ),
         CLOUDFLARE_IPS_PROBE_INTERVAL_S=_num("CLOUDFLARE_IPS_PROBE_INTERVAL_S"),
-        # The domain's RDAP record, whose `expiration` event dates the registration.
-        # Empty disables the check. Successes cached a day, failures re-probed every cycle
-        # (checks/domain_registration.py).
+        # Empty disables the check; successes cached a day, failures re-probed every cycle.
         DOMAIN_RDAP_URL=_env("DOMAIN_RDAP_URL"),
         DOMAIN_REGISTRATION_PROBE_INTERVAL_S=_num(
             "DOMAIN_REGISTRATION_PROBE_INTERVAL_S"
         ),
-        # The WAN gate's endpoints, comma-separated and tried in order; empty disables the
-        # gate. They are URLs rather than hosts so resolution, connect and TLS are all probed
-        # by one request — checks/wan.py's header has why an anycast IP would not do.
+        # URLs, not hosts, so resolution, connect and TLS are all probed by one request; empty
+        # disables the gate.
         WAN_PROBE_URLS=tuple(
             u.strip()
             for u in _env("WAN_PROBE_URLS", WAN_PROBE_DEFAULT).split(",")
             if u.strip()
         ),
-        # The Healthchecks.io console against docs/healthchecks-io-deadman.md. The key
-        # is the project's READ-ONLY API key, file-mounted like CF_ANALYTICS_TOKEN; the expected
-        # list is monitor_bridge_healthchecks_expected rendered as JSON. Either empty disables
-        # the check. Successes cached a day, failures re-probed every cycle
-        # (checks/healthchecks.py).
+        # The key is the project's READ-ONLY API key, file-mounted; either empty disables the check.
+        # Successes cached a day, failures re-probed.
         HEALTHCHECKS_API_URL=_env(
             "HEALTHCHECKS_API_URL", "https://healthchecks.io/api/v3/checks/"
         ),
         HEALTHCHECKS_API_KEY=_env_file("HEALTHCHECKS_API_KEY"),
         HEALTHCHECKS_EXPECTED=_expected_checks(_env("HEALTHCHECKS_EXPECTED")),
         HEALTHCHECKS_PROBE_INTERVAL_S=_num("HEALTHCHECKS_PROBE_INTERVAL_S"),
-        # The Uptime Robot console against docs/uptime-robot-monitors.md. The key is the
-        # account's READ-ONLY API key, file-mounted; the monitor list is
-        # monitor_bridge_uptime_robot_monitors rendered as JSON. Either empty disables the
-        # check. Successes cached a day, failures re-probed every cycle
-        # (checks/uptime_robot.py).
+        # The key is the account's READ-ONLY API key, file-mounted; either empty disables the check.
+        # Successes cached a day, failures re-probed.
         UPTIME_ROBOT_API_URL=_env(
             "UPTIME_ROBOT_API_URL", "https://api.uptimerobot.com/v2/getMonitors"
         ),
         UPTIME_ROBOT_API_KEY=_env_file("UPTIME_ROBOT_API_KEY"),
         UPTIME_ROBOT_MONITORS=_uptime_robot_monitors(_env("UPTIME_ROBOT_MONITORS")),
         UPTIME_ROBOT_PROBE_INTERVAL_S=_num("UPTIME_ROBOT_PROBE_INTERVAL_S"),
-        # Discord delivery: Alertmanager's `discord` receiver POSTs every alert to this webhook
-        # (monitor_discord_webhook_url). A rotated/revoked/deleted webhook leaves every alert
-        # firing while Discord goes silent — the one link in the alert chain no other
-        # check (not even the off-box UptimeRobot host dead-man) verifies. We GET-verify the
-        # webhook is still valid: Discord answers a webhook GET with its JSON metadata + HTTP 200
-        # while it exists and 404s once it's gone — a GET, not a POST, so this never puts a test
-        # message in the channel. Empty URL = disabled (stays up), like N8N_API_KEY. The streak
-        # hysteresis (like HA_CONSECUTIVE) rides out a transient blip on the one check that
-        # reaches the public internet.
+        # GET-verifies the webhook still exists (200 with metadata, 404 once gone), never a POST, so
+        # no test message reaches the channel.
+        # Empty URL disables the check; the streak hysteresis rides out a transient blip.
         DISCORD_WEBHOOK_URL=_env("DISCORD_WEBHOOK_URL"),
-        # The CrowdSec ban-alert webhook is a SECOND, independent Discord delivery hop: CrowdSec
-        # POSTs directly to it (not via Alertmanager), so a rotated/revoked CrowdSec webhook
-        # silently drops security-ban notifications and nothing else pages. Verify it alongside
-        # the Alertmanager webhook. Empty = not checked.
+        # CrowdSec POSTs to this webhook directly, not via Alertmanager, so a revoked one silently
+        # drops ban notifications. Empty = not checked.
         DISCORD_CROWDSEC_WEBHOOK_URL=_env("DISCORD_CROWDSEC_WEBHOOK_URL"),
         # The GitOps/Renovate webhook is a THIRD independent hop: it delivers both the
         # gitops-deploy rollback alert AND every renovate_notify manual-action digest, neither
         # via Alertmanager, so a rotated/revoked webhook here drops every digest silently.
         # Verify it too. Empty = not checked.
         DISCORD_GITOPS_WEBHOOK_URL=_env("DISCORD_GITOPS_WEBHOOK_URL"),
-        # The *arr health/event webhook is a FOURTH independent hop: Sonarr/Radarr/Prowlarr POST
-        # their own onHealthIssue alerts (indexer down, download-client errors, app DB errors —
-        # signals the Arr Queue check does NOT cover) directly to it via their in-app Discord
-        # "Connect", not via Alertmanager. A rotated/revoked webhook silently drops those while
-        # every container-up check stays green. Empty = not checked. (The URL lives only in the *arr
-        # app DBs + SOPS — this GET-verify is its one watchdog.)
+        # Sonarr/Radarr/Prowlarr POST onHealthIssue alerts directly to this webhook, so a revoked
+        # one drops them while every container-up check stays green. Empty = not checked.
         DISCORD_ARR_WEBHOOK_URL=_env("DISCORD_ARR_WEBHOOK_URL"),
         # The healthchecks.io app's own Discord webhook is a FIFTH independent hop: healthchecks
         # POSTs its own check-down/up alerts to it via a "webhook" notification channel (config
@@ -319,16 +252,10 @@ def io_config(
         # delivery hop worth verifying. Empty = skipped.
         DISCORD_HEALTHCHECKS_WEBHOOK_URL=_env("DISCORD_HEALTHCHECKS_WEBHOOK_URL"),
         DISCORD_CONSECUTIVE=_int("DISCORD_CONSECUTIVE"),
-        # Alert-email backstop deliverability (folded into check_discord). Alertmanager's
-        # `email` receiver (Gmail SMTP) is the independent 2nd channel for critical alerts — the
-        # escape hatch when the Discord webhook is dead (the alert-delivery SPOF). Nothing else
-        # checks it, so a silently revoked
-        # Gmail app-password could leave that backstop dead undetected and BOTH channels down at
-        # once. We fold a throttled SMTP login probe into check_discord: connect + AUTH to
-        # SMTP_HOST:SMTP_PORT with the same creds Alertmanager uses, so a revoked password / broken
-        # SMTP flips check_discord down (which still pages via the working Discord channel). Throttled to EMAIL_PROBE_INTERVAL_S — Gmail flags frequent AUTHs, so a
-        # success is cached and only a failure re-probes every cycle. Empty SMTP_PASSWORD =
-        # disabled (stays up), like the empty-webhook skips.
+        # SMTP login probe for the Alertmanager email backstop, folded into check_discord so a
+        # revoked app-password flips it down.
+        # Throttled to EMAIL_PROBE_INTERVAL_S because Gmail flags frequent AUTHs: a success is
+        # cached, a failure re-probes. Empty SMTP_PASSWORD disables it.
         SMTP_HOST=_env("SMTP_HOST", "smtp.gmail.com"),
         SMTP_PORT=_int("SMTP_PORT", "465"),
         SMTP_USER=_env("SMTP_USER"),

@@ -155,10 +155,8 @@ def check_discord(
         except (
             Exception
         ) as e:  # network/DNS blip -> ride the streak, don't page on one cycle
-            # str(e) can quote the webhook URL back (a scheme-less URL raises
-            # `ValueError: unknown url type: '<the URL>'`), and that URL is the channel's
-            # bearer credential — see _redact. The message still carries the real reason, so
-            # an ordinary "Name or service not known" still reaches the operator.
+            # str(e) can quote the webhook URL, which is the channel's bearer credential, so it is
+            # redacted; the real reason still reaches the operator.
             w_ok, w_msg = (
                 False,
                 "unreachable: %s" % _redact(str(e), [u for _, u in webhooks]),

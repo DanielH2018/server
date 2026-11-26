@@ -75,8 +75,8 @@ def check_speedtest(cfg: Config, src: Sources) -> tuple[bool, str]:
         )
         return CheckResult(ok, msg, ["API unreachable"])
     src.state.down_streaks["speedtest"] = 0
-    # Narrowed after the streak reset, outside the `try`: a body of the wrong shape is a bug in
-    # the reply, not an unreachable API, and must page now rather than ride the deploy grace.
+    # Outside the `try`: a wrong-shaped body is a reply bug, not an unreachable API, and must page
+    # now rather than ride the deploy grace.
     rows = as_object_list(
         as_object(payload, "speedtest results").get("data") or [],
         "speedtest results data",
