@@ -39,7 +39,7 @@ neither `ls ~/.n8n/nodes/node_modules` nor a query against the `installed_packag
 `database.sqlite` is reachable, and n8n carries **its own owner login on top of Authelia**, so
 `GET /rest/community-packages` answers `{"status":"error","message":"Unauthorized"}` even with a
 valid two_factor Authelia session (measured 2026-09-10). code-server and `FreshRSS` are the same
-shape — see the `TWO_FACTOR_SERVICES` comment in `scripts/diagnostics/tests/test_ui_smoke.py`.
+shape — see the `TWO_FACTOR_SERVICES` comment in `scripts/diagnostics/tests/ui_smoke/test_ui_smoke.py`.
 
 - **The operator**, signed in to n8n as the owner, opens **Settings → Community nodes**. That
   panel lists each package with its version and is also the install and uninstall path.

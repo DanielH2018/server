@@ -351,8 +351,7 @@ def census(
     return reserved + found + _digests_problems(out, names)
 
 
-# Each plumbing tag's named members, as (kind, metadata.name), from H1's *Plumbing tags are
-# never pruned*, plus the restore drill's (H2.3b, and its CronJob at H2.3d). Change a row in the PR that changes that list.
+# Change a row in the PR that changes the plumbing-tag member list.
 NAMED_MEMBERS: dict[str, frozenset[tuple[str, str]]] = {
     "cluster-base": frozenset(
         {
@@ -373,8 +372,8 @@ NAMED_MEMBERS: dict[str, frozenset[tuple[str, str]]] = {
         }
     ),
     "longhorn-reconcile": frozenset({("CronJob", "longhorn-reconcile")}),
-    # Not a plumbing tag: it prunes. Its stamp ConfigMap holds state no render restores and
-    # carries `prune: disabled`, so a render that drops it leaves it live (H2 Open question 12).
+    # Not a plumbing tag: it prunes. Its stamp ConfigMap holds state no render restores and carries
+    # `prune: disabled`.
     "longhorn-restore-drill": frozenset(
         {
             ("ConfigMap", "longhorn-restore-drill-stamps"),
@@ -488,8 +487,6 @@ def report(
     return OK
 
 
-# The subcommands `promote.py` hands to `run`. Both read the checkout alone; the one GHCR read
-# in the render job, `--against-prod`'s, is `promote.py`'s through `forge.py`.
 COMMANDS = ("check-bundle", "published-tags")
 
 

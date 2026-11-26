@@ -35,8 +35,8 @@ from collections.abc import Callable, Sequence
 from datetime import datetime
 from pathlib import Path
 
-# `.claude/hooks/fanout-stop.py` copies this pattern (the hooks stay stdlib-only) and
-# `test_fanout_stop.py` holds the copies equal. `status.PR_URL` re-exports it.
+# `.claude/hooks/fanout-stop.py` copies this pattern (the hooks stay stdlib-only);
+# `test_fanout_stop.py` holds the copies equal.
 PR_URL = re.compile(r"https://github\.com/[\w.-]+/[\w.-]+/pull/\d+")
 BRANCH_PR_LIMIT = "10"
 

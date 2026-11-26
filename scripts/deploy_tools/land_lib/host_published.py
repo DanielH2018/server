@@ -27,8 +27,8 @@ from diagnostics.probe_lib.builder import HEALTHY
 PUBLISHED = "homelab_repo_published_info"
 UNBUILT_SINCE = "homelab_builder_unbuilt_since_timestamp_seconds"
 FETCHED = "homelab_builder_fetch_timestamp_seconds"
-# The reasons of a builder that publishes the merge without a hand. `no-green` is one because
-# the host wait runs only once master CI is green at the merge: the builder has not run since.
+# `no-green` is included: the host wait runs only once master CI is green, so the builder has not
+# run since.
 LAGGING = HEALTHY | {"no-green"}
 
 

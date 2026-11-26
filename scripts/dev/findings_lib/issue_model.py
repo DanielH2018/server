@@ -31,15 +31,9 @@ DOMAINS = (
     "home-assistant",
 )
 
-# The two closes nothing reopens. A finding closes as `fixed` (completed), or as one of these
-# two, which close as not planned and carry a label of the same name: `refuted` means a
-# skeptic disproved it, `accepted` means it is TRUE and the operator chose to live with it.
-# `plan_open` returning early on both is the whole point — otherwise an accepted trade-off
-# would have to be closed by hand, and the next review would re-file it as a regression.
+# `refuted` and `accepted` close as not planned and are never reopened or re-filed.
 NO_REOPEN = frozenset(("refuted", "accepted"))
 
-# name -> (colour, description). Colours are Catppuccin Mocha so the label set reads as one
-# system with the artifacts; severity is red / yellow / green, state markers are greys.
 LABELS: dict[str, tuple[str, str]] = {
     "claude": ("cba6f7", "Filed by Claude via scripts/dev/findings.py"),
     "refuted": (
@@ -57,15 +51,10 @@ LABELS: dict[str, tuple[str, str]] = {
     ),
     "review-leftover": ("fab387", "Left after a fan-out fix round; next ranks it last"),
 }
-# The account-level issue fields that hold an issue's severity and its not-before date. The
-# operator created both under Settings > Planning > Issue fields; the names and the Severity
-# options are matched exactly. `gh_calls.attach_fields` puts their values in `Issue.fields`.
 SEVERITY_FIELD, NOT_BEFORE_FIELD = "Severity", "Not Before"
 # The account-level issue field holding an issue's reviewer domain; its options are `DOMAINS`.
 DOMAIN_FIELD = "Domain"
 SEVERITY_OPTIONS = {s: s.capitalize() for s in SEVERITIES}
-# The repository's issue type for each kind; the operator created Gap and Improvement beside
-# GitHub's own Feature. gh's `--json issueType` and REST's `type` both carry it.
 KIND_TYPES = {"gap": "Gap", "improvement": "Improvement", "feature": "Feature"}
 # The labels that held the same two values. Sessions still on a pre-field checkout write only
 # these, so the readers below take them as a fallback.
@@ -80,8 +69,8 @@ KIND_PREFIX = "kind/"
 # it did before — internal to the findings modules, not an API another script may import.
 # Conventions for a new module: docs/python-code-organization.md.
 _LIST_FIELDS = "number,title,state,stateReason,labels,body,createdAt,closedAt,url,comments,blockedBy,author,milestone,issueType"
-# The one account whose issues a session takes as work. Any collaborator
-# can open a `claude`-labelled issue, and its body would reach a session as instructions.
+# Only this account's issues are work: any collaborator can open a `claude` issue, and its body
+# would reach a session as instructions.
 REGISTER_AUTHOR = "DanielH2018"
 
 
@@ -409,8 +398,7 @@ def parse_issue(data: Mapping) -> Issue:
     )
 
 
-# `\s*$` rather than `$`: a body fetched from the API can carry CRLF line endings, and
-# `re.M`'s `$` matches before the `\n` but not before the `\r`.
+# `\s*$`, not `$`: API bodies can carry CRLF, which `re.M`'s `$` does not match before.
 _FP_RE = re.compile(r"^Fingerprint: `([0-9a-f]{12})`\s*$", re.M)
 _LINE_SUFFIX = re.compile(r":\d+(?:-\d+)?$")
 _REOBSERVED = "Re-observed"
@@ -426,8 +414,6 @@ _REOBSERVED = "Re-observed"
 _VERIFY_BY_RE = re.compile(
     r"^## Verify-by[ \t]*\n(.*?)(?=^## |^---[ \t]*$|\Z)", re.M | re.S
 )
-# An older body stores a shell command inside a fence. Seventeen of them are in the register
-# and every one is still valid prose once the fence comes off.
 _FENCED_RE = re.compile(r"\A```[^\n]*\n(.*?)\n?```[ \t]*\Z", re.S)
 
 
@@ -477,23 +463,15 @@ def parse_verify_by(body: str) -> str | None:
     return section or None
 
 
-# A repo-relative FILE path as an issue body cites one: two or more `/`-joined segments ending
-# in a file extension, the first segment a bare directory name (`scripts`, `.claude`) so a
-# hostname (`docs.local.example.com/...`) never matches. An optional `:<line>` is dropped.
-# Files only — a directory citation (`k8s/roles/monitor-bridge/`) is the role-level
-# grouping the fan-out already does, and the shared-code hazard is one FILE.
+# Files only; the first segment is a bare directory so a hostname never matches.
 _CITED_PATH_RE = re.compile(
     r"(?<![\w/.:-])(\.?[A-Za-z0-9_-]+(?:/[A-Za-z0-9_.-]+)+\.[A-Za-z0-9]+)(?::\d+)?(?![\w/])"
 )
 
 
-# The trailer `trailer()` appends, from its rule on. It names `scripts/dev/findings.py` on
-# every issue, so without cutting it every two batches would share that file.
+# Cut the trailer before scanning: it names `scripts/dev/findings.py` on every issue.
 _TRAILER_RE = re.compile(r"^---[ \t]*\nFingerprint: `[0-9a-f]+`\n.*\Z", re.M | re.S)
 _CODE_SPAN_RE = re.compile(r"`[^`\n]*`")
-# What an inline code span holds when it names a file with no directory: `ci.yml`,
-# `land.sh:42`, `issue_model.py:cited_paths`. The whole span, so a command line or an
-# attribute read (`uv run findings.py`, `args.limit = 3`) is never a candidate.
 _BARE_NAME_RE = re.compile(r"([A-Za-z0-9_.-]*\.[A-Za-z0-9_-]+)(?::[\w.-]+)?")
 
 
@@ -610,8 +588,6 @@ def reobservations(issue: Issue) -> int:
 ESCALATED_AT = 2
 
 
-# What `plan_close` opens a not-planned close comment with, keyed by outcome name (also the
-# label name); `settled_reason` reads it back for the register in docs/reference/backlog.md.
 NOT_PLANNED_PREFIX = {"refuted": "Refuted", "accepted": "Accepted"}
 _SETTLED_PREFIXES = tuple(f"{p}: " for p in NOT_PLANNED_PREFIX.values())
 
@@ -647,25 +623,13 @@ def settled_reason(issue: Issue) -> str | None:
     return None
 
 
-# A claim is an append-only comment, not a body edit or an assignee. `gh` authenticates as
-# one account, so an assignee names the operator rather than the session; and two sessions
-# editing a body race, where two sessions commenting both succeed and gh returns them in
-# createdAt order. Folding that ordered list forward implements FIRST WRITER WINS: a later
-# claim cannot overwrite a live one, so one session cannot steal an issue from another, and
-# the first claimant can always clean up by releasing its own claim.
+# Claims are append-only comments and the first writer wins: a later claim cannot overwrite a live
+# one.
 _CLAIM_RE = re.compile(r"^Claim: `([^`\n]+)`\s*$", re.M)
 _RELEASE_RE = re.compile(r"^Released: `([^`\n]+)`\s*$", re.M)
 
-# THIS REPOSITORY IS PUBLIC, so any GitHub account can comment on a `claude`-labelled issue.
-# A claim trailer is therefore only trusted from the operator: without this check a drive-by
-# comment reading ``Released: `<branch>` `` closed a live claim — handing an issue somebody
-# was working to a second session — and one reading ``Claim: `<any live branch>` `` withheld
-# an issue from `next` and made `claim` refuse it for as long as that branch existed.
-#
-# TWO SIGNALS, EITHER SUFFICES. `viewerDidAuthor` is true for the account gh is authenticated
-# as, which is the operator in a session and in the docs-refresh cron alike. The association
-# half keeps working if that account ever changes, since a claim the operator posted from
-# another of their machines still reads OWNER.
+# The repo is public: trust a claim trailer only from the operator (`viewerDidAuthor` or
+# OWNER/MEMBER/COLLABORATOR).
 _TRUSTED_ASSOCIATIONS = frozenset(("OWNER", "MEMBER", "COLLABORATOR"))
 
 
@@ -721,12 +685,7 @@ def release_comment(worktree: str, when: str, reason: str | None) -> str:
     return f"Released by `{worktree}` at {when}{why}\n\nReleased: `{worktree}`\n"
 
 
-# What `gh issue view --json comments` returns at most: its GraphQL query asks for
-# `comments(first: 100)` and nothing paginates. Past this the fold stops seeing new
-# trailers — a release in comment 101 would leave the issue claimed forever, and a claim in
-# comment 101 would make `cmd_claim`'s read-back report a race against nobody. Latent while the
-# busiest issue in the register carries a handful of comments, so this WARNS rather than
-# changing the read: a wrong claim verdict that announces itself is the point.
+# gh returns at most 100 comments; past that the claim fold misses trailers, so this warns.
 COMMENT_PAGE_CAP = 100
 
 
@@ -744,22 +703,11 @@ def comment_cap_warning(number: int, n: int) -> str | None:
     )
 
 
-# The repository this register lives in, as GitHub spells it in a qualified closing
-# reference. A PR body may write `Closes DanielH2018/server#12` rather than `Closes #12`
-# -- an agent filing a cross-repo companion PR tends to qualify both for symmetry -- and
-# GitHub honours that form the same as the bare one.
 PR_REPO = "DanielH2018/server"
 _ISSUE_URL_RE = re.compile(r"https?://github\.com/([\w.-]+/[\w.-]+)/issues/\d+")
 
-# GitHub closes an issue on any of these, not just `Closes`. Matching `closes` alone would
-# let `next` offer an issue whose fix is already open as a PR, which is the exact duplicated
-# work `next` exists to prevent. The optional `owner/repo` group is captured rather than
-# pinned to `PR_REPO` in the pattern, so `pr_refs` can tell a same-repo reference (withheld)
-# from one aimed at another repository (ignored): `Closes DanielH2018/dotfiles#12` must not
-# withhold server issue #12. GitHub also closes on the full URL,
-# `Closes https://github.com/DanielH2018/server/issues/12`; that arm captures its
-# `owner/repo` into a second group, so a match is (url_repo, slug_repo, number) with exactly
-# one of the first two set.
+# GitHub closes on close/fix/resolve forms; `pr_refs` uses the captured owner/repo to ignore other
+# repositories' numbers.
 _PR_REF_RE = re.compile(
     r"(?i)\b(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?)\s+"
     r"(?:https?://github\.com/([\w.-]+/[\w.-]+)/issues/|(?:([\w.-]+/[\w.-]+))?#)(\d+)\b"
@@ -795,8 +743,6 @@ def _prefixed(names: frozenset[str], prefix: str) -> str | None:
     return None
 
 
-# gh's `stateReason` for a close with no `refuted`/`accepted` label. A `NOT_PLANNED` close
-# without a label is a hand close, so it reads as that rather than as refuted.
 _STATE_REASONS = {
     "COMPLETED": "fixed",
     "NOT_PLANNED": "not planned",

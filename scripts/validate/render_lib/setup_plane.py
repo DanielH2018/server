@@ -11,7 +11,7 @@ Undefined and then judges each name it collected. A name is allowed to be undefi
   - supplied by the host renderer (`renderer_lib/host.py`) — `hosts`, `services` and
     `inventory_hostname` (`HOST_RENDER_SUPPLIED`);
   - a SOPS secret, by name, from the plaintext registry `secrets/secret_rotation.yml`;
-  - defined anywhere in the inventory — `group_vars/all.yml` or any host's `host_vars` file;
+  - defined in a vars file — a shared one or any host's `hosts/<host>/vars.yml`;
   - declared in the component's own `defaults/main.yml`. `lib.render_context` leaves out a
     default whose value will not expand (it names a filter the light environment lacks), so the
     key reads as undefined in the render while the component still defines it;
@@ -36,11 +36,10 @@ import yaml
 from jinja2 import meta
 
 from lib import yaml_fast
+from lib.estate import Estate
 from lib.render_context import render_context
 from lib.render_guard import (
-    ALL_VARS,
     dump_numbered,
-    host_files,
     load_yaml,
     StubUndefined,
     make_env,
@@ -76,9 +75,8 @@ def _tracking_undefined(seen: dict[str, set[str]], template: str):
             return super().__str__()
 
         def __bool__(self) -> bool:
-            # `{% if undefined %}` is an error under Ansible's Templar, so it is one here too.
-            # `x | default(y)` and `x is defined` inspect the type without going through this,
-            # which is why those idioms are not flagged.
+            # `{% if undefined %}` is an error under Ansible's Templar, so it is one here;
+            # `default(y)` and `is defined` do not go through this and are not flagged.
             self._record()
             return False
 
@@ -99,9 +97,10 @@ def secret_names(registry: Path = SECRET_REGISTRY) -> frozenset[str]:
 
 def inventory_names() -> frozenset[str]:
     """Every variable name the plaintext inventory defines, group_vars plus every host."""
-    names = set(load_yaml(ALL_VARS))
-    for host in host_files():
-        names.update(load_yaml(host))
+    estate = Estate()
+    names = set(estate.group_vars)
+    for host in estate.hosts():
+        names.update(estate.own_vars(host))
     return frozenset(names)
 
 

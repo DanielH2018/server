@@ -22,8 +22,7 @@ from lib.k8s_roles import (
 from renderer.template_filters.role_label import ROLE_LABEL, _Loader, homelab_role_label
 
 
-# The roles that opt out of the prune, each by operator decision recorded as a DECIDED marker
-# in its defaults. Every other role is armed.
+# Each opts out by an operator decision recorded as a DECIDED marker in its defaults.
 _UNARMED_ROLES = frozenset({"authelia", "nut"})
 
 

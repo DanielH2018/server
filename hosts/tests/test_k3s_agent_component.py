@@ -11,7 +11,6 @@ a crash loop's reason, and a file with no activation is never reported pending.
 import base64
 import dataclasses
 import os
-import shutil
 
 import pytest
 from _helpers import load_yaml
@@ -20,7 +19,9 @@ from _readonly_kubeconfig import run_kubeconfig, written_kubeconfig
 from _wifi_fallback import WIFI_FILE, WIFI_RENDERED, installed_wifi_file
 from lib import yaml_fast
 from lib.estate import REPO_INVENTORY
+from lib.inventory_lists import host_vars_file
 from lib.proc_testing import run, write_exec
+from lib.render_guard import copy_host_files
 from lib.repo_paths import K3S_DEFAULTS, K3S_SERVER, REPO
 from renderer.renderer_lib import host as host_mode
 
@@ -183,7 +184,11 @@ def test_the_shells_name_the_kubeconfig_as_they_do_on_the_server(package):
     server = host_mode.render_host("daniel-box")
 
     def zshenv(node) -> list[dict]:
-        return [e for e in node.lines if e["path"] == "/etc/zsh/zshenv"]
+        return [
+            e
+            for e in node.lines
+            if e.get("marker") == "# {mark} ANSIBLE MANAGED — k3s kubeconfig"
+        ]
 
     assert zshenv(package) == zshenv(server) != []
     profile = "/etc/profile.d/k3s-kubeconfig.sh"
@@ -314,9 +319,8 @@ def test_a_password_reaches_netplan_unchanged(package, password):
 
 def test_emptying_the_wifi_link_drops_the_units_and_retires_both_copies(tmp_path):
     """netplan refuses an empty `wifis:`, so the output must go rather than render empty."""
-    host_vars = tmp_path / "host_vars"
-    shutil.copytree(REPO_INVENTORY.host_vars, host_vars)
-    server = host_vars / "daniel-server.yml"
+    host_vars = copy_host_files(tmp_path / "hosts", REPO_INVENTORY.host_vars)
+    server = host_vars_file("daniel-server", host_vars)
     named = "k3s_node_wifi_link: wlo1"
     assert named in server.read_text()
     server.write_text(server.read_text().replace(named, 'k3s_node_wifi_link: ""'))

@@ -68,7 +68,7 @@ Exit: a commit that changes the list the docs-refresh cron stages rewrites the c
 +  regen-doc-values      files: each row's doc and source
 -test_docs_quote_current_values.py     its two rows move into VALUES
 +scripts/docs/tests/test_doc_values.py: every VALUES row matches the tree
-+tests/repo/test_doc_values_hook.py: the hook's pattern covers every row
++tests/repo/ci_workflows/test_doc_values_hook.py: the hook's pattern covers every row
 ```
 
 ## Steps, as PRs

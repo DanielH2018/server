@@ -13,7 +13,7 @@ alone is a silent fault rather than a loud one:
 
 Neither shows up in a single render, because both halves render perfectly well on their own.
 So the guard is that both halves move with `k3s_etcd_expose_metrics`, defined once in
-group_vars/all.yml, exactly as `k3s_audit_log_path` is shared by setup/k3s and loki-homelab's
+k8s/vars.yml, exactly as `k3s_audit_log_path` is shared by setup/k3s and loki-homelab's
 Alloy shipper for the same two-roles-one-fact reason.
 
 The scrape half is read from TWO renders of `prometheus.yaml.j2`, one with the switch armed and
@@ -31,7 +31,7 @@ import re
 
 from _helpers import REPO
 from lib import yaml_fast
-from lib.repo_paths import ALL_VARS, K3S_DEFAULTS, K3S_SERVER
+from lib.repo_paths import K3S_DEFAULTS, K3S_SERVER, K8S_VARS
 from _k8s_render import render_role_template
 
 _REPO = REPO
@@ -48,14 +48,14 @@ def _prometheus_config(switch: bool) -> str:
     )
 
 
-def test_the_switch_is_defined_once_in_group_vars():
-    """The shared fact lives in all.yml, not in either role's defaults.
+def test_the_switch_is_defined_once_in_k8s_vars():
+    """The shared fact lives in k8s/vars.yml, not in either role's defaults.
 
     A role-local default would let the other role fall through to its own `| default(false)`
     and read the opposite value, which is precisely the drift this file exists to stop.
     """
-    assert re.search(rf"^{_SWITCH}:", ALL_VARS.read_text(), re.M), (
-        f"{_SWITCH} must be defined in group_vars/all.yml — two roles read it"
+    assert re.search(rf"^{_SWITCH}:", K8S_VARS.read_text(), re.M), (
+        f"{_SWITCH} must be defined in k8s/vars.yml — two roles read it"
     )
 
     for role_defaults in (K3S_DEFAULTS, _COMPONENT):

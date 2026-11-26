@@ -43,9 +43,8 @@ import jinja2
 
 from renderer.renderer_lib.targets import render_targets, vendored_paths
 from lib import yaml_fast
-from lib.inventory_lists import K8S_HOST
 from lib.guard_jinja_env import ansible_bool
-from lib.estate import REPO_INVENTORY, Inventory
+from lib.estate import REPO_INVENTORY, Inventory, shared_vars
 from lib.k8s_roles import (
     CLAIM_TEMPLATE,
     MANIFESTS_PRUNE_DEFAULT,
@@ -57,7 +56,7 @@ from lib.k8s_roles import (
     role_defaults,
 )
 from lib.render_guard import SHARED_TPL, k8s_services
-from lib.repo_paths import JOB_FILES, K8S_ROLES, K8S_SERVICES, INVENTORY
+from lib.repo_paths import JOB_FILES, K8S_ROLES, K8S_SERVICES
 from renderer.renderer_lib.bundle import (
     KUSTOMIZATION,
     SHARED_KINDS,
@@ -93,7 +92,6 @@ LABEL_WRAPPER = SHARED_TPL / "role-labelled.yaml.j2"
 FLUX_DEFAULTS = K8S_ROLES / "flux" / "defaults" / "main.yml"
 FLUX_JOB_CONNECT = JOB_FILES / "flux_job_connect.py"
 FLUX_JOB_PARSE = JOB_FILES / "flux_job_parse.py"
-GROUP_VARS = INVENTORY / "group_vars" / "all.yml"
 # Each group variable naming a namespace that a role creates, mapped to that role. A deferred
 # document in that namespace gives `<tag>-deferred` an edge to the role (D4.2).
 NAMESPACE_ROLE_VARS = {"k8s_observability_namespace": "observability"}
@@ -209,7 +207,6 @@ def select_tags(
 
 def bundle_ordering(
     services: Path = K8S_SERVICES,
-    group_vars: Path = GROUP_VARS,
     roles: Path = K8S_ROLES,
 ) -> Ordering:
     """What the bundle generates `dependsOn` from: the full dependency map (D4.2).
@@ -228,7 +225,7 @@ def bundle_ordering(
     if problems:
         raise ValueError("; ".join(problems))
     k8s = k8s_services(services)
-    group = yaml_fast.safe_load(group_vars.read_text())
+    group = shared_vars()
     return Ordering(
         deps=build_k8s_dep_map(k8s, str(K8S_ROLES)),
         applies_last=frozenset(K8S_APPLIES_LAST),
@@ -277,11 +274,10 @@ def tag_context(
     role_dir: Path,
     tag: str,
     overrides: dict,
-    host: str = K8S_HOST,
     inventory: Inventory = REPO_INVENTORY,
 ) -> dict:
     """`template_context` with `container_item`, the entry the role templates read, set to `tag`'s."""
-    ctx = template_context(role_dir, overrides, host, inventory)
+    ctx = template_context(role_dir, overrides, inventory)
     ctx["container_item"] = next(e for e in ctx["services"] if e["name"] == tag)
     return ctx
 
@@ -289,7 +285,6 @@ def tag_context(
 def role_context(
     tag: str,
     stubs: dict,
-    host: str = K8S_HOST,
     built: dict[str, str] | None = None,
     roles: Path = K8S_ROLES,
     inventory: Inventory = REPO_INVENTORY,
@@ -299,7 +294,6 @@ def role_context(
     Args:
         tag: The deploy tag.
         stubs: The extra vars that outrank every other layer: a mode's secret values.
-        host: The inventory host whose context the tag renders in.
         built: The images `tag`'s role builds, each mapped to its content tag. None computes
             them here.
         roles: The role tree `tag`'s role is read from.
@@ -313,13 +307,13 @@ def role_context(
     """
     role_dir = roles / tag
     try:
-        ctx = tag_context(role_dir, tag, stubs, host, inventory)
+        ctx = tag_context(role_dir, tag, stubs, inventory)
         # A role default can read a derived fact, as every `*_k8s_image` built here reads
         # `k8s_built_image_tags`. The first pass leaves such a default undefined, so the facts
         # go in as the overrides of a second pass, above every file layer.
         # The stub file's extra vars outrank them in turn.
         facts = derived_facts(role_dir, ctx, built)
-        ctx = tag_context(role_dir, tag, {**facts, **stubs}, host, inventory)
+        ctx = tag_context(role_dir, tag, {**facts, **stubs}, inventory)
     except (ValueError, jinja2.TemplateError) as exc:
         raise RenderError(f"{tag}: {exc}") from exc
     # The strict context leaves a value that will not resolve undefined, which a render key
@@ -334,7 +328,6 @@ def role_context(
 def render_tag(
     tag: str,
     stubs: dict,
-    host: str = K8S_HOST,
     built: dict[str, str] | None = None,
     roles: Path = K8S_ROLES,
     inventory: Inventory = REPO_INVENTORY,
@@ -347,7 +340,6 @@ def render_tag(
     Args:
         tag: The deploy tag.
         stubs: The extra vars that outrank every other layer: a mode's secret values.
-        host: The inventory host whose context the tag renders in.
         built: The images `tag`'s role builds, each mapped to its content tag, as the
             caller computed them for `DIR/images/tags.json`. None computes them here.
         roles: The role tree `tag`'s role is read from; a test passes a fixture copy.
@@ -358,7 +350,7 @@ def render_tag(
             listed basename has no template.
     """
     role_dir = roles / tag
-    ctx, include = role_context(tag, stubs, host, built, roles, inventory)
+    ctx, include = role_context(tag, stubs, built, roles, inventory)
     entry = ctx["container_item"]
     refusal = sync_suspend_refusal(tag, ansible_bool(ctx.get(SYNC_SUSPEND_KEY, False)))
     if refusal:

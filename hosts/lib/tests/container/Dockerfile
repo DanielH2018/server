@@ -42,7 +42,10 @@ ENV container=docker
 # `validate_lib/node_units_case.py` installs nut-client and netplan.io to run the files that override them.
 # They download in a transaction of their own: in the one above, netplan.io changes what apt
 # resolves, and the Pi package's makedev drops out of the cache.
-# tests/repo/test_host_test_image_predownloads.py fails on a case Depends this list lacks. `age` generates the throwaway key the
+# `validate_lib/node_package_case.py` installs each cluster node's real package, so the rest of
+# each node's Depends downloads in that node's own transaction, as the case resolves it. Only an
+# amd64 leg runs the case, so the arm64 image skips these.
+# tests/repo/ci_workflows/test_host_test_image_predownloads.py fails on a case Depends this list lacks. `age` generates the throwaway key the
 # secrets-unit case encrypts to (H4.1c). `git`, `gnupg` and `curl` are on an Ubuntu server
 # install, and bootstrap-host.sh calls each before it installs anything (H7.15a). `gcc`,
 # `libc6-dev` and `libyaml-dev` build PyYAML's C extension for the repo venv. They are
@@ -69,11 +72,19 @@ RUN --mount=type=secret,id=runner-ca,target=/run/runner-ca.crt,mode=0444 \
         fail2ban sysstat acct rkhunter aide aide-common \
         auditd debsums jq libpam-tmpdir unattended-upgrades unzip update-notifier-common rsyslog \
         gh; \
-    apt-get install -y --download-only nut-client netplan.io
+    apt-get install -y --download-only nut-client netplan.io; \
+    if [ "$(dpkg --print-architecture)" = amd64 ]; then \
+        apt-get install -y --download-only nftables openssh-client; \
+        apt-get install -y --download-only acl apparmor libvirt-clients libvirt-daemon-system \
+            multipath-tools netcat-openbsd nfs-common open-iscsi qemu-system-x86 qemu-utils \
+            virtinst xorriso zsh; \
+        apt-get install -y --download-only acl apparmor apt-utils bat btop chafa fd-find ffmpeg \
+            gron lua5.4 mkvtoolnix multipath-tools netcat-openbsd nfs-common open-iscsi \
+            shellcheck squid-openssl strace zsh zsh-autosuggestions zsh-syntax-highlighting; \
+    fi
 
-# The Pi package Depends on linux-raspi, which has no amd64 candidate, and on wireguard, which pulls
-# a kernel into the image through wireguard-modules (H7.58). An empty package stands in for each,
-# because no case boots the kernel or loads the module.
+# linux-raspi has no amd64 candidate and wireguard pulls a kernel: an empty package stands in, since
+# no case boots it.
 RUN set -eu; \
     for package in linux-raspi wireguard; do \
         mkdir -p "/tmp/$package/DEBIAN"; \
@@ -88,9 +99,7 @@ RUN set -eu; \
 # bootstrap-host.sh step 4 adds the sys user to `ssh-users`, and refuses a host without that user.
 RUN id ubuntu > /dev/null 2>&1 || useradd --create-home ubuntu
 
-# Units that would take dpkg's lock mid-case, or reach the runner's devices through
-# --privileged, never start. The updater's own timer is left alone: neither the fixture nor the
-# real Pi package ships its enable link, and the by-hand case asserts it stays inactive.
+# The updater's own timer is left alone: the by-hand case asserts it stays inactive.
 RUN systemctl mask \
         apt-daily.timer apt-daily-upgrade.timer dpkg-db-backup.timer e2scrub_all.timer \
         fstrim.timer motd-news.timer \
@@ -99,16 +108,12 @@ RUN systemctl mask \
         getty@tty1.service console-getty.service systemd-modules-load.service \
     && systemctl set-default multi-user.target
 
-# The textfile directory with M3's owner and mode, which the Pi package's tmpfiles.d line creates
-# when node_exporter.service starts (sys_user is ubuntu). The image holds it so the updater's
-# first run finds it before that unit has started.
+# The image holds the textfile directory so the updater's first run finds it before
+# node_exporter.service starts.
 RUN install -d -o root -g ubuntu -m 2775 /var/lib/node-exporter-textfile
 
-# dpkg unpacks the homelab.sources homelab-updater ships at the diverted path, outside
-# sources.list.d/, so the test's source below survives every install. The source's Signed-By
-# names the throwaway keyring host_fixtures.publish writes into the mounted repository
-# (host_fixtures.TEST_KEYRING), so apt checks InRelease's signature and its Valid-Until. The
-# keyring homelab-updater ships from H3.4c is installed and unused.
+# dpkg unpacks homelab.sources at the diverted path, so the test's source survives every install;
+# its Signed-By names the throwaway keyring (host_fixtures.TEST_KEYRING).
 RUN set -eu; \
     mkdir /var/lib/homelab-test; \
     dpkg-divert --local --no-rename \
@@ -122,9 +127,8 @@ RUN set -eu; \
         'Signed-By: /srv/repo/homelab-test-keyring.gpg' \
         > /etc/apt/sources.list.d/homelab.sources
 
-# The apt-docker and apt-github-cli components ship the Docker and GitHub CLI sources (H7.24a).
-# Every updater run reads sources.list.d, so both are diverted like homelab.sources: dpkg unpacks
-# them outside sources.list.d and no case reaches the upstream hosts. validate_lib/repos_case.py removes the diversions to prove the real install.
+# Both sources are diverted like homelab.sources so no case reaches the upstream hosts;
+# repos_case.py removes the diversions.
 RUN set -eu; \
     for source in docker github-cli; do \
         dpkg-divert --local --no-rename \

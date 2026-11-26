@@ -45,14 +45,12 @@ from pathlib import Path
 
 _READ_METHODS = frozenset({"read_text", "read_bytes", "open"})
 _GLOB_METHODS = frozenset({"glob", "rglob"})
-# The calls that wrap an iterable without changing what it yields. A template glob inside one
-# of these binds its loop target exactly as the bare glob does.
+# A template glob inside one of these binds its loop target as the bare glob does.
 _WRAPPERS = frozenset(
     {"sorted", "list", "tuple", "set", "frozenset", "reversed", "iter"}
 )
-# Jinja's two entry points for a template string. A read whose result goes straight into one of
-# these renders the template rather than asserting on its text, so it is not a source read, as
-# a test that needs a different override per test does.
+# Jinja's two entry points for a template string: a read whose result goes straight into one renders
+# the template, so it is not a source read.
 _RENDER_CALLS = frozenset({"from_string", "Template"})
 
 

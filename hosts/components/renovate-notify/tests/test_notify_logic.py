@@ -86,11 +86,8 @@ def test_fingerprint_empty_is_blank():
     assert nl.fingerprint([]) == ""
 
 
-# A fingerprint on #number:bucket alone makes notify() fire once when a PR first goes stuck, then
-# never change while the PR just sits there, so it never re-pages. The age dimension makes
-# the fingerprint change — and so re-notify — each time the PR's stuck-age crosses a threshold.
-# `manual` PRs deliberately carry no age dimension (nothing to escalate: they're waiting on a
-# merge, not getting worse).
+# A fingerprint on #number:bucket alone never re-pages; the age dimension changes it at each
+# threshold. `manual` PRs carry no age dimension: they wait on a merge, not worsen.
 def test_fingerprint_stuck_pr_under_a_day_old_has_no_age_suffix():
     now = datetime(2026, 8, 10, tzinfo=timezone.utc)
     pr = _pr(number=67, created_at="2026-08-10T00:00:00Z")
@@ -133,8 +130,6 @@ def test_fingerprint_manual_pr_never_gets_age_suffix():
 
 def test_should_notify_repages_when_stuck_pr_crosses_age_threshold():
     # fact: hosts/components/renovate-notify/CLAUDE.md#Notification is fingerprint-gated, not state-gated
-    # The escalation this closes: a stuck PR's fingerprint at day 1 differs from its fingerprint
-    # at day 3, so should_notify fires again instead of staying silent forever after the day-1 page.
     day1 = nl.fingerprint(
         [(_pr(number=67, created_at="2026-08-03T00:00:00Z"), "stuck")],
         now=datetime(2026, 8, 4, tzinfo=timezone.utc),
@@ -277,10 +272,8 @@ def test_find_dashboard_ignores_a_lookalike_renovate_login():
     assert nl.find_dashboard([issue]) is None
 
 
-# A package whose lookup starts failing (karakeep's gcr.io image, say) gets no PR and
-# doesn't touch dashboard staleness — the dashboard still updates on schedule. This section
-# is the only signal, so it must be parsed into the notify path or it silently stops
-# receiving updates forever.
+# A failing package lookup gets no PR and leaves dashboard staleness alone; this section is the only
+# signal.
 _PROBLEMS_BODY = """This issue lists Renovate updates and detected dependencies.
 
 ## Repository Problems
@@ -369,8 +362,8 @@ def test_parse_dependency_lookup_failures_is_clean_without_callout():
 
 
 def test_parse_dependency_lookup_failures_ignores_files_affected_backticks():
-    # `Files affected:` carries backticked paths on its own line; folding those in would
-    # report two package files as if they were failing dependencies.
+    # `Files affected:` carries backticked paths; folding them in would report package files as
+    # failing dependencies.
     parsed = nl.parse_dependency_lookup_failures(_LOOKUP_WARNING_BODY)
     assert not any("pyproject.toml" in p for p in parsed)
     assert not any("observability" in p for p in parsed)

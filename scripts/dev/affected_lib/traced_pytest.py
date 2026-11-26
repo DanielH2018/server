@@ -61,14 +61,12 @@ def _log_listings(log_path: str) -> None:
 
 
 if __name__ == "__main__":
-    # Without the log there is nothing to launch for: answer what this file is, importing
-    # nothing, because an import here would list `sys.path` ahead of the hook.
+    # Without the log, answer what this file is and import nothing: an import would list `sys.path`
+    # ahead of the hook.
     if LOG_ENV not in os.environ:
         print(__doc__)
         raise SystemExit(0 if {"-h", "--help"} & set(sys.argv[1:]) else 64)
     _log_listings(os.environ[LOG_ENV])
-    # `python -m pytest` puts the working directory first on sys.path, where running this
-    # file puts its own directory.
     sys.path[0] = os.getcwd()
     import pytest
 

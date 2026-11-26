@@ -18,7 +18,7 @@ conventions.
 
 - **Depends on:** traefik, authelia
 - **Flux applies it.** Its `containers_list` entry is
-  in `cluster/services.yml`, so nothing applies it by hand, and a merged change reaches the cluster when
+  in `k8s/services.yml`, so nothing applies it by hand, and a merged change reaches the cluster when
   `promote` publishes and verifies the next bundle. Its image-bump PRs therefore draw no
   `land-wait` and no `probe.py health` run. authelia and traefik are flux-owned too, so the
   Kustomization lists them in `dependsOn`, and Flux applies this tag only after their
@@ -50,7 +50,7 @@ reads as `/app/config` (`k8s/roles/homepage/templates/deployment.yaml.j2`):
   `custom.css.j2` — every app config file, one level down because
   `scripts/validate/render_lib/k8s.py` parses every `templates/*.j2` as a manifest and fails a
   `lookup('template')` that names one outside `config/`
-  (`scripts/validate/tests/test_skip_roles_classes_hold.py::test_a_lookup_into_templates_top_level_is_flagged`).
+  (`scripts/validate/tests/renders/test_skip_roles_classes_hold.py::test_a_lookup_into_templates_top_level_is_flagged`).
   `services.yaml` is the tile list; edit it here and nowhere else.
 - `k8s/roles/homepage/templates/icons-configmap.yaml.j2` — base64s the PNGs in `files/` into a
   ConfigMap.
@@ -73,18 +73,18 @@ that bite from a config edit alone.
   `ingress: false` removes the call rather than permitting it; this cluster routes with
   `IngressRoute` CRDs and owns no `Ingress` object, so the grant would list an empty set
   forever. The two halves are asserted together by
-  `tests/k8s/test_k8s_manifests_rbac.py`.
+  `tests/k8s/rbac/test_k8s_manifests_rbac.py`.
 - **A widget's credential goes in `key:`, never in `url:`.** Each widget's `proxy.js` logs the
   full request URL on any non-2xx, so a credential in a query string is published to the pod log
   and to Loki on the target's next outage. `jellyfin_api_key` leaked that way during the
   2026-09-09 Jellyfin crash loop (#1499) and was rotated on 2026-09-10. ENFORCED by
-  `tests/services/test_homepage_widget_urls_carry_no_credentials.py`.
+  `tests/services/homepage/test_homepage_widget_urls_carry_no_credentials.py`.
 - **A widget dialling a ClusterIP needs `homepage_widget: true` on the target's entry.**
   The namespace baseline admits Traefik and Prometheus, so homepage's pod-to-pod call is
   denied by default and the tile fails as a widget-proxy error while homepage stays 1/1. The
   key adds homepage to the entry's fence, and `homepage_widget_url` builds the URL only for an
   entry carrying it (`scripts/renderer/template_filters/homepage_tiles.py`, #3691). ENFORCED on the
-  rendered URLs by `tests/services/test_homepage_tiles_filter.py`. So a widget also
+  rendered URLs by `tests/services/homepage/test_homepage_tiles_filter.py`. So a widget also
   deploys the target's fence. Headlamp's and pihole's widgets are the two exceptions, each
   behind a `DECIDED:` marker in `services.yaml.j2`.
 - **A layout entry matches a group by NAME, and an unmatched one is silently dead.** `layout:`
@@ -104,7 +104,7 @@ that bite from a config edit alone.
   original text and supplies the replacement as an `::after` `content`, for qBittorrent,
   Speedtest, Karakeep and UPS. Tiles are matched by `href` so a reorder cannot mislabel one; the
   block index within a tile is positional and must agree with that widget's `fields:` order,
-  ENFORCED by `tests/services/test_homepage_block_label_overrides.py`. A widget that
+  ENFORCED by `tests/services/homepage/test_homepage_block_label_overrides.py`. A widget that
   takes a `label:` per block, `customapi` or `prometheusmetric`, names its blocks in config and
   needs no rename; the Karma tile is one.
 - **The Karma tile links to Karma's LAN name.** Karma is the alert UI, and its route
@@ -116,7 +116,7 @@ that bite from a config edit alone.
   `templates/config/widgets.yaml.j2` holds only the display options. A `url:` written beside
   those options is ignored — the pod logs `<longhorn> Missing Longhorn URL` every refresh, the
   tile renders empty, and the Deployment stays 1/1. PR #1391 shipped it that way. ENFORCED by
-  `tests/services/test_homepage_longhorn_widget_url.py`.
+  `tests/services/homepage/test_homepage_longhorn_widget_url.py`.
 - **The tile list is CURATED, not a census of what is routed.** Nine link tiles were added on
   2026-09-09 and removed again the same day at the operator's request. They are routed and
   reachable; they are simply not wanted on the dashboard. Do not "restore" them by comparing
@@ -127,5 +127,5 @@ that bite from a config edit alone.
   `probe.py health homepage` exiting 0. The `lifecycle.postStart` hook in
   `templates/deployment.yaml.j2` calls `/api/revalidate` once at startup, which regenerates `/`
   from the config the pod can read. ENFORCED by the `homepage-revalidates-on-start` row of
-  `tests/k8s/_workload_property_rows.py`; a browser tab reading
+  `tests/k8s/rendered_properties/_workload_property_rows.py`; a browser tab reading
   `Homepage` is the symptom, and the measurements are on the docs page.

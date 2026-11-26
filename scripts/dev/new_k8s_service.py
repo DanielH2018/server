@@ -7,7 +7,7 @@ Usage::
         --image ghcr.io/miniflux/miniflux:2.2.16 --port 8080 --authelia one_factor
 
 The role is a `containers_list` entry plus a Deployment template. The entry is
-appended to `cluster/services.yml`, and `templates/deployment.yaml.j2`
+appended to `k8s/services.yml`, and `templates/deployment.yaml.j2`
 is the one manifest the role ships. The role has no `tasks/`: the renderer derives the file
 lists from `templates/` and the entry, and the workload to restart from the role's name.
 Two small files sit beside the template:
@@ -34,7 +34,7 @@ WHAT IT DOES NOT WRITE, deliberately:
   bundle, and `land.sh` follows the promotion.
 
 The output is meant to pass `prek run --all-files` and the renderer's `cluster` render of the
-new tag with no hand edits; `scripts/dev/tests/test_new_k8s_service.py` renders it through
+new tag with no hand edits; `scripts/dev/tests/repo_tools/test_new_k8s_service.py` renders it through
 the repo's own manifest validator to hold that.
 """
 
@@ -53,8 +53,6 @@ from renderer.template_filters.toposort import K8S_APPLIES_LAST
 AUTH_TIERS = ("one_factor", "two_factor")
 STRATEGIES = ("RollingUpdate", "Recreate")
 
-# The tiers `k8s/roles/cluster-base/templates/priorityclass.yaml.j2` declares. Named here so a
-# typo fails at the command line rather than at admission, hours later.
 PRIORITY_CLASSES = (
     "homelab-critical",
     "homelab-standard",
@@ -90,7 +88,7 @@ k8s_autodeploy_reason: "{reason}"
 {prefix}_k8s_mem_request: 64Mi
 
 # The uid the container runs as, pinned rather than left to the image's named user.
-# `tests/k8s/test_container_security_context.py::test_every_asserting_container_pins_a_uid`
+# `tests/k8s/workloads/test_container_security_context.py::test_every_asserting_container_pins_a_uid`
 # requires it: a pod asserting runAsNonRoot with no runAsUser still passes admission after a
 # tag bump moves that named user to a different uid. Read the image's own uid and set it here.
 {prefix}_k8s_uid: {uid}
@@ -179,7 +177,7 @@ See repo-root `CLAUDE.md` for shared conventions.
 
 
 def entry_lines(name, port, hostname, auth_tier, route) -> str:
-    """The service entry, as the block this script appends to cluster/services.yml.
+    """The service entry, as the block this script appends to k8s/services.yml.
 
     Position in the list does not set the deploy order: `scripts/renderer/template_filters/toposort.py`
     derives the ordering edges from the templates and the entry, and gives each
@@ -226,8 +224,6 @@ def append_entry(services: Path, entry: str) -> None:
     except StopIteration:
         raise ValueError(f"{services} declares no containers_list") from None
 
-    # The list ends at the first non-blank line indented no deeper than the key itself: the
-    # next top-level key, or the comment block above it.
     end = len(lines)
     for i in range(start + 1, len(lines)):
         if lines[i].strip() and not lines[i].startswith((" ", "\t")):
@@ -307,7 +303,7 @@ def parse_args(argv=None):
         choices=STRATEGIES,
         default="RollingUpdate",
         help="Deployment strategy. Recreate means a downtime gap on every deploy and has to "
-        "be allowlisted with a reason in tests/k8s/test_deploy_strategy.py.",
+        "be allowlisted with a reason in tests/k8s/workloads/test_deploy_strategy.py.",
     )
     parser.add_argument(
         "--priority-class", choices=PRIORITY_CLASSES, default="homelab-best-effort"
@@ -350,8 +346,6 @@ def next_steps(args, role: Path) -> str:
         if args.route
         else ""
     )
-    # The route's blackbox target renders in observability, and until Flux applies that render
-    # `probe.py health` skips the probe half.
     probe_step = (
         f"Once Flux has applied `observability`, which loads {args.name}'s ingress probe, "
         f"gate it with `probe.py health {args.name}`.\n"
@@ -371,11 +365,11 @@ def next_steps(args, role: Path) -> str:
         f"`k8s_claims` entry in {(role / 'defaults' / 'main.yml').relative_to(REPO)}, not "
         f"a template.\n"
         f"\nTwo censuses a new role always has to join, which `prek` does not run and CI does:\n"
-        f"  BORN_FENCED_ROLES in tests/k8s/test_netpol_baseline_labels.py — add "
+        f"  BORN_FENCED_ROLES in tests/k8s/edge/test_netpol_baseline_labels.py — add "
         f"{args.name} with the sentence saying why Traefik is its only caller, or drop the "
         f"`netpol-baseline: enforced` pod label and write the role its own NetworkPolicy.\n"
         f"  ROLES_WITH_A_DEFAULT_SERVICE in "
-        f"tests/k8s/test_shared_manifest_defaults.py — add {args.name}, since it "
+        f"tests/k8s/workloads/test_shared_manifest_defaults.py — add {args.name}, since it "
         f"takes the shared default Service{route_census}.\n"
         f"The regen-doc-fragments prek hook rewrites the Renovate stance fragment on "
         f"your commit and fails once: stage what it wrote and commit again."

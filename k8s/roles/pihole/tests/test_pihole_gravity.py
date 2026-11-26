@@ -147,8 +147,8 @@ def _serve(state: FakeFTL) -> ThreadingHTTPServer:
         def do_PUT(self):
             url = urlsplit(self.path)
             body = self._body()
-            # FTL routes on the raw path: an address whose `/` went unencoded is a longer path
-            # that names no list.
+            # FTL routes on the raw path: an address with an unencoded `/` is a longer path naming
+            # no list.
             prefix = "/api/lists/"
             address = unquote(url.path[len(prefix) :])
             if not self._authed():

@@ -4,15 +4,13 @@
 timeout read the `dependsOn` graph off a bundle's documents in the same shape. Every reader
 tolerates a malformed item, because the list comes from the cluster.
 
-Run: imported only. `uv run pytest scripts/deploy_tools/tests/test_promote_land_wait.py`
+Run: imported only. `uv run pytest scripts/deploy_tools/tests/promote/test_promote_land_wait.py`
 """
 
 import re
 
 from lib.k8s_conditions import NO_CONDITION, ConditionStatus, parse_conditions
 
-# The `lastAppliedOriginRevision` form that names a commit: the `--revision` that `flux push
-# artifact` writes (contract C6). promote.py reads the same form off `prod`'s manifest.
 REVISION = re.compile(r"master@sha1:([0-9a-f]{40})")
 
 

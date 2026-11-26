@@ -131,9 +131,8 @@ def test_parse_nodes_reads_ready_and_cordon():
 
 
 def test_claude_event_rows_never_leak_the_line_body():
-    # The projection is the KL1 boundary: whatever the store returns, only the
-    # whitelisted metadata fields plus ts may leave. The body ("line") and any
-    # non-whitelisted label are dropped, whether or not they carry content.
+    # Whatever the store returns, only whitelisted metadata fields plus ts may leave; the body and
+    # other labels are dropped.
     parsed = [
         {
             "labels": {

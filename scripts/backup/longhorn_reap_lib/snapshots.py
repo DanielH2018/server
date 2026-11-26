@@ -60,13 +60,12 @@ from lib.k8s_objects import LonghornVolume
 NAMESPACE = "longhorn-system"
 KUBECTL_BIN = os.environ.get("LONGHORN_REAP_KUBECTL", "k3s kubectl")
 
-# Overridable via env purely so a test can point this at a fixture instead of the real
-# root-only file; production never sets this, so it stays the fixed admin path.
+# Env override so a test can point at a fixture; production never sets it.
 ADMIN_KUBECONFIG = os.environ.get(
     "LONGHORN_REAP_ADMIN_KUBECONFIG", "/etc/rancher/k3s/k3s.yaml"
 )
-# No fallback default. Left unset, a dry run must refuse rather than let KUBECONFIG stay whatever
-# the caller's shell happens to have -- which, run as root, is the admin one. See main().
+# No default: unset, a dry run must refuse rather than inherit the caller's KUBECONFIG, which as
+# root is the admin one.
 READONLY_KUBECONFIG = os.environ.get("LONGHORN_REAP_READONLY_KUBECONFIG", "")
 SUDO_HINT = logic.sudo_hint(logic.ENTRY_POINT, "snapshots")
 
@@ -249,12 +248,8 @@ def main(argv: list[str], now: float | None = None) -> int:
             time.time() if now is None else now,
         )
     except logic.ReapAbort as e:
-        # A volume whose group label named no RecurringJob resolves to owner "", which the
-        # current-tier test reads as "no snapshot belongs to the current tier" -- every snapshot
-        # past the age floor then becomes a candidate. classify_snapshots refuses; without this
-        # the refusal reaches the operator as a traceback. `abort_reason` already writes the
-        # `ABORT: ` prefix into the message, so this prints it as it stands rather than doubling
-        # it.
+        # An owner of "" (group label naming no RecurringJob) makes every snapshot past the age
+        # floor a candidate; print the refusal, which already carries `ABORT: `.
         print(str(e), file=sys.stderr)
         return 1
 
@@ -291,10 +286,8 @@ def main(argv: list[str], now: float | None = None) -> int:
     print("deleted %d stranded snapshot(s)." % deleted)
 
     if deleted > 0:
-        # A hard exit here, ahead of the PARTIAL check below, mirrors the shell original: an
-        # unreachable manager pod or a rejected POST leaves the deletions marked-removed-but-
-        # not-purged, which is worse left unreported than a partial-run notice for a break that
-        # already happened.
+        # Exit hard before the PARTIAL check: an unpurged delete is worse unreported than a
+        # partial-run notice.
         unpurged = _purge(kubectl, os.uname().nodename, touched)
         if unpurged:
             print(

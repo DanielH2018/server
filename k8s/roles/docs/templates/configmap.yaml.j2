@@ -12,43 +12,29 @@ data:
         root /usr/share/nginx/html;
         index index.html;
 
-        # Every response revalidates. Without this nginx sends only Last-Modified and ETag,
-        # and a browser with no explicit freshness falls back to a heuristic — a fraction of
-        # the age since Last-Modified — so a file unchanged for days is cached for hours with no
-        # revalidation. The docs site's own files carry no content hash: mkdocs copies
-        # docs/assets/ through under its authored name, and the pages are plain index.html.
-        # Material's own bundles are content-hashed and are safe; nothing this repo writes is.
-        #
-        # `no-cache` is revalidate-before-use, not no-store: an unchanged file still answers
-        # 304 with no body. For a LAN docs site that is the right trade against serving a
-        # reader a page or a script that no longer matches the tree.
+        # Every response revalidates: the site's files carry no content hash, so with only
+        # Last-Modified and ETag a browser caches heuristically for hours.
+        # `no-cache` is revalidate-before-use, not no-store: an unchanged file still answers 304.
         add_header Cache-Control "no-cache";
 
-        # Answered from nginx itself, never from the mounted tree. A build that has not run
-        # yet leaves the tree empty; the pod must still pass its probes and serve a 404,
-        # because "the site is not built" is an operator problem, not a rollout failure.
+        # Answered from nginx itself: an unbuilt site leaves the tree empty, and the pod must still
+        # pass its probes and serve a 404.
         location = /healthz {
             access_log off;
             add_header Content-Type text/plain;
             return 200 'ok';
         }
 
-        # The build stamp is the signal that the docs-refresh cron is alive, so a cached copy
-        # would report a dead cron as healthy. `no-store` rather than the server-level
-        # `no-cache`: this file must not be written to disk at all, where the rest may be
-        # stored and revalidated.
-        #
-        # nginx's add_header does not merge across levels — a location declaring any
-        # add_header of its own replaces every inherited one. That is why this block restates
-        # Cache-Control rather than adding to it, and why /healthz above serves no
-        # Cache-Control at all.
+        # nginx's add_header does not merge across levels: a location declaring any replaces every
+        # inherited one, so this block restates Cache-Control.
+        # The build stamp shows the docs-refresh cron is alive, so a cached copy would report a dead
+        # cron as healthy: `no-store`, not `no-cache`.
         location = /build-info.json {
             add_header Cache-Control "no-store";
         }
 
-        # MkDocs `use_directory_urls: true` emits page/index.html, so a request for /page/
-        # resolves by directory index. try_files keeps a missing page a 404 rather than a
-        # directory listing.
+        # `use_directory_urls: true` emits page/index.html; try_files keeps a missing page a 404,
+        # not a directory listing.
         location / {
             try_files $uri $uri/ $uri/index.html =404;
         }

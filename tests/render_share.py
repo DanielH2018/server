@@ -61,7 +61,7 @@ CI on every module that did not pay: eleven modules recorded near 0s measured 5-
 instead would add the render to each of the 70-odd modules that read it. No module's weight
 carries a render; `pytest_shard.py` packs them per shard.
 
-Run: uv run pytest tests/repo/test_render_share.py
+Run: uv run pytest tests/repo/suite/test_render_share.py
 """
 
 import contextlib

@@ -10,7 +10,7 @@ The rule that judges such a lock is `claude_worktree.unit_lock_is_live`: the uni
 decides, and a lock younger than a day is live whatever the unit says. This module holds the
 two things that rule cannot know. `REASON` says which lock reasons name a unit, and
 `.claude/prune-worktrees.json` hands the same pattern to the worktree pruner as `unit_locks`
-(`scripts/lib/tests/test_fanout_lock.py::test_the_pruner_policy_carries_the_fanout_lock_pattern`).
+(`scripts/lib/tests/git_and_gh/test_fanout_lock.py::test_the_pruner_policy_carries_the_fanout_lock_pattern`).
 `process_unit_state` judges a tree another user owns, for a caller that only reports, never
 removes. It reads the unit names in `/proc/<pid>/cgroup`, which every user can read, where
 that user's manager answers only its owner.
@@ -22,8 +22,6 @@ import re
 from collections.abc import Callable
 from pathlib import Path
 
-# `fanout_lib.target.Target.unit_prefix` plus `fanout_lib.launch.unit_name`'s batch id: issue
-# numbers joined by hyphens. A repo-name segment starts with a letter, so it never reads as one.
 REASON = re.compile(r"fanout(?:-[A-Za-z][\w.]*)*(?:-\d+)+")
 
 

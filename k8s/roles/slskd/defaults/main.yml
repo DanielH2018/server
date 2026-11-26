@@ -1,6 +1,4 @@
 ---
-# slskd, the Soulseek client, and Soularr, which pushes Lidarr's wanted albums into it. One pod,
-# behind its own Mullvad WireGuard tunnel (k8s/templates/wireguard-sidecar.yml.j2).
 slskd_k8s_image: slskd/slskd:0.26.2@sha256:d0963a3e5b16facd295bf4f2156dad0182f246b1b21a032cae12f5494c694843
 slskd_k8s_soularr_image: ghcr.io/mrusse/soularr:1.2.3@sha256:e448d49d0ca6091a35653ff9198ebb4a3acf42abfc2f2056490a9a0f0cffd210
 slskd_k8s_wireguard_image: lscr.io/linuxserver/wireguard:latest@sha256:10db56ad834f94541307d5dfdbe87370e26d155bb341a5bf65789f970f24ab5c
@@ -10,18 +8,15 @@ slskd_k8s_wireguard_image: lscr.io/linuxserver/wireguard:latest@sha256:10db56ad8
 k8s_autodeploy: false
 k8s_autodeploy_reason: "VPN-gated pod — a bump that breaks the WireGuard sidecar or slskd's start fails the tunnel gate and holds every promotion; it lands by hand through land.sh, as qbittorrent's does"
 
-# The first start installs the Mullvad mod and then waits up to 5 minutes on the wg0 gate, which
-# leaves Flux's 600s default no margin.
+# First start: mod install plus up to 5 minutes on the wg0 gate leaves no margin in 600s.
 manifests_rollout_timeout: 900s
 
-# The tunnel reads the Mullvad account from qbittorrent's Secret. Listing the key hashes its
-# `.source` digest into this pod's restart checksum, so a rotation rolls slskd too.
+# Listing the key hashes its digest into the restart checksum, so a rotation rolls slskd.
 manifests_outside_secrets:
   - name: qbittorrent-mullvad-account
     keys: [mullvad_account]
 
-# THE SHARE SWITCH. true shares the music library, read-only, with the Soulseek network; false
-# shares nothing. Flipping it changes slskd's environment, so the pod restarts with the new share.
+# true shares the music library, read-only, with the Soulseek network; false shares nothing.
 slskd_k8s_share_library: true
 
 # slskd's app dir and the sidecar's wg0.conf and mod cache share this claim's root, as
@@ -46,12 +41,10 @@ slskd_k8s_lan_networks: "192.168.0.0/24,{{ lan_subnet }},172.16.0.0/12,10.42.0.0
 slskd_k8s_mullvad_dns: 10.43.0.10
 slskd_k8s_secret_mount: /mullvad
 
-# netns-reset.sh fences the sidecar's PUID off eth0 while the tunnel is down, so slskd and
-# Soularr run as that uid.
+# Runs as the sidecar's PUID, which netns-reset.sh fences off eth0 while the tunnel is down.
 slskd_k8s_uid: 1000
 
-# Soularr's poll interval, in seconds, and what it grabs. allowed_filetypes is in preference
-# order: the lossy default profile first, lossless after.
+# allowed_filetypes is in preference order: lossy first, lossless after.
 slskd_k8s_soularr_interval: "300"
 slskd_k8s_soularr_filetypes: "mp3 320,mp3 v0,flac 16/44.1,flac"
 
@@ -73,17 +66,13 @@ k8s_claims:
     storage_class: "{{ slskd_k8s_storage_class }}"
     size: "{{ slskd_k8s_size }}"
 
-# Each entry renders k8s/templates/secret-default.yaml.j2 as secret-<name>.yaml:
-# its `string_data` maps a Secret field to the SOPS key its value comes from.
 render_secrets:
   # The Soulseek network login slskd connects with.
   - name: slskd-soulseek
     string_data:
       username: soulseek_username
       password: soulseek_password
-  # slskd's own Mullvad device key, a second device on qbittorrent's account. Read as a file
-  # through FILE__MULLVAD_PRIVATE_KEY. Store it without surrounding whitespace: init-envfile
-  # keeps a trailing newline, and a newline corrupts the key.
+  # Store without surrounding whitespace: init-envfile keeps a trailing newline, corrupting the key.
   - name: slskd-mullvad
     string_data:
       key: slskd_wireguard_private_key

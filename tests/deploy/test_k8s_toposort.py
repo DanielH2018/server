@@ -101,9 +101,6 @@ def host(request):
 
 
 def test_the_render_found_traefik_crd_roles_at_all():
-    # An empty set would make every comparison below vacuously pass -- the "unreadable
-    # input and an empty result are indistinguishable" shape. Assert a concrete floor and
-    # named members, not just a count: a count can hold while a specific role drops out.
     assert len(traefik_crd_roles()) > 10, traefik_crd_roles()
     assert {"traefik", "authelia", "crowdsec", "freshrss"} <= traefik_crd_roles()
 
@@ -124,10 +121,7 @@ def _derived_traefik_edge(entries: list[dict]) -> set[str]:
     }
 
 
-# Roles the derivation claims an edge for while the render shows no Traefik CRD in the role.
-# Over-derivation is the safe direction and under-derivation is not: an extra edge costs an
-# ordering constraint that is already true, while a missing one applies a Traefik CRD before
-# traefik owns the CRDs. Each name carries the reason it is one-directional.
+# Over-derivation is the safe direction: an extra edge is an already-true constraint.
 OVER_DERIVED_TRAEFIK_EDGE = {
     "livesync": (
         "its route is a file-provider router in the traefik role "
@@ -270,11 +264,7 @@ def test_shuffled_list_still_sorts_to_respect_every_edge(host):
         )
 
 
-# Every pairwise ordering a role doc or a containers_list comment states in prose, as the
-# `depends_on:` edge that carries it. Without the edge an ordering holds by hand position alone,
-# which the stable sort preserves and nothing checks. The value names the doc to reconcile on a
-# red failure. netpol-baseline's "after everything" is no pair, and no entry declares it:
-# test_every_entry_sorts_ahead_of_an_applies_last_role_listed_first guards it.
+# Without the edge an ordering holds by hand position alone, which nothing checks.
 DOCUMENTED_ORDERINGS = {
     ("mosquitto", "zigbee2mqtt"): "k8s/roles/mosquitto/CLAUDE.md",
     ("media-volume", "sonarr"): "k8s/roles/media-volume/CLAUDE.md",
@@ -316,8 +306,7 @@ def test_documented_pairwise_ordering_survives_an_adversarial_list(host, before,
     if before not in idx or after not in idx:
         pytest.skip(f"host does not deploy both {before} and {after}")
     by_name = {c["name"]: c for c in entries}
-    # The edge must be DECLARED, not merely implied: a pair held only by a transitive edge
-    # elsewhere would pass the sort below whatever this entry says, which is vacuous.
+    # The edge must be declared, not implied by a transitive edge elsewhere.
     assert before in by_name[after].get("depends_on", []), (
         f"{after}'s containers_list entry declares no `depends_on: [{before}]`; "
         f"{DOCUMENTED_ORDERINGS[(before, after)]} says it must."

@@ -143,7 +143,7 @@ For each PR read the file list and the diff — `gh pr diff <n> --name-only`, th
 | `uv.lock` | lock file maintenance | merge; nothing to deploy |
 | `k8s/roles/*/defaults/main.yml` | k8s image pin | merge, land with the role's tag |
 | same, **title or branch** carries `(manual — k8s_autodeploy: false, …)` — the branch slugifies it to `k8s_autodeploy-false`, and for a single-dependency group that can be the only place it lands (#2641). `groupSingleUpdates: true` on every rule carrying the marker puts it in the title of a PR raised since #2646 (the denylist and base-image rules) or #2654 (the per-package rules); a PR raised before that still titles bare | k8s image pin marked `k8s_autodeploy: false` | nothing to finish; merge through `land.sh`, which deploys it from the merge commit — a bare merge leaves it to the drift monitor (#1886). **An interactive session's job only**: the unattended `renovate_agent` leaves this class open and names the `land.sh` command in its digest, because the denial reason is that a failed deploy here (authelia, traefik, crowdsec) is one `probe.py health` cannot see, so a person is the review (#1939). A title whose parenthetical ENDS with `; k8s_autodeploy: false` after its own work order (`crowdsec bouncer plugin`, `meilisearch`, `karakeep time-tagger pip deps`, `n8n`) is a per-package rule on a denied role (#1963): the work order in front of the marker decides the handling — *When to stop and say so* below — and the marker only says who may land it |
-| `inventory/group_vars/all.yml`, same title | a cross-role image pin (`crowdsec_k8s_image`, read by crowdsec, traefik and authelia) | same as the row above: `promote` re-renders every tag reading the key, and `land.sh` gates the tags the promotion's changed set names |
+| `k8s/vars.yml`, same title | a cross-role image pin (`crowdsec_k8s_image`, read by crowdsec, traefik and authelia) | same as the row above: `promote` re-renders every tag reading the key, and `land.sh` gates the tags the promotion's changed set names |
 | `hosts/components/*/defaults/main.yml` | host plane | often `manual —`; check the rule |
 | `k8s/roles/*/templates/Dockerfile*.j2` | in-cluster-built image | merge, land, then verify the pod took the rebuild |
 | `hosts/components/pi-compose/services/*/compose.yaml.j2` | a Pi Compose image pin | autoheal's and docker-proxy's digest bumps automerge, and the Pi's updater installs the next package. A `pi image wg-easy (manual — …)` or `grafana/alloy (manual — lockstep …)` PR waits for a person: land it through `land.sh`, which waits for the Pi to install the package, then read the running image with `ssh daniel-pi "docker inspect <service> --format '{{.Image}}'"` and compare it with the digest in the service's `compose.yaml.j2`. `docker ps --format '{{.Image}}'` is no substitute, because it prints the tag and the Pi's local `latest` can point at an older image than the running one (#7089) |
@@ -269,7 +269,7 @@ A half-done bump is a normal code change: worktree, fix, test, PR. Three rules s
   your own branch, then `gh pr close <renovate-pr>` naming the superseding PR. Keeping the
   bot's commit preserves the provenance of the version bump.
 - **A coupled pin moves with it.** `raise jellyfin with it` means the image bump is part of
-  the same PR, because the repo guards the pair (`tests/services/test_anisync_pin_matches_server.py::test_the_plugin_target_abi_does_not_exceed_the_server`). Run
+  the same PR, because the repo guards the pair (`tests/services/jellyfin/test_anisync_pin_matches_server.py::test_the_plugin_target_abi_does_not_exceed_the_server`). Run
   the guard the rule points at; it is the completion criterion.
 - **The unattended run cannot finish a work order.** It runs as its own user with a token
   that cannot push, merge or file an issue, so it opens no superseding PR
@@ -291,11 +291,11 @@ uv run python scripts/dev/renovate_rebase.py <n>
 ```
 
 It is idempotent (a ticked box exits 0 and writes nothing,
-`scripts/dev/tests/test_renovate_rebase.py::test_main_is_idempotent_on_a_ticked_box`), exits 1 on a body with no
+`scripts/dev/tests/repo_tools/test_renovate_rebase.py::test_main_is_idempotent_on_a_ticked_box`), exits 1 on a body with no
 `<!-- rebase-check -->` box, which is a PR Renovate did not author
-(`scripts/dev/tests/test_renovate_rebase.py::test_main_refuses_a_body_with_no_box_without_editing`), and exits 3 on a PR still
+(`scripts/dev/tests/repo_tools/test_renovate_rebase.py::test_main_refuses_a_body_with_no_box_without_editing`), and exits 3 on a PR still
 inside its soak, naming `renovate/stability-days` and writing nothing
-(`scripts/dev/tests/test_renovate_rebase.py::test_main_refuses_to_tick_a_soaking_pr`). Renovate refreshes the
+(`scripts/dev/tests/repo_tools/test_renovate_rebase.py::test_main_refuses_to_tick_a_soaking_pr`). Renovate refreshes the
 branch within a cycle. Do not hand-edit the digest: the next Renovate
 run would rewrite it anyway.
 
@@ -311,7 +311,7 @@ PR, and that PR still reads `renovate/stability-days: pending` (§0).
 `renovate_rebase.py` now enforces that paragraph rather than relying on you to remember it: it
 reads the PR's status rollup, and on a pending `renovate/stability-days` it names the soak and
 exits 3 without ticking (#2630,
-`scripts/dev/tests/test_renovate_rebase.py::test_main_names_the_soak_on_a_pr_whose_box_is_already_ticked`). It refuses even where the box is unticked, so that exit 0
+`scripts/dev/tests/repo_tools/test_renovate_rebase.py::test_main_names_the_soak_on_a_pr_whose_box_is_already_ticked`). It refuses even where the box is unticked, so that exit 0
 never reads as "the rebase is coming" while the soak holds it.
 
 A box Renovate left ticked through the soak should still be honoured. Renovate rereads the box
@@ -323,10 +323,10 @@ uv run python scripts/dev/renovate_rebase.py --retick <n>
 ```
 
 `--retick` writes the box unticked, then ticked, as two separate edits (#2655,
-`scripts/dev/tests/test_renovate_rebase.py::test_retick_unticks_then_reticks_a_spent_box_after_the_soak`). It refuses with
+`scripts/dev/tests/repo_tools/test_renovate_rebase.py::test_retick_unticks_then_reticks_a_spent_box_after_the_soak`). It refuses with
 exit 3 unless `renovate/stability-days` reads SUCCESS, so it cannot spend a tick during the
-soak (`scripts/dev/tests/test_renovate_rebase.py::test_retick_refuses_a_pr_still_soaking`). If the second edit fails, the box is left unticked; a plain run ticks it
-(`scripts/dev/tests/test_renovate_rebase.py::test_retick_names_the_unticked_box_when_the_second_edit_fails`).
+soak (`scripts/dev/tests/repo_tools/test_renovate_rebase.py::test_retick_refuses_a_pr_still_soaking`). If the second edit fails, the box is left unticked; a plain run ticks it
+(`scripts/dev/tests/repo_tools/test_renovate_rebase.py::test_retick_names_the_unticked_box_when_the_second_edit_fails`).
 
 ## 6. Land them one at a time
 
@@ -338,7 +338,7 @@ prompt says, because its own token cannot merge
 (`hosts/tests/test_renovate_agent_identity.py::test_the_runner_lands_through_the_lander_the_polkit_rule_admits`).
 
 **Serialize.** One landing at a time holds the landing turn, and the others wait for it
-(`scripts/deploy_tools/tests/test_land_turn.py::test_a_landing_waits_while_another_holds_the_turn`);
+(`scripts/deploy_tools/tests/land_merge/test_land_turn.py::test_a_landing_waits_while_another_holds_the_turn`);
 the skill's verdict table says what to do with the line each prints.
 
 ## 7. Verify the bump, not the rollout
@@ -348,7 +348,7 @@ the skill's verdict table says what to do with the line each prints.
 - **An upstream version bump:** ask the app. `kubectl -n homelab logs deploy/<svc> | grep -i version`,
   or the service's own version endpoint.
 - **A built image** (`Dockerfile*.j2`): confirm the pod resolved the digest the registry serves.
-  The `built-images-pull-always` row of `tests/k8s/_workload_property_rows.py` guards
+  The `built-images-pull-always` row of `tests/k8s/rendered_properties/_workload_property_rows.py` guards
   the usual cause.
 - **A plugin or extension:** confirm the host loaded it, not just that the file is on disk.
 

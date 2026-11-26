@@ -89,7 +89,7 @@ five: the fifth was the file's title, which holds no prose.
 
 - **The one value already had a detector, and keeps it.** The section says the hooks run
   "twenty-five" test files, and
-  `tests/repo/test_static_ratchet_hook.py::test_claude_md_states_how_many_files_the_hook_runs`
+  `tests/repo/ci_workflows/test_static_ratchet_hook.py::test_claude_md_states_how_many_files_the_hook_runs`
   holds that count against the hooks. The test fails and rewrites nothing. Moving it to a
   `VALUES` row would add the fixer, and is not part of this batch.
 - **Three sentences stay unbound.** "CI's `pytest` job runs the whole suite on every PR"

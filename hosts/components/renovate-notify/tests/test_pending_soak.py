@@ -33,9 +33,8 @@ _FIXTURE_MEMBERS = frozenset(
     }
 )
 
-# Named members of the newer capture, chosen the same way: one version bump, one mutable-tag
-# digest bump. A count alone would have passed all through the week the marker rename made the
-# parse return nothing.
+# Named members, because a count alone would pass while a marker rename made the parse return
+# nothing.
 _FIXTURE_2026_09_09_MEMBERS = frozenset(
     {
         "renovate/k8s-image-traefik",
@@ -57,8 +56,6 @@ def test_parse_pending_finds_named_members_in_the_real_dashboard():
 
 
 def test_parse_pending_reads_every_item_in_the_section():
-    # Every approvePr-branch= checkbox in the captured body sits in this section; none may
-    # be dropped.
     assert len(pl.parse_pending(FIXTURE)) == FIXTURE.count("approvePr-branch=")
 
 
@@ -78,8 +75,8 @@ def test_pending_section_unreadable_is_clean_on_both_captures():
 
 
 def test_pending_section_unreadable_is_flagged_when_the_marker_is_renamed_again():
-    # Header intact, every item carrying a marker this module does not know: the exact shape
-    # that read 26 live items as zero. `dashboard_headers_unrecognized` cannot see it.
+    # Header intact, every item with an unknown marker: dashboard_headers_unrecognized cannot see
+    # this shape.
     body = (
         "## Pending Status Checks\n\n"
         " - [ ] <!-- someNewName-branch=renovate/foo -->Update foo to v2\n"
@@ -95,8 +92,7 @@ def test_pending_section_unreadable_is_false_when_nothing_is_pending():
 
 
 def test_parse_pending_stops_at_the_next_section():
-    # "Awaiting Schedule" sits ABOVE Pending Status Checks and carries an unschedule-branch
-    # marker, not an approvePr-branch one; Detected Dependencies sits below.
+    # Awaiting Schedule sits above Pending Status Checks and carries an unschedule-branch marker.
     assert "renovate/lock-file-maintenance" not in pl.parse_pending(FIXTURE)
 
 
@@ -191,8 +187,7 @@ def test_item_soak_is_seven_days_for_a_version_bump():
     assert pl.item_soak_days("something else entirely") == 7
 
 
-# One real grouped row from issue #3: tdarr's pin is `latest@sha256:...`,
-# so this is a digest bump whose title says nothing of the sort.
+# tdarr's pin is `latest@sha256:...`, a digest bump whose title does not say so.
 GROUPED_DIGEST_ROW = (
     "Update k8s image ghcr.io/haveagitgat/tdarr "
     "(manual \u2014 k8s_autodeploy: false, so the tick applies nothing; land.sh deploys it)"
@@ -349,8 +344,7 @@ def test_stale_pending_uses_the_shorter_allowance_for_a_digest_item():
 
 
 def test_stale_pending_treats_an_unseen_item_as_first_seen_now():
-    # The first run after this ships has an empty state file. Seeding it must not page for
-    # every pending item at once.
+    # An empty state file on the first run must not page for every pending item at once.
     assert pl.stale_pending({}, pl.parse_pending(FIXTURE), 1_000_000.0) == []
 
 
@@ -433,11 +427,8 @@ def test_render_pending_does_not_truncate_a_short_list():
     assert "…and" not in msg
 
 
-# --- Dwell-state loss ---------------------------------------------------------
-# A reset is only useful if it names when the check is trustworthy again, so the dates are
-# asserted as literal strings against a fixed epoch: deriving them from VERSION_SOAK_DAYS +
-# PENDING_GRACE_DAYS inside the test would assert the file equals itself and would still pass
-# if either constant drifted.
+# Dates are literal strings against a fixed epoch: deriving them from the constants would assert the
+# file equals itself.
 _RESET_NOW = (
     1_788_990_155.26  # 2026-09-09 21:42 UTC — the run that reset all 27 live clocks
 )

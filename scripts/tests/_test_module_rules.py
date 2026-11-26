@@ -49,8 +49,7 @@ MODULE_FLOOR = 800
 # The comprehension a module writes when it re-derives the scrub by filtering on a GIT_ prefix.
 GIT_SCRUB = re.compile(r'startswith\(\s*["\']GIT_["\']\s*\)')
 
-# The verbs that build or edit a repository. A read verb against the real checkout -- the
-# `git ls-files` twenty-two guards run -- is harmless however the environment is set.
+# A read verb against the real checkout is harmless however the environment is set.
 WRITE_VERBS = frozenset(
     {
         "add",
@@ -90,8 +89,6 @@ def raw_git_calls(source: str) -> list[str]:
     A list or a tuple opening with the literal `"git"`. Read from the AST, so a docstring
     naming the old form is prose rather than a hit.
     """
-    # A hit calls through the bare `subprocess` name, an identifier no module can spell
-    # any other way.
     if "subprocess" not in source:
         return []
     found = []
@@ -125,8 +122,8 @@ def raw_git_calls(source: str) -> list[str]:
     return found
 
 
-# The launches that take a `timeout=`. `Popen` is deliberately absent: it takes no `timeout=`,
-# and its deadline lives on the `wait`/`communicate` that follows.
+# `Popen` is absent: it takes no `timeout=`; its deadline lives on the following
+# `wait`/`communicate`.
 _BOUNDABLE_LAUNCHES = frozenset({"run", "check_output", "check_call", "call"})
 
 # DECIDED: no fourth rule for Popen. #3073 proposed one — a `Popen` whose enclosing function
@@ -142,14 +139,14 @@ _BOUNDABLE_LAUNCHES = frozenset({"run", "check_output", "check_call", "call"})
 #
 # It HITS almost nothing else. Two of the three sites in `tests/repo/
 # test_process_waits.py` would need an exemption, because that module's subject IS an
-# unbounded wait. The third, and `scripts/deploy_tools/tests/test_land_detach.py`, already
+# unbounded wait. The third, and `scripts/deploy_tools/tests/land_merge/test_land_detach.py`, already
 # clear on the preceding `kill()`. That leaves a rule whose hit set is mostly its own
 # exemption list.
 #
 # And the spelling it would demand is not safe by itself. `communicate(timeout=...)` raises
 # `TimeoutExpired` and leaves the child RUNNING, so a rule satisfied by adding the keyword
 # would bless a site that still leaks a process into `filterwarnings = ["error"]`. The one
-# real hazard the census found — `scripts/validate/tests/test_vale_sync_guard.py`'s
+# real hazard the census found — `scripts/validate/tests/repo_checks/test_vale_sync_guard.py`'s
 # `run_concurrently` — needed the deadline AND a `finally` that reaps the batch, and only the
 # second half is what actually keeps a wedged guard from parking CI.
 #
@@ -157,9 +154,7 @@ _BOUNDABLE_LAUNCHES = frozenset({"run", "check_output", "check_call", "call"})
 # `Popen` in a test is already the deliberate act. Contradict this with a measured `Popen`
 # site that rule 4 would have caught and `kill()` would not have cleared.
 
-# The module names a `subprocess` import can be bound to. A hit needs the call to reach the
-# stdlib module rather than any object that happens to own a `run`, and `sp` is the one alias
-# this tree uses.
+# `sp` is the one alias this tree uses; a hit needs the call to reach the stdlib module.
 _SUBPROCESS_NAMES = frozenset({"subprocess", "sp"})
 
 _EXEC_BITS = 0o111
@@ -184,8 +179,7 @@ def handwritten_executables(source: str) -> list[str]:
     what makes it a fake binary, so the chmodded path must also be written in the same
     function, either as the same expression or as a join under the same directory.
     """
-    # A hit needs a `.chmod(` call, and most test modules have none. Walking each function
-    # scope twice costs ~3s of the static-ratchet-tests hook over ~1400 modules.
+    # Most test modules have no `.chmod(` call; skipping them avoids walking each scope twice.
     if "chmod" not in source:
         return []
     found = []

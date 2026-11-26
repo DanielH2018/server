@@ -18,7 +18,7 @@ FreshRSS with a small nginx feed-cache Deployment beside it
   applies it.
 - **Port:** 80
 - **Flux applies it.** Its `containers_list` entry is
-  in `cluster/services.yml`, so nothing applies it by hand, and a merged change reaches the cluster when
+  in `k8s/services.yml`, so nothing applies it by hand, and a merged change reaches the cluster when
   `promote` publishes and verifies the next bundle. Its image-bump PRs therefore draw no
   `land-wait` and no `probe.py health` run. authelia and traefik are flux-owned too, so the
   Kustomization lists them in `dependsOn`, and Flux applies this tag only after their

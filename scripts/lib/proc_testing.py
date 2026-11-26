@@ -43,7 +43,7 @@ test_proc_testing.py` covers this module's own behaviour, and a test that pins t
 environment its subject runs under — a hook fixture holding `PATH` to `/usr/bin:/bin` — keeps
 its raw form. Both cases are named in the guard's exemption set with that reason.
 
-Run: uv run pytest scripts/lib/tests/test_proc_testing.py
+Run: uv run pytest scripts/lib/tests/utils/test_proc_testing.py
 """
 
 import os
@@ -60,16 +60,11 @@ __all__ = [
     "write_exec",
 ]
 
-# Every launch this module makes is bounded. 60s is two orders of magnitude above what a test
-# launch here actually takes (`pytest scripts/deploy_tools/tests/test_deploy_at_sha.py
-# --durations=5` on daniel-server: slowest case 0.39s), so it leaves room for a
-# loaded CI runner without any caller needing to raise it. It is also far below pytest's own
-# patience, which is the point — a child that wedges fails its own test rather than parking the
-# run. A caller whose subject is genuinely slow passes its own `timeout=`.
+# Bounds every launch so a wedged child fails its own test; a slow subject passes its own
+# `timeout=`.
 DEFAULT_TIMEOUT = 60
 
-# The interpreter line `write_exec` supplies when the text does not carry one. `sh` rather than
-# `bash`, so a stub runs the same under a container image that ships neither as `/bin/bash`.
+# `sh` rather than `bash`, so a stub runs under a container image with no /bin/bash.
 SHEBANG = "#!/bin/sh\n"
 
 

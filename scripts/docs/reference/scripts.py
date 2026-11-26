@@ -54,12 +54,17 @@ from lib.exit_codes import CONTRACTS as _EXIT_CONTRACTS, contract as _exit_contr
 from lib.repo_paths import REPO, SCRIPTS
 from lib.script_classify import RUNS, candidates, classify
 
-# The reStructuredText usage marker the repo's scripts already use, and the indented block
-# that follows it.
 _USAGE_RE = re.compile(r"^Usage::\s*$", re.MULTILINE)
 
 # The Directory cell of a script that sits directly in scripts/ rather than in a subdirectory.
 TOP_LEVEL = "(top level)"
+
+
+def _holds(place: Path, name: str) -> bool:
+    """Whether `place` holds `name`, below a subject directory when `place` is a suite."""
+    if place.name == "tests":
+        return any(place.rglob(name))
+    return (place / name).is_file()
 
 
 def _python_docstring(path: Path) -> str | None:
@@ -143,22 +148,15 @@ def build_rows(
                 summary, usage = doc.strip().splitlines()[0].strip(), _usage(doc)
         else:
             doc = _shell_docstring(path)
-            # The first NON-EMPTY line: two of these scripts open `#!`, then a bare `#`,
-            # then the sentence. Taking line one left them with a blank summary cell.
+            # First NON-EMPTY line: two scripts open `#!`, then a bare `#`.
             lines = [line for line in doc.splitlines() if line.strip()]
             summary = lines[0].strip() if lines else "(no leading comment)"
             # Two of them open "name.sh — what it does"; the name is already the row label.
             summary = re.sub(rf"^{re.escape(path.name)}\s+[—-]\s*", "", summary)
             usage = _usage(doc)
 
-        # The split layout keeps a script's test in a sibling `tests/`; the flat one beside it.
-        # A module inside a `*_lib` package keeps its test in the entrypoint's `tests/`, beside
-        # the package, as land_lib, probe_lib and fragments_lib do. That test may carry the
-        # family's prefix, which is the package name less `_lib`: land_lib/ci.py is tested by
-        # test_land_ci.py. The nearest `*_lib` ancestor decides both, so a module in a
-        # subpackage counts too: fanout_lib/review/base_check.py is tested by
-        # test_fanout_base_check.py. The bare name is tried first, so fragments_lib's
-        # fragments_hosts.py keeps test_fragments_hosts.py.
+        # A `*_lib` module is tested in the entrypoint's `tests/`, possibly prefixed with the
+        # package name less `_lib`; the bare name is tried first.
         places = [path.parent / "tests", path.parent]
         names = [f"test_{path.stem}.py"]
         lib = next(
@@ -172,12 +170,10 @@ def build_rows(
         if lib is not None:
             places.append(lib.parent / "tests")
             names.append(f"test_{lib.name.removesuffix('_lib')}_{path.stem}.py")
-        test = next((n for n in names if any((p / n).is_file() for p in places)), "")
+        test = next((n for n in names if any(_holds(p, n) for p in places)), "")
         run, evidence = verdicts.get(
             path.name, ("adhoc", "no automated caller in the tree")
         )
-        # The top-level subdirectory only: `docs/reference/x.py` files under `docs`, which is
-        # the grouping the Directory filter on the page offers.
         within = path.relative_to(scripts).parts
         rows.append(
             {
@@ -255,9 +251,7 @@ def render_markdown(rows: list[dict[str, str]]) -> str:
         if not section:
             parts.append("None.\n")
             continue
-        # Script stays the first cell: _mkdocs_repo_links.py finds each row's anchor target
-        # there. Directory repeats a prefix of the path so the page's table filter
-        # (docs/assets/table-filter.js) can offer it as a choice.
+        # Script stays the first cell: _mkdocs_repo_links.py finds each row's anchor target there.
         parts.append(
             "| Script | Directory | What it does | Reached by | Tests | Exit codes |"
         )
@@ -291,7 +285,7 @@ def render_markdown(rows: list[dict[str, str]]) -> str:
     parts.append(
         f"\n## Usage\n\n{len(documented)} script(s) document how to invoke themselves. "
         "The rest take `--help`, which every catalogued entry point answers with exit 0 "
-        "(`scripts/lib/tests/test_entry_points_answer_help.py`).\n"
+        "(`scripts/lib/tests/script_census/test_entry_points_answer_help.py`).\n"
     )
     for row in documented:
         parts.append(f"\n### `{row['path']}`\n")

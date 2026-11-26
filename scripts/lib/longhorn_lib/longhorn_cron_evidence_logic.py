@@ -244,7 +244,7 @@ class CronLines(NamedTuple):
 
 
 # Matched as written against what the probe prints, and pinned by the coupling tests in
-# scripts/lib/tests/test_longhorn_backup_health_cron_evidence.py.
+# scripts/lib/tests/longhorn/test_longhorn_backup_health_cron_evidence.py.
 CRON_LINES = {
     # `deletions_summary_line` and `deletions_declined_line` in probe_lib/b2_ledger.py.
     "b2-deletions": CronLines(

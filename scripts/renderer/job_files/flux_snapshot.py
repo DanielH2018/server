@@ -20,7 +20,7 @@ server's CA reaches `urlopen` through `SSL_CERT_FILE`, which the Job sets. Stand
 only. Exit 0 when every claim is snapshotted or skipped, 1 on the first failure, naming it.
 
 Run: python3 flux_snapshot.py (in the Job; it takes no arguments)
-     uv run pytest scripts/renderer/tests/test_flux_snapshot.py
+     uv run pytest scripts/renderer/tests/flux_jobs/test_flux_snapshot.py
 """
 
 import argparse
@@ -45,11 +45,10 @@ KUSTOMIZATIONS = (
 LONGHORN_DRIVER = "driver.longhorn.io"
 # `volume-snapshot`'s run token: the UTC time the Job's pod starts.
 TOKEN_FORMAT = "%Y%m%d%H%M%S"
-# Longhorn's delete webhook refuses a longer name through every route, so nothing could prune
-# the snapshot.
+# Longhorn's delete webhook refuses a longer name, so nothing could prune the snapshot.
 NAME_LIMIT = 63
-# The retention floor `claim.yml` clamps to: a rollback takes its own snapshot and prunes
-# before `volume-revert` reads the chain, so both must survive one run's prune.
+# `claim.yml` clamps retention to this: a rollback takes its own snapshot and prunes before
+# `volume-revert` reads the chain.
 RETAIN_FLOOR = 2
 # The seconds each API call may take.
 CALL_TIMEOUT = 10
@@ -254,8 +253,8 @@ def wait_ready(kube: Kube, name: str, volume: str, cfg: Config, sleep, clock) ->
     deadline = clock() + cfg.timeout
     while True:
         status, body = kube.call("GET", f"{LONGHORN}/snapshots/{name}")
-        # A refused or vanished read is no readiness answer, so it fails at once, naming the
-        # status, rather than polling out to a timeout that blames Longhorn.
+        # A refused or vanished read is no readiness answer, so it fails at once instead of polling
+        # out to a timeout.
         state = _ok(status, body, f"Snapshot {name}").get("status") or {}
         if state.get("readyToUse") is True:
             return

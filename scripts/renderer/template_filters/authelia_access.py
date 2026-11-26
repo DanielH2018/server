@@ -14,11 +14,8 @@ class AccessRuleError(ValueError):
     """A `containers_list` entry whose Authelia declaration no access rule can carry."""
 
 
-# The policies a service can declare, in the order their rules render (first match wins, so
-# the stricter tier goes first). `bypass` is deliberately absent: a scoped bypass
-# (paths, networks, methods) has no per-service shape and stays a hand-written rule in the
-# template, ahead of the generated block, while the entry's `auth_tier` names what its UI
-# traffic gets.
+# First match wins, so the stricter tier goes first. `bypass` is absent: a scoped bypass stays a
+# hand-written rule ahead of the generated block.
 AUTH_TIERS = ("two_factor", "one_factor")
 
 

@@ -58,7 +58,7 @@ only when all three hold:
   claim in the findings register names, stale claims included.
 
 A holds command that fails keeps every landed branch
-(`scripts/dev/tests/test_held_branches.py::test_main_fails_and_prints_no_branch_when_a_register_is_unread`).
+(`scripts/dev/tests/fanout/test_held_branches.py::test_main_fails_and_prints_no_branch_when_a_register_is_unread`).
 The sweep never deletes a remote branch. To see what a sweep would delete and why, with a
 count of the branches it keeps under each reason, run `--check` with no branch:
 
@@ -84,7 +84,7 @@ gone is ignored, because Claude Code does not release the lock when a session en
 why a worktree the current session still holds stays `keep` until that session exits. Nothing
 you can do from inside a worktree makes the pruner collect it. A fan-out batch's lock names
 its systemd unit, and it holds the tree while the unit runs
-(`scripts/lib/tests/test_fanout_lock.py::test_a_merged_tree_whose_batch_unit_runs_is_kept`)
+(`scripts/lib/tests/git_and_gh/test_fanout_lock.py::test_a_merged_tree_whose_batch_unit_runs_is_kept`)
 and for a day after the lock was written (`scripts/lib/fanout_lock.py`).
 
 `git worktree remove` refuses outright while a worktree is locked, and unlocking is a separate

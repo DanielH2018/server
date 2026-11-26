@@ -1,11 +1,7 @@
 {% from 'ingressroute.yml.j2' import ingressroute with context %}
 ---
-{#
-  The UI route, plus the strangler-bridge route once unsuffixed_hostname is set. /webhook/ needs no
-  route of its own here: the bridge route the macro emits carries no Authelia at all, and the
-  Docker edge's half of the bypass is generated from bridge_bypass_prefixes. That pairing is
-  what reproduces the unauthenticated `n8n-webhook` route — see daniel-box.yml.
-#}
+{# /webhook/ needs no route here: the bridge route carries no Authelia, paired with the Docker edge's
+   bridge_bypass_prefixes. #}
 {# DECIDED: the UI keeps its public name despite near-zero traffic, by operator ruling 2026-11-15 (#8514). #}
 {{ ingressroute(
     container_item.name,
@@ -15,14 +11,5 @@
     bypass_prefixes=container_item.bridge_bypass_prefixes | default([])
   )
 }}
-{#
-  No `n8n-monitoring` route exists: monitor-bridge's check_n8n reaches n8n over the Service DNS
-  name, so nothing needs a door onto /api/v1/workflows and /api/v1/executions.
-
-  /api/v1 is READ-WRITE — it can create, modify, activate and delete workflows — so such a route
-  would reach it with X-N8N-API-KEY as the only gate unless it carries Authelia or a ClientIP
-  matcher.
-
-  If a future caller needs this, add it through the shared monitoring_route() macro so it
-  inherits the ClientIP matcher, rather than writing a hand-rolled twin.
-#}
+{# No n8n-monitoring route: /api/v1 is read-write, so X-N8N-API-KEY would be the only gate. Add one
+   only via monitoring_route(). #}

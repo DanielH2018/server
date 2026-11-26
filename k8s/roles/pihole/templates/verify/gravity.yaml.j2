@@ -45,11 +45,9 @@
 {% endfor %}
 {% set roll_digest8 = ((roll.text + roll.secrets) | hash('sha256'))[:8] %}
 {% set spec_text %}
-# No retry. A retry logs in again, and a mutation that failed partway is safer read by a
-# person than repeated. A failed reconcile waits for the next revision or a hand run.
+# No retry: a retry logs in again, and a mutation that failed partway is safer read by a person.
 backoffLimit: 0
-# Two logins and two reads, then, after a change, two gravity rebuilds of one to two minutes
-# each. `<tag>-verify`'s timeout rises to this plus 60s (`ordering.verify_timeout`).
+# Two logins, two reads and two 1-2 minute gravity rebuilds; the verify timeout is this plus 60s.
 activeDeadlineSeconds: 600
 template:
   metadata:
@@ -80,8 +78,7 @@ template:
             value: >-
               pihole=http://pihole.{{ k8s_namespace }}.svc.cluster.local:{{ container_item.port }}
               pihole-2=http://pihole-2-web.{{ k8s_namespace }}.svc.cluster.local:{{ container_item.port }}
-          # FTL's own admin password, from the Secret both instances read, as pihole-exporter
-          # reads it. A secretKeyRef keeps the value out of the spec and its digest.
+          # secretKeyRef keeps the value out of the spec and its digest.
           - name: PIHOLE_PASSWORD
             valueFrom:
               secretKeyRef:

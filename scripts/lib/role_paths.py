@@ -3,14 +3,13 @@
 `land.sh` reads a PR's file list through these to derive the tags it gates, and
 `findings_lib/precomputed.py` reads them to say what a brief's cited paths deploy.
 
-Run: uv run pytest scripts/lib/tests/test_role_paths.py
+Run: uv run pytest scripts/lib/tests/k8s/test_role_paths.py
 """
 
 import re
 from typing import NamedTuple
 
-# The second group takes a TRAILING SLASH, so a file at a role's own root reports no
-# subdirectory rather than its own basename.
+# The second group takes a TRAILING SLASH, so a file at a role's root reports no subdirectory.
 _ROLE_PATH = re.compile(r"^k8s/roles/([^/]+)/(?:([^/]+)/)?")
 
 SECRETS_FILE = "secrets/secrets.yml"
@@ -42,7 +41,7 @@ def is_test_path(path: str) -> bool:
 
     The `tests/` directory shape, which `test_testpaths_covers_every_test_file.py` enforces,
     plus a `test_*.py` or `conftest.py` wherever it sits. The `no-role-ships-a-pytest-file`
-    row of `tests/repo/test_census_rows_roles.py` holds that no role ships one.
+    row of `tests/repo/census_rows/test_census_rows_roles.py` holds that no role ships one.
     """
     if path.startswith("tests/"):
         return True

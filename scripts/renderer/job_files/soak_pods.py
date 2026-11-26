@@ -9,8 +9,7 @@ from typing import NamedTuple
 from soak_reads import Reads
 
 WORKLOADS = frozenset({"Deployment", "DaemonSet", "StatefulSet"})
-# Each workload kind's recording rule and the label naming the workload in it. A StatefulSet
-# has none, so its unmapped pod always fails.
+# A StatefulSet has no recording rule, so its unmapped pod always fails.
 WORKLOAD_RULES = {
     "Deployment": ("homelab:deployment_service:info", "deployment"),
     "DaemonSet": ("homelab:daemonset_service:info", "daemonset"),

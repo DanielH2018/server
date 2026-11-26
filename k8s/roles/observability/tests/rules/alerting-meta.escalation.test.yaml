@@ -8,7 +8,7 @@
 # warning and would otherwise escalate beside the alert under test.
 #
 # The input is ALERTS itself, the series Prometheus writes for every rule's pending and firing
-# alerts. tests/services/test_warning_escalation_exemptions.py holds the real rules'
+# alerts. tests/services/alertmanager/test_warning_escalation_exemptions.py holds the real rules'
 # labels to the selector.
 rule_files:
   - ../../files/rules/alerting-meta.yaml

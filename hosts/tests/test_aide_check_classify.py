@@ -64,8 +64,6 @@ EXPLAINED = {
     "a mount unit snapd wrote": f"{ADDED}: /etc/systemd/system/snap-snapd-27738.mount",
     "the usr-merge links as a merged host has them": f"{LINK_CHANGED}: /bin",
 }
-# Files package triggers regenerate: (entry, the packages dpkg.log shows configured since the
-# baseline). Each is explained by a package that writes that kind of file.
 KERNEL_PACKAGE = "linux-image-7.0.0-42-generic"
 REGENERATED = {
     "an initrd a kernel package built": (
@@ -373,8 +371,6 @@ def test_a_difference_no_package_explains_is_flagged(tmp_path, entry, setup, rea
     )
 
 
-# Fails the classifier's join with dpkg's records, the program that reads ARGV[1], and runs
-# every other awk call for real.
 FAILING_JOIN_AWK = """\
 #!/bin/sh
 case "$*" in *'ARGV[1]'*) echo 'awk: fatal: out of memory' >&2; exit 2 ;; esac

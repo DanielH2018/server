@@ -32,7 +32,6 @@ import jinja2
 import yaml
 
 from lib import yaml_fast
-from lib.inventory_lists import K8S_HOST
 from lib.repo_paths import K8S_ROLES
 from renderer.renderer_lib.bundle import CLUSTER_DIR, FLUX_DIR, KUSTOMIZATION
 from renderer.renderer_lib.cluster import RenderedTag, RenderRefused, tag_context
@@ -42,17 +41,15 @@ from renderer.renderer_lib.task_inputs import image_builder_sites, image_context
 
 IMAGES_DIR = "images"
 TAGS_FILE = f"{IMAGES_DIR}/tags.json"
-# A GHCR content tag is immutable under `ci_images`' push-once rule, so a node's cached copy is
-# always the right image. Under `Always`, kubelet asks GHCR on every container start, so a GHCR
-# or WAN outage would fail every restart, reboot and crash recovery of the consumer.
+# A GHCR content tag is immutable, so a cached copy is always right; `Always` would fail every
+# restart during a GHCR or WAN outage.
 GHCR_PULL_POLICY = "IfNotPresent"
-# A built-image ref as a role default spells it: `<pull host>/<name>:<content tag>`. A GHCR ref
-# has a second `/` before the name, so it never matches.
+# A GHCR ref has a second `/` before the name, so it never matches.
 BUILT_REF = re.compile(
     r"[^/\s]+/(?P<name>[a-z0-9]+(?:-[a-z0-9]+)*):(?P<tag>sha-[0-9a-f]{12})"
 )
-# Where `ci_images` pushes each image. A host render imports this module, and `ci_images` is no
-# `HOST_INPUTS` member, so the prefix is repeated here and a test holds the two equal.
+# A host render imports this module and `ci_images` is no HOST_INPUTS member, so the prefix is
+# repeated and a test holds the two equal.
 GHCR = "ghcr.io/danielh2018"
 GHCR_REF = re.compile(re.escape(GHCR) + r"/[^:\s]+:sha-[0-9a-f]{12}")
 
@@ -78,13 +75,12 @@ def builder_roles(roles: Path = K8S_ROLES) -> list[str]:
 
 
 def render_images(
-    overrides: dict, host: str = K8S_HOST, tags: Iterable[str] | None = None
+    overrides: dict, tags: Iterable[str] | None = None
 ) -> dict[str, BuiltImage]:
     """Each built image's context and tag, rendered with `overrides` over its role's context.
 
     Args:
         overrides: The extra vars that outrank every other layer.
-        host: The inventory host whose context each role renders in.
         tags: The deploy tags whose roles' images to build, or None for every builder role.
 
     Raises:
@@ -96,7 +92,7 @@ def render_images(
         if wanted is not None and role not in wanted:
             continue
         try:
-            ctx = tag_context(K8S_ROLES / role, role, overrides, host)
+            ctx = tag_context(K8S_ROLES / role, role, overrides)
             built = image_contexts(K8S_ROLES / role, ctx)
         except (ValueError, jinja2.TemplateError) as exc:
             raise RenderError(f"{role}'s image context: {exc}") from exc

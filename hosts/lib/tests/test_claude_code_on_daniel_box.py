@@ -9,13 +9,14 @@ Run: uv run pytest hosts/lib/tests/test_claude_code_on_daniel_box.py
 
 import json
 import re
-import shutil
 
 import pytest
 import yaml
 
 from lib.estate import Estate, Inventory
-from lib.repo_paths import HOST_VARS, REPO
+from lib.inventory_lists import host_vars_file
+from lib.render_guard import copy_host_files
+from lib.repo_paths import REPO
 from renderer.renderer_lib import host as host_mode
 
 COMPONENT = REPO / "hosts" / "components" / "claude-code" / "component.yml"
@@ -36,8 +37,6 @@ SLICE_ONE = (
     "/etc/sudoers.d/homelab-rootq",
     "/usr/lib/homelab/secret-templates/var/lib/claude/.config/gh/hosts.yml",
 )
-# The second slice: the lander, the server-batch lander, the pipeline timeline, the memory sync
-# and the takeover check's wrapper and grant. Each is armed only in daniel-box's host_vars.
 SLICE_TWO = (
     f"{UNITS}/homelab-claude-land@.service",
     "/usr/share/polkit-1/rules.d/50-claude-land.rules",
@@ -60,8 +59,6 @@ SLICE_THREE = (
     "/usr/lib/homelab/secret-templates/var/lib/claude/.config/homelab-ui/credentials.json",
     f"{UNITS}/homelab-claude-agent-browser.service",
 )
-# The fourth slice: the artifacts node's peer sync and OTLP-door heartbeat, with the directories
-# the artifacts pod mounts. They ship on the node only.
 SLICE_FOUR = (
     "/usr/lib/homelab/sync-artifacts",
     "/usr/lib/homelab/claude-otel-health",
@@ -129,8 +126,8 @@ def test_the_takeover_check_runs_homelab_tools_flux(box):
 
 
 def test_daniel_server_ships_the_browser_only_to_take_it_back(server):
-    # Triage, the peer config and the homelab-ui login are daniel-box's alone. The browser unit
-    # ships wherever the agent exists, and with homelab-ui off its script removes the toolchain.
+    # The browser unit ships wherever the agent exists; with homelab-ui off its script removes the
+    # toolchain.
     browser = f"{UNITS}/homelab-claude-agent-browser.service"
     assert [p for p in SLICE_THREE if p in server.files] == [browser]
     script = server.files["/usr/lib/homelab/claude-agent-browser"][0].decode()
@@ -147,8 +144,7 @@ def test_a_host_with_homelab_ui_off_removes_the_agents_login(box, server):
 
 
 def test_the_package_installs_no_link_into_the_agents_home(box, server):
-    # The agent owns its home, so claude-agent-setup links each login there after checking the
-    # path. A link the package installed would put root's write inside that directory.
+    # A link the package installed would put root's write inside the agent-owned directory.
     for package in (box, server):
         assert [p for p in package.links if p.startswith("/var/lib/claude/")] == []
 
@@ -172,8 +168,8 @@ def test_each_login_renders_where_the_setup_script_links_to_it(box, server):
 def test_every_packaged_agent_takes_the_dotfiles_so_no_operator_config_copy_is_owed(
     host,
 ):
-    # The package ships no copy of the operator config subset: the role runs it only for an
-    # agent without the dotfiles. A host that turned them off would lose its subset silently.
+    # The package ships no copy of the operator config subset: a host that turned dotfiles off would
+    # lose it silently.
     assert (
         Estate().role_vars(COMPONENT.parent, host)["claude_code_agent_dotfiles"] is True
     )
@@ -201,9 +197,8 @@ def test_daniel_box_declares_the_agent_with_its_own_uid(box):
 
 
 def render_box_with_rc_user(tmp_path, rc_user: str):
-    host_vars = tmp_path / "host_vars"
-    shutil.copytree(HOST_VARS, host_vars)
-    path = host_vars / "daniel-box.yml"
+    host_vars = copy_host_files(tmp_path / "hosts")
+    path = host_vars_file("daniel-box", host_vars)
     path.write_text(
         yaml.safe_dump(
             {**yaml.safe_load(path.read_text()), "claude_code_user": rc_user}
@@ -227,8 +222,8 @@ def test_the_rc_host_moved_to_the_agent_binds_the_runtime_dir_of_the_uid_the_pac
 
 
 def test_the_rc_host_rolled_back_to_the_operator_reaches_the_operators_bus(tmp_path):
-    # The rollback sets claude_code_user to ubuntu and leaves claude_code_user_uid at the
-    # agent's 996, so the unit must take the operator's uid from claude_code_login_uid.
+    # The rollback leaves claude_code_user_uid at the agent's 996, so the unit must take the uid
+    # from claude_code_login_uid.
     rolled_back = render_box_with_rc_user(tmp_path, "ubuntu")
     unit = rolled_back.files[f"{UNITS}/homelab-claude-rc.service"][0].decode()
     assert re.findall(r"^Environment=(XDG_RUNTIME_DIR=\S+)$", unit, re.M) == [
@@ -286,9 +281,8 @@ def retired_textfiles(package) -> set[str]:
 
 @pytest.mark.parametrize("toggle", sorted(TIMER_TEXTFILES))
 def test_disarming_a_timer_retires_its_textfiles(tmp_path, toggle):
-    host_vars = tmp_path / "host_vars"
-    shutil.copytree(HOST_VARS, host_vars)
-    path = host_vars / "daniel-box.yml"
+    host_vars = copy_host_files(tmp_path / "hosts")
+    path = host_vars_file("daniel-box", host_vars)
     path.write_text(yaml.safe_dump({**yaml.safe_load(path.read_text()), toggle: False}))
 
     off = host_mode.render_host("daniel-box", inventory=Inventory(host_vars=host_vars))

@@ -10,7 +10,7 @@ The duplication itself is deliberate (see the comment above the hook in prek.tom
 test is what makes it safe.
 
 Scope only. How the hook provisions the Google style package — and why that sync needs a
-lock — is `scripts/validate/tests/test_vale_sync_guard.py`.
+lock — is `scripts/validate/tests/repo_checks/test_vale_sync_guard.py`.
 """
 
 import re

@@ -30,7 +30,7 @@ THE BACKSTOP. (`prod`, T] holds no more than one change to each pin, and
 merge that bypassed `land.sh`'s land rule.
 
 Every read is a `promote.Reads` field, so this module reaches GitHub only through `forge.py`
-(scripts/deploy_tools/tests/test_promote_forge_boundary.py).
+(scripts/deploy_tools/tests/promote/test_promote_forge_boundary.py).
 """
 
 from collections.abc import Callable, Mapping
@@ -54,8 +54,7 @@ FORWARD_ONLY_FLAG = "flux_forward_only"
 ROLE_DEFAULTS = ":(glob)k8s/roles/*/defaults/main.yml"
 UNCLASSIFIED = "_unclassified"
 GATE_STATUS_CONTEXT = "homelab/upgrade-gates"
-# A status older than this describes a drill age and a volume health from before a hold or
-# an outage came between the merge and the promotion (*A gate status goes stale*).
+# A status older than this predates a hold or outage between the merge and the promotion.
 GATE_STATUS_MAX_AGE = timedelta(hours=6)
 
 

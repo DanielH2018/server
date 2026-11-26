@@ -113,8 +113,6 @@ def render_markdown(rows: list[ServiceRow]) -> str:
         for row in host_rows:
             cells = (
                 row.name,
-                # Markdown only. The stored value stays plain text for render_html and
-                # every text consumer; only the docs site can resolve these into links.
                 linkify_fqdns(row.route),
                 row.auth_tier,
                 row.backup_tier,

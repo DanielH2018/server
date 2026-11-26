@@ -85,7 +85,7 @@ a run. Its host key is pinned, not accepted on first connect.
   cluster.
 - **Mode (explicit + reversible):** `hypervisor_etcd_drill_armed` (`defaults/main.yml`, `true`)
   gates the timer's enable link; `false` stops it at the next package version. The cadence, `etcd_drill_full_cron` in
-  `group_vars/all.yml`, also sizes the textfile verdicts' deadline.
+  `hosts/vars.yml`, also sizes the textfile verdicts' deadline.
 - **Authoritative sources:** the snapshot listed in R2, daniel-server's own
   `/usr/local/bin/k3s`, and `K3S_TOKEN` from the k3s-agent unit's env file — a wrong token fails
   the restore loudly. Nothing rewrites that file on a joined agent, so after a deliberate

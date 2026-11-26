@@ -63,7 +63,7 @@ passes cleanly in exactly that state. Merged branches are deleted on this repo
      message: GitHub creates no ``pull_request`` run for it, so CI never starts and its
      landing has nothing to wait on.
 
-Run: uv run pytest scripts/deploy_tools/tests/test_publish_pr.py
+Run: uv run pytest scripts/deploy_tools/tests/release/test_publish_pr.py
 """
 
 import argparse
@@ -95,31 +95,21 @@ from lib import detach_fork
 from lib import gh as gh_mod
 from lib import git as git_mod
 
-# The gate job's check-run name and its `needs`, which the red-PR read below needs to excuse a
-# gate that failed only because its run was cancelled, and the rule that grades one check.
 from lib import host_modules  # noqa: F401
 from ci_verdict import CI_GATE_NAME, CI_GATE_NEEDS_JOBS, RunState, parse_rollup
 
-# Same bound the shell's `tr '\n' ' ' | tail -c 400` applied: enough to carry the ruleset's
-# rejection line, short enough for a one-line report.
 FAILURE_TAIL = 400
 
-# Two contracts over the same integers -- `publish` says what state the tree is in, `unlanded`
-# says what it found on origin. Both are defined in `lib/exit_codes.py`, whose prefixes are
-# what tell a reader which of the two a value belongs to.
-
-# What a PR lookup reports when it timed out. Non-empty on purpose: `unlanded` and the
-# `open-pr` shell idiom both read an empty answer as "no PR", which would let a run publish a
-# second branch on the strength of an answer GitHub never gave.
+# Non-empty on purpose: an empty answer reads as "no PR" and would let a run publish a second branch
+# on an answer GitHub never gave.
 OPEN_PR_UNKNOWN = "unknown"
 
-# `lib.git.git` has no default timeout, and git sets no connect timeout of its own, so a
-# blackholed origin would hang the calling cron until its unit's TimeoutStartSec. 30s is well
-# under the 60s bound `lib.gh.gh` puts on the PR lookup beside it.
+# `lib.git.git` has no default timeout and git has no connect timeout, so a blackholed origin would
+# hang the cron until TimeoutStartSec.
 LS_REMOTE_TIMEOUT_S = 30.0
 
-# The landing entry point. Run with this interpreter, not through `land.sh`: that wrapper
-# execs `uv` from PATH, and docs-refresh's cron PATH does not carry ~/.local/bin.
+# Run with this interpreter, not through `land.sh`: that wrapper execs `uv` from PATH, which
+# docs-refresh's cron PATH lacks.
 LAND_SCRIPT = Path(__file__).resolve().parent / "land.py"
 
 # `land.py --detach` resolves `--since`, forks and returns; it does not wait for anything.
@@ -128,9 +118,7 @@ LAND_START_TIMEOUT_S = 60.0
 # `gh pr create` prints the new PR's URL as its last line.
 PR_URL = re.compile(r"/pull/(\d+)\s*$")
 
-# The shell's convention for "the command was killed on a timeout". `lib.gh.gh` bounds every
-# call at 60s where the inline shell these crons carried had no bound at all, so this is a
-# state the callers did not have before and must not meet as a traceback.
+# The shell's convention for a command killed on timeout; callers must not meet it as a traceback.
 GH_TIMEOUT_RC = 124
 
 Runner = Callable[..., subprocess.CompletedProcess[str]]
@@ -160,8 +148,7 @@ def real_tools(
         return gh_mod.gh(*args, check=False)
 
     def land(*args: str) -> subprocess.CompletedProcess[str]:
-        # The landing runs `land.sh`, which needs `uv` and kubectl on
-        # PATH; cron provides neither directory.
+        # The landing needs `uv` and kubectl on PATH; cron provides neither directory.
         env = dict(os.environ)
         env["PATH"] = os.pathsep.join(
             [
@@ -268,18 +255,14 @@ def publish(
             branch,
         )
 
-    # The branch is on origin. Take the commit off the local master BEFORE opening the PR:
-    # once the squash lands under a new SHA, a local master one commit ahead is no ancestor of
-    # origin/master, and homelab-checkout-sync refuses it (reason `ancestry`) until cleared.
-    # HEAD~1, not origin/master: this undoes exactly the one commit the caller made.
-    # origin/master is only as fresh as the last fetch, which the callers do not do, so
-    # resetting to it could discard something else or move master backwards.
+    # Take the commit off local master BEFORE opening the PR: after the squash lands under a new
+    # SHA, a master one commit ahead is no ancestor of origin/master and checkout-sync refuses it.
+    # HEAD~1, not origin/master: callers do not fetch, so resetting to it could move master
+    # backwards.
     proc = tools.git("reset", "--hard", "HEAD~1")
     if proc.returncode != 0:
-        # The branch is on origin, but master is still one commit ahead -- exactly the state
-        # this reset exists to prevent. Report it as rc 2 (branch published, human must
-        # clear it) rather than pressing on to open a PR while master disagrees with origin;
-        # `failure_tail` names why the reset itself failed (index lock, dirtied tree).
+        # Report rc 2 (branch published, human must clear it) rather than open a PR while master
+        # disagrees with origin.
         return PublishOutcome(
             PUBLISH_PUSHED_NO_PR,
             f"{branch} pushed but resetting local master to drop its commit failed; "
@@ -308,8 +291,8 @@ def publish(
             branch,
         )
 
-    # A REST merge does not delete the branch the way `gh pr merge --delete-branch` did; the
-    # repo's deleteBranchOnMerge does, and `unlanded` relies on that.
+    # A REST merge does not delete the branch; the repo's deleteBranchOnMerge does, and `unlanded`
+    # relies on that.
     proc = run_bounded(
         tools.land,
         "land.py",
@@ -406,8 +389,8 @@ def merge_if_stalled(number: str, view: dict, tools: PublishTools) -> str:
       or why the merge was refused.
     """
     checks = parse_rollup(view.get("statusCheckRollup"))
-    # Green needs the CI gate itself: a rollup holding only an app's check, such as
-    # GitGuardian's, is a PR whose CI never ran. Every check must pass, not only the gate.
+    # Green needs the CI gate itself: a rollup holding only an app's check, such as GitGuardian's,
+    # is a PR whose CI never ran.
     green = any(c.name == CI_GATE_NAME for c in checks) and all(
         c.passed for c in checks
     )
@@ -527,8 +510,8 @@ def unlanded(prefix: str, tools: PublishTools) -> PublishOutcome:
                 f"run skips until the base is merged into it or it is closed",
                 branch,
             )
-        # Still UNLANDED_PR_OPEN after a merge: this run's tree predates the merge, so it skips
-        # and the next run starts from a master that holds the merged commit.
+        # Still UNLANDED_PR_OPEN after a merge: this run's tree predates the merge, so the next run
+        # starts from a master that holds it.
         merged = merge_if_stalled(number, view, tools)
         return PublishOutcome(
             UNLANDED_PR_OPEN,
@@ -594,8 +577,8 @@ def main(argv: list[str] | None = None) -> int:
     else:
         body = args.body if args.body is not None else args.body_file.read_text()
         outcome = publish(args.prefix, args.title, body, tools)
-    # The cron callers capture both streams with 2>&1, so a failure's line still reaches
-    # their alert; a reader of stdout alone gets only a success's.
+    # The cron callers capture both streams with 2>&1; a reader of stdout alone gets only a
+    # success's line.
     if outcome.message:
         print(outcome.message, file=sys.stdout if outcome.rc == 0 else sys.stderr)
     return outcome.rc

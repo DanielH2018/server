@@ -4,7 +4,7 @@
 # The local policy keeps its extra origins in Origins-Pattern with the `::` append form, for two
 # reasons: Allowed-Origins matches only a repo that publishes a `Suite:` field, and a `{ ... }`
 # block reads like a replacement that would drop the -security pocket. The list is
-# `unattended_upgrades_origins_patterns` in group_vars/all.yml.
+# `unattended_upgrades_origins_patterns` in hosts/vars.yml.
 #
 # The list holds the release's regular updates pocket, so no Ubuntu update waits for a hand run.
 # Docker's origin stays out, and the engine packages are held besides. The homelab origin stays out, because the updater is the one path that

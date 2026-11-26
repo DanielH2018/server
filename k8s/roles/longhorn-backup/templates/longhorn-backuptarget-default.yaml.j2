@@ -1,19 +1,8 @@
 ---
-# The `default` BackupTarget, B2's. longhorn-manager creates the object with an empty URL, and this
-# render declares only the three fields the repo governs, so Flux's server-side apply never takes
-# a field the manager writes (`syncRequestedAt`, the rest of `spec`, and `status`).
-#
-# `default` stays B2's, so the routing lists in the `longhorn-reconcile` role's defaults are the
-# only thing that decides where a volume goes (ADR-0007).
-#
-# Declarative in BOTH directions: `k3s_longhorn_backup_armed: false` renders a BLANK URL, and Flux
-# enforces the blank on every reconcile. Arming unconditionally would silently resurrect a
-# deliberately blanked target and restart the B2 transaction-cap death spiral. A blank is the
-# incident lever that stops all backupstore S3 traffic, so it survives every apply until the flag
-# returns to true. The flag's comment in defaults/main.yml has the spiral's mechanism.
-#
-# The bucket and the region are plain variables. The bucket is `k3s_longhorn_b2_bucket` in
-# inventory/group_vars/all.yml, which `probe.py b2-longhorn` and `b2-budget` read too.
+# Declares only the three fields the repo governs, so Flux's apply never takes a manager-written
+# field.
+# Declarative both ways: armed false renders a BLANK URL, which Flux enforces; it is the incident
+# lever for the B2 cap spiral.
 apiVersion: longhorn.io/v1beta2
 kind: BackupTarget
 metadata:
@@ -22,6 +11,4 @@ metadata:
 spec:
   backupTargetURL: "{% if k3s_longhorn_backup_armed | bool %}s3://{{ k3s_longhorn_b2_bucket }}@{{ k3s_longhorn_b2_region }}/{{ k3s_longhorn_backup_prefix }}{% endif %}"
   credentialSecret: longhorn-b2
-  # Seconds, rendered as the duration string the CR wants. Rate-limits the only recurring B2
-  # caller in the cluster. See k3s_longhorn_backupstore_poll_interval in defaults/main.yml.
   pollInterval: "{{ k3s_longhorn_backupstore_poll_interval }}s"

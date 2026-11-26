@@ -111,9 +111,8 @@ import shlex
 import sys
 
 
-# `core.<name>` for anything the tests monkeypatch — `k8s_namespace` is the one this file
-# still reads. Binding it into this module's globals with a `from core import ...` would take
-# a snapshot the patch never reaches.
+# Use `core.<name>` for anything tests monkeypatch: a `from core import` binds a snapshot the patch
+# never reaches.
 from diagnostics.probe_lib import core
 from diagnostics.probe_lib.cli_parser import ENTRY_POINT, _build_parser
 from diagnostics.probe_lib.curl_pipeline import output_redaction, plan, stream_pipeline
@@ -123,9 +122,6 @@ from diagnostics.probe_lib.health import (
     k8s_pods_args,
 )
 
-# Every subcommand's `run_*` callable comes from here rather than from its module: `main()`
-# builds its `handlers` table from the entries flagged "handler", and reaches the four
-# `subcommands.ROUTED_IN_MAIN` ones by name.
 from diagnostics.probe_lib.subcommands import REGISTRY, VERDICT_HA_SUBCOMMANDS
 
 from lib.exit_codes import (
@@ -167,9 +163,8 @@ def main(argv=None, *, plan=plan):
     code becomes a verdict word.
     """
     argv = list(sys.argv[1:] if argv is None else argv)
-    # Handled on raw argv, ahead of `_build_parser().parse_args`: the subparsers below are
-    # `required=True`, so `probe.py --list` alone would otherwise fail argparse's "cmd is
-    # required" check before `ns.list` was ever read.
+    # Handled on raw argv: the subparsers are `required=True`, so `--list` alone would fail argparse
+    # first.
     if "--list" in argv:
         print("\n".join(REGISTRY.render_list()))
         return 0
@@ -184,18 +179,15 @@ def main(argv=None, *, plan=plan):
         # Printed on build, like Unreadable. 64 names no verdict, so no line follows it.
         rc = PROBE_USAGE_ERROR
     except SystemExit as exc:
-        # A message-carrying SystemExit -- a group_vars key missing, an automation not found
-        # -- is not a failed read: retrying it never helps, so it must not exit 75.
-        # A failed read raises `core.Unreadable` at its own site instead. A verdict subcommand
-        # reports the rest as the `fail` verdict, still with its line, rather than exiting 1
-        # with none.
+        # A message-carrying SystemExit is not a failed read: retrying never helps, so it must not
+        # exit 75.
         if path is None or isinstance(exc.code, int) or exc.code is None:
             raise
         print(exc.code, file=sys.stderr)
         rc = PROBE_FAILED
     if path:
-        # The detail never repeats the failure: stderr carries it, and stdout stays the
-        # verdict alone for a caller that reads only the last line.
+        # stderr carries the failure, so stdout stays the verdict alone for a caller reading the
+        # last line.
         line = verdict_line(ENTRY_POINT, rc, f"probe.py {path}, exit {rc}")
         if line:
             print(line)
@@ -243,22 +235,16 @@ def _dispatch(ns, argv, plan):
         return run_health(ns.container, docker=ns.docker, cluster=ns.cluster)
     if ns.cmd == "targets" and (ns.pi or not (ns.json or ns.dry_run)):
         return REGISTRY.get("targets").func(ns)
-    # Subcommands that answer from an API rather than streaming a shell pipeline. Each one is
-    # `run_X(ns) -> int`, so the table is the whole dispatch: adding one is a row in
-    # `probe_lib/subcommands.py` plus its parser entry.
     handlers = {e.name: e.func for e in REGISTRY if "handler" in e.flags}
     if ns.cmd in handlers:
         try:
             return handlers[ns.cmd](ns)
         except WrongCluster as exc:
-            # Every kubectl read names the cluster it is about (`--cluster`, default prod) and
-            # lib.kubectl refuses before running when the local kubectl serves another one.
-            # One line, not a traceback. Nothing about the subject was read, so this is 75
-            # with the refusal on stderr, never the `fail` verdict.
+            # The local kubectl serves another cluster: nothing was read, so exit 75, never the
+            # `fail`
+            # verdict.
             print(f"{ns.cmd}: {exc}", file=sys.stderr)
             return PROBE_UNREADABLE
-    # metric / loki-query default to a formatted view; --json and --dry-run fall
-    # through to the raw streaming path below.
     if ns.cmd in ("metric", "loki-query") and not ns.json and not ns.dry_run:
         return REGISTRY.get(ns.cmd).func(ns)
     stages = plan(argv)

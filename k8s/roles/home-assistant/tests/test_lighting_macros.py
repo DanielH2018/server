@@ -35,8 +35,8 @@ def test_in_wake_window_boundaries():
 
 
 def test_in_wake_release_window_is_a_bounded_catchup():
-    # The release catch-up starts exactly where in_wake_window ends (45) so there's no gap or overlap,
-    # and runs for 45 more min so a missed single-tick hand-off self-heals after a restart/deploy.
+    # The release catch-up starts exactly where in_wake_window ends (45), with no gap or overlap,
+    # and runs 45 more min.
     assert (
         _release_window(44.99) == "False"
     )  # still inside the ramp -> not releasing yet
@@ -65,8 +65,8 @@ def test_wake_elapsed_reads_whichever_anchor_started_today():
 
 
 def test_wake_elapsed_skips_an_anchor_dated_tomorrow():
-    # No alarm today, one tomorrow: wake_start is available but in the future while the fallback
-    # ramp runs off today's last_wake. A wake_start-first read would see a negative elapsed.
+    # wake_start is available but in the future while the fallback ramp runs off today's last_wake:
+    # a wake_start-first read would see a negative elapsed.
     assert _elapsed(NOW + 23 * 60 * MIN, NOW - 15 * MIN) == 15
 
 
@@ -93,8 +93,8 @@ def test_wake_brightness_curve_endpoints():
 
 
 def test_wake_brightness_is_gentle_then_steep():
-    # Each segment is steeper than the last, with the climb pushed into the final 10 min:
-    # pre-alarm 2%/15min, alarm->knee 17%/20min (a dim plateau), knee->full 80%/10min.
+    # Each segment is steeper than the last: pre-alarm 2%/15min, alarm->knee 17%/20min, knee->full
+    # 80%/10min.
     assert _brightness(7.5) == 2  # 1 + (3-1)*0.5 = 2
     assert _brightness(25) == 12  # 3 + (20-3)*(10/20) = 11.5 -> banker's round -> 12
     assert (
@@ -191,8 +191,6 @@ def test_light_decision_passthrough_reasons_are_ungated():
 
 
 def test_light_decision_wake_fallback_is_passthrough():
-    # The 06:00 safety-net ramp routes through the single writer as its own ungated reason
-    # (bedroom_fallback_wake pre-gates); it must pass through, not fall into the noop bucket.
     assert _decision("wake_fallback") == "wake_fallback"
     assert (
         _decision("wake_fallback", manual_off=True, presence=False) == "wake_fallback"
@@ -215,8 +213,7 @@ def test_natural_exception_selection():
 
 
 def test_natural_exception_early_alarm_yields_to_wake():
-    # The documented trap: an early alarm puts hour<5 INSIDE the window -> must be `wake`, not the
-    # 3% nightlight (which would mask the ramp).
+    # An early alarm puts hour<5 inside the window: must be `wake`, not the 3% nightlight.
     assert _exception(False, 4, True) == "wake"
     assert _exception(True, 4, True) == "wake"  # even in sleep mode, the window wins
     assert _exception(False, 5, False) == "default"  # strict hour < 5 boundary

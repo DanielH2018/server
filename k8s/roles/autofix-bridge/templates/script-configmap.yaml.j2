@@ -4,7 +4,7 @@
 
   Rendered here rather than staged on the node, so the ConfigMap is part of this role's
   manifests and the renderer's `checksum/restart` hashes it into the Deployment's pod template.
-  scripts/renderer/tests/test_renderer_autofix_bridge_script.py holds the test.
+  scripts/renderer/tests/manifests/test_renderer_autofix_bridge_script.py holds the test.
 
   The modules live in files/ and in two other roles, never in templates/, because
   scripts/validate/render_lib/k8s.py renders every *.j2 under templates/ as a manifest. `lookup('file')`

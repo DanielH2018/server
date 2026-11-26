@@ -133,9 +133,8 @@ def test_aide_runs_without_the_lock_descriptor(tmp_path):
     assert (tmp_path / "ran").read_text() == ""
 
 
-# Paths AIDE must skip, and paths beside them it must still check. The second list is
-# what keeps an exclusion from widening: the primary checkout, the repo's hooks and the
-# executables under ~/.local all sit next to an excluded directory.
+# The second list keeps an exclusion from widening: the primary checkout, hooks and ~/.local
+# executables sit beside excluded directories.
 EXCLUDED = (
     "/home/ubuntu/server/.claude/worktrees/fix-5785/.venv/bin/python",
     "/home/ubuntu/.cache/uv/archive-v0/x/lib.py",
@@ -203,8 +202,6 @@ def _inode_skipped(path: str, conf: str) -> bool:
     return False
 
 
-# Live paths whose only change was a vfat inode number: daniel-box's ESP on 2026-11-09 and
-# daniel-pi's firmware partition on 2026-11-10.
 VFAT_PATHS = (
     "/boot/efi/EFI/ubuntu",
     "/boot/efi/EFI/ubuntu/grubx64.efi",
@@ -229,8 +226,8 @@ def test_a_firmware_path_without_its_rule_is_flagged():
     assert not _inode_skipped("/boot/firmware/README", efi_only)
 
 
-# Debian's /etc/aide/aide.conf: `@@x_include /etc/aide/aide.conf.d ^[a-zA-Z0-9_-]+$`. A
-# conf.d file whose name fails this is skipped silently, and `aide --config-check` still passes.
+# A conf.d file whose name fails Debian's include pattern is skipped silently, and
+# `aide --config-check` still passes.
 DEBIAN_INCLUDE_NAME = re.compile(r"^[a-zA-Z0-9_-]+$")
 
 
@@ -340,3 +337,14 @@ def test_the_push_deadline_covers_one_week_and_not_two():
         f"DEADLINE_S {deadline}s must exceed the timer's weekly period, and stay "
         "under two so a second missed run cannot pass unreported"
     )
+
+
+def test_a_writable_aide_config_pushes_down_without_a_scan(tmp_path):
+    conf = tmp_path / "fs" / "etc" / "aide" / "aide.conf.d"
+    conf.mkdir(parents=True)
+    (conf / "10_x").touch()
+    (conf / "10_x").chmod(0o666)
+    code, pushed, _, ran = _run_check(tmp_path, CLEAN_REPORT, rc=0)
+    assert not ran
+    assert pushed[0] == "down" and "writable" in pushed[1], pushed
+    assert code == 0

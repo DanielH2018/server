@@ -25,14 +25,12 @@ from lib.repo_paths import REPO
 # Enough modules that every row's selector keeps some, few enough to stay a unit test.
 SAMPLE = 60
 
-# A census module another census module imports is read twice: once for the importer's names,
-# once on its own turn. Each pair is (importer, imported), and the sample keeps both. In the
-# first pair the importer sorts first, so the imported module is read ahead of its turn. In
-# the second the imported module's turn comes first, and the importer reads its names later.
+# A census module another imports is read twice; in the first pair the importer sorts first, in the
+# second the imported module's turn comes first.
 IMPORT_PAIRS = (
     (
-        ".claude/hooks/tests/test_hook_shim_fail_open.py",
-        ".claude/hooks/tests/test_run_hook.py",
+        ".claude/hooks/tests/hook_contract/test_hook_shim_fail_open.py",
+        ".claude/hooks/tests/hook_contract/test_run_hook.py",
     ),
     (
         "k8s/roles/registry/tests/test_registry_verify.py",
@@ -40,8 +38,6 @@ IMPORT_PAIRS = (
     ),
 )
 
-# Runs every row of both census files over the sample, each row through its own selector, and
-# prints how many times each sampled module's text was compiled to an AST.
 _COUNT_PARSES = """
 import ast, builtins, json, sys
 from collections import Counter

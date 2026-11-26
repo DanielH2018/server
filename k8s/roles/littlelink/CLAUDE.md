@@ -12,7 +12,7 @@ list in `k8s/roles/littlelink/templates/deployment.yaml.j2`: the name, bio, avat
 <!-- /generated_from -->
 
 - **Flux applies it.** Its `containers_list` entry
-  is in `cluster/services.yml`, so nothing applies it by hand, and a
+  is in `k8s/services.yml`, so nothing applies it by hand, and a
   merged change reaches the cluster when `promote` publishes and verifies the next bundle. Its
   image-bump PRs therefore draw no `land-wait` and no `probe.py health` run.
 - **Its rollout.** The Kustomization's `wait` holds the rollout.

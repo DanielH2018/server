@@ -46,8 +46,8 @@ from lib.json_types import JsonObject
 # `https://127.0.0.1:6443` its production counterpart does, so the address discriminates
 # nothing. Named rather than derived from the inventory at runtime — probe.py must answer
 # without parsing Ansible — and pinned to it by
-# scripts/diagnostics/tests/test_probe_health_cluster.py, which fails if a name here stops
-# naming a host_vars file under inventory/host_vars/.
+# scripts/diagnostics/tests/probe_health/test_probe_health_cluster.py, which fails if a name here stops
+# naming a host with a hosts/<host>/vars.yml.
 #
 # DECIDED: `stage` stays after daniel-stage was retired (#2941). What it buys does not depend
 # on a staging cluster existing: a `--cluster stage` request against this prod kubectl has to
@@ -55,7 +55,7 @@ from lib.json_types import JsonObject
 # and that request becomes an unknown-cluster ValueError instead, and `cluster_of` degenerates
 # to a one-entry lookup that can never disagree with itself. `daniel-stage` is therefore the
 # one name here that is deliberately not an inventory host — the exemption is named in
-# scripts/lib/tests/test_kubectl.py::test_every_named_node_is_a_host_in_the_inventory.
+# scripts/lib/tests/k8s/test_kubectl.py::test_every_named_node_is_a_host_in_the_inventory.
 # The operator ruled that a staging cluster may come back, so the entry
 # and its callers stay as they are rather than being re-derived later.
 CLUSTER_NODES = {
@@ -129,14 +129,11 @@ def cluster_refusal(requested: str, served: str | None) -> str | None:
 
 # ── discovery ───────────────────────────────────────────────────────────────────────────────
 
-# Directories searched for the binary, on top of whatever PATH the caller happens to have.
-# cron runs with PATH=/usr/bin:/bin, which omits /usr/local/bin — where kubectl lives as a
-# symlink to k3s.
+# cron runs with PATH=/usr/bin:/bin, which omits /usr/local/bin, where kubectl is a symlink to k3s.
 TOOL_DIRS = ("/usr/local/bin", "/usr/bin", "/bin", "/usr/local/sbin", "/snap/bin")
 
-# k3s ships kubectl as a symlink to itself and defaults it at this file, which is root-owned
-# 0640. An interactive shell exports KUBECONFIG to the user copy, so `kubectl get` works by
-# hand and fails under cron — the same ambient-environment trap as PATH, one variable over.
+# k3s.yaml is root-owned 0640; an interactive shell exports KUBECONFIG to the user copy, cron does
+# not.
 K3S_KUBECONFIG = Path("/etc/rancher/k3s/k3s.yaml")
 USER_KUBECONFIG = Path.home() / ".kube" / "config"
 
@@ -254,15 +251,10 @@ def _resolve(tools: Tools) -> tuple[str, Path]:
     return binary, kubeconfig
 
 
-# One identity read per (tools, binary, kubeconfig) per process. probe.py runs several kubectl
-# calls per subcommand; the check must cost one `get nodes`, not one per call. Only a
-# recognised answer is cached: a read that failed or timed out is retried on the next call,
-# so one slow API-server moment does not turn into a process-long refusal.
+# Only a recognised answer is cached: a failed or timed-out read is retried on the next call.
 _SERVED: dict[tuple[Tools, str, str], str] = {}
 
-# The identity read's own budget. It is a different question from the caller's query and must
-# not inherit the caller's timeout: a caller polling at a short budget while a rollout is in
-# flight would hand it that budget exactly when `get nodes` is slowest.
+# Not inherited from the caller: a short caller timeout would starve `get nodes` mid-rollout.
 IDENTITY_TIMEOUT = 30.0
 
 

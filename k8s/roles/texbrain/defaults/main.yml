@@ -15,12 +15,10 @@ texbrain_k8s_image: ghcr.io/danielh2018/texbrain:latest@sha256:c97188d8b271fab5a
 k8s_autodeploy: true
 k8s_autodeploy_reason: "stateless RollingUpdate Deployment, no PVC, readinessProbe, digest-pinned image"
 
-# nginx-unprivileged runs as this UID. It is also the fsGroup: emptyDir mounts 0755
-# root-owned, so without one the container EPERMs on its cache and tmp directories.
+# The UID nginx-unprivileged runs as, and the fsGroup: emptyDir is root-owned 0755, so it EPERMs.
 texbrain_k8s_uid: 101
 
-# nginx gzips the 1.8 MB WebAssembly engine on a cold request, which bento-pdf does not do. The
-# limit covers that; the request stays small because the pod is idle the rest of the time.
+# nginx gzips the 1.8 MB WebAssembly engine on a cold request; the limit covers that.
 texbrain_k8s_cpu_limit: "500m"
 texbrain_k8s_mem_limit: 256Mi
 texbrain_k8s_cpu_request: "50m"

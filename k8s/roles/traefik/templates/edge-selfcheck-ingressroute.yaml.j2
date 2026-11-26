@@ -14,7 +14,7 @@
   `{{ k8s_namespace }}-crowdsec@kubernetescrd`, so this router is rejected by exactly the
   failure the probe exists to catch, and the probe 404s instead of 200ing. Moving it to
   another entrypoint would leave the probe passing while detecting nothing — ENFORCED by
-  tests/services/test_traefik_edge_selfcheck.py against the RENDERED manifests.
+  tests/services/traefik/test_traefik_edge_selfcheck.py against the RENDERED manifests.
 
   `ping@internal` is Traefik's own ping handler, reached by name with `kind: TraefikService`
   and no port, the same shape and trap as the dashboard's `api@internal`: with the default
@@ -39,23 +39,14 @@ spec:
     - https
   routes:
     - kind: Rule
-      # Path-only, and deliberately NOT a Host() rule. A kubelet httpGet probe connects to
-      # the pod IP, so it sends no TLS SNI, and Traefik answers a matched Host() router whose
-      # SNI does not agree with the Host header with `421 Misdirected Request`. A probe that
-      # can only ever return 421 or 404 never passes, so the edge would crashloop on a change
-      # meant to protect it. With no Host matcher there is nothing to disagree.
-      #
-      # The path is unroutable by any app here and the handler returns the literal `OK`, so
-      # matching it on every hostname — including the public ones — costs nothing. Rule
-      # priority is rule length, so this only ever wins for requests to this exact path.
+      # Path-only, not Host(): a kubelet probe sends no SNI, so a Host() router answers it 421 and
+      # the probe never passes, crashlooping the edge on the change it protects.
       match: "PathPrefix(`/.well-known/traefik-edge-selfcheck`)"
       services:
         # kind + absent port are both load-bearing. See the header.
         - name: ping@internal
           kind: TraefikService
-  # An https router with no tls block is a NON-TLS router and is never a candidate for an
-  # HTTPS request — see dashboard-ingressroute.yaml.j2. The SAN set is the existing wildcard,
-  # so this adds no ACME order.
+  # No tls block means a non-TLS router, never matched by HTTPS requests.
   tls:
 {% if k8s_tls_cert_resolver %}
     certResolver: {{ k8s_tls_cert_resolver }}

@@ -15,7 +15,7 @@ the File System Access API. See repo-root `CLAUDE.md` for shared conventions.
 - **Digest-pinned `:latest`**, built by the fork below
 - **Host:** daniel-box or daniel-server (k8s), preference only — added 2026-08-26
 - **State:** none. No Secret, no PVC, no backup job — the pod serves files and holds nothing
-- **Flux applies it.** Its `containers_list` entry is in `cluster/services.yml`,
+- **Flux applies it.** Its `containers_list` entry is in `k8s/services.yml`,
   so nothing applies it by hand, and a merged change reaches
   the cluster when `promote` publishes and verifies the next bundle. Its digest-bump PRs
   therefore draw no `land-wait` and no `probe.py health` run.
@@ -54,7 +54,7 @@ symptom shows up in this cluster, not in that repo:
 - **The pod dials nothing, but the app reaches the internet.** jsDelivr serves on-demand TeX
   packages beyond the 86 MB subset baked into the image, and a CORS proxy carries git
   push/pull. Both are the *browser's* fetches, from the reader's machine. That is why
-  texbrain is in `BORN_FENCED_ROLES` in `tests/k8s/test_netpol_baseline_labels.py`.
+  texbrain is in `BORN_FENCED_ROLES` in `tests/k8s/edge/test_netpol_baseline_labels.py`.
 - **An expired Authelia session can leave the app serving HTML as JavaScript.** The service
   worker's `handleImmutable` caches any 200 under a content-hashed name and treats it as
   permanent, so a chunk fetch that follows the redirect to the login page caches the portal.

@@ -20,6 +20,7 @@ import re
 import tomllib
 
 import pytest
+from _inventory_read_rules import inventory_reads
 from _row_table import (
     Census,
     Subject,
@@ -27,6 +28,7 @@ from _row_table import (
     lines_matching,
     proof_problems,
     share,
+    tracked,
 )
 from _test_module_rules import (
     GIT_SCRUB,
@@ -79,10 +81,10 @@ ROWS = (
         min_matches=MODULE_FLOOR,
         must_find=frozenset(
             {
-                "tests/repo/test_ci_empty_pr_merge_fails.py",
-                ".claude/hooks/tests/test_rules_globs_match_a_tracked_file.py",
-                "scripts/deploy_tools/tests/test_land_tools.py",
-                "scripts/lib/tests/test_render_guard.py",
+                "tests/repo/ci_workflows/test_ci_empty_pr_merge_fails.py",
+                ".claude/hooks/tests/instructions/test_rules_globs_match_a_tracked_file.py",
+                "scripts/deploy_tools/tests/land/test_land_tools.py",
+                "scripts/lib/tests/k8s/test_render_guard.py",
             }
         ),
     ),
@@ -107,7 +109,7 @@ ROWS = (
         min_matches=MODULE_FLOOR,
         allow={
             SELF: "the red fixtures above hold the offending spelling as text",
-            "scripts/lib/tests/test_git_testing.py": "the module under test IS the scrub",
+            "scripts/lib/tests/git_and_gh/test_git_testing.py": "the module under test IS the scrub",
         },
     ),
     Census(
@@ -159,12 +161,12 @@ ROWS = (
                 ".claude/hooks/tests/conftest.py",
                 "hosts/tests/test_github_ruleset_drift.py",
                 "tests/staging/_fence_probe.py",
-                "scripts/deploy_tools/tests/test_land_detach.py",
-                "scripts/validate/tests/test_vale_sync_guard.py",
+                "scripts/deploy_tools/tests/land_merge/test_land_detach.py",
+                "scripts/validate/tests/repo_checks/test_vale_sync_guard.py",
             }
         ),
         allow={
-            "scripts/dev/tests/test_gen_hook_settings.py": (
+            "scripts/dev/tests/repo_tools/test_gen_hook_settings.py": (
                 "the exec bit IS the subject: `hook_files` must read a hook committed WITHOUT "
                 "it, so the fixture writes one file with the bit and one without"
             ),
@@ -230,11 +232,11 @@ ROWS = (
         min_matches=MODULE_FLOOR,
         must_find=frozenset(
             {
-                ".claude/hooks/tests/test_hook_scripts_executable.py",
+                ".claude/hooks/tests/hook_contract/test_hook_scripts_executable.py",
                 "tests/_helpers.py",
-                "tests/repo/test_testpaths_covers_every_test_file.py",
-                "scripts/deploy_tools/tests/test_land_tools.py",
-                "scripts/lib/tests/test_git.py",
+                "tests/repo/suite/test_testpaths_covers_every_test_file.py",
+                "scripts/deploy_tools/tests/land/test_land_tools.py",
+                "scripts/lib/tests/git_and_gh/test_git.py",
             }
         ),
     ),
@@ -278,16 +280,96 @@ ROWS = (
                 "the shipped-files row that refuses a stub citation names the directory in "
                 "its pattern and subjects; it reads no plan"
             ),
-            "tests/services/test_alert_runbook_urls.py": (
+            "tests/services/alert_rules/test_alert_runbook_urls.py": (
                 "its `CITED_PAGE` pattern excludes a design-doc citation from the runbook "
                 "rule, and its fixture is an alert description; it reads no plan"
             ),
         },
     ),
+    Census(
+        name="inventory-files-are-read-through-lib-estate",
+        reason=(
+            "ADR-0042 moves the inventory's files, so a module that opens one by path reads "
+            "nothing after the move. Read a value through `lib.estate.shared_vars()` or "
+            "`host_vars(host)`, or an `Estate`. A hit is a call that takes an inventory path "
+            "as its receiver or an argument, or a function whose parameter defaults to one; "
+            "`relative_to`, `copytree`, `copy_host_files` and `host_vars_file` only name the path. Every Python file is in the "
+            "census, not only the tests."
+        ),
+        files=lambda: tracked("*.py"),
+        offence=lambda s: inventory_reads(s.text, REPO / s.rel),
+        red=(
+            Subject(
+                "a.py",
+                "from lib.repo_paths import ESTATE_VARS\nload_yaml(ESTATE_VARS)\n",
+            ),
+            Subject(
+                "g.py",
+                "from lib.repo_paths import K8S_VARS, HOSTS_SHARED_VARS\n"
+                "load_yaml(K8S_VARS)\nHOSTS_SHARED_VARS.read_text()\n",
+            ),
+            Subject(
+                "b.py",
+                "from lib.repo_paths import HOST_VARS\n"
+                'vars_of(HOST_VARS / "daniel-pi" / "vars.yml")\n',
+            ),
+            Subject(
+                "c.py",
+                "from lib.repo_paths import REPO\n"
+                'GROUP = REPO / "estate" / "vars.yml"\n'
+                "GROUP.read_text()\n",
+            ),
+            Subject(
+                "d.py",
+                "from lib.repo_paths import HOST_VARS\n"
+                "def names(host_vars=HOST_VARS):\n    pass\n",
+            ),
+            Subject(
+                "f.py",
+                "from lib.repo_paths import HOST_VARS\n"
+                "def f(host_vars: dict):\n    pass\n"
+                'HOST_VARS.glob("*")\n',
+            ),
+            Subject(
+                "e.py", 'from lib.repo_paths import HOST_VARS\nHOST_VARS.glob("*")\n'
+            ),
+        ),
+        green=(
+            Subject("a.py", "from lib.estate import shared_vars\nshared_vars()\n"),
+            Subject(
+                "b.py",
+                "from lib.repo_paths import HOST_VARS, REPO\n"
+                "HOST_VARS.relative_to(REPO)\n"
+                'shutil.copytree(HOST_VARS, tmp / "host_vars")\n',
+            ),
+            Subject(
+                "c.py",
+                "from lib.estate import Inventory\n"
+                "def render(template: str, host_vars: dict):\n"
+                "    return render_text(template, host_vars)\n",
+            ),
+        ),
+        min_matches=2000,
+        must_find=frozenset({"scripts/lib/estate.py"}),
+        allow={
+            **dict.fromkeys(
+                ("scripts/lib/render_guard.py", "scripts/lib/inventory_lists.py"),
+                "`lib.estate` reads the files through it",
+            ),
+            **dict.fromkeys(
+                (
+                    "hosts/lib/tests/test_bootstrap_host_pins.py",
+                    "hosts/tests/test_etcd_metrics_single_switch.py",
+                    "hosts/tests/test_unattended_origins_pattern.py",
+                    "tests/deploy/test_renovate_automerge_follows_the_autodeploy_denylist.py",
+                ),
+                "it reads the file's text or asserts which file declares a key, which "
+                "ADR-0042 step 6 decides per key",
+            ),
+        },
+    ),
 )
 
-# Every row here and in its sibling file reads the same census, so they judge each module in
-# one pass over one tree.
 ROWS = share(ROWS)
 
 

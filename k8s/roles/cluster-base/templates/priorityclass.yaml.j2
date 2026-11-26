@@ -5,7 +5,7 @@
 # manifest and in kubectl's last-applied annotation but absent from the live object. The
 # three-way merge therefore finds a patch to make on every single run, and never converges.
 #
-# ENFORCED by tests/k8s/test_priorityclass_omits_defaulted_fields.py.
+# ENFORCED by tests/k8s/workloads/test_priorityclass_omits_defaulted_fields.py.
 #
 # The homelab's workload tiers, as PriorityClasses. Four bands, all below
 # system-node-critical (2000001000) and system-cluster-critical (2000000000) on purpose:
@@ -32,13 +32,9 @@
 # 3", it merges it into a pile of pods that were never part of this model at all. That is
 # why homelab-best-effort exists as a real class rather than as the absence of one.
 ---
-# TIER 1 — base infrastructure: all ingress, all auth, LAN DNS, the WAF, the image registry,
-# the alert bridge, the UPS primary, and wg-easy.
-#
-# The two that look out of place both earn it. `nut` runs the UPS primary — evicting it
-# breaks the chain that powers daniel-server down on a battery FSD, which is a hardware
-# risk, not a service outage. `wg-easy` is the remote-access path: evicting it removes the
-# way back in to deal with whatever caused the pressure.
+# `nut` runs the UPS primary: evicting it breaks the chain that powers daniel-server down on a
+# battery FSD.
+# `wg-easy` is the way back in during resource pressure.
 apiVersion: scheduling.k8s.io/v1
 kind: PriorityClass
 metadata:
@@ -46,10 +42,7 @@ metadata:
 value: 100000
 description: "Tier 1 — edge, auth, DNS, WAF, registry, alerting. Evicted last."
 ---
-# TIER 2 — home automation. Below the edge (a house with no lights is worse than a house
-# with no lights *and* no way to reach the dashboard, but only just) and above everything
-# discretionary. The three move as a group: home-assistant is useless without mosquitto,
-# and mosquitto is useless without zigbee2mqtt feeding it.
+# The three move as a group: home-assistant needs mosquitto, which needs zigbee2mqtt.
 apiVersion: scheduling.k8s.io/v1
 kind: PriorityClass
 metadata:
@@ -57,9 +50,6 @@ metadata:
 value: 50000
 description: "Tier 2 — Home Assistant and the Zigbee chain."
 ---
-# TIER 3 — the services with users and state worth protecting: game servers (a killed
-# Valheim pod costs the players their session back to the last autosave) and the media /
-# reading stack.
 apiVersion: scheduling.k8s.io/v1
 kind: PriorityClass
 metadata:
@@ -67,9 +57,7 @@ metadata:
 value: 10000
 description: "Tier 3 — game servers, media stack, feeds and bookmarks."
 ---
-# TIER 4 — everything discretionary: dashboards, utilities, batch work. tdarr belongs here
-# by design rather than by omission — it is the most preemptible thing in the cluster, and
-# a transcode killed mid-run simply reruns.
+# tdarr belongs here by design: a killed transcode simply reruns.
 apiVersion: scheduling.k8s.io/v1
 kind: PriorityClass
 metadata:

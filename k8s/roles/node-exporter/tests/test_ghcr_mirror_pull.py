@@ -69,8 +69,7 @@ def _write_once(
     target: Path, out: Path, node: str, local: str, remote: str
 ) -> dict[str, str]:
     """Run the script once on `node`, with daniel-box as the registry node."""
-    # The host's wget, reached through a directory this test owns: leakguard shims a wget the
-    # child would find in a system directory, and this one only talks to the loopback mirror.
+    # leakguard shims a system wget; this one only talks to the loopback mirror.
     bin_dir = target.parent / "bin"
     bin_dir.mkdir(exist_ok=True)
     if not (bin_dir / "wget").exists():

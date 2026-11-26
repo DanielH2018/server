@@ -68,8 +68,7 @@ def test_backups_delete_passes_both_the_server_wait_and_the_subprocess_cap(monke
 
 
 def test_the_default_delete_cap_outlives_the_server_wait_and_the_read_cap():
-    # Assert the COMPUTED value, not wall time: the client cap must never fire first and turn a
-    # delete that is still legitimately running on the server into a false FAILED.
+    # Assert the computed value: the client cap must never fire first.
     assert DEFAULTS.delete_subprocess_timeout_s > DEFAULTS.delete_timeout_s
     # host_lib.kubectl_runner's read cap, which a delete routinely runs past.
     assert DEFAULTS.delete_subprocess_timeout_s > DEFAULTS.kubectl_timeout_s
@@ -138,10 +137,7 @@ def test_purge_accepts_a_pod_whose_containers_are_all_ready():
 
 
 def test_purge_rejects_a_pod_with_no_containerstatuses():
-    # The rejecting half. Bash's `select([.status.containerStatuses[].ready] | all)` does not
-    # count such a pod as vacuously ready: `.[]` over a null field raises "Cannot iterate over
-    # null", jq exits nonzero, and bash takes its "no ready manager pod" branch. A pod whose containers have not started
-    # cannot serve the purge POST.
+    # A pod whose containers have not started is not ready; it cannot serve the purge POST.
     assert snapshots_mod._purge(_kubectl_returning(_pod()), "this-node", {"vol-a"}) == 1
 
 

@@ -87,9 +87,7 @@ if [[ -z "$name" ]]; then
     exit 0
 fi
 
-# Both arguments reach the `ask` reason, a JSON string, so each is constrained rather than
-# escaped: unparsable output from a DENY guard reads to the harness as a silent allow.
-# The name bails rather than falling back, since a quote or slash names no `.py` here.
+# Unparsable output from a DENY guard reads as a silent allow.
 if [[ ! "$name" =~ ^[A-Za-z0-9_.-]+$ ]]; then
     echo "[run-hook.sh] '$name' is not a hook name — nothing ran" >&2
     exit 0
@@ -134,9 +132,7 @@ if [[ ! -f "$script" ]]; then
     exit 0
 fi
 
-# `fanout-stop` acts only at or above a `.fanout/brief.md` (`fanout_root` in fanout-stop.py),
-# and every session's Stop runs it, so the same walk runs here first and an ordinary session's
-# Stop starts no interpreter. A payload whose `cwd` this cannot read falls through to the hook.
+# Walk for `.fanout/brief.md` here so an ordinary session's Stop starts no interpreter.
 if [[ "$name" == fanout-stop ]]; then
     payload=$(cat)
     cwd_re='"cwd"[[:space:]]*:[[:space:]]*"([^"\]*)"'
@@ -172,18 +168,15 @@ if [[ -n "$project" ]]; then
     exit 0
 fi
 
-# stdout goes straight through on fd 3; only stderr is captured, for the failure line.
-# `--quiet` drops uv's own warnings, such as a `UV_*` setting that `--no-project` ignores,
-# which would otherwise be the last line; uv's errors still print. A no-venv run gets no
-# `.pth`, so `PYTHONPATH` supplies the import root: this checkout's `scripts/`.
+# A no-venv run gets no `.pth`, so `PYTHONPATH` supplies the import root: this checkout's
+# `scripts/`.
 exec 3>&1
 err=$(PYTHONPATH="${HOOKS_DIR%/.claude/hooks}/scripts" "$uv" run --quiet --no-project --no-python-downloads --python 3.15.2 \
     "$script" 2>&1 >&3 3>&-)
 rc=$?
 exec 3>&-
 if ((rc != 0)); then
-    # The last non-empty stderr line is a Python traceback's `<Exc>: <msg>`. It can carry any
-    # bytes, so control characters are stripped and the JSON specials escaped.
+    # Strip control characters and escape JSON specials: the traceback line can carry any bytes.
     cause=$(printf '%s\n' "$err" | awk 'NF { last = $0 } END { print last }' | tr -d '\000-\037')
     cause=${cause:0:300}
     cause=${cause:-exit $rc with no stderr}

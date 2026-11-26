@@ -25,8 +25,7 @@ UNBACKED = "c-config"  # in a backup group but with no Completed backup
 @pytest.fixture
 def drill(tmp_path: Path):
     run = harness(tmp_path, [OLDEST, PINNED, UNBACKED], backed=[OLDEST, PINNED])
-    # Both attempts SUCCEEDED, so neither is owed the retry that would otherwise outrank the
-    # rotation's pick and make every assertion below about the wrong volume.
+    # Both attempts succeeded, so neither is owed a retry that would outrank the rotation's pick.
     for pvc, when in ((OLDEST, 1_700_000_000), (PINNED, 1_750_000_000)):
         run.seed({f"attempts.{pvc}": when, f"success.{pvc}": when})
     return run

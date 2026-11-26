@@ -6,25 +6,11 @@
    accident rather than by statement.
 #}
 ---
-# The WireGuard endpoint. Two ports, and they are fenced differently.
-#
-# 51820/UDP — the VPN listener, OPEN. Clients dial it from the public internet (the router
-#   forwards 51820/udp to this node), so the source addresses are by definition not enumerable.
-#   Its Service (`wg-easy-udp`) is a LoadBalancer with `externalTrafficPolicy: Local`, which
-#   preserves the client address rather than SNAT-ing it — correct for WireGuard, which
-#   authenticates by key rather than by address, and the reason an ipBlock here would be
-#   meaningless. Fencing this port is what would break remote access.
-#
-# 51821/TCP — the admin UI, on a ClusterIP Service. No rule here: the baseline already admits
-#   traefik and prometheus, and nothing else has any business in it.
-#
-# VPN clients cannot reach a cluster service by ClusterIP or pod IP at all: the wg-easy pod drops
-# peer traffic bound for k3s_pod_cidr and k3s_service_cidr in its own netns (the
-# `peer-cluster-drop` init container in k8s/roles/wg-easy). Peers reach services by hostname
-# through the Traefik VIP, a LAN address, so no policy should ever need `app: wg-easy` as a peer.
-#
-# Both ports come from this service's `containers_list` entry (udp_port / port) and equal the
-# containerPorts.
+# 51820/UDP stays OPEN: clients dial from the internet and WireGuard authenticates by key, so an
+# ipBlock is meaningless.
+# 51821/TCP: no rule; the baseline admits traefik and prometheus.
+# VPN clients cannot reach cluster IPs (`peer-cluster-drop`), so no policy needs `app: wg-easy`
+# as a peer.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -37,9 +23,8 @@ spec:
   policyTypes:
     - Ingress
   ingress:
-{# Renders allow-all when the flag is false, so `netpol_baseline_enforced` is a real rollback
-   lever. `| bool` for the string trap. Both explained in full in
-   networkpolicy-traefik.yaml.j2. #}
+{# Allow-all when the flag is false, the rollback lever. `| bool`: a string 'false' is truthy to
+   Jinja. #}
 {% if netpol_baseline_enforced | bool %}
     - ports:
         - port: 51820

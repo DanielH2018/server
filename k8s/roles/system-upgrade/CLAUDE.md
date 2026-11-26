@@ -14,7 +14,7 @@ nothing else upgrades k3s. The decision is
 - **Claims:** none (no PVC)
 <!-- /generated_from -->
 
-- **Flux applies it.** Its `containers_list` entry is in `cluster/services.yml`, so
+- **Flux applies it.** Its `containers_list` entry is in `k8s/services.yml`, so
   nothing applies it by hand.
 - **The Plans select the nodes in `system_upgrade_nodes`.** The list in `defaults/main.yml` holds
   `daniel-box` and `daniel-server`. A node joins the list only after its
@@ -50,7 +50,7 @@ nothing else upgrades k3s. The decision is
       rollout, and only then removes the label, so no Job starts under the old environment.
 - **The tag renders `prune: false`** (`flux_prune: false`, with the `DECIDED:` marker beside it
   in `defaults/main.yml`), because its render holds the Plan CRD and
-  `scripts/renderer/tests/test_renderer_crd_census.py` refuses a CRD under prune. A Plan
+  `scripts/renderer/tests/bundle/test_renderer_crd_census.py` refuses a CRD under prune. A Plan
   removed from the render stays live until the operator deletes it (**operator-only**):
   `kubectl -n system-upgrade delete plan <name>`.
 - **The tag is forward-only** (`flux_forward_only: true`). A failed or timed-out revision holds

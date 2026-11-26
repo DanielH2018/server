@@ -44,7 +44,7 @@ git clone https://github.com/DanielH2018/server.git   # use a GitHub PAT as the 
 ```
 
 Clone it to **`/home/<user>/server`, as the user named by `sys_user`** (`ubuntu`, in
-`inventory/group_vars/all.yml`). Both the path and the username are baked into role templates and
+`estate/vars.yml`). Both the path and the username are baked into role templates and
 systemd units, such as the secret-rotation crons and AIDE's local config. A repo cloned elsewhere, or owned by a
 differently named user, breaks those with no clear error.
 
@@ -64,21 +64,21 @@ source ~/.bashrc   # (or re-login) to pick up ~/.local/bin on PATH
 
 ## 4. Add the host to inventory
 
-`inventory/host_vars/<host>.yml` describes each host to the renderer and the host
+`hosts/<host>/vars.yml` describes each host to the renderer and the host
 packages: one file is one inventory host, and a host without a file matches nothing. Before
 touching SOPS:
 
-1. Create `inventory/host_vars/<host>.yml` — copy
-   `inventory/host_vars/_example.yml`, which lists every variable a
+1. Create `hosts/<host>/vars.yml` — copy
+   `hosts/_example/vars.yml`, which lists every variable a
    new host can set with its default and why it matters. At minimum:
    - `server_ip` — the host's LAN IP (no default exists; every role that publishes a
      LAN-bound port or firewalls by IP needs it).
    - `compose_services: []` on a Docker host only, which its host package deploys. A k3s
-     node drops the key, because the k3s services live in `cluster/services.yml` (see the
+     node drops the key, because the k3s services live in `k8s/services.yml` (see the
      repo-root `CLAUDE.md` → "Project Overview").
    - Any hardware capability flags a role you plan to deploy expects — for example `has_igpu: true`
      only if the host has an Intel iGPU (gates `/dev/dri` passthrough for jellyfin/tdarr;
-     defaults to `false` in `inventory/group_vars/all.yml`).
+     defaults to `false` in `hosts/vars.yml`).
 
 ## 5. Onboard the host to SOPS
 

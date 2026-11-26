@@ -24,7 +24,7 @@ x265 re-encode instead, which made Jellyfin buffer and seek slowly.
 <!-- /generated_from -->
 
 - **Flux applies it.** Its `containers_list` entry is
-  in `cluster/services.yml`, so nothing applies it by hand. A merged change
+  in `k8s/services.yml`, so nothing applies it by hand. A merged change
   reaches the cluster when `promote` publishes and verifies the next bundle.
 - **Host: daniel-box (k8s CronJob).** This role renders `templates/config/config.yml.j2` and
   stages `files/configarr_lib/configarr_status.py` into a ConfigMap. Edit the config HERE.
@@ -66,7 +66,7 @@ x265 re-encode instead, which made Jellyfin buffer and seek slowly.
   `k8s/roles/configarr/defaults/main.yml:DECIDED: the two gates run unordered`
   (#5617).
 - **The pod holds no Secret.** The reader's code ships in the `configarr-health` ConfigMap,
-  beside `host_lib.py`. No secret goes in the ConfigMap (`tests/k8s/test_no_secret_in_a_moved_jobs_configmap.py`).
+  beside `host_lib.py`. No secret goes in the ConfigMap (`tests/k8s/flux/test_no_secret_in_a_moved_jobs_configmap.py`).
 - **The reader also exports its verdict** (M6 B6b). It patches `homelab/check-verdict`,
   `homelab/check-last-run` and `homelab/check-message` onto the `configarr-health-verdict`
   ConfigMap, which the role renders with no annotations so the reader is their only writer.

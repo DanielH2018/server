@@ -88,8 +88,6 @@ def test_a_check_run_that_is_not_an_object_is_refused():
         CheckRun.parse(["x"])
 
 
-# Two entries of `GET /repos/DanielH2018/server/commits/bd39c048c/check-suites`, cut to the
-# fields beside the ones the type reads: an app that registered nothing, and the CI run.
 SUITES = [
     {
         "id": 121321898339,

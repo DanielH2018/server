@@ -1,0 +1,205 @@
+---
+# The B2 bucket Longhorn's `default` BackupTarget writes to, which `probe.py b2-longhorn` and
+# `b2-budget` list. A bucket name grants nothing without the key pair, and the BackupTarget CR
+# already shows it to the read-only ServiceAccount, so the probe reads it here with no age key.
+# The BackupTarget renders it as a literal, so this is the only copy.
+# DECIDED: not named `longhorn_b2_bucket`. Every `secrets.yml` key's stub overrides inventory in
+# a render, so that name would keep rendering the SOPS key's placeholder.
+k3s_longhorn_b2_bucket: daniel-server-kopia
+# Global because the hypervisor role's staging-guest egress fence must name these ranges.
+# Unfenced, the guest reaches prod's unauthenticated Longhorn API (ClusterIPs are off the LAN).
+k3s_pod_cidr: "10.42.0.0/16"
+k3s_service_cidr: "10.43.0.0/16"
+# Global because loki-homelab's monitoring route also admits exactly these two addresses.
+k3s_cni0_gateways:
+  - 10.42.0.1/32
+  - 10.42.1.1/32
+# DECIDED: cni0 alone, for netpol_baseline_node_cidrs. The censused host caller has a fallback.
+# `netpol_baseline_node_cidrs` reads the pair above and NOT the flannel pair below, deliberately.
+# A host process reaching a baseline-selected pod on the other node is denied, with the pod's
+# node as the only variable: from daniel-box, sonarr's
+# ClusterIP (pod on daniel-box) answers 200 while prowlarr's (pod on daniel-server) times out,
+# and from daniel-server the two verdicts swap. The census found ONE host caller of that
+# shape, `get_via_service()` in scripts/diagnostics/postflight.py, and it already falls back to
+# the workload's Traefik route when the ClusterIP does not answer — which is why the
+# *arr `-monitoring` routes admit the flannel pair. Traefik itself is immune: its
+# policy's first ingress rule carries ports 8000/8443 with no `from:`, so the three host crons
+# that dial it are unaffected by this list. Adding the flannel pair here would re-scope every pod
+# the namespace-scoped baseline selects, to buy a fast path that already has a working fallback.
+# Contradict this with a NAMED host caller that has no route fallback.
+# The two nodes' flannel.1 VXLAN addresses — the OTHER source a host process can arrive as.
+# Which of the two sets a host request carries depends on where the traefik pod sits: traffic
+# to a pod on the SAME node leaves via cni0 and arrives as that node's cni0 gateway above,
+# while traffic to a pod on the OTHER node crosses the overlay and arrives as the sending
+# node's flannel.1 address. Traefik is pinned to daniel-box, so daniel-box arrives as
+# 10.42.0.1 and daniel-server as 10.42.1.0: from a daniel-server shell `ip route get` to a
+# daniel-box pod reads `src 10.42.1.0`, and Traefik's access log reads `ClientHost: 10.42.1.0`.
+#
+# Separate from k3s_cni0_gateways rather than merged into it: netpol-baseline reads that
+# variable for 16 workloads' NetworkPolicies, and admitting the overlay addresses to a route
+# must not silently widen those. A route with ANY host-process caller reads both lists: the
+# cni0 pair alone matches only while traefik happens to sit on the caller's node, and nothing
+# ties the traefik nodeSelector to a route's grants. loki-homelab's read route and the
+# three *arr `-monitoring` routes read it, and each is guarded by a test in tests/k8s/.
+# netpol-baseline reads it too, for the observability fence (netpol_baseline_obs_node_cidrs)
+# and the nut policy's host callers.
+#
+# Verified per node with `ip -4 -o addr show flannel.1` (daniel-box: 10.42.0.0,
+# daniel-server: 10.42.1.0).
+k3s_flannel_node_ips:
+  - 10.42.0.0/32
+  - 10.42.1.0/32
+k3s_agent_node_ips:
+  - "{{ hosts['daniel-server'].server_ip }}"
+k3s_metallb_ingress_vip: 10.0.0.240
+# MQTT is raw TCP: it crosses hosts by this VIP, not a Traefik hostname.
+mqtt_k8s_vip: 10.0.0.242
+# The cluster Pi-hole's pinned LAN DNS VIP. Global for the same two-hosts reason —
+# daniel-box's pihole-dns Service claims it, and wg-easy's WG_DEFAULT_DNS points here.
+dns_k8s_vip: 10.0.0.243
+# Cluster DNS forwards here, not to the VIP: the LoadBalancer's externalTrafficPolicy: Local
+# blackholes traffic MetalLB's announcer would forward to another node.
+dns_k8s_cluster_ip: 10.43.252.187
+jellyfin_k8s_lan_ip: 10.0.0.241
+# Global: shared by the crowdsec and traefik roles, which cannot see each other's defaults.
+crowdsec_k8s_image: crowdsecurity/crowdsec:v1.8.2@sha256:65b74942f7e7ed5c60fde4ac15fc4ba715904c398c8b16dd451f4907d90347d4
+# Four readers derive from this map: sidecar username, machine registration, scrape jobs, netpol
+# :6060.
+crowdsec_k8s_sidecar_agents:
+  traefik: k8s-traefik-agent
+  authelia: k8s-authelia-agent
+crowdsec_k8s_lapi_port: 8080
+crowdsec_k8s_appsec_port: 7422
+zigbee_pan_id: 6754
+zigbee_ext_pan_id: [221, 187, 17, 34, 51, 68, 85, 102]
+# One namespace: Traefik Middleware references are namespace-scoped, so splitting costs a qualified
+# name on every route.
+k8s_namespace: homelab
+
+# Every nodeSelector pin and `hosts[...]` lookup meaning "primary node" reads this, not the literal.
+# It does not say why a workload is pinned; that is recorded at each pin.
+k8s_primary_node: daniel-box
+
+# Warn/audit only, no `enforce`: this namespace holds privileged, hostNetwork, hostPath pods.
+# Rollback: set to {} and promote; PSA acts only at pod create and update.
+k8s_psa_labels:
+  pod-security.kubernetes.io/warn: baseline
+  pod-security.kubernetes.io/audit: baseline
+
+# Default container resources, applied to homelab and observability.
+#
+# A LimitRange, and deliberately NOT a ResourceQuota. Every container this repo renders
+# already carries requests and limits, so this changes nothing for them. It exists for the
+# objects this repo does not render — a hand-created pod, a Helm chart, a `kubectl run`.
+#
+# DEFAULTS ONLY — no `min`, no `max`. A `min`/`max` REJECTS every pod outside the band,
+# including ones this repo already renders at 2Gi and 4Gi, while a default only fills in
+# what was left out. Same reason there is no ResourceQuota: a namespace CPU/memory quota
+# makes requests and limits MANDATORY on every pod in it.
+#
+# DEFAULTS STILL HAVE ONE REJECTION PATH, and it is why the ceiling is not tighter. A
+# container that sets a REQUEST and no limit is given `default` as its limit — and if that
+# lands below the request it stated, the API server refuses the pod. Requests-only is how a
+# lot of Helm charts ship, so the ceiling must sit above anything one plausibly asks for.
+# Hence 2Gi: already the joint-most-common memory limit here and 1/14th of a node, so it
+# bounds a runaway while leaving the rejection path essentially unreachable.
+#
+# LimitRange evaluates at pod CREATE only, so adding this evicts nothing.
+#
+# ROLLBACK: set to {} and let the change promote. Neither copy then renders, and the
+# homelab-namespace and observability Kustomizations, both `prune: true`, delete them live.
+#
+# DECIDED: 40x CPU / 32x memory default-to-request, two namespaces only; do not tighten it, and
+# do not extend it to longhorn-system (instance-manager already peaks near a 2Gi limit).
+k8s_default_limitrange:
+  defaultRequest:
+    cpu: 50m
+    memory: 64Mi
+  default:
+    cpu: "2"
+    memory: 2Gi
+
+# Global: k3s-server arms the flags and loki-homelab's promtail tails the file. Only daniel-box
+# writes it.
+k3s_audit_log_enabled: true
+k3s_audit_log_dir: /var/lib/rancher/k3s/server/logs
+k3s_audit_log_path: "{{ k3s_audit_log_dir }}/audit.log"
+# Embedded etcd's metrics endpoint. Here, not in the k3s-server component's defaults, for the same
+# reason as the audit log above: TWO readers need it. k3s-server puts --etcd-expose-metrics in
+# the server args, and observability's prometheus.yaml.j2 gates its `etcd` scrape job on the
+# same value, so the port and its only consumer cannot drift apart.
+#
+# k3s serves etcd metrics on 2381 either way. The flag moves the bind from 127.0.0.1 to
+# 0.0.0.0, which is the whole point: Prometheus scrapes from the pod network and a
+# loopback-bound port is unreachable from there. Plain HTTP, no auth, by k3s's design — the
+# same posture as the kubelet's :10250, which also binds all interfaces and is protected by the
+# host's default-deny UFW policy rather than by transport auth. The endpoint exposes counters
+# and latencies, never key material or object data.
+#
+# Arming it needs a k3s reinstall: the installer rewrites the unit and RESTARTS k3s. The
+# API server is briefly unavailable; running workloads keep running.
+#
+# DECIDED: off, and the DB-size risk is covered by a proxy instead. The restart above also
+# re-encrypts every Secret, the reinstall is manual-plane by construction, and the
+# flag opens an unauthenticated :2381 — more cost than the gap is worth on a single voter,
+# where leader changes and WAL fsync latency carry little signal anyway. The one series that
+# does matter, the DB size against its 2 GiB quota, is readable WITHOUT the flag:
+# `apiserver_storage_size_bytes` is scraped unconditionally, and it matches the
+# etcd snapshot's size. The `EtcdDBNearQuota` rule reads it
+# (k8s/roles/observability/files/rules/storage.yaml). Reopen this with evidence that fsync latency or leader churn is what broke, not
+# with the observation that the etcd series are empty — that is this decision, not a finding.
+k3s_etcd_expose_metrics: false
+# Post-rollout hold: `rollout status` passes on readiness alone, hiding a liveness crashloop.
+# Must exceed a probe's initialDelaySeconds + failureThreshold x periodSeconds (slowest ~35s).
+k8s_rollout_stabilise_seconds: 60
+
+# A concurrency limit on rollouts, not on watching them. Most Deployments are Recreate, so width N
+# means N simultaneous Longhorn detach/attach cycles; widen only against a measured run.
+k8s_rollout_batch_width: 5
+
+# Global: traefik must list it as a watched namespace, or its IngressRoutes are silently ignored.
+k8s_observability_namespace: observability
+# Fixed by the upstream manifest; traefik must list it among watched namespaces.
+k8s_longhorn_namespace: longhorn-system
+# Infrastructure APIs opt out per route with the macro's public=false.
+k8s_public_route: true
+# Empty means Traefik's default self-signed cert (staging holds no Cloudflare token).
+# Keep the `tls:` block either way: without `spec.tls` the route is non-TLS, with no visible error.
+k8s_tls_cert_resolver: cloudflare
+# Monitoring routes are ClientIP-gated to it. A failed `hosts` lookup resolves to None silently, so
+# guards compare the render against the host_vars literal.
+k8s_bridge_client_ip: "{{ hosts['daniel-server'].server_ip }}"
+# Consumers: loki-homelab's push-only IngressRoute allowlist and the Pi's static scrape jobs.
+k8s_pi_client_ip: "{{ hosts['daniel-pi'].server_ip }}"
+# A pod cannot reach the host forwarder at 127.0.0.1, so the scrape job and deploy-ui's
+# EndpointSlice need the node's routable address.
+k8s_node_client_ip: "{{ hosts['daniel-box'].server_ip }}"
+# Duplicated from `k3s_host_dns_metrics_port` on purpose (role defaults are out of scope in the k8s
+# play);
+# hosts/tests/test_coredns_metrics_port_agrees.py keeps them equal.
+k8s_node_dns_metrics_port: 9253
+# PUSH from builder pods via the Service name (`localhost` is the pod); PULL by containerd via a
+# loopback hostPort (a host process resolves no cluster names). Global for k3s-server.
+k8s_registry_port: 5000
+# Loopback only: the registry has no auth and no TLS.
+k8s_registry_host_ip: 127.0.0.1
+# Same string as the registries.yaml mirror KEY, so image refs are node-portable; endpoints differ.
+k8s_registry_pull_host: "localhost:{{ k8s_registry_port }}"
+# Where a Flux-owned tag pulls each built image. The renderer rewrites every container `image:`
+# naming a built image to this host (scripts/renderer/renderer_lib/images.py:GHCR); a ref
+# the rewrite cannot reach, such as one inside ConfigMap text, names it directly.
+# tests/services/apps/test_airflow_task_image.py holds the two equal.
+k8s_ghcr_pull_host: ghcr.io/danielh2018
+# Pinned: agents' registries.yaml names it, and containerd resolves no cluster DNS.
+# Plain HTTP between nodes is accepted (own hosts, own switch).
+k8s_registry_cluster_ip: 10.43.51.14
+# Pull-through mirror of ghcr.io on its own port: a proxy-mode registry refuses pushes.
+# 5002, not 5001: the image's baked config binds its debug server to :5001.
+k8s_registry_ghcr_mirror_port: 5002
+# 5003 and 5004 are the ghcr-mirror pod's loopback debug and resume ports.
+k8s_registry_dockerhub_mirror_port: 5005
+# Follows the cluster so staging never pushes to or pulls from the prod registry.
+k8s_registry_node: "{{ k8s_primary_node }}"
+# Fully qualified: a builder pod may lack a search domain, and a wrong namespace reads as a DNS
+# failure.
+k8s_registry_push_host: "registry.{{ k8s_namespace }}.svc.cluster.local:{{ k8s_registry_port }}"

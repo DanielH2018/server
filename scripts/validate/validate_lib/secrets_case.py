@@ -91,10 +91,8 @@ def encrypt(c: Container, values: dict[str, str]) -> str:
     return c.ok(f"cat /tmp/seal/{HOST}.sops.yaml")
 
 
-# A `docker` that accepts every verb and prints nothing: the container holds no engine. The real
-# Pi package enables homelab-compose.service (H5.2b), and reconcile restarts it. compose-run then
-# finds no service to adopt and no image to pull, so a no-output `docker` lets its six steps pass.
-# The package, the unit and the scripts stay the real ones.
+# A `docker` that accepts every verb and prints nothing: the container holds no engine, and
+# compose-run finds nothing to adopt or pull, so its steps pass.
 DOCKER_STUB_PATH = "/usr/local/bin/docker"
 DOCKER_STUB = r"#!/bin/sh\nexit 0\n"
 
@@ -142,8 +140,8 @@ def seal_host(cases, c: Container, host: str, seal=None) -> Path:
     c.ok(f"install -d -m 0755 /etc/homelab && age-keygen -o {AGE_KEY}")
     package = host_mode.render_host(host)
     expect(bool(package.credentials), f"{host}'s package lists no credential to seal")
-    # An output's keys, such as the Pi's Compose env file (H5.7), are decrypted by the unit too.
-    # Without them homelab-secrets fails, and reconcile keeps every legacy entry and exits 1.
+    # An output's keys are decrypted by the unit too; without them homelab-secrets fails, and
+    # reconcile keeps every legacy entry and exits 1.
     keys = sorted(
         {*package.credentials, *(k for out in package.outputs for k in out["keys"])}
     )

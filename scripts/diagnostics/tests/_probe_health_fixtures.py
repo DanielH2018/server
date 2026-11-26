@@ -14,8 +14,6 @@ Import by bare name: pytest puts a test's own directory on `sys.path`, so
 
 from datetime import datetime, timezone
 
-# The instant every fake timestamp below is measured against. Fixed rather than
-# `datetime.now()` so a restart "120s ago" stays 120s ago on a slow CI runner.
 NOW = datetime(2026, 8, 16, 12, 0, 0, tzinfo=timezone.utc)
 
 

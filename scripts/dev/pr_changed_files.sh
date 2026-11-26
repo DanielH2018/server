@@ -10,7 +10,7 @@
 # One caller uses only the fetch: image-smoke.yml's collect step diffs its own pathspec after
 # it, and leaves the file lists below unread. The fetch is
 # here so that no workflow carries its own copy of the token header; the `workflows-fetch-
-# through-the-shared-script` row of tests/repo/test_census_rows_text.py checks that.
+# through-the-shared-script` row of tests/repo/census_rows/test_census_rows_text.py checks that.
 #
 # Inputs, from the environment:
 #   BASE_REF          the PR's base branch (github.base_ref)
@@ -33,9 +33,6 @@
 # PR's merge ref.
 set -euo pipefail
 
-# `--help` answers from any environment, ahead of every step below — the repo-wide convention
-# `scripts/lib/tests/test_entry_points_answer_help.py` checks. The awk prints this
-# file's leading comment block, which is the usage, with the `#` markers stripped.
 if [ "${1:-}" = "-h" ] || [ "${1:-}" = "--help" ]; then
   awk 'NR>1 && /^#/ {sub(/^# ?/, ""); print; next} NR>1 {exit}' "$0"
   exit 0
@@ -55,18 +52,14 @@ fi
 git -c "http.https://github.com/.extraheader=AUTHORIZATION: basic $(printf 'x-access-token:%s' "$FETCH_TOKEN" | base64 -w0)" \
   fetch --no-tags origin "$BASE_REF"
 
-# `A...B` (three dots) diffs against the merge base, so this is the PR's own change and not
-# whatever else landed on the base meanwhile. --no-renames reports a rename as its D + A
-# halves rather than one R entry, so the D trips the full-sweep rule.
+# --no-renames reports a rename as D + A, so the D trips the full-sweep rule.
 base="origin/$BASE_REF...HEAD"
 git diff --name-only --no-renames --diff-filter=D "$base" > "$RUNNER_TEMP/deleted.txt"
-# --diff-filter=d (lowercase) drops deletions: a removed file is still "changed", but passing a
-# path that no longer exists to a hook is a hook error, not a lint finding.
+# Drop deletions: passing a nonexistent path to a hook is a hook error.
 git diff --name-only --no-renames --diff-filter=d "$base" > "$RUNNER_TEMP/changed.txt"
 
-# `-x` so `prek.toml` cannot match `docs/prek.toml.md`; the blank-line filter so a block
-# scalar's trailing newline cannot become an empty pattern that matches everything. Each grep
-# tolerates exit 1 (no match) and nothing else, so a read error still fails the step.
+# `-x` so `prek.toml` cannot match `docs/prek.toml.md`; the blank-line filter stops an empty pattern
+# that matches everything.
 printf '%s\n' "${FULL_SWEEP_PATHS:-}" | { grep -v '^$' || [ $? -eq 1 ]; } > "$RUNNER_TEMP/triggers.txt"
 grep -Fx -f "$RUNNER_TEMP/triggers.txt" "$RUNNER_TEMP/changed.txt" > "$RUNNER_TEMP/triggered.txt" || [ $? -eq 1 ]
 

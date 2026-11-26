@@ -1,7 +1,7 @@
 """The `--help` contract every entry point under `scripts/` answers.
 
 ONE CONVENTION: `-h` or `--help` prints what the script is for and exits 0, from any
-environment. `scripts/lib/tests/test_entry_points_answer_help.py` runs every catalogued entry
+environment. `scripts/lib/tests/script_census/test_entry_points_answer_help.py` runs every catalogued entry
 point that way, so an operator can ask what a script does without reading it and without a
 kubeconfig, a cluster, a lock or a network in reach.
 
@@ -28,7 +28,7 @@ A USAGE ERROR EXITS 64. argparse's own `error()` exits 2, which many entry point
 return as an outcome (`CI_DISARMED`, `PUBLISH_PUSHED_NO_PR`), so a mistyped
 flag read as a real result. `ArgumentParser` below is argparse's with `error()` exiting
 `lib.exit_codes.USAGE_ERROR`. Subparsers inherit it, because `add_subparsers` defaults its
-`parser_class` to the parent's class. `scripts/lib/tests/test_exit_codes.py`'s census refuses a
+`parser_class` to the parent's class. `scripts/lib/tests/script_census/test_exit_codes.py`'s census refuses a
 bare `argparse.ArgumentParser(` in an entry point.
 
 MESSAGES carry argparse's prefix. `warn` and `error` print `<prog>: warning: ...` and

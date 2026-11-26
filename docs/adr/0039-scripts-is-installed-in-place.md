@@ -37,7 +37,7 @@ outside a venv (`uv run --no-project`) gets no `.pth`, so each of its launchers 
 `PYTHONPATH` to its own checkout's `scripts/` (#9271). A GitHub Actions step that runs a
 script with the runner's bare `python3` is such a launcher too, and sets `PYTHONPATH: scripts`.
 `scripts/lib/stdlib_only.py` reads those steps, and a script reached from one that sets no
-root fails `scripts/lib/tests/test_stdlib_only.py::test_every_member_of_the_set_imports_outside_the_venv`.
+root fails `scripts/lib/tests/script_census/test_stdlib_only.py::test_every_member_of_the_set_imports_outside_the_venv`.
 
 The install has one effect the re-plan did not foresee, found when slice 1 ran on the real
 tree. Several mechanisms run one tree's code under another tree's venv:

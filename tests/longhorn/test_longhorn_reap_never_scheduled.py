@@ -129,15 +129,9 @@ def test_a_comment_naming_a_reaper_is_clean(tmp_path: Path) -> None:
     assert scheduled_reapers(tmp_path) == []
 
 
-# ── The CronJob arm: no k8s CronJob runs a reaper ────────────────────────────────────────
-#
-# A schedule can arrive in a rendered CronJob as well as in a unit template. A CronJob that names
-# the reaper in its command is caught directly; one that runs a script from a mounted ConfigMap
-# names it only in that ConfigMap's data, so the arm reads the data of every ConfigMap the
-# CronJob mounts, through a `configMap` volume or a `projected` source.
+# A CronJob that mounts a script ConfigMap names the reaper only in that ConfigMap's data.
 
-# The CronJob and the mounted script ConfigMap that must be read, so an empty render cannot
-# pass. H2.3b adds the drill's script ConfigMap here when its tag renders one.
+# These must be read so an empty render cannot pass.
 CRONJOB_MEMBERS = frozenset({("CronJob", "pi-peer-backup")})
 MOUNTED_MEMBERS = frozenset({("ConfigMap", "karakeep-archive-pruner")})
 

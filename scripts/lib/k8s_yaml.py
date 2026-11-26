@@ -174,11 +174,10 @@ def make_lookup(ctx: dict):
             return base64.b64encode(path.read_bytes()).decode()
         if kind == "template":
             env = make_env([path.parent])
-            # jinja2 leaves `Environment.globals` unannotated, so its type is inferred from
-            # the default namespace's values and rejects any other callable.
+            # jinja2 leaves `Environment.globals` unannotated, so the cast is needed.
             cast(dict[str, Any], env.globals)["lookup"] = lookup
-            # A deploy's lookup('template') sees every filter the calling template does, and
-            # homepage's tile list reaches the repo's own (homepage_href), so copy them over.
+            # A deploy's lookup('template') sees every filter the calling template does
+            # (homepage_href).
             env.filters.update(context.environment.filters)
             env.filters["from_json"] = _from_json
             env.filters["to_json"] = to_json_stub

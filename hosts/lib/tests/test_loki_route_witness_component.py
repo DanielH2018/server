@@ -65,8 +65,8 @@ def test_the_timer_fires_hourly_at_minute_23_and_the_links_are_enabled(package):
 
 
 def test_both_cluster_nodes_witness_and_the_pi_does_not():
-    # One host cannot see a route that is dead only from the other, and daniel-pi is not in its
-    # ClientIP set.
+    # One host cannot see a route dead only from the other, and daniel-pi is not in its ClientIP
+    # set.
     listing = {
         host: "loki-route-witness"
         in yaml.safe_load((REPO / "hosts" / host / "package.yml").read_text())[

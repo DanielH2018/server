@@ -1,13 +1,7 @@
 ---
-# The namespace ingress baseline. Kubernetes admits every pod-to-pod connection by default and a
-# NetworkPolicy constrains only the pods it SELECTS, so this is the object that makes every other
-# policy in the repo mean something.
-#
-# INGRESS ONLY. An Egress policy selects pods correctly on this cluster and blocks nothing, so
-# writing one would read like a control in the repo and do nothing in the cluster.
-#
-# Kubelet probe traffic needs no rule here: flaresolverr admits :8191 only from prowlarr yet is
-# probed on that port and runs 1/1, and headlamp corroborates it.
+# Kubernetes admits every connection by default; this baseline makes the other policies mean
+# something.
+# INGRESS ONLY: an egress rule would be enforced and cut DNS unless it admits CoreDNS.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -16,14 +10,9 @@ metadata:
 spec:
   podSelector:
 {% if netpol_baseline_scope == 'namespace' %}
-    # Every pod EXCEPT the ones that opt out. A bare `{}` here would select the workloads carrying a
-    # policy tighter than this one and, because policies are additive, ADD this allow-list on top
-    # of theirs, widening exactly the fences those policies exist to draw.
-    # `netpol_baseline_exempt_workloads` names them, and the exempt-set check in
-    # templates/verify/job.yaml.j2 fails if the cluster's exempt set differs.
-    #
-    # DoesNotExist, not `NotIn: ["true"]`: a pod with no such key satisfies DoesNotExist with no
-    # ambiguity, where NotIn against an absent key is the kind of semantics that reads two ways.
+    # Selects every pod EXCEPT the opt-outs: a bare `{}` would ADD this allow-list to tighter
+    # policies.
+    # DoesNotExist, not `NotIn: ["true"]`, which reads two ways for an absent key.
     matchExpressions:
       - key: netpol-baseline-exempt
         operator: DoesNotExist
@@ -34,20 +23,16 @@ spec:
   policyTypes:
     - Ingress
   ingress:
-{# `| bool`, matching `netpol_baseline_probe_active` in defaults/main.yml. Without it the two
-   disagree for a STRING: `'false'` is truthy to Jinja (this branch renders, fencing applied) and
-   False to that list (the verify Job dials no leg), so enforcement runs with no probe. #}
+{# Allow-all when the flag is false, the rollback lever. `| bool`: a string 'false' is truthy to
+   Jinja. #}
 {% if netpol_baseline_enforced | bool %}
-    # Three callers legitimately reach almost every pod; stating them once here replaces
-    # restating them in every per-workload policy.
     - from:
         # Traefik is the front door for every web UI. Bare podSelector = this namespace only.
         - podSelector:
             matchLabels:
               app: traefik
-        # Prometheus scrapes every workload. namespaceSelector and podSelector are SIBLING KEYS
-        # in ONE list item, so they AND together: the prometheus pod in observability. As two
-        # separate list items they would OR, admitting the entire observability namespace.
+        # namespaceSelector and podSelector are siblings in ONE item, so they AND; as two items they
+        # would OR.
         - namespaceSelector:
             matchLabels:
               kubernetes.io/metadata.name: observability

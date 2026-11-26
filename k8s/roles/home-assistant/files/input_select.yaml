@@ -13,9 +13,8 @@ bedroom_test_scenario:
     - arrive
     - held
     - reset
-# Test-harness speed (script.bedroom_run_scenario): `fast` (~30s, the first option = default) or
-# `real` (production timing). An input_select's first option is its creation default, so this
-# realizes the "fast by default" intent that an input_boolean (no `initial:` field) cannot.
+# The first option is the creation default, so `fast` is the default (an input_boolean cannot
+# express this).
 bedroom_test_speed:
   name: Bedroom test speed
   icon: mdi:fast-forward

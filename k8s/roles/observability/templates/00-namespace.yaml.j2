@@ -7,7 +7,7 @@ kind: Namespace
 metadata:
   name: {{ k8s_observability_namespace }}
 {% if k8s_psa_labels %}
-  # Pod Security Admission, warn+audit only — see k8s_psa_labels in group_vars/all.yml for
+  # Pod Security Admission, warn+audit only — see k8s_psa_labels in k8s/vars.yml for
   # why nothing is enforced here. Four workloads in this namespace publish a loopback
   # hostPort, so `enforce: baseline` would refuse loki, tempo, prometheus and the collector.
   labels:
@@ -21,7 +21,7 @@ metadata:
 # the namespace file, not one of its own, because it is a property OF the namespace and must be
 # applied after it — and this file is the one guaranteed to sort first. Every container this
 # role renders already sets both, so nothing here changes; see k8s_default_limitrange in
-# group_vars/all.yml for what it is actually for, and why it sets no min/max.
+# k8s/vars.yml for what it is actually for, and why it sets no min/max.
 apiVersion: v1
 kind: LimitRange
 metadata:

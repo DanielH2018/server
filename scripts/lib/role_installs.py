@@ -6,7 +6,7 @@ installed path to its tree source, `stage()` copies the sources to that layout u
 `role_entries()` reads each command a role's or component's files run `--no-project` and
 returns the staged copy it runs. `lib.stdlib_only` walks those entries from the stage.
 
-Run: uv run pytest scripts/lib/tests/test_stdlib_only.py
+Run: uv run pytest scripts/lib/tests/script_census/test_stdlib_only.py
 """
 
 import atexit
@@ -20,10 +20,8 @@ from lib import yaml_fast
 from lib.repo_paths import K8S_ROLES, REPO
 from renderer.renderer_lib.host_sources import SHARED_FILES
 
-# A role command running a script `--no-project`: the first `.py` path after the flag, in one
-# command. The scan stops at a blank line, a `-m` (a module run names no path) or the next
-# `--no-project`, so it never takes another command's script. A path may hold `{{ var }}`, as
-# in `{{ deploy_ui_dir }}/x.py`.
+# Stops at a blank line, a `-m` or the next `--no-project`, so it never takes another command's
+# script.
 _NO_PROJECT = re.compile(r"--no-project\b")
 _ROLE_RUN = re.compile(
     r"--no-project\b(?:(?!\n\s*\n|\s-m\s|--no-project\b)[\s\S]){0,400}?"
@@ -87,8 +85,7 @@ def install_map() -> dict[str, tuple[Path, Path]]:
             )
         found.setdefault(live, (src.resolve(), declared_in))
 
-    # A host component installs a script by a `src:` entry, and a shared module beside it by
-    # a `lib:` or `shared:` entry.
+    # A component installs a script by `src:` and a shared module by `lib:` or `shared:`.
     for component in sorted(COMPONENTS.glob("*/component.yml")):
         data = yaml_fast.safe_load(component.read_text(encoding="utf-8")) or {}
         for entry in data.get("files") or []:

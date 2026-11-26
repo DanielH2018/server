@@ -23,7 +23,7 @@ The key set anywhere else under `k8s/` or `inventory/` is refused: inventory, pl
 vars and `set_fact` override a role default, so a pin there would move the deployed version
 while the role file stays put. That scan matches the key at any indent, as YAML `key:` or as
 INI `key=`, in every YAML and INI file and every file under `inventory/`, `group_vars/` or
-`host_vars/`. A `-e` passed at run time is outside its reach.
+`hosts/<host>/vars.yml`. A `-e` passed at run time is outside its reach.
 
 There is no bypass. The plan is docs/archive/host/h1-cluster-config-to-flux.md,
 *CI checks on the pins*, and docs/landing.md says what to do with a refused PR.
@@ -37,7 +37,7 @@ There is no bypass. The plan is docs/archive/host/h1-cluster-config-to-flux.md,
 Exit codes: 0 clean; 1 refused; 2 a pin could not be read, so the check could not judge.
 
 Run: uv run python scripts/validate/cluster_pins.py --base origin/master
-     uv run pytest scripts/validate/tests/test_validate_cluster_pins.py
+     uv run pytest scripts/validate/tests/pins/test_validate_cluster_pins.py
 """
 
 import re
@@ -54,8 +54,7 @@ from lib.repo_paths import REPO
 
 CLEAN, REFUSED, UNJUDGED = 0, 1, 2
 
-# The forward-only pins, each with whether a bump may move it by at most one minor release.
-# MetalLB has no such rule upstream, so only its decrease and its PR's other paths are checked.
+# Whether a bump may move the pin by at most one minor release; MetalLB has no such rule upstream.
 PINS: Mapping[str, bool] = {
     "k3s_longhorn_version": True,
     "k3s_metallb_version": False,
@@ -66,6 +65,9 @@ VARS_YAML = (
     ":(glob)k8s/**/*.yaml",
     ":(glob)inventory/**/*.yml",
     ":(glob)inventory/**/*.yaml",
+    ":(glob)estate/**/*.yml",
+    "hosts/vars.yml",
+    ":(glob)hosts/*/vars.yml",
 )
 # Every file a render reads variables from. Inventory files take any extension or none.
 VARS_FILES = (*VARS_YAML, ":(glob)inventory/**")
@@ -225,8 +227,8 @@ def files_setting(key: str, sha: str, repo: Path = REPO) -> list[str]:
     return [line.split(":", 1)[1] for line in hits.stdout.splitlines()]
 
 
-# A quote opens at the line start or after whitespace or `{[,:=`, as a YAML scalar or an INI
-# value Ansible splits with shlex does. A quote inside a bare word, as in `x's`, opens none.
+# A quote opens at line start or after whitespace or `{[,:=`; a quote inside a bare word, as in
+# `x's`, opens none.
 QUOTE_OPENERS = " \t{[,:="
 
 

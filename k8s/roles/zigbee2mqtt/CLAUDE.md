@@ -19,7 +19,7 @@ See repo-root `CLAUDE.md` for shared conventions.
 - **Port:** 8080 · reaches the coordinator at `tcp://{{ slzb_ip }}:6638`, broker at the
   in-cluster `mosquitto` Service name
 - **Flux applies it.** Its `containers_list` entry
-  is in `cluster/services.yml`, so nothing applies it by hand, and a
+  is in `k8s/services.yml`, so nothing applies it by hand, and a
   merged change reaches the cluster when `promote` publishes and verifies the next bundle. mosquitto
   is Flux-owned too, so the
   Kustomization depends on it. The Deployment is `Recreate` and the SLZB-06M coordinator
@@ -210,7 +210,7 @@ If that happens, stop and read the log before trying again.
    "copy the IEEE address" guide. The address is `coordinatorIeeeAddress` in the backup.
 6. **Give the replacement the old address and port.** Either reserve `10.0.0.127` for it on
    the LAN and set its Zigbee TCP port to 6638, or change `slzb_ip` in
-   `inventory/group_vars/all.yml`. That variable feeds both the Zigbee2MQTT config and the
+   `estate/vars.yml`. That variable feeds both the Zigbee2MQTT config and the
    blackbox probe in `k8s/roles/observability/templates/prometheus.yaml.j2`, so changing it
    is a merged change.
 7. **Let the pod reconnect.** Zigbee2MQTT exits when it cannot reach the coordinator, and the

@@ -4,7 +4,7 @@ Two readers classify a volume's robustness, over different transports:
 
 - The `LonghornVolumeDegraded` rule in observability's `storage.yaml` selects the one-hot
   `longhorn_volume_robustness` metric with `state!~"healthy|unknown"`, a regex that
-  `tests/services/test_storage_rule_literals.py` holds to `SAFE_ROBUSTNESS`.
+  `tests/services/alert_rules/test_storage_rule_literals.py` holds to `SAFE_ROBUSTNESS`.
 - `scripts/deploy_tools/runbook_gates.py` reads `status.robustness` off each `volumes.longhorn.io`
   CR through kubectl, before a k3s upgrade or a Longhorn hop.
 

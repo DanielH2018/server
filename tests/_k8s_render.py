@@ -80,9 +80,7 @@ def _render_all(tags: dict[str, RenderedTag]):
 
 
 _CACHE: tuple | None = None
-# Filled by _render_all as a side effect, because the render is the expensive part and a
-# second pass over the tree would double it. Only reachable through rendered_texts(), which
-# forces the render first.
+# Filled by `_render_all` as a side effect; reachable only through `rendered_texts()`.
 _TEXTS: list[tuple[str, str, str]] = []
 # Filled with _CACHE, from the same shared render. Only reachable through rendered_tags().
 _TAGS: dict[str, RenderedTag] = {}
@@ -175,23 +173,19 @@ def render_texts(
     return tuple(_render_texts(overrides, only=only))
 
 
-def host_context(host: str = "daniel-box") -> dict:
-    """The resolved inventory a render for `host` starts from: base context, all.yml, host_vars.
+def host_context() -> dict:
+    """The resolved inventory a k8s render starts from: base context, all.yml and `hosts`.
 
-    `render_context` with no role's defaults: the plane directory holds no defaults file. The
-    host is a parameter so a staging guard can render against `daniel-stage.yml`. Not cached:
-    resolving the inventory is cheap next to the render itself.
+    `render_context` with no role's defaults: the plane directory holds no defaults file. Not
+    cached: resolving the inventory is cheap next to the render itself.
     """
-    return render_context(K8S_ROLES, host=host, strict=True)
+    return render_context(K8S_ROLES, strict=True)
 
 
 def render_role_template(
-    role: str, template: str, overrides: dict | None = None, *, host: str = "daniel-box"
+    role: str, template: str, overrides: dict | None = None
 ) -> str:
     """One role's template rendered as text, with `overrides` laid over the role's context.
-
-    `overrides` is a dict rather than `**kwargs` because a caller may need to override a
-    variable named `host` — the staging variables guard hands every unsupplied name in.
 
     For a guard that flips one variable, such as a `manage_*` flag, and asserts
     on what changes. `rendered_docs()` is the whole tree at inventory values; this is one
@@ -202,46 +196,44 @@ def render_role_template(
     `overrides`.
 
     The context is `role_context`'s, the one `render_tag` renders with. Role defaults go under
-    the inventory, which is Ansible's own precedence. It matters here because daniel-stage
-    overrides `traefik_k8s_manage_crowdsec` on purpose, so a staging render with defaults on
-    top would render the value the deploy never uses. `overrides` go in before anything
+    the inventory, which is Ansible's own precedence. `overrides` go in before anything
     resolves, so a default derived from an overridden flag (traefik's `k8s_claims` from
     `traefik_k8s_manage_acme`) follows the flag. A name no layer supplies fails the render, so
     a guard passes every variable a caller role hands over.
     """
     ctx = (
-        _inventory_context(role, host)
+        _inventory_context(role)
         if not overrides
-        else _template_context(role, overrides, host)
+        else _template_context(role, overrides)
     )
     env = renderer_env(K8S_ROLES / role / "templates", ctx)
     try:
         return render_file(env, template, ctx)
     except jinja2.TemplateError as exc:
         raise AssertionError(
-            f"{role}/{template} failed to render for {host} with {overrides}: "
+            f"{role}/{template} failed to render with {overrides}: "
             f"{type(exc).__name__}: {exc}"
         ) from exc
 
 
 @functools.cache
-def _entry_names(host: str) -> frozenset[str]:
-    return frozenset(c["name"] for c in host_context(host)["services"])
+def _entry_names() -> frozenset[str]:
+    return frozenset(c["name"] for c in host_context()["services"])
 
 
 @functools.cache
-def _inventory_context(role: str, host: str) -> dict:
+def _inventory_context(role: str) -> dict:
     """`_template_context` at inventory values, once per process: a context costs about 100ms."""
-    return _template_context(role, None, host)
+    return _template_context(role, None)
 
 
-def _template_context(role: str, overrides: dict | None, host: str) -> dict:
+def _template_context(role: str, overrides: dict | None) -> dict:
     """The context one role's template renders with, for a role in no service entry too."""
     stubs = _stubs(overrides)
-    if role in _entry_names(host):
-        return role_context(role, stubs, host)[0]
+    if role in _entry_names():
+        return role_context(role, stubs)[0]
     return {
-        **template_context(K8S_ROLES / role, stubs, host),
+        **template_context(K8S_ROLES / role, stubs),
         "manifests_service": role,
     }
 
@@ -271,12 +263,8 @@ def render_pod_env(role: str, overrides: dict | None = None) -> dict[str, str]:
     return {**data["stringData"], **plain}
 
 
-# `_render_all` skips `Dockerfile*` because its output feeds a YAML parse. A build pin is still
-# a rendered value — code-server's Dockerfile names its node URL and every extension URL
-# through a role default — so the build files get their own accessor and their own cache.
-def traefik_static_config(
-    overrides: dict | None = None, *, host: str = "daniel-box"
-) -> dict:
+# `_render_all` skips `Dockerfile*` because its output feeds a YAML parse.
+def traefik_static_config(overrides: dict | None = None) -> dict:
     """Traefik's static config itself, parsed, not the ConfigMap that wraps it.
 
     `static-config.yaml.j2`'s data value is a block scalar, so the config is a STRING at the
@@ -284,17 +272,13 @@ def traefik_static_config(
     template's text: the indirection trap in `textual-guard-checks-break-on-indirection`.
     """
     doc = yaml_fast.safe_load(
-        render_role_template("traefik", "static-config.yaml.j2", overrides, host=host)
+        render_role_template("traefik", "static-config.yaml.j2", overrides)
     )
     return yaml_fast.safe_load(doc["data"]["traefik.yml"])
 
 
 BUILD_TEMPLATE_GLOB = "Dockerfile*.j2"
 
-# The roles whose build the accessor must reach, so a renamed or moved template fails as a
-# missing member rather than as a guard over an empty set. k8s/image-builder renders each of
-# these through `lookup('template', image_builder_dockerfile)` from the CALLER's role context,
-# which is the context `_render_build_files` lays out.
 BUILD_ROLES = frozenset(
     {
         "code-server",
@@ -387,9 +371,7 @@ def rendered_k8s_text(role: str, template: str) -> str:
     return "\n".join(texts)
 
 
-# `k8s/image-builder` is a CALLER_RENDERED_ROLES member, so `rendered_docs()` never reaches its
-# build Job: the image, context and tag arrive on the calling role's `include_role` task. These
-# stand in for that task, so a guard over every pod the cluster runs can still parse this one.
+# These stand in for the calling role's `include_role` task, which supplies the image.
 IMAGE_BUILDER_CALLER_VARS = {
     "image_builder_name": "example-image",
     "image_builder_context_dir": "/tmp/example-context",

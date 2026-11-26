@@ -10,8 +10,6 @@ from _row_table import Census, Subject, tracked
 
 _PREK = "prek.toml"
 _COMMIT_ONLY = ["pre-commit"]
-# One of the three hooks whose upstream manifest declares pre-push. A census that stops finding
-# it has stopped reading the repo the bug lives in.
 _NAMED_REMOTE_HOOK = "trailing-whitespace"
 _MIN_UV_ENTRIES = 15
 

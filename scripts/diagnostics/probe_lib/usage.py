@@ -63,8 +63,8 @@ REQUEST_SLACK = 0.25
 UNDER_REQUEST = 0.5
 
 CENSUS_PRIORITY_CLASSES = frozenset(SERVICE_TIERS.values())
-# A pod that ran in the window but is gone keeps its p95 series, so the join reads pod_info
-# over the same window rather than at the instant.
+# A pod that ran in the window but is gone keeps its p95 series, so the join reads pod_info over the
+# window.
 CRITICAL_P95_QUERY = (
     f"{P95_QUERY} and on (namespace, pod) max by (namespace, pod) (max_over_time("
     f'kube_pod_info{{priority_class=~"{"|".join(sorted(CENSUS_PRIORITY_CLASSES))}"}}'
@@ -246,7 +246,7 @@ def memory_flags(request, limit, p95):
 def under_requested(request, p95):
     """Whether a memory `request` is under `UNDER_REQUEST` of its `p95`. Pure.
 
-    The census in `tests/k8s/_memory_property_rows.py` fails a container at a
+    The census in `tests/k8s/rendered_properties/_memory_property_rows.py` fails a container at a
     `CENSUS_PRIORITY_CLASSES` class on it.
     """
     return p95 is not None and request < UNDER_REQUEST * p95

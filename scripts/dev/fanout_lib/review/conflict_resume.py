@@ -35,9 +35,6 @@ that runs `Pipeline.run_conflict`, which calls `resolve` with that landing's `VE
 
 from functools import partial
 
-# Reach the sibling package: a directly-invoked script gets only its own directory on
-# sys.path, and pyproject's `pythonpath` is a pytest setting.
-
 
 from dev.fanout_lib.review.batch_run import BatchRun
 from dev.fanout_lib.brief import lands

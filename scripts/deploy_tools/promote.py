@@ -104,7 +104,7 @@ Exit codes:
       readable kubeconfig.
 
 Every GitHub and GHCR call goes through `forge.py`, and this module starts no subprocess
-(scripts/deploy_tools/tests/test_promote_forge_boundary.py).
+(scripts/deploy_tools/tests/promote/test_promote_forge_boundary.py).
 
 Run: uv run python scripts/deploy_tools/promote.py decide --trigger <sha>
      uv run python scripts/deploy_tools/promote.py land-wait <sha> --services <tag,...>
@@ -156,24 +156,17 @@ from deploy_tools.promote_lib.reads import (
     prod_commit,
 )
 
-# The CI reduction every deploy path shares, so a promotion and checkout-sync agree on what
-# green means. It moved to `hosts/lib/` in H7.2e so the deployer could retire without it.
 from lib import host_modules  # noqa: F401
 from ci_verdict import CIVerdict, ci_verdict
 
-# The revert rule's switch (contract C2). Open question 11 of
-# docs/archive/deploy/d2-first-leaf.md asks whether it turns on, and only the
-# operator rules on that, in a one-line PR of its own. Every D2 step assumes it is off.
+# Only the operator rules on turning the revert rule on, in a one-line PR of its own.
 REVERT_RULE = False
 
-# Whether `decide` may promote T over a verification in flight rather than wait on it (slice
-# D7, `promote_lib/supersede.py`). Turning it on is an operator ruling, in a one-line PR of its
-# own, as for REVERT_RULE.
+# Turning it on is an operator ruling, in a one-line PR of its own, as for REVERT_RULE.
 SUPERSEDE = True
 
-# How many commits a first run's walk examines, newest first, so a walk with no `prod` stops
-# short of master's root. At about 124 merges a day (see `ci_ancestor_walk_max`) 50 is several
-# hours of merges, so the commit that triggered the run is inside it.
+# Bounds a first run's walk so it stops short of master's root; 50 is several hours of merges, so
+# the triggering commit is inside.
 FIRST_RUN_WALK_MAX = 50
 
 
@@ -232,8 +225,6 @@ def decide(
                 continue
             target_bundle = None
             if held is not None:
-                # The revert rule: only a descendant of the held commit whose footprints
-                # for the failed names equal last-good's. Each read happens only here.
                 held_sha, names = held
                 if candidate == held_sha or not reads.is_ancestor(held_sha, candidate):
                     continue
@@ -243,8 +234,7 @@ def decide(
                 if not verify.footprints_match(target_bundle, last_good_bundle, names):
                     continue
             reads.verify(digest)
-            # The walk only yields descendants. This holds the rule that prod never moves
-            # backwards even if the walk is ever changed.
+            # Holds the rule that prod never moves backwards even if the walk changes.
             if prod is not None and (
                 candidate == prod or not reads.is_ancestor(prod, candidate)
             ):
@@ -287,8 +277,6 @@ def decide(
                         "clear without either holds again at the next decide",
                         hold=f"{candidate} suspended-changed={tags}",
                     )
-            # The commit `last-good` names: `prod`'s while they agree, and `prod`'s when the
-            # `tag` job seeds `last-good` from it.
             lower = (
                 prod
                 if last_good is None or last_good == prod_digest
@@ -494,8 +482,8 @@ def main(
             args.bundle_dir,
         )
     except Exception as err:
-        # The workflow reads the one line and the outputs, so a failure no read anticipated
-        # still has to print `error` rather than a traceback alone.
+        # The workflow reads the one line and the outputs, so an unanticipated failure must still
+        # print `error`.
         error(f"unexpected failure: {err!r}")
         decision = Decision("error", reason="unexpected failure")
     return report(args.trigger, decision, os.environ.get("GITHUB_OUTPUT"))

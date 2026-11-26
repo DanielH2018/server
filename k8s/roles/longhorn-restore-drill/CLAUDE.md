@@ -17,12 +17,12 @@ and the *Mode* bullet below says why.
 - **Claim:** `${DRILL}` (no declared tier (runtime claim named by a shell variable))
 <!-- /generated_from -->
 
-- **Flux applies it.** Its `containers_list` entry is in `cluster/services.yml` and
+- **Flux applies it.** Its `containers_list` entry is in `k8s/services.yml` and
   `depends_on: [longhorn]`.
 - **It is a tag of its own, not part of `longhorn`.** The drill's objects live in `homelab`.
   The disaster-recovery order waits on `longhorn` at step 6, and nothing creates `homelab`
   until step 8, so a `homelab` object in `longhorn` would stall step 6.
-  `tests/k8s/test_step6_tags_render_into_created_namespaces.py` holds that. The
+  `tests/k8s/flux/test_step6_tags_render_into_created_namespaces.py` holds that. The
   generated `homelab-namespace` kind gives this tag its `dependsOn`, so it waits for `homelab`.
 - **The tag renders no Namespace.** A Namespace object here would be a second writer of
   `homelab` beside the generated `homelab-namespace` kind.
@@ -30,13 +30,13 @@ and the *Mode* bullet below says why.
   makes Flux create it once and never revert the drill's writes to its data.
   `kustomize.toolkit.fluxcd.io/prune: disabled` keeps it when a render drops it, because the
   tag prunes like any per-tag Kustomization and no render restores its state.
-  `tests/k8s/test_restore_drill_stamps.py::test_the_stamp_configmap_renders_empty_with_both_annotations`
+  `tests/k8s/flux/test_restore_drill_stamps.py::test_the_stamp_configmap_renders_empty_with_both_annotations`
   holds both.
 - **A revert of the tag leaves the ConfigMap live**, because `prune: disabled` keeps it.
   Deleting it is **operator-only**.
 - **`longhorn_drill_namespace` mirrors `k3s_longhorn_restore_drill_namespace`.** Backup health's
   readers read the second.
-  `tests/k8s/test_restore_drill_stamps.py::test_the_stamp_namespace_equals_the_host_drills`
+  `tests/k8s/flux/test_restore_drill_stamps.py::test_the_stamp_namespace_equals_the_host_drills`
   holds the pair equal.
 - **The census names the ConfigMap and the CronJob.**
   `scripts/deploy_tools/bundle_census.py:NAMED_MEMBERS` lists both, so a published render that
@@ -77,9 +77,9 @@ real, and tears everything down.
   also deletes those objects for any `restore-drill-` Volume older than the Job's deadline plus
   its grace period, whichever PVC that Volume restored.
   `templates/rbac.yaml.j2` grants exactly the calls the script makes.
-  `tests/k8s/test_rbac_against_script_drill.py::test_the_drill_role_grants_every_call_its_script_makes`
+  `tests/k8s/rbac/test_rbac_against_script_drill.py::test_the_drill_role_grants_every_call_its_script_makes`
   holds that, and
-  `tests/k8s/test_rbac_against_script_drill.py::test_a_drill_role_without_the_volume_delete_wait_is_flagged`
+  `tests/k8s/rbac/test_rbac_against_script_drill.py::test_a_drill_role_without_the_volume_delete_wait_is_flagged`
   is its red half.
 - **The drill's three bounds** are an operator pin, an empty-restore waiver with a size ceiling and
   one retry per failure. `docs/k3s-node-plane-crons-and-incidents.md` derives them, and a test
@@ -100,7 +100,7 @@ real, and tears everything down.
   yet, the gate passes for one schedule period after Flux first applied the revision and fails
   after that. With a Job, the gate reads the newest firing, which must have succeeded within two
   periods. ENFORCED:
-  `scripts/diagnostics/tests/test_probe_health_cronjob_schedule_gate.py::test_no_job_past_one_schedule_period_of_the_apply_fails`,
+  `scripts/diagnostics/tests/probe_health/test_probe_health_cronjob_schedule_gate.py::test_no_job_past_one_schedule_period_of_the_apply_fails`,
   `tests/deploy/test_cronjob_only_roles_include_the_gate.py::test_the_schedule_gate_marker_names_exactly_the_ungated_roles`.
 - **Abort valves.** The Job's `activeDeadlineSeconds` is the restore timeout plus the probe pod's
   300-second bound plus a 600-second margin. The kubelet's SIGTERM at the deadline runs the

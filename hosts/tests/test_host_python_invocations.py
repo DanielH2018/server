@@ -20,7 +20,8 @@ from _helpers import REPO as _REPO
 
 from lib import role_installs
 from lib.k8s_roles import is_manifest_template
-from lib.repo_paths import ALL_VARS, K8S_ROLES
+from lib.estate import shared_vars
+from lib.repo_paths import K8S_ROLES
 
 
 _SEARCH_ROOTS = [
@@ -35,9 +36,8 @@ _CONTAINER_CONTEXT = re.compile(
     r"Dockerfile|docker-compose|deployment\.yaml|healthcheck"
 )
 
-# The checkout sync keeps uv's self-healing download on purpose. See the comment above its
-# ExecStart: hard-failing on a missing interpreter blocks every landing, including the one that
-# would ship the fix.
+# The checkout sync keeps uv's self-healing download: hard-failing on a missing interpreter would
+# block every landing, including the fix.
 _DOWNLOADS_EXEMPT = frozenset({"homelab-checkout-sync.service.j2"})
 
 
@@ -89,8 +89,6 @@ def _pinned_uv_lines():
             yield path, n, stripped
 
 
-# Units that run the system interpreter on purpose, each with the reason the syntax floor does
-# not reach it. Keyed by template basename.
 _SYSTEM_INTERPRETER_EXEMPT = {
     "homelab-apt-repo.service.j2": (
         "runs only the stdlib's `http.server`, so no repo code runs under it; the unit "
@@ -224,9 +222,7 @@ def test_hook_wrappers_pin_the_same_version_as_ansible():
     and cannot interpolate host_python_version. Nothing else couples the two, so a bump to the
     Ansible pin would leave the hooks silently requesting an interpreter the hosts no longer
     install — and these are the wrappers that route stderr to /dev/null."""
-    import yaml
-
-    pin = yaml.safe_load(ALL_VARS.read_text())["host_python_version"]
+    pin = shared_vars()["host_python_version"]
     offenders = []
     for path in sorted((_REPO / ".claude/hooks").glob("*.sh")):
         for n, line in enumerate(path.read_text().splitlines(), 1):
@@ -237,13 +233,11 @@ def test_hook_wrappers_pin_the_same_version_as_ansible():
                 offenders.append(f"{path.name}:{n}: {stripped[:100]}")
 
     assert not offenders, (
-        f"these request an interpreter other than the Ansible pin ({pin}, from "
-        "inventory/group_vars/all.yml):\n  " + "\n  ".join(offenders)
+        f"these request an interpreter other than the host Python pin ({pin}, from "
+        "estate/vars.yml):\n  " + "\n  ".join(offenders)
     )
 
 
-# A command word: the start of a line that does not continue the one above, or what follows a
-# substitution, a pipe, a list operator, `exec`, a systemd ExecStart= or a cron `job:`.
 _COMMAND_POSITION = (
     r"""(?:^(?<!\\\n)|\$\(|<\(|[;|&]|\bexec\s|ExecStart=[-@+!:]*|\bjob:\s*["']?)\s*"""
 )

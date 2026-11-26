@@ -172,7 +172,7 @@ directory.
   drops every `homelab_check_*` series whose file omits the HELP and TYPE lines the other
   check files declare. The file's mtime still reaches Prometheus, so the only symptom is the
   check's `NotReporting` alert. The `host-check-textfiles-go-through-host-lib` row of
-  `tests/repo/test_census_rows_python.py` refuses a hand-written series.
+  `tests/repo/census_rows/test_census_rows_python.py` refuses a hand-written series.
 
 ## The fleet bound, and why it lives on `user.slice`
 
@@ -189,8 +189,10 @@ start**, so the deploy that changes it drops the RC host's sessions.
 pod. A slice cannot carry `OOMScoreAdjust=`, so the two fleet units set it, a
 `templates/fleet-user-manager-oom.conf.j2` drop-in sets it on each fleet uid's
 `user@<uid>.service`, and the agent's login profile writes it to `/proc/self/oom_score_adj`.
-A `lines:` block in `/etc/zsh/zprofile` writes it for the operator's zsh login, which is why
-the component depends on `zsh`.
+A `lines:` block in `/etc/zsh/zshenv` writes it for every zsh of the operator's, which is why
+the component depends on `zsh`. `zprofile` would miss the desktop app's sessions: they start
+from `ssh host cmd`, which is no login shell. Keep the comment-only `zprofile` block declared:
+the lines arm never removes a block, and aide-check explains only a declared one.
 That drop-in must not be named `50-homelab.conf`: reconcile restarts a unit whose
 `50-homelab.conf` changes, and restarting a user manager ends that user's sessions.
 ENFORCED: `hosts/tests/test_claude_fleet_slice_cap.py`.
@@ -282,7 +284,7 @@ template carries why it is a host timer at all.
   `claude_code_artifacts_peer_dir`, `claude_code_artifacts_stars_file`,
   `claude_code_otlp_host_ip` and `claude_code_otlp_port` are each held equal to the k8s key by
   `hosts/lib/tests/test_claude_artifacts_node_timers.py`. A change edits both roles. One key in
-  `group_vars/all.yml` would route as a deploy-plane change only.
+  a shared vars file would route as a deploy-plane change only.
 - **The package creates the directories the artifacts pod mounts.**
   `hosts/components/claude-code/tmpfiles.d/homelab-artifacts.conf.j2` declares the local tree,
   each peer directory, the star list directory and the textfile directory, and the sync's
@@ -292,7 +294,7 @@ template carries why it is a host timer at all.
   through `write_check_textfile` in `homelab-check-lib.sh`. The `ArtifactsSync*` and `OtlpDoor*`
   rules in observability's `host-checks.yaml` page from those files. Each script renders its
   deadline from its own minute default, so that default must stay `*/N`, and
-  `tests/services/test_b6a_rule_literals.py` pins the rules to it.
+  `tests/services/alert_rules/test_b6a_rule_literals.py` pins the rules to it.
 
 ## Autonomous-role contract (`claude-guardrail-audit`, the audit watches on the guardrail paths)
 
@@ -322,7 +324,7 @@ runs `hosts/components/claude-code/templates/claude-guardrail-audit.sh.j2` as ro
   (`hosts/tests/test_claude_guardrail_audit.py::test_a_watch_that_will_not_load_is_flagged_by_path`).
   `ClaudeGuardrailAuditNotReporting` pages a timer that stopped. Each watched write lands in
   `/var/log/audit/audit.log`, which loki-homelab's Alloy ships as `{job="audit"}`
-  (`tests/k8s/test_alloy_ships_audit_log.py::test_the_source_tails_auditds_log_into_this_block`). Its SYSCALL line carries the key and the
+  (`tests/k8s/alloy/test_alloy_ships_audit_log.py::test_the_source_tails_auditds_log_into_this_block`). Its SYSCALL line carries the key and the
   writing process, so a Bash write shows apart from the Write tool's.
 - **Next-run review:** before adding a path, check that a write to it is rare. Every write to
   a watched path is a shipped record.
@@ -483,7 +485,7 @@ at 09:00 UTC, and 10 minutes after each activation of the timer.
 - **Evidence:** the post itself, a `status=` line under `journalctl -t claude-weekly-summary`,
   and `claude-weekly-summary.prom`, which `ClaudeWeeklySummaryFailed` and
   `ClaudeWeeklySummaryNotReporting` read. The deadline is a week plus an hour, 608400 seconds
-  (`tests/services/test_b6a_rule_literals.py::test_the_weekly_summary_rules_carry_the_deadline_its_config_renders_is_clean`).
+  (`tests/services/alert_rules/test_b6a_rule_literals.py::test_the_weekly_summary_rules_carry_the_deadline_its_config_renders_is_clean`).
 - **Next-run review:** when C2's autopr-repair profile starts writing records, add its source
   and check the first post that carries it.
 
@@ -731,7 +733,7 @@ server batch runs as `ubuntu` on `worktree-fanout-<batch>`.
   or that this lander will not land. A project with such a batch pages the operator once,
   on the second pass in a row that reads it so, through
   `fanout-alert@fanout-coordinator-<worktree>:no-coordinator.service`
-  (`scripts/dev/tests/test_fanout_coordinators.py::test_an_orphaned_project_pages_once_on_its_second_pass`).
+  (`scripts/dev/tests/fanout/test_fanout_coordinators.py::test_an_orphaned_project_pages_once_on_its_second_pass`).
   It starts no session and changes no worktree, lock, claim or PR. The record of what it
   paged is `~/.local/state/fanout-server-lander/coordinator-pages.json`. A failed read logs a
   line and never changes the exit status. `--dry-run` logs the page it would send.

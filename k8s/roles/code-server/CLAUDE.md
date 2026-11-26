@@ -4,7 +4,7 @@
 
 This role owns both the workload and the image it is built from
 (`k8s/roles/code-server/templates/Dockerfile.j2` + `k8s/roles/code-server/files/extensions.sh`);
-its `containers_list` entry is in `cluster/services.yml`.
+its `containers_list` entry is in `k8s/services.yml`.
 
 ## At a glance
 <!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates or containers_list entry, or the Longhorn tier lists in k8s/roles/longhorn-reconcile/defaults/main.yml. -->
@@ -19,7 +19,7 @@ its `containers_list` entry is in `cluster/services.yml`.
   pushed to `ghcr.io/danielh2018/code-server:<content tag>`.
 - **Host:** daniel-box (k3s), pinned by a required node affinity · **Port:** 8443
 - **Flux applies it.** Its `containers_list` entry is
-  in `cluster/services.yml`, so nothing applies it by hand, and a merged
+  in `k8s/services.yml`, so nothing applies it by hand, and a merged
   change reaches the cluster when `promote` publishes and verifies the next bundle. `k8s_autodeploy:
   false` still stops Renovate's
   automerge of a base-image or build-pin bump.
@@ -63,7 +63,7 @@ its `containers_list` entry is in `cluster/services.yml`.
   no datasource for a VS Code extension, so those bump by hand — the base-image PR is the
   natural moment. The exception is `Anthropic.claude-code`: it moves with every Renovate
   bump of the CLI, in the same PR, and the `code-server build pins` group name says so
-  (#4584). `tests/services/test_code_server_build_is_pinned.py` refuses a
+  (#4584). `tests/services/apps/test_code_server_build_is_pinned.py` refuses a
   floating input.
 - **Rust is one pinned stable toolchain with no rustup** (2026-10-12). The image installs
   rustc, cargo, clippy, rustfmt and rust-src from the standalone tarballs into `/usr/local`,
@@ -77,7 +77,7 @@ its `containers_list` entry is in `cluster/services.yml`.
     `/config/workspace`. That path is on the 1 Gi backed-up claim, and one `target/` reaches
     several GiB. Every project shares the one target directory, so `cargo run` works as usual
     but the binaries are under `/config/.cargo-target/debug/`, not `./target/`.
-    `tests/services/test_code_server_build_is_pinned.py::test_cargo_writes_stay_off_the_backed_up_claim`
+    `tests/services/apps/test_code_server_build_is_pinned.py::test_cargo_writes_stay_off_the_backed_up_claim`
     refuses a cargo path under a backed-up mount.
   - The editor side is rust-analyzer, Even Better TOML and CodeLLDB. CodeLLDB is pinned to its
     GitHub release, not Open VSX; its defaults entry says why.

@@ -21,7 +21,7 @@ steps, and this page describes each piece once its PR has merged.
   rules (*The file rules*), and renders every k8s render target of daniel-box.
 - `scripts/renderer/renderer_lib/context.py` builds the variables a role's templates see,
   and `renderer_lib/cluster.py` renders each tag and writes its directories.
-- `scripts/lib/container_entry.py:parse_containers_list` parses `cluster/services.yml`'s
+- `scripts/lib/container_entry.py:parse_containers_list` parses `k8s/services.yml`'s
   entries once, before any template reads `services`. It refuses a malformed entry, so a
   template filter never sees one.
 - `scripts/renderer/renderer_lib/task_inputs.py:include_vars` reads each role's render
@@ -30,7 +30,7 @@ steps, and this page describes each piece once its PR has merged.
   (*Derived values*), and `scripts/renderer/renderer_lib/targets.py:render_targets` lists the
   tags a host renders.
 - `scripts/renderer/renderer_lib/jinja_filters.py` holds the Ansible-dialect filters, so the renderer
-  imports no ansible-core. `scripts/renderer/tests/test_renderer_filters.py` holds each to the
+  imports no ansible-core. `scripts/renderer/tests/manifests/test_renderer_filters.py` holds each to the
   value ansible-core 2.22 returned for the same call.
 - `scripts/renderer/shadow_diff.py digest` hashes a render (*Hash a render tree*).
   `scripts/renderer/renderer_lib/shadow.py` holds its library.
@@ -62,7 +62,7 @@ stub instead, which the filter `homelab_secret_stub` builds:
 - `domain` takes no stub and no placeholder, because it is not in `secrets/secrets.yml`.
   The operator ruled on 2026-10-14 that it is a variable, not a secret, and deleted it from
   the store on 2026-10-15. Every render reads its value from
-  `inventory/group_vars/all.yml`.
+  `estate/vars.yml`.
 
 Two more filters serve the stale-stub-file refusal. `homelab_stub_keys` lists the key names
 that take a stub, from the parsed `secrets.yml`. It reads keys only, so the ciphertext file is
@@ -111,7 +111,7 @@ is escaped. `tests/_k8s_render.py:rendered_docs` reads `render_tag`'s output, wh
 holds no vendored file, so the fleet guards never read them. H1's *Vendored upstream manifests*
 (`docs/archive/host/h1-cluster-config-to-flux.md`) says why that is accepted. The
 one exception is the per-container resources guard in
-`tests/k8s/test_namespace_resource_defaults.py`, which reads each vendored workload with its
+`tests/k8s/workloads/test_namespace_resource_defaults.py`, which reads each vendored workload with its
 patches applied.
 
 A placeholder render with `--role` also writes the publish bundle, `DIR/flux/` and
@@ -184,19 +184,20 @@ on a usage error. `scripts/lib/exit_codes.py` holds the four codes as its `RENDE
 
 ### The render context
 
-A role's templates render with these variables, resolved for daniel-box:
+A role's templates render with these variables:
 
-- role defaults, `group_vars/all.yml` and daniel-box's host_vars, in that rising precedence,
-  with the stub file's variables over all of them;
-- `services`: every entry of `cluster/services.yml`, in the dependency order of
+- role defaults, `estate/vars.yml` and `k8s/vars.yml`, in that rising precedence, with the stub file's
+  variables over both. No host's host_vars merge in: a template names the host it reads, as
+  `hosts[k8s_primary_node].render_gid`;
+- `services`: every entry of `k8s/services.yml`, in the dependency order of
   `toposort_containers`. `scripts/renderer/renderer_lib/context.py` sorts it with
   `scripts/renderer/template_filters/toposort.py`, and templates read that order. An entry's position
   in the list therefore does not matter: an ordering no template carries goes in
   `depends_on:` on the entry;
 - `container_item`, the tag's own entry from that list;
-- `hosts`, one entry per `inventory/host_vars/` file, holding that host's literal
-  `server_ip`, `compose_services`, `claude_agent_ssh_login_enabled` and
-  `ssh_host_ed25519_key` (`scripts/lib/render_context.py:_hosts`). `group_vars`' `k8s_pi_client_ip` reads
+- `hosts`, one entry per `hosts/<host>/vars.yml`, holding that host's literal
+  `server_ip`, `compose_services`, `claude_agent_ssh_login_enabled`, `ssh_host_ed25519_key`,
+  `render_gid` and `claude_code_triage_enabled` (`scripts/lib/render_context.py:_hosts`). `group_vars`' `k8s_pi_client_ip` reads
   `hosts['daniel-pi'].server_ip`, so it is daniel-pi's address, not daniel-box's.
 
 The render is strict. A name that no layer supplies stops the render with an error naming it.
@@ -287,7 +288,7 @@ only those filters and tests and refuses any other lookup, so a template off the
 render with an error naming the construct. To add a construct, add it to the literal, the ADR's
 table and a case in `scripts/renderer/tests/_dialect_cases.py`, in one PR.
 
-`scripts/renderer/tests/test_renderer_dialect.py` compares each construct with its literal, and
+`scripts/renderer/tests/manifests/test_renderer_dialect.py` compares each construct with its literal, and
 holds every template, variable value and render-key value of the k8s roles to the list. Host and package modes
 render through `strict_env`, which the subset does not bind.
 
@@ -330,7 +331,7 @@ context with the map as an override, the precedence `set_fact` has over every fi
 
 Tests hold each content tag equal to image-builder's expression evaluated with the same
 variables, which `tests/_image_builder_tag.py` holds as a literal.
-`scripts/deploy_tools/tests/test_ci_images.py` also holds one tag as the literal ansible-core
+`scripts/deploy_tools/tests/release/test_ci_images.py` also holds one tag as the literal ansible-core
 2.22 computed.
 
 `lookup('template')` keeps the render's trailing newlines. The content tag hashes those bytes,
@@ -439,7 +440,7 @@ transform of the key.
   bound it to a literal container, a length test in an `{% if %}`. A value alias passes none
   of the three.
 - **Role defaults and inventory name no key.** A Jinja string in
-  `k8s/roles/*/defaults/main.yml`, `inventory/group_vars/` or `inventory/host_vars/` that
+  `k8s/roles/*/defaults/main.yml`, `estate/vars.yml`, `k8s/vars.yml`, `hosts/vars.yml` or `hosts/<host>/vars.yml` that
   names a secret key, bare or through a literal `vars` lookup, is a violation, and so is a
   non-literal `vars` lookup there. A template reads a key by its own name, so no template
   sees an alias it did not bind itself
@@ -470,7 +471,7 @@ Secret, rule 2 the escaped `$${` in qbittorrent's `qbittorrent-netns-reset` Conf
 name a key and two accepted uses. A `--role` render asserts a member of rules 1 to 4 only
 for the tags it rendered. Rule 5 reads the whole tree on every run.
 
-`scripts/renderer/tests/test_renderer_secret_checks.py` holds each rule's `_is_clean` and
+`scripts/renderer/tests/secrets/test_renderer_secret_checks.py` holds each rule's `_is_clean` and
 `_is_flagged` pair, and `test_renderer_secret_checks_tree.py` the fleet render and the named
 members.
 
@@ -523,7 +524,7 @@ filter. The set is closed and empty. Its two members, `homepage_href` and
 was published. As members they would accept a later secret passed to either filter.
 
 A member must pass a membership test in
-`scripts/renderer/tests/test_renderer_secret_checks.py`. The test calls the filter in every
+`scripts/renderer/tests/secrets/test_renderer_secret_checks.py`. The test calls the filter in every
 call shape the templates write, once with the sentinel `r2-sentinel` for the key and once with
 `a.b-c.example`. The first output, serialised as JSON, must hold the sentinel. Replacing the
 sentinel there with `a.b-c.example` must give the second output exactly. A fixture filter that
@@ -680,7 +681,7 @@ template shape fixes it, so the guard checks the values where the cluster file i
   member was `mullvad_account`, whose real value is all digits, until R2's PR 7b moved that
   key into the dedicated SOPS-encrypted Secret `qbittorrent-mullvad-account`, which
   placeholder mode leaves out.
-- **The coverage test**, `scripts/renderer/tests/test_renderer_standalone_map.py`, renders the
+- **The coverage test**, `scripts/renderer/tests/bundle/test_renderer_standalone_map.py`, renders the
   fleet in placeholder mode and holds the committed map equal to it. It also fails on a
   mapped key absent from `secrets/secrets.yml`. Its named members are `email` and
   `wireguard_interface_private_key`, mapped under `traefik` and `qbittorrent`.
@@ -701,12 +702,12 @@ the secret keys.
 
 Two checks hold this:
 
-- `scripts/renderer/tests/test_renderer_stub_file.py` requires the stub file's key set to be
+- `scripts/renderer/tests/bundle/test_renderer_stub_file.py` requires the stub file's key set to be
   the secret keys plus the sentinel. A stub writer that adds one other key fails it.
 - `scripts/renderer/renderer_lib/dialect.py` refuses every lookup plugin but `b64file`,
   `file`, `template` and `vars`, so a template cannot shell out with `pipe` or query the
   cluster
-  (`scripts/renderer/tests/test_renderer_dialect.py::test_an_off_the_list_lookup_fails_the_render_and_the_census`).
+  (`scripts/renderer/tests/manifests/test_renderer_dialect.py::test_an_off_the_list_lookup_fails_the_render_and_the_census`).
   A `vars` lookup reads only the variable layers, and every layer comes from the tree.
 
 A value a template needs from the cluster has no way in. Move it into the tree instead: a SOPS
@@ -784,7 +785,7 @@ installed in an xdist worker would outlive the test.
 
 The same subprocess sets `sys.modules['ansible'] = None`, so `import ansible` raises wherever the
 renderer reaches for it, and the four modules together render every tag that way.
-`tests/repo/test_ansible_core_census.py` reads every tracked Python file for an import of
+`tests/repo/census_rows/test_ansible_core_census.py` reads every tracked Python file for an import of
 `ansible`, executed or not, which holds the validator and the host packages to the same rule.
 
 In CI, each module writes one `digest_line` per directory it rendered to two places. Each
@@ -903,7 +904,7 @@ service, timer, socket or path.
 A host package's context is the host's inventory layers, as
 `scripts/lib/render_context.py:render_context` builds them, with `inventory_hostname` set to
 the host. A shared package's context has no host_vars layer. The component's `defaults:` map
-goes in through the `component_defaults` keyword, beneath `group_vars/all.yml`. A host_vars
+goes in through the `component_defaults` keyword, beneath `estate/vars.yml`, `k8s/vars.yml` and `hosts/vars.yml`. A host's
 value of the same name therefore wins, as it does over a role default. No `ansible_facts`
 value is in the context, so a template that reads one fails. A fact a template needs becomes
 an inventory variable.
@@ -928,6 +929,6 @@ and escapes `$`.
 - A `${` in a host template is shell, and renders byte for byte. Host mode imports nothing
   from `placeholders.py`.
 
-`scripts/renderer/tests/test_renderer_host_mode.py` proves both halves. The secret pair goes
+`scripts/renderer/tests/host/test_renderer_host_mode.py` proves both halves. The secret pair goes
 red when the withholding is removed, because each fixture gives the secret's name a value in a
 layer.

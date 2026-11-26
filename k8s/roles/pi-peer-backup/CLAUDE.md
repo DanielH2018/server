@@ -5,7 +5,7 @@ nightly (`k8s/roles/pi-peer-backup/defaults/main.yml:pi_peer_backup_k8s_schedule
 `k8s/roles/pi-peer-backup/defaults/main.yml:pi_peer_backup_src_dir`) into a Longhorn PVC
 (`k8s/roles/pi-peer-backup/defaults/main.yml:pi_peer_backup_k8s_storage_class`). The Saturday
 weekly shard (weekly-backup-d6) carries it to B2; the pi-peer-backup entry's
-`weekly_backup_claims` in `cluster/services.yml` names the shard.
+`weekly_backup_claims` in `k8s/services.yml` names the shard.
 
 ## At a glance
 <!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates or containers_list entry, or the Longhorn tier lists in k8s/roles/longhorn-reconcile/defaults/main.yml. -->
@@ -16,7 +16,7 @@ weekly shard (weekly-backup-d6) carries it to B2; the pi-peer-backup entry's
 <!-- /generated_from -->
 
 - **Flux applies it.** Its `containers_list` entry is
-  in `cluster/services.yml`, so nothing applies it by hand. A merged change
+  in `k8s/services.yml`, so nothing applies it by hand. A merged change
   reaches the cluster when `promote` publishes and verifies the next bundle. Its Kustomization
   renders `decryption`, because the
   private key arrives as the SOPS manifest `pi-peer-backup.ssh-key-secret.sops.yaml`.
@@ -37,7 +37,7 @@ weekly shard (weekly-backup-d6) carries it to B2; the pi-peer-backup entry's
   file in `render_sops_manifests`, so a placeholder render leaves it out. The CronJob projects
   it and `pi-peer-backup-ssh` into one volume at `/ssh`, so the script still reads `/ssh/id`.
   The Pi's host key is pinned from `ssh_host_ed25519_key` in
-  `inventory/host_vars/daniel-pi.yml`, the same value the `pi-ssh-name` host component pins
+  `hosts/daniel-pi/vars.yml`, the same value the `pi-ssh-name` host component pins
   on daniel-box and daniel-server, so `pi-peer-backup-ssh` renders from git alone. The job
   runs `StrictHostKeyChecking=yes` — never TOFU. To re-pin after the Pi is re-keyed, follow
   step 9 of `docs/break-glass.md`; `promote` applies the new `pi-peer-backup-ssh` Secret.
@@ -52,7 +52,7 @@ weekly shard (weekly-backup-d6) carries it to B2; the pi-peer-backup entry's
   validates the request structurally rather than pinning the argv, because rsync's
   short-option blob is version-negotiated and moves with the alpine base image. Until
   2026-09-17 the key carried no options, so reading the Secret was a shell as a NOPASSWD-sudo
-  user on the Pi (#1927). `tests/services/test_pi_peer_backup_forced_command.py` runs
+  user on the Pi (#1927). `tests/services/pi_peer_backup/test_pi_peer_backup_forced_command.py` runs
   the wrapper against the captured request and eight refusals.
 - **sudo rsync** on the Pi is required (files are root-owned); the ubuntu user there
   has NOPASSWD sudo. The wrapper's exec'd argv stays `sudo rsync …`, so it works under a
@@ -61,7 +61,7 @@ weekly shard (weekly-backup-d6) carries it to B2; the pi-peer-backup entry's
   with the rsync error or the file-count-floor breach (>= 2 files required; no `--delete`, so
   an empty source can never wipe the copy). A host key that no longer matches the pin reports
   down with `daniel-pi host key differs from the committed pin` instead of the generic rsync
-  error. `tests/services/test_pi_peer_backup_host_key_failure.py` holds that branch
+  error. `tests/services/pi_peer_backup/test_pi_peer_backup_host_key_failure.py` holds that branch
   apart from an unreachable Pi, which also exits 255. The verdict reaches Prometheus through the
   ConfigMap below, and the `pods` rules page it. The job also pings an off-premises
   Healthchecks.io check (`HC_PING_URL`, slug `pi-peer-backup`) when one is configured, because a

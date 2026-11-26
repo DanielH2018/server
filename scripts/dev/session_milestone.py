@@ -19,9 +19,6 @@ Typical usage example:
     session_milestone.py attach-pr 8812 --repo DanielH2018/server
 """
 
-# Reach the sibling package directories: a directly-invoked script gets only its own
-# directory on sys.path, and pyproject's `pythonpath` is a pytest setting.
-
 from dev.findings_lib.issue_model import PR_REPO
 from dev.findings_lib.milestone import (
     Gh,

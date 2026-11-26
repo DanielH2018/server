@@ -110,8 +110,6 @@ def test_reconcile_starts_behind_its_wait_unit_and_survives_its_failure(package)
 def test_a_leveled_reconcile_line_carries_its_priority_only_on_the_journal(
     tmp_path, monkeypatch, capsys
 ):
-    # The distro tier's copy of host_lib's prefix rule: `journalctl -p err` finds a
-    # reconcile failure, and a terminal never sees `<3>`.
     from reconcile_lib import common
 
     journal = tmp_path / "journal"

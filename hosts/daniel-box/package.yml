@@ -43,26 +43,22 @@
 # Reconcile therefore never restarts k3s, and homelab-k3s-restart does it once per changed hash of
 # the files the component marks `manual:k3s.service`. The component is forward-only.
 #
-# The restart window is `k3s_restart_window` in inventory/host_vars/daniel-box.yml, which
+# The restart window is `k3s_restart_window` in hosts/daniel-box/vars.yml, which
 # sits above the component's defaults. A package-level `defaults:` map reaches only the package's
 # own files, never a component's.
 description: daniel-box's homelab host package
-# media-volume's host path, a copy of the k8s role's default for the tmpfiles.d file below. puid
-# and pgid come from group_vars. hosts/lib/tests/test_box_k3s_host_half.py holds the copy equal.
+# A copy of the k8s role's default for the tmpfiles.d file below; test_box_k3s_host_half.py holds it
+# equal.
 defaults:
   media_volume_host_path: /srv/media
-# The claude-code component's agent user. Its uid differs per host, so the users entry and the
-# agent's login-slice cap sit here; `component: claude-code` reaches only these files.
+# The agent's uid differs per host, so its users entry and login-slice cap sit here.
 component: claude-code
 users:
   # The homelab band 900-949 sits below the uids Ubuntu hands out from 999 down.
   - {name: claude, uid: 900, gid: 900, home: /var/lib/claude, shell: /bin/bash, comment: Claude agent}
-  # Triage's controller: owns triage's records and reports, and alone will
-  # start its units. Declared here, not in the claude-code component, because triage ships only
-  # on daniel-box. Its name and home are pinned in claude-triage-pins.j2.
+  # Declared here, not in the claude-code component, because triage ships only on daniel-box.
   - {name: claude-triage-ctl, uid: 906, gid: 906, home: /var/lib/claude-triage-ctl, shell: /usr/sbin/nologin, comment: Triage controller}
-  # Triage's session user: runs the headless session the controller starts, with no GitHub token
-  # and no start right.
+  # Runs the headless session with no GitHub token and no start right.
   - {name: claude-triage, uid: 907, gid: 907, home: /var/lib/claude-triage, shell: /usr/sbin/nologin, comment: Triage session}
   # Renders the triage and Renovate sessions' Claude Code config from the verified dotfiles tag
   # It is no session's user, so no session reaches its stage.
@@ -125,12 +121,10 @@ units:
 credentials:
   - k3s_readonly_token
   - healthchecks_ping_key
-# Two claude-code secrets only this host uses. They sit here rather than in
-# the component, because host_secrets.py names every output key a component declares for each
-# host that lists it, and daniel-server's SOPS file must not carry them.
+# On the host, not the component: host_secrets.py names every output key a component declares for
+# each host that lists it, and daniel-server's SOPS file must not carry these.
 outputs:
-  # Triage's own Claude credential, read by systemd as root. It stays out of the agent's files, so
-  # a session cannot copy it into the clone or a report.
+  # Read by systemd as root, outside the agent's files, so a session cannot copy it.
   - src: "component:templates/claude-triage-oauth-token.j2"
     path: /etc/claude-triage/oauth-token
     owner: root
@@ -140,10 +134,8 @@ outputs:
     persist: false
     link: true
     when: claude_code_agent_user_enabled and claude_code_triage_enabled
-  # The agent's login for the homelab-ui MCP server. `format: json` makes homelab-secrets
-  # JSON-escape the password and refuse a file that does not parse. The file renders under /run, outside the agent's home. `path` is where the agent looks:
-  # claude-agent-setup links it there (its `ui_login` names the destination), because the
-  # package must not install into a directory the agent owns.
+  # `format: json` makes homelab-secrets JSON-escape the password and refuse a file that does not
+  # parse. claude-agent-setup links it to `path`: the package must not install there.
   - src: "component:templates/agent-homelab-ui-credentials.json.j2"
     path: /var/lib/claude/.config/homelab-ui/credentials.json
     destination: claude-agent/homelab-ui-credentials.json
@@ -156,17 +148,15 @@ outputs:
     format: json
     when: claude_code_agent_user_enabled and claude_code_agent_homelab_ui_enabled
 maintainer_scripts: [preinst, postinst, prerm]
-# Arms the shared updater schedule here, as daniel-server and the Pi do. daniel-box ships
-# no drop-in on the timer.
 enable:
   homelab-updater.timer: timers.target
-# nfpm, for the builder this host runs. libyaml-dev: pyproject.toml forces PyYAML's C
-# extension, so a repo venv on an interpreter PyYAML ships no wheel for builds it from source.
+# pyproject.toml forces PyYAML's C extension, so an interpreter PyYAML ships no wheel for builds it
+# from source.
 depends:
   - homelab-tools
   - libyaml-dev
-  # What the dotfiles' install-cli-tools script wants and cannot install itself: it shells
-  # out to sudo, which has no TTY on a non-interactive apply. Its PKGS list is the source.
+  # The dotfiles' install-cli-tools needs these but cannot install them: sudo has no TTY on a
+  # non-interactive apply.
   - bat
   - fd-find
   - gron
@@ -179,9 +169,8 @@ depends:
   - zsh-syntax-highlighting
 files:
   - {src: tmpfiles.d/homelab-media-volume.conf.j2, dst: /usr/lib/tmpfiles.d/homelab-media-volume.conf}
-  # Ethernet flow control off on eno1: the I226-V neither honours nor sends PAUSE frames. udev
-  # applies a .link file when the device appears, so a change goes live at the next boot, which
-  # the weekly reboot makes happen within 7 days. A live apply would bounce the wired link.
+  # Flow control off on eno1: the I226-V neither honours nor sends PAUSE frames. udev applies .link
+  # at device appearance, so it goes live next boot; a live apply would bounce the link.
   - {src: network/50-homelab-eno1.link, dst: /usr/lib/systemd/network/50-homelab-eno1.link, activate: reboot}
   # The agent's login-session slice, capped like the Remote Control unit (claude-code component).
   - src: "component:templates/login-slice-caps.conf.j2"

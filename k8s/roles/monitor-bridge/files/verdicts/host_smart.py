@@ -1,7 +1,7 @@
 """SMART verdicts for check.py — what scrutiny reports about the drives.
 
 Its own module rather than a section of `verdicts/host.py`, which had reached the 600-line cap
-in `tests/repo/test_module_length_ratchet.py` exactly, so the next line added to it
+in `tests/repo/ratchets/test_module_length_ratchet.py` exactly, so the next line added to it
 failed CI (issue #1708).
 
 Three arms, all read by `check_scrutiny` (checks/host_thermal.py): the collector's freshness,
@@ -14,7 +14,6 @@ Decides; does not fetch. Takes its inputs as arguments and reads no module-level
 
 from datetime import datetime, timezone
 
-from bridge.parsing import parse_rfc3339
 from bridge.types import CheckResult
 
 
@@ -45,7 +44,7 @@ def scrutiny_freshness(
             stale.append("%s (no SMART data)" % name)
             members.append("%s stale" % device_label(wwn, dev))
             continue
-        age_h = (now - parse_rfc3339(cdate)).total_seconds() / 3600
+        age_h = (now - datetime.fromisoformat(cdate)).total_seconds() / 3600
         if age_h > max_age_h:
             stale.append("%s (last report %.1fh ago)" % (name, age_h))
             members.append("%s stale" % device_label(wwn, dev))

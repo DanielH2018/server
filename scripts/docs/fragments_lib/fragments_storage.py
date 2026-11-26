@@ -127,7 +127,7 @@ def _volume_shards() -> tuple[str, list[str]]:
         estate.group_vars["k8s_namespace"],
     ), [
         "k8s/roles/longhorn-reconcile/defaults/main.yml",
-        "cluster/services.yml",
+        "k8s/services.yml",
     ]
 
 

@@ -18,7 +18,7 @@ visible decision:
   them. ENFORCED: `hosts/lib/tests/test_deploy_ui_component.py`.
 - Authelia `two_factor` gates `deploy.local`: `auth_tier: two_factor` on the `deploy-ui`
   containers_list entry, rendered into the authelia role's access_control rules.
-  ENFORCED: `tests/services/test_authelia_access_tiers.py`.
+  ENFORCED: `tests/services/authelia/test_authelia_access_tiers.py`.
 
 DECIDED: a pod inside the cluster reaches the daemon without Authelia. Accepted 2026-09-10 —
 a hostile pod already has kubectl-adjacent reach. Nothing stops it at the network layer:
@@ -37,7 +37,7 @@ because the daemon's `homelab-games` token can change the replica count of the D
   To remove it, drop `deploy-ui` from `components:` in `hosts/daniel-box/package.yml`; the next
   package version stops it, and reconcile deletes its three ufw rules over two runs, because
   the arm deletes at most two in one run.
-- Remove the `deploy-ui` entry from `containers_list` in `cluster/services.yml` and
+- Remove the `deploy-ui` entry from `containers_list` in `k8s/services.yml` and
   deploy, which drops the route (`k8s/roles/deploy-ui/`) and `deploy.local`.
 
 ## In flight
@@ -80,7 +80,7 @@ the label's hover text, and the log shows as its file name
 Only a `land` row is cancellable (`hosts/components/deploy-ui/tests/test_deploy_ui_app.py::test_cancel_lock_row_is_flagged`).
 
 The daemon runs outside the venv. The unit renders `DEPLOY_UI_TREE_LOCK` from
-`inventory/group_vars/all.yml:server_git_tree_lock`.
+`hosts/vars.yml:server_git_tree_lock`.
 
 ## Landing queue
 
@@ -115,9 +115,9 @@ Land and cancel each emit one logfmt line via `logger -t deploy-ui`
 (`hosts/components/deploy-ui/files/deploy_ui_lib/deploy_ui_writes.py:audit`). The page reads
 no hold itself: `land.sh` meets `DEPLOY_HOLD` on its own. A PR that bumps a forward-only pin
 is refused before it merges
-(`scripts/deploy_tools/tests/test_land_pin_gate.py::test_a_bump_is_refused_unless_deploy_hold_reads_none`).
+(`scripts/deploy_tools/tests/land_deploy/test_land_pin_gate.py::test_a_bump_is_refused_unless_deploy_hold_reads_none`).
 Any other landing under the hold merges and ends `deploy-failed` with cause `promote-held`
-(`scripts/deploy_tools/tests/test_promote_land_wait.py::test_a_hold_set_before_the_merge_ends_the_wait_at_the_first_poll`).
+(`scripts/deploy_tools/tests/promote/test_promote_land_wait.py::test_a_hold_set_before_the_merge_ends_the_wait_at_the_first_poll`).
 The hold is cleared with `gh variable set DEPLOY_HOLD --body none`, never from this page.
 
 Log names carry a `mkstemp` suffix as well as the second-granular timestamp
@@ -159,7 +159,7 @@ daemon cannot import land_lib
 
 ## Game servers
 
-The *Game servers* panel shows each game in `game_servers` (`inventory/group_vars/all.yml`), which
+The *Game servers* panel shows each game in `game_servers` (`estate/vars.yml`), which
 the component renders into `games.json` beside the daemon (`templates/games.json.j2`) and the unit
 names in `DEPLOY_UI_GAMES_FILE`. A game is its server's Deployment plus every Deployment
 that runs only while it does, such as its game-stats exporter. `files/deploy_ui_lib/deploy_ui_games.py`
@@ -203,7 +203,7 @@ them where the panel sets them.
   reason (`hosts/components/deploy-ui/tests/test_deploy_ui_game_control.py::test_a_refused_start_scales_nothing_is_flagged`);
   stop stays allowed (`hosts/components/deploy-ui/tests/test_deploy_ui_game_control.py::test_a_refused_game_can_still_be_stopped_is_clean`).
   terraria carries one until issue #822's restore checklist is done
-  (`inventory/group_vars/all.yml:game_servers`).
+  (`estate/vars.yml:game_servers`).
 - Every action writes one audit line through `logger -t deploy-ui`:
   `action=game-<action> game=<name>`, and the restart's outcome as
   `action=game-restart game=<name> result=started|left-stopped`

@@ -32,12 +32,12 @@ so a regeneration diffs as the pipeline plus upstream's change.
   *The `flux-system` fence*).
 - **The images are pinned by digest**, as `<repo>:<tag>@sha256:<digest>`. The tag stays for
   the reader, and the kubelet pulls the digest. The fleet digest rule reads `*_image` defaults
-  only, so `tests/k8s/test_flux_role.py` checks the rendered images instead.
+  only, so `tests/k8s/workloads/test_flux_role.py` checks the rendered images instead.
 - **To bump Flux**, set `flux_version`, then rerun line 1's pipeline at the new `--version`
   with that release's `flux` and crane v0.22.1 on `PATH`. Put the two header lines back above
   the output with the new version, and review the diff as upstream's change plus three digests.
   A release that changes `flux-view-flux-system`'s groups or verbs, or adds an aggregating
-  ClusterRole, also fails `tests/k8s/test_aggregated_clusterroles.py`. Regenerating
+  ClusterRole, also fails `tests/k8s/rbac/test_aggregated_clusterroles.py`. Regenerating
   does not clear that failure: it widens `view` for every identity bound to it, so extend
   that module's lists only as a decision the PR states.
   Renovate cannot regenerate the file, so its PR is manual (`renovate.json`'s `fluxcd/flux2`
@@ -53,7 +53,7 @@ so a regeneration diffs as the pipeline plus upstream's change.
   and `scripts/tests/test_renovate_flux_cli.py` fails a pin that lost it (#4822). For a bump by
   hand, set every pin and the homelab-tools `flux` blocks yourself.
   The `promote-flux-cli-matches-the-controllers` row of
-  `tests/repo/test_census_rows_workflows.py` fails a drift.
+  `tests/repo/census_rows/test_census_rows_workflows.py` fails a drift.
 
 ## How the render meets the fleet guards
 
@@ -66,7 +66,7 @@ controllers apply every service, and an exemption would be a lasting hole for th
 - merges `flux_pod_patch` into each Deployment: `revisionHistoryLimit`, `enableServiceLinks:
   false`, and a pod-level `runAsUser`/`runAsGroup` of 65534, the uid each image declares;
 - states `RollingUpdate` where upstream leaves the strategy implicit. source-controller keeps
-  upstream's `Recreate`, and its row in `tests/k8s/test_deploy_strategy.py:_RECREATE`
+  upstream's `Recreate`, and its row in `tests/k8s/workloads/test_deploy_strategy.py:_RECREATE`
   is the one exemption;
 - sets each pod's class from `containers_list | tier_priority_class('flux')`, so the `flux`
   entry's `tier: platform` gives `homelab-critical`, below the system classes like every
@@ -93,10 +93,9 @@ from pods there, so it is the namespace's default-deny, and its same-namespace r
 artifact fetches and controller events. `k8s/roles/flux/templates/networkpolicy.yaml.j2` adds
 `flux-allow-prometheus`, which admits only the `app: prometheus` pods in `observability` to
 the metrics port 8080
-(`tests/k8s/test_flux_role.py::test_all_namespace_peers_is_clean_on_the_rendered_fence`).
-Egress is not enforced on this cluster
-(`docs/adr/0009-networkpolicy-default-deny-ingress.md`), so `allow-egress`'s
-egress rule changes nothing. A change that adds a Receiver adds its fence with it.
+(`tests/k8s/workloads/test_flux_role.py::test_all_namespace_peers_is_clean_on_the_rendered_fence`).
+Its egress rule is empty, which admits every destination. Egress is enforced
+(`docs/adr/0009-networkpolicy-default-deny-ingress.md`), so narrowing that rule takes effect. A change that adds a Receiver adds its fence with it.
 
 ## Rollouts
 
@@ -159,18 +158,18 @@ statuses and Discord errors. `docs/flux-deploy-plane.md` describes each object.
   delete that CRD and every object of its kind, and `deletionPolicy: Orphan` covers only a
   delete of the Kustomization itself. The cost is traefik-crds': an object a later upgrade
   drops stays until the operator deletes it (**operator-only**).
-  `scripts/renderer/tests/test_renderer_crd_census.py` names `flux` as a member. The lever
+  `scripts/renderer/tests/bundle/test_renderer_crd_census.py` names `flux` as a member. The lever
   reaches `flux` alone (`scripts/renderer/renderer_lib/bundle.py:flux_files`, its decision
   marker), so a sync object the render drops is pruned.
 - **The source is pinned.**
-  `scripts/renderer/tests/test_renderer_bootstrap_documents.py` fails a render whose
+  `scripts/renderer/tests/manifests/test_renderer_bootstrap_documents.py` fails a render whose
   OCIRepositories move off `oci://ghcr.io/danielh2018/homelab-manifests`, `prod` and
   `last-good`, or the `promote` signer, because a broken source cuts Flux off from the commit
   that would fix it.
 - **The signer identity is pinned twice.** `flux_signer_subject` and `flux_signer_issuer` are
   the regular expressions the OCIRepository matches, and `scripts/deploy_tools/forge.py` holds
   the same identity for `promote.py`'s `cosign verify`.
-  `tests/k8s/test_flux_sync.py` fails a drift between the two.
+  `tests/k8s/flux/test_flux_sync.py` fails a drift between the two.
 
 ## The suspend lever is gone
 
@@ -186,9 +185,9 @@ with its resume beside it: `docs/flux-deploy-plane.md`, *Recovering Flux by hand
 `flux_verify_drill: true` renders a second OCIRepository, `verify-drill`, which follows the
 unsigned tag that a `verify_drill` dispatch of `promote` pushes. It must read Ready=False with
 a verification error. The `deploy-errors` Alert does not name it, so it posts nothing to
-Discord (`tests/k8s/test_flux_sync.py::test_deploy_errors_names_no_drill_source`). The way out
+Discord (`tests/k8s/flux/test_flux_sync.py::test_deploy_errors_names_no_drill_source`). The way out
 is the lever set back to `false`: the render drops the document
-(`tests/k8s/test_flux_sync.py::test_verify_drill_renders_only_while_its_lever_is_on`), and
+(`tests/k8s/flux/test_flux_sync.py::test_verify_drill_renders_only_while_its_lever_is_on`), and
 `flux-deferred`'s prune deletes `ocirepository/verify-drill` at its next reconcile after the
 promotion.
 
@@ -196,11 +195,11 @@ promotion.
 `prod` already carries would reuse `prod`'s signed digest. The drill push therefore carries the
 annotation `io.homelab.verify-drill=true`, so no signed push carries its digest, and the
 dispatch fails unless `cosign verify` refuses that digest (#4826,
-`tests/repo/test_promote_drill_workflow.py::test_the_drill_path_holds_every_property`). The refusal alone proves
+`tests/repo/ci_workflows/test_promote_drill_workflow.py::test_the_drill_path_holds_every_property`). The refusal alone proves
 nothing, because cosign v3.1.3 reads a registry error on its bundle probe as "no bundle"
 (#4829). The dispatch therefore also reads the registry itself, and fails unless it answers
 that the digest has no referrer and no legacy `.sig` tag
-(`tests/repo/test_promote_drill_workflow.py::test_the_refusal_step_passes_only_on_a_registry_that_holds_no_signature`). GHCR serves no referrers API, so
+(`tests/repo/ci_workflows/test_promote_drill_workflow.py::test_the_refusal_step_passes_only_on_a_registry_that_holds_no_signature`). GHCR serves no referrers API, so
 cosign keeps a digest's bundle in the referrers tag `sha256-<hex>`.
 
 **HISTORY — The drill ran on 2026-10-13.** The first dispatch was a false green: `verify-drill`
@@ -242,7 +241,7 @@ OCIRepository `homelab`. `FluxNotReady` stayed quiet for the same reason, and
   Kustomization renders `decryption` with `sops-age`. The Secret `flux-github-status` holds the
   keys `githubAppID`, `githubAppInstallationID` and `githubAppPrivateKey`, and the
   `github-status` Provider sets `address` to the repository URL and reads that Secret
-  (`tests/k8s/test_flux_sync.py::test_the_github_status_provider_authenticates_as_a_github_app`). To
+  (`tests/k8s/flux/test_flux_sync.py::test_the_github_status_provider_authenticates_as_a_github_app`). To
   rotate the private key, generate a new one in the App's settings, store it with `sops set`
   as `flux_github_app_private_key`, run `uv run python
   scripts/secrets_mgmt/secret_rotation.py sync`, and write the cluster file and the SOPS
@@ -254,7 +253,7 @@ OCIRepository `homelab`. `FluxNotReady` stayed quiet for the same reason, and
 `flux_break_glass: true` renders the OCIRepository `homelab` against the in-cluster registry
 instead of GHCR. It reads the registry over plain HTTP and verifies against the Secret
 `flux-break-glass-key`, which holds the public half of the operator's break-glass cosign key and
-nothing else. The default is `false`, and `tests/k8s/test_flux_sync.py` pins the
+nothing else. The default is `false`, and `tests/k8s/flux/test_flux_sync.py` pins the
 production render. Normal operation reads the Secret nowhere, because the production source
 verifies keyless against the `promote` identity. The runbook is in `docs/break-glass.md`
 (*GitHub, GHCR or Sigstore is unreachable*), and operator-only to run. `flux-deletion-drill`

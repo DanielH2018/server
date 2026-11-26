@@ -29,9 +29,7 @@ Imported as `from lib.jinja_comments import strip_jinja_comments` after the call
 
 import re
 
-# Jinja's default `comment_start_string` / `comment_end_string`, non-greedy over newlines.
-# Every template in this repo uses the default delimiters; a role that changed them would
-# have to change the deploy's environment too.
+# Jinja's default comment delimiters, which every template here uses.
 _COMMENT_RE = re.compile(r"\{#.*?#\}", re.DOTALL)
 
 

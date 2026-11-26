@@ -56,7 +56,7 @@ ROWS = (
         min_matches=MODULE_FLOOR,
         must_find=frozenset(
             {
-                ".claude/hooks/tests/test_hook_scripts_executable.py",
+                ".claude/hooks/tests/hook_contract/test_hook_scripts_executable.py",
                 "k8s/roles/monitor-bridge/tests/test_check_ha.py",
                 "tests/k8s/_manifest_guards.py",
                 "tests/longhorn/_restore_drill.py",
@@ -157,8 +157,6 @@ ROWS = (
                 "j.py",
                 'v.K8S_ROLES.parent.parent / "hosts/components/k3s-server" / "units"\n',
             ),
-            # A path built in two steps. The first step of `l.py` is a hit on its
-            # own; `k.py`'s owns nothing, so only resolving HOSTS makes it red.
             Subject(
                 "l.py",
                 'K3S = REPO / "hosts" / "components" / "k3s-server"\n'
@@ -204,8 +202,6 @@ ROWS = (
             ),
         ),
         min_matches=MODULE_FLOOR,
-        # The classifier tests holding repo-relative inventory strings as inputs, and the
-        # converted modules are in the census the row reads.
         must_find=frozenset(
             {
                 "hosts/tests/test_host_python_invocations.py",
@@ -214,12 +210,6 @@ ROWS = (
                 "tests/k8s/_manifest_guards.py",
             }
         ),
-        allow={
-            "scripts/lib/tests/test_render_guard.py": (
-                "`test_anchors_resolve_to_the_real_tree` checks that `repo_paths`' own "
-                "`INVENTORY` anchor reaches the real tree, so it spells a path under it"
-            ),
-        },
     ),
     Census(
         name="tests-read-shell-templates-rendered",
@@ -327,8 +317,6 @@ ROWS = (
                 "for path in discover_templates():\n    render_template(path)\n"
                 "def rendered_or_source_text(path):\n    return path.read_text()\n",
             ),
-            # Four ways a helper call is not a read: the helper reads nothing, it is imported,
-            # a test parameter shadows its name, and the argument is a `tmp_path` template.
             Subject(
                 "i.py",
                 "def _name(path):\n    return path.name\n"
@@ -409,17 +397,15 @@ ROWS = (
             {
                 "hosts/tests/test_aide_check.py",
                 "tests/deploy/test_k8s_toposort.py",
-                "tests/k8s/test_configmap_keys_not_absorbed.py",
-                "tests/k8s/test_vip_pins.py",
-                "tests/k8s/test_volume_names_descriptive.py",
+                "tests/k8s/workloads/test_configmap_keys_not_absorbed.py",
+                "tests/k8s/edge/test_vip_pins.py",
+                "tests/k8s/workloads/test_volume_names_descriptive.py",
                 "tests/longhorn/test_pvc_sizes_match_block_size.py",
             }
         ),
     ),
 )
 
-# Every row here and in its sibling file reads the same census, so they judge each module in
-# one pass over one tree.
 ROWS = share(ROWS)
 
 

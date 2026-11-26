@@ -71,5 +71,5 @@ Tdarr, transcoding through the node's AMD VAAPI device (`devic.es/dri`,
   copies the Deployment's placement. That is why the Deployment carries a required node
   affinity to `k8s_primary_node`, the node the `media-data` PV already pins it to: the
   renderer refuses a pre-pull for a workload that names no node.
-  The `tdarr-prepull-lands-on-the-media-node` row of `tests/k8s/test_rendered_properties.py`
-  holds the Job's node, and `tests/services/test_media_volume_pins_tdarrs_claim.py` the PV's.
+  The `tdarr-prepull-lands-on-the-media-node` row of `tests/k8s/rendered_properties/test_rendered_properties.py`
+  holds the Job's node, and `tests/services/media/test_media_volume_pins_tdarrs_claim.py` the PV's.

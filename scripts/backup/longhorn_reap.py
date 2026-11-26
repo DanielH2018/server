@@ -43,8 +43,8 @@ def main(argv: list[str], now: float | None = None) -> int:
         print(__doc__.strip(), file=sys.stderr)
         return USAGE_ERROR
     subcommand, rest = argv[0], argv[1:]
-    # Imported only once chosen: the backups reaper int()s its timeout env at import, so a
-    # malformed value there must not traceback a `snapshots` run.
+    # Imported only once chosen: the backups reaper int()s its timeout env at import, so a malformed
+    # value must not break `snapshots`.
     if subcommand == "backups":
         from backup.longhorn_reap_lib import backups
 

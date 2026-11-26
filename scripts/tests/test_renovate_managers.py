@@ -17,7 +17,7 @@ from pathlib import PurePosixPath
 
 import pytest
 
-from lib.repo_paths import ALL_VARS, REPO
+from lib.repo_paths import K8S_VARS, REPO
 from validate.renovate_extract import IMAGE_DEFAULTS, REGISTRY_BUILT_IMAGES
 from _renovate import (
     EXPECTED_DEPS,
@@ -94,7 +94,7 @@ def test_no_k8s_role_image_is_disabled_by_a_package_rule() -> None:
     disabling_rules = _disabling_currentvalue_rules(_PACKAGE_RULES)
     defaults = sorted((_REPO / "k8s/roles").glob("*/defaults/main.yml"))
     defaults += [_REPO / p for p in IMAGE_DEFAULTS if "*" not in p]
-    assert ALL_VARS in defaults, "the census lost inventory/group_vars/all.yml"
+    assert K8S_VARS in defaults, "the census lost k8s/vars.yml"
     disabled = []
     for f in defaults:
         rel_path = str(f.relative_to(_REPO))
@@ -155,8 +155,8 @@ def test_disabling_currentvalue_rule_scoped_to_its_files() -> None:
         )
         is not None
     )
-    # Out of scope: the same currentValue in a k8s role default must NOT be caught by a rule
-    # scoped to the compose plane — this is precisely what the un-scoped rule got wrong.
+    # Out of scope: the same currentValue in a k8s role default must NOT be caught by a rule scoped
+    # to the compose plane.
     assert (
         _is_disabled_by_packagerule(
             "latest", "k8s/roles/littlelink/defaults/main.yml", fake_rules
@@ -174,12 +174,9 @@ def test_disabling_currentvalue_rule_scoped_to_its_files() -> None:
     )
 
 
-# Every `image:` line in a k8s deployment template must come from a Jinja variable: a literal
-# bypasses the k8s-defaults customManager (it only scans defaults/main.yml, never templates/*.j2)
-# and ages with no update signal. Add an entry only as a deliberate, reviewed exception.
-# `rancher/k3s-upgrade` is the one exception: a SUC Plan's `upgrade.image` names the repository
-# alone, and SUC appends the Plan's `version` as the tag, so the pin that ages is `k3s_version`,
-# which an annotation tracks (ADR-0025).
+# A literal `image:` bypasses the k8s-defaults customManager (it scans only defaults/main.yml)
+# and ages with no update signal. `rancher/k3s-upgrade` is the one exception: SUC appends the Plan's
+# `version` as the tag, so `k3s_version` is the pin that ages.
 IMAGE_LITERAL_ALLOWLIST: frozenset[str] = frozenset({"rancher/k3s-upgrade"})
 
 

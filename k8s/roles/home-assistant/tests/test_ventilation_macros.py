@@ -23,30 +23,22 @@ def test_smoke_guard_blocks_when_outdoor_pm_unsafe():
 
 
 def test_scrubbed_indoor_does_not_veto_safe_outdoor():
-    # A HEPA purifier keeps indoor PM very low (4); outdoor (12) is higher but under pm_safe and
-    # clean+comfortable -> still advise. There is NO relative "dirtier than indoors" veto: a bare
-    # op>ip term would falsely block CO2/cooling ventilation whenever the purifier scrubbed indoor
-    # below outdoor. The absolute pm_safe/pm10_safe caps are the only air-quality gate.
+    # No relative 'dirtier than indoors' veto: it would falsely block ventilation when a purifier
+    # scrubs indoor below outdoor; only the absolute pm_safe/pm10_safe caps gate.
     assert _advice(75, 65, 4, 12, True) == "stale"
 
 
 def test_safe_but_moderate_outdoor_ventilates_over_scrubbed_indoor():
-    # Outdoor PM 18 is safe-but-moderate (< pm_safe 25) while a scrubbed indoor sits at 2. With no
-    # relative floor, the whole [15, 25) band ventilates for both stale-air ...
     assert _advice(75, 65, 2, 18, True) == "stale"
     # ... and free-cooling advice (warm inside, cooler + safe outside).
     assert _advice(82, 70, 2, 18, False) == "cool"
 
 
 def test_safe_outdoor_above_scrubbed_indoor_still_ventilates():
-    # HEPA purifier scrubs indoor to ~0.5, outdoor 12 is objectively safe
-    # (well under pm_safe). Must keep advising instead of vetoing all CO2/free-cooling advice.
     assert _advice(75, 65, 0.5, 12, True) == "stale"
 
 
 def test_smoke_guard_blocks_when_outdoor_pm10_unsafe():
-    # PM2.5 is clean + comfortable, but coarse PM10 (dust/pollen) is over its cap -> never
-    # advise ventilating. Baseline (no PM10) for these inputs is 'stale'.
     assert _advice(75, 65, 8, 6, True) == "stale"  # baseline without PM10
     assert (
         render_macro(VENT, "ventilation_advice", 75, 65, 8, 6, True, outdoor_pm10=80)
@@ -164,6 +156,6 @@ def test_rain_outranks_cold():
 
 
 def test_unavailable_readings_stay_silent():
-    # The OPPOSITE default from ventilation_advice: a dead sensor must not nag. Unparseable temps
-    # coerce to 999 (never below the floors) and unparseable PM to 0 (never over the caps).
+    # The opposite default from ventilation_advice: a dead sensor must not nag (temps coerce to 999,
+    # PM to 0).
     assert _close("unavailable", "unknown", "unavailable", False, "unknown") == "none"

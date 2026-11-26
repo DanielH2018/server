@@ -150,7 +150,7 @@ def deadman_crons(
 ) -> list[tuple[str, str, str]]:
     """(slug, cron, source) per Healthchecks.io slug, assembled from the variables that set it.
 
-    Shared with tests/services/test_monitor_bridge_healthchecks_expected.py, which holds
+    Shared with tests/services/monitor_bridge/test_monitor_bridge_healthchecks_expected.py, which holds
     monitor-bridge's console expectations to these same crons.
 
     The weekly reboot pings a slug for each of `hosts`, and the Docker prune pings one for
@@ -302,14 +302,14 @@ def render_lan_addresses(
         pi_wg_port: the WireGuard UDP port for the Pi's LAN-only wg-easy.
         lan_subnet: the physical LAN subnet.
         wg_client_subnet: wg-easy's own client pool (not an Ansible input; see the
-            `wg_client_subnet` comment in group_vars/all.yml).
+            `wg_client_subnet` comment in estate/vars.yml).
     """
     rows = [
         ("k3s ingress VIP (MetalLB; every `.local` service answers here)", ingress_vip,
          "`k3s_metallb_ingress_vip`"),
         ("Pi-hole DNS VIP (MetalLB)", dns_vip, "`dns_k8s_vip`"),
         ("WireGuard UDP port, wg-easy on daniel-box", f"{wg_port}/udp",
-         "`udp_port` on the k8s `wg-easy` entry in `cluster/services.yml`"),
+         "`udp_port` on the k8s `wg-easy` entry in `k8s/services.yml`"),
         ("WireGuard UDP port, the Pi's LAN-only wg-easy", f"{pi_wg_port}/udp",
          "`udp_port` on `wg-easy` in `host_vars/daniel-pi.yml`"),
         ("Home LAN subnet", lan_subnet, "`lan_subnet`"),

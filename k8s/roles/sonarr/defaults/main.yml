@@ -1,7 +1,8 @@
 ---
-sonarr_k8s_image: lscr.io/linuxserver/sonarr:4.0.20.3014-ls329@sha256:44b06045a98bc1f237b9ffefc4b28dab64cb29305e4a2a94875ae93b5224e4cc
+sonarr_k8s_image: lscr.io/linuxserver/sonarr:develop-5.0.0.3041-ls212@sha256:c8c4a3dcb49e1bd3ee19cf33e128837fdd6615e7a6b69cf02326133e193e4c29
 
 # Renovate stance: whether an image bump here may automerge. `promote` deploys what merges.
+# The Sonarr image itself takes no automerge: renovate.json has a rule for the v5 beta channel.
 # Migrating state — strategy is Recreate and the config volume comes from
 # k8s_claims below (hardcoded ReadWriteOnce), so a bad image swap can migrate the library
 # database + root-folder paths before the gate observes a fault, then fail the rollback
@@ -14,25 +15,15 @@ sonarr_k8s_image: lscr.io/linuxserver/sonarr:4.0.20.3014-ls329@sha256:44b06045a9
 # image.
 k8s_autodeploy: true
 k8s_autodeploy_reason: "migrating state — Recreate + RWO PVC, protected by the sonarr-snapshot Job before each revision and an operator revert to it after a failed one; -lsNN versioning still hides a breaking bump. WEIGHED: sonarr also mounts media-data (shared RWX, not reverted); a revert rewinds import/rename history while the files stay where they were left, so it desyncs into duplicate-import attempts or a missed-file state, recoverable by a library rescan"
-# The claim snapshotted before each revision applies. Under Flux the renderer turns this
-# list into the sonarr-snapshot Kustomization, whose Job snapshots it before sonarr applies
-# The snapshot is the recovery point this role's auto-deploy depends on.
 k8s_autodeploy_snapshot_pvcs: [sonarr-config]
 # Claims this role MOUNTS but does not revert — the WEIGHED clause in the reason above, stated
 # where a test can read it. media-data is rendered by k8s/media-volume, so no guard that reads
 # what this role creates can see the coupling.
 k8s_autodeploy_unreverted_claims: [media-data]
 
-# The rollout budget, declared once. Read as Flux's health-check `timeout` and by
-# `progressDeadlineSeconds` in templates/deployment.yaml.j2, so the two cannot drift.
-# A first boot installing DOCKER_MODS takes up to 10 minutes. That is the whole of Flux's 600s
-# default, so the default leaves no margin over the startupProbe that allows it.
-# The deadline has to move with the budget: at the 600s Kubernetes default, `rollout status`
-# fails on ProgressDeadlineExceeded whatever `--timeout` says, so the last 60s of this budget
-# is unreachable unless the deadline is rendered from this variable too.
-# The literal is `manifests_rollout_timeout` because the renderer reads a role's Flux
-# Kustomization `timeout` only from a literal role default (`role_defaults` in
-# scripts/lib/k8s_roles.py); as an include var it would render Flux's 600s default.
+# Read as Flux's health-check timeout and by progressDeadlineSeconds, so the two cannot drift.
+# A literal `manifests_rollout_timeout`: the renderer reads a Flux timeout only from a literal role
+# default.
 manifests_rollout_timeout: 660s
 sonarr_k8s_rollout_timeout: "{{ manifests_rollout_timeout }}"
 
@@ -40,17 +31,13 @@ sonarr_k8s_rollout_timeout: "{{ manifests_rollout_timeout }}"
 # 85 M / 221 files. `longhorn`, not longhorn-nobackup: sonarr.db holds the library and the
 # absolute root-folder paths — it is exactly the state worth snapshotting.
 sonarr_k8s_claim: sonarr-config
-# `longhorn` — backed up. Excluding this volume would leave it with a single frozen restore
-# point. B2 Reachable is the readout for whether its incrementals strain B2's TRANSACTION cap.
+# longhorn: backed up; excluding it would leave one frozen restore point.
 sonarr_k8s_storage_class: longhorn
 sonarr_k8s_size: 2Gi
 
-# The B2 volume, mounted at /data — sonarr stores absolute in-container paths, so the mount
-# must match them byte for byte (D4). Getting this wrong does not fail at startup; it fails as a library that looks intact until an import.
+# Mounted at /data: sonarr stores absolute paths, so a mismatch fails only at import.
 sonarr_k8s_media_claim: media-data
 
-# TheCaptain989's striptracks mod (there is no separate `sonarr-striptracks` — the
-# radarr-named image auto-detects which app it is in).
 sonarr_k8s_docker_mods: linuxserver/mods:radarr-striptracks
 
 sonarr_k8s_cpu_limit: "1"
@@ -58,21 +45,7 @@ sonarr_k8s_mem_limit: 1024Mi
 sonarr_k8s_cpu_request: "100m"
 sonarr_k8s_mem_request: 128Mi
 
-# Logging, bound through Sonarr's own config system rather than config.xml — the *arr apps read
-# `<App>:Log` from IConfiguration, and AddEnvironmentVariables() is registered with NO prefix
-# filter, so the section maps to SONARR__LOG__*. Verified against Sonarr's Bootstrap.cs
-# (`services.Configure<LogOptions>(config.GetSection("Sonarr:Log"))`) and LogOptions.cs, which
-# declares Level and Rotate; radarr and prowlarr bind the identical shape under their own names.
-#
-# WHY: upstream's defaults are LogLevel=debug, Rotate=50, SizeLimit=1MB — so every *arr sits at
-# a 50 MB steady state of debug chatter it rewrites continuously. Measured: sonarr
-# and prowlarr each held 51 MiB in /config/logs, radarr 25 MiB. The size is capped, so this is
-# not primarily a space fix; it is a CHURN fix. Longhorn backs up allocated device blocks, and
-# a directory that rewrites 50 MB in a rolling window leaves freed-but-undiscarded blocks that
-# the backup ships forever. sonarr-config backed up at 278 MiB against 91 MiB of live files.
-#
-# info keeps every message the UI's log view and the support workflow actually use; debug is a
-# developer setting upstream ships on. Rotate 10 caps the directory at ~10 MB.
+# Upstream's debug and Rotate 50 churn the logs dir, which inflates Longhorn backups; this cuts it.
 sonarr_k8s_log_level: info
 sonarr_k8s_log_rotate: "10"
 
@@ -85,8 +58,6 @@ sonarr_k8s_log_rotate: "10"
 # fails if the three drift apart.
 sonarr_k8s_exportarr_image: ghcr.io/onedr0p/exportarr:v2.3.0@sha256:af535d94061cf97a52e1661945ffba78c03f9443eae7c0da1a80a5a4be56b520
 
-# The claim the renderer emits for this role. The sonarr Kustomization applies it after the
-# sonarr-snapshot Job.
 k8s_claims:
   - name: "{{ sonarr_k8s_claim }}"
     storage_class: "{{ sonarr_k8s_storage_class }}"
@@ -94,18 +65,17 @@ k8s_claims:
 
 # ── the air-date guard (templates/air-date-guard-cronjob.yaml.j2) ───────────────────────────
 # Removes and blocklists a queued grab whose release was published before its episode aired,
-# Sonarr v5's Release Profile rule applied after the grab on v4. files/sonarr_air_date_guard.py
-# holds the rule and what it leaves alone. Retire this CronJob once Sonarr v5 stable ships and
-# a Release Profile's "do not download before air date" replaces it.
+# the rule Sonarr v5 carries as a Release Profile's air-date restriction, applied after the
+# grab. files/sonarr_air_date_guard.py holds the rule and what it leaves alone. Retire it once
+# a Release Profile carries the rule.
 sonarr_k8s_air_date_guard_image: python:3.15-alpine@sha256:0f9552bb28711333da16915ec146f5e6bb44a7fdac9ced15dc17c2e0206346dd
-# Every 5 minutes, matching monitor-bridge's Arr Queue Warnings cycle, so a fake is usually
-# removed before the warning it causes pages.
+# Every 5 minutes, matching monitor-bridge's queue-warning cycle, so a fake goes before it pages.
 sonarr_k8s_air_date_guard_schedule: "*/5 * * * *"
 sonarr_k8s_air_date_guard_deadline_seconds: 240
 # How long a finished sonarr-air-date-guard Job, and so its pod, stays visible. A run the weekly reboot
 # interrupts fails, and without a TTL it reads Failed until three later runs fail.
 # 30 minutes clears it inside the hour after boot
-# (tests/k8s/test_reboot_window_cronjobs_age_out.py); the run's output is in Loki past that.
+# (tests/k8s/flux/test_reboot_window_cronjobs_age_out.py); the run's output is in Loki past that.
 sonarr_k8s_air_date_guard_job_ttl_seconds: 1800
 # v5's grace period of -1 day. Backtested over this library's history from
 # 2023-04: for standard series it would have removed 13 of the 16 grabs marked failed by hand,
@@ -113,8 +83,7 @@ sonarr_k8s_air_date_guard_job_ttl_seconds: 1800
 # air). At 3h it removes all 16 and 5 imported ones, all Netflix or Disney+ drops whose TVDB
 # air date is a later broadcast.
 sonarr_k8s_air_date_guard_grace_hours: 24
-# TVDB air dates for anime are off by hours to a week: at any grace up to 48h the rule removed
-# at least 18 imported anime releases for 2 fakes.
+# TVDB air dates for anime are off by up to a week, so the rule removes real releases.
 sonarr_k8s_air_date_guard_skip_series_types: [anime]
 # A Sonarr series tag that exempts a show whose real releases come out early.
 sonarr_k8s_air_date_guard_exempt_tag: allow-early
@@ -123,22 +92,16 @@ sonarr_k8s_air_date_guard_max_removals: 5
 # False makes every run, the deploy gate's included, a dry-run report.
 sonarr_k8s_air_date_guard_apply: true
 
-# The renderer copies this CronJob's jobTemplate into `sonarr-verify` as
-# `sonarr-air-date-guard-deploy-gate-<spec digest8>`, a real pass once per revision.
 flux_cronjob_gates:
   sonarr-air-date-guard:
     kind: mutation
     rerun_safe: k8s/roles/sonarr/tests/test_sonarr_air_date_guard.py::test_a_second_run_removes_nothing
 
-# The Service's pinned address (templates/service.yaml.j2). daniel-box's fake-remux config names
-# it, so a change here changes hosts/components/fake-remux/defaults/main.yml too.
+# Named by fake-remux's config in hosts/components/fake-remux/defaults/main.yml; change both.
 sonarr_k8s_cluster_ip: 10.43.114.186
 
-# Each entry renders k8s/templates/secret-default.yaml.j2 as secret-<name>.yaml:
-# its `string_data` maps a Secret field to the SOPS key its value comes from.
 render_secrets:
-  # The exportarr sidecar's credential: sonarr's own API key, since sonarr offers no
-  # scoped read-only key.
+  # Sonarr's own API key: sonarr offers no scoped read-only key.
   - name: sonarr-exportarr
     string_data:
       api_key: sonarr_api_key

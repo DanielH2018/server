@@ -7,7 +7,7 @@ deleted at a time nothing recorded. This reads the account's monitors back throu
 Uptime Robot's API and fails when a documented id is missing or paused.
 
 The doc's *What is configured* table is the oracle, parsed here and nowhere else:
-`tests/repo/test_uptime_robot_keywords.py` reads the same rows to check each keyword against
+`tests/repo/docs/test_uptime_robot_keywords.py` reads the same rows to check each keyword against
 the live endpoint.
 
 The API key is the SOPS key `uptimerobot_api_key`, fed to curl on stdin so it never reaches
@@ -18,8 +18,8 @@ the only kind this check needs.
 import re
 
 
-# `core.<name>` for anything the tests monkeypatch — binding those into this module's
-# globals with a `from core import ...` would take a snapshot the patch never reaches.
+# Use `core.<name>` for anything tests monkeypatch: a `from core import` binds a snapshot the patch
+# never reaches.
 from diagnostics.probe_lib import core
 
 from lib.repo_paths import REPO
@@ -33,15 +33,14 @@ _ROW = re.compile(
     re.MULTILINE,
 )
 
-# The monitors the table lists. The parse is a regex over prose, so a reworded table would
-# otherwise yield no rows and a check with nothing to compare.
+# The parse is a regex over prose, so a reworded table would yield no rows and a check with nothing
+# to compare.
 KNOWN_MONITORS = frozenset({"Auth Health", "Jellyfin Health"})
 
 API_URL = "https://api.uptimerobot.com/v2/getMonitors"
 API_KEY_NAME = "uptimerobot_api_key"
 
-# v2's `status`: 0 paused, 1 not checked yet, 2 up, 8 seems down, 9 down. Only 0 means the
-# console stopped the monitor; a down monitor is still watching, and pages on its own.
+# Only 0 means the console stopped the monitor; a down monitor still watches and pages on its own.
 PAUSED = 0
 
 

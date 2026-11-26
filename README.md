@@ -6,12 +6,12 @@ and each host installs a signed **Debian package** built from the repo. A small 
 secrets encrypted with **SOPS/age**, storage on **Longhorn**, and reverse-proxied behind
 **Cloudflare**.
 
-<!-- The exact count is whatever `containers_list` says in cluster/services.yml — don't
+<!-- The exact count is whatever `containers_list` says in k8s/services.yml — don't
      restate a precise number here or in CLAUDE.md; two hand-maintained copies drift apart
      (they read 44 and 49 while the real total was 52). -->
 
 ```bash
-grep -c '^  - name:' inventory/host_vars/*.yml   # the actual per-host tally
+grep -c '^  - name:' hosts/*/vars.yml   # the actual per-host tally
 ```
 
 > Day-to-day conventions and the agent contract live in [`CLAUDE.md`](CLAUDE.md). Most
@@ -35,15 +35,17 @@ work already executed.
 ```
 k8s/              # Render inputs for the k8s workloads   ← EDIT HERE
   roles/              # One role per k8s workload (manifests rendered from templates)
+  services.yml        # One entry per k8s deploy tag
+  vars.yml            # The cluster's facts: CIDRs, VIPs, namespaces
   templates/          # Shared Jinja partials the k8s roles include
-inventory/        # group_vars/all.yml, host_vars/<host>.yml (one file per host)
+estate/           # vars.yml: facts every plane reads (domain, subnets, CI contexts)
 secrets/          # SOPS-encrypted secrets.yml, its .sops.yaml and the rotation register
 tests/            # Tests over the roles, their renders and the deploy path
-cluster/          # services.yml: one entry per k8s deploy tag
 hosts/            # Host packages and the setup plane each one ships
   components/         # Units, timers and scripts a host package installs; the Pi's
                       #   Docker services are pi-compose/
-  daniel-box/ …       # One package.yml per host
+  vars.yml            # Defaults every host shares
+  daniel-box/ …       # One package.yml and vars.yml per host
   packages/           # Packages shared across hosts
   lib/                # The updater, reconcile and checkout-sync helpers
   bootstrap-host.sh   # One-time bring-up of a new host
@@ -98,8 +100,8 @@ flowchart TD
 
 Network segmentation is **not** blanket-enforced: only a few roles define NetworkPolicies
 (`n8n`, `prowlarr`, `registry`) — everything else is reachable pod-to-pod within the
-namespace. Where policies do exist, **ingress** rules are enforced; **egress** rules are
-**not** enforced by this cluster's CNI, so never read an egress policy as a control.
+namespace. Where policies do exist, kube-router enforces **ingress** and **egress** rules. An egress
+rule does not cover the first seconds of a pod's life (ADR-0009).
 
 ## How deploys work
 
@@ -113,7 +115,7 @@ workload by hand.
   `authelia`, which creates the middleware other routes reference. Both are derived from the
   role's own templates/entry, not hand-listed; an edge no template carries (crowdsec before
   traefik, for the LAPI machine credential) is declared as `depends_on:` on the entry instead.
-  List order in `cluster/services.yml` is only the sort's tiebreak.
+  List order in `k8s/services.yml` is only the sort's tiebreak.
 
 - **The Pi's containers** are `compose_services` entries that its `homelab-daniel-pi` package
   deploys. No host_vars file carries a `containers_list`. The Pi's ordering, docker-proxy
@@ -171,7 +173,7 @@ prek run --all-files
 
 Almost every new service is a **k8s** workload: add a role under `k8s/roles/<name>/`
 rendering its manifests (Deployment/Service/IngressRoute/PVC), then an entry in
-`cluster/services.yml` `containers_list`. Position in the list
+`k8s/services.yml` `containers_list`. Position in the list
 doesn't matter — the renderer toposorts on derived Traefik-CRD and authelia edges, plus any
 `depends_on:` the entry declares — so add it wherever reads best. Deploy tags derive from
 the name.

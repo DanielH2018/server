@@ -110,8 +110,6 @@ class _Split:
     named: frozenset[str]
 
 
-# Keyed by the text itself: a replay hands ``Code`` the same string objects for every file a
-# commit did not change, so each file is cut once per version, not once per commit.
 _SPLITS: dict[str, _Split] = {}
 
 

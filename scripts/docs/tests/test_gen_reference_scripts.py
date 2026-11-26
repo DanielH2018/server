@@ -123,6 +123,13 @@ def test_a_package_module_names_a_test_named_after_its_family(tmp_path):
     assert rows["ci.py"]["tests"] == "test_land_ci.py"
 
 
+def test_a_test_in_a_subject_directory_is_found(tmp_path):
+    _write(tmp_path / "dev" / "fanout_lib" / "brief.py", '"""Summary."""\n')
+    _write(tmp_path / "dev" / "tests" / "fanout" / "test_fanout_brief.py", '"""x"""\n')
+    rows = {r["name"]: r for r in _build(tmp_path)}
+    assert rows["brief.py"]["tests"] == "test_fanout_brief.py"
+
+
 def test_only_a_lib_package_reaches_into_the_parents_tests(tmp_path):
     _write(tmp_path / "docs" / "reference" / "backlog.py", '"""Summary."""\n')
     _write(tmp_path / "docs" / "tests" / "test_backlog.py", '"""x"""\n')
@@ -298,9 +305,8 @@ def test_the_live_tree_classifies_the_names_we_already_know(live_verdicts):
         "validate_ha_config.py": "gate",
         "grafana_dashboard_uids.py": "gate",
         "smoke_extract.py": "gate",
-        # "scheduled" rather than "gate": the B2 accounting timer (k3s-host-checks) invokes
-        # `probe.py b2-deletions`, and "scheduled" outranks "gate" in _PRECEDENCE. probe.py is
-        # still a gate too (hooks) -- the cron adds a caller, it doesn't drop one.
+        # 'scheduled' outranks 'gate' in _PRECEDENCE; the B2 accounting timer invokes `probe.py
+        # b2-deletions`.
         "probe.py": "scheduled",
         "docs_provenance.py": "library",
         "core.py": "library",
@@ -391,7 +397,7 @@ def test_no_two_scripts_share_a_basename():
     undecidable for exactly the colliding names this test forbids. So uniqueness is the
     invariant, and this is where it is enforced. Sibling, different invariant, keep apart:
     the `no-two-import-roots-share-a-module-basename` row of
-    `tests/repo/test_census_rows_python.py` forbids one NAME at two
+    `tests/repo/census_rows/test_census_rows_python.py` forbids one NAME at two
     import roots (`pythonpath`, role `files/`, test-inserted `scripts/<dir>`) — sys.path
     shadowing, so every root but top level only.
     """

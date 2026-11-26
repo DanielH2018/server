@@ -21,7 +21,7 @@ THE CONDITIONS. `verify_promotion.wait_settled` reads the first two and asks
 A condition that fails returns `decide` to the wait, which promotes T once P settles.
 docs/archive/deploy/d7-superseding-promotions.md has the design and the cases.
 
-Run: imported only. `uv run pytest scripts/deploy_tools/tests/test_promote_supersede.py`
+Run: imported only. `uv run pytest scripts/deploy_tools/tests/promote/test_promote_supersede.py`
 """
 
 from collections.abc import Callable
@@ -32,8 +32,7 @@ from deploy_tools.promote_lib import verify_promotion as verify
 from deploy_tools.promote_lib.flux_status import FAILED_STATES, flux_states
 from deploy_tools.promote_lib.reads import Reads
 
-# Each has its own provisional window in `verify`, which a superseding promotion does not
-# compose: the storage rollout, the controller rollout, and the cluster file's substitution.
+# Each has its own provisional window in `verify`, which a superseding promotion does not compose.
 OWN_WINDOW = frozenset({"longhorn", "flux", "cluster-vars"})
 # Every changed set beside a tag holds these, so they never make two sets overlap.
 ALWAYS = frozenset({ROOT, SOAK})

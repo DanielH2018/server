@@ -24,14 +24,8 @@
             icon: kubernetes.png
             href: {{ services | homepage_href('headlamp', domain) }}
             description: Cluster UI
-            # The namespace/podSelector keys are homepage's built-in pod stats (CPU/memory) for
-            # headlamp's OWN pod, and need kubernetes.yaml's `mode: cluster`. They are separate
-            # from the `widget:` block below, which shows whole-cluster counts — see its
-            # comment for why it is not a native Headlamp widget.
-            #
-            # podSelector rather than `app:`: homepage's `app:` key expands to the label
-            # selector app.kubernetes.io/name=<value>, and this homelab labels its pods with
-            # the plain `app` key instead. `app: headlamp` would match nothing and render blank.
+            # podSelector, not `app:`: homepage's `app:` expands to app.kubernetes.io/name=<value>;
+            # pods here use plain `app`.
             namespace: {{ k8s_namespace }}
             podSelector: app=headlamp
             # The widget reads PROMETHEUS, NOT HEADLAMP, and that is the whole design decision.
@@ -56,8 +50,7 @@
             widget:
                 type: customapi
                 url: "http://prometheus.{{ k8s_observability_namespace }}.svc.cluster.local:9090/api/v1/query?query={{ homepage_k8s_headlamp_cluster_query | urlencode }}"
-                # 60s, against homepage's 10s default: this is a Prometheus query per dashboard
-                # load per browser, and cluster counts do not move on a 10-second scale.
+                # 60s: a Prometheus query per dashboard load per browser.
                 refreshInterval: 60000
                 # DECIDED: `display: block` (homepage's default), not `dynamic-list` — every
                 # other widget on this dashboard renders as blocks, and a list tile reads as a
@@ -67,7 +60,7 @@
                 # "97 NODES" — wrong at a glance rather than plausibly wrong. Keep the
                 # query's operand order and this list in the same order; changing one alone is
                 # the only way to break this quietly. ENFORCED by
-                # tests/services/test_headlamp_widget_mapping_order.py, which fails on a
+                # tests/services/homepage/test_headlamp_widget_mapping_order.py, which fails on a
                 # reordered, renamed, missing or duplicated counter.
                 #
                 # Prometheus wraps its vector as {"data": {"result": [{"metric": {...},
@@ -80,23 +73,13 @@
                       label: Down
                       format: number
         - Karma:
-            # /icons/, not the CDN: dashboard-icons has no entry for it. The 48px frame of
-            # karma's own ui/public/favicon.ico.
+            # /icons/, not the CDN: dashboard-icons has no entry for it.
             icon: /icons/karma.png
-            # Karma is the alert UI. It links the public name; the authelia role's `karma.<domain>`
-            # rules admit `group:admins` only, so a non-admin is denied there.
+            # Links the public name; the authelia `karma.<domain>` rules admit `group:admins` only.
             href: {{ services | homepage_href('karma', domain) }}
             description: Alerts
-            # The alert plane at a glance, read from Prometheus's ALERTS series. Critical and
-            # Warning count what pages: they drop shadow="true", paged_by="homelab-alert" and
-            # drill="true", the matchers the Alertmanager routing tree sends to its blackhole receiver.
-            # `or vector(0)`: the widget reads the first sample, and a count over no alerts
-            # is an empty vector that would render a blank block instead of 0.
-            #
-            # Same Prometheus ClusterIP and fence as the Headlamp tile above: homepage is a
-            # named caller in netpol-baseline's networkpolicy-prometheus.yaml.j2.
-            # prometheusmetric names each block with its own `label:`, so this tile needs no
-            # heading rename in custom.css.j2.
+            # Critical and Warning count what pages (shadow/paged_by/drill dropped); `or vector(0)`
+            # because an empty vector renders blank.
             widget:
                 type: prometheusmetric
                 url: "http://prometheus.{{ k8s_observability_namespace }}.svc.cluster.local:9090"
@@ -128,15 +111,10 @@
             icon: home-assistant.png
             href: {{ services | homepage_href('home-assistant', domain) }}
             description: Air Quality
-            # No server/container pair: HA runs in k3s. The .local name resolves from containers
-            # (LAN DNS).
             widget:
                 type: homeassistant
                 url: https://home-assistant.local.{{ domain }}
                 key: {{ homepage_ha_token }}
-                # `custom:` is this widget's equivalent of `fields:` — each entry IS a block,
-                # so pruning means deleting entries rather than naming the ones to keep.
-                # Dropped: Temp and Humidity.
                 custom:
                     - state: sensor.bedroom_airgradient_one_carbon_dioxide
                       label: CO₂
@@ -146,26 +124,19 @@
             icon: karakeep.png
             href: {{ services | homepage_href('karakeep', domain) }}
             description: Karakeep
-            # No server/container: karakeep runs in k3s. Same as speedtest and freshrss —
-            # the -k8s monitoring route, because the native route's Authelia 401s the widget.
+            # -k8s monitoring route: the native route's Authelia 401s the widget.
             widget:
                 type: karakeep
                 url: https://karakeep.local.{{ domain }}
                 key: {{ karakeep_homepage_api_key }}
-                # UNARCHIVED IS NOT AVAILABLE, so this shows the two numbers it subtracts
-                # from. karakeep's /api/v1/users/me/stats returns numBookmarks (the total)
-                # and numArchived, and homepage renders each `field` verbatim — no widget
-                # type on this dashboard can express arithmetic over two of them. A computed
-                # tile would mean a customapi widget, and customapi maps a JSON path to a
-                # label with no expression support either. Dropped: favorites, highlights,
-                # lists, tags.
+                # karakeep has no unarchived count and no widget can subtract, so both numBookmarks
+                # and numArchived are shown.
                 fields: [bookmarks, archived]
         - FreshRSS:
             icon: freshrss.png
             href: {{ services | homepage_href('freshrss', domain) }}
             description: RSS Aggregator
-            # No server/container: freshrss runs in k3s. Same as speedtest and karakeep —
-            # the -k8s monitoring route, because the native route's Authelia 401s the widget.
+            # -k8s monitoring route: the native route's Authelia 401s the widget.
             widget:
                 type: freshrss
                 url: https://freshrss.local.{{ domain }}
@@ -179,28 +150,20 @@
             description: APC BR1500MS2
             widget:
                 type: peanut
-                # The -k8s monitoring route (ClientIP-gated, no Authelia). peanut's own basic
-                # auth (username/password below) is the gate on this path.
+                # Monitoring route (ClientIP-gated, no Authelia); peanut's own basic auth is the
+                # gate.
                 url: https://peanut.local.{{ domain }}
                 key: {{ nut_ups_name | default('apc-ups') }}
                 username: {{ peanut_username }}
                 password: {{ peanut_password }}
-                # Dropped: ups_load. peanut names these `battery_charge` and `ups_status`,
-                # not `charge` and `status`.
+                # peanut names these `battery_charge` and `ups_status`.
                 fields: [battery_charge, ups_status]
         - Scrutiny:
             icon: scrutiny.png
             href: {{ services | homepage_href('scrutiny', domain) }}
             description: Disk Health
-            # ClusterIP, not a Traefik route: scrutiny's native route is Authelia-gated and would
-            # 401 this session-less widget, and its monitoring route exposes no API path. Pod to
-            # pod bypasses both. Same shape as the sonarr/radarr/qbittorrent widgets below:
-            # `homepage_widget: true` on scrutiny's entry admits homepage to the `scrutiny-web`
-            # fence and lets homepage_widget_url build this URL.
-            #
-            # Scrutiny has no auth of its own (that is why longhorn-ui-style route middleware
-            # fronts it), so there is no key to hold here. `GET /api/summary` on the ClusterIP
-            # answers 200 with the device summary.
+            # ClusterIP, not a Traefik route: scrutiny's native route is Authelia-gated and 401s
+            # this session-less widget.
             widget:
                 type: scrutiny
                 url: {{ services | homepage_widget_url('scrutiny', k8s_namespace) }}
@@ -210,33 +173,15 @@
             icon: speedtest-tracker.png
             href: {{ services | homepage_href('speedtest', domain) }}
             description: Internet tracking
-            # No server/container: speedtest runs in k3s, so there is no Docker container
-            # for the status dot. The -k8s name is the ClientIP-gated monitoring route (no
-            # Authelia) — the unsuffixed name's native route is Authelia'd and 401s this
-            # session-less widget.
+            # -k8s name is the ClientIP-gated monitoring route; the native route's Authelia 401s
+            # this session-less widget.
             widget:
                 type: speedtest
                 url: https://speedtest.local.{{ domain }}
                 # Dropped: upload.
                 fields: [download, ping]
-        # THE THREE MEDIA TILES AND THE THREE MUSIC TILES make this group fifteen tiles. The
-        # Services column's row count, five, is what the calendar height in custom.css.j2 is
-        # derived from, so the column squares its bottom edge with the personal links beside
-        # it. Jellyfin has no tile; it stays routed and reachable by hostname.
-        #
-        # THEIR URL SHAPE DIFFERS FROM THE TILES ABOVE ON PURPOSE — do not normalise it. The
-        # lidarr/sonarr/radarr/qbittorrent/slskd routes are Authelia-gated, and the *arr
-        # monitoring IngressRoutes deliberately expose only /api/v3/queue, so no Traefik URL
-        # reaches their widget APIs. These tiles therefore address the ClusterIP directly, which
-        # bypasses Traefik and Authelia entirely and leaves `monitoring_route`
-        # (k8s/templates/ingressroute.yml.j2) as narrow as it was. Same URL shape
-        # monitor-bridge already uses (k8s/roles/monitor-bridge/templates/config/env.yaml.j2).
-        #
-        # Reaching a ClusterIP is pod → pod, so each target's NetworkPolicy must admit
-        # `app: homepage` on that port. `homepage_widget: true` on each entry does that, through
-        # the role's own networkpolicy.yaml.j2 (sonarr, radarr, qbittorrent) or netpol-baseline's
-        # caller fences (lidarr, slskd). Fenced out, the widget fails as a widget-proxy error,
-        # not as an auth error.
+        # ClusterIP addressed directly, on purpose (do not normalise): the *arr monitoring routes
+        # expose only /api/v3/queue.
         - Lidarr:
             icon: lidarr.png
             href: {{ services | homepage_href('lidarr', domain) }}
@@ -260,11 +205,8 @@
         - Sonarr:
             icon: sonarr.png
             href: {{ services | homepage_href('sonarr', domain) }}
-            # ONE WORD, and qBittorrent's below is why. At 1280px a Services tile is 195px and
-            # "Download management" wrapped its title to three lines, taking that tile to 68px
-            # where every other is 52px — which took its whole grid row to 128px and overshot
-            # the pinned calendar beside it by 16px. All three are shortened together so the
-            # media row reads consistently.
+            # One word: at 1280px "Download management" wraps to three lines and overshoots the
+            # pinned calendar by 16px; all three are shortened together.
             description: Series
             widget:
                 type: sonarr
@@ -290,15 +232,14 @@
             widget:
                 type: slskd
                 url: {{ services | homepage_widget_url('slskd', k8s_namespace) }}
-                # A placeholder, as Soularr's is: SLSKD_NO_AUTH accepts any key, but the widget
-                # sends one on every call.
+                # A placeholder: SLSKD_NO_AUTH accepts any key, but the widget sends one on every
+                # call.
                 key: slskd-runs-without-auth
                 # Dropped: updateStatus, uploads, and downloads, which counts every user in the
                 # transfer history rather than what is transferring.
                 fields: [slskStatus, sharedFiles]
-        # Read from Prometheus, not navidrome's own widget: that one sends a user's Subsonic
-        # token and salt in the query string, which proxy.js logs on any non-2xx. No
-        # `or vector(0)`: a down navidrome renders a blank block rather than an empty library.
+        # Read from Prometheus: navidrome's own widget sends a Subsonic token in the query string,
+        # which proxy.js logs on non-2xx.
         - Navidrome:
             icon: navidrome.png
             href: {{ services | homepage_href('navidrome', domain) }}
@@ -356,20 +297,8 @@
                   color: emerald
                   params:
                       showName: true
-        # THE PERSONAL LINKS, as SERVICE tiles rather than bookmarks, and that is the only way
-        # they reach this column. A bookmark group cannot be laid out inside `Top Row` at any
-        # depth — nested under `Calendar:` and as a sibling of it both make homepage v1.13.2
-        # silently drop the group out of Top Row and render it last at full width. Nothing logs
-        # that and every repo-side check stays green.
-        #
-        # They live here rather than in bookmarks.yaml.j2, which is empty. The visible cost:
-        # a service tile shows `description` where a bookmark tile showed the bare domain.
-        #
-        # THE ORDER HERE IS THE ORDER ON THE PAGE, and it is the operator's, not alphabetical
-        # or grouped by theme. homepage renders a group's tiles in file order, so moving a tile
-        # means moving its block. Everyday accounts first, then the two code and money links,
-        # then the three gaming and anime ones; Jellyfin sits after Twitter and Google Maps
-        # after GitHub.
+        # SERVICE tiles, not bookmarks: a bookmark group cannot be laid out inside `Top Row`. Order
+        # here is the page order.
         - Gmail:
             icon: gmail.png
             href: https://mail.google.com/mail/u/0/#inbox
@@ -387,12 +316,11 @@
             href: https://twitter.com/home
             description: twitter.com
         - Jellyfin:
-            # Link-only: no `widget:`, so none of the media-widget rules apply. A widget added
-            # here later needs `version: 2` (docs/homepage-widgets-and-layout.md).
+            # Link-only: a widget added later needs `version: 2`
+            # (docs/homepage-widgets-and-layout.md).
             icon: jellyfin.png
             href: {{ services | homepage_href('jellyfin', domain) }}
-            # Not the bare domain like its neighbours: jellyfin.<domain> would overrun the 165px
-            # tile that the Monarch note below measures.
+            # Not the bare domain: jellyfin.<domain> would overrun the 165px tile.
             description: Media server
         - GitHub:
             icon: github.png
@@ -403,17 +331,15 @@
             href: https://www.google.com/maps
             description: maps.google.com
         - Monarch:
-            # /icons/ is the homepage-icons ConfigMap, not the bundled dashboard-icons set —
-            # see templates/icons-configmap.yaml.j2, which must carry any file named this way.
+            # /icons/ is the homepage-icons ConfigMap; templates/icons-configmap.yaml.j2 must carry
+            # any file named this way.
             icon: /icons/monarch.png
             href: https://app.monarch.com/dashboard
-            # `monarch.com`, not `app.monarch.com`: at five columns a link tile is 165px, and
-            # the longer form needed 170px — it clipped by 5px. The CSS guard below would wrap
-            # it instead, but wrapping costs the whole row 16px of height.
+            # `monarch.com`, not `app.monarch.com`: the longer form needs 170px and clips a 165px
+            # tile.
             description: monarch.com
         - AniList:
-            # /icons/, not the CDN: dashboard-icons has no entry for it. Fetched from
-            # anilist.co's own android-chrome-192x192.png.
+            # /icons/, not the CDN: dashboard-icons has no entry for it.
             icon: /icons/anilist.png
             href: https://anilist.co/
             description: anilist.co
@@ -421,16 +347,14 @@
             icon: /icons/tacticstools.png
             href: https://tactics.tools/
             description: tactics.tools
-        # THE THREE TOOL TILES COME LAST, in the column's bottom row, below the two link rows
-        # (operator's order). They are link-only like the personal links, but keep
-        # their name and description: custom.css.j2 excludes them from the icon-only rules by
-        # their `id:` prefix, spans each across a third of the row, and draws each as one large,
-        # centred link. The `-#rrggbb` suffix colours an `mdi-` icon.
+        # custom.css.j2 excludes these from the icon-only rules by their `id:` prefix. The
+        # `-#rrggbb`
+        # suffix colours an `mdi-` icon.
         - Deploy:
             id: calendar-tool-deploy
             icon: mdi-rocket-launch-#fb923c
             # The queue page starts landings with land.sh, so Authelia two_factor gates both its
-            # names (hosts/components/deploy-ui/).
+            # names.
             href: {{ services | homepage_href('deploy-ui', domain) }}
             description: Deploy queue
         - Artifacts:
@@ -444,19 +368,8 @@
             href: {{ services | homepage_href('docs', domain) }}
             description: Homelab reference
 
-# `Admin & Tools` IS A LINK-ONLY GROUP, and the absence of `widget:` blocks is the point. The
-# dashboard carries few tiles against ~30 routed web UIs, so the way to reach the others is to
-# remember the hostname. A link-only tile closes that gap at zero risk: a widget dialling a
-# ClusterIP needs `homepage_widget: true` on the target's entry to open its NetworkPolicy to
-# homepage, while a tile with only an `href:` reaches nothing from the pod at all.
-#
-# Adding a widget to one of these later is a per-service change, not a bulk one, and three of
-# them are already ruled on: grafana, crowdsec and healthchecks each record a credential reason
-# the widget was not simply plumbed in. A link-only tile contradicts none of those — it adds a
-# way in, not an API call.
-#
-# Two roles carry a `hostname:` in containers_list and are NOT here, both on purpose: livesync
-# has no IngressRoute at all, and the deploy queue tile replaces the traefik dashboard's.
+# Link-only on purpose: a widget needs `homepage_widget: true` to open the target's NetworkPolicy; a
+# bare `href:` reaches nothing.
 - Admin & Tools:
     - Grafana:
         icon: grafana.png
@@ -464,9 +377,8 @@
         description: Metrics and dashboards
     - Longhorn:
         icon: longhorn.png
-        # LAN-only: longhorn-frontend's IngressRoute matches longhorn.local.<domain> and no
-        # public name, because Authelia is the entire access control on a UI that can delete
-        # volumes and their B2 backup chain.
+        # LAN-only: Authelia is the entire access control on a UI that can delete volumes and their
+        # B2 backups.
         href: {{ services | homepage_href('longhorn-ui', domain, lan=true) }}
         description: Cluster storage
     - n8n:

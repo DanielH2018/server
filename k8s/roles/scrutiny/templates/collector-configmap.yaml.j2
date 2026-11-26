@@ -1,11 +1,6 @@
 ---
-# Pin the collector to the node's real NVMe. A privileged pod sees the HOST's /dev, which
-# on a Longhorn node includes dozens of iSCSI virtual disks (sda, sdb, …) — smartctl
-# errors on every one (checksum error, exit 4) and publishes bogus 0x600… wwn records.
-# `allow_listed_devices` is the key that restricts the smartctl scan (a `devices:` list
-# only CUSTOMIZES detected entries — tried first, and the scan kept publishing the iSCSI
-# fleet). Both nodes' NVMe enumerates as /dev/nvme0, so one config serves the whole
-# DaemonSet. This ConfigMap is the only place it is set.
+# Pin the scan to the NVMe: the host's /dev holds Longhorn iSCSI disks that smartctl errors on.
+# `allow_listed_devices` restricts the scan; a `devices:` list only customizes detected entries.
 apiVersion: v1
 kind: ConfigMap
 metadata:

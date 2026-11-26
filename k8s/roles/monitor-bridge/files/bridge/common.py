@@ -7,12 +7,12 @@ same few pure helpers — this module is the one place those bodies live now.
 WHAT MAY LIVE HERE, AND WHY SOME DUPLICATION STAYS
 ===========================================================
 This module is imported by check.py, so bridge/parsing.py's rule binds here too, in a form the
-`scripts/diagnostics/tests/test_probe_boundaries.py` precedent widens rather than a strict ban: a helper the test
+`scripts/diagnostics/tests/probe_cli/test_probe_boundaries.py` precedent widens rather than a strict ban: a helper the test
 suites patch directly may still live here, PROVIDED every caller reaches it *qualified* —
 `bridge.common.log(...)`, never `from bridge.common import log` — since `monkeypatch.setattr`
 rebinds the attribute on this module object, and only a qualified lookup re-reads that attribute
 at call time. A from-import binds its own reference at import time and never sees the patch. This
-is enforced by `tests/services/test_bridge_patch_boundary.py`, which AST-walks every test suite for
+is enforced by `tests/services/monitor_bridge/test_bridge_patch_boundary.py`, which AST-walks every test suite for
 `setattr(bridge.common, "X", ...)` and asserts no non-test module reaches `X` via a from-import.
 Likewise a helper that reads a module-level constant either suite patches (e.g. `HEARTBEAT_FILE`)
 may live here if the constant is taken as an **argument** rather than read as a global — the
@@ -31,9 +31,9 @@ drifted signatures (`check.push(token, ok, msg)` vs `autofix.push(ok, msg)`) and
 patch sites apiece. See bridge/parsing.py's header for the full argument on why a patched name
 can't just move without qualification or argument-passing.
 
-ENFORCED by tests/services/test_monitor_bridge_modules.py, which checks that every name a test
+ENFORCED by tests/services/monitor_bridge/test_monitor_bridge_modules.py, which checks that every name a test
 patches is bound in the module it is patched on, and by
-tests/services/test_bridge_patch_boundary.py for the qualified-access rule across both bridges.
+tests/services/monitor_bridge/test_bridge_patch_boundary.py for the qualified-access rule across both bridges.
 
 Ship path: this file is monitor-bridge's canonical copy. autofix-bridge stages a copy of it onto
 the node from here (`role_file('files/bridge/common.py', role='monitor-bridge')`), the

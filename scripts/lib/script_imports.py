@@ -122,7 +122,7 @@ def _pytest_pythonpath(scripts: Path) -> list[Path]:
     """The directories pytest's `pythonpath` puts in front of every test, in order.
 
     A test imports a module from another directory by bare name, `from deploy_run import ...`
-    in `scripts/lib/tests/test_exit_codes.py`, and only this list says where that resolves.
+    in `scripts/lib/tests/script_census/test_exit_codes.py`, and only this list says where that resolves.
     Empty when the repo root holds no `pyproject.toml`, as a synthetic test tree does not.
     """
     pyproject = scripts.parent / "pyproject.toml"
@@ -182,9 +182,7 @@ def import_graph(scripts: Path, keep: Callable[[Path], bool]) -> dict[str, set[s
     """
     stems = {p.stem for p in _all_py(scripts)}
     pythonpath = _pytest_pythonpath(scripts)
-    # Memoised for this call only: most imports name a few shared modules from the same roots,
-    # and each answer is a chain of stat calls. A later call, such as a test's on an edited
-    # synthetic tree, resolves afresh.
+    # Memoised for this call only, so a later call on an edited tree resolves afresh.
     head_of = functools.cache(lambda dotted, roots: _head(dotted, roots, scripts))
     package_of = functools.cache(lambda dotted, roots: _package(dotted, roots, scripts))
     found: dict[str, set[str]] = {}
@@ -196,10 +194,8 @@ def import_graph(scripts: Path, keep: Callable[[Path], bool]) -> dict[str, set[s
             nodes = list(ast.walk(ast.parse(path.read_text())))
         except SyntaxError, ValueError, UnicodeDecodeError:
             continue
-        # `_roots` first, then what the file puts on `sys.path` itself, then, for a test,
-        # pytest's `pythonpath`. An import none of them explains resolves outside `scripts/`
-        # (the stdlib, a role's `files/`) and credits nothing: matching on the bare name
-        # credited `scripts/docs/reference/secrets.py` with `import secrets`.
+        # An import no root explains resolves outside `scripts/` (stdlib, a role's `files/`) and
+        # credits nothing.
         roots = _roots(path, scripts) + _path_inserts(nodes, path)
         if is_test_file(path):
             roots += pythonpath
@@ -208,10 +204,8 @@ def import_graph(scripts: Path, keep: Callable[[Path], bool]) -> dict[str, set[s
             if isinstance(node, ast.Import):
                 names = [head_of(alias.name, roots) for alias in node.names]
             elif isinstance(node, ast.ImportFrom):
-                # A relative import resolves against the package directory `node.level` says,
-                # and against nothing else. `from .citations import Citation` in
-                # `scripts/lib/facts/atoms.py` is how a package's own members reach each other,
-                # and skipping those read `citations.py` as a script nobody runs.
+                # A relative import resolves against the package directory `node.level` says, and
+                # against nothing else.
                 if node.level:
                     base = path.parent
                     for _ in range(node.level - 1):
@@ -229,10 +223,8 @@ def import_graph(scripts: Path, keep: Callable[[Path], bool]) -> dict[str, set[s
                     names = []
                 else:
                     head = head_of(node.module, roots)
-                    # `from diagnostics.probe_lib import core` names only directories in the
-                    # module part, so the modules imported are the aliases, and only the ones
-                    # that directory holds: `from ansible.plugins.filter import core` names no
-                    # script, whatever else under `scripts/` is called `core.py`.
+                    # `from pkg import core` names only directories in the module part, so the
+                    # imported modules are the aliases that directory holds.
                     package = None if head else package_of(node.module, roots)
                     names = (
                         [head]

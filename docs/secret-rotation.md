@@ -185,7 +185,7 @@ key a host file carries. No cron calls `sync`.
   the promote workflow's `PROMOTE_TOKEN`. The audit flags the copy before the token expires.
 - `pinned` — **must not be naively swapped**. The special procedure, below.
 - `ignore` — not a secret: usernames, the R2 bucket name, static addresses. `domain` left
-  the store on 2026-10-15 and is an inventory variable in `inventory/group_vars/all.yml`.
+  the store on 2026-10-15 and is a variable in `estate/vars.yml`.
 
 `sync` gives a newly registered key its tier from one name rule in
 `scripts/secrets_mgmt/secrets_lib/secret_classify.py`: `*_user` and `*_username` are `ignore`,
@@ -353,7 +353,7 @@ before deciding what is due. Examples:
   `sops set`, and commit the public half over
   `hosts/components/pi-peer-backup-target/pi-peer-backup.pub` and into the `line:` of that
   component's `component.yml`, which `hosts/lib/tests/test_pi_tuning_component.py` and
-  `tests/services/test_pi_peer_backup_forced_command.py` hold equal. The private key is
+  `tests/services/pi_peer_backup/test_pi_peer_backup_forced_command.py` hold equal. The private key is
   multi-line, so it has a Secret of its own, `pi-peer-backup-ssh-key`, rendered from
   `k8s/roles/pi-peer-backup/templates/ssh-key-secret.yaml.j2`. Flux owns pi-peer-backup,
   so that Secret reaches the cluster as the SOPS manifest `cluster_vars.py write` regenerates
@@ -395,7 +395,7 @@ SOPS name.
 2. Mint and validate the digest in a one-shot pod, because daniel-box has no Docker. The
    plaintext travels over stdin, so it never reaches the pod spec. The flags match the hashing
    block in `config-secret.yaml.j2`, and
-   `tests/services/test_authelia_argon2_parameters_agree.py` holds the two equal. The
+   `tests/services/authelia/test_authelia_argon2_parameters_agree.py` holds the two equal. The
    image is the one `authelia_k8s_image` names in the role's `defaults/main.yml`.
 
    ```bash

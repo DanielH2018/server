@@ -76,9 +76,7 @@ from _hook_common import BashCall, read_payload, tagged
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
 
-# The arms, in the order their separate registrations ran. That order decides which reason is
-# surfaced when two arms return the same decision, so it is data here rather than an accident
-# of import order.
+# The order decides which reason surfaces when two arms return the same decision.
 _DECISION_ARMS = (
     ("block-protected-bash", "block_protected_bash"),
     ("block-footguns", "block_footguns"),
@@ -86,13 +84,11 @@ _DECISION_ARMS = (
 )
 _CONTEXT_ARM = ("inject-nested-docs", "inject_nested_docs")
 
-# The arms that rewrite rather than judge, in the order they apply. Asked last, so every
-# decision above read the command as typed. `strip-cd-cwd` goes first so that `cd <cwd> &&
-# pytest` reaches `uv-python` as `pytest` and leaves as `uv run pytest`.
+# Asked last, so every decision above read the command as typed.
+# `strip-cd-cwd` goes first so `cd <cwd> && pytest` reaches `uv-python` as `pytest`.
 _REWRITE_ARMS = (("strip-cd-cwd", "strip_cd_cwd"), ("uv-python", "uv_python"))
 
-# Rewrite arms not asked in auto mode: the classifier has already reviewed the typed command, so
-# stripping a `cd` there buys nothing and draws the input-changed refusal.
+# Not asked in auto mode: stripping a `cd` there draws the input-changed refusal.
 _SKIPPED_IN_AUTO_MODE = frozenset({"strip-cd-cwd"})
 
 _AUTO_MODE_DENY = (
@@ -100,8 +96,8 @@ _AUTO_MODE_DENY = (
     "the rewrite instead of applying it. Send this command, alone: {command}"
 )
 
-# Highest first. `defer` is in the table because the harness ranks it between deny and ask; no
-# arm returns one today, and leaving it out would silently demote an arm that grew one.
+# Highest first. `defer` ranks between deny and ask in the harness; omitting it would demote an arm
+# that returns one.
 _PRECEDENCE = ("deny", "defer", "ask", "allow")
 
 

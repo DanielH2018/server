@@ -49,10 +49,8 @@ CRONJOB = ("longhorn-restore-drill", "cronjob.yaml.j2")
 RBAC = ("longhorn-restore-drill", "rbac.yaml.j2")
 
 
-# The drill as the host RUNS it, minus the comments that discuss the rejected idioms on purpose:
-# scanning those would match an explanation as readily as a violation. Rendered rather than read,
-# because a jq filter or a path built from a role default reads as `{{ ... }}` in the template and
-# a pattern that matches nothing passes.
+# Rendered rather than read: a jq filter or path built from a role default reads as `{{ ... }}` in
+# the template, so a pattern matches nothing.
 CODE = "\n".join(
     line
     for line in rendered_shell_text(*DRILL).splitlines()

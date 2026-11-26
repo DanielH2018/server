@@ -25,23 +25,16 @@ bedroom_apply_wake:
         brightness_pct: "{{ target }}"
         color_temp_kelvin: 2200
         transition: 60
-    # Arm the color tracker at the 2200K we just set, exactly as the wake_fallback branch of
-    # bedroom_lights_set does (scripts/lighting.yaml) — same reasoning: bedroom_color_track is
-    # suppressed for the whole ramp window by in_wake_window, so a missing arm is invisible during
-    # the ramp and bites after it, when tracking resumes against a stale expected value and reads
-    # the fixed warm ramp color as "manual".
+    # Arm the color tracker at the 2200K just set: after the ramp, tracking would compare against a
+    # stale expected value and read the warm color as manual.
     - service: input_number.set_value
       target:
         entity_id: input_number.bedroom_light_expected_color_temp
       data:
         value: 2200
 
-# Test-only: preview the morning wake ramp on demand, COMPRESSED. Sweeps the 45-min window's frames
-# (elapsed 0 -> 15 -> 30 -> 45 = window start -> alarm -> alarm+15 -> alarm+30) using the SAME tested
-# wake_brightness macro the production ramp uses, applying each with a short fade so you watch
-# 1% -> ~12% -> 40% -> 100% in ~40s — without waiting for a real alarm or touching
-# automation.bedroom_wake_ramp. Warm 2200K, like bedroom_apply_wake. Driven only by
-# script.bedroom_run_scenario (the test harness).
+# Test-only: sweeps the window's frames compressed with the production wake_brightness macro;
+# driven only by script.bedroom_run_scenario.
 bedroom_preview_wake:
   alias: "Bedroom — preview wake ramp (test, compressed)"
   description: >-
@@ -84,8 +77,6 @@ bedroom_bedtime:
     - service: input_boolean.turn_on
       target:
         entity_id: input_boolean.bedroom_sleep_mode
-    # Mark AL hands-off FIRST so enabling AL sleep mode below can't force a ~45s pre-dim to
-    # sleep_brightness before the fade — the fade must be the only brightness change.
     - service: adaptive_lighting.set_manual_control
       data:
         entity_id: switch.bedroom_adaptive_lighting_bedroom
@@ -108,8 +99,6 @@ bedroom_bedtime:
         entity_id: scene.bedroom_nightlight
       data:
         transition: "{{ fade | default(1800) | int }}"
-    # Set AL's sleep target (warm/dim) for after the morning reset releases control. Harmless now —
-    # AL is already hands-off, so this can't move the lights.
     - service: switch.turn_on
       target:
         entity_id: switch.adaptive_lighting_bedroom_adaptive_lighting_sleep_mode_bedroom

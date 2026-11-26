@@ -8,10 +8,7 @@ checkout to narrow a secrets change.
 import re
 from pathlib import Path
 
-# A `role_file('<path>', role='<role>')` naming one file of another role, the form every
-# cross-role lookup passes its path in. Group 1 is the path, group 2 the role. A path built
-# from a variable (`'files/' + name`) is not matched, and every such path in the tree names
-# its own role's file.
+# A path built from a variable is not matched.
 _CROSS_ROLE_FILE = re.compile(
     r"role_file\(\s*'([^']+)'\s*,\s*role\s*=\s*'([^']+)'\s*\)"
 )

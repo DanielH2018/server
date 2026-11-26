@@ -10,8 +10,8 @@ is a block tag or a typo and is the only absence the notifier may skip. Read tha
 before rewording either message.
 """
 
-# `core.<name>` for anything the tests monkeypatch — binding those into this module's
-# globals with a `from core import ...` would take a snapshot the patch never reaches.
+# Use `core.<name>` for anything tests monkeypatch: a `from core import` binds a snapshot the patch
+# never reaches.
 from diagnostics.probe_lib import core
 
 from lib.exit_codes import PROBE_NOT_APPLICABLE

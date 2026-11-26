@@ -33,49 +33,30 @@ for arg in "$@"; do
 done
 
 : "${PI_SRC:?}"
-# A subdir, not the PVC mountpoint: /data itself is root-owned (fsGroup grants group
-# write, not ownership), so rsync -a's final set-times on the dest dir EPERMs (exit 23).
-# A subdir we create is ours and takes attrs cleanly.
+# Subdir, not /data: /data is root-owned, so rsync -a's final set-times on it EPERMs (exit 23).
 DEST=/data/peers
 
-# The Secret volume is root-owned 0440 (group-read via fsGroup); ssh refuses a
-# group-readable identity file, so stage a private 0400 copy we own.
+# ssh refuses a group-readable identity file, so stage a private 0400 copy we own.
 install -m 0700 -d "$HOME/.ssh"
 install -m 0400 /ssh/id "$HOME/.ssh/id"
 
-# Flux runs a one-off gate Job named pi-peer-backup-deploy-gate-<spec digest8> in
-# pi-peer-backup-verify once per role revision, to prove a bumped image still runs. The renderer
-# copies it from this CronJob (scripts/renderer/renderer_lib/cronjob_gate.py).
-# That run is not the scheduled backup, and it must not report as one: a ping or an export here
-# would make the check mean "something ran" instead of "the nightly backup ran", masking a
-# missed 23:00 firing, and a failing gate run would page the operator from a deploy-time probe
-# rather than from the backup itself. The pod's hostname is `<job-name>-<random>` (the gate Job
-# carries the CronJob's pod template verbatim, so there is no other way for the script to tell
-# the two runs apart).
+# The deploy-gate Job (hostname pi-peer-backup-deploy-gate-*) runs this script; it must not ping or
+# export, or the check would mean "something ran" and mask a missed 23:00 firing.
 GATE_RUN=0
 [[ "${HOSTNAME:-}" == pi-peer-backup-deploy-gate-* ]] && GATE_RUN=1
 
-# The verdict is written in the host crons' syslog shape — `<ts> <host> pi-peer-backup:
-# status=<up|down> <msg>` — because there is no `logger` in this pod. Alloy labels this
-# container's stdout `{container="pi-peer-backup"}`, not `{job="syslog"}`.
-# busybox `date` has no `-Is`, hence the explicit format.
+# Syslog shape because the pod has no `logger`; busybox `date` has no `-Is`.
 report() { # line
   echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) ${HOSTNAME:-pi-peer-backup} pi-peer-backup: $1"
 }
 
-# The ServiceAccount mount (SERVICEACCOUNT_DIR is the test's seam onto it), and the API Service
-# by its DNS name: the pod sets enableServiceLinks: false, so KUBERNETES_SERVICE_HOST is not
-# injected.
+# enableServiceLinks is false, so reach the API by DNS name; KUBERNETES_SERVICE_HOST is not set.
 SA_DIR="${SERVICEACCOUNT_DIR:-/var/run/secrets/kubernetes.io/serviceaccount}"
 VERDICT_CONFIGMAP="${VERDICT_CONFIGMAP:-}"
 EXPORT_FAILED=0
 
-# Writes the verdict to the verdict ConfigMap's annotations. The role renders that ConfigMap with
-# no annotations, and its Role grants `patch` on that one name, which is all a bare PATCH needs
-# (`kubectl patch` would GET first, but this sends no GET). The message is redacted of IPv4
-# addresses and stripped of the characters JSON would need escaped, so a rsync error naming the
-# Pi's address leaves the pod as `<ip>`. A no-op for the gate run and for an empty
-# VERDICT_CONFIGMAP. Sets EXPORT_FAILED on any failure, and the caller turns that into exit 1.
+# Bare PATCH of the verdict annotations: the Role grants `patch` on that name only, with no GET.
+# IPv4 addresses are redacted from the message; sets EXPORT_FAILED on failure, no-op for the gate.
 export_verdict() { # status msg
   [[ -n "${VERDICT_CONFIGMAP:-}" && "$GATE_RUN" -eq 0 ]] || return 0
   local msg body code rc ns
@@ -105,37 +86,26 @@ push() { # status msg
   report "status=$1 $2"
   export_verdict "$1" "$2"
 
-  # The cluster is what can fail silently: an outage stops this CronJob, the verdict export and
-  # every Prometheus rule that reads them, so nothing in the cluster alerts. hc-ping.com is
-  # off-site and alerts on the silence instead. Empty when no ping key is configured, in which
-  # case this is a no-op.
+  # hc-ping.com is off-site and alerts on silence: a cluster outage stops every in-cluster alert.
   if [[ -n "${HC_PING_URL:-}" ]]; then
     local url="$HC_PING_URL"
     [[ "$1" == "up" ]] || url="$url/fail"
-    # Deliberately not "$2": an rsync failure echoes PI_SRC, which carries the Pi's LAN IP and
-    # ssh user, and Healthchecks.io stores ping bodies. The status is what has to escape the
-    # house; the detail stays in the pod log and the verdict ConfigMap.
-    # No `-S`, stderr discarded — see longhorn-backup-health.sh.j2. This one runs as a
-    # pod rather than a cron, so the chatter lands in the pod log rather than in mail; the rule
-    # is uniform across every hc-ping site so that none of them has to be exempted.
+    # Deliberately not "$2": rsync errors echo PI_SRC (LAN IP, ssh user) and Healthchecks.io stores
+    # ping bodies. No `-S`, stderr discarded, as in longhorn-backup-health.sh.j2.
     curl -fs -m 10 --retry 3 --data-raw "peer pull reported $1; detail in the pod log" "$url" >/dev/null 2>&1 \
       || echo "healthchecks ping failed ($1: $2)" >&2
   fi
 }
 
-# --timeout bounds a connected-but-stalled transfer, which --connect-timeout does not cover: a
-# Pi that accepts the connection and then hangs would otherwise sit until the CronJob's own
-# activeDeadlineSeconds (600s) kills the pod, at which point the controller deletes it, the
-# deploy-time gate reads no container state, and the deploy fails on a misleading message
-# instead of this script's own. 120s is comfortably below that deadline for two small files.
+# --timeout bounds a stalled transfer that --connect-timeout misses; keep it under the CronJob's
+# 600s activeDeadlineSeconds, whose pod kill makes the deploy gate fail on a misleading message.
 OUT=$(rsync -a --chmod=D700 --timeout=120 \
   --rsync-path='sudo rsync' \
   -e "ssh -i $HOME/.ssh/id -o UserKnownHostsFile=/ssh/known_hosts -o StrictHostKeyChecking=yes -o BatchMode=yes -o ConnectTimeout=15" \
   "$PI_SRC" "$DEST/" 2>&1)
 RC=$?
 
-# ssh exits 255 for any connection failure, and rsync passes that code through, so the exit
-# code alone cannot tell a changed host key from an unreachable Pi. ssh's own line can.
+# ssh exits 255 for any connection failure, so only its own line tells a host-key change apart.
 if [ "$RC" -eq 255 ] && [[ "$OUT" == *"Host key verification failed."* ]]; then
   push down "daniel-pi host key differs from the committed pin"
   exit 1
@@ -147,9 +117,7 @@ if [ "$RC" -ne 0 ]; then
   exit 1
 fi
 
-# File-count floor: a momentarily empty/unreadable source can rsync clean and, with no
-# --delete, leave a stale-but-present copy. The Pi's config always holds at least
-# wg0.conf + wg0.json.
+# Floor: an empty source can rsync clean, with no --delete, leaving a stale copy; expect >=2 files.
 FILES=$(find "$DEST" -type f | wc -l | tr -d '[:space:]')
 if [ "${FILES:-0}" -lt 2 ]; then
   push down "pulled but only ${FILES:-0} file(s) in /data (expected >=2: wg0.conf + wg0.json)"
@@ -157,7 +125,5 @@ if [ "${FILES:-0}" -lt 2 ]; then
 fi
 
 push up "pulled $FILES peer file(s) from daniel-pi"
-# A backup that ran but could not export its verdict still fails the Job, so the CronJob's last
-# successful time stops moving and PiPeerBackupNotReporting fires. The down paths above exit 1
-# already.
+# A failed verdict export fails the Job, so PiPeerBackupNotReporting fires.
 [[ "$EXPORT_FAILED" -eq 0 ]] || exit 1

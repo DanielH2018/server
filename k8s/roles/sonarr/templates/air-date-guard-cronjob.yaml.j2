@@ -29,8 +29,7 @@ metadata:
 spec:
   schedule: "{{ sonarr_k8s_air_date_guard_schedule }}"
   timeZone: "{{ tz }}"
-  # The deploy gate creates a Job from this CronJob out of schedule. An overlapping run finds
-  # the queue the first one left, so it removes nothing the first one did not.
+  # The deploy gate runs this out of schedule; an overlapping run removes nothing the first did not.
   concurrencyPolicy: Forbid
   startingDeadlineSeconds: 120
   successfulJobsHistoryLimit: 3

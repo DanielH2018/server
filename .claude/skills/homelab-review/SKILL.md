@@ -53,7 +53,7 @@ order:
    cross-cutting stances would have nowhere to go. This step and `.claude/agents/skeptic.md`
    both name that slug, and no skill, agent or eval case carries a retired spelling of it
    (ENFORCED by the `review-surfaces-name-the-standing-slug` row of
-   `tests/repo/test_census_rows_text.py::test_census_row_holds_on_the_tree`).
+   `tests/repo/census_rows/test_census_rows_text.py::test_census_row_holds_on_the_tree`).
    A slug the store does not hold primes nothing, and the harness reports no error for it.
 2. **The newest two dated `review-*-state` ledgers the store actually holds** — for recency only:
    what shipped since the standing list was last distilled, and this week's refutations with their
@@ -109,7 +109,7 @@ this review makes it, never as a discovery. Count the run number, never copy a c
 first sighting is run 1, each re-observation adds one, and this review adds one more. So an
 issue that `findings.py list` prints as `x3` is on its fifth run now, which is the sighting
 number `findings.py touch` writes
-(`scripts/dev/tests/test_findings.py::test_touch_names_the_sighting_this_run_makes`). A legacy
+(`scripts/dev/tests/findings/test_findings.py::test_touch_names_the_sighting_this_run_makes`). A legacy
 register row that carried a finding across N runs makes this review run N+1. A third or later
 appearance is an escalation signal (it belongs in a durable owner: a test, a lint, a CLAUDE.md
 rule), and re-presenting it as new is how it stays unowned. Verify each is still live before
@@ -410,7 +410,7 @@ control is the "fires on nothing" case the repo warns about, and it reads exactl
   **a census or schema check already covers it** (`_k8s_render`'s censuses, and
   the strict OpenAPI validation of `validate-render-templates`' k8s family, are the usual coverers here). Drop the
   check's `ENFORCED` citation in the prose in the same PR, or
-  `tests/repo/test_documented_paths_exist.py::test_every_cited_test_exists` fails on the
+  `tests/repo/docs/test_documented_paths_exist.py::test_every_cited_test_exists` fails on the
   dangling node id. Say in the PR body which of the two conditions applied and where the coverage
   now sits; "it still passes" is not a reason to keep a check, because a check over a subject that
   no longer exists passes by construction.

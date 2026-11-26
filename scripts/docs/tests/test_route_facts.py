@@ -4,6 +4,7 @@ Run: uv run pytest scripts/docs/tests/test_route_facts.py
 """
 
 from docs.catalog_lib import route_facts as rf
+from lib.estate import Inventory
 
 
 def _role(tmp_path, name, body=None):
@@ -16,10 +17,18 @@ def _role(tmp_path, name, body=None):
     return tmp_path / name
 
 
+def _isolated(tmp_path, estate_vars):
+    return Inventory(
+        estate_vars=estate_vars,
+        k8s_vars=tmp_path / "k8s-vars.yml",
+        host_vars=tmp_path / "hosts",
+    )
+
+
 def _group_vars(tmp_path, text):
-    path = tmp_path / "all.yml"
+    path = tmp_path / "estate-vars.yml"
     path.write_text(text)
-    return path
+    return _isolated(tmp_path, path)
 
 
 def test_a_role_with_no_templates_directory_declares_no_route(tmp_path):
@@ -51,7 +60,7 @@ def test_public_route_enabled_reads_the_flag(tmp_path):
 def test_a_missing_group_vars_file_reads_as_off(tmp_path):
     """Under-reporting reachability is the safe error; over-reporting sends a reader
     to a name that does not resolve."""
-    assert not rf.public_route_enabled(tmp_path / "absent.yml")
+    assert not rf.public_route_enabled(_isolated(tmp_path, tmp_path / "absent.yml"))
 
 
 def test_unparseable_group_vars_reads_as_off(tmp_path):

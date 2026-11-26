@@ -45,8 +45,7 @@ PEER = DEFAULTS["claude_code_artifacts_peer_sources"][0]["name"]
 PEER_SSH = DEFAULTS["claude_code_artifacts_peer_sources"][0]["ssh_target"]
 PEER_STARS = DEFAULTS["claude_code_artifacts_peer_sources"][0]["stars_path"]
 
-# Every `rsync` call is recorded. It fails when the stub file says `fail`, and only the star
-# push fails when it says `push-fail`, so one rendered script drives every path.
+# The stub file says `fail` to fail every call, `push-fail` to fail only the star push.
 RSYNC_STUB = (
     'printf "%s\\n" "$*" >>"$SYNC_ARTIFACTS_CALLS"; '
     'case "$(cat "$SYNC_ARTIFACTS_STUB")" in fail) return 1 ;; '
@@ -89,9 +88,6 @@ class _Runner:
 def _runner(tmp_path: Path) -> _Runner:
     """A rendered sync script plus `run(outcome)` -> CompletedProcess."""
     script = tmp_path / "sync-artifacts.sh"
-    # The shared accessor renders what the gate lints, with one override: the peer tree has to
-    # be a tmp_path, because the run is real. Role defaults come from the accessor's own
-    # context rather than being passed in here.
     stars = tmp_path / "stars.txt"
     script.write_text(
         render_shell_script(
@@ -269,10 +265,8 @@ def test_the_packaged_timer_runs_the_script_this_suite_renders():
     assert "LoadCredential" not in unit
 
 
-# The pull handed to the real rsync, locally: `-e` and its transport argument are dropped and
-# the `<ssh_target>:` prefix is stripped, so every other flag reaches rsync as rendered.
-# leakguard shims `rsync` on PATH, so the stub calls the binary by the path the test resolved
-# from the PATH leakguard saved. A copy between two tmp_path trees reaches no host.
+# leakguard shims `rsync` on PATH, so the stub calls the binary by the path resolved from the PATH
+# leakguard saved.
 LOCAL_RSYNC_STUB = (
     'local a skip= args=(); for a in "$@"; do '
     'if [ -n "$skip" ]; then skip=; continue; fi; '
@@ -327,8 +321,8 @@ def test_a_sync_leaves_the_peer_directory_at_the_packaged_mode(tmp_path):
             },
         )
     )
-    # The repo's check library and a temp textfile directory: the defaults are the host's
-    # installed library and node_exporter's real directory, which a test must not write.
+    # The defaults are the host's installed library and node_exporter's real directory, which a test
+    # must not write.
     textfile = tmp_path / "textfile"
     textfile.mkdir()
     proc = launch(

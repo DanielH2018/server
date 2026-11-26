@@ -18,7 +18,7 @@
   `app: prowlarr-verify` in `k8s_namespace`, and it dials two ports and execs into nothing:
     - prowlarr:<port>, the control. prowlarr's role-owned fence,
       `networkpolicy-prowlarr.yaml.j2`, admits only its `netpol_from` list, so prowlarr's
-      `services` entry lists `prowlarr-verify`. `tests/k8s/test_netpol_from.py`
+      `services` entry lists `prowlarr-verify`. `tests/k8s/edge/test_netpol_from.py`
       reads the label from this render in VERIFY_CALLERS.
       If that peer went, the control would be refused and the Job would fail closed;
     - flaresolverr:<port>. `networkpolicy-flaresolverr.yaml.j2` must REFUSE this pod, so no
@@ -32,13 +32,10 @@
 {% set head %}
 # A flaky check fails rather than passing on a retry.
 backoffLimit: 0
-# Below the 600s `manifests_rollout_timeout_default` every `<tag>-verify` Kustomization takes.
-# The control's 60s of connect retries, then one 5s connect.
 activeDeadlineSeconds: 180
 {% endset %}
 {% set label_note %}
-# A peer of prowlarr's fence, for the control, and not of flaresolverr's, which is what
-# the isolation leg needs. It must never be `prowlarr`.
+# Never `prowlarr`: the control needs a peer of prowlarr's fence but not of flaresolverr's.
 {% endset %}
 {% set env %}
 - name: CONTROL_URL

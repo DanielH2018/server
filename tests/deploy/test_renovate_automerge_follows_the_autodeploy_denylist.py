@@ -15,11 +15,11 @@ failure message prints the exact line to add or drop. It also pins the rule's po
 is load-bearing — later rules win in Renovate, so the rule must follow the two automerge rules
 it overrides and precede the per-package manual rules that override its groupName.
 
-One path in the rule is not a role's defaults: `inventory/group_vars/all.yml`.
+One path in the rule is not a role's defaults: `k8s/vars.yml`.
 `crowdsec_k8s_image` lives there because traefik's and authelia's sidecars read it too, and a
 per-role rule would leave it automerging while `promote` re-renders every role reading the
 key and Flux applies them all with no denylist check. That path is
-safe in this rule only while every `_image:` pin in group_vars belongs to denied roles, so the
+safe in this rule only while every `_image:` pin in k8s/vars.yml belongs to denied roles, so the
 census below reads each pin's Jinja readers out of the role trees and asserts they are all
 denied. A pin no role reads fails too: an unmappable pin must not pass as "not eligible".
 The `registry-gc` component's defaults are the other: they copy registry's pins, and
@@ -44,8 +44,9 @@ import pytest
 from lib import yaml_fast
 
 from _autodeploy import _denylist
-from _helpers import ALL_VARS, REPO
+from _helpers import REPO
 from dev import k8s_autodeploy_counts
+from lib.repo_paths import K8S_VARS
 from _role_census import role_dirs
 
 _RENOVATE = REPO / "renovate.json"
@@ -54,45 +55,35 @@ _RENOVATE = REPO / "renovate.json"
 # `manual —` tell the renovate-prs skill triages by.
 MANUAL_GROUP_PREFIX = "k8s images (manual — k8s_autodeploy: false"
 
-# The base-image rule's head differs from the denylist rule's so `find_rule` keeps its
-# exactly-one contract on each; the parenthetical carries the same marker.
 DOCKERFILE_MANUAL_GROUP_PREFIX = "k8s base images (manual — k8s_autodeploy: false"
 DOCKERFILE_GLOB = "templates/Dockerfile*.j2"
 
-# The denied roles the Dockerfile census must find, so a moved or renamed template fails as a
-# missing member rather than passing over an empty glob.
 KNOWN_DENIED_DOCKERFILE_ROLES = frozenset({"code-server", "nut", "terraria", "valheim"})
 
-# The automerge rules the manual rule must FOLLOW, and the first per-package manual rule it
-# must PRECEDE — the CrowdSec bouncer plugin pin shares traefik's defaults/main.yml, and its
-# own rule must keep the last word on that pin's group name.
+# The manual rule must FOLLOW the automerge rules and PRECEDE the first per-package manual rule: the
+# CrowdSec bouncer plugin pin shares traefik's defaults/main.yml and its own rule must keep the last
+# word on its group name.
 AUTOMERGE_GROUP = "k8s image {{depName}}"
 DIGEST_UPDATE_TYPES = ["digest", "pinDigest"]
 FIRST_PER_PACKAGE_MANUAL_GROUP_PREFIX = "crowdsec bouncer plugin (manual"
 
-# The manual paths that are not a denied role's defaults. Fixed here rather than tolerated
-# as "any extra": another path added by hand has to be argued for the way these were.
-ALL_VARS_REL = ALL_VARS.relative_to(REPO).as_posix()
+# Fixed here, not tolerated as "any extra": another path has to be argued for.
+K8S_VARS_REL = K8S_VARS.relative_to(REPO).as_posix()
 HOST_FILES_REL = "hosts/components/registry-gc/defaults/main.yml"
 _K8S_ROLES = REPO / "k8s" / "roles"
 
-# The pin the census must find, so a group_vars with no `_image:` key (renamed, moved back to
-# a role) fails as a missing member rather than passing over nothing.
 KNOWN_GROUP_VARS_PINS = frozenset({"crowdsec_k8s_image"})
 
-# A Jinja reference to the var — `{{ var }}`, `{% if var %}` — not a mention in a comment:
-# sonarr's defaults cite crowdsec_k8s_image in prose and read nothing.
+# A Jinja reference, not a mention in a comment.
 _JINJA_REF_PREFIX = r"\{[{%][^}%]*\b"
 
-# The floor the derived denylist must clear, mirroring test_the_real_repo_derives_a_plausible_denylist:
-# below it the filter has stopped reading roles and every assertion here runs over nothing.
 _DENYLIST_FLOOR = 34
 _LOAD_BEARING = frozenset({"traefik", "authelia", "code-server"})
 
 
 def expected_match_file_names(denylist: set[str]) -> list[str]:
     """The denylist as Renovate must spell it: group_vars, the host-files copy, then each denied role."""
-    return [ALL_VARS_REL, HOST_FILES_REL] + [
+    return [K8S_VARS_REL, HOST_FILES_REL] + [
         f"k8s/roles/{role}/defaults/main.yml" for role in sorted(denylist)
     ]
 
@@ -128,14 +119,14 @@ def group_vars_pin_problems(
     for pin, readers in sorted(readers_by_pin.items()):
         if not readers:
             problems.append(
-                f"{pin} in {ALL_VARS_REL} is read by no k8s role — an unmappable pin cannot be "
+                f"{pin} in {K8S_VARS_REL} is read by no k8s role — an unmappable pin cannot be "
                 "argued as denied; find its reader or move it"
             )
             continue
         eligible = sorted(readers - denylist)
         if eligible:
             problems.append(
-                f"{pin} in {ALL_VARS_REL} is read by auto-deployable role(s) {eligible}, so the "
+                f"{pin} in {K8S_VARS_REL} is read by auto-deployable role(s) {eligible}, so the "
                 "manual rule's group_vars entry would hold an eligible bump too — move the pin "
                 "into the role's defaults or deny the role"
             )
@@ -294,7 +285,7 @@ def test_the_manual_rule_sits_between_the_automerge_rules_and_the_per_package_ma
 
 
 def test_every_group_vars_image_pin_belongs_to_denied_roles() -> None:
-    pins = group_vars_image_pins(ALL_VARS.read_text())
+    pins = group_vars_image_pins(K8S_VARS.read_text())
     assert KNOWN_GROUP_VARS_PINS <= pins, sorted(KNOWN_GROUP_VARS_PINS - pins)
     problems = group_vars_pin_problems({p: roles_reading(p) for p in pins}, _denylist())
     assert not problems, "\n".join(problems)

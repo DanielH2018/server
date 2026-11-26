@@ -18,37 +18,8 @@
 {# DECIDED: no retry middleware in the default chain; the macro has no per-route opt-out, and a
    retry replays a POST body a terminating backend already consumed. #}
 {% macro ingressroute(name, hostname, port, authelia, extra_middlewares=[], namespace=none, public=true, bypass_prefixes=[]) -%}
-{#
-  namespace defaults to k8s_namespace, which most services want. It is overridable
-  because the telemetry stack runs in its own namespace, and an IngressRoute must live
-  alongside the Service it targets: Traefik will not route across namespaces with
-  allowCrossNamespace off, which it deliberately is. The referenced middlewares must
-  therefore also exist in that namespace.
-
-  One IngressRoute PER HOSTNAME rather than one carrying both, because the two hosts differ
-  in two things a Rule or an object carries exactly once:
-    - rate-limit keying. The public name is Cloudflare-proxied, so its connections come from
-      a Cloudflare edge and the limiter must key on the forwarded client
-      (`rate-limit-proxied`); the `.local.` name is DNS-only and reached direct, where the
-      remote address is the client and a forwarded-header key would pool every LAN client
-      into one bucket. A Rule carries one middleware list. The full reasoning is with the
-      middlewares in k8s/roles/traefik/templates/dynamic.yaml.j2.
-    - TLS options. The public name requires Cloudflare's origin-pull client certificate
-      (`cloudflare-origin-pull`, k8s/templates/origin-pull.yml.j2); the `.local.`
-      name must not, since a LAN or WireGuard client holds none. `spec.tls.options` is per
-      IngressRoute and Traefik picks it by SNI, so one object holding both hosts would demand
-      the certificate of LAN clients too. Hence two objects, not two Rules.
-  Everything else is identical between the two, hence the loop.
-
-  The `.local.` object keeps the bare name and the public one is `<name>-public`: the local
-  object renders unconditionally, so a checkout with k8s_public_route off keeps today's
-  object names and nothing orphans under manifests_prune.
-
-  The public object exists only when k8s_public_route is true AND the caller didn't opt out. The absent object is the guard — not
-  the absent DNS record: the Cloudflare wildcard resolves ANY name. `public=false` is for
-  infrastructure APIs that must never face the internet whatever the flag says — the CrowdSec
-  LAPI is the standing example.
-#}
+{# One object per host: rate-limit keying and `spec.tls.options` differ, and each is per object.
+   Public object only if k8s_public_route and not `public=false`: its absence is the guard, not DNS. #}
 {% for host, rate_limit, suffix, tls_option in [(hostname ~ '.local.' ~ domain, 'rate-limit', '', 'modern')] + ([(hostname ~ '.' ~ domain, 'rate-limit-proxied', '-public', 'cloudflare-origin-pull')] if k8s_public_route and public else []) %}
 {% if not loop.first %}
 ---
@@ -75,20 +46,12 @@ spec:
       services:
         - name: {{ name }}
           port: {{ port }}
-{#
-  `k8s_tls_cert_resolver` is empty on a cluster with no ACME resolver, and then Traefik serves
-  its own default self-signed certificate. The `tls:` key itself is NEVER conditional: without
-  it this becomes a non-TLS router that an HTTPS request is never matched against — see the
-  header of monitoring_route below. `domains:` is the SAN set
-  ACME is told to request, so it goes with the resolver rather than with TLS.
-#}
+{# `tls:` is never conditional (else a non-TLS router); only certResolver and domains are. #}
   tls:
 {% if k8s_tls_cert_resolver %}
     certResolver: {{ k8s_tls_cert_resolver }}
 {% endif %}
-    # Explicit, and deliberately not named `default` — Traefik reserves that name for the
-    # global default options and never registers it under a namespaced key, so referencing
-    # `default` here fails with "unknown TLS options". See the traefik role's dynamic.yaml.j2.
+    # Not `default`: Traefik reserves it, so naming it fails with `unknown TLS options`.
     options:
       name: {{ tls_option }}
 {% if k8s_tls_cert_resolver %}
@@ -103,13 +66,8 @@ spec:
 {% for prefix in bypass_prefixes %}
 {% set slug = prefix | trim('/') | replace('/', '-') %}
 ---
-# An unauthenticated public path the service had at the Docker edge (bridge_bypass_prefixes),
-# reproduced natively on the UNSUFFIXED name for B5: the callers are automated and
-# session-less, so an Authelia gate does not fail loudly — it silently breaks every caller
-# while they keep reporting success. Same trailing-slash load-bearing rule as the Docker twin.
-# A separate document on purpose: its metadata.name must appear in test_k8s_manifests.py's
-# AUTHELIA_BYPASS_ROUTES allow-list with a written reason, so a new public no-auth path is a
-# conscious edit there, never a quiet template change.
+# Unauthenticated public path: callers are session-less, so an Authelia gate silently breaks them.
+# Its name must be in test_k8s_manifests.py's AUTHELIA_BYPASS_ROUTES with a written reason.
 apiVersion: traefik.io/v1alpha1
 kind: IngressRoute
 metadata:
@@ -132,9 +90,8 @@ spec:
 {% if k8s_tls_cert_resolver %}
     certResolver: {{ k8s_tls_cert_resolver }}
 {% endif %}
-    # The public name's option, and it MUST match the main public object's: Traefik picks TLS
-    # options by SNI and two routers on one host naming different options fall back to the
-    # default — which requires no client certificate at all (origin-pull.yml.j2).
+    # Must match the main public object's: routers on one host naming different options fall back to
+    # default, which requires no client certificate.
     options:
       name: cloudflare-origin-pull
 {% if k8s_tls_cert_resolver %}
@@ -169,7 +126,7 @@ spec:
   priority, the ClientIP matcher or reconciliation timing changes nothing. A field-by-field
   diff against n8n-monitoring, which works from the same caller and carries `tls:`, isolates it.
 
-  Guard: tests/k8s/test_k8s_manifests.py fails any rendered IngressRoute that serves the
+  Guard: tests/k8s/rendered_properties/test_k8s_manifests.py fails any rendered IngressRoute that serves the
   https entrypoint without a tls block, so this cannot regress silently.
 
   The guards it is MEANT to provide, kept in the rule so they are real once it routes:
@@ -200,34 +157,22 @@ spec:
     - https
   routes:
     - kind: Rule
-{# One ClientIP() per CIDR, OR'd: Traefik v3's ClientIP takes a single argument, and a
-    two-argument call silently kills the whole router — every source 404s. #}
+{# One ClientIP() per CIDR, OR'd: a two-argument call silently 404s every source. #}
 {% set client_cidrs = ([k8s_bridge_client_ip ~ '/32'] if include_bridge_ip else []) + extra_client_cidrs %}
-{# An empty set would render `&& ()`, which Traefik rejects and which would read as "no client
-    restriction" to anyone skimming the template. Fail at render instead. #}
+{# An empty set renders `&& ()`, which Traefik rejects; fail at render instead. #}
 {% if not client_cidrs %}{{ monitoring_route_with_include_bridge_ip_false_needs_a_non_empty_extra_client_cidrs() }}{% endif %}
       match: "Host(`{{ hostname }}.local.{{ domain }}`) && PathPrefix(`{{ path_prefix }}`) && ({% for cidr in client_cidrs %}ClientIP(`{{ cidr }}`){% if not loop.last %} || {% endif %}{% endfor %})"
-      # EXPLICIT, as n8n-monitoring sets it: this must beat the service's plain Host router,
-      # which otherwise sends monitor-bridge to Authelia.
+      # Explicit: must beat the service's plain Host router, which sends monitor-bridge to Authelia.
       priority: 100
       middlewares:
         - name: rate-limit
       services:
-{# `service_name` defaults to `name`, which is what every existing caller wants — one route per
-    service, named after it. It is separable for the case where ONE service needs a SECOND
-    monitoring route with a different path and a different ClientIP set: the OBJECT names must
-    differ, while both still point at the same backend. Splitting the routes is what lets a
-    narrow grant stay narrow instead of being widened into an existing one — see
-    loki-homelab/templates/ingressroute-push.yaml.j2. #}
+{# `service_name` lets one service carry a second monitoring route with its own path and ClientIP
+   set. #}
         - name: {{ service_name | default(name, true) }}
           port: {{ port }}
-  # Not optional, and not boilerplate — see the header. Without this the router is non-TLS and
-  # never matches an HTTPS request. Identical to ingressroute()'s block above.
-{#
-  A Jinja comment, not a YAML one: this text must not reach the rendered manifest. The `tls:`
-  KEY stays unconditional while its contents follow k8s_tls_cert_resolver — an empty resolver
-  drops certResolver and domains, never the key itself.
-#}
+  # Not optional: without a tls block the router is non-TLS and never matches HTTPS.
+{# `tls:` stays unconditional; an empty resolver drops certResolver and domains, never the key. #}
   tls:
 {% if k8s_tls_cert_resolver %}
     certResolver: {{ k8s_tls_cert_resolver }}
@@ -240,9 +185,6 @@ spec:
         sans:
           - "*.{{ domain }}"
           - "*.local.{{ domain }}"
-{#- The dash matters. `{% endif %}` on its own line leaves the newline that ended the SAN
-    above, which `{%- endmacro %}` would otherwise strip — a trailing blank line in every
-    rendered monitoring route. Harmless YAML, but a changed manifest rolls the workload, so ten
-    pods would restart for a whitespace edit. -#}
+{#- Keep the dash: without it each route gains a blank line, and a changed manifest rolls the pod. -#}
 {%- endif %}
 {%- endmacro %}

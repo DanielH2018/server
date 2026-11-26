@@ -227,9 +227,9 @@ the template was amended by #1211, not reversed: the skipped hub tree is not all
 `cscli hub update` before the parser load, which is why hub-install exists.
 
 Three tests hold both pods to this:
-`tests/services/test_crowdsec_config_install_seeds_staged_tree.py`,
-`tests/services/test_crowdsec_optional.py` and
-`tests/services/test_crowdsec_hub_install_stages_the_hub_tree.py`.
+`tests/services/crowdsec/test_crowdsec_config_install_seeds_staged_tree.py`,
+`tests/services/crowdsec/test_crowdsec_optional.py` and
+`tests/services/crowdsec/test_crowdsec_hub_install_stages_the_hub_tree.py`.
 To verify a deploy of either host role, read the sidecar's restart count rather than pod readiness:
 
 ```

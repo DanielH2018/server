@@ -35,8 +35,8 @@ from dev.affected_lib import record, table
 from lib.cli_help import ArgumentParser
 from lib.repo_paths import REPO
 
-# The docs-refresh cron runs at 06:17 and 18:17. Two runs 12 hours apart always fall in
-# consecutive periods of this length, so successive runs visit successive slices.
+# Two runs 12 hours apart fall in consecutive periods of this length, so successive runs visit
+# successive slices.
 _SLICE_PERIOD_SECONDS = 12 * 60 * 60
 
 

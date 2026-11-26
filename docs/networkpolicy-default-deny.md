@@ -49,7 +49,7 @@ All measured on this cluster, not assumed.
 | Fact | Evidence |
 |---|---|
 | **Ingress policies are enforced**; kube-router's netpol controller runs (k3s default, `--disable-network-policy` not passed) | `n8n/templates/networkpolicy.yaml.j2` header; four live policies |
-| **Egress policies select pods and block nothing** | measured 2026-08-07, recorded in `sonarr/tasks/main.yml` (probe retired 2026-08-17; prose is the only record) |
+| **Egress policies are enforced, except in the first seconds of a pod's life** | measured 2026-11-25 on both nodes; [ADR-0009](adr/0009-networkpolicy-default-deny-ingress.md) has the result |
 | **Kubelet probe traffic needs no ingress rule** | `flaresolverr` admits :8191 only from prowlarr, yet is probed on :8191 and runs 1/1. Corroborated by `headlamp` (:4466 from traefik only, 1/1 for 28h) |
 | **hostNetwork pods cannot be policed by podSelector** | `node-exporter` (both nodes), `metallb` `speaker` — pod IP *is* the node IP |
 | **hostPort traffic arrives with a node IP**, needing an `ipBlock` | `registry`'s policy carries `ipBlock` entries for exactly this |
@@ -66,11 +66,11 @@ The LoadBalancer Services, read from the role templates:
 
 Two consequences worth stating so nobody "fixes" a non-problem later:
 
-- **Ingress-only.** Writing egress policies here produces something that reads like a
-  control in the repo and does nothing in the cluster — worse than no policy, because it
-  invites trust.
-- **No pod loses cluster DNS.** Because egress is unenforced and CoreDNS is reached
-  outbound, an ingress-only policy cannot break name resolution for the pod it selects.
+- **Ingress-only.** The baseline declares no egress rule, so it restricts no outbound call.
+  An egress policy does, and it leaves a gap at pod start.
+- **No pod loses cluster DNS.** CoreDNS is reached outbound, so an ingress-only policy cannot
+  break name resolution for the pod it selects. An egress policy breaks it unless it admits
+  CoreDNS.
 
 ### Correction carried into this design
 
@@ -252,7 +252,7 @@ reason below.
 **Services born fenced.** A leaf app added after slice 1 shipped belongs to no slice, but has
 slice 1's shape: Traefik is its only caller and it dials nothing. Those carry the label from
 their first deploy rather than waiting for slice 5 to sweep them up, and
-`tests/k8s/test_netpol_baseline_labels.py` lists them in `BORN_FENCED_ROLES` so the set
+`tests/k8s/edge/test_netpol_baseline_labels.py` lists them in `BORN_FENCED_ROLES` so the set
 stays as explicit as the slices. So far: **artifacts** (2026-08-19), the read-only browser over
 each host's `~/.claude/artifacts`; **docs** (2026-08-24), nginx over a hostPath of built MkDocs
 output, whose site is generated on the host by the `docs-refresh` cron so the pod never fetches,
@@ -262,13 +262,13 @@ app reaches jsDelivr for on-demand TeX packages and a CORS proxy for git. Those 
 browser's fetches, made from the reader's machine, not the pod's — the container serves files
 and opens no connection of its own. **navidrome** (2026-09-02), the music server, dials out
 since 2026-11-13: it scrobbles to ListenBrainz and fetches artist images from Deezer. Traefik is
-still its only caller, and the outbound calls are egress, which kube-router does not enforce
-here, so it stays in this set on the same terms as nut-exporter below.
+still its only caller, and the outbound calls are egress, which the baseline does not
+fence, so it stays in this set on the same terms as nut-exporter below.
 **nut-exporter** (2026-09-10), the UPS metrics exporter, stretches the shape in the other
 direction and is listed here anyway. Traefik is not its caller — it has no IngressRoute, and
 Prometheus is the only thing that reaches it — but the baseline admits Prometheus on every port,
 so the label alone fences it exactly as intended. It also dials out, to `upsd` on the nut pod,
-which the other four do not. That is egress, which kube-router does not enforce on this cluster;
+which the other four do not. That is egress, which the baseline does not fence;
 the inbound half of that call is admitted by an `app: nut-exporter` podSelector added to
 `networkpolicy-nut.yaml.j2`.
 **pihole-exporter** (2026-09-10) is the same shape again, one layer out: no IngressRoute,
@@ -405,7 +405,7 @@ bazarr → sonarr/radarr, freshrss → feed-cache, home-assistant → mosquitto.
 1. Whether a lint should require every `containers_list` entry to have a policy — the
    baseline makes a missing policy safe rather than broken, so this is optional, but it is
    the executable-check end of the repo's escalation ladder. Slice 1 shipped a narrower
-   version of this: `tests/k8s/test_netpol_baseline_labels.py` pins the labelled set.
+   version of this: `tests/k8s/edge/test_netpol_baseline_labels.py` pins the labelled set.
 2. The probe's `activeDeadlineSeconds` (120s) was shorter than the Ansible-era wait (180s), so a
    deadline-exceeded run produces a misleading diagnosis in either branch of the fail message.
    Slice 1's probe completed well inside both, so the real timings are now known and this can

@@ -57,21 +57,12 @@ manifests_extra_rollouts:
     kind: daemonset
     restart_on: []
 
-# networkpolicy-influxdb.yaml renders from THIS role rather than netpol-baseline on purpose.
-# scrutiny-web panics rather than retries when InfluxDB is unreachable, so the policy
-# admitting it is part of this workload rather than part of the fleet baseline. Shipped one
-# role away, `--tags scrutiny` would stage a web pod whose `wait-for-influxdb` gate could
-# only time out. The file carries the reasoning.
-#
-# The Services live in influxdb.yaml and web.yaml, so the entry's `port` must not also
-# earn the shared default Service.
+# Policy ships with this role: scrutiny-web panics when InfluxDB is unreachable.
+# Services live in influxdb.yaml and web.yaml, so the shared default service.yaml is excluded.
 manifests_exclude_files: [service.yaml]
 
-# Each entry renders k8s/templates/secret-default.yaml.j2 as secret-<name>.yaml:
-# its `string_data` maps a Secret field to the SOPS key its value comes from.
 render_secrets:
-  # Mounted with defaultMode 0444, not 0400: the files are root-owned and the influxdb and
-  # web processes run as non-root.
+  # Mode 0444, not 0400: the files are root-owned and the processes run as non-root.
   - name: scrutiny-influxdb-credentials
     string_data:
       influxdb_admin_password: scrutiny_influxdb_admin_password

@@ -91,7 +91,7 @@ shadow. Ledger and outcome state live under `/var/lib/autofix-fake-remux/`.
 
 The state dir `/var/lib/autofix-fake-remux` is created `sys_user`-owned. Both crons import the
 shared `hosts/lib/host_lib.py` and run via `uv run --no-project --python <pin>`, the `host_python_version` pin in
-`inventory/group_vars/all.yml`. monitor-bridge no longer reads these state files, so no
+`estate/vars.yml`. monitor-bridge no longer reads these state files, so no
 deploy order applies between `autofix-bridge` and `monitor-bridge`: `fake-remux-health` reads
 the state files itself and writes the three textfile verdicts that the `other-setup-checks` rules
 read.
@@ -135,5 +135,5 @@ configarr. Do not re-propose these.
 inventory file sets them, so the `default(5)` in
 `hosts/components/fake-remux/templates/fake-remux.config.env.j2` applies to both.
 `autofix_fake_remux_replace_mode` (off/shadow/live) gates the reconciler, and
-`inventory/host_vars/daniel-box.yml` sets it. `autofix_fake_remux_policy`, also in that
+`hosts/daniel-box/vars.yml` sets it. `autofix_fake_remux_policy`, also in that
 host_vars file, is the git-tracked selection-policy dict rendered to `policy.json`.

@@ -442,7 +442,7 @@ needs no checkout, and it grades each commit against that commit's own docs and 
                           ~ precision(): also returns its (commit, unit, atom) moves
  scripts/dev/fact_status.py
 +  notice [--since REF] [--head REV] [--format text|markdown|github|json]
- tests/repo/test_census_rows_python.py
+ tests/repo/census_rows/test_census_rows_python.py
                           ~ _raw_call_offence(): also matches subprocess.Popen
  .github/workflows/ci.yml   (hooks job)
 +  step "Notice: CLAUDE.md sections citing atoms this PR moved"   (id: notice)
@@ -798,10 +798,10 @@ the reader:
     - `..._github_format_escapes_properties_and_messages`: a heading that holds `%` and `,`
       reads `%25` and `%2C` in the notice's `title`, and a message that holds a line feed
       reads `%0A`.
-- A CLI test in `scripts/dev/tests/test_facts_cli.py` asserts that `notice` exits 0 with
+- A CLI test in `scripts/dev/tests/repo_tools/test_facts_cli.py` asserts that `notice` exits 0 with
   rows present, exits 0 with an `unparsable` row, and exits 2 when `resolve_base` cannot
   resolve the ref.
-- Replay tests in `scripts/lib/tests/test_facts_report.py`:
+- Replay tests in `scripts/lib/tests/facts/test_facts_report.py`:
     - a fixture history with one lock commit and a matching notice reads `listed`, with
       zero misses;
     - the same history with a notice stub that returns nothing reads one named `miss`;
@@ -965,7 +965,7 @@ Each risk is checked against `docs/failure-classes.md`.
 - **PR 1:**
     - the reader tests, including the backend half of the non-vacuity test, the absent-path
       test and the inherited-`GIT_DIR` test, in `scripts/lib/tests/`;
-    - a test in `scripts/lib/tests/test_git.py` that the shared environment builder drops
+    - a test in `scripts/lib/tests/git_and_gh/test_git.py` that the shared environment builder drops
       an inherited `GIT_DIR`;
     - the widened `_raw_call_offence`, its red `Popen` subject and the `must_find` entry in
       `test_census_rows_python.py`;
@@ -975,11 +975,11 @@ Each risk is checked against `docs/failure-classes.md`.
       `scripts/lib/tests/`.
 - **PR 3:**
     - the emitter tests in `scripts/lib/tests/`;
-    - the CLI test in `scripts/dev/tests/test_facts_cli.py`;
+    - the CLI test in `scripts/dev/tests/repo_tools/test_facts_cli.py`;
     - the `notice` bullet in `.claude/rules/facts.md`;
     - `scripts/dev/fact_status.py`'s module docstring.
 - **PR 4:**
-    - the replay tests in `scripts/lib/tests/test_facts_report.py`;
+    - the replay tests in `scripts/lib/tests/facts/test_facts_report.py`;
     - `report.py`'s module docstring, which gains the third measurement;
     - the `report` bullet in `.claude/rules/facts.md`, which names the `moved` and
       `moved_prose_edited` keys.

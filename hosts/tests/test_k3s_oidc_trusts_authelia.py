@@ -28,21 +28,19 @@ from _helpers import load_defaults, K8S_ROLES
 from _k8s_render import rendered_docs
 from lib import yaml_fast
 from lib.guard_jinja_env import make_env, register_ansible_filters
-from lib.repo_paths import ALL_VARS, K3S_SERVER
+from lib.estate import shared_vars
+from lib.repo_paths import K3S_SERVER
 from renderer.renderer_lib import host as host_mode
 
 HEADLAMP = K8S_ROLES / "headlamp"
-DOMAIN = yaml_fast.safe_load(ALL_VARS.read_text())["domain"]
+DOMAIN = shared_vars()["domain"]
 
-# The two hostnames Authelia answers on, and the two `iss` values they mint. Measured
-# against `/.well-known/openid-configuration` on each name. Named rather than
-# counted: a count of 2 passes while one of them has been swapped for something else, and the
-# whole point of the file is that BOTH are trusted.
+# Named rather than counted: a count of 2 passes while one host has been swapped for something else;
+# BOTH must be trusted.
 REQUIRED_ISSUER_HOSTS = frozenset({f"auth.local.{DOMAIN}", f"auth.{DOMAIN}"})
 
-# The flags the config file replaced. kube-apiserver refuses to start when a JWT-configuring
-# `--authentication-config` is passed alongside any of these, and on this Type=notify unit a
-# refusal to start is an indefinite hang rather than an error.
+# kube-apiserver refuses to start when a JWT-configuring `--authentication-config` is passed with
+# any of these, and on this Type=notify unit a refusal is an indefinite hang.
 MUTUALLY_EXCLUSIVE_FLAGS = frozenset(
     {
         "oidc-issuer-url",

@@ -43,7 +43,7 @@
       registry:{{ k8s_registry_port }}. `networkpolicy.yaml.j2` already admits that label,
       because the Ansible self-test it replaces carries it, so it needs no new peer. Its seed
       also reads `flux_job_image`'s registry over the WAN, which no fence here covers, because
-      egress is not enforced on this cluster (ADR-0009);
+      none declares an egress rule;
     - `registry-verify-pull-<digest>` and, on a cluster with an agent node,
       `registry-verify-pull-agent-<digest>` carry `app: registry-verify` and dial nothing.
       Their image pull is containerd's, which arrives SNAT'd to a node grant the fence already
@@ -104,7 +104,7 @@
   assumption breaks. Rendered only where `k3s_agent_node_ips` names an agent, as
   the deleted Ansible agent half was: a single-node cluster could never schedule it.
 #}
-{% if k3s_agent_node_ips | default([]) | length > 0 %}
+{% if k3s_agent_node_ips | length > 0 %}
 {% set checks = checks + [{
     'name': 'pull-agent',
     'app': 'registry-verify',

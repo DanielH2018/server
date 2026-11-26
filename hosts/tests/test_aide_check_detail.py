@@ -8,8 +8,6 @@ Run: uv run pytest hosts/tests/test_aide_check_detail.py
 
 from _aide_check_run import CHANGED_CONTENT, _report, _run_check
 
-# AIDE 0.18.6's detail section as it prints a content change, a wrapped SHA256 included, for one
-# entry the classifier pages on and one a package explains.
 DETAIL = """
 ---------------------------------------------------
 Detailed information about changes:

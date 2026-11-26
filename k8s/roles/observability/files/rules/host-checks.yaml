@@ -884,7 +884,7 @@ groups:
       severity: warning
       service: daniel-box
     annotations:
-      summary: 'daniel-box: a new package config copy (*.ucf-dist) has waited more than a day.'
+      summary: 'daniel-box: a new package config copy (*-dist) has waited more than a day.'
       description: >-
         An upgrade kept a locally edited config file and left the package's new version beside it. Run
         `journalctl -t ucf-dist` on daniel-box for the paths, then merge or replace each file and delete
@@ -897,7 +897,7 @@ groups:
       severity: warning
       service: daniel-pi
     annotations:
-      summary: 'daniel-pi: a new package config copy (*.ucf-dist) has waited more than a day.'
+      summary: 'daniel-pi: a new package config copy (*-dist) has waited more than a day.'
       description: >-
         An upgrade kept a locally edited config file and left the package's new version beside it. Run
         `journalctl -t ucf-dist` on daniel-pi for the paths, then merge or replace each file and delete
@@ -910,8 +910,7 @@ groups:
       severity: warning
       service: daniel-server
     annotations:
-      summary: >-
-        daniel-server: a new package config copy (*.ucf-dist) has waited more than a day.
+      summary: 'daniel-server: a new package config copy (*-dist) has waited more than a day.'
       description: >-
         An upgrade kept a locally edited config file and left the package's new version beside it. Run
         `journalctl -t ucf-dist` on daniel-server for the paths, then merge or replace each file and delete
@@ -936,8 +935,8 @@ groups:
       summary: 'daniel-box: the pending-config check has stopped reporting.'
       description: >-
         No ucf-dist verdict newer than 10800s reached Prometheus from daniel-box, so nothing is counting
-        its pending *.ucf-dist copies. Read `systemctl status homelab-ucf-dist.timer` and `journalctl
-        -t ucf-dist` on daniel-box, then /var/lib/node-exporter-textfile/ucf-dist.prom.
+        its pending *.ucf-dist and *.dpkg-dist copies. Read `systemctl status homelab-ucf-dist.timer`
+        and `journalctl -t ucf-dist` on daniel-box, then /var/lib/node-exporter-textfile/ucf-dist.prom.
   - alert: UcfDistNotReporting
     expr: |
       (
@@ -957,8 +956,8 @@ groups:
       summary: 'daniel-pi: the pending-config check has stopped reporting.'
       description: >-
         No ucf-dist verdict newer than 10800s reached Prometheus from daniel-pi, so nothing is counting
-        its pending *.ucf-dist copies. Read `systemctl status homelab-ucf-dist.timer` and `journalctl
-        -t ucf-dist` on daniel-pi, then /var/lib/node-exporter-textfile/ucf-dist.prom.
+        its pending *.ucf-dist and *.dpkg-dist copies. Read `systemctl status homelab-ucf-dist.timer`
+        and `journalctl -t ucf-dist` on daniel-pi, then /var/lib/node-exporter-textfile/ucf-dist.prom.
   - alert: UcfDistNotReporting
     expr: |
       (
@@ -978,8 +977,8 @@ groups:
       summary: 'daniel-server: the pending-config check has stopped reporting.'
       description: >-
         No ucf-dist verdict newer than 10800s reached Prometheus from daniel-server, so nothing is counting
-        its pending *.ucf-dist copies. Read `systemctl status homelab-ucf-dist.timer` and `journalctl
-        -t ucf-dist` on daniel-server, then /var/lib/node-exporter-textfile/ucf-dist.prom.
+        its pending *.ucf-dist and *.dpkg-dist copies. Read `systemctl status homelab-ucf-dist.timer`
+        and `journalctl -t ucf-dist` on daniel-server, then /var/lib/node-exporter-textfile/ucf-dist.prom.
   - alert: KubeletShutdownLockMissing
     expr: |
       homelab_check_success{check="kubelet-shutdown-lock",origin="daniel-box"} == 0

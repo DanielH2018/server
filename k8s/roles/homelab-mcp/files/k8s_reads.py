@@ -113,12 +113,8 @@ def parse_nodes(resp: dict) -> list[dict]:
     return rows
 
 
-# Metadata-only projection for claude_code_events. The observability Loki holds prompts,
-# responses and tool output VERBATIM (content logging is on, by design), and the
-# whole boundary is that this content never gets a LAN-reachable path — so rows leaving
-# through the (bearer-gated, LAN-routed) MCP carry ONLY these fields. A whitelist, not
-# a blacklist: an OTLP attribute added upstream stays withheld until named here. The
-# log line/body is never returned in any form.
+# A whitelist, not a blacklist: Loki holds prompts verbatim, so a new OTLP attribute stays withheld
+# until named.
 CLAUDE_EVENT_FIELDS = (
     "event_name",
     "tool_name",

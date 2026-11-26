@@ -1,11 +1,6 @@
 ---
-# The Longhorn backup plane: the two credential Secrets, the BackupTargets `default` (B2) and `r2`,
-# and the RecurringJobs. Flux applies the tag.
-#
-# No host file reads any of these keys. The backup-health reader derives each target's arm state
-# and each tier's schedule from the live objects, so a flip here reaches the cluster
-# through Flux alone and leaves no host cron stale. The `no Flux-born key on the host plane` row
-# of tests/repo/test_census_rows_roles.py keeps it that way.
+# No host file reads these keys: backup health derives arm state and schedules from the live
+# objects.
 
 # DECIDED: forward-only. A failed revision of this tag holds and leaves `prod`, because a reset to
 # a revision before a disarm would re-arm B2 and restart the transaction-cap spiral. The hold
@@ -20,39 +15,17 @@ flux_forward_only: true
 # are never pruned*.
 flux_prune: false
 
-# Auto-deploy stance. Flux applies the tag, so this gates no apply; the reason records why a bad
-# merge here is not a routine bump.
 k8s_autodeploy: false
 k8s_autodeploy_reason: "platform — the arm flags and the schedules govern every Longhorn backup; a wrong arm re-opens the B2 transaction-cap spiral, and host probes stay green through it"
 
-# The B2 region of the `default` target's URL, `s3://<bucket>@<region>/<prefix>`. A plain
-# variable, not a secret: docs/break-glass.md already publishes the B2 target URL. Nothing ties
-# it to the SOPS key `longhorn_b2_endpoint`. A wrong region makes the target unreachable, which
-# `probe.py health longhorn-backup` reports as `available: false` within one probe run.
+# A plain variable, not a secret. A wrong region makes the target unreachable (`available: false`).
 k3s_longhorn_b2_region: us-east-005
 
-# How often Longhorn lists the B2 backup store, in seconds. Upstream default is 300, which
-# exhausts the allowance on its own: `backup ls` is an S3 LIST, LIST is a Backblaze Class C
-# transaction, and the free allowance is 2,500 Class C/day. At 300s that is 288 polls a day,
-# each issuing several LISTs (volumes, then backups per volume). Once the cap trips, B2 refuses
-# every request account-wide and every backup tier goes down, whatever the bucket holds.
-#
-# 3600 cuts that 12x and fixes the Class C math — but each poll ALSO GETs the .cfg of every
-# volume and every retained backup, and those are Class B (same 2,500/day cap, counted
-# separately). That read count grows with retention: ~100-150 cfg GETs/poll x 24 polls against a
-# 14-day daily tier reach the Class B cap by midday with zero restore traffic — surfacing as
-# the restore drill failing with a masked "cannot find volume.cfg in backupstore" (a cap 403,
-# not data loss). 0 disables polling entirely: Longhorn still syncs a volume's backup list
-# right after each backup completes, so the only loss is UI staleness between nightlies
-# (manual sync: Backup -> Sync). That also removes the poll's LISTs from Class C.
-#
-# The failure mode 0 guards against is a ratchet: once the cap trips, every BackupVolume
-# controller retries its denied LISTs, so the failed state itself burns transactions and eats
-# into the next day's allowance.
+# 0 disables polling: each poll costs Class C LISTs and Class B cfg GETs that grow with retention,
+# and a tripped cap makes every BackupVolume controller retry, so the failure burns the next day's
+# allowance. Cost is UI staleness only.
 k3s_longhorn_backupstore_poll_interval: 0
 
-# Longhorn writes under this prefix inside the B2 bucket, so its objects keep their own
-# namespace and a lifecycle rule written for anything else in the bucket cannot expire them.
 k3s_longhorn_backup_prefix: longhorn
 # Whether the backup target is armed. false enforces a BLANK target URL - the containment
 # lever for a B2 transaction-cap spiral (see the task comment).
@@ -91,18 +64,12 @@ k3s_longhorn_backup_prefix: longhorn
 # first — that ordering, not the clock, is what makes a re-arm hold.
 k3s_longhorn_backup_armed: true
 
-# Daily volume backup to that target. 03:30 clears the daily secret-rotation cron. (The
-# `longhorn_b2_*` SOPS key names are Longhorn's credentials.) 14 retained backups per volume is
-# two weeks of recovery — Longhorn backups are incremental at the block level, so the marginal
-# cost of depth here is small compared to the first full. In steady state this group is only
-# the R2-routed volumes plus any newly provisioned PVC awaiting reconcile — every
-# B2-destined volume lives in a weekday shard below.
+# 03:30 clears the daily secret-rotation cron. Steady state is the R2-routed volumes plus new PVCs.
 k3s_longhorn_backup_cron: "30 3 * * *"
 k3s_longhorn_backup_retain: 14
 
-# Longhorn's native filesystem trim (the `trim` RecurringJob). 06:10 UTC follows both backup
-# windows, because a trim before the day's snapshot hands back blocks that the snapshot then pins
-# again.
+# 06:10 UTC follows both backup windows: a trim before the snapshot hands back blocks the snapshot
+# re-pins.
 k3s_longhorn_trim_cron: "10 6 * * *"
 
 # Weekly tier: B2 transaction spend scales with volume COUNT per run — each backup pays fixed
@@ -139,17 +106,11 @@ k3s_longhorn_weekly_backup_retain: 2
 # is 10 GB against ~8.2 GB of live volume data, so it could not hold everything anyway.
 k3s_longhorn_r2_armed: true
 
-# R2's region component is literally "auto" and the account-specific part is the endpoint
-# host. R2 shares no configuration with B2, so the two regions are independent variables.
+# R2's region is literally "auto"; it shares no configuration with B2.
 k3s_longhorn_r2_region: auto
 k3s_longhorn_r2_backup_prefix: longhorn
 
-# 0 for the same reason B2 is 0 — see k3s_longhorn_backupstore_poll_interval. A poll costs a
-# metadata GET per volume per retained backup, and a target that starts failing retries far
-# faster than its interval, so the failure itself burns the allowance. R2 would absorb it
-# comfortably (~333k Class B/day available against a 300s poll's ~43k), which makes this
-# conservatism rather than necessity — but it is the right default to start from, and the
-# only cost is UI staleness between nightlies. Raise deliberately.
+# 0 as for B2: a poll costs a metadata GET per volume per retained backup. Raise deliberately.
 k3s_longhorn_r2_poll_interval: 0
 
 manifests_rollout: ''

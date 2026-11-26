@@ -25,8 +25,7 @@ from lib.worktrees import (
 )
 from worktree_holders import answer, escape, main, render, scan, serve
 
-# pyproject.toml's py312 floor for the host-run files. The shebang names /usr/bin/python3: root
-# must not run an interpreter a non-root user can write, so the uv-managed Python is no option.
+# The shebang names /usr/bin/python3: root must not run an interpreter a non-root user can write.
 ME = pwd.getpwuid(os.getuid()).pw_name
 
 
@@ -69,8 +68,6 @@ def test_only_the_project_dir_value_leaves_environ_is_flagged(tmp_path):
 
 
 def test_a_process_root_cannot_read_is_reported_unreadable_is_flagged(tmp_path):
-    # readlink on a regular file fails with EINVAL, which stands in for any refusal that is
-    # not "the process is gone".
     root = tmp_path / "worktrees"
     root.mkdir()
     entry = _entry(tmp_path / "proc", 7)
@@ -94,9 +91,8 @@ def _caller_reads(tree: Path, text: str):
     return read_answer(text.encode("ascii"), tree, "worktree-holders.sock")
 
 
-# Each a directory name a caller reading a line at a time would misread: a bare newline makes
-# an unparseable line, a newline and tabs forge a holder line for tree `b`, U+2028 is a line
-# break to `str.splitlines()` though it is not `\n`, and a tab forges a field.
+# Each name a line-at-a-time reader would misread: bare newline, forged holder line, U+2028
+# (splitlines), tab.
 LINE_BREAKERS = (
     "a\nnot a holder line",
     "a\n4242\tcwd\t/b",
@@ -110,8 +106,6 @@ LINE_BREAKERS = (
 def test_a_cwd_with_a_line_break_is_reported_on_one_line_and_holds_only_its_tree_is_clean(
     tmp_path, name
 ):
-    # The process holds its own tree and nothing else. An unescaped line break would hand the
-    # caller an unparseable line, refusing every removal while the process lived.
     root = tmp_path / "worktrees"
     held, unrelated = root / name, root / "b"
     held.mkdir(parents=True)
@@ -161,8 +155,8 @@ def test_the_helper_and_the_callers_escape_one_way_is_clean():
 
 
 def test_main_answers_under_the_callers_mapped_root_is_flagged(tmp_path):
-    # The root comes from the map, keyed by the uid the kernel names, so the agent
-    # user's removal in its own clone sees the operator's process there.
+    # The root comes from the uid-keyed map: the agent user's removal in its clone sees the
+    # operator's process.
     root = tmp_path / "clone" / ".claude" / "worktrees"
     (root / "a").mkdir(parents=True)
     _entry(tmp_path / "proc", 7, cwd=root / "a", environ=b"")
@@ -180,8 +174,7 @@ def test_main_answers_under_the_callers_mapped_root_is_flagged(tmp_path):
 
 
 def test_a_uid_the_map_does_not_root_is_refused_is_flagged(tmp_path):
-    # Fail closed: a missing map, no entry for the user, or a relative path each refuse, and
-    # the refusal carries no `end`, so a caller cannot read it as "no holders".
+    # Fail closed: each refusal carries no `end`, so a caller cannot read it as "no holders".
     proc = tmp_path / "proc"
     proc.mkdir()
 
@@ -196,8 +189,8 @@ def test_a_uid_the_map_does_not_root_is_refused_is_flagged(tmp_path):
 
 
 def test_main_refuses_an_argument_or_a_stdin_that_is_not_a_socket_is_flagged(tmp_path):
-    # The service takes nothing from the caller. A path argument would let it ask root about
-    # any directory, and a pipe on stdin means nothing named the caller.
+    # The service takes nothing from the caller: a path argument would let it ask root about any
+    # directory.
     read_end, write_end = os.pipe()
     os.close(write_end)
     try:

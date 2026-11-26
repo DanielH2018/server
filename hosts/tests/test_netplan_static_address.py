@@ -9,7 +9,7 @@ must switch DHCPv4 off rather than run it alongside (the template says why).
 
 import functools
 
-from lib.repo_paths import ALL_VARS, HOST_VARS
+from lib.estate import host_vars, shared_vars
 from lib import yaml_fast
 from _setup_render import render_component_text
 from renderer.renderer_lib import host as host_mode
@@ -43,8 +43,8 @@ def static_address_problems(
         for r in iface.get("routes", [])
     ):
         problems.append(f"no default route via {router}")
-    # netplan emits the `[DHCP] RouteMetric` that networkd also gives RA routes only with a DHCP
-    # client on, so the metric without `dhcp6: true` renders nothing.
+    # netplan emits the `[DHCP] RouteMetric` for RA routes only with a DHCP client on, so the metric
+    # without `dhcp6: true` renders nothing.
     if (
         iface.get("dhcp6") is not True
         or (iface.get("dhcp6-overrides") or {}).get("route-metric") != 100
@@ -53,14 +53,10 @@ def static_address_problems(
     return problems
 
 
-def _host_vars(host: str) -> dict:
-    return yaml_fast.safe_load((HOST_VARS / f"{host}.yml").read_text())
-
-
 def test_each_node_renders_its_own_address_pinned() -> None:
-    router = yaml_fast.safe_load(ALL_VARS.read_text())["lan_router_ip"]
+    router = shared_vars()["lan_router_ip"]
     for host in _NODES:
-        hv = _host_vars(host)
+        hv = host_vars(host)
         link = hv.get("k3s_node_static_link")
         assert link, f"{host} sets no k3s_node_static_link, so its k3s still needs DHCP"
         text = render_component_text(
@@ -141,7 +137,7 @@ def _linkdown_text(host: str) -> str:
 
 def test_each_pinned_link_ignores_its_routes_without_carrier() -> None:
     for host in _NODES:
-        link = _host_vars(host)["k3s_node_static_link"]
+        link = host_vars(host)["k3s_node_static_link"]
         assert linkdown_sysctl_problems(_linkdown_text(host), link) == [], host
 
 

@@ -21,8 +21,8 @@ from deploy_tools import bundle_census
 import pytest
 from _k8s_render import render_role_template
 
+from lib.estate import shared_vars
 from lib import yaml_fast
-from lib.repo_paths import ALL_VARS
 from renderer import homelab_render
 
 ROLE = "longhorn-backup"
@@ -59,7 +59,7 @@ def test_an_armed_render_names_the_bucket_region_and_prefix():
 
 def test_the_b2_target_renders_the_inventory_bucket_as_a_literal():
     """Inventory's `k3s_longhorn_b2_bucket` is the one copy, and the probe reads it too."""
-    bucket = yaml_fast.safe_load(ALL_VARS.read_text())["k3s_longhorn_b2_bucket"]
+    bucket = shared_vars()["k3s_longhorn_b2_bucket"]
     assert bucket
     assert _url(DEFAULT_TARGET, k3s_longhorn_b2_region="us-west-004") == (
         f"s3://{bucket}@us-west-004/longhorn"

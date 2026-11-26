@@ -24,8 +24,8 @@ highest-signal findings.
 - **One trap to respect:** for **stale Secret keys**, see `.claude/rules/k8s-templates.md`,
   *Removing a key from a Secret template*. (The k8s deploy play toposorts `containers_list` on
   derived Traefik-CRD and authelia edges, so a new entry's position no longer needs checking.)
-- **Egress NetworkPolicies are not enforced** by this cluster's CNI. Never report one as a control,
-  and don't propose an egress policy as a fix.
+- **Egress NetworkPolicies are enforced, except in the first seconds of a pod's life** (ADR-0009,
+  amended 2026-11-25). Never report one as a control over a pod that dials as it starts.
 - **Retired Compose roles live in git history only.** H5.12 deleted `ansible/roles/containers/`.
   daniel-pi's Docker services are the `compose_services` entries in `host_vars/daniel-pi.yml`,
   which its `homelab-daniel-pi` package deploys as one Compose project.
@@ -38,7 +38,7 @@ highest-signal findings.
   directly, publishing a UI port bound to `{{ server_ip }}` (the Pi's LAN IP, never
   `0.0.0.0`) with no Traefik labels, since the Pi has no Traefik in front of it.
 - **The service set + per-service shape** (port/use_authelia/networks) live in
-  `cluster/services.yml` `containers_list` for the cluster and in
+  `k8s/services.yml` `containers_list` for the cluster and in
   `host_vars/daniel-pi.yml` `compose_services` for the Pi.
 - **Pinning:** **Watchtower is retired** — nothing auto-updates any more. Every image is
   pin-and-Renovate-managed, and residual `watchtower.enable=false` labels are dead metadata

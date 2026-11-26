@@ -3,7 +3,7 @@
 Written for the Docker-era host cron, whose I/O shell was retired with the k3s migration; the
 caller is now configarr_health_logic.py, reading the last CronJob's exit code + logs. Kept
 stdlib-only (runs via `uv run --no-project --python <pin>`, host_python_version in
-inventory/group_vars/all.yml), and unit-testable without a
+estate/vars.yml), and unit-testable without a
 cluster: the caller hands it an exit code plus combined output and it returns the verdict.
 
 Why not trust the exit code alone: recyclarr's healthcheck watched only the supercronic PROCESS, so
@@ -16,10 +16,7 @@ from __future__ import annotations
 
 import re
 
-# An error-LEVEL line: an optional run of non-word chars (log brackets / stripped ANSI) then the
-# ERROR/FATAL level token on a word boundary. Anchored at line start so a benign "0 errors" summary
-# or "Checking for errors..." never trips it (a bare `"error" in output` substring would). Tune the
-# token set against real configarr output in Task 9 if a clean run pages.
+# Anchored at line start so a benign "0 errors" summary never trips it, as a bare substring would.
 _ERROR_LINE = re.compile(r"(?im)^[^\w]*(?:error|fatal)\b")
 
 

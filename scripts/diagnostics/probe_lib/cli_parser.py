@@ -42,7 +42,7 @@ def _verdict_help(summary, ok, fail):
     """`add_parser` keywords that end a verdict subcommand's `help` and `--help` with `exits`.
 
     Spread into a literal `add_parser("<name>", ...)` call rather than wrapping it, because
-    `.claude/hooks/tests/test_setup_wiring.py` finds the subcommand names by that text.
+    `.claude/hooks/tests/hook_contract/test_setup_wiring.py` finds the subcommand names by that text.
     """
     text = f"{summary} ({exits(ok, fail)})"
     return {"help": text, "description": text}
@@ -383,8 +383,8 @@ def _build_parser():
     hl.add_argument(
         "--cluster",
         choices=sorted(CLUSTER_NODES),
-        # SUPPRESS, not DEFAULT_CLUSTER: a subparser default overwrites the value the root
-        # parser already stored, so `probe.py --cluster stage health x` would read prod.
+        # SUPPRESS, not DEFAULT_CLUSTER: a subparser default overwrites the root's value, so
+        # `--cluster stage` would read prod.
         default=argparse.SUPPRESS,
         help="which cluster the verdict is about (default: prod). The gate refuses rather "
         "than answering when the local kubectl serves a different one (#1663). Ignored "

@@ -25,7 +25,7 @@ SMART trend history (`k8s/roles/scrutiny/templates/web.yaml.j2`,
 - **`scrutiny-influxdb-data`** (2Gi) is deliberately not backed up. It holds only the SMART
   time series, which the daily collector runs rebuild; the reason sits beside the
   `no_backup_claims` key of this role's `containers_list` entry in
-  `cluster/services.yml`, which `k3s_longhorn_nobackup_volumes` derives
+  `k8s/services.yml`, which `k3s_longhorn_nobackup_volumes` derives
   from.
   **`scrutiny-web-config`** (1Gi) is the SQLite config DB: device metadata and notification
   settings. Both claims are `k8s_claims` entries in `defaults/main.yml`.
@@ -65,7 +65,7 @@ SMART trend history (`k8s/roles/scrutiny/templates/web.yaml.j2`,
   minutes. Without that init container a shared restart costs a crash and a `restarts=1` that
   fails `probe.py health scrutiny`'s 180s window. A probe cannot cover this, because the panic
   happens before either probe runs. Same class as authelia's session store
-  (#1609). `tests/services/test_scrutiny_influxdb_policy.py` pins the co-location, the
+  (#1609). `tests/services/apps/test_scrutiny_influxdb_policy.py` pins the co-location, the
   port and the file's place in the role's resolved `manifests_files`. The policy carries no `netpol_baseline_enforced` branch:
   that lever is a netpol-baseline role default and role defaults are role-scoped, so it does not
   resolve here.

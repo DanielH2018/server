@@ -1,4 +1,4 @@
-"""The k8s services the cluster renders, derived from `cluster/services.yml` and the role files.
+"""The k8s services the cluster renders, derived from `k8s/services.yml` and the role files.
 
 A service renders when its role has something to render: its own manifest template, a shared
 default its entry earns, or a vendored manifest. `render_targets` keeps a tag Flux owns,
@@ -12,9 +12,8 @@ from lib.render_guard import entry_tags, k8s_services
 from lib.repo_paths import K8S_ROLES, K8S_SERVICES
 from renderer.renderer_lib.bundle import PATCHES_DIR
 
-# A role's vendored files sit in these subdirectories of `files/` and keep them under
-# `cluster/<tag>/` (H1 *Vendored upstream manifests*): upstream manifests byte for byte, and
-# Kustomize patches. H1.1d's `health_vendored.py` reads the same two.
+# Vendored files keep these `files/` subdirectories under `cluster/<tag>/`: upstream manifests byte
+# for byte, and Kustomize patches.
 VENDORED_DIRS = ("upstream", PATCHES_DIR)
 
 

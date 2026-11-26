@@ -20,8 +20,6 @@ from lib.repo_paths import K8S_ROLES, SYSTEM_UPGRADE_DEFAULTS
 
 _COREDNS_DEFAULTS = K8S_ROLES / "coredns" / "defaults" / "main.yml"
 
-# The k3s version the excerpt below was read from, and the image block of that version's
-# manifests/coredns.yaml before k3s substitutes `%{SYSTEM_DEFAULT_REGISTRY}%`.
 _EXCERPT_K3S_VERSION = "v1.37.2+k3s1"
 _EXCERPT = """\
       containers:
@@ -30,9 +28,7 @@ _EXCERPT = """\
         imagePullPolicy: IfNotPresent
 """
 
-# The index digest of each image an excerpt has named, read from the registry by hand
-# (docs/k3s-upgrade.md). Keyed by image, so an excerpt naming a new tag fails until its
-# digest is recorded here.
+# Keyed by image, so an excerpt naming a new tag fails until its digest is recorded.
 _DIGESTS = {
     "rancher/mirrored-coredns-coredns:1.14.7": "sha256:7efd3c635b03efd68c4e8398fc45f0d993d0e9ab016f72c1cefb0fd6d01aa286",
 }

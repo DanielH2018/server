@@ -353,7 +353,7 @@ Each limit exceeds the longest gap between two of the host's updater fires plus 
 `homelab-docker-engine.timer` also covers the engine run's mask. The run can hold
 `homelab-updater.timer` masked for its whole `TimeoutStartSec` (#6613). daniel-pi's daily 03:05
 fire comes after the 00:30 engine run's worst case, so its limit is one day plus one run.
-`scripts/renderer/tests/test_renderer_host_update_limits.py` fails a limit the host's rendered
+`scripts/renderer/tests/host/test_renderer_host_update_limits.py` fails a limit the host's rendered
 schedule outgrows. The map lists daniel-pi (job `node-pi`, 90000 seconds), added by H3.9c and raised by H3.13 (#6911).
 
 ## Clearing a host's hold
@@ -556,7 +556,7 @@ key. Every step is **operator-only**, and each host step runs from a LAN session
 
     In the same commit, update the fingerprint pin, `ARCHIVE_FINGERPRINT` in
     `hosts/bootstrap-host.sh`.
-    `tests/repo/test_lan_facts_have_one_source.py::test_the_bootstrap_pin_is_the_committed_keyrings_key`
+    `tests/repo/docs/test_lan_facts_have_one_source.py::test_the_bootstrap_pin_is_the_committed_keyrings_key`
     fails until the two match. Copy the new private key into the break-glass kit, as
     [the break-glass doc](break-glass.md) describes.
 1. Delete the old key from the signer's home, because the role's apply refuses a home that
@@ -712,7 +712,7 @@ daniel-box serves the repository, so it builds its own packages from the clone.
 
 1. Check that the server came up with the flags the package's
    `/etc/rancher/k3s/config.yaml.d/50-homelab.yaml` sets. Each read has one expected answer:
-    - the first prints daniel-box's `server_ip` from `inventory/host_vars/daniel-box.yml`.
+    - the first prints daniel-box's `server_ip` from `hosts/daniel-box/vars.yml`.
       Any other address means k3s picked a second NIC, and every pod would dial the
       apiserver on it;
     - the second prints `etcd`. Without it, `cluster-init` did not take and k3s runs on SQLite;
@@ -831,7 +831,7 @@ daniel-server installs from daniel-box's repository, so daniel-box and the repos
     ```
 
 1. Check that the node holds `server_ip` on `k3s_node_static_link`, which
-   `inventory/host_vars/daniel-server.yml` names. Then start the agent, for the same
+   `hosts/daniel-server/vars.yml` names. Then start the agent, for the same
    reason as on daniel-box, and read the node from daniel-box:
 
     ```bash
@@ -967,7 +967,7 @@ arm64 only. The `arm64` build ships only the tools daniel-pi's packages name. To
 
     In the same step, name the host in two more places. The renderer reads the inventory, and
     `bootstrap-host.sh` refuses a host that `HOSTS` does not list:
-    - copy `inventory/host_vars/_example.yml` to `<host>.yml`, which makes it an
+    - copy `hosts/_example/vars.yml` to `<host>.yml`, which makes it an
       inventory host;
     - add the host to `HOSTS` in `hosts/bootstrap-host.sh`.
 1. **Operator-only:** create the age key and read its public key. Run the script from the PR
@@ -1061,7 +1061,7 @@ Every `k3s` subcommand needs root.
 1. To make the host's package one the suite has tested on the target, merge a PR that adds the
    release to the `host_packages` matrix in `.github/workflows/ci.yml`, with the suite green. The
    PR makes the same edit to `.github/workflows/host-test-image.yml`, which
-   `tests/repo/test_host_test_image.py` holds equal to `ci.yml`, and adds a
+   `tests/repo/ci_workflows/test_host_test_image.py` holds equal to `ci.yml`, and adds a
    `<release>-<arch> -` line per new leg to `hosts/lib/tests/container/image.pins`, which the same
    test requires. Until that workflow has published the new release's image and a later PR copies
    its digest into `image.pins` and adds the leg to that test's `PUBLISHED` set, the new leg
@@ -1101,7 +1101,7 @@ Every `k3s` subcommand needs root.
 1. On a cluster node, pause system-upgrade-controller and check the cluster, both from daniel-box.
    The label stops a promoted k3s bump from starting a Job on the node. Go on only when the gate
    exits 0. daniel-box's restart runs at `k3s_restart_window` in
-   `inventory/host_vars/daniel-box.yml`, so pick a quiet slot outside that window.
+   `hosts/daniel-box/vars.yml`, so pick a quiet slot outside that window.
 
     ```bash
     sudo k3s kubectl label node <node> homelab/k3s-upgrade-paused=true
@@ -1561,7 +1561,7 @@ new version, which costs each host one install.
 
 The builder grades each commit over `CI_CONTEXTS`, which the role renders from
 `ci_required_contexts`. When a CI job is renamed, no commit carries the old context, so no
-commit is ever green. Change `ci_required_contexts` in `inventory/group_vars/all.yml` to
+commit is ever green. Change `ci_required_contexts` in `estate/vars.yml` to
 the new name, spelled exactly as `ci.yml`'s `name:`, and merge that. The builder's
 `builder.conf` and the `homelab-checkout-sync` unit both render the key, so neither changes
 until a host package carries it. The updater installs the builder's copy once the builder
@@ -1585,7 +1585,7 @@ procedure above. The first builder run after the fix builds.
 
 The builder refuses to grade anything, because `CI_CONTEXTS` is empty or
 `CI_ANCESTOR_WALK_MAX` is not a positive integer. Restore `ci_required_contexts` or
-`ci_ancestor_walk_max` in `inventory/group_vars/all.yml` and merge it.
+`ci_ancestor_walk_max` in `estate/vars.yml` and merge it.
 
 ### `reason="token"` and `reason="build"`
 

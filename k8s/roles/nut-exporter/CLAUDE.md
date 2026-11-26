@@ -15,7 +15,7 @@ no volume, no route, no secret (`k8s/roles/nut-exporter/templates/deployment.yam
 <!-- /generated_from -->
 
 - **Flux applies it.** Its `containers_list` entry
-  is in `cluster/services.yml`, so nothing applies it by hand, and a
+  is in `k8s/services.yml`, so nothing applies it by hand, and a
   merged change reaches the cluster when `promote` publishes and verifies the next bundle. Its
   image-bump PRs therefore draw no `land-wait` and no `probe.py health` run.
 - **Its rollout.** The Kustomization's `wait` holds the `nut-exporter` rollout.
@@ -50,7 +50,7 @@ on the assumption that a scrape must authenticate.
 **The UPS reading is on `/ups_metrics`, not `/metrics`.** `/metrics` is the exporter's own Go and
 process registry and carries no UPS variable at all, so a scrape job pointed there succeeds and
 returns nothing useful. The `nut` scrape job renders from the `metrics` item on this role's
-`containers_list` entry in `cluster/services.yml`. That item sets `path`
+`containers_list` entry in `k8s/services.yml`. That item sets `path`
 accordingly and passes `ups=` in `params`. The exporter fails a scrape outright if it discovers
 several UPS devices and has not been told which, so naming it means a second UPS cannot
 silently blank the job. The same item holds the `:9199` port, which the Deployment and Service
@@ -59,7 +59,7 @@ read back through `metrics_port('nut')`.
 **The probes are `tcpSocket` for two separate reasons.** Probing `/ups_metrics` would crash-loop
 this pod whenever upsd is unreachable, turning a metrics gap into a second outage — Prometheus
 already reports that as `up == 0`. Probing `/metrics` would trip
-`tests/k8s/_scrape_property_rows.py`, which refuses a kubelet httpGet on a
+`tests/k8s/rendered_properties/_scrape_property_rows.py`, which refuses a kubelet httpGet on a
 metrics route below a 300s period after node-exporter's probes produced 97% of the namespace's
 Loki ingest.
 

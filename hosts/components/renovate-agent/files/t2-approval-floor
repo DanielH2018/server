@@ -32,7 +32,7 @@ scripts/
 evals/
 renovate.json
 mkdocs.yml
-cluster/services.yml
+k8s/services.yml
 .gitmodules
 .gitattributes
 Email-to-RSS

@@ -125,7 +125,7 @@ when it shadows a directory or module at the top of another. It reads those root
 `land.py`'s `sys.path` once its imports have run, not from `pythonpath`: the refusal protects what `land.py` imports,
 and `pythonpath` applies only under pytest. Across the `pythonpath` roots, every role's `files/`
 and every `scripts/<dir>` holding a `tests/`, the
-`no-two-import-roots-share-a-module-basename` row of `tests/repo/test_census_rows_python.py`
+`no-two-import-roots-share-a-module-basename` row of `tests/repo/census_rows/test_census_rows_python.py`
 catches two roots that hold the same module name. No test catches a module that shadows a
 directory in another root.
 
@@ -140,7 +140,7 @@ imports dotted, as `from lib.repo_paths import REPO` or `from dev.fanout_lib imp
 does, and carries no insert. That holds inside a module's own directory too, because one
 file imported under two names is two module objects.
 
-Two rows of `tests/repo/test_census_rows_layout.py` hold the rule.
+Two rows of `tests/repo/census_rows/test_census_rows_layout.py` hold the rule.
 `no-sys-path-change-under-scripts` refuses a `sys.path` change in any module under
 `scripts/`, tests included. Its `SYS_PATH_WRITERS` allow-list names each one that remains
 and why: `lib.host_modules` for `hosts/lib`, the `longhorn_lib` modules a host package copies
@@ -163,13 +163,13 @@ fail in the cron or hook that runs it. ty resolves the same directories through
 `[tool.ty.environment] extra-paths`, which its docs describe as the knob for "first-party or
 third-party modules that are not installed into your project's Python environment in a
 conventional way" ([ty configuration][ty-config]);
-`tests/repo/test_ty_config_covers_the_repo.py` keeps the two lists aligned.
+`tests/repo/ci_workflows/test_ty_config_covers_the_repo.py` keeps the two lists aligned.
 
 ### Tests in a sibling `tests/`, never beside the code
 
 A role's `files/` is a ship list. A test inside it would be copied to the host. So tests sit
 in `k8s/roles/<role>/tests/` and reach `files/` through `pythonpath` or a
-bootstrap. `tests/repo/test_testpaths_covers_every_test_file.py` enforces that every
+bootstrap. `tests/repo/suite/test_testpaths_covers_every_test_file.py` enforces that every
 test directory is in `testpaths`.
 
 ### Options considered and not taken
@@ -204,7 +204,7 @@ listing the directory then sees one program rather than several. The operator ru
 imports and a `__main__` guard whose one statement calls the entrypoint of its own family. Shipped code
 or an older checkout may still run such a path, so a consolidation can leave a shim there
 until the last caller moves. The
-`module-families-live-in-a-package` row of `tests/repo/test_census_rows_layout.py`
+`module-families-live-in-a-package` row of `tests/repo/census_rows/test_census_rows_layout.py`
 enforces the rule for a `scripts/` subdirectory and a role's `files/`. Its `allow` names each
 family that stays flat, with the reason. One stays flat by design: the
 `scripts/validate/*_templates.py` checks, each its own prek hook. The retired deployer's
@@ -222,7 +222,7 @@ The second shape, for a program whose boundary is configuration rather than I/O,
 `load_config(env)`, constructed once in `cli.py` and passed down. A test builds its own with `load_config({...})` or `dataclasses.replace(cfg,
 X=...)` rather than a fakes module, because the fields are values, not callables. The
 transport underneath (`bridge.net`) is still patched, which is why
-`tests/services/test_bridge_patch_boundary.py` stays and why that role's monkeypatch
+`tests/services/monitor_bridge/test_bridge_patch_boundary.py` stays and why that role's monkeypatch
 entries have not reached zero.
 
 **Decision functions are pure.** A function that decides takes plain values and returns plain
@@ -260,7 +260,7 @@ non-obvious. Shape is gated by ruff `D205/D415/D212/D209/D210`; content follows
 
 **`from __future__ import annotations` is dead on 3.14.** PEP 649 defers annotation
 evaluation by default ([What's new in 3.14][py314]). Do not add it to a new module, and
-the `no-future-annotations` row of `tests/repo/test_census_rows_python.py` enforces
+the `no-future-annotations` row of `tests/repo/census_rows/test_census_rows_python.py` enforces
 that the tree agrees —
 the rule governed new modules only until 2026-09-05, so half of `scripts/infra_map/` carried
 the line and half did not.
@@ -294,7 +294,7 @@ already past any of these limits are listed one per line in
 `tests/repo/module_length_allowlist.txt`,
 `tests/repo/monkeypatch_allowlist.txt` and
 `tests/repo/copied_tests_allowlist.txt`, with the number each stands at today, and
-`tests/repo/test_module_length_ratchet.py` fails when one grows past its line, when a
+`tests/repo/ratchets/test_module_length_ratchet.py` fails when one grows past its line, when a
 file over a cap has no line, when a file that has come back under its cap keeps one, and when
 a file has shrunk below its line without the line following it down — an entry records what
 the file is today, and the gap between the two would be regrowth headroom nothing reports. The
@@ -329,12 +329,12 @@ A guard reads rendered output where a render carries the claim, and source text 
 erases it.
 
 - **Rendered manifests.** A property of the rendered k8s manifests goes in as a row of
-  `tests/k8s/test_rendered_properties.py`, not as a regex over a template.
+  `tests/k8s/rendered_properties/test_rendered_properties.py`, not as a regex over a template.
 - **Workflows.** A property of a GitHub Actions workflow or action is a row of
-  `tests/repo/test_census_rows_workflows.py`, which parses the file rather than matching its
+  `tests/repo/census_rows/test_census_rows_workflows.py`, which parses the file rather than matching its
   text, so a reordered key or an `if` split across lines reads the same.
 - **Template-source readers are declared.** Every directory under `tests/` is in `SCANNED`
-  of `tests/repo/test_guard_tests_read_renders_not_templates.py`. A module that must read
+  of `tests/repo/suite/test_guard_tests_read_renders_not_templates.py`. A module that must read
   template text lists itself in that file's `TEMPLATE_SOURCE_READERS` with what a render erases:
   a macro call against its expanded body, byte identity, a Jinja filter, or a variable name.
 - **A task file has no render, so the structural read is a parse.** Read `tasks/*.yml` through
@@ -374,15 +374,15 @@ behind them.
 
 - `scripts/deploy_tools/land_lib/tools.py`: one dataclass holding every process
   boundary with real implementations as defaults.
-- `scripts/deploy_tools/tests/test_land_imports.py`: an explicit `ALLOWED`
+- `scripts/deploy_tools/tests/land/test_land_imports.py`: an explicit `ALLOWED`
   dependency map plus a reject-half test proving the parser sees both import forms.
 - `scripts/deploy_tools/tests/conftest.py`: an autouse fixture that turns a
   `sys.path` leak into a test failure.
 - `scripts/deploy_tools/land_lib/outcome.py`: exit code and verdict constructed
   together and validated in `__init__`, so "printed without its verdict" is unrepresentable.
-- `tests/services/test_monitor_bridge_modules.py`: a ship list guarded in both
+- `tests/services/monitor_bridge/test_monitor_bridge_modules.py`: a ship list guarded in both
   directions against the tree.
-- `tests/services/test_monitor_bridge_mount_layout.py`: a synthesized missing
+- `tests/services/monitor_bridge/test_monitor_bridge_mount_layout.py`: a synthesized missing
   module must produce `No module named 'bridge.config'`.
 - `pyproject.toml` `addopts`: `-p leakguard` makes "does a test reach the network" a runner
   verdict rather than a review question.

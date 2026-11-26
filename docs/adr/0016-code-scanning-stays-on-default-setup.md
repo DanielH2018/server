@@ -4,8 +4,8 @@ title: Code scanning stays on default setup, and false positives are removed in 
 status: Superseded by ADR-0024
 date: 2026-09-02
 governs:
-  - scripts/diagnostics/probe_lib/ha.py:272
-  - k8s/roles/homelab-mcp/files/safe_reads.py:289
+  - "scripts/diagnostics/probe_lib/ha.py#state the floor instead of leaving it to the platform default"
+  - "k8s/roles/homelab-mcp/files/safe_reads.py#state the floor instead of leaving it to the platform default"
 ---
 
 # ADR-0016: Code scanning stays on default setup, and false positives are removed in code
@@ -64,7 +64,7 @@ The filters advanced setup would buy cannot express what the remaining noise nee
 `paths-ignore` drops a file from *every* query and `query-filters` filters a query across
 *every* file; there is no path×query intersection. The 13 remaining
 `py/incomplete-url-substring-sanitization` alerts are `assert "name" in list_of_strings`
-membership checks in tests — `tests/k8s/test_k8s_manifests_rbac.py`,
+membership checks in tests — `tests/k8s/rbac/test_k8s_manifests_rbac.py`,
 `scripts/dev/tests/test_gen_hosts_block.py` and siblings. Ignoring those paths would also
 strip `py/clear-text-logging-sensitive-data` from them, which is the query covering the secret
 discipline this repo cares most about; and one of the paths,
@@ -147,8 +147,8 @@ those two queries matter most.
 
 ## Governs
 
-- `scripts/diagnostics/probe_lib/ha.py:272` — the `tls_context()` marker in the probe library.
-- `k8s/roles/homelab-mcp/files/safe_reads.py:289` — the same marker in the MCP
+- `scripts/diagnostics/probe_lib/ha.py` — the `tls_context()` marker in the probe library.
+- `k8s/roles/homelab-mcp/files/safe_reads.py` — the same marker in the MCP
   server's ship list.
 
 Both markers explain why the TLS floor is stated rather than inherited. Neither enforces the

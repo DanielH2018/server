@@ -63,9 +63,8 @@ def _audit_verdict_args():
 
 
 def test_audit_verdict_exits_nonzero_on_a_down_audit(capsys):
-    # The daily audit runs under a kuma-check timer whose Restart=on-failure reruns it while
-    # red, and its wrapper writes the exit code as the textfile verdict, so a `down` audit has
-    # to reach both as a non-zero exit.
+    # The daily audit's Restart=on-failure reruns it while red and its wrapper writes the exit code
+    # as the textfile verdict, so a `down` audit must exit non-zero.
     tools, _ = build_tools(
         Fakes(
             registry=_plain(("stale_push_token", "assisted", "2025-01-01")),
@@ -97,9 +96,8 @@ def test_audit_summary_caps_the_overdue_name_list():
     assert "+3 more" in summary  # 8 overdue → first 5 named, then "+3 more"
 
 
-# ── a tier with no cadence ──────────────────────────────────────────────────
-# A hand edit can give a row a tier the table lacks, such as the retired weekly tier. Nothing
-# dates such a row, so the audit must read down on it rather than skip it.
+# A hand edit can give a row a tier the table lacks, such as the retired weekly tier; the audit must
+# read down on it rather than skip it.
 RETIRED = yaml_fast.safe_load("""
 entries:
   retired_push_token: {tier: auto, last_rotated: '2026-08-01'}

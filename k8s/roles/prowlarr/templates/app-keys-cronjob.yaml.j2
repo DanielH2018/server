@@ -59,9 +59,7 @@ spec:
   failedJobsHistoryLimit: 2
   jobTemplate:
     spec:
-      # Below the 600s `manifests_rollout_timeout_default` every `<tag>-verify` Kustomization
-      # takes. One list call and, per app, a test and a write of 30s each, plus 60s of connect
-      # retries.
+      # Below the 600s manifests_rollout_timeout_default every verify Kustomization takes.
       activeDeadlineSeconds: 300
       ttlSecondsAfterFinished: {{ prowlarr_k8s_app_keys_job_ttl_seconds }}
       # One retry. A rerun tests each entry again and writes only a key Prowlarr still rejects.

@@ -45,8 +45,7 @@ from lib.progress import OnChange
 # 6 to 7 live landings spent about 1,700 of the 5,000 core calls an hour and 2,250 of the 5,000
 # GraphQL calls. Lower it from data.
 COUNT = 6
-# Each host's own count while the turn host does not answer: the per-host limit `live_limit`
-# set before the slots existed.
+# Per-host limit `live_limit` set before the slots existed.
 FALLBACK_COUNT = 3
 _LOCK_DIR = turn.LOCK.parent
 SLOT_NAMES = tuple(f"homelab-land-slot-{n}.lock" for n in range(COUNT))
@@ -189,11 +188,11 @@ class Clears(Enum):
 
     # Nothing a wait can see: the landing is refused at once.
     NEVER = "never"
-    # The landings past their merge reach their verdicts. A landing waits for that holding
-    # the turn, so no other landing merges meanwhile.
+    # Landings past their merge wait for their verdicts holding the turn, so no other landing merges
+    # meanwhile.
     VERDICTS = "verdicts"
-    # The serial landing's process ends. A landing waits for that with the turn given back,
-    # because the serial landing may need the turn again before its merge.
+    # A landing waits for the serial landing's process end with the turn given back, because the
+    # serial landing may need the turn before its merge.
     SERIAL_ENDS = "serial-ends"
 
 

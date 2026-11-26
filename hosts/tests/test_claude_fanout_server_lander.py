@@ -2,7 +2,7 @@
 """claude-fanout-server-lander lands finished daniel-server batches' PRs.
 
 The rule that decides a PR is `scripts/dev/fanout_lib/autoland.py`, tested in
-`scripts/dev/tests/test_fanout_autoland.py`. This module pins what the rule cannot see about
+`scripts/dev/tests/fanout_status/test_fanout_autoland.py`. This module pins what the rule cannot see about
 its unit:
 
 1. `KillMode=process`. A detached landing leaves a user-manager service's cgroup only, so the
@@ -21,7 +21,7 @@ from _agent_package import render_daniel_server_with
 from _helpers import load_yaml, REPO
 from _setup_render import CLAUDE_CODE, render_component_text
 from dev.fanout_lib import own_surface
-from lib.repo_paths import HOST_VARS
+from lib.estate import host_vars
 
 ROLE = CLAUDE_CODE
 DEFAULTS = load_yaml(ROLE / "defaults" / "main.yml")
@@ -53,8 +53,8 @@ def test_the_unit_runs_the_command_as_the_operator_and_alerts_on_failure():
 
 
 def test_the_command_runs_in_a_checkout_the_operator_owns_not_the_agents_clone():
-    # On daniel-box `claude_code_rc_workdir` is the agent's clone, which `ubuntu` cannot write
-    # and git refuses as "dubious ownership".
+    # On daniel-box the agent's clone is not writable by `ubuntu`, and git refuses it as "dubious
+    # ownership".
     unit = _render(
         claude_code_rc_workdir="/var/lib/claude/server",
         claude_code_operator_checkout="/home/ubuntu/server",
@@ -80,8 +80,8 @@ def test_the_timer_runs_every_ten_minutes_by_default():
 def test_armed_only_on_daniel_box_and_disarming_drops_the_units(tmp_path):
     key = "claude_code_fanout_server_lander_enabled"
     assert DEFAULTS[key] is False
-    assert load_yaml(HOST_VARS / "daniel-box.yml").get(key) is True
-    assert not load_yaml(HOST_VARS / "daniel-server.yml").get(key, False)
+    assert host_vars("daniel-box").get(key) is True
+    assert not host_vars("daniel-server").get(key, False)
 
     on = render_daniel_server_with(tmp_path / "on", **{key: True})
     off = render_daniel_server_with(tmp_path / "off", **{key: False})

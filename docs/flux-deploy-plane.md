@@ -15,7 +15,7 @@ recovered by *Recovering Flux by hand*.
   `k8s/roles/flux/defaults/main.yml`. helm-controller and the image-automation
   controllers are not installed, because nothing here uses them.
 - **Flux applies them**, from `k8s/roles/flux/`'s render under the tag `flux`
-  (its entry is in `cluster/services.yml`). The Kustomization `flux` applies the components at `prune: false`, and
+  (its entry is in `k8s/services.yml`). The Kustomization `flux` applies the components at `prune: false`, and
   `flux-deferred` applies the sync objects at `prune: true`. No local script applies the
   tag.
 - **The install is vendored.** `files/gotk-components.yaml` is the output of `flux install
@@ -29,7 +29,7 @@ recovered by *Recovering Flux by hand*.
 
 Renovate opens a manual PR for a new `fluxcd/flux2` release, because its hosted app can bump
 `flux_version` but cannot run `flux install`. The PR is finished by regenerating the vendored
-file at the new release. Until then, the header test in `tests/k8s/test_flux_role.py`
+file at the new release. Until then, the header test in `tests/k8s/workloads/test_flux_role.py`
 fails, because the file's first line still names the old release. Land the finished PR with
 `land.sh`; `promote` publishes it, and the Kustomization `flux` rolls the controllers. A
 release that breaks the controllers is the first branch of *Recovering Flux by hand*.
@@ -132,7 +132,7 @@ Kustomization's status, but it builds nothing and applies nothing. The deepest c
 requeue most, and a Kustomization with no `dependsOn` never requeues. The requeues are
 accepted too. A longer `--requeue-dependency` would cut them, but each `dependsOn` hop of
 every rollout could then wait up to that longer interval. `chained_timeout.py` also sizes `verify`'s wait from
-the default, and `scripts/deploy_tools/tests/test_chained_timeout.py` fails a vendored install
+the default, and `scripts/deploy_tools/tests/promote/test_chained_timeout.py` fails a vendored install
 or role default that sets the flag.
 
 The rate follows the merge rate on master, so it has no fixed value. One hour of
@@ -410,7 +410,7 @@ Three things hold the ruling on the tree:
   a flux-owned service*).
   ```
 
-- **No ownership flag.** Every `cluster/services.yml` entry is Flux's, so no key marks one (H1.9).
+- **No ownership flag.** Every `k8s/services.yml` entry is Flux's, so no key marks one (H1.9).
 - **No local path.** No local script applies a k8s entry: `promote` and Flux do, and
   `land.sh` gates the tags a PR changed.
 
@@ -426,7 +426,7 @@ ClusterRole `flux-view-flux-system` carries the label
 `watch` on six Flux API groups to `view`, which that identity binds. No change to
 `k3s_readonly_crd_api_groups` is needed. The operator accepted the aggregation on 2026-10-12.
 
-Two guards in `tests/k8s/test_aggregated_clusterroles.py` keep the grant from
+Two guards in `tests/k8s/rbac/test_aggregated_clusterroles.py` keep the grant from
 widening unseen. Every ClusterRole that aggregates into `view`, `edit` or `admin` must be on
 that module's allowlist with a reason. `flux-view-flux-system` must stay read-only on exactly
 its six groups, so a Flux upgrade that widens it fails CI.
@@ -456,7 +456,7 @@ The Kustomization `flux-deferred` applies these objects in `flux-system` from th
   Kustomization and from the `OCIRepository` `homelab` to the `discord_alert_webhook` channel.
 
 A renderer test pins the two `OCIRepository` objects' URL, `ref` and `verify` block to these values
-(`scripts/renderer/tests/test_renderer_bootstrap_documents.py`), so a change to them fails CI
+(`scripts/renderer/tests/manifests/test_renderer_bootstrap_documents.py`), so a change to them fails CI
 rather than cutting Flux off from its source. The renderer refuses `flux_sync_suspend: true`:
 Flux would apply the suspend to its own source and could never fetch the commit that clears
 it. To stop all reconciliation, suspend the `OCIRepository` `homelab` by hand, as *Recovering
@@ -647,7 +647,7 @@ to fetch the commit that fixes it. In this order:
   owner would stay on every field, and a later commit that removed one would never take
   effect.
 
-The `recovery-*` rows of `tests/repo/test_runbook_rules.py` fail this section on a suspend
+The `recovery-*` rows of `tests/repo/census_rows/test_runbook_rules.py` fail this section on a suspend
 or a resume without `--field-manager=homelab-operator`, on a server-side apply without
 `--force-conflicts`, and on a hand-apply branch whose apply precedes its `DEPLOY_HOLD` step.
 
@@ -762,7 +762,7 @@ step 6 applies.
    Kustomization in their `dependsOn` closure, `flux/cluster-vars.yaml` and
    `flux/homelab-namespace.yaml`. The closure never holds
    `flux-deferred` or the root, because `flux-deferred` applies the root.
-   `scripts/renderer/tests/test_renderer_bootstrap_documents.py` fails a plumbing tag whose
+   `scripts/renderer/tests/manifests/test_renderer_bootstrap_documents.py` fails a plumbing tag whose
    closure reaches either.
 
     ```bash
@@ -813,7 +813,7 @@ Every hand apply in steps 3, 5, 6 and 9 is
 file. That is the root's own field manager, so the root and the `flux` tag adopt each object
 without a conflict.
 
-The `bootstrap-*` rows of `tests/repo/test_runbook_rules.py` fail this section when the
+The `bootstrap-*` rows of `tests/repo/census_rows/test_runbook_rules.py` fail this section when the
 root's apply comes before the restore step, when a hand apply lacks
 `--field-manager=kustomize-controller`, and when a step names `reset_to_last_good` without its
 condition and the recorded exception. They also refuse, on any line of the section, fenced
@@ -1099,7 +1099,7 @@ read: `none`, or the `failed=` hold the revert rule passed. A superseding `tag` 
 nothing once `last-good` has moved since `decide` read it (D7.7). A run is superseded only
 while `SUPERSEDE` is on (`docs/archive/deploy/d7-superseding-promotions.md`),
 and otherwise both reads are inert
-until then. `scripts/deploy_tools/tests/test_promote_settle_owner.py` runs both steps against fake
+until then. `scripts/deploy_tools/tests/promote/test_promote_settle_owner.py` runs both steps against fake
 binaries.
 
 `verify` and `settle` join no concurrency group: GitHub keeps one pending job per group and a
@@ -1297,7 +1297,7 @@ promotion verifying across the reboot would therefore hold.
 - **The window.** It opens T's own derived verify timeout before the reboot, and it closes when
   M2's mute ends. The reboot is the cron's fire plus `weekly_reboot_shutdown_delay_minutes`,
   and the mute ends `weekly_reboot_mute_recovery_minutes` after the reboot. `decide` reads the
-  `weekly_reboot_*` variables from `inventory/group_vars/all.yml` in its checkout.
+  `weekly_reboot_*` variables from `estate/vars.yml` in its checkout.
   At the committed schedule, the window closes at 08:15 UTC on Sunday and opens between about
   02:05 and 07:30, depending on T.
 - **Which timeout `decide` reads.** It is T's own, from `verify_promotion.expected_set`, the
@@ -1308,7 +1308,7 @@ promotion verifying across the reboot would therefore hold.
 - **The scheduled run.** `promote.yml`'s `schedule:` cron fires at the window's end and
   promotes master's tip. It skips render, images and publish, because every commit merged
   in the window was published by its own run. GitHub reads the cron as a literal, so
-  `scripts/deploy_tools/tests/test_promote_reboot_window.py` derives it from the same
+  `scripts/deploy_tools/tests/promote/test_promote_reboot_window.py` derives it from the same
   variables and fails when the two differ. GitHub can start a scheduled run late or skip it.
   A skipped run leaves the window's commits for the run the next merge starts.
 - **`land-wait`.** Each poll inside the window moves the give-up deadline to the window's end
@@ -1349,8 +1349,8 @@ only after its dependencies finish, so the wait sums four terms, with the soak b
 
 The root `homelab`'s 5-minute `timeout` is the floor of the first two terms. The flux role
 leaves `--requeue-dependency` at its default, and
-`scripts/deploy_tools/tests/test_chained_timeout.py` fails a vendored install or role default
-that sets it. `tests/k8s/test_flux_role.py` holds `chained_timeout.CONCURRENT` equal to
+`scripts/deploy_tools/tests/promote/test_chained_timeout.py` fails a vendored install or role default
+that sets it. `tests/k8s/workloads/test_flux_role.py` holds `chained_timeout.CONCURRENT` equal to
 the `--concurrent` the role renders, less the soak's worker.
 A `dependsOn` naming a Kustomization the bundle does not hold, or a cycle, fails `verify`
 with no verdict, and `settle` holds it as `<T> unverified`.
@@ -1360,7 +1360,7 @@ with no verdict, and `settle` holds it as `<T> unverified`.
 `<T> unverified`, which names no Kustomization. At the cap `verify` prints `failed` with the
 names that never passed, and `settle` writes that hold like any other timeout. Three limits
 are sized from the cap, and the `promote-verify-*` and `promote-job-timeout-*` rows of
-`tests/repo/test_census_rows_workflows.py` hold them against each other:
+`tests/repo/census_rows/test_census_rows_workflows.py` hold them against each other:
 
 | Limit | Value | Why |
 |---|---|---|
@@ -1407,7 +1407,7 @@ A wait shorter than a verification is safe and costs a promotion. `decide` gives
 
 ## The bundle
 
-The render job publishes the deploy tags of every entry in `cluster/services.yml`. `promote.py published-tags` prints them. A tag whose entry goes is left
+The render job publishes the deploy tags of every entry in `k8s/services.yml`. `promote.py published-tags` prints them. A tag whose entry goes is left
 out, and the tag rule refuses that change while its role stays (*A Flux-owned service stays
 Flux-owned*). The publish floor fails `published-tags` and `check-bundle` when the list
 publishes no `coredns`, `longhorn`, `metallb` or `traefik`, so an empty or shrunken list
@@ -1422,7 +1422,7 @@ and no tag, so the first decryption of the cluster file gets a revision of its o
 branches pass `--all-images`, because the `images` job refuses a render without
 `images/tags.json` and `publish` needs that job (#5593).
 The `promote-render-no-tag-branch-renders-the-shared-kinds` row of
-`tests/repo/test_census_rows_workflows.py` fails a no-tag branch without
+`tests/repo/census_rows/test_census_rows_workflows.py` fails a no-tag branch without
 `--shared-only` or `--all-images`.
 
 After the census, the step `ciphertext` runs `cluster_vars.py check --ciphertext-only` on
@@ -1499,14 +1499,14 @@ escaping*).
 - **The projection is `spec.postBuild`.** A reader that sees only the written bundle reads
   that field: the publish gate *source* below, and `promote.py verify`'s timeout.
 
-`scripts/renderer/tests/test_renderer_bundle.py` holds the predicate: a fixture with a
+`scripts/renderer/tests/bundle/test_renderer_bundle.py` holds the predicate: a fixture with a
 placeholder gets both fields, one without gets neither and keeps `${HOME}` as written.
 
 ### Ordering: `dependsOn`
 
 The renderer generates every `dependsOn` from its own dependency map, and no template
 writes one. The `no-template-hand-writes-depends-on` row of
-`tests/repo/test_census_rows_text.py` fails a template that does.
+`tests/repo/census_rows/test_census_rows_text.py` fails a template that does.
 `scripts/renderer/renderer_lib/cluster.py:bundle_ordering` builds the map with `build_k8s_dep_map` over the full k8s
 `containers_list`, so a `--role` render gives a tag
 the same toposort edges as a full one. The `<tag>-deferred` edges come from the tags the
@@ -1541,7 +1541,7 @@ Flux would hold every Kustomization on it at `DependencyNotReady`. An edge gover
 revision after the one that adds it, so a PR that adds an edge does not also change the
 dependent's render. The plan is `docs/archive/deploy/d4-ordering.md`, and
 `scripts/renderer/renderer_lib/ordering.py` derives the edges, and
-`scripts/renderer/tests/test_renderer_bundle_ordering.py` holds the rules.
+`scripts/renderer/tests/bundle/test_renderer_bundle_ordering.py` holds the rules.
 
 ### Restart triggers: `checksum/restart`
 
@@ -1583,12 +1583,12 @@ the type Flux substitutes into it.
 
 Two tests keep the annotation honest:
 
-- **The outside-role reference test**, in `scripts/renderer/tests/test_renderer_restart.py`,
+- **The outside-role reference test**, in `scripts/renderer/tests/manifests/test_renderer_restart.py`,
   fails when a flux-owned pod template names a Secret or ConfigMap that its own role does not
   render. The annotation sees only the role's own render, so such a reference would roll
   nothing. peanut is its named member.
 - **The self-rollouts census**, in
-  `scripts/renderer/tests/test_renderer_self_rollout_restart.py`, renders every role that
+  `scripts/renderer/tests/manifests/test_renderer_self_rollout_restart.py`, renders every role that
   sets `manifests_self_rollouts` as flux-owned. It fails on an entry whose pod template
   names a ConfigMap or Secret and carries no `checksum/restart`. pihole and observability
   are its named members, and pihole-2 with its annotation removed is its red fixture. flux's
@@ -1616,7 +1616,7 @@ manifests rather than as placeholders. `cluster_vars.py write` (operator-only) k
 - **The publish job's `ciphertext` step covers the copies**, because each ends in
   `.sops.yaml` under `out/cluster/`.
 
-`scripts/renderer/tests/test_renderer_bundle.py` holds the pair: pi-peer-backup with a fixture
+`scripts/renderer/tests/bundle/test_renderer_bundle.py` holds the pair: pi-peer-backup with a fixture
 manifest gets the copy and `decryption`, bento-pdf beside it gets neither, and a manifest
 without the annotation fails the render.
 
@@ -1784,7 +1784,7 @@ gate's name.
   holds no Kustomization, and a document whose `spec.path` is not a directory under
   `cluster/`.
 - **host**: every `Host(...)` in an IngressRoute ends in `.<domain>`, the literal that
-  `inventory/group_vars/all.yml` defines. A `${domain}`, a `stub-domain` and a
+  `estate/vars.yml` defines. A `${domain}`, a `stub-domain` and a
   hand-written host each fail. While bento-pdf is published, its `.local.` route is the
   gate's named member, and the gate fails when that route holds no matching Host rule.
 - **no-stub**: no file in the bundle holds an R1 stub value, `stub-<key>` for a key name of
@@ -2088,7 +2088,7 @@ A flux-owned service retires through its own render, in this order:
    names an emptied workload goes too, because the renderer refuses a restart target with no
    workload in the render. `promote` must move `prod` to a commit
    that holds this PR, and the objects must read `NotFound`, before the next step.
-   `scripts/validate/tests/test_validate_cross_plane_retirement.py` renders both forms.
+   `scripts/validate/tests/renders/test_validate_cross_plane_retirement.py` renders both forms.
 1. **The retiring PR removes the `containers_list` entry and the role.** It carries a
    `Removes-Object:` line for each object with no prune exemption in every directory the tag
    still renders: `cluster/<tag>/` and each suffixed kind, whose objects arm 3 counts for

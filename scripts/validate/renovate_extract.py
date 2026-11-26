@@ -46,7 +46,6 @@ from lib.renovate_annotations import annotations_in, is_annotation_manager
 from lib.repo_paths import REPO
 
 TABLE = REPO / "scripts/validate/renovate_expected_deps.tsv"
-# The check's own code and inputs: a PR changing one runs the extract against the real tree.
 # The annotation reader's path comes from the module, because a literal path here reads to
 # lib/script_classify.py as this script invoking it.
 CHECK_FILES = frozenset(
@@ -92,13 +91,12 @@ REGISTRY_BUILT_IMAGES = frozenset(
 IMAGE_DEFAULTS = (
     "k8s/roles/*/defaults/main.yml",
     "hosts/components/registry-gc/defaults/main.yml",
-    "inventory/group_vars/all.yml",
+    "k8s/vars.yml",
 )
 CONTROL_PLANE_DEFAULTS = "k8s/roles/system-upgrade/defaults/main.yml"
 
-# (file, depName) of regex deps whose captured value is deliberately shorter than the version
-# beside it. Each jellyfin plugin's release tag is the leading part of the plugin's four-part
-# version, so the matchStrings capture the tag and rewrite every occurrence in step.
+# Each jellyfin plugin's release tag is the leading part of its four-part version, so the
+# matchStrings capture the tag and rewrite every occurrence in step.
 PARTIAL_VALUE_DEPS = frozenset(
     {
         ("k8s/roles/jellyfin/defaults/main.yml", "vosmiic/jellyfin-ani-sync"),
@@ -113,7 +111,7 @@ PARTIAL_VALUE_DEPS = frozenset(
 # Version keys a pinned download renders from that no manager tracks, on purpose.
 UNTRACKED_BY_DECISION = {
     # Covers traefik's in-tree CRD copy, which Renovate cannot rewrite: the image pin is the
-    # tracked one, and tests/k8s/test_traefik_crds.py fails a minor image bump until the copy,
+    # tracked one, and tests/k8s/edge/test_traefik_crds.py fails a minor image bump until the copy,
     # this key and the hash are refreshed together.
     "traefik_crds_k8s_version": "follows traefik_k8s_image's minor; refreshed by hand",
 }

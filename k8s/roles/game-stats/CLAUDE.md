@@ -20,7 +20,7 @@ claims are unchanged.
 <!-- /generated_from -->
 
 - **Flux applies it.** Its `containers_list` entry
-  is in `cluster/services.yml`, so nothing applies it by hand, and a
+  is in `k8s/services.yml`, so nothing applies it by hand, and a
   merged change reaches the cluster when `promote` publishes and verifies the next bundle. Both
   Deployments are `Recreate` over
   an RWO claim, so a roll stops the old pod before the new one starts and the exporter's
@@ -42,7 +42,7 @@ claims are unchanged.
 - Stock `python` (`game_stats_k8s_image`), not an `image-builder` build: both scripts and `stats_lib.py` are
   pure stdlib, so a build would add a layer and change nothing that runs.
   **Not because a built image could not be pulled here.** The in-cluster `registry` serves a
-  cross-node pull — `inventory/group_vars/all.yml:k8s_registry_pull_host` is one
+  cross-node pull — `k8s/vars.yml:k8s_registry_pull_host` is one
   mirror key every node's `registries.yaml` carries, and `k8s/roles/ical-proxy/` is
   the live proof. An earlier version of this bullet claimed the opposite and would have
   talked a sibling role out of a build it could have (#2703).
@@ -53,7 +53,7 @@ claims are unchanged.
 - **A script edit rolls the pods with no annotation of the role's own.** The edit changes the
   render, and the renderer's restart checksum hashes the ConfigMap each pod
   mounts (`docs/flux-deploy-plane.md`, *Restart triggers*).
-  `scripts/renderer/tests/test_renderer_game_stats_restart.py` holds both ConfigMaps to that.
+  `scripts/renderer/tests/manifests/test_renderer_game_stats_restart.py` holds both ConfigMaps to that.
 
 ## terraria-stats
 
@@ -64,7 +64,7 @@ claims are unchanged.
   `players` schema, `load_state` and `save`, over a `stats_lib.SqliteStore` subclass.
 - **It runs while the game server does.** Neither Deployment renders `replicas:`; deploy.local's
   Games panel starts and stops each exporter with its server, from the `game_servers` registry
-  in `inventory/group_vars/all.yml` (ADR-0033). The scrape job renders either way, and its
+  in `estate/vars.yml` (ADR-0033). The scrape job renders either way, and its
   `ScrapeTargetDown` rule mutes while kube-state-metrics reads 0 replicas, because a Service
   with no endpoint reads `up == 0`.
 
@@ -105,7 +105,7 @@ Both exporters run as stock `python` pods with `stats_lib.py` mounted alongside 
 own entry script by a ConfigMap, because a directly-invoked script gets only its own
 directory on `sys.path`. Each game's ConfigMap template carries the copy as a second key.
 `docs/game-stats-internals.md` has the mechanism and the guard that holds it,
-`scripts/renderer/tests/test_renderer_game_stats_restart.py`.
+`scripts/renderer/tests/manifests/test_renderer_game_stats_restart.py`.
 
 ## Editing
 
@@ -113,4 +113,4 @@ directory on `sys.path`. Each game's ConfigMap template carries the copy as a se
   `k8s/roles/game-stats/files/stats_lib.py`. Tests: `k8s/roles/game-stats/tests/`
   (`uv run pytest k8s/roles/game-stats/tests`). A change in `stats_lib.py` affects
   both games
-  (`scripts/renderer/tests/test_renderer_game_stats_restart.py::test_a_stats_lib_edit_moves_both_pods_checksums`).
+  (`scripts/renderer/tests/manifests/test_renderer_game_stats_restart.py::test_a_stats_lib_edit_moves_both_pods_checksums`).

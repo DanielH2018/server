@@ -113,10 +113,8 @@ def eval_path_expr(
             return None
         if name == "str" and len(node.args) == 1:
             return eval_path_expr(node.args[0], file, index, seen)
-        # The `os.path` spelling of the same arithmetic. Test modules across this repo
-        # bootstrap with `os.path.dirname(os.path.dirname(os.path.abspath(__file__)))`
-        # rather than `Path(__file__).resolve().parents[1]`, and guard 3
-        # (test_test_module_bootstraps_present.py) reads them through this evaluator.
+        # The `os.path` spelling of the same arithmetic, which test modules bootstrap with; guard 3
+        # reads them through this evaluator.
         if name == "dirname" and len(node.args) == 1:
             base = eval_path_expr(node.args[0], file, index, seen)
             return base.parent if base is not None else None

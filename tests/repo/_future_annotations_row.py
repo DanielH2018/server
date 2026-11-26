@@ -49,9 +49,8 @@ NO_FUTURE_ANNOTATIONS = Census(
         Subject("b.py", "from __future__ import division\n"),
     ),
     min_matches=200,
-    # One per context that reaches the uv interpreter: a template filter, a Claude hook, an
-    # eval script and the suite's shared helper. Then one per context that reaches a host's
-    # /usr/bin/python3: the repository signer's helper and rootq's root script.
+    # One per context that reaches the uv interpreter, then one per context that reaches a host's
+    # /usr/bin/python3.
     must_find=frozenset(
         {
             "scripts/renderer/template_filters/toposort.py",

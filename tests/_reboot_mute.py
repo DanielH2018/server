@@ -1,16 +1,16 @@
 """Alertmanager's `weekly-reboot` mute, as rendered and as the reboot schedule implies.
 
 `mute_minutes` reads the mute Alertmanager is given. `window_minutes` is the sum the template
-does, from the `weekly_reboot_*` values in group_vars/all.yml alone. Both count minutes of the
+does, from the `weekly_reboot_*` values in estate/vars.yml alone. Both count minutes of the
 week from Sunday 00:00, and both take the same template-variable overrides.
 """
 
+from lib.estate import shared_vars
 from lib import yaml_fast
 from _k8s_render import render_role_template
 
-from lib.repo_paths import ALL_VARS
 
-GROUP_VARS = yaml_fast.safe_load(ALL_VARS.read_text())
+GROUP_VARS = shared_vars()
 MINUTES_PER_DAY = 24 * 60
 MINUTES_PER_WEEK = 7 * MINUTES_PER_DAY
 WEEKDAYS = [

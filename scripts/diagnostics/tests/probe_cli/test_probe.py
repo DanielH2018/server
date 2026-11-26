@@ -1,0 +1,373 @@
+"""probe.py's command surface: argv parsing, URL building, output formatting.
+
+These cover the pieces a subcommand is assembled from — the URL builders in `core`, the
+argparse surface in `cli_parser`, and the formatters each `run_*` prints through.
+
+`test_probe_curl_pipeline.py` covers the routing itself: which host `plan()` asks and which URL it
+builds for each streaming subcommand.
+"""
+
+import subprocess
+
+import pytest
+
+from diagnostics.probe_lib import arr
+from diagnostics.probe_lib import health_docker
+from diagnostics.probe_lib import metrics
+from diagnostics.probe_lib import cli_parser
+from diagnostics.probe_lib import core
+
+
+def test_prom_query_url_encodes_promql():
+    url = core.prom_query_url("https://prom.example", "up == 0")
+    assert url == "https://prom.example/api/v1/query?query=up+%3D%3D+0"
+
+
+def test_prom_targets_url():
+    assert (
+        core.prom_targets_url("https://prom.example")
+        == "https://prom.example/api/v1/targets"
+    )
+
+
+def test_loki_labels_url():
+    assert (
+        core.loki_labels_url("https://loki.example")
+        == "https://loki.example/loki/api/v1/labels"
+    )
+
+
+def test_loki_query_url_encodes_logql_and_limit():
+    url = core.loki_query_url("https://loki.example", '{job="x"}', 50)
+    assert (
+        url
+        == "https://loki.example/loki/api/v1/query_range?query=%7Bjob%3D%22x%22%7D&limit=50"
+    )
+
+
+def test_scrutiny_url():
+    assert (
+        core.scrutiny_url("https://scrutiny.example")
+        == "https://scrutiny.example/api/summary"
+    )
+
+
+def test_curl_argv():
+    assert core.curl_argv("http://x") == [
+        "curl",
+        "-sS",
+        "--max-time",
+        "10",
+        "http://x",
+    ]
+
+
+def test_k8s_service_ip_args_target_the_service():
+    argv = health_docker.k8s_service_ip_args("sonarr", "homelab")
+    assert argv[-1] == "jsonpath={.spec.clusterIP}"
+    assert "sonarr" in argv
+    assert "homelab" in argv
+
+
+def test_format_metric_vector_prints_labels_and_value_per_series():
+    data = {
+        "data": {
+            "resultType": "vector",
+            "result": [
+                {
+                    "metric": {"__name__": "monitor_status", "monitor_name": "Pi"},
+                    "value": [1720000000, "1"],
+                },
+                {
+                    "metric": {"__name__": "monitor_status", "monitor_name": "Loki"},
+                    "value": [1720000000, "0"],
+                },
+            ],
+        }
+    }
+    out = metrics.format_metric(data)
+    assert "monitor_name=Pi = 1" in out
+    assert "monitor_name=Loki = 0" in out
+    # __name__ is dropped — it's the metric name, redundant here.
+    assert "__name__" not in out
+
+
+def test_format_metric_single_unlabeled_series_prints_bare_value():
+    # e.g. predict_linear(...)/1e9 strips all labels -> just the scalar.
+    data = {
+        "data": {
+            "resultType": "vector",
+            "result": [{"metric": {}, "value": [0, "6.47"]}],
+        }
+    }
+    assert metrics.format_metric(data) == "6.47"
+
+
+def test_format_metric_matrix_uses_latest_point():
+    data = {
+        "data": {
+            "resultType": "matrix",
+            "result": [
+                {
+                    "metric": {"mountpoint": "/"},
+                    "values": [[1, "10"], [2, "12"], [3, "15"]],
+                }
+            ],
+        }
+    }
+    assert metrics.format_metric(data) == "mountpoint=/ = 15"
+
+
+def test_format_metric_scalar_result_prints_value():
+    data = {"data": {"resultType": "scalar", "result": [1720000000, "42"]}}
+    assert metrics.format_metric(data) == "42"
+
+
+def test_format_metric_empty_is_no_data():
+    assert (
+        metrics.format_metric({"data": {"resultType": "vector", "result": []}})
+        == "no data"
+    )
+
+
+def test_pi_subcommand_accepts_only_containers():
+    p = cli_parser._build_parser()
+    assert p.parse_args(["pi", "containers"]).subpath == "containers"
+    with pytest.raises(SystemExit):
+        p.parse_args(["pi", "fs"])
+
+
+def test_format_loki_prints_lines_oldest_first_across_streams():
+    data = {
+        "data": {
+            "resultType": "streams",
+            "result": [
+                {
+                    "stream": {"container": "traefik"},
+                    "values": [["30", "newest"], ["10", "oldest"]],
+                },
+                {"stream": {"container": "traefik"}, "values": [["20", "middle"]]},
+            ],
+        }
+    }
+    # Sorted by nanosecond timestamp so the newest line sits nearest the prompt.
+    assert metrics.format_loki(data) == "oldest\nmiddle\nnewest"
+
+
+def test_format_loki_empty_is_no_logs():
+    assert metrics.format_loki({"data": {"result": []}}) == "no logs"
+
+
+# A `docker exec <arr> curl -H "X-Api-Key: <hex>" …/api/… | python3` pipeline
+# both prompts AND leaks the key into argv / shell history / the log.
+
+
+def test_arr_url_sonarr_defaults_to_api_v3_and_port_8989():
+    assert (
+        arr.arr_url("10.0.0.5", "sonarr", "health")
+        == "http://10.0.0.5:8989/api/v3/health"
+    )
+
+
+def test_arr_url_radarr_port_7878_api_v3():
+    assert (
+        arr.arr_url("10.0.0.6", "radarr", "queue")
+        == "http://10.0.0.6:7878/api/v3/queue"
+    )
+
+
+def test_arr_url_prowlarr_port_9696_api_v1():
+    assert (
+        arr.arr_url("10.0.0.7", "prowlarr", "indexerstatus")
+        == "http://10.0.0.7:9696/api/v1/indexerstatus"
+    )
+
+
+def test_arr_url_normalizes_leading_slash_api_and_version_prefix():
+    # bare, /-prefixed, api/-prefixed, and version-prefixed all mean the same endpoint.
+    for path in ("health", "/health", "api/v3/health", "v3/health", "/api/v3/health"):
+        assert arr.arr_url("h", "sonarr", path) == "http://h:8989/api/v3/health"
+
+
+def test_arr_url_keeps_multi_segment_path():
+    assert (
+        arr.arr_url("h", "prowlarr", "indexer/testall")
+        == "http://h:9696/api/v1/indexer/testall"
+    )
+
+
+def test_arr_curl_config_uses_x_api_key_header():
+    assert 'header = "X-Api-Key: SECRET_KEY"' in arr.arr_curl_config("SECRET_KEY")
+
+
+def test_arr_curl_config_is_not_bearer():
+    cfg = arr.arr_curl_config("SECRET_KEY")
+    assert "Bearer" not in cfg and "Authorization" not in cfg
+
+
+def test_arr_request_never_puts_key_in_argv():
+    # Regression guard mirroring the ha token: the key travels via stdin --config, never argv.
+    argv = core.ha_curl_argv(arr.arr_url("h", "sonarr", "health"))
+    assert "--config" in argv
+    assert not any("Api-Key" in a or "SECRET" in a for a in argv)
+
+
+def test_resolve_arr_ip_uses_kubectl_not_docker(monkeypatch):
+    monkeypatch.setattr(core, "k8s_namespace", lambda: "homelab")
+
+    class FakeResult:
+        returncode = 0
+        stdout = "10.43.114.186"
+        stderr = ""
+
+    calls = []
+
+    def fake_run(cluster, *argv, **kwargs):
+        calls.append(argv)
+        return FakeResult()
+
+    monkeypatch.setattr(health_docker, "kubectl", fake_run)
+    assert arr.resolve_arr_ip("sonarr") == "10.43.114.186"
+    assert calls == [tuple(health_docker.k8s_service_ip_args("sonarr", "homelab"))]
+    assert "docker" not in calls[0]
+
+
+def test_resolve_arr_ip_raises_on_kubectl_failure(monkeypatch):
+    monkeypatch.setattr(core, "k8s_namespace", lambda: "homelab")
+
+    class FakeResult:
+        returncode = 1
+        stdout = ""
+        stderr = 'services "sonarr" not found'
+
+    monkeypatch.setattr(
+        health_docker, "kubectl", lambda cluster, *argv, **kwargs: FakeResult()
+    )
+    with pytest.raises(SystemExit) as excinfo:
+        arr.resolve_arr_ip("sonarr")
+    assert "sonarr" in str(excinfo.value)
+
+
+def test_resolve_arr_ip_raises_on_empty_cluster_ip(monkeypatch):
+    monkeypatch.setattr(core, "k8s_namespace", lambda: "homelab")
+
+    class FakeResult:
+        returncode = 0
+        stdout = ""
+        stderr = ""
+
+    monkeypatch.setattr(
+        health_docker, "kubectl", lambda cluster, *argv, **kwargs: FakeResult()
+    )
+    with pytest.raises(SystemExit) as excinfo:
+        arr.resolve_arr_ip("sonarr")
+    assert "ClusterIP" in str(excinfo.value)
+
+
+def test_arr_subcommand_parses_app_path_and_json_flag():
+    p = cli_parser._build_parser()
+    ns = p.parse_args(["arr", "sonarr", "health"])
+    assert (
+        ns.cmd == "arr"
+        and ns.app == "sonarr"
+        and ns.path == "health"
+        and ns.json is False
+    )
+    assert p.parse_args(["arr", "prowlarr", "indexerstatus", "--json"]).json is True
+
+
+def test_arr_subcommand_rejects_unknown_app():
+
+    with pytest.raises(SystemExit):
+        cli_parser._build_parser().parse_args(["arr", "readarr", "health"])
+
+
+# ── core.get_status: the (status, body) curl GET postflight judges its checks by ─────────
+
+
+def stub_curl(monkeypatch, run):
+    """Replace the subprocess `get_status()` shells out to."""
+    monkeypatch.setattr(subprocess, "run", run)
+
+
+def test_get_parses_status_and_body(monkeypatch):
+    class Result:
+        returncode = 0
+        stdout = '{"a": 1}\n200'
+        stderr = ""
+
+    stub_curl(monkeypatch, lambda *a, **kw: Result())
+    assert core.get_status("http://x") == (200, '{"a": 1}')
+
+
+def test_get_reports_curl_failure_as_status_zero(monkeypatch):
+    class Result:
+        returncode = 7
+        stdout = ""
+        stderr = "connection refused"
+
+    stub_curl(monkeypatch, lambda *a, **kw: Result())
+    assert core.get_status("http://x") == (0, "connection refused")
+
+
+def test_get_reports_output_without_a_status_line_as_status_zero(monkeypatch):
+    # A trailing line that is not digits raised ValueError out of every caller.
+    class Result:
+        returncode = 0
+        stdout = '{"a": 1}'
+        stderr = ""
+
+    stub_curl(monkeypatch, lambda *a, **kw: Result())
+    status, body = core.get_status("http://x")
+    assert status == 0 and "not an HTTP status" in body
+
+
+def test_get_reports_a_curl_that_never_returns_as_status_zero(monkeypatch):
+    """The subprocess timeout is what turns a hung curl into a status-0 reply."""
+
+    def hang(argv, **kw):
+        raise subprocess.TimeoutExpired(argv, kw["timeout"])
+
+    stub_curl(monkeypatch, hang)
+    status, body = core.get_status("http://x", timeout=3)
+    assert status == 0
+    assert "8s" in body
+
+
+def test_get_bounds_the_subprocess_beyond_curls_own_max_time(monkeypatch):
+    seen = {}
+
+    class Result:
+        returncode = 0
+        stdout = "\n200"
+        stderr = ""
+
+    def fake_run(argv, **kw):
+        seen["timeout"] = kw.get("timeout")
+        seen["max_time"] = argv[argv.index("--max-time") + 1]
+        return Result()
+
+    stub_curl(monkeypatch, fake_run)
+    core.get_status("http://x", timeout=3)
+    assert seen["max_time"] == "3"
+    assert seen["timeout"] is not None and seen["timeout"] > 3
+
+
+def test_credentials_never_reach_argv(monkeypatch):
+    """The auth header goes in on stdin — a secret in argv would land in `ps`."""
+    seen = {}
+
+    class Result:
+        returncode = 0
+        stdout = "\n200"
+        stderr = ""
+
+    def fake_run(argv, input=None, **kw):
+        seen["argv"] = argv
+        seen["input"] = input
+        return Result()
+
+    stub_curl(monkeypatch, fake_run)
+    core.get_status("http://x", 'header = "X-Api-Key: hunter2"\n')
+    assert "hunter2" not in " ".join(seen["argv"])
+    assert "hunter2" in seen["input"]

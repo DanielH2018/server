@@ -42,8 +42,6 @@ from lib.cli_help import answer_help
 from validate.render_lib import compose, k8s, setup_plane, shell, units
 from validate.validate_lib.ok_lines import ok_printer
 
-# A family's run takes the `[ok]` printer and returns (checked, failures), printing its own
-# `[FAIL]` lines as it goes.
 Run = Callable[[Callable[[str], None]], tuple[int, int]]
 
 
@@ -62,11 +60,11 @@ class Family:
 
 # The render's import closure and the inventory it layers in, which every family reads.
 _SHARED = (
-    r"hosts/lib/host_lib\.py|scripts/lib/longhorn_lib/longhorn_backups\.py|cluster/services\.yml"
+    r"hosts/lib/host_lib\.py|scripts/lib/longhorn_lib/longhorn_backups\.py|k8s/services\.yml"
     r"|scripts/renderer/(renderer_lib|template_filters)/[^/]+\.py"
     r"|scripts/deploy_tools/(chained_timeout|changed_set|kustomizations)\.py"
     r"|scripts/validate/(render_templates|validate_lib/(ok_lines|shipped_render))\.py"
-    r"|inventory/(host_vars/[^/]+|group_vars/all)\.yml"
+    r"|(hosts/[^/]+/vars|hosts/vars|estate/vars|k8s/vars)\.yml"
     r"|scripts/lib/(container_entry|inventory_lists|guard_jinja_env|cli_help|exit_codes|estate"
     r"|git|jinja_comments|k8s_conditions|k8s_context|k8s_lookups|k8s_objects|k8s_role_callers|k8s_roles|k8s_yaml"
     r"|host_modules|render_context|render_guard|repo_paths|role_files|yaml_fast)\.py"
@@ -108,8 +106,8 @@ FAMILIES: dict[str, Family] = {
         rf"hosts/components/(?!{_COMPOSE_TREES}).*\.(j2|yml)|secrets/secret_rotation\.yml"
         r"|scripts/validate/(validate_lib/host_specs|render_lib/setup_plane)\.py",
     ),
-    # Every `.j2` under a role, not only templates/: a manifest embeds a script or a config
-    # from anywhere in the role with `lookup()`.
+    # Every `.j2` under a role, not only templates/: a manifest embeds a script or config from
+    # anywhere in the role with `lookup()`.
     "k8s": _family(
         k8s.run,
         rf"k8s/roles/.*\.j2|{_ROLE_DEFAULTS}|k8s/templates/ingressroute\.yml\.j2"

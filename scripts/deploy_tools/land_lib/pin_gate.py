@@ -187,9 +187,8 @@ def land_rule(ln: Landing, pins: list[str]) -> None:
     tip = ln.git("rev-parse", f"origin/{BRANCH}")
     if tip.returncode != 0:
         ln.die(f"could not resolve origin/{BRANCH} for the land rule", 1)
-    # First-parent with ancestry-path, as `promote.py`'s own walk reads (`last-good`, T]. A
-    # `last-good` that is not on master's first-parent line leaves the range empty, so it
-    # is refused rather than read as "no change in flight".
+    # A `last-good` off master's first-parent line leaves the range empty, so it is refused rather
+    # than read as "no change in flight".
     ancestor = ln.git("merge-base", "--is-ancestor", last_good, tip.stdout.strip())
     if ancestor.returncode != 0:
         ln.die(

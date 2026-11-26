@@ -27,7 +27,7 @@ LAN-only **Docker** wg-easy, on an older version with a different auth model.
   deliberate PR; the digest keeps it immutable within v15.x.
 - **`udp_port: 51820`** on the `containers_list` entry.
 - **Flux applies it.** Its
-  `containers_list` entry is in `cluster/services.yml`, so nothing applies it by hand, and a merged change reaches the cluster when `promote` publishes and
+  `containers_list` entry is in `k8s/services.yml`, so nothing applies it by hand, and a merged change reaches the cluster when `promote` publishes and
   verifies the next bundle. The Deployment is `Recreate` and the role declares no snapshot claim, so
   the tag renders no
   `-snapshot` Job. A change that rolls the pod cuts every WireGuard peer until the new pod is
@@ -70,7 +70,7 @@ The server MASQUERADEs peer traffic out of its own pod, so a peer would arrive a
 or pod IP as the wg-easy pod and bypass the Authelia gate on that service's route. The
 `peer-cluster-drop` init container stops that: it inserts `FORWARD -i wg0 -d <cidr> -j DROP` at
 position 1 for `k3s_pod_cidr` and `k3s_service_cidr`
-(`tests/services/test_wg_easy_peer_cluster_drop.py::test_drop_rules_follow_the_cluster_cidr_vars_is_clean`),
+(`tests/services/network/test_wg_easy_peer_cluster_drop.py::test_drop_rules_follow_the_cluster_cidr_vars_is_clean`),
 and logs `iptables -S FORWARD` —
 `kubectl -n homelab logs deploy/wg-easy -c peer-cluster-drop` is the live proof.
 

@@ -40,8 +40,6 @@ def _groups_view(model: dict) -> str:
 def _table_view(model: dict) -> str:
     rows = []
     for service in model["services"]:
-        # "Runs on" is where the pods landed; a k8s service with none falls back
-        # to the host that declares it.
         runs_on = ", ".join(service.get("nodes") or []) or service.get("host", "")
         rows.append(
             "<tr>"
@@ -84,11 +82,8 @@ def render_svg(model: dict) -> str:
     open_tag = svg[:open_tag_end].replace(
         "<svg ", '<svg xmlns="http://www.w3.org/2000/svg" ', 1
     )
-    # CDATA because the stylesheet contains '>' in descendant selectors, which is not
-    # legal bare text in XML.
-    # Trailing newline: the end-of-file-fixer prek hook adds one otherwise, and a
-    # generated file a hook keeps rewriting fails the docs-refresh cron's commit on
-    # every run.
+    # CDATA because the stylesheet contains '>' in selectors. Trailing newline: end-of-file-fixer
+    # would otherwise rewrite it and fail docs-refresh's commit.
     return f"{open_tag}<style><![CDATA[{STYLE}]]></style>{svg[open_tag_end:]}\n"
 
 
@@ -122,7 +117,7 @@ def render_html(model: dict) -> str:
 <style>{STYLE}</style>
 </head><body><div class="wrap">
 <h1>Homelab infrastructure</h1>
-<p class="lede">Declared state from <code>cluster/services.yml</code> and <code>inventory/host_vars/</code>, overlaid with
+<p class="lede">Declared state from <code>k8s/services.yml</code> and <code>hosts/&lt;host&gt;/vars.yml</code>, overlaid with
 live state from <code>kubectl</code> and <code>docker ps</code>. Regenerated on a timer, so
 edits to the inventory and drift in the running fleet both show up here on their own.</p>
 <p class="meta">Generated {e(model["generated_at"])} &middot; page reloads every {PAGE_REFRESH_SECONDS // 60} min</p>

@@ -100,7 +100,7 @@ The role `CLAUDE.md` keeps the rules; this is the wiring.
   keys, which `templates/config/env.yaml.j2` renders from the `weekly_reboot_*` group vars, so
   PromotionStalled stays quiet while `promote` defers across the weekly reboot (#5458).
 - **The deploy-pipeline scrape port is a literal in `prometheus.yaml.j2`.**
-  `tests/services/test_deploy_pipeline_scrape.py` holds it to the role's default.
+  `tests/services/scraping/test_deploy_pipeline_scrape.py` holds it to the role's default.
 - **The gates' labels.** B2 and WAN Reachable skip the rows naming them. The `prometheus` gate
   value suppresses no row in the bridge: it labels the rows `EXPORTER_DEPENDENT` holds and the
   rules that carry the exporter inhibit. `registry.build_checks` hands each row's `gate` to
@@ -118,9 +118,9 @@ The role `CLAUDE.md` keeps the rules; this is the wiring.
   layout misses.
 - **A module edit rolls the pod.** Under Flux the restart annotation that the renderer stamps
   (`RESTART_ANNOTATION` in `scripts/renderer/renderer_lib/restart.py`) hashes every ConfigMap
-  the volume names. `scripts/renderer/tests/test_renderer_monitor_bridge_script.py` holds the
+  the volume names. `scripts/renderer/tests/manifests/test_renderer_monitor_bridge_script.py` holds the
   embed, the size and the checksum.
-- **Flux applies the role** since #5594. Its `containers_list` entry is in `cluster/services.yml`, and the
+- **Flux applies the role** since #5594. Its `containers_list` entry is in `k8s/services.yml`, and the
   Kustomization's `wait` replaces the rollout wait.
 - **Config in tests.** A test states the registry, gate rows first, and its I/O as a
   `FakeSources` passed as `src`. A default argument cannot read the config, because it
@@ -205,7 +205,7 @@ The role `CLAUDE.md` keeps the rules; this is the wiring.
   for this role.
 - **A test that does patch one must patch the module that READS the name, and a module reads
   it qualified** (`bridge.net.prom_vector` at call time, never `from bridge.net import prom_vector`). Getting it
-  wrong is silent, so `tests/services/test_monitor_bridge_modules.py` re-derives every
+  wrong is silent, so `tests/services/monitor_bridge/test_monitor_bridge_modules.py` re-derives every
   patched `(module, name)` pair by AST, and `test_bridge_patch_boundary.py` beside it fails a
   runtime module that from-imports a patched name.
 - **Per-check state is a parameter too.** Every streak counter and probe cache is a field of

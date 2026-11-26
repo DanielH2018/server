@@ -17,7 +17,7 @@ single source of truth, and it loses locality: inject-nested-docs puts a role do
 block first, in front of a session that touches the role, and nothing injects `services.md`.
 
 ONE FIELD SET. Every role is a k8s service role (`k8s/roles/<name>/`, every entry of
-`cluster/services.yml`), and its block carries:
+`k8s/services.yml`), and its block carries:
 
 - an **Applied by** line (`catalog_backup.owner_stance`): it names Flux and `promote`, and says
   `land.sh --tags=<tag>` gates the rollout, the tag from `entry_tags`;
@@ -85,9 +85,9 @@ from docs.catalog_lib.catalog_backup import (
 from docs.catalog_lib.catalog_facts import auth_tier, k8s_route
 from docs.catalog_lib.catalog_model import K3S_DEFAULTS, K8S_ROLES
 from lib.cli_help import ArgumentParser
-from lib.estate import Estate, role_defaults
+from lib.estate import REPO_INVENTORY, Estate, Inventory, role_defaults
 from lib.k8s_roles import role_dirs
-from lib.render_guard import ALL_VARS, entry_tags
+from lib.render_guard import entry_tags
 from lib.repo_paths import REPO
 from renderer.renderer_lib.task_inputs import image_builder_sites
 
@@ -111,9 +111,8 @@ BEGIN = begin_marker(
     "k8s/roles/longhorn-reconcile/defaults/main.yml"
 )
 END = "<!-- /generated_from -->"
-# Where promote's `images` job pushes each built image. `renderer_lib/images.py` holds the same
-# prefix, and importing it would pull the whole renderer into this hook's `files` closure, so
-# it is repeated here and `test_gen_role_glance.py` holds the two equal.
+# Repeated from `renderer_lib/images.py`: importing it would pull the renderer into this hook's
+# `files` closure; a test holds them equal.
 GHCR = "ghcr.io/danielh2018"
 WIDTH = 95
 
@@ -198,7 +197,7 @@ def glance_lines(
     *,
     group_vars: dict[str, Any],
     k8s_roles: Path = K8S_ROLES,
-    all_vars: Path = ALL_VARS,
+    inventory: Inventory = REPO_INVENTORY,
     k3s_defaults: Path = K3S_DEFAULTS,
     claim_classes: dict[str, str | None] | None = None,
     tiers: LonghornTiers | None = None,
@@ -226,9 +225,7 @@ def glance_lines(
         )
         lines.append(f"- **{label}:** {pins}")
 
-    route = k8s_route(entry, k8s_roles, all_vars)
-    # `k8s_route` resolves the shared default too, so this branch is reached only by a
-    # role that declares no `ingressroute.yaml` at all — for which the wording still holds.
+    route = k8s_route(entry, k8s_roles, inventory)
     if route.startswith("no route"):
         lines.append("- **Route:** none (no `templates/ingressroute.yaml.j2`)")
     else:
@@ -250,10 +247,8 @@ def glance_lines(
         claim_classes=claim_classes,
     )
     if claims:
-        # A claim named by a template loop variable (pihole's `{{ inst.claim }}`) is a real
-        # claim the parser cannot name; say so rather than print the expression as a name.
-        # The tier labels are the catalogue's own, verbatim: a reader who greps
-        # `docs/reference/services.md` for one finds the same string here.
+        # A claim named by a template loop variable cannot be named by the parser; say so rather
+        # than print the expression.
         named = [(c, tier) for c, tier in claims if "{{" not in c]
         looped = [c for c, _ in claims if "{{" in c]
         cells = ", ".join(f"`{claim}` ({tier})" for claim, tier in named)
@@ -347,7 +342,6 @@ def stale_k8s_docs(
     """
     estate = estate or Estate()
     group_vars = estate.group_vars
-    all_vars = estate.inventory.all_vars
     claim_classes = claim_index(k8s_roles)
     entries = estate.k8s_entries()
     tiers = load_longhorn_tier_lists(k3s_defaults, group_vars, list(entries.values()))
@@ -362,7 +356,7 @@ def stale_k8s_docs(
                 role_dir,
                 group_vars=group_vars,
                 k8s_roles=k8s_roles,
-                all_vars=all_vars,
+                inventory=estate.inventory,
                 k3s_defaults=k3s_defaults,
                 claim_classes=claim_classes,
                 tiers=tiers,

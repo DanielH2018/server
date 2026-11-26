@@ -56,8 +56,6 @@ def failure_reason(state) -> str:
 
 @pytest.mark.parametrize("status", [401, 403])
 def test_a_refused_token_reads_token_and_pages_once(lab, status):  # noqa: F811
-    # The anonymous fetch keeps succeeding, so only the check-runs read sees the
-    # revoked token. Read as pending, it ended the run `no-green` with exit 0.
     origin, state, etc, _ = lab
     origin.commit("a")
     origin.commit("b")
@@ -128,8 +126,6 @@ def rate_limited_github(header: tuple[str, str], asked: list[str]):
     "header", [("X-RateLimit-Remaining", "0"), ("Retry-After", "60")]
 )
 def test_a_spent_rate_limit_stays_pending(lab, header):  # noqa: F811
-    # The primary limit and the secondary one clear on their own, so each reads as
-    # pending, not as a token page.
     origin, state, etc, _ = lab
     origin.commit("a")
     asked: list[str] = []

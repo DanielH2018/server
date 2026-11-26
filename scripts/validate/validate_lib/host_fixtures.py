@@ -28,13 +28,15 @@ from email.utils import formatdate
 from pathlib import Path
 
 from lib.estate import REPO_INVENTORY, Inventory
+from lib.inventory_lists import host_vars_file
+from lib.render_guard import copy_host_files
 from lib.repo_paths import REPO
 from renderer.renderer_lib import host as host_mode
 
 FIXTURE = REPO / "hosts" / "lib" / "tests" / "container" / "fixture"
 VARIANTS = ("base", "head", "payload", "sealed", "conffile")
-# The `sealed` variant carries `secrets-unit`, which ships a host's ciphertext. This stand-in is
-# the file the render takes where no ciphertext is given, and it holds no value (H4.1c).
+# The `sealed` variant carries `secrets-unit`; this stand-in is the file the render takes where no
+# ciphertext is given, and it holds no value.
 STAND_IN = FIXTURE.parent / "standin"
 HOST = "daniel-pi"
 UPDATER = "homelab-updater"
@@ -45,14 +47,12 @@ KEYRING = "/usr/share/keyrings/homelab-archive-keyring.gpg"
 UNIT_DIR = "/usr/lib/systemd/system"
 UNIT_CHANGE = "Environment=HOMELAB_FIXTURE=unit-changed"
 DROPIN = f"{UNIT_DIR}/{UPDATER}.timer.d/50-homelab.conf"
-# The inventory flag whose false value drops the recovery timer's enable link (H3.8b).
 RECOVERY_FLAG = "optimize_pi_recovery_restart_enabled"
 RECOVERY_TIMER = "homelab-pi-recovery.timer"
 # The real Pi drop-in's daily time, and the one its changed copy fires at instead.
 DROPIN_MINUTE = "03:05:00"
 DROPIN_CHANGED = "03:10:00"
-# The public keyring that verifies InRelease, at the top of the published repository. The test
-# image's source names it as /srv/repo/<this>, where the container mounts the repository.
+# The test image's source names it as /srv/repo/<this>, where the container mounts the repository.
 TEST_KEYRING = "homelab-test-keyring.gpg"
 # How long a published Release stays valid by default: the real signer's ValidTime.
 VALID_FOR = timedelta(days=7)
@@ -137,13 +137,12 @@ def pi_dropin_variant(head: Path, out: Path) -> Path:
 def disarmed_inventory(directory: Path) -> Inventory:
     """The repo's inventory with daniel-pi's container-recovery timer disarmed, under `directory`.
 
-    The host_vars directory is copied and the Pi's file gains
+    The hosts' vars files are copied and the Pi's file gains
     `optimize_pi_recovery_restart_enabled: false`, the edit an operator makes to disarm it, so a
     render through this inventory takes the path a real disarm does.
     """
-    host_vars = directory / "host_vars"
-    shutil.copytree(REPO_INVENTORY.host_vars, host_vars)
-    pi = host_vars / f"{HOST}.yml"
+    host_vars = copy_host_files(directory / "hosts", REPO_INVENTORY.host_vars)
+    pi = host_vars_file(HOST, host_vars)
     pi.write_text(pi.read_text() + f"\n{RECOVERY_FLAG}: false\n")
     return dataclasses.replace(REPO_INVENTORY, host_vars=host_vars)
 

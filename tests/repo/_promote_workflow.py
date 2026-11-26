@@ -28,7 +28,6 @@ RELEASE_FETCH = {
 PINNED_TOOL = "$/.github/actions/pinned-tool"
 COSIGN_RELEASE = "v3.1.4"
 
-# The reset_to_last_good dispatch's two jobs (D5.2b2), guarded by RESET_GUARDS instead.
 RESET_JOBS = ("reset-check", "reset-move")
 # The job that fails a run started by an account off the starter list.
 REFUSE_JOB = "refuse-starter"
@@ -65,7 +64,6 @@ TRIGGER_GUARDS = (
     "github.event.workflow_run.head_branch == 'master'",
     "github.event.workflow_run.head_repository.full_name == github.repository",
 )
-# Who may start a dispatch or a re-run: the operator, and `settle`'s own GITHUB_TOKEN dispatch.
 # DanielClaudeBot holds write access, so without this it could dispatch reset_to_last_good.
 STARTER_GUARD = (
     "(github.event_name != 'workflow_dispatch' && github.run_attempt == '1' || "
@@ -73,8 +71,7 @@ STARTER_GUARD = (
 )
 # A dispatch reaches every job, so every job also requires master's copy of the file.
 REF_GUARD = "github.ref == 'refs/heads/master'"
-# The reset jobs run only for a dispatch of master's copy that sets the input, and render skips
-# that dispatch, so it renders, publishes and promotes nothing.
+# The reset jobs run only for a dispatch of master's copy that sets the input.
 RESET_GUARDS = (
     "inputs.reset_to_last_good",
     REF_GUARD,

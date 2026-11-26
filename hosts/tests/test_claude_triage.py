@@ -97,8 +97,8 @@ def test_the_template_pins_equal_the_defaults() -> None:
         assert pins()[name] == defaults()[var], name
 
 
-# Inventory values under the role's names, none of them the pinned ones. The package renderer
-# puts the inventory above a component's defaults, so only a template's own pin holds here.
+# The package renderer puts inventory above a component's defaults, so only a template's own pin
+# holds here.
 RAISED = {
     "claude_code_triage_agent_user": "triage-sentinel-user",
     "claude_code_agent_user": "agent-sentinel-user",
@@ -269,7 +269,9 @@ def test_the_artifacts_pod_mounts_the_report_tree_the_host_creates() -> None:
     agent_home = defaults()["claude_code_agent_user_home"]
     deployment = yaml_fast.safe_load(
         render_role_template(
-            "artifacts", "deployment.yaml.j2", {"claude_code_triage_enabled": True}
+            "artifacts",
+            "deployment.yaml.j2",
+            {"hosts": {"daniel-box": {"claude_code_triage_enabled": True}}},
         )
     )
     paths = {

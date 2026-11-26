@@ -3,7 +3,7 @@
 `_ratchet.py` holds the allowlist comparisons both ratchets share; this module holds what only
 the monkeypatch ratchet needs, the AST reading that turns a test module into a count. The
 census that runs it over the tree is `_ratchet_census.py`, and its tests are
-`tests/repo/test_ratchet_rules.py`.
+`tests/repo/ratchets/test_ratchet_rules.py`.
 
 What the heuristic counts, and what it misses:
 
@@ -50,8 +50,7 @@ What the heuristic counts, and what it misses:
 import ast
 from collections.abc import Collection, Iterable
 
-# `mod = importlib.util.module_from_spec(spec)` and `mod = importlib.import_module("x")` both
-# bind a module to a plain name, which no import statement records.
+# Both bind a module to a plain name, which no import statement records.
 DYNAMIC_IMPORTS = frozenset({"module_from_spec", "import_module"})
 
 

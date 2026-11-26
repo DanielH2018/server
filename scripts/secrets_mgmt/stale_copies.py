@@ -22,8 +22,7 @@ from secrets_mgmt.consumers import HOST_PLANE, K8S_PLANE, tree_consumers
 from secrets_mgmt.host_secrets import tree_hosts, tree_keys
 from secrets_mgmt.rotation_tools import REPO
 
-# Copies of a secret that no deploy reaches, key -> where they sit. A rotation of one of these
-# keys always owes a hand step; `docs/secret-rotation.md` gives each one's.
+# A rotation of one of these keys always owes a hand step.
 OUTSIDE_THE_TREE: Mapping[str, str] = MappingProxyType(
     {
         "crowdsec_k8s_agent_password": "the CrowdSec LAPI's machine registrations",

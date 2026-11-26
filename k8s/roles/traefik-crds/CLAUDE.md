@@ -2,7 +2,7 @@
 
 The IngressRoute, Middleware, TLSOption and the rest of upstream Traefik's
 CustomResourceDefinitions (`k8s/roles/traefik-crds/files/upstream/kubernetes-crd-definition-v1.yml`).
-traefik's Kustomization depends on this tag (its `depends_on` in `cluster/services.yml`), and
+traefik's Kustomization depends on this tag (its `depends_on` in `k8s/services.yml`), and
 every routed role reaches the CRDs through its edge to `traefik`
 (`tests/deploy/test_k8s_toposort.py::test_the_derived_traefik_edge_agrees_with_the_render`).
 
@@ -20,7 +20,7 @@ every routed role reaches the CRDs through its edge to `traefik`
   `manifests_files: []`, so the render holds the kustomization and the vendored file alone. No
   render may fetch a URL (D5, C1).
 - **A minor traefik image bump needs a refresh of the copy.**
-  `tests/k8s/test_traefik_crds.py` fails when traefik's image minor differs from
+  `tests/k8s/edge/test_traefik_crds.py` fails when traefik's image minor differs from
   `traefik_crds_k8s_version`'s, and when traefik renders a `traefik.io` kind the copy lacks.
   The refresh command sits above the pin.
 - **Why a tag of its own** (#5666). `scripts/renderer/renderer_lib/cluster.py:attach_vendored`
@@ -33,7 +33,7 @@ every routed role reaches the CRDs through its edge to `traefik`
   kind, would make Flux delete that CRD, and the API server would then delete every
   IngressRoute or Middleware of the kind: the whole edge goes down. `deletionPolicy` does not
   help, because it governs deleting the Kustomization, not pruning an object the render
-  dropped. `scripts/renderer/tests/test_renderer_crd_census.py` fails a CRD in any tag that
+  dropped. `scripts/renderer/tests/bundle/test_renderer_crd_census.py` fails a CRD in any tag that
   renders `prune: true`, with this tag as its named member.
 - **The cost of `prune: false`:** a CRD a later upstream release retires stays live until
   the operator deletes it (**operator-only**). Never revert `flux_prune: false` while the tag is
@@ -41,4 +41,4 @@ every routed role reaches the CRDs through its edge to `traefik`
 - **`tier: home-edge`**, traefik's tier, keeps the tag out of the lost-node shed set without
   a `NEVER_SHED` entry (`scripts/renderer/template_filters/service_tier.py`).
 - **Flux applies it.** Its `containers_list` entry
-  is in `cluster/services.yml` from its first commit.
+  is in `k8s/services.yml` from its first commit.

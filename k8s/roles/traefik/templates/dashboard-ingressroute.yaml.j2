@@ -45,9 +45,7 @@ spec:
       # session, so don't add it back to make the SPA work again.
       match: "Host(`traefik.local.{{ domain }}`) && PathPrefix(`/dashboard`)"
       middlewares:
-        # rate-limit is per-router on this edge, not on the https entrypoint. default-headers
-        # is NOT listed: it is already global on the entrypoint (static-config.yaml.j2), so
-        # repeating it here would be a no-op.
+        # rate-limit is per-router; default-headers is already global on the entrypoint.
         - name: rate-limit
         - name: authelia
       services:
@@ -57,7 +55,7 @@ spec:
   # Not boilerplate. An IngressRoute on the https entrypoint with no tls block becomes a
   # NON-TLS router and is never a candidate for an HTTPS request — it does not lose a
   # priority contest, it is not in the running at all. ENFORCED by
-  # tests/k8s/test_k8s_manifests.py. Do not shorten to the file provider's `tls: {}`;
+  # tests/k8s/rendered_properties/test_k8s_manifests.py. Do not shorten to the file provider's `tls: {}`;
   # that shorthand is not IngressRoute syntax.
   tls:
 {% if k8s_tls_cert_resolver %}

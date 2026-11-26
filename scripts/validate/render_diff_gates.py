@@ -43,7 +43,7 @@ states how to split a refused PR. The plan is docs/archive/deploy/d4-ordering.md
 Exit codes: 0 clean; 1 refused; 2 a render failed, so the gate could not judge.
 
 Run: uv run python scripts/validate/render_diff_gates.py --base origin/master
-     uv run pytest scripts/validate/tests/test_validate_render_diff_gates.py
+     uv run pytest scripts/validate/tests/renders/test_validate_render_diff_gates.py
 """
 
 import hashlib
@@ -78,9 +78,12 @@ from renderer.renderer_lib.ordering import (
 from renderer.template_filters.toposort import K8S_APPLIES_LAST, build_k8s_dep_map
 
 CLEAN, REFUSED, UNJUDGED = 0, 1, 2
-SERVICES = Path("cluster/services.yml")
+SERVICES = Path("k8s/services.yml")
+# Where a base from before the move to `k8s/` holds the list; goes once no open PR has one.
+PRE_MOVE_SERVICES = Path("cluster/services.yml")
 ROLES_DIR = Path("k8s/roles")
-GROUP_VARS = Path("inventory/group_vars/all.yml")
+# The namespace keys, in a tree after ADR-0042's split and in one from before it.
+CLUSTER_VARS_FILES = (Path("k8s/vars.yml"), Path("inventory/group_vars/all.yml"))
 
 
 class RenderFailed(RuntimeError):
@@ -264,10 +267,13 @@ def snapshot(
     Raises:
         RenderFailed: The render exited non-zero.
     """
-    k8s = k8s_services(tree / SERVICES)
+    services = tree / SERVICES
+    if not services.exists():
+        services = tree / PRE_MOVE_SERVICES
+    k8s = k8s_services(services)
     names = {e["name"] for e in k8s}
     roles_dir = tree / ROLES_DIR
-    roles = list(roles) or targets(tree / SERVICES, roles_dir)
+    roles = list(roles) or targets(services, roles_dir)
     with tempfile.TemporaryDirectory(prefix="cross-plane-") as out:
         # DECIDED: both sides run under the PR's interpreter, not each commit's own `uv run
         # --frozen` environment. A dependency bump that changes the render is then invisible
@@ -276,9 +282,8 @@ def snapshot(
         cmd = [python, str(tree / "scripts/renderer/homelab_render.py"), "cluster"]
         cmd += ["--out", out]
         cmd += [arg for r in roles for arg in ("--role", r)]
-        # The all-zero SHA is soak.NORMALISED_REVISION: R never moves the footprint. It goes in
-        # the environment, not a flag, so an older renderer ignores it rather than refusing it.
-        # `tree`'s scripts/ goes ahead of this venv's .pth, which names this checkout's.
+        # The all-zero SHA is soak.NORMALISED_REVISION. It goes in the environment, not a flag, so
+        # an older renderer ignores it rather than refusing it.
         env = {
             **git_env(),
             "HOMELAB_RENDER_REVISION": "0" * 40,
@@ -319,7 +324,9 @@ def snapshot(
         for tag in names
         if tag in dirs
     }
-    group = yaml_fast.safe_load((tree / GROUP_VARS).read_text())
+    group = yaml_fast.safe_load(
+        next(tree / p for p in CLUSTER_VARS_FILES if (tree / p).exists()).read_text()
+    )
     objects, unpruned = _objects(dirs)
     return Snapshot(
         renders=renders,
@@ -339,7 +346,7 @@ def snapshot(
 
 
 # The top-level trees a render reads. `extract` skips one a commit does not hold.
-RENDER_TREES = ("k8s", "inventory", "secrets", "scripts", "hosts", "cluster")
+RENDER_TREES = ("k8s", "inventory", "estate", "secrets", "scripts", "hosts", "cluster")
 
 
 def render_side(sha: str, dest: Path, repo: Path = REPO) -> Snapshot:

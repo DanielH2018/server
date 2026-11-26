@@ -14,9 +14,6 @@ is a pure function a test can call without a CLI or a gh read.
 
 import textwrap
 
-# Reach the sibling package directories: a directly-invoked script gets only its own
-# directory on sys.path, and pyproject's `pythonpath` is a pytest setting.
-
 
 from dev.findings_lib.issue_model import Issue, parse_verify_by
 

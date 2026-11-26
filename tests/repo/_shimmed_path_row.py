@@ -23,8 +23,7 @@ from lib.proc_testing import run
 
 _SCRIPT_SUFFIXES = (".sh", ".bash", ".py", ".sh.j2", ".bash.j2", ".py.j2")
 
-# A real PATH directory, then a shimmed name. The lookbehind keeps a path that only ends in
-# `/bin/<name>`, such as `/usr/lib/homelab/bin/sops`, out.
+# The lookbehind keeps a path that only ends in `/bin/<name>`.
 SHIMMED_PATH = re.compile(
     r"(?<![\w./-])/(?:usr/(?:local/)?)?s?bin/(?P<name>"
     + "|".join(re.escape(name) for name in SHIMMED_BINARIES)

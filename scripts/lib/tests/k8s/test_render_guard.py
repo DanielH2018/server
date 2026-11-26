@@ -1,0 +1,222 @@
+"""The inventory readers every generator and validator shares.
+
+``load_yaml`` coerces a non-mapping file to ``{}`` and must keep doing so, or a host_vars
+file whose top level is a list reaches a ``.get`` several calls later.
+"""
+
+import os
+from pathlib import Path
+
+import pytest
+
+from lib import render_guard
+from lib.render_guard import (
+    BASE_CONTEXT,
+    HOST_VARS,
+    SERVICES_IN_TREE,
+    REPO,
+    host_files,
+    host_layer,
+    load_yaml,
+    k8s_services,
+    k8s_services_at,
+    service_tags_at_or_none,
+)
+from lib.estate import shared_vars
+from lib.inventory_lists import host_vars_file
+from lib.repo_paths import K8S_ROLES, SECRETS
+from lib import yaml_fast
+from lib.container_entry import ContainerEntryError
+from lib.git_testing import commit, init_repo
+
+# One commit declaring a service, and one adding a second. `deploy.sh --at <sha>` validates
+# its tags against the commit it renders, so the answer must move with the ref.
+_WITHOUT = "containers_list:\n  - name: sonarr\n"
+_WITH = _WITHOUT + "  - name: newsvc\n"
+
+
+def _tags_repo(tmp_path: Path, *texts: str) -> list[str]:
+    """Commit each `texts` entry as ``k8s/services.yml`` in `tmp_path`; the shas, in order.
+
+    `lib.git_testing` scrubs every ``GIT_*`` variable: under a prek hook an inherited
+    ``GIT_DIR`` beats ``cwd``, and these commits would land in the real repository.
+    """
+    init_repo(tmp_path)
+    return [
+        commit(tmp_path, f"c{n}", **{SERVICES_IN_TREE: text})
+        for n, text in enumerate(texts)
+    ]
+
+
+def test_service_tags_at_a_ref_sees_what_that_commit_declares(tmp_path):
+    """CLEAN half: a role and its containers_list entry added together are declared at it."""
+    shas = _tags_repo(tmp_path, _WITHOUT, _WITH)
+    assert service_tags_at_or_none(shas[1], tmp_path) == {"sonarr", "newsvc"}
+
+
+def test_the_same_tag_is_absent_at_the_commit_before_it(tmp_path):
+    """The answer has to MOVE with the ref, or reading at one proves nothing."""
+    shas = _tags_repo(tmp_path, _WITHOUT, _WITH)
+    assert service_tags_at_or_none(shas[0], tmp_path) == {"sonarr"}
+
+
+def test_an_unreadable_ref_is_none_rather_than_an_empty_set(tmp_path):
+    """REJECTING half: `set()` says no service is declared anywhere, which refuses every tag.
+
+    None is what sends the caller back to the tree it can read.
+    """
+    _tags_repo(tmp_path, _WITHOUT)
+    assert service_tags_at_or_none("deadbeefdeadbeefdeadbeef", tmp_path) is None
+
+
+def test_host_vars_that_do_not_parse_at_the_ref_are_none_too(tmp_path):
+    """The second damage mode, and the one the read actually meets: unparseable YAML.
+
+    `service_tags_at` parses what it fetches from the ref, so a `yaml.YAMLError` escaping here
+    turns `deploy_tags.py validate --at <sha>` into a traceback, which `deploy.sh` reports as
+    its tag-miss exit -- "a --tags value matched no service", for a file that merely does not
+    parse.
+    """
+    shas = _tags_repo(tmp_path, _WITHOUT, "containers_list:\n  - name: [unclosed\n")
+    assert service_tags_at_or_none(shas[1], tmp_path) is None
+
+
+def test_an_unnamed_entry_at_the_ref_is_none_rather_than_dropped(tmp_path):
+    """A malformed service list at the ref is a damaged read, so the caller reads the tree."""
+    shas = _tags_repo(tmp_path, _WITHOUT, _WITH + "  - port: 1\n")
+    with pytest.raises(ContainerEntryError, match="item 2 has no `name`"):
+        k8s_services_at(shas[1], tmp_path)
+    assert service_tags_at_or_none(shas[1], tmp_path) is None
+
+
+def test_k8s_services_at_a_ref_reads_the_entries_of_that_commit(tmp_path):
+    shas = _tags_repo(tmp_path, _WITHOUT, _WITH)
+    assert [e["name"] for e in k8s_services_at(shas[1], tmp_path)] == [
+        "sonarr",
+        "newsvc",
+    ]
+    assert [e["name"] for e in k8s_services_at(shas[0], tmp_path)] == ["sonarr"]
+
+
+def test_the_service_list_is_in_k8s_services_and_no_host_vars_file():
+    names = {e["name"] for e in k8s_services()}
+    assert {"sonarr", "traefik", "longhorn"} <= names
+    assert not [p.name for p in host_files() if "containers_list" in load_yaml(p)]
+
+
+def test_host_layer_is_the_hosts_own_file_and_empty_for_a_host_without_one(tmp_path):
+    host_vars_file("daniel-box", tmp_path).parent.mkdir()
+    host_vars_file("daniel-box", tmp_path).write_text("server_ip: 2.2.2.2\n")
+    assert host_layer(tmp_path, "daniel-box") == {"server_ip": "2.2.2.2"}
+    assert host_layer(tmp_path, "absent") == {}
+
+
+def test_load_yaml_returns_a_mapping(tmp_path):
+    path = tmp_path / "a.yml"
+    path.write_text("key: value\n")
+    assert load_yaml(path) == {"key": "value"}
+
+
+def test_load_yaml_returns_empty_for_a_missing_file(tmp_path):
+    assert load_yaml(tmp_path / "absent.yml") == {}
+
+
+def test_load_yaml_returns_empty_for_an_empty_file(tmp_path):
+    path = tmp_path / "empty.yml"
+    path.write_text("")
+    assert load_yaml(path) == {}
+
+
+def test_load_yaml_returns_empty_for_a_non_mapping(tmp_path):
+    path = tmp_path / "list.yml"
+    path.write_text("- one\n- two\n")
+    assert load_yaml(path) == {}
+
+
+def test_load_yaml_parses_an_unchanged_file_once(tmp_path):
+    # A render reads all.yml, host_vars and role defaults once per render_context call, and
+    # parsing them again each time was 8% of the renderer round trip.
+    path = tmp_path / "a.yml"
+    path.write_text(f"path: {tmp_path}\n")
+    before = render_guard._parsed_mapping.cache_info()
+    assert load_yaml(path) == load_yaml(path) == {"path": str(tmp_path)}
+    after = render_guard._parsed_mapping.cache_info()
+    assert (after.misses - before.misses, after.hits - before.hits) == (1, 1)
+
+
+def test_load_yaml_sees_an_edit_that_keeps_the_size_and_mtime(tmp_path):
+    # Tests edit fixture trees between renders, so a cache keyed on (path, mtime, size) would
+    # hand the second render the first file's values.
+    path = tmp_path / "a.yml"
+    path.write_text(f"path: {tmp_path}\nvalue: before\n")
+    stat = path.stat()
+    assert load_yaml(path)["value"] == "before"
+    path.write_text(f"path: {tmp_path}\nvalue: after_\n")
+    os.utime(path, ns=(stat.st_atime_ns, stat.st_mtime_ns))
+    assert load_yaml(path)["value"] == "after_"
+
+
+def test_load_yaml_hands_each_caller_its_own_copy(tmp_path):
+    path = tmp_path / "a.yml"
+    path.write_text(f"path: {tmp_path}\nnested: {{list: [1]}}\n")
+    load_yaml(path)["nested"]["list"].append(2)
+    assert load_yaml(path)["nested"] == {"list": [1]}
+
+
+def test_host_files_skips_the_example_template(tmp_path):
+    for name, ip in (("_example", "1.1.1.1"), ("daniel-box", "2.2.2.2")):
+        host_vars_file(name, tmp_path).parent.mkdir()
+        host_vars_file(name, tmp_path).write_text(f"server_ip: {ip}\n")
+    assert [p.parent.name for p in host_files(tmp_path)] == ["daniel-box"]
+
+
+def test_anchors_resolve_to_the_real_tree():
+    """A wrong ``parents[N]`` reads as an empty inventory, not an error."""
+    assert (REPO / "pyproject.toml").is_file()
+    assert (SECRETS / "secret_rotation.yml").is_file()
+    assert host_vars_file("daniel-box", HOST_VARS).is_file()
+    assert (K8S_ROLES).is_dir()
+
+
+def test_render_guard_re_exports_the_same_anchor_objects():
+    from lib.repo_paths import REPO as PATHS_REPO
+
+    assert REPO == PATHS_REPO
+    assert isinstance(REPO, Path)
+
+
+def test_every_public_name_is_listed_in_all():
+    """`__all__` drifted behind three helpers this module gained.
+
+    Derived from the module rather than compared to a copied list: a hand-written expected
+    list is the same drift one indirection away. Sorted, because the list is maintained in
+    that order and an append at the end reads as correct until someone bisects it.
+    """
+    import types
+
+    from lib import render_guard
+
+    public = {
+        name
+        for name, value in vars(render_guard).items()
+        if not name.startswith("_")
+        and not isinstance(value, types.ModuleType)
+        and getattr(value, "__module__", "render_guard") == "render_guard"
+    }
+    assert public - set(render_guard.__all__) == set(), sorted(
+        public - set(render_guard.__all__)
+    )
+    assert render_guard.__all__ == sorted(render_guard.__all__)
+    for name in render_guard.__all__:
+        assert hasattr(render_guard, name), name
+
+
+def test_load_yaml_raises_the_one_parse_failure_for_an_impossible_date(tmp_path):
+    path = tmp_path / "vars.yml"
+    path.write_text("d: 2026-13-45\n")
+    with pytest.raises(yaml_fast.UnparsableYaml):
+        load_yaml(path)
+
+
+def test_no_base_stub_shadows_a_group_vars_value():
+    assert BASE_CONTEXT.keys() & shared_vars().keys() == set()

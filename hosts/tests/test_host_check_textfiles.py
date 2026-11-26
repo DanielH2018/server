@@ -143,7 +143,6 @@ def _run_audit(tmp_path, audit_rc=0, kit_rc=0):
         "exit $STUB_AUDIT_RC\n",
     )
     body = _render("secret-rotation-audit.sh.j2")
-    # The packaged script (H7.36) sources the check library from /usr/lib/homelab.
     audit_check_lib = "/usr/lib/homelab/homelab-check-lib.sh"
     for needle in (
         audit_check_lib,
@@ -181,7 +180,6 @@ def test_a_clean_audit_writes_success_one_and_exits_zero(tmp_path):
         == "90000"
     )
     assert code == 0
-    # The audit is asked for its verdict, which no longer means a push.
     assert "secret_rotation.py audit --verdict" in (tmp_path / "uv-argv").read_text()
 
 

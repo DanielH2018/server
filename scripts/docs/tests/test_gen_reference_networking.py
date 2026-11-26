@@ -8,6 +8,7 @@ Run: uv run pytest scripts/docs/tests/test_gen_reference_networking.py
 import textwrap
 
 from docs.reference import networking as g
+from lib.estate import Inventory
 
 
 def _make(tmp_path):
@@ -47,94 +48,100 @@ def _make(tmp_path):
     # media-volume: an infra role with no ingressroute template at all.
     _defaults("media-volume")
     (roles / "media-volume" / "templates").mkdir(parents=True)
-    group_vars = tmp_path / "all.yml"
-    group_vars.write_text("k8s_public_route: true\n")
-    return services, roles, group_vars
+    estate_vars = tmp_path / "estate-vars.yml"
+    estate_vars.write_text("k8s_public_route: true\n")
+    inventory = Inventory(
+        estate_vars=estate_vars,
+        k8s_vars=tmp_path / "k8s-vars.yml",
+        host_vars=tmp_path / "hosts",
+        services=services,
+    )
+    return inventory, roles
 
 
 def test_only_services_with_a_route_appear(tmp_path):
-    services, roles, group_vars = _make(tmp_path)
-    names = {r["name"] for r in g.build_rows(services, roles, group_vars)}
+    inventory, roles = _make(tmp_path)
+    names = {r["name"] for r in g.build_rows(inventory, roles)}
     assert names == {"sonarr", "crowdsec", "karakeep"}
 
 
 def test_public_false_is_reported_as_lan_only(tmp_path):
-    services, roles, group_vars = _make(tmp_path)
-    rows = {r["name"]: r for r in g.build_rows(services, roles, group_vars)}
+    inventory, roles = _make(tmp_path)
+    rows = {r["name"]: r for r in g.build_rows(inventory, roles)}
     assert rows["crowdsec"]["reach"] == "LAN only"
     assert rows["sonarr"]["reach"] == "LAN + public"
 
 
 def test_public_route_flag_off_makes_every_route_lan_only(tmp_path):
     """`public=false` is one of two gates; the cluster-wide flag is the other."""
-    services, roles, group_vars = _make(tmp_path)
-    group_vars.write_text("k8s_public_route: false\n")
-    for row in g.build_rows(services, roles, group_vars):
+    inventory, roles = _make(tmp_path)
+    inventory.estate_vars.write_text("k8s_public_route: false\n")
+    for row in g.build_rows(inventory, roles):
         assert row["reach"] == "LAN only", row["name"]
 
 
 def test_a_lan_only_route_is_never_offered_on_the_public_name(tmp_path):
     """A public link for a LAN-only service reaches nothing, so it must not be printed."""
-    services, roles, group_vars = _make(tmp_path)
-    rows = {r["name"]: r for r in g.build_rows(services, roles, group_vars)}
+    inventory, roles = _make(tmp_path)
+    rows = {r["name"]: r for r in g.build_rows(inventory, roles)}
     assert rows["crowdsec"]["route"] == "crowdsec.local.<domain> (LAN only)"
 
 
 def test_a_public_route_names_both_tiers(tmp_path):
-    services, roles, group_vars = _make(tmp_path)
-    rows = {r["name"]: r for r in g.build_rows(services, roles, group_vars)}
+    inventory, roles = _make(tmp_path)
+    rows = {r["name"]: r for r in g.build_rows(inventory, roles)}
     assert rows["sonarr"]["route"] == "sonarr.<domain> · sonarr.local.<domain>"
 
 
 def test_authelia_middleware_comes_from_the_inventory(tmp_path):
-    services, roles, group_vars = _make(tmp_path)
-    rows = {r["name"]: r for r in g.build_rows(services, roles, group_vars)}
+    inventory, roles = _make(tmp_path)
+    rows = {r["name"]: r for r in g.build_rows(inventory, roles)}
     assert "authelia" in rows["sonarr"]["middlewares"]
     assert "authelia" not in rows["crowdsec"]["middlewares"]
 
 
 def test_rate_limit_is_on_every_route(tmp_path):
     """The shared macro applies it unconditionally."""
-    services, roles, group_vars = _make(tmp_path)
-    for row in g.build_rows(services, roles, group_vars):
+    inventory, roles = _make(tmp_path)
+    for row in g.build_rows(inventory, roles):
         assert "rate-limit" in row["middlewares"], row["name"]
 
 
 def test_extra_middlewares_are_picked_up(tmp_path):
-    services, roles, group_vars = _make(tmp_path)
-    rows = {r["name"]: r for r in g.build_rows(services, roles, group_vars)}
+    inventory, roles = _make(tmp_path)
+    rows = {r["name"]: r for r in g.build_rows(inventory, roles)}
     assert "csp-karakeep" in rows["karakeep"]["middlewares"]
 
 
 def test_hostname_defaults_to_the_service_name(tmp_path):
-    services, roles, group_vars = _make(tmp_path)
-    rows = {r["name"]: r for r in g.build_rows(services, roles, group_vars)}
+    inventory, roles = _make(tmp_path)
+    rows = {r["name"]: r for r in g.build_rows(inventory, roles)}
     assert rows["crowdsec"]["hostname"] == "crowdsec"
 
 
 def test_markdown_says_the_suffix_is_not_derivable(tmp_path):
     """The page cannot know the reader's tier, so it writes the placeholder, not an FQDN."""
-    services, roles, group_vars = _make(tmp_path)
-    out = g.render_markdown(g.build_rows(services, roles, group_vars))
+    inventory, roles = _make(tmp_path)
+    out = g.render_markdown(g.build_rows(inventory, roles))
     assert "<domain>" in out
 
 
 def test_markdown_wraps_routes_so_the_site_can_link_them(tmp_path):
-    services, roles, group_vars = _make(tmp_path)
-    out = g.render_markdown(g.build_rows(services, roles, group_vars))
+    inventory, roles = _make(tmp_path)
+    out = g.render_markdown(g.build_rows(inventory, roles))
     assert 'class="fqdn" data-host="sonarr"' in out
     assert 'class="fqdn" data-host="sonarr.local"' in out
 
 
 def test_markdown_opens_with_the_provenance_banner(tmp_path):
-    services, roles, group_vars = _make(tmp_path)
-    out = g.render_markdown(g.build_rows(services, roles, group_vars))
+    inventory, roles = _make(tmp_path)
+    out = g.render_markdown(g.build_rows(inventory, roles))
     assert out.startswith("---\n")
     assert "generated_from: scripts/docs/reference/networking.py" in out
 
 
 def test_markdown_ends_with_exactly_one_newline(tmp_path):
-    services, roles, group_vars = _make(tmp_path)
-    out = g.render_markdown(g.build_rows(services, roles, group_vars))
+    inventory, roles = _make(tmp_path)
+    out = g.render_markdown(g.build_rows(inventory, roles))
     assert out.endswith("\n")
     assert not out.endswith("\n\n")

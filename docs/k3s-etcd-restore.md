@@ -25,7 +25,7 @@ rejoin and the Longhorn reattach, and it has never been done.
 ## The full drill runs monthly in a throwaway guest
 
 `hosts/components/hypervisor` ships `etcd-restore-drill-vm` on daniel-server,
-and `homelab-etcd-restore-drill.timer` runs it as root on `etcd_drill_full_cron` (`inventory/group_vars/all.yml`: the first day of each month, 11:20 UTC). One run:
+and `homelab-etcd-restore-drill.timer` runs it as root on `etcd_drill_full_cron` (`hosts/vars.yml`: the first day of each month, 11:20 UTC). One run:
 
 1. builds a transient libvirt guest (`etcd-drill`, 2 GiB / 2 vCPU / 20 G) from the same pinned
    cloud image as the staging guest, on the staging network and behind its egress fence — the

@@ -23,7 +23,8 @@ import jinja2
 from jinja2 import nodes
 
 from lib import yaml_fast
-from lib.repo_paths import INVENTORY, K8S_ROLES
+from lib.estate import REPO_INVENTORY
+from lib.repo_paths import K8S_ROLES
 from renderer.renderer_lib.jinja_uses import lookup_argument, vars_lookup
 
 
@@ -41,15 +42,12 @@ class VarsLookupSite(NamedTuple):
     names: Callable[[], set[str]]
 
 
-# The non-literal `vars` lookups that rule 5 does not count as a secret reference, for any of
-# its clauses. Each entry fails the check when its site has gone, or when a name its argument
-# can take is a secret key. The tree holds no such lookup, so every non-literal `vars` lookup
-# is refused until an entry here names it.
+# Each entry fails the check when its site has gone or a name its argument can take is a secret key;
+# the tree holds no such lookup.
 NON_SECRET_VARS_LOOKUPS: frozenset[VarsLookupSite] = frozenset()
 
-# The bindings rule 5 must see and must not read as an alias, as `(template, name)`. The
-# `observability_prometheus_config` set block holds no key, and the Deployment hashes the block
-# with `hash('sha1')`, so the hash must not make it an alias of one.
+# The `observability_prometheus_config` block holds no key, and the Deployment hashes it with
+# `hash('sha1')`, which must not make it an alias.
 NOT_ALIASES: tuple[tuple[str, str], ...] = (
     (
         "k8s/roles/observability/templates/prometheus.yaml.j2",
@@ -82,15 +80,9 @@ def not_alias_problems(
     return problems
 
 
-def rule5_var_files(roles: Path = K8S_ROLES, inventory: Path = INVENTORY) -> list[Path]:
+def rule5_var_files() -> list[Path]:
     """The k8s roles' `defaults/main.yml` and every inventory vars file."""
-    return sorted(
-        [
-            *roles.glob("*/defaults/main.yml"),
-            *inventory.glob("group_vars/**/*.yml"),
-            *inventory.glob("host_vars/**/*.yml"),
-        ]
-    )
+    return sorted([*K8S_ROLES.glob("*/defaults/main.yml"), *REPO_INVENTORY.var_files()])
 
 
 def var_tag(path: Path) -> str:

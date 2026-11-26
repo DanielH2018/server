@@ -172,8 +172,6 @@ def plan(work: Path, green: Path) -> list[Planned]:
                 reason,
             )
         )
-    # Offline, so the red needs no network and differs from the green offline case in its
-    # clone alone.
     cases.append(
         Planned(
             f"refuse a local build whose homelab-daniel-box Depends on {HOMELAB_ONLY}",

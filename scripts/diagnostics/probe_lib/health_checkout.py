@@ -25,8 +25,8 @@ from pathlib import Path as _Path
 from lib.git import git
 from lib.repo_paths import K8S_ROLES, REPO
 
-# Opens every `stale_checkout_reason`; `detach_notify.gate` reads it to word the deferral apart
-# from a store that did not answer, because a re-run from the same tree refuses again.
+# `detach_notify.gate` reads it to tell this deferral from a store that did not answer: a re-run
+# from the same tree refuses again.
 STALE_CHECKOUT = "stale checkout"
 
 

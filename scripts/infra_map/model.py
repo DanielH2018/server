@@ -261,10 +261,8 @@ def build_model(
             }
         )
 
-    # `per_host_services` stays declaration-based — it is the canonical list the
-    # table, the totals and the grouping count exactly once. The host panels
-    # answer a different question ("what is on this box"), and for the k3s hosts
-    # that is placement, not declaration.
+    # `per_host_services` stays declaration-based; host panels answer 'what is on this box', which
+    # for k3s hosts is placement.
     k8s_services = [
         s
         for host, services in per_host_services.items()
@@ -315,9 +313,6 @@ def build_model(
             "volumes": cluster["volumes"],
             "backup_targets": cluster["backup_targets"],
         },
-        # Every address the diagram labels an edge with, read from the inventory
-        # rather than written into the drawing. Renaming a VIP in group_vars
-        # moves the label; it does not leave a stale one behind.
         "endpoints": {
             "ingress_vip": global_vars.get("k3s_metallb_ingress_vip", ""),
             "dns_vip": global_vars.get("dns_k8s_vip", ""),

@@ -47,9 +47,8 @@ INTERVAL_S=${INTERVAL_S:-600}
 TIMEOUT_S=${TIMEOUT_S:-30}
 ONCE=${ONCE:-0}
 CHECK=${CHECK:-ghcr-mirror-pull}
-# The longest legitimate gap between two writes: five intervals. The GhcrMirrorPullNotReporting
-# and DockerhubMirrorPullNotReporting rules in observability's registry.yaml carry it as a
-# literal, and this role's test_ghcr_mirror_pull.py and test_dockerhub_mirror_pull.py pin them.
+# Five intervals; the Ghcr/Dockerhub MirrorPullNotReporting rules carry it as a literal, pinned by
+# tests.
 DEADLINE_S=$((INTERVAL_S * 5))
 # Every manifest type a registry can store, so a served reference never answers 404 for its type.
 ACCEPT=application/vnd.oci.image.index.v1+json,application/vnd.oci.image.manifest.v1+json,application/vnd.docker.distribution.manifest.list.v2+json,application/vnd.docker.distribution.manifest.v2+json
@@ -60,8 +59,6 @@ else
   ENDPOINT=${REMOTE_ENDPOINT:-}
 fi
 
-# One verdict: 1 when the GET answered 2xx, 0 otherwise. Each down names its reason on stderr,
-# which is the container log the alert's description points at.
 verdict() {
   if [ -n "${REPOSITORY:-}" ]; then
     repository=$REPOSITORY
@@ -98,9 +95,8 @@ write_once() {
   success=$(verdict)
   now=$(date +%s)
   {
-    # The homelab_check_* HELP lines must match disk-health.sh's byte for byte. node_exporter
-    # drops a family whose HELP differs from an earlier file's and sets
-    # node_textfile_scrape_error, so a mismatch loses these series on the node.
+    # HELP lines must match disk-health.sh byte for byte: node_exporter drops a family whose HELP
+    # differs.
     printf "# HELP homelab_check_success 1 when the check's last verdict was up, 0 when down.\n"
     printf '# TYPE homelab_check_success gauge\n'
     printf 'homelab_check_success{check="%s"} %s\n' "$CHECK" "$success"
@@ -111,8 +107,7 @@ write_once() {
     printf '# TYPE homelab_check_deadline_seconds gauge\n'
     printf 'homelab_check_deadline_seconds{check="%s"} %s\n' "$CHECK" "$DEADLINE_S"
   } > "$tmp"
-  # mktemp creates 0600; the exporter in the other container reads as the same uid, and 0644
-  # keeps the contract's mode for any other reader.
+  # 0644 keeps the contract's mode for other readers (mktemp creates 0600).
   if ! { chmod 0644 "$tmp" && mv "$tmp" "$TEXTFILE_DIR/$CHECK.prom"; }; then
     rm -f "$tmp"
     echo "$CHECK: cannot replace $TEXTFILE_DIR/$CHECK.prom" >&2

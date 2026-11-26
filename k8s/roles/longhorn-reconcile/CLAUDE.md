@@ -24,7 +24,7 @@ Deployment write here.
 - **Claims:** none (no PVC)
 <!-- /generated_from -->
 
-- **Flux applies it.** Its `containers_list` entry is in `cluster/services.yml` and
+- **Flux applies it.** Its `containers_list` entry is in `k8s/services.yml` and
   `depends_on: [longhorn]`, because its objects live in the `longhorn-system` namespace that
   `longhorn`'s vendored file creates. It is a tag of its own, not part of `longhorn`, because its ConfigMap
   renders from `containers_list`: inside `longhorn`, every claim or tier change would change a
@@ -97,7 +97,7 @@ authority is written here to keep a later edit from widening it.
   `volumes.longhorn.io`, and a ClusterRole with `list` on `persistentvolumeclaims`. No grant
   reaches a Deployment. `get` on volumes is absent because the script lists once and never
   reads a single volume. ENFORCED:
-  `tests/k8s/test_rbac_against_rest_script.py::test_the_longhorn_reconcile_role_grants_every_call_its_script_makes`.
+  `tests/k8s/rbac/test_rbac_against_rest_script.py::test_the_longhorn_reconcile_role_grants_every_call_its_script_makes`.
 - **A failed read writes nothing.** Both lists are read before the first patch. A refused patch
   fails the run (exit 1); the next hourly run retries.
 - **A claim on both the weekly and the no-backup list stops the run before any write.** The

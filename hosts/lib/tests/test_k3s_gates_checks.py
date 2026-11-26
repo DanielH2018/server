@@ -111,8 +111,7 @@ def test_check_is_clean(check, routes, args):
     assert _run(check, routes, *args) == []
 
 
-# A read error is not a refusal list: the runner turns it into one. Every check must raise
-# ReadError (never return []) when its document cannot be read.
+# Every check must raise ReadError (never return []) when its document cannot be read.
 READ_PATHS = {
     k3s_gates.check_volumes: k3s_gates.VOLUMES_PATH,
     k3s_gates.check_backups: k3s_gates.BACKUPS_PATH,

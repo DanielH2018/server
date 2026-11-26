@@ -23,9 +23,6 @@
 
 set -euo pipefail
 
-# `--help` answers from any environment, ahead of every step below — the repo-wide convention
-# `scripts/lib/tests/test_entry_points_answer_help.py` checks. The awk prints this
-# file's leading comment block, which is the usage, with the `#` markers stripped.
 if [ "${1:-}" = "-h" ] || [ "${1:-}" = "--help" ]; then
   awk 'NR>1 && /^#/ {sub(/^# ?/, ""); print; next} NR>1 {exit}' "$0"
   exit 0
@@ -36,11 +33,8 @@ REPO_ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd)"
 RUNTIME_DIR="${XDG_RUNTIME_DIR:-/tmp}/claude-ui-mcp"
 CONFIG_PATH="$RUNTIME_DIR/playwright-mcp.json"
 
-# `--two-factor` opts this launch into the short-lived two_factor jar, which is the only way
-# to reach code-server, n8n and longhorn. It is opt-in per launch and never a fallback: those
-# three are a shell as the repo user, arbitrary workflow execution, and volume deletion
-# including the B2 backup chain. Picking the jar up automatically when it happened to exist
-# would put admin-capable auth behind every ordinary page load.
+# `--two-factor` is opt-in per launch, never a fallback: code-server, n8n and longhorn are a shell,
+# arbitrary workflows and volume deletion.
 TIER_ARGS=()
 if [[ "${1:-}" == "--two-factor" ]]; then
   TIER_ARGS=(--two-factor)
@@ -50,42 +44,30 @@ fi
 
 export PATH="$NODE_BIN:$PATH"
 
-# `UI_MCP_STATE_PATH` points this launch at a caller-supplied storage-state file instead of
-# the tier's shared one, and skips the mint above — the caller owns that file's contents. It
-# exists for `test_ui_state_reload.py`, the regression guard on the `browser_close` reload
-# procedure in docs/claude-tooling.md: that test swaps a state file underneath a running
-# server, which must never happen to the jar other sessions and `-m ui` runs are reading.
-# The config gets its own name for the same reason the `--two-factor` tier does — a launch
-# here and an ordinary one otherwise overwrite each other's config file.
+# `UI_MCP_STATE_PATH` uses a caller-owned state file and skips the mint: test_ui_state_reload.py
+# swaps it under a running server. Its config gets its own name.
 if [[ -n "${UI_MCP_STATE_PATH:-}" ]]; then
   STATE_PATH="$UI_MCP_STATE_PATH"
   CONFIG_PATH="$RUNTIME_DIR/playwright-mcp-private-$(basename "$STATE_PATH").json"
 else
-  # Check the session, and mint one if it is missing or expired. --check exits non-zero in
-  # both cases and is one API call, so it is cheap enough to do every launch.
   if ! uv --directory "$REPO_ROOT" run python scripts/diagnostics/ui_login.py --check "${TIER_ARGS[@]}" >/dev/null 2>&1; then
-    # Both tiers mint unattended. The two_factor one logs in as `claude-ui`, whose TOTP
-    # secret is a SOPS value, so `--two-factor` needs no typed code — see ui_login.py's
-    # module docstring. Its session still lasts about an hour, which is why this re-mints
-    # on every launch rather than expecting a jar to survive between them.
+    # Both tiers mint unattended; the two_factor session lasts about an hour, so this re-mints on
+    # every launch.
     uv --directory "$REPO_ROOT" run python scripts/diagnostics/ui_login.py "${TIER_ARGS[@]}" >&2
   fi
 
   STATE_PATH="$(uv --directory "$REPO_ROOT" run python scripts/diagnostics/ui_login.py --path "${TIER_ARGS[@]}")"
 fi
-# From ui_login.py rather than from inventory directly: the agent user's domain comes from
-# the same credentials file its login does, and ui_login.py falls back to group_vars.
 DOMAIN="$(uv --directory "$REPO_ROOT" run python scripts/diagnostics/ui_login.py --domain)"
 VIP="$(awk -F': *' '/^k3s_metallb_ingress_vip:/ {print $2; exit}' \
-  "$REPO_ROOT/inventory/group_vars/all.yml")"
+  "$REPO_ROOT/k8s/vars.yml")"
 
 if [[ -z "$DOMAIN" || -z "$VIP" ]]; then
   echo "could not resolve domain or MetalLB ingress VIP" >&2
   exit 1
 fi
 
-# Mode set separately from -p: with -p, -m applies only to the deepest directory, so any
-# parent this creates would take the default mode (SC2174).
+# Mode set separately from -p, which applies -m only to the deepest directory (SC2174).
 mkdir -p "$RUNTIME_DIR"
 chmod 700 "$RUNTIME_DIR"
 
@@ -112,18 +94,9 @@ cat >"$CONFIG_PATH" <<EOF
 }
 EOF
 
-# `--disable-http2` is load-bearing, not tuning. The resolver rule above maps every
-# `*.local.<domain>` name to ONE address, and they share one wildcard certificate, so
-# Chromium considers the connections interchangeable and coalesces them. A request that then
-# arrives on a connection opened for a different hostname is answered by Traefik with
-# `421 Misdirected Request`. For a navigation the browser hides that by retrying on a fresh
-# connection; for the page's OWN XHRs it does not, so a dashboard would mount its chrome and
-# then render no panels at all — silently, and only sometimes. Measured: the
-# Grafana panel tier failed this way on 5 dashboards in one run and a disjoint 2 in the next.
-# HTTP/1.1 has no coalescing, so the failure cannot occur.
+# `--disable-http2` is load-bearing: every `*.local.<domain>` shares one address and certificate, so
+# Chromium coalesces connections and Traefik answers a page's own XHRs with 421.
 
-# Snapshots, console logs and screenshots default to `.playwright-mcp/` in the CURRENT
-# directory, so without this the server litters whatever tree it was launched from — the
-# repo root, for a Claude session or the `ui` test suite. `.gitignore`'s catch-all hides it
-# from `git status`, which makes the mess easy to miss rather than harmless.
+# Output defaults to `.playwright-mcp/` in the CURRENT directory, which would litter the launch
+# tree; `.gitignore` hides it from `git status`.
 exec playwright-mcp --config "$CONFIG_PATH" --output-dir "$RUNTIME_DIR/output" "$@"

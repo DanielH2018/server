@@ -29,8 +29,6 @@
 {% set spec_text %}
 # A flaky check fails rather than passing on a retry.
 backoffLimit: 0
-# Below the 600s `manifests_rollout_timeout_default` every `<tag>-verify` Kustomization takes,
-# with room for the media volume to attach, so the Job fails with its own message first.
 activeDeadlineSeconds: 300
 template:
   metadata:
@@ -42,15 +40,13 @@ template:
     automountServiceAccountToken: false
     restartPolicy: Never
     enableServiceLinks: false
-    # tdarr's PUID and PGID, the uid tdarr's own process writes the library as, and the
-    # render-node group tdarr's Deployment adds. Probing as root with DAC_OVERRIDE would pass a
-    # library tdarr itself cannot write.
+    # As tdarr's PUID/PGID: root with DAC_OVERRIDE would pass a library tdarr itself cannot write.
     securityContext:
       runAsNonRoot: true
       runAsUser: {{ puid }}
       runAsGroup: {{ pgid }}
       supplementalGroups:
-        - {{ render_gid }}
+        - {{ hosts[k8s_primary_node].render_gid }}
       seccompProfile:
         type: RuntimeDefault
     containers:
@@ -70,9 +66,8 @@ template:
             value: "{{ deployment_digest8 }}"
           - name: PYTHONDONTWRITEBYTECODE
             value: "1"
-        # The device request is what puts the render node in this pod, as it does in tdarr's.
-        # `dri_device_plugin_count` shares the one node among four pods, so tdarr and
-        # jellyfin holding theirs leave room for this one.
+        # dri_device_plugin_count shares the node among four pods; tdarr and jellyfin leave room for
+        # this.
         resources:
           requests:
             cpu: 10m

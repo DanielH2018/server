@@ -28,8 +28,6 @@ SYSCTL_FILES = (
     "/etc/sysctl.d/90-homelab-host-tuning.conf",
     "/etc/sysctl.d/90-homelab-pi-tuning.conf",
 )
-# The twenty keys initial_setup's two `ansible.posix.sysctl` tasks set on the Pi, and the two
-# zram keys from optimize_pi.
 SYSCTL_KEYS = {
     "vm.swappiness": "130",
     "vm.page-cluster": "0",

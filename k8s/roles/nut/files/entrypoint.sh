@@ -14,9 +14,8 @@ for arg in "$@"; do
   esac
 done
 
-# Config arrives as a Secret volume (symlinked, root-owned). NUT's tools want real files
-# owned root:nut and not world-readable, so stage a copy rather than mounting onto
-# /etc/nut directly.
+# NUT's tools want real files owned root:nut and not world-readable, so stage a copy of the Secret
+# volume.
 mkdir -p /etc/nut
 cp -L /nut-config/* /etc/nut/
 chown -R root:nut /etc/nut
@@ -31,6 +30,5 @@ upsdrvctl start
 # Start upsd (NUT server, allows clients to query UPS status)
 upsd
 
-# Start upsmon in foreground (monitors UPS, raises FSD on low battery; the host-side
-# secondary upsmon performs the actual poweroff — see role CLAUDE.md, two-tier shutdown)
+# Foreground upsmon raises FSD; the host-side secondary upsmon performs the poweroff.
 exec upsmon -D

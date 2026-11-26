@@ -1,0 +1,229 @@
+#!/usr/bin/env python3
+"""Ansible's variable semantics as the k8s render guard reproduces them.
+
+`resolve_vars` expands `{{ ... }}` inside a variable's VALUE the way Ansible does before
+templating; getting that wrong leaves literal braces in a manifest, which reads as "invalid
+YAML" pointing at a perfectly good template.
+
+Run: uv run pytest scripts/lib/tests/k8s/test_k8s_context.py
+"""
+
+import jinja2
+import pytest
+
+from lib.k8s_context import resolve_vars
+from lib.render_guard import StrictChainableUndefined
+
+
+# --- resolve_vars: values nested inside lists and dicts ---
+#
+# Ansible expands `{{ ... }}` wherever a string sits inside a variable's value, not only when
+# the whole value IS a string. Scanning top-level strings alone leaves a list-valued variable
+# unexpanded, and it renders literal `{{ ... }}` into YAML. `traefik_k8s_watched_namespaces` is
+# the live case: a YAML list looped over by both rbac.yaml.j2 and static-config.yaml.j2.
+
+
+def test_resolve_vars_expands_a_string_inside_a_list():
+    resolved = resolve_vars(
+        {"watched": ["{{ ns_a }}", "{{ ns_b }}"]},
+        {"ns_a": "homelab", "ns_b": "longhorn"},
+    )
+    assert resolved["watched"] == ["homelab", "longhorn"]
+
+
+def test_resolve_vars_expands_a_string_inside_a_dict():
+    resolved = resolve_vars({"m": {"src": "{{ root }}/x.py"}}, {"root": "/srv"})
+    assert resolved["m"] == {"src": "/srv/x.py"}
+
+
+def test_resolve_vars_expands_through_a_list_of_dicts():
+    """The shape autofix_bridge_modules uses — the nesting is two levels, not one."""
+    resolved = resolve_vars(
+        {"mods": [{"name": "a.py", "src": "{{ root }}/a.py"}]}, {"root": "/srv"}
+    )
+    assert resolved["mods"] == [{"name": "a.py", "src": "/srv/a.py"}]
+
+
+def test_resolve_vars_leaves_a_brace_free_value_alone():
+    """The accepting half: a brace-free value is left alone.
+
+    Expansion must not rewrite values that held no template, and must not coerce non-strings. A
+    recursive walk that stringified as it went would pass the three tests above and quietly turn
+    every int and bool in the inventory into text.
+    """
+    values = {"ports": [80, 443], "on": True, "names": ["homelab"], "nested": {"n": 1}}
+    assert resolve_vars(dict(values), {}) == values
+
+
+# ── resolve_vars: a whole-value alias keeps the aliased variable's own type ────────────────────
+#
+# Ansible returns a role default that is nothing but `"{{ other_var }}"` as `other_var`'s own
+# type, list included. `.render()` alone cannot reproduce that: Jinja always renders to text, so
+# a list-valued alias would come back as the characters of its Python repr, and a `{% for %}`
+# loop over it would iterate one character at a time.
+
+
+def test_resolve_vars_a_whole_value_alias_keeps_the_list_type():
+    resolved = resolve_vars(
+        {"node_cidrs": "{{ shared_cidrs }}"},
+        {"shared_cidrs": ["10.42.0.1/32", "10.42.1.1/32"]},
+    )
+    assert resolved["node_cidrs"] == ["10.42.0.1/32", "10.42.1.1/32"]
+
+
+def test_resolve_vars_maps_combine_over_a_list():
+    """flux's and observability's `manifests_self_rollouts` are this expression, read as defaults."""
+    resolved = resolve_vars(
+        {"rollouts": "{{ workloads | map('combine', extra) | list }}"},
+        {"workloads": [{"name": "a"}], "extra": {"namespace": "obs"}},
+    )
+    assert resolved["rollouts"] == [{"name": "a", "namespace": "obs"}]
+
+
+def test_resolve_vars_a_partial_value_still_renders_to_a_string():
+    """The rejecting half: text alongside the expression still goes through `.render()`.
+
+    Only a value that IS the template, with nothing else in the string, gets the native-type
+    treatment — the same boundary Ansible itself draws.
+    """
+    resolved = resolve_vars({"url": "https://{{ host }}/x"}, {"host": ["a", "b"]})
+    assert resolved["url"] == "https://['a', 'b']/x"
+
+
+# --- resolve_vars: the `bool` filter a variable value reaches for ---
+#
+# A group_vars value may read `"{{ ... | bool }}"`; a bare Jinja env has no `bool`, so
+# expansion registers a shim. The shim is the one every render guard in scripts/lib shares.
+# This pair checks the string/boolean divergence the filter exists for.
+
+
+def test_resolve_vars_bool_filter_reads_the_string_false_as_false():
+    assert resolve_vars({"flag": "{{ raw | bool }}"}, {"raw": "false"})["flag"] is False
+
+
+def test_resolve_vars_bool_filter_reads_the_string_true_as_true():
+    assert resolve_vars({"flag": "{{ raw | bool }}"}, {"raw": "true"})["flag"] is True
+
+
+# --- resolve_vars: an undefined name inside a value ---
+#
+# homelab-render resolves with a strict class, because the default turns an undefined name
+# into `STUB` inside text and into None as a whole value, and either reaches a manifest.
+
+
+def test_resolve_vars_by_default_renders_an_undefined_name_as_stub_or_none_is_clean():
+    resolved = resolve_vars({"text": "a-{{ nope }}", "alias": "{{ nope }}"}, {})
+    assert resolved == {"text": "a-STUB", "alias": None}
+
+
+@pytest.mark.parametrize("value", ["a-{{ nope }}", "{{ nope }}"])
+def test_resolve_vars_under_a_strict_class_raises_on_an_undefined_name_is_flagged(
+    value,
+):
+    with pytest.raises(jinja2.UndefinedError, match="nope"):
+        resolve_vars({"v": value}, {}, undefined_cls=StrictChainableUndefined)
+
+
+# --- resolve_vars: the trailing newline of a value rendered as text ---
+#
+# ansible-core resolves a var through `AnsibleEnvironment`, whose `keep_trailing_newline` is
+# False, then pads the result as `TemplateEngine._post_render_mutation` does: newlines are added
+# only until it ends in as many as the source. `resolve_vars` renders through `make_env`, which
+# keeps the source's last newline, so a render that already ends in one gains a second.
+#
+# Each value has text around its expression. Without that text `_PURE_TEMPLATE` matches, and
+# the value is evaluated as an expression and never reaches `keep_trailing_newline`.
+
+
+# Each expected value is what ansible-core 2.22's `Templar` returned for `{{ y }}` with the
+# source held in `y`.
+@pytest.mark.parametrize(
+    ("source", "expected"),
+    [
+        pytest.param("p {{ x }}\n", "p a\n", id="one-newline"),
+        # A fix that rstrips the render and appends one newline passes the case above and
+        # fails this one; padding up to the source's count passes both.
+        pytest.param("p {{ x }}\n\n", "p a\n\n", id="two-newlines"),
+    ],
+)
+def test_resolve_vars_ends_a_value_whose_render_ends_in_a_newline_as_ansible_core_does(
+    source, expected
+):
+    assert resolve_vars({"y": source}, {"x": "a\n"})["y"] == expected
+
+
+@pytest.mark.parametrize(
+    ("source", "x", "expected"),
+    [
+        # Jinja drops the one trailing newline before parsing, so this is still a single
+        # expression, and Ansible pads its string result back to the source's newline.
+        pytest.param("{{ x }}\n", "a", "a\n", id="one-newline-after-a-bare-expression"),
+        pytest.param(
+            "{{ x }}\n\n", "a\n", "a\n\n", id="two-newlines-after-a-bare-expression"
+        ),
+        # Text around the expression makes the value text rather than the expression's type.
+        pytest.param(" {{ x }} ", "a", " a ", id="spaces-around-a-bare-expression"),
+        pytest.param("\n{{ x }}", "a", "\na", id="newline-before-a-bare-expression"),
+        pytest.param("{{ x }}\n", [1, 2], [1, 2], id="list-keeps-its-type"),
+    ],
+)
+def test_resolve_vars_resolves_a_whole_value_expression_as_ansible_core_does(
+    source, x, expected
+):
+    resolved = resolve_vars({"y": source}, {"x": x})["y"]
+    assert (resolved, type(resolved)) == (expected, type(expected))
+
+
+def test_resolve_vars_reads_a_default_through_dirname_and_basename():
+    """k3s's `k3s_host_coredns_tarball` is a `dirname`; it rendered as STUB before."""
+    raw = {
+        "bin": "/usr/local/lib/coredns/1.14.7/coredns",
+        "tarball": "{{ bin | dirname }}/coredns.tgz",
+        "name": "{{ bin | basename }}",
+    }
+    out = resolve_vars(raw, raw)
+    assert out["tarball"] == "/usr/local/lib/coredns/1.14.7/coredns.tgz"
+    assert out["name"] == "coredns"
+
+
+def test_resolve_vars_reads_a_default_through_the_search_test():
+    """netpol-baseline drops `cloudflare_ips`' IPv6 half with `reject('search', ':')`."""
+    raw = {
+        "cidrs": ["104.16.0.0/13", "2400:cb00::/32"],
+        "v4": "{{ cidrs | reject('search', ':') | list }}",
+    }
+    assert resolve_vars(raw, raw, undefined_cls=StrictChainableUndefined)["v4"] == [
+        "104.16.0.0/13"
+    ]
+
+
+# --- resolve_vars: one compile per distinct string ---
+#
+# A render resolves every inventory value once per role and pass, through a per-key fallback,
+# so the same strings reach `resolve_vars` thousands of times. Compiling each one afresh was
+# about a third of a full k8s render.
+
+
+def test_resolve_vars_compiles_a_repeated_value_once(monkeypatch):
+    compiled = []
+    real = jinja2.Environment.compile
+
+    def counting(self, source, *args, **kwargs):
+        compiled.append(source)
+        return real(self, source, *args, **kwargs)
+
+    monkeypatch.setattr(jinja2.Environment, "compile", counting)
+    values = {"text": "{{ a }}-compile-once", "whole": "{{ a ~ '-compile-once' }}"}
+    for _ in range(3):
+        assert resolve_vars(values, {"a": "x"}) == {
+            "text": "x-compile-once",
+            "whole": "x-compile-once",
+        }
+    assert len(compiled) == 2, compiled
+
+
+def test_resolve_vars_keeps_each_undefined_class_for_a_string_both_have_compiled():
+    value = {"v": "{{ missing_for_both_classes }}-tail"}
+    assert resolve_vars(value, {}) == {"v": "STUB-tail"}
+    with pytest.raises(jinja2.UndefinedError):
+        resolve_vars(value, {}, undefined_cls=StrictChainableUndefined)

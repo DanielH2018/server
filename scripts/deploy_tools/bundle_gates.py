@@ -14,7 +14,7 @@ verification*, the design:
   a published name whose file or directories it could not examine, so it never passes over
   nothing.
 - `host`: every `Host(...)` in an IngressRoute ends in `.<domain>`, the literal that
-  `inventory/group_vars/all.yml` defines. While bento-pdf is published, its `.local.`
+  `estate/vars.yml` defines. While bento-pdf is published, its `.local.`
   route is the gate's named member, and a gate that finds no Host rule there fails.
 - `no-stub`: no file under the bundle holds an R1 stub value, `stub-<key>` for a key name of
   `secrets.yml`, with each Secret's `data` decoded too.
@@ -31,7 +31,8 @@ from pathlib import Path
 import yaml
 
 from lib import yaml_fast
-from lib.repo_paths import ALL_VARS, SECRETS as SECRETS_DIR
+from lib.estate import REPO_INVENTORY, Estate, Inventory
+from lib.repo_paths import SECRETS as SECRETS_DIR
 from renderer.renderer_lib.bundle import (
     CLUSTER_DIR,
     FLUX_DIR,
@@ -46,14 +47,12 @@ from renderer.template_filters.secret_stubs import homelab_secret_stub
 
 SECRETS = SECRETS_DIR / "secrets.yml"
 
-# The host gate's named member: bento-pdf's `.local.` route, as (tag, namespace, name). The
-# gate asserts it only while the tag is published, so a bundle without the tag does not fail it.
+# The gate asserts this member only while the tag is published.
 NAMED_ROUTE = ("bento-pdf", "homelab", "bento-pdf")
 
 _HOST = re.compile(r"(?<![A-Za-z])Host\(([^)]*)\)")
 _KEY = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
-# A Kustomization's `spec.path` as the renderer writes it: one directory under `cluster/`. A
-# segment cannot start with `.`, so no path leaves the bundle.
+# A segment cannot start with `.`, so no path leaves the bundle.
 _PATH = re.compile(rf"\./{CLUSTER_DIR}/([a-z0-9][a-z0-9.-]*)")
 
 
@@ -76,19 +75,20 @@ def secret_keys(secrets: Path = SECRETS) -> frozenset[str]:
     return frozenset(keys)
 
 
-def inventory_domain(all_vars: Path = ALL_VARS) -> str:
-    """The literal `domain` that `all_vars` defines.
+def inventory_domain(inventory: Inventory = REPO_INVENTORY) -> str:
+    """The literal `domain` that `inventory`'s group variables define.
 
     Raises:
         ValueError: the file does not parse, or `domain` is missing or is not a literal.
     """
     try:
-        data = yaml_fast.safe_load(all_vars.read_text())
+        value = Estate(inventory).group_vars.get("domain")
     except (OSError, yaml.YAMLError) as err:
-        raise ValueError(f"{all_vars}: {err}") from err
-    value = data.get("domain") if isinstance(data, dict) else None
+        raise ValueError(f"{inventory.estate_vars}: {err}") from err
     if not isinstance(value, str) or not value or "{" in value or "$" in value:
-        raise ValueError(f"{all_vars} defines no literal domain, got {value!r}")
+        raise ValueError(
+            f"{inventory.estate_vars} defines no literal domain, got {value!r}"
+        )
     return value
 
 
@@ -223,13 +223,13 @@ def gates(
     out: Path,
     published: Iterable[str],
     secrets: Path = SECRETS,
-    all_vars: Path = ALL_VARS,
+    inventory: Inventory = REPO_INVENTORY,
     kinds=SHARED_KINDS,
 ) -> list[str]:
     """Every problem the three gates find in the bundle at `out`, one line each."""
     published = list(published)
     try:
-        keys, domain = secret_keys(secrets), inventory_domain(all_vars)
+        keys, domain = secret_keys(secrets), inventory_domain(inventory)
     except ValueError as err:
         return [f"gates: {err}"]
     return (

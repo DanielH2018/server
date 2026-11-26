@@ -121,7 +121,7 @@ Each app's `templates/verify/notification.yaml.j2` calls it, byte-identical in a
 The caller passes in every `lookup()` the macro needs. The two lookups into this role must stay
 in the caller, because `scripts/lib/k8s_role_callers.py:role_callers` reads only a role's own
 templates, and those lookups are each app's only edge to this role
-(`scripts/lib/tests/test_k8s_role_callers.py::test_the_lookup_form_resolves`).
+(`scripts/lib/tests/k8s/test_k8s_role_callers.py::test_the_lookup_form_resolves`).
 
 - **The script is the one this role ships**, read by a cross-role `lookup()`, so a change here
   changes all four apps' renders. The template also reads

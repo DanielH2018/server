@@ -93,8 +93,8 @@ def test_discord_returns_true_on_2xx(monkeypatch):
 
 
 def test_discord_returns_false_on_error(monkeypatch):
-    # A transient webhook failure must return False so the fingerprint is NOT advanced and the
-    # digest is retried next run, instead of being permanently suppressed.
+    # A transient webhook failure returns False so the fingerprint is not advanced and the digest
+    # retries.
     def boom(req, timeout=None):
         raise OSError("connection reset")
 
@@ -105,8 +105,8 @@ def test_discord_returns_false_on_error(monkeypatch):
 def test_an_over_long_digest_reaches_the_webhook_ending_in_the_truncation_marker(
     monkeypatch,
 ):
-    # Two caps applied in sequence would let the second slice off the first's marker, so a
-    # cut digest would read as a complete one.
+    # Two caps in sequence would let the second slice off the first's marker, so a cut digest would
+    # read complete.
     captured = {}
 
     def fake_urlopen(req, timeout=None):
@@ -123,11 +123,8 @@ def test_discord_returns_false_without_webhook():
     assert rn.discord("", "hi") is False
 
 
-# --- the check-runs read walks every page and refuses a short one ---------------------
-#
-# GitHub answers an unparameterised check-runs GET with its default page of 30. The fake honours
-# `per_page` (default 30, cap 100) and `page` like the API, so only a reader that walks the pages
-# sees a run past the first 30. It stubs urlopen, so `rn.get` and a shared walk are both caught.
+# GitHub's default check-runs page is 30; the fake honours per_page and page, so only a reader that
+# walks the pages sees a run past the first 30.
 
 _SHA = "c0ffee"
 _OPEN_PR = {

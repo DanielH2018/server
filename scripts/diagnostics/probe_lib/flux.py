@@ -52,8 +52,6 @@ KUSTOMIZATION = "Kustomization"
 OCIREPOSITORY = "OCIRepository"
 FLUX_KINDS = "kustomizations.kustomize.toolkit.fluxcd.io,ocirepositories.source.toolkit.fluxcd.io"
 
-# `probe.py flux`'s help as `cli_parser._verdict_help` takes it (summary, exit 0, exit 1). It
-# lives here because `cli_parser.py` sits at its module-length cap.
 FLUX_HELP = (
     "each Flux Kustomization in flux-system: Ready with its reason, the commit "
     "lastAppliedOriginRevision names against the commit its OCIRepository serves, and "
@@ -67,23 +65,17 @@ FLUX_HELP = (
 )
 FLUX_TAGS_HELP = "deploy tags, as `land.sh --tags` takes them"
 
-# The per-tag kinds the renderer writes beside `<tag>`. This module runs under the cc-wait
-# source with no project environment, so it cannot import
-# `scripts/renderer/renderer_lib/ordering.py:TAG_KIND_SUFFIXES`, which needs PyYAML.
-# `scripts/diagnostics/tests/test_probe_flux.py` pins the two equal.
+# Cannot import renderer_lib's TAG_KIND_SUFFIXES: this module runs under cc-wait with no PyYAML.
+# A test pins them equal.
 TAG_KIND_SUFFIXES = ("-deferred", "-snapshot", "-prepull", "-precheck", "-verify")
 # The shared Kustomization every promotion that holds a tag also waits on.
 SOAK = "soak"
 
-# `flux push artifact --revision master@sha1:<sha>` writes the commit under this annotation,
-# and source-controller copies it into the OCIRepository's `status.artifact.metadata`.
-# `promote_state.artifact_of` reads the same field, but it is not reachable without the venv.
+# `promote_state.artifact_of` reads the same field but needs the venv.
 REVISION_ANNOTATION = "org.opencontainers.image.revision"
 
-# Ready reasons that mean "not yet", not "failed": kustomize-controller is waiting on a
-# dependency or is mid-apply. Flux sets Progressing with Ready=Unknown and DependencyNotReady
-# with Ready=False. Every other reason on a not-Ready row is a failed apply or health check.
-# `wait_state` and `format_flux` both read this set, so the probe and cc-wait agree.
+# Reasons meaning 'not yet', not 'failed': waiting on a dependency or mid-apply. `wait_state` and
+# `format_flux` share this set.
 NOT_YET_REASONS = frozenset(
     {"DependencyNotReady", "Progressing", "ProgressingWithRetry"}
 )
@@ -360,8 +352,6 @@ def format_flux(
     return "\n".join(lines), 0
 
 
-# The checkout `contains` asks: the one this file sits in, which shares its object store with
-# every worktree of the repo.
 REPO = _Path(__file__).resolve().parents[3]
 
 

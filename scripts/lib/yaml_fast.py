@@ -31,12 +31,8 @@ call `yaml.safe_load`. They are not a CI cost and are deliberately left alone.
 
 import yaml
 
-# The C extension ships in PyYAML's manylinux wheels, so this resolves to CSafeLoader on
-# every machine this repo runs on. The getattr is for a source build without libyaml,
-# where the correct behaviour is to be slow rather than to fail — but that fallback is
-# SILENT, and a silent fallback costs the whole 30% with nothing to show for it. Hence
-# `test_the_c_loader_is_the_one_actually_selected`, which asserts the fast loader
-# specifically rather than "a loader was chosen".
+# The getattr falls back silently to SafeLoader without libyaml; a test asserts the C loader is
+# selected.
 Loader = getattr(yaml, "CSafeLoader", yaml.SafeLoader)
 
 
@@ -59,8 +55,8 @@ def parse_yaml(text: str):
     """
     try:
         return safe_load(text)
-    # The boundary around untrusted text: PyYAML's constructor raises whatever a bad scalar
-    # triggers (ValueError for `2026-13-45`, KeyError for `!!bool x`, IndexError for `!!int ""`).
+    # PyYAML's constructor raises ValueError, KeyError or IndexError on a bad scalar; all become
+    # UnparsableYaml.
     except Exception as exc:
         raise UnparsableYaml(str(exc)) from exc
 

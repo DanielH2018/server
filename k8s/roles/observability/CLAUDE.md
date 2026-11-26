@@ -15,7 +15,7 @@ Renovate sessions export here, and they read untrusted text. A metric they forge
 other name could fire a routed triage alert
 (`hosts/tests/test_claude_triage_alert_inputs.py::test_no_routed_alert_reads_a_series_a_session_can_send_is_clean`).
 
-Flux applies the role (its entry is in `cluster/services.yml`).
+Flux applies the role (its entry is in `k8s/services.yml`).
 
 The `observability-verify` Job reads the pin back from the live DaemonSet and fails without it.
 It lives in `templates/verify/` and runs `files/observability_verify.py` with `get` on the
@@ -53,7 +53,7 @@ the one route `alertmanager.local.<domain>` keeps.
   It admits `/api/v2/alerts` and `/api/v2/silences`, so `probe.py health` can name a silenced
   or inhibited gated alert and `probe.py monitors` can list active silences. It admits the LAN
   and the node addresses only, whatever `k8s_public_route` says.
-  `tests/k8s/test_alertmanager_read_route.py` holds the door to `GET` and the two paths.
+  `tests/k8s/edge/test_alertmanager_read_route.py` holds the door to `GET` and the two paths.
 
 **The `observability-prepull` Kustomization pulls Grafana's image before its `Recreate`**, so the
 dashboards serve through a 482 MB Docker Hub pull (`flux_prepull_timeout` in
@@ -69,7 +69,7 @@ pod templates are `homelab-best-effort` (#1851). Prometheus earns tier 1 because
 monitor-bridge reads it every cycle via `PROMETHEUS_URL`. Alertmanager earns it because it is
 the paging path, which the operator accepted on 2026-10-12 (#4693, the M1 plan's open question
 1). The exporters stay tier 4 — a lost one surfaces loudly as `up == 0`.
-`tests/k8s/test_pod_template_hygiene.py` holds every long-running pod template to one
+`tests/k8s/workloads/test_pod_template_hygiene.py` holds every long-running pod template to one
 of the four classes.
 
 ## One config change, one restart
@@ -87,7 +87,7 @@ Secret reader names the rendered files its pod reads in `restart_secrets`:
 alertmanager. The first two render from the role's `render_secrets` entries. Grafana mounts
 the warehouse datasource Secret as a projected volume source, beside its provisioning
 ConfigMap.
-`tests/services/test_observability_config_rolls_one_workload.py` holds that
+`tests/services/scraping/test_observability_config_rolls_one_workload.py` holds that
 declaration equal to the Secrets each pod reads. One Secret edit then rolls its readers alone.
 An Alertmanager config edit rolls Alertmanager alone.
 
@@ -109,14 +109,14 @@ restart annotation hashes the ConfigMaps a pod mounts, but it skips every name i
 `scripts/renderer/renderer_lib/restart.py:RELOADED_IN_PLACE`. Without that list, a board edit
 would restart the `Recreate` grafana pod once the dashboards join the bundle, and a rule edit
 would restart Prometheus.
-`scripts/renderer/tests/test_renderer_self_rollout_restart.py::test_a_board_or_rule_edit_after_the_flip_moves_no_restart_value`
+`scripts/renderer/tests/manifests/test_renderer_self_rollout_restart.py::test_a_board_or_rule_edit_after_the_flip_moves_no_restart_value`
 renders the flipped role and holds both values still across such an edit.
 
 Every entry declares `restart_on: []`, which the renderer ignores for a self-rollout entry.
 
 **Widen the capture when you add a `data:` key.** Every capture but Grafana's holds ONE key's
 body, so a second key in `prometheus.yaml.j2` lands outside the hash and the pod never rolls.
-`tests/services/test_observability_config_rolls_one_workload.py` guards the three ways
+`tests/services/scraping/test_observability_config_rolls_one_workload.py` guards the three ways
 this goes QUIET.
 
 ## Alert plane
@@ -142,10 +142,10 @@ are in `docs/archive/monitoring/m1-alertmanager.md`.
 
 **A summary reads `<service or host>: <what is wrong>`.** The subject is the rule's own
 `service` label, an inventory host, or labels of the firing series, and
-`tests/services/test_alert_runbook_urls.py::test_every_alert_summary_opens_with_its_service_or_host_is_clean`
+`tests/services/alert_rules/test_alert_runbook_urls.py::test_every_alert_summary_opens_with_its_service_or_host_is_clean`
 fails any other shape. A summary holds a `: `, so its YAML scalar is quoted or folded.
 A summary fits `SUMMARY_CAP` as rendered, and
-`tests/services/test_alert_runbook_urls.py::test_every_alert_summary_fits_the_cap_once_rendered_is_clean`
+`tests/services/alert_rules/test_alert_runbook_urls.py::test_every_alert_summary_fits_the_cap_once_rendered_is_clean`
 measures the `summary` a promtool test's `exp_annotations` holds, so a templated summary's
 render needs a test case that asserts it.
 
@@ -162,16 +162,16 @@ inventory host groups by `alertname` alone, and the title lists the hosts the gr
 The route for `WarningUnresolved` groups by `escalated_from`, so one message names the warning
 it escalates and lists the services. Each grouping route nests the paging routes, because an
 alert stops at the first route it matches.
-`tests/services/test_alertmanager_grouping.py::test_a_host_plane_alert_groups_by_alertname_alone`
+`tests/services/alertmanager/test_alertmanager_grouping.py::test_a_host_plane_alert_groups_by_alertname_alone`
 walks the tree with inheritance.
 
 **The weekly reboot mutes every paging route, never the Watchdog.** The `weekly-reboot` time
 interval derives from the reboot cron's `weekly_reboot_*` values and the mute's lead and
-recovery allowance in `group_vars/all.yml`. A schedule written here as a literal would stop
+recovery allowance in `estate/vars.yml`. A schedule written here as a literal would stop
 following the reboot.
-`tests/services/test_alertmanager_reboot_mute.py::test_moving_the_reboot_moves_the_mute`
+`tests/services/alertmanager/test_alertmanager_reboot_mute.py::test_moving_the_reboot_moves_the_mute`
 holds the interval to that sum, and
-`tests/services/test_alertmanager_routing.py::test_every_route_a_paging_alert_reaches_is_muted`
+`tests/services/alertmanager/test_alertmanager_routing.py::test_every_route_a_paging_alert_reaches_is_muted`
 walks the routing tree to prove the alerts reach the mute.
 
 **A warning that fires for 48 hours pages as a critical.** `WarningUnresolved` in
@@ -186,7 +186,7 @@ and drill alerts never escalate, and neither does a rule labelled `escalate: "fa
 `DeployHoldActive`, `FluxSuspended`, and the weekly scans' `AideCheckFailed` and
 `RkhunterScanFailed`, which hold until someone reviews the scan by hand. Such a warning repeats
 daily instead of every 6h.
-`tests/services/test_warning_escalation_exemptions.py` holds that exempt set to the
+`tests/services/alertmanager/test_warning_escalation_exemptions.py` holds that exempt set to the
 rules. The rule has no `for:`, because a Prometheus restart resets every alert's activation
 (`docs/archive/monitoring/m6-retire-kuma.md`, Open question 9). It counts the
 stored `ALERTS` samples of the last 48 hours against the Watchdog's instead, so a gap of
@@ -204,7 +204,7 @@ workload-service join. The host table is
 its scrape job and its `HostUpdateStale` limit. To change a host-plane rule, edit its table
 entry, run the generator, and commit the table and the rule file together. The
 `gen-host-rules` prek hook and
-`scripts/dev/tests/test_gen_host_rules.py::test_the_committed_rule_files_are_the_render_of_their_tables_is_clean`
+`scripts/dev/tests/repo_tools/test_gen_host_rules.py::test_the_committed_rule_files_are_the_render_of_their_tables_is_clean`
 fail a rule file that differs from its table. The generator refuses to render while an
 inventory host has no host-table entry, so every host pages for its reconcile and its updates. `docs/host-packages.md` is the
 runbook for both pages. `WiredLinkDown` takes one copy per node whose host_vars set
@@ -229,10 +229,10 @@ counts as paged. The label never changes
 mid-failure, because a changed label set would resolve the firing alert. A blackhole route in `templates/alertmanager-secret.yaml.j2`
 takes that label, so the unit pages once, and `WarningUnresolved` drops the label so its
 escalation still pages
-(`tests/services/test_alertmanager_routing.py::test_a_unit_failure_its_hook_already_paged_reaches_only_the_blackhole`).
+(`tests/services/alertmanager/test_alertmanager_routing.py::test_a_unit_failure_its_hook_already_paged_reaches_only_the_blackhole`).
 The triage poll's hook-paged `SystemdUnitsFailed` also inhibits `ClaudeTriagePollNotReporting`
 on the same `origin`, and that rule's `for: 7m` lets the source fire first at every phase of the
-5-minute check, so a poll that fails every tick pages once (`tests/services/test_alertmanager_triage_poll_inhibit.py`). A
+5-minute check, so a poll that fails every tick pages once (`tests/services/alertmanager/test_alertmanager_triage_poll_inhibit.py`). A
 pair with a `for:` is pending when `HostCheckOverdue` would fire, so `HostCheckOverdue` skips
 a check whose pair is pending, and fires 2 minutes after the pair, held by it.
 A check that writes a
@@ -248,21 +248,21 @@ moves. `homelab-reconcile-metrics.service` rewrites the reconcile file at boot, 
 **`ScrapeTargetDown` is one rule per owning role, and a new scrape job needs a line in one.**
 `files/rules/scrape-targets.yaml` gives each rule a literal `service`, because a static scrape
 job has no other source for it. The last rule catches a job that none of the others names, with
-`service="unmapped"`. `tests/services/test_scrape_target_rule_jobs.py` fails until every
+`service="unmapped"`. `tests/services/alert_rules/test_scrape_target_rule_jobs.py` fails until every
 rendered job is in exactly one named rule. Each rule has a `ScrapeTargetFlapping` twin with
 the same job matcher and `service`. It pages a target that failed more than 30% of its scrapes
 over 30 minutes and went down at least twice, with no 11-minute window of the 30 failing every
 scrape. That is the flapping case the per-series 10-minute hold
-never fires on (#6626). `tests/services/test_scrape_target_flap_rule.py` holds the two
+never fires on (#6626). `tests/services/alert_rules/test_scrape_target_flap_rule.py` holds the two
 sets equal. These rules and `files/rules/log-pipeline.yaml` page since M6's batch A3
 Cutover-b. `BlackboxExporterDown` holds back
 `ScrapeTargetDown` for job `blackbox-ingress` through an Alertmanager inhibit, so a dead exporter
-pages once (`tests/services/test_alertmanager_blackbox_inhibit.py`).
+pages once (`tests/services/alertmanager/test_alertmanager_blackbox_inhibit.py`).
 `FluxControllerDown`'s `up == 0` arm holds back `ScrapeTargetDown` for the same `job` and
 `instance`, so a dead Flux controller pages once, as a critical
-(`tests/services/test_alertmanager_flux_inhibit.py`).
+(`tests/services/alertmanager/test_alertmanager_flux_inhibit.py`).
 `PiHostDown` holds back `PiPortDead`, so a dead Pi pages as the host and not once per published
-port (`tests/services/test_alertmanager_pi_inhibit.py`). The inhibit has no `equal` list,
+port (`tests/services/alertmanager/test_alertmanager_pi_inhibit.py`). The inhibit has no `equal` list,
 because the two alerts share no `instance`, and the estate has one Pi.
 The two k3s-cron rule pairs in `files/rules/host-checks.yaml` page since M6's batch B1
 Cutover-1b.
@@ -298,7 +298,7 @@ hand-written in `prometheus.yaml.j2` and renders one target per entry the
 `ingress_probe_targets` filter yields. These probes are the only ones on the ingress names. An entry opts out with `probe: false`. Each
 target sets `service`, `module` and `page_tier`, and the `ingress-probes` rules take `service`
 from the target rather than from a literal. A new routed entry therefore changes
-`prometheus.yml` and rolls Prometheus. `tests/services/test_blackbox_ingress_targets.py`
+`prometheus.yml` and rolls Prometheus. `tests/services/scraping/test_blackbox_ingress_targets.py`
 pins the targets to the filter's output, and
 `docs/archive/monitoring/m4-blackbox-ingress.md` has the design.
 
@@ -312,10 +312,10 @@ from a pod to its Deployment, and the `kube-state-metrics` scrape job drops the 
 duration of each soak, snapshot and verify Job a landing waits on (#5675), and the scrape job
 keeps five `kube_job_*` families of the seventeen. A workload with no label resolves through a literal override
 table in the rule, then to `k3s` in the add-on namespaces, then to `unmapped`.
-`tests/k8s/test_workload_service_overrides.py` derives the table from the render. The
+`tests/k8s/workloads/test_workload_service_overrides.py` derives the table from the render. The
 pod mapping leaves out Job-owned and ownerless pods outside the add-on namespaces. That holds
 only while every rendered Job runs under `restartPolicy: Never`, which the
-`job-restart-policy-is-never` row of `tests/k8s/test_rendered_properties.py` enforces.
+`job-restart-policy-is-never` row of `tests/k8s/rendered_properties/test_rendered_properties.py` enforces.
 
 ## Flux in the metrics plane
 
@@ -326,7 +326,7 @@ OCIRepositories from the config in
 That config travels as the `--custom-resource-state-config` argument, not a ConfigMap, so a
 change to it rolls kube-state-metrics through the apply and adds no key for the rolls-one-workload
 guard to track. A kind added to the config needs `list` and `watch` in the ClusterRole beside it;
-`tests/services/test_ksm_flux_resource_state.py` fails a kind with no grant.
+`tests/services/scraping/test_ksm_flux_resource_state.py` fails a kind with no grant.
 `docs/flux-deploy-plane.md` has the labels, and why `suspended` is absent rather than `"false"`.
 A Kustomization's `content_digest` label is the tag's own rendered-content digest. It is what
 `probe.py health` matches a flux-owned tag's reference time on, because `revision` moves on
@@ -342,7 +342,7 @@ Three rules hold this together: `GF_SERVER_ROOT_URL` decides the one route that 
 OIDC login, keeping the admin form on as the break-glass path; the Authelia client keeps its
 `with_groups` claims policy, or an `admins` user logs in as Viewer behind a green health gate;
 and the client secret is one credential in two SOPS keys, rotated together.
-`tests/services/test_grafana_authelia_oidc.py` holds both roles to the three settings
+`tests/services/dashboards/test_grafana_authelia_oidc.py` holds both roles to the three settings
 that are written twice. `docs/observability-dashboards.md` has each rule in full.
 
 ## Dashboards
@@ -363,7 +363,7 @@ not in `templates/grafana.yaml.j2`. Three tests and the
 per folder and passes each board through the `grafana_deploy_annotated` filter, which adds the
 two deploy-annotation queries. The file joins the `observability` bundle, and Flux applies it
 server-side, which the 262144-byte annotation cap on a client-side apply of the Infrastructure
-folder needs. `tests/services/test_dashboard_configmaps.py` renders the bundle and holds
+folder needs. `tests/services/dashboards/test_dashboard_configmaps.py` renders the bundle and holds
 every ConfigMap under the 1 MiB object cap.
 
 **Flux applies every key of a dashboard ConfigMap.** A board dropped from

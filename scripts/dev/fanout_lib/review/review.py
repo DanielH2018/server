@@ -156,8 +156,8 @@ class Pipeline(BatchRun):
         # A text naming only another PR is a defect: end here naming both.
         report = needs_input_report(found.problem) if found.problem else impl.report
         if impl.failed or not found.url:
-            # Saved all the same: a batch that never reached a PR is the failure rate the
-            # records exist to measure.
+            # Saved all the same: a batch that never reached a PR is the failure rate the records
+            # measure.
             self.record.settle(report, has_pr=False)
             self._save()
             return report
@@ -179,9 +179,8 @@ class Pipeline(BatchRun):
             last = fix_rounds(self, issues, base, head, last)
 
         held = held_for_findings(self.record, self.state_dir)
-        # A PR this pipeline lands stays a draft for `land_draft`, and so does one a person
-        # lands: their `land.sh` gives it its one CI run. Any other is marked ready, a PR held
-        # for its findings included, since a PR left a draft gets no CI.
+        # A PR this pipeline or a person lands stays a draft, since `land.sh` gives it its one CI
+        # run. Any other is marked ready, since a draft gets no CI.
         lands_it = held is None and (
             lands(self.host, self.target.repo) or server_lands(self, self.record.head)
         )

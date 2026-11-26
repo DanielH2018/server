@@ -48,8 +48,8 @@ WINDOW_S = float(os.environ.get("JANITORR_WINDOW_H", "12")) * 3600
 GRACE_S = float(os.environ.get("JANITORR_STARTUP_GRACE_S", "600"))
 KUBECTL = os.environ.get("JANITORR_KUBECTL", "k3s kubectl")
 TIMEOUT = int(os.environ.get("JANITORR_KUBECTL_TIMEOUT_S", "30"))
-# The verdict leaves the pod a second way, as annotations on this ConfigMap, which
-# kube-state-metrics exports to Prometheus. Empty exports nothing.
+# Annotations on this ConfigMap export the verdict to Prometheus via kube-state-metrics; empty
+# exports nothing.
 VERDICT_CONFIGMAP = os.environ.get("JANITORR_VERDICT_CONFIGMAP", "")
 # The pod log is the evidence, in the `<ts> <host> <tag>: <message>` shape.
 TAG = "janitorr-health"
@@ -105,8 +105,8 @@ def export_verdict(
         "configmap",
         configmap,
         "--type=merge",
-        # Flux's server-side apply strips fields owned by a manager named `kubectl*`, and the
-        # default here is `kubectl-patch`, so the annotations vanish at every apply.
+        # Flux's server-side apply strips fields owned by a manager named `kubectl*`; the default
+        # `kubectl-patch` would make the annotations vanish at every apply.
         "--field-manager=" + TAG,
         "--patch=" + json.dumps(patch),
     )
@@ -125,9 +125,8 @@ def verdict(kubectl: Callable[..., tuple[int, str]], now: float) -> tuple[bool, 
         kubectl: `kubectl(*args) -> (rc, output)`, as `host_lib.kubectl_runner` returns.
         now: the current time as a Unix timestamp, which the container's uptime is measured to.
     """
-    # The CONTAINER's startedAt, not the pod's: a container that crash-looped inside a long-lived
-    # pod restarts its own clock, and the boot race restarts with it. Using the pod's start time
-    # would put a just-restarted janitorr past grace and count its startup errors against it.
+    # The CONTAINER's startedAt, not the pod's: a crash-looped container restarts its clock, and the
+    # pod's time would count its startup errors against it.
     rc, out = kubectl(
         "get",
         "pod",

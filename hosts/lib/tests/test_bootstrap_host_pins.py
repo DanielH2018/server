@@ -12,7 +12,8 @@ import json
 import re
 
 from _bootstrap_host import group
-from lib.repo_paths import ALL_VARS, HOST_VARS, REPO
+from lib.inventory_lists import host_vars_file
+from lib.repo_paths import ESTATE_VARS, REPO
 
 SCRIPT = (REPO / "hosts" / "bootstrap-host.sh").read_text()
 TOOLS = (REPO / "hosts" / "packages" / "homelab-tools" / "package.yml").read_text()
@@ -36,10 +37,10 @@ def package_pins(package: str) -> str:
 
 
 def test_the_sys_user_and_swap_file_equal_the_inventory():
-    all_vars = ALL_VARS.read_text()
-    pi_vars = (HOST_VARS / "daniel-pi.yml").read_text()
+    estate_vars = ESTATE_VARS.read_text()
+    pi_vars = host_vars_file("daniel-pi").read_text()
     for name, value in (
-        ("SYS_USER", group(r"^sys_user: (\S+)", all_vars, re.MULTILINE)),
+        ("SYS_USER", group(r"^sys_user: (\S+)", estate_vars, re.MULTILINE)),
         ("PI_SWAPFILE", group(r"^pi_swapfile_path: (\S+)", pi_vars, re.MULTILINE)),
         ("PI_SWAPFILE_SIZE", group(r"^pi_swapfile_size: (\S+)", pi_vars, re.MULTILINE)),
     ):
@@ -93,8 +94,6 @@ def test_a_k3s_bump_the_script_did_not_follow_is_flagged():
 
 
 def test_renovate_finds_every_pin_the_script_holds():
-    # The tools manager needs the annotation, version and sha256 lines of each of the four
-    # blocks, and the k3s manager needs the annotated K3S_VERSION line.
     found = {}
     for manager in managers_reading_the_script():
         for pattern in manager["matchStrings"]:

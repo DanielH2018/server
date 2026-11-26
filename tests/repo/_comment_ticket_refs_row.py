@@ -9,8 +9,8 @@ _COMMENTED = (
     "*.conf", "*.service", "*.timer", "*.alloy",
 )  # fmt: skip
 
-# A line that opens with `#` or a Jinja `{#`. A comment after code is skipped: telling it from
-# a `#` inside a string needs a tokenizer per language.
+# A line that opens with `#` or a Jinja `{#`; a comment after code is skipped, since telling it from
+# a `#` in a string needs a tokenizer per language.
 _COMMENT = re.compile(r"^\s*(?:#(?!!)|\{#)")
 
 _TICKET = re.compile(
@@ -26,9 +26,7 @@ _ALLOW = {
     "scripts/deploy_tools/chained_timeout.py": (
         "test_chained_timeout.py parses the `#5868: <n>s` measurement out of this comment"
     ),
-    "scripts/dev/findings_lib/issue_model.py": "the issue-URL closing syntax is the example",
-    "tests/_ratchet.py": "the `#NNNN` issue-reference syntax is the example",
-    "tests/repo/test_role_claude_md.py": "its DECIDED paragraph cites the operator ruling",
+    "tests/repo/docs/test_role_claude_md.py": "its DECIDED paragraph cites the operator ruling",
 }
 
 

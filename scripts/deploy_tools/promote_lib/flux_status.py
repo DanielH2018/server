@@ -5,7 +5,7 @@ the `flux/` contexts, strips the prefix and parses each state, so `verify`, `dec
 of `prod`'s statuses and its supersede check look a Kustomization up by its own name and
 compare against StatusState.
 
-Run: imported only. `uv run pytest scripts/deploy_tools/tests/test_verify_promotion.py`
+Run: imported only. `uv run pytest scripts/deploy_tools/tests/promote/test_verify_promotion.py`
 """
 
 from collections.abc import Mapping

@@ -42,9 +42,8 @@ def run_sections(
         except Exception:
             results[i] = []
 
-    # Daemon threads, not a ThreadPoolExecutor: the executor joins its workers at interpreter
-    # exit, so a probe hung past the deadline would hold the hook until the harness kills it
-    # and the printed sections with it.
+    # Daemon threads, not an executor: an executor joins at exit, so a hung probe would hold the
+    # hook.
     threads = [
         threading.Thread(target=work, args=(i, name, probe), daemon=True)
         for i, (name, probe) in enumerate(probes)

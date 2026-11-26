@@ -128,8 +128,7 @@ def test_a_class_naming_no_csi_secret_is_clean():
 
 def test_no_longhorn_class_needs_the_dropped_grant():
     # fact: k8s/roles/longhorn/CLAUDE.md#At a glance
-    # The delete patches are safe only while no class asks a CSI sidecar to read a Secret:
-    # without the grant, that sidecar fails Forbidden at provision, attach or expand time.
+    # The delete patches are safe only while no class asks a CSI sidecar to read a Secret.
     classes = _longhorn_classes()
     assert NAMED_CLASSES <= {c["metadata"]["name"] for c in classes}
     assert _secret_parameters(classes) == []
@@ -149,8 +148,5 @@ def test_the_render_drops_both_upstream_objects():
 
 
 def test_each_delete_patch_names_an_upstream_object():
-    # A guard, not coverage of the deletions: with no delete patches the set is empty and this
-    # passes. kustomize refuses a build whose patch matches nothing, so a release that renames or
-    # drops a deleted object would fail the whole `longhorn` apply rather than this test.
     upstream = {(d["kind"], d["metadata"]["name"]) for d in _docs(UPSTREAM.read_text())}
     assert _deleted(_patch_docs()) - upstream == set()

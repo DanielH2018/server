@@ -23,6 +23,6 @@ def test_the_runbook_gates_call_the_one_function():
     # Identity, not equal output: a second copy that agrees today is a duplication that would
     # drift the next time one side changed. The `LonghornVolumeDegraded`
     # rule is the other reader; it is PromQL, so
-    # tests/services/test_storage_rule_literals.py holds its `state!~` regex to this
+    # tests/services/alert_rules/test_storage_rule_literals.py holds its `state!~` regex to this
     # module's SAFE_ROBUSTNESS instead.
     assert gate_runner._unsafe_states is longhorn_robustness.unsafe_volumes

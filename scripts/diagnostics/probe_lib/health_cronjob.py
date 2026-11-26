@@ -16,40 +16,19 @@ from dataclasses import dataclass
 from diagnostics.probe_lib.health_rollout import seconds_since
 from lib.k8s_conditions import ConditionStatus, parse_conditions
 
-# RBAC decides which of two paths this gate can take: trigger a fresh run itself, or fall back
-# to reading the most recent existing run.
-# probe.py runs as `homelab-readonly` (see `k8s/roles/cluster-base/templates/readonly-rbac.yaml.j2`),
-# bound to the built-in `view` ClusterRole plus one additive ClusterRole, neither granting any
-# write verb. Verified live, running as that identity:
-#   k3s kubectl auth can-i create jobs -n homelab   -> no
-#   k3s kubectl auth can-i get jobs -n homelab      -> yes
-#   k3s kubectl auth can-i list jobs -n homelab     -> yes
-#   k3s kubectl auth can-i get cronjobs -n homelab  -> yes
-#   k3s kubectl auth can-i list cronjobs -n homelab -> yes
-# So the READ-ONLY FALLBACK IS THE ONLY PATH LIVE HERE: this module never creates a Job, only
-# reads the CronJob and its existing Jobs. That is the whole reason `format_cronjob_health`
-# has a schedule-fallback branch at all — the trigger-a-run half is not
-# available to this identity, ever, by design (the readonly SA is a read path, deliberately).
-# The gate run itself is a Job Flux applies in `<tag>-verify`.
+# probe.py runs as `homelab-readonly`, which cannot create jobs, so this module only reads the
+# CronJob and its existing Jobs. The gate run itself is a Job Flux applies in `<tag>-verify`.
 
 
-# A Flux-owned role's gate Job. Its `<role>-verify` Kustomization applies it, so it has
-# no `ownerReferences`: `scripts/renderer/renderer_lib/cronjob_gate.py:gate_name` names it
-# `<cronjob>-deploy-gate-<spec digest8>`, and Flux labels it with the Kustomization's name.
-# The exact name pins the CronJob, so a CronJob whose name extends this one's never matches.
-# The label pins the applier: an ownerless Job a person made with that name proves nothing.
+# The exact name pins the CronJob; the Flux label pins the applier, since an ownerless Job a person
+# made proves nothing.
 FLUX_OWNER_LABEL = "kustomize.toolkit.fluxcd.io/name"
 _GATE_INFIX = "-deploy-gate-"
 _DIGEST8 = re.compile(r"^[0-9a-f]{8}$")
 
 
-# Which gate Job proves the revision Flux applies. A Flux-owned role has no release
-# record, so no `applied_at` to compare a Job's creation time against. The renderer stamps the
-# same digest twice instead: `scripts/renderer/renderer_lib/bundle.py:CONTENT_DIGEST` on
-# Kustomization `<tag>` carries the tag's `own` digest, and
-# `scripts/renderer/renderer_lib/cronjob_gate.py:ROLE_DIGEST8` on the gate Job's pod template
-# carries its first eight characters. Verified live 2026-10-23 for configarr,
-# longhorn-reconcile and pi-peer-backup.
+# A Flux-owned role has no release record, so the renderer stamps one digest on Kustomization
+# `<tag>` and its first eight characters on the gate Job's pod template.
 CONTENT_DIGEST = "homelab/content-digest"
 ROLE_DIGEST8 = "homelab/role-digest8"
 
@@ -195,19 +174,12 @@ def _job_outcome(job):
     return "running"
 
 
-# `M H * * *` (daily) and `M H * * D` (weekly) are the schedule shapes this sizes: configarr,
-# pi-peer-backup and all seven Longhorn backup jobs. longhorn-reconcile runs hourly
-# (`17 * * * *`), so it passes only on a gate Job newer than its deploy. This is
-# deliberately not a general cron parser: a schedule outside these two shapes returns None and
-# the caller fails closed rather than guess what "normal interval" means for it.
+# Only daily and weekly shapes; any other schedule returns None and the caller fails closed rather
+# than guess an interval.
 _DAILY_SCHEDULE = re.compile(r"^\s*\d+\s+\d+\s+\*\s+\*\s+\*\s*$")
 _WEEKLY_SCHEDULE = re.compile(r"^\s*\d+\s+\d+\s+\*\s+\*\s+[0-6]\s*$")
 
-# How many schedule intervals a CronJob-only role's last known run may age past before the
-# schedule-fallback path (below) calls it overdue rather than merely "hasn't fired again yet".
-# 2x rather than 1x: a run that fires a few minutes late every so often is normal cluster jitter,
-# not a stalled CronJob, and this path is only reached when release_stamp.yml also says the
-# latest owned run predates the deploy it should be proving.
+# 2x, not 1x: a run firing a few minutes late is normal jitter, not a stalled CronJob.
 CRONJOB_STALE_MULTIPLIER = 2
 
 
@@ -237,10 +209,7 @@ def declared_suspended(docs, default_namespace):
     )
 
 
-# The marker a CronJob carries when nothing runs it per revision and its schedule is the gate.
-# The restore drill carries it: a gate Job would run a real restore beside the
-# scheduled one, under the same `restore-drill-<pvc>` name
-# (`tests/deploy/test_cronjob_only_roles_include_the_gate.py:UNGATED_BY_DESIGN`).
+# The restore drill carries it: a gate Job would run a real restore beside the scheduled one.
 SCHEDULE_GATE = "homelab/gate"
 SCHEDULE_GATE_VALUE = "schedule"
 
@@ -384,8 +353,9 @@ def format_cronjob_health(name, cronjob, latest_job, pods, deploy_applied_at, no
         failure = _flux_revision_failure(name, job_name, deploy_applied_at)
         if failure:
             return failure, 1
-        # `latest_owned_job` takes the newest Job of a set that holds the revision's gate, so
-        # `latest_job` is that gate or a firing created after it.
+        # `latest_owned_job` takes the newest Job of a set holding the revision's gate, so
+        # `latest_job`
+        # is that gate or a later firing.
         fresh = True
     else:
         deploy_age = seconds_since(deploy_applied_at, now)

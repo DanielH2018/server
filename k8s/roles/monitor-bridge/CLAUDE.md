@@ -18,7 +18,7 @@ two exporters, prerequisites, gate-set membership and test-patching rules.
 - **Claims:** none (no PVC)
 <!-- /generated_from -->
 
-**Host:** daniel-box, pinned by `nodeSelector` to `inventory/group_vars/all.yml:k8s_primary_node`
+**Host:** daniel-box, pinned by `nodeSelector` to `k8s/vars.yml:k8s_primary_node`
 because the `etcd_restore_drill` check reads the drill's stamp directory over a hostPath. Every
 source is reached by in-cluster Service name.
 
@@ -63,7 +63,7 @@ Three conventions hold across all of them:
   The `monitor-bridge-env` Secret
   (`k8s/roles/monitor-bridge/defaults/main.yml:render_secrets`) holds only credentials, because Flux's typed patch reads a
   Secret's quoted `"300"` back as a number and refuses it (#5574;
-  `scripts/renderer/tests/test_renderer_string_values_census.py::test_no_substituting_directory_holds_a_value_that_unquotes_to_a_non_string`).
+  `scripts/renderer/tests/bundle/test_renderer_string_values_census.py::test_no_substituting_directory_holds_a_value_that_unquotes_to_a_non_string`).
 
 **A new arm folds into an existing check by default**; prove its selector against a live source
 first. **A new check is one `check_table.py` row and one `check_*` body, plus a rule in
@@ -118,7 +118,7 @@ without running it.
 
 **Adding a module means adding its path to `monitor_bridge_modules`** in `defaults/main.yml`.
 Each entry renders as its own ConfigMap, and a module missing from the list kills the pod at
-import on its next roll; `tests/services/test_monitor_bridge_modules.py` catches that.
+import on its next roll; `tests/services/monitor_bridge/test_monitor_bridge_modules.py` catches that.
 The internals page says why it is one ConfigMap per module and which module stays off the list.
 
 ## Configuration is a parameter, not a module global
@@ -137,7 +137,7 @@ the `cfg` fixture is that render (`k8s/roles/monitor-bridge/tests/conftest.py:cf
 ## Editing & testing
 Unit tests are `uv run pytest k8s/roles/monitor-bridge/tests`, one file per domain.
 **A shared test helper goes under `tests/`, never beside `cli.py`** — every `.py` in `files/` is
-production code to `tests/services/test_monitor_bridge_modules.py:_runtime_modules`. Smoke test
+production code to `tests/services/monitor_bridge/test_monitor_bridge_modules.py:_runtime_modules`. Smoke test
 one pass with
 `sudo k3s kubectl -n homelab exec deploy/monitor-bridge -- python /app/cli.py --once`
 (**operator-only**); `--check <name>` runs a gated check without its gate, which reads as up

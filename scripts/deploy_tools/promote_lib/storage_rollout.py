@@ -32,7 +32,7 @@ only a hand clear lifts. More hops without provisional failures would not change
 `verify_promotion.expected_set` reads `grace_s` and `rollout_s` into `Expected`, and
 `verify_promotion.verify` asks a `Window` whether the failures it read end the wait.
 
-Run: imported only. `uv run pytest scripts/deploy_tools/tests/test_verify_promotion_storage_rollout.py`
+Run: imported only. `uv run pytest scripts/deploy_tools/tests/promote/test_verify_promotion_storage_rollout.py`
 """
 
 from collections.abc import Iterable, Mapping
@@ -42,13 +42,9 @@ from deploy_tools.chained_timeout import largest_retry_s, seconds
 from deploy_tools.promote_lib.flux_status import STATUS_PREFIX, StatusState
 
 
-# The tag whose longhorn-manager pods serve the admission webhook a claim's dry run calls
-# (THE STORAGE ROLLOUT).
 STORAGE_TAG = "longhorn"
-# How many of the bundle's largest `retryInterval` a provisional failure has to recover after
-# STORAGE_TAG reads `success`: one for the retry, one for it to queue behind the workers and
-# post. On 61c16826 (2026-10-23) the four claims recovered 97s after `flux/longhorn` read
-# `success`, on a 2-minute `retryInterval`.
+# How many of the bundle's largest `retryInterval` a provisional failure needs to recover after
+# STORAGE_TAG reads `success`: one for the retry, one to queue behind the workers and post.
 STORAGE_GRACE_RETRIES = 2
 
 

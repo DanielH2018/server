@@ -16,7 +16,8 @@ and the alert cannot say WHY the target is down. This test can.
 """
 
 from lib import yaml_fast
-from lib.repo_paths import ALL_VARS, HOST_VARS, K3S_HOST_DNS
+from lib.estate import host_vars, shared_vars
+from lib.repo_paths import K3S_HOST_DNS
 from _k8s_render import rendered_k8s_text
 
 
@@ -38,7 +39,7 @@ def test_the_live_ports_agree() -> None:
     publisher = yaml_fast.safe_load(
         (K3S_HOST_DNS / "defaults" / "main.yml").read_text()
     )[_PUBLISHER_VAR]
-    scraper = yaml_fast.safe_load(ALL_VARS.read_text())[_SCRAPER_VAR]
+    scraper = shared_vars()[_SCRAPER_VAR]
     problem = ports_disagree(publisher, scraper)
     assert problem is None, problem
 
@@ -63,12 +64,10 @@ def test_the_scrape_job_reads_the_group_var_rather_than_a_literal() -> None:
     `{{ k8s_node_dns_metrics_port }}` matches nothing the moment the expression is spelled any
     other way, and a pattern that matches nothing passes.
     """
-    group_vars = yaml_fast.safe_load(ALL_VARS.read_text())
-    # daniel-box's own literal, not k8s_node_client_ip: that derives from it through hostvars,
-    # and a derivation that lost the entry would render `None` here too.
-    box_ip = yaml_fast.safe_load((HOST_VARS / "daniel-box.yml").read_text())[
-        "server_ip"
-    ]
+    group_vars = shared_vars()
+    # daniel-box's own literal: k8s_node_client_ip derives from it, and a derivation that lost the
+    # entry would render `None` too.
+    box_ip = host_vars("daniel-box")["server_ip"]
     target = f"{box_ip}:{group_vars[_SCRAPER_VAR]}"
     rendered = rendered_k8s_text("observability", "prometheus.yaml.j2")
     assert target in rendered, (

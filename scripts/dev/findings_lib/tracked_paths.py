@@ -7,8 +7,6 @@ function, so the `git ls-files` read it resolves against lives here.
 
 from functools import cache
 
-# Reach the sibling package directories: a directly-invoked script gets only its own
-# directory on sys.path, and pyproject's `pythonpath` is a pytest setting.
 from pathlib import Path
 
 

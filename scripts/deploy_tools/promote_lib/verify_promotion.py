@@ -64,7 +64,7 @@ THE OTHER TWO HALVES `decide` calls:
   - `revertible` and `footprints_match`, the revert rule, which `promote.REVERT_RULE` keeps off.
 
 Like `promote.py`, this module reaches GitHub only through `forge.py`
-(scripts/deploy_tools/tests/test_promote_forge_boundary.py).
+(scripts/deploy_tools/tests/promote/test_promote_forge_boundary.py).
 
 Run: uv run python scripts/deploy_tools/promote.py verify <sha> --bundle-dir <dir> --prior <sha>
 """
@@ -118,13 +118,11 @@ DIGESTS_FILE = "digests.json"
 KUSTOMIZATION_API = "kustomize.toolkit.fluxcd.io/v1"
 _SHA = re.compile(r"[0-9a-f]{40}")
 
-# How far before `--moved-at` a status on T still counts, for clock skew between the runner
-# that stamped the move and GitHub. A status left by an earlier promotion of T is older than
-# that by a whole failed run: a verify timeout, a settle, an operator's clear and a new render.
+# Tolerance for clock skew between the runner that stamped the move and GitHub; a status from an
+# earlier promotion of T is older by a whole failed run.
 MOVED_AT_SKEW_S = 60
 
-# Seconds between two status reads. Each is one GITHUB_TOKEN call, so a 15-minute wait spends
-# 30 of the token's 1,000 an hour.
+# Each read is one GITHUB_TOKEN call: a 15-minute wait spends 30 of the token's 1,000 an hour.
 POLL_S = 30
 
 
@@ -149,7 +147,7 @@ POLL_S = 30
 # Longer than the `verify` job's timeout-minutes plus `settle`'s, with ten minutes for runner
 # queueing, so the wait outlasts any run still verifying
 # (the `promote-verify-and-settle-fit-inside-decides-wait` row of
-# tests/repo/test_census_rows_workflows.py). `verify`'s limit sits just above
+# tests/repo/census_rows/test_census_rows_workflows.py). `verify`'s limit sits just above
 # `chained_timeout.VERIFY_CAP_S`, so this is 335 + 5 + 10 minutes, and the `promote` job that holds it fits
 # inside GitHub's 6-hour job limit with 10 minutes to spare.
 IN_FLIGHT_WAIT_S = 350 * 60
@@ -160,8 +158,6 @@ IN_FLIGHT_POLL_S = 30
 # listing that lags a live run cannot end a wait on a verification still in flight.
 LOST_SETTLE_S = 10 * 60
 
-# The commit status promote.yml's `verdict-status` job posts on T, which `reconcile` reads
-# when a run ended without its `settle`.
 VERDICT_STATUS_CONTEXT = "homelab/promote-verdict"
 
 # A wait that runs the full IN_FLIGHT_WAIT_S reads DEPLOY_HOLD about 700 times and the

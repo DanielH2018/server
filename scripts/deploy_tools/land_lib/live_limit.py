@@ -9,7 +9,7 @@ on 2026-11-11 thirteen live landings spent it.
 THE READS FAIL OPEN. A read that fails lowers nothing and bars nothing. `gh api rate_limit`
 costs no core quota.
 
-Run: uv run pytest scripts/deploy_tools/tests/test_land_live_limit.py
+Run: uv run pytest scripts/deploy_tools/tests/land_merge/test_land_live_limit.py
 """
 
 from collections.abc import Callable, Iterable
@@ -34,7 +34,7 @@ SERIAL_ROLES = frozenset(
 # DECIDED: every edit to the service list is serial, a field change on one service included.
 # Every tag promotes with the bundle the list declares, and one crashlooping new service fails
 # that whole promotion and sets `DEPLOY_HOLD`.
-SERIAL_PATHS = frozenset({"cluster/services.yml"})
+SERIAL_PATHS = frozenset({"k8s/services.yml"})
 # What a serial PR changes, as the object of "changes" in a refusal.
 SERIAL_WHAT = "a forward-only pin, the flux role, cluster-vars or " + " or ".join(
     sorted(SERIAL_PATHS)

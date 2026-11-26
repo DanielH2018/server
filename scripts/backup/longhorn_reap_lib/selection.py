@@ -2,7 +2,7 @@
 
 Companion to logic.py beside it, which holds the strays classifier and the shared pieces
 both reapers use. Split out because one module cannot hold both and stay under the 600-line cap
-`tests/repo/test_module_length_ratchet.py` enforces; the selection still has exactly one
+`tests/repo/ratchets/test_module_length_ratchet.py` enforces; the selection still has exactly one
 implementation, and it is this one.
 
 Both selectors answer a different question from `classify_backups`, over a population that
@@ -41,8 +41,6 @@ from lib.longhorn_lib.longhorn_backups import Backup
 
 
 SEED_NAME_PREFIX = "seed-"
-# The shard jobs' `retain`, which is the state a volume's rotation reaches on its own. A seed
-# below it is still that volume's coverage.
 SEED_FLOOR_DEFAULT = 2
 
 

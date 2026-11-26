@@ -13,7 +13,7 @@ to refuse.
 
 Split out of `lib.k8s_roles`, which sat at its length cap.
 
-Run: uv run pytest scripts/lib/tests/test_k8s_role_callers.py
+Run: uv run pytest scripts/lib/tests/k8s/test_k8s_role_callers.py
 """
 
 import re
@@ -33,9 +33,6 @@ class CannotNarrow(Exception):
     """
 
 
-# The second edge: a key in a role's defaults makes the renderer read a helper role for it.
-# `image_builder_builds` reads image-builder's context template, and
-# `k8s_autodeploy_snapshot_pvcs` reads volume-snapshot's defaults for the role's snapshot Job.
 _DEFAULTS_KEY_ROLES = {
     "image_builder_builds": "image-builder",
     "k8s_autodeploy_snapshot_pvcs": "volume-snapshot",

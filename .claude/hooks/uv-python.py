@@ -62,28 +62,21 @@ import re
 
 from _hook_common import BashCall
 
-# The programs that must not run on the system interpreter. `*.py` covers a script invoked by
-# its shebang (`./scripts/diagnostics/probe.py`), which names no interpreter at all and so would
-# otherwise slip past every python-named pattern here. The path excludes `=`: a word like
-# `P=x.py` is a shell assignment, and wrapping it made `uv run P=x.py`.
+# `*.py` covers a shebang-invoked script that names no interpreter; the path excludes `=`, since
+# `P=x.py` is an assignment.
 _PROGS = r"(?:python3?|pytest|py\.test|[^\s=]*\.py)"
 
 # A program can end at the thing that ends its segment — `$(cd x; pytest)` ends at `)`, not at a
 # space — so the terminator class is wider than whitespace.
 _TERMINATOR = r"(?:[\s;&|)]|$)"
 
-# Idempotent by construction, not by a check: an already-wrapped segment begins with `uv`, which
-# no alternative in _PROGS matches, so it falls through untouched.
+# Idempotent by construction: an already-wrapped segment begins with `uv`.
 _SEGMENT_PROG = re.compile(rf"^(\s*){_PROGS}{_TERMINATOR}")
 
-# Fast reject before any scanning. Measured on this repo's traffic the overwhelming majority of
-# Bash calls name none of these, and they should pay a single regex rather than the character
-# walk below.
+# Fast reject: most Bash calls name none of these and pay a single regex.
 _INTERESTING = re.compile(r"python|pytest|py\.test|\.py")
 
-# What must follow `<<` for it to open a heredoc. Screened before `_parse_heredoc_delimiter`,
-# which bails on the whole command: right for an unreadable heredoc, wrong for a `<<` that
-# never was one.
+# Screened before `_parse_heredoc_delimiter`, which bails on the whole command.
 _HEREDOC_OPENER = re.compile(r"^-?[ \t]*[^ \t\n;&|<>()]")
 
 _DELIMITER_END = frozenset(";&|<>()")
@@ -200,8 +193,7 @@ def command_starts(cmd):
                     # A here-string is a single-line redirection: no body to skip.
                     i += 2
                 elif cmd[i : i + 2] == "<<" and _HEREDOC_OPENER.match(cmd[i + 2 :]):
-                    # Two heredocs opened on one line (`cat <<A <<B`) is rare enough that
-                    # bailing beats queueing: leave the command alone.
+                    # Two heredocs on one line are rare enough that bailing beats queueing.
                     if delimiter is not None:
                         return None
                     parsed = _parse_heredoc_delimiter(cmd, i)
@@ -226,8 +218,7 @@ def command_starts(cmd):
             elif c == '"':
                 state = "none"
         i += 1
-    # An unterminated quote means the walk lost track of what is quoted, so every offset after it
-    # is a guess. Leave the command alone rather than splice on a guess.
+    # An unterminated quote means every later offset is a guess, so leave the command alone.
     if state != "none":
         return None
     return starts

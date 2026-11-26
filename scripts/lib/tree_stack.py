@@ -6,7 +6,7 @@ gate builds it again here to record what it tested. The tree after each merge is
 GitHub's squash merge of that head makes when the heads before it have merged, which
 `git merge-tree` reproduces exactly.
 
-Run: uv run pytest scripts/lib/tests/test_tree_stack.py
+Run: uv run pytest scripts/lib/tests/git_and_gh/test_tree_stack.py
 """
 
 from collections.abc import Sequence
@@ -59,8 +59,8 @@ def stack(
     tip = base
     for index, head in enumerate(heads):
         merged = git("merge-tree", "--write-tree", tip, head, cwd=cwd, check=False)
-        # git exits 1 for a conflict and for a commit it cannot read. Only a conflict prints
-        # the merged tree.
+        # git exits 1 for a conflict and for an unreadable commit; only a conflict prints the merged
+        # tree.
         if merged.returncode == 1 and merged.stdout.strip():
             raise Conflict(index)
         merged.check_returncode()

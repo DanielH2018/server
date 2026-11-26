@@ -102,8 +102,8 @@ def write_report(report: dict, out: TextIO, path: Path | None = None) -> None:
         out.seek(0)
     print(json.dumps(report), file=out)
     out.flush()
-    # `status` reads the file by name. An agent that deleted it and wrote another in its
-    # place, or a symlink, left this process writing to an inode nobody reads.
+    # `status` reads the file by name: an agent that replaced it with another file or a symlink left
+    # this process writing to an inode nobody reads.
     if path is not None and not _same_file(path, out):
         path.unlink(missing_ok=True)
         path.write_text(json.dumps(report) + "\n")

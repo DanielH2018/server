@@ -17,24 +17,20 @@ Every flux-owned tag that renders into the namespace depends on this Kustomizati
 step 30.
 """
 
-from pathlib import Path
-
-from lib import yaml_fast
-from lib.repo_paths import ALL_VARS
+from lib.estate import shared_vars
 
 HOMELAB_NAMESPACE = "homelab-namespace"
 LIMITRANGE = "default-container-limits"
 NAMESPACE_FILE = "namespace.yaml"
 LIMITRANGE_FILE = "limitrange.yaml"
-# `prune_label.PRUNE_LABEL` and `PRUNE_DISABLED`. That module imports Jinja through
-# `cluster.py`, so this one spells them out, and a renderer test holds the two equal by running
-# `prune_label.label` over the render and finding nothing to add.
+# That module imports Jinja through `cluster.py`, so these are spelled out and a renderer test holds
+# the two equal.
 PRUNE_EXEMPT = {"kustomize.toolkit.fluxcd.io/prune": "disabled"}
 
 
-def namespace_settings(group_vars: Path = ALL_VARS) -> dict:
+def namespace_settings() -> dict:
     """`k8s_namespace`, `k8s_psa_labels` and `k8s_default_limitrange` from the group variables."""
-    found = yaml_fast.safe_load(group_vars.read_text()) or {}
+    found = shared_vars()
     return {
         "namespace": str(found["k8s_namespace"]),
         "labels": dict(found.get("k8s_psa_labels") or {}),
@@ -42,9 +38,9 @@ def namespace_settings(group_vars: Path = ALL_VARS) -> dict:
     }
 
 
-def namespace_documents(group_vars: Path = ALL_VARS) -> dict[str, dict]:
+def namespace_documents() -> dict[str, dict]:
     """The kind's manifests by file name: the Namespace, and the LimitRange unless it is empty."""
-    settings = namespace_settings(group_vars)
+    settings = namespace_settings()
     name = settings["namespace"]
     documents = {
         NAMESPACE_FILE: {
@@ -57,8 +53,8 @@ def namespace_documents(group_vars: Path = ALL_VARS) -> dict[str, dict]:
         }
     }
     if settings["limitrange"]:
-        # Defaults only: see k8s_default_limitrange in group_vars/all.yml for why there is no
-        # min or max here and no ResourceQuota anywhere.
+        # Defaults only: see k8s_default_limitrange in k8s/vars.yml for why no min, max or
+        # ResourceQuota.
         documents[LIMITRANGE_FILE] = {
             "apiVersion": "v1",
             "kind": "LimitRange",

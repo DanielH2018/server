@@ -18,8 +18,8 @@ from _workflow_rows import (
 )
 
 CENSUS = "promote.py check-bundle out --against-prod"
-# `images` refuses a render without tags.json, and `publish` needs `images`, so the no-tag
-# branch passes --all-images too.
+# `images` refuses a render without tags.json and `publish` needs `images`, so the no-tag branch
+# passes --all-images too.
 SHARED_ONLY = "homelab_render.py cluster --out out --shared-only --all-images"
 # A `--role` render writes only the named tags' image contexts, and `images` builds every one.
 ALL_IMAGES = 'homelab_render.py cluster --out out --all-images "${roles[@]}"'
@@ -28,9 +28,8 @@ CIPHERTEXT = "cluster_vars.py check --ciphertext-only"
 
 SCHEDULED = "github.event_name == 'schedule'"
 SCHEDULED_PROMOTE = f"({SCHEDULED} && needs.publish.result == 'skipped')"
-# A status-check function in an `if` replaces GitHub's implicit success(), which reads every
-# ancestor in `needs`. Only !cancelled() is accepted: always() would also move `prod` on a
-# cancelled run.
+# A status-check function in an `if` replaces the implicit success(); only !cancelled() is accepted,
+# as always() would also move `prod` on a cancelled run.
 STATUS_CHECK = "!cancelled()"
 # `tag` reads `promote`'s result itself, because the skipped publish is its ancestor too.
 TAG_RESULT = (STATUS_CHECK, "needs.promote.result == 'success'")

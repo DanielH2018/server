@@ -38,8 +38,8 @@ OWNER = "fixture-conffile-owner"
 CONFFILE = f"/etc/{OWNER}.conf"
 # The line the `conffile` fixture's `lines:` edit declares.
 LINE = "homelab_fixture_line=kept"
-# Each owner build: its version and the conffile it ships. The unchanged upgrade ships the
-# base's bytes; the changed one sorts after it, so one container takes both upgrades in turn.
+# The unchanged upgrade ships the base's bytes; the changed one sorts after it, so one container
+# takes both upgrades in turn.
 BASE = ("0.1", "# fixture-conffile-owner's conffile\nsetting=base\n")
 UNCHANGED = ("0.2", BASE[1])
 CHANGED = ("0.3", "# fixture-conffile-owner's conffile, changed\nsetting=changed\n")
@@ -173,8 +173,8 @@ def _body(cases, c: Container) -> list[str]:
     host = cases.work / "debs" / deb.name
     shutil.copy(deb, host)
     updater = cases.debs["updater-head"]
-    # The owner goes first. With no owner, the arm would create the file, and the owner's
-    # install would then meet a file it does not own at its conffile's path.
+    # The owner goes first: with no owner, the arm would create the file and the owner's install
+    # would meet a file it does not own.
     c.ok(
         f"DEBIAN_FRONTEND=noninteractive apt-get install -y /srv/debs/{owners[0].name}"
     )
@@ -182,8 +182,8 @@ def _body(cases, c: Container) -> list[str]:
         "DEBIAN_FRONTEND=noninteractive apt-get install -y"
         f" /srv/debs/{updater.name} /srv/debs/{host.name}"
     )
-    # Joins the start the postinst queued. Without it, the checked start below could merge into
-    # that queued run, and its journal would hold no start of its own.
+    # Joins the start the postinst queued; otherwise the checked start could merge into that run and
+    # its journal would hold no start of its own.
     c.ok("systemctl start homelab-reconcile.service")
     _reconcile(c, "homelab-reconcile.service")
     expect(_has_line(c), f"reconcile did not write {LINE!r} into {CONFFILE}")

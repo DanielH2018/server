@@ -1,14 +1,7 @@
 ---
-# A read-only cluster identity for {{ sys_user }}, so day-to-day inspection and automated
-# diagnostics don't need the admin kubeconfig at /etc/rancher/k3s/k3s.yaml (root:root 0640,
-# reachable only through passworded sudo — which needs a TTY and so blocks anything
-# unattended). Writes keep going through Ansible, which escalates properly.
-#
-# Bound to the built-in `view` ClusterRole PLUS the additive role below. `view` alone is not
-# enough on this cluster: it grants no `nodes`, no `persistentvolumes`, no storageclasses,
-# and nothing for the CRDs this homelab runs on. Nothing here aggregates into `view` either
-# — only system:aggregate-to-view and system:aggregated-metrics-reader carry that label, so
-# installing Traefik/MetalLB/Longhorn did not widen it.
+# Bound to `view` PLUS the additive role below: `view` grants no nodes, PVs, storageclasses or CRDs.
+# The admin kubeconfig is root:root 0640, reachable only through sudo, which unattended callers
+# cannot use.
 apiVersion: v1
 kind: ServiceAccount
 metadata:
@@ -22,9 +15,8 @@ metadata:
   namespace: {{ cluster_base_readonly_sa_namespace }}
   annotations:
     kubernetes.io/service-account.name: {{ cluster_base_readonly_sa_name }}
-# A non-expiring token, deliberately. `kubectl create token` issues a bounded one, but it
-# expires and the unattended caller it exists for has no way to mint a replacement. Revoke
-# by deleting this Secret and the ServiceAccount.
+# Non-expiring on purpose: the unattended caller cannot mint a replacement. Revoke by deleting this
+# Secret and the ServiceAccount.
 type: kubernetes.io/service-account-token
 ---
 apiVersion: rbac.authorization.k8s.io/v1
@@ -42,20 +34,13 @@ rules:
   - apiGroups: ["apiextensions.k8s.io"]
     resources: ["customresourcedefinitions"]
     verbs: ["get", "list", "watch"]
-  # The CRDs this homelab actually runs on — IngressRoute/Middleware, IPAddressPool, and
-  # the Longhorn volume/backup objects. Without these, checking whether a route or a backup
-  # exists falls back to sudo.
 {% for group in k3s_readonly_crd_api_groups %}
   - apiGroups: ["{{ group }}"]
     resources: ["*"]
     verbs: ["get", "list", "watch"]
 {% endfor %}
-# Deliberately absent, and each for a reason:
-#   secrets      — `view` excludes them and so does this. Every credential the cluster holds
-#                  is in one, so granting read here would hand over the whole secret store.
-#   pods/exec    — a shell in any pod is arbitrary code execution as that workload, not a read.
-#   pods/portforward — same reach as exec, over the network instead.
-#   rbac.*       — reading the bindings maps the escalation paths without granting any.
+# Deliberately absent: secrets (every credential is in one), pods/exec and pods/portforward (code
+# execution, not a read), and rbac.* (reading bindings maps escalation paths).
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
@@ -83,9 +68,8 @@ subjects:
     name: {{ cluster_base_readonly_sa_name }}
     namespace: {{ cluster_base_readonly_sa_namespace }}
 ---
-# One Lease read, for the server-restart guard. `k3s_gates.py` reads `kube-controller-manager`'s `acquireTime` to
-# learn that the k3s server restarted less than 15 minutes ago, and `view` grants no Lease.
-# `resourceNames` pins the grant to that one object, so a list of Leases stays Forbidden.
+# One Lease read for the server-restart guard (`kube-controller-manager`'s acquireTime); `view`
+# grants no Lease, and `resourceNames` keeps a list Forbidden.
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:

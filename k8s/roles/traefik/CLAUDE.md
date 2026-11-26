@@ -24,7 +24,7 @@ The init containers' working-out is `docs/crowdsec-waf-record.md`.
 ## Flux applies it
 
 - **Flux applies traefik.** Its
-  `containers_list` entry is in `cluster/services.yml`, so nothing applies it by hand, and a merged change reaches the cluster when `promote` publishes and
+  `containers_list` entry is in `k8s/services.yml`, so nothing applies it by hand, and a merged change reaches the cluster when `promote` publishes and
   verifies the next bundle.
 - **Its prerequisites and checks.** The `traefik-crds` tag installs the CRDs, and traefik's
   Kustomization depends on it. `rbac.yaml` in this tag's `manifests_files` carries the RBAC.
@@ -37,7 +37,7 @@ The init containers' working-out is `docs/crowdsec-waf-record.md`.
   tag renders `prune: false` (#5666). `k8s/roles/traefik-crds/CLAUDE.md` has why the
   copy cannot sit in this tag: `attach_vendored` refuses a tag that vendors files while its
   render holds a placeholder, and this one holds six. A minor bump of this role's image needs
-  a refresh of that copy, which `tests/k8s/test_traefik_crds.py` enforces.
+  a refresh of that copy, which `tests/k8s/edge/test_traefik_crds.py` enforces.
 
 ## Plugins and the startupProbe
 
@@ -47,7 +47,7 @@ The init containers' working-out is `docs/crowdsec-waf-record.md`.
   2026-09-06 (#1322). The probe targets `edge-selfcheck-ingressroute.yaml.j2`, a router of
   Traefik's own backed by `ping@internal`, so the failure that kills every app route kills it
   too. Three constraints hold it together — the entrypoint, the path and matching on a path
-  rather than a Host — and `tests/services/test_traefik_edge_selfcheck.py` ENFORCES
+  rather than a Host — and `tests/services/traefik/test_traefik_edge_selfcheck.py` ENFORCES
   all three.
 - **A rejected bouncer key is refused before the roll by `traefik-precheck`** (#6095,
   switched on by #6157 through `traefik_k8s_bouncer_key_precheck`). The startupProbe also
@@ -63,13 +63,13 @@ The init containers' working-out is `docs/crowdsec-waf-record.md`.
   short-circuits nothing.
 - **The bouncer runs with `metricsUpdateIntervalSeconds: 0`**, because nothing reads its usage
   metrics. The `DECIDED: no usage-metrics ticker` comment in `templates/dynamic.yaml.j2` has the
-  ruling, and `tests/services/test_traefik_bouncer_metrics_ticker_off.py` pins the value.
+  ruling, and `tests/services/traefik/test_traefik_bouncer_metrics_ticker_off.py` pins the value.
   Changing it needs a pod restart, not just a Middleware edit.
 - **`cloudflare-realip` is an in-repo LOCAL plugin** (`files/cloudflare-realip/`), projected
   from a ConfigMap rather than downloaded, and gated with the bouncer so the startupProbe
   covers it. A name mismatch across `experimental.localPlugins`, the Middleware, the ConfigMap
   items and the manifest's `import` disables every plugin at startup, which `--dry-run` cannot
-  see; `tests/k8s/test_traefik_cloudflare_realip.py` pins the names.
+  see; `tests/k8s/edge/test_traefik_cloudflare_realip.py` pins the names.
 
 ## Client identity and TLS
 
@@ -88,7 +88,7 @@ The init containers' working-out is `docs/crowdsec-waf-record.md`.
   `k8s/templates/origin-pull.yml.j2`. Traefik picks TLS options by SNI, so the
   `ingressroute()` macro renders public and `.local.` hosts as two objects and only the public
   one names the option.
-  `tests/k8s/test_public_routes_require_cloudflare_origin_pull.py` holds two traps:
+  `tests/k8s/edge/test_public_routes_require_cloudflare_origin_pull.py` holds two traps:
   every router on one public host names the SAME option, and the option resolves in the
   ROUTE's namespace.
 - **SNICheck pins the TLS-options name per CONNECTION, so a 421 outlives the misconfiguration
@@ -100,7 +100,7 @@ The init containers' working-out is `docs/crowdsec-waf-record.md`.
 - **`allowEmptyServices` keeps a router whose backend has no ready endpoints** (#2747,
   #2758), which is what opened that router-less window on a reboot. `static-config.yaml.j2`
   carries the `DECIDED: keep a router` marker, and
-  `tests/services/test_traefik_watched_namespaces.py::test_empty_services_keep_their_router_is_clean`
+  `tests/services/traefik/test_traefik_watched_namespaces.py::test_empty_services_keep_their_router_is_clean`
   pins the flag.
 
 ## Pod plumbing

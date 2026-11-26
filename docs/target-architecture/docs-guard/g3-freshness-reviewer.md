@@ -140,12 +140,12 @@ tier.
   and `_landing` tell the session to "Open the PR with `gh pr create` and STOP there".
   `_finishing` requires the final message to end with the PR URL, and
   `.claude/hooks/fanout-stop.py` enforces that. `render_brief` assembles the sections, and
-  `scripts/dev/tests/test_fanout_brief.py` holds them.
+  `scripts/dev/tests/fanout_review/test_fanout_brief.py` holds them.
 - **Sessions open PRs with `gh pr create`.** `scripts/deploy_tools/publish_pr.py` is the
   crons' path, and it runs `gh` through `subprocess`, so no PreToolUse hook sees it. The
   user-level guard reads `gh pr create` titles, so the command shape is stable.
 - **Hook tests can build real repositories.** `scripts/lib/git_testing.py:init_repo` and
-  `commit` run git under `scrubbed_env`. `.claude/hooks/tests/test_hook_common.py` already
+  `commit` run git under `scrubbed_env`. `.claude/hooks/tests/hook_contract/test_hook_common.py` already
   imports `lib.git_testing` from a hook test. The `repo` fixture of `test_inject_nested_docs.py`
   makes only an empty `.git` directory, with no commit and no ref. The census row
   `tests-run-no-git-write-through-subprocess` in `scripts/tests/test_census_rows_test_modules.py`
@@ -503,7 +503,7 @@ Each risk is checked against `docs/failure-classes.md`.
 - **PR 2:**
     - the arm tests in `.claude/hooks/tests/`, and the error-path and budget tests in
       `test_bash_pretool.py`, with `EXPECTED_ARMS`;
-    - `scripts/dev/tests/test_fanout_brief.py`;
+    - `scripts/dev/tests/fanout_review/test_fanout_brief.py`;
     - `docs/claude-tooling.md`;
     - a pytest shard-weight row, which the docs-refresh cron adds.
 - **PR 3:** the two arm test pairs, and the `docs/claude-tooling.md` subsection.

@@ -5,7 +5,7 @@
     get jobs -l app=configarr -o json   list on jobs.batch
     logs job/<name>                     get on jobs.batch, list on pods, get on pods/log
 
-  tests/k8s/test_rbac_against_script.py runs the reader's main with a recording
+  tests/k8s/rbac/test_rbac_against_script.py runs the reader's main with a recording
   runner and holds this Role to the calls it records.
 #}
 ---
@@ -30,10 +30,8 @@ rules:
   - apiGroups: [""]
     resources: [pods/log]
     verbs: [get]
-  # The verdict export (files/configarr_health.py:export_verdict): a merge patch of the
-  # annotations on the one ConfigMap this role renders for it. `get` as well as `patch`, because
-  # `kubectl patch` GETs the object before it sends the PATCH, and the grant names the
-  # object so it reaches no other.
+  # `get` as well as `patch`: `kubectl patch` GETs the object first; the grant names the object so
+  # it reaches no other.
   - apiGroups: [""]
     resources: [configmaps]
     verbs: [get, patch]

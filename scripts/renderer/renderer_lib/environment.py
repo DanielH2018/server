@@ -89,8 +89,7 @@ def _template_lookup(env: jinja2.Environment, ctx: dict):
             )
         if kind != "template":
             return base(context, kind, *args, **kwargs)
-        # Not rstripped: ansible-core's lookup pads a render's trailing newlines as the
-        # template module does, and image-builder's content tag hashes them.
+        # Not rstripped: image-builder's content tag hashes the trailing newlines.
         return _lookup_render(env, Path(args[0]), context.get_all())
 
     return lookup
@@ -127,8 +126,7 @@ def evaluate(env: jinja2.Environment, expression: str, variables: dict) -> objec
     dict stays a dict. Any other value renders to a string.
     """
     inner = expression[2:-2]
-    # Jinja warns on a string literal holding an escape Python does not know, such as a regex.
-    # Ansible parses it with the same lexer and only prints that warning.
+    # Jinja warns on an unknown escape such as a regex; Ansible only prints that warning.
     with warnings.catch_warnings():
         warnings.filterwarnings(
             "ignore", ".*invalid escape sequence", DeprecationWarning

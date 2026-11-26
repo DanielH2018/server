@@ -20,8 +20,8 @@
 #
 # To see a file's count, lower its entry here by 1 and run the guard -- the failure names
 # the real number:
-#   uv run pytest tests/repo/test_module_length_ratchet.py -k no_test_module_patches
-.claude/hooks/tests/test_block_footguns.py 2
+#   uv run pytest tests/repo/ratchets/test_module_length_ratchet.py -k no_test_module_patches
+.claude/hooks/tests/bash_guards/test_block_footguns.py 2
 hosts/components/deploy-ui/tests/test_deploy_ui_app.py 3
 hosts/components/fake-remux/tests/test_fake_remux_replace_logic.py 2
 hosts/components/renovate-notify/tests/test_pending_soak_wiring.py 6
@@ -29,30 +29,30 @@ k8s/roles/artifacts/tests/test_artifact_server.py 1
 k8s/roles/autofix-bridge/tests/test_autofix.py 12
 scripts/backup/tests/test_longhorn_reap_delete_transport.py 5
 scripts/deploy_tools/tests/conftest.py 1
-scripts/deploy_tools/tests/test_await_ci.py 4
-scripts/deploy_tools/tests/test_land_pipeline.py 3
-scripts/deploy_tools/tests/test_land_tags.py 5
-scripts/deploy_tools/tests/test_land_tools.py 1
-scripts/diagnostics/tests/test_postflight.py 9
-scripts/diagnostics/tests/test_postflight_runner.py 3
-scripts/diagnostics/tests/test_probe.py 6
-scripts/diagnostics/tests/test_probe_alerts.py 4
-scripts/diagnostics/tests/test_probe_b2_ledger.py 7
-scripts/diagnostics/tests/test_probe_ha.py 3
-scripts/diagnostics/tests/test_probe_log_secret_redaction.py 3
-scripts/diagnostics/tests/test_probe_metric_span.py 3
-scripts/diagnostics/tests/test_probe_pi_plane.py 5
-scripts/diagnostics/tests/test_ui_smoke_helpers.py 2
+scripts/deploy_tools/tests/land/test_land_pipeline.py 3
+scripts/deploy_tools/tests/land/test_land_tools.py 1
+scripts/deploy_tools/tests/land_deploy/test_land_tags.py 5
+scripts/deploy_tools/tests/release/test_await_ci.py 4
+scripts/diagnostics/tests/probe_alerts/test_probe_alerts.py 4
+scripts/diagnostics/tests/probe_alerts/test_probe_metric_span.py 3
+scripts/diagnostics/tests/probe_cli/test_probe.py 6
+scripts/diagnostics/tests/probe_cli/test_probe_log_secret_redaction.py 3
+scripts/diagnostics/tests/probe_landing/test_postflight.py 9
+scripts/diagnostics/tests/probe_landing/test_postflight_runner.py 3
+scripts/diagnostics/tests/probe_workloads/test_probe_b2_ledger.py 7
+scripts/diagnostics/tests/probe_workloads/test_probe_ha.py 3
+scripts/diagnostics/tests/probe_workloads/test_probe_pi_plane.py 5
+scripts/diagnostics/tests/ui_smoke/test_ui_smoke_helpers.py 2
 scripts/docs/tests/test_build_docs.py 12
 scripts/docs/tests/test_gen_reference_backlog.py 1
 scripts/home_assistant/tests/test_ha_state_checks.py 2
 scripts/home_assistant/tests/test_ha_state_model.py 3
 scripts/infra_map/tests/test_gen_infra_map.py 1
 scripts/infra_map/tests/test_infra_map_live.py 1
-scripts/lib/tests/test_gh.py 4
-scripts/lib/tests/test_worktrees.py 4
-scripts/validate/tests/test_bootstrap_case_concurrent.py 6
-scripts/validate/tests/test_host_package_cases_concurrent.py 3
-scripts/validate/tests/test_render_k8s.py 1
-scripts/validate/tests/test_render_shell.py 2
-scripts/validate/tests/test_render_units.py 5
+scripts/lib/tests/git_and_gh/test_gh.py 4
+scripts/lib/tests/git_and_gh/test_worktrees.py 4
+scripts/validate/tests/host_cases/test_bootstrap_case_concurrent.py 6
+scripts/validate/tests/host_cases/test_host_package_cases_concurrent.py 3
+scripts/validate/tests/renders/test_render_k8s.py 1
+scripts/validate/tests/renders/test_render_shell.py 2
+scripts/validate/tests/renders/test_render_units.py 5

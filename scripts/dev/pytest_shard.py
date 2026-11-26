@@ -141,17 +141,10 @@ from dev.shard_weight_gate import (
 # DECIDED: six shards, on slot-seconds per landing and p90 queue wait (#8456, 2026-11-14; kept 2026-11-20)
 CI_LEGS = 6
 
-# pytest's default `python_files`, both forms — the same pair
-# `tests/repo/test_testpaths_covers_every_test_file.py` derives its census from, and for
-# the same reason: a single hand-kept glob would miss a `foo_test.py` that pytest collects.
 _TEST_FILE_GLOBS = ("test_*.py", "*_test.py")
 
-# What a file costs before any of its tests run: pytest imports the module at collection, and
-# the durations report attributes that to no test. Timing two N=4 shards
-# serially against their recorded totals — a 49-file shard ran 26.0s against 24.5s recorded and
-# a 357-file shard 34.2s against the same 24.5s, so the residual is 0.031s and 0.027s per file.
-# Without this term the split balances recorded seconds and leaves the file COUNT wildly uneven,
-# which is how the 357-file shard became the pole while the model called every shard equal.
+# Per-file import cost at collection; without it the split balances seconds and leaves file counts
+# uneven.
 _PER_FILE_SECONDS = 0.028
 
 
@@ -475,9 +468,8 @@ def main(argv=None, select=affected) -> int:
             f"{args.planned_legs} would run nowhere"
         )
     files = leg_files(args.shard, args.of, selection)
-    # An empty share of the census is not a fast green: pytest exits 5 ("no tests collected")
-    # on one, and a shard that collects nothing has silently stopped covering whatever it used
-    # to hold. A selection's spare leg is empty on purpose.
+    # An empty share is not a fast green: pytest exits 5 on it, and the shard stops covering its
+    # files.
     if whole and not files:
         raise SystemExit(f"shard {args.shard} of {args.of} selects no test files")
     text = "".join(f"{f}\n" for f in files)

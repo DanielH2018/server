@@ -3,7 +3,7 @@
 `CONTENT_TAG_EXPRESSION` is k8s/image-builder's content-tag rule as a task evaluates it, and
 `derived.content_tag` and `ci_images.content_tag` are held equal to it. Those modules restate
 the rule in Python; this evaluates the role's own expression.
-`scripts/deploy_tools/tests/test_ci_images.py` holds one tag as the literal ansible-core
+`scripts/deploy_tools/tests/release/test_ci_images.py` holds one tag as the literal ansible-core
 2.22 computed.
 """
 

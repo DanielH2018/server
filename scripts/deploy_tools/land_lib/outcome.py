@@ -33,22 +33,17 @@ class Verdict(StrEnum):
     MERGE_TIMEOUT = "merge-timeout"
     CI_RED = "ci-red"
     CI_TIMEOUT = "ci-timeout"
-    # GitHub never ran CI for the merge commit, and no later master commit stands in for it:
-    # none has run CI either, or the nearest is red with a green one after it. No re-run
-    # converges on its own, so this is not a resume point. The detail names the tip and the
-    # way out. See `await_ci.wait`.
+    # GitHub never ran CI for the merge commit and no later master commit stands in for it. No
+    # re-run converges, so this is not a resume point.
     CI_UNPROVEN = "ci-unproven"
     # The landing stopped on a refusal or an error of its own before it reached any other
     # verdict: the landing policy, a PR closed unmerged or with changes requested, a read
     # that failed. `Outcome` gives every exit-1 end this verdict when its site named none,
     # so no exit-1 landing ends without a `VERDICT:` line. The detail says which.
     REFUSED = "refused"
-    # land.sh handed the landing to a lander unit (`handoff.py`) and stopped waiting on it
-    # before it ended. The unit may still be running, and a re-run waits on it again.
     HANDOFF_TIMEOUT = "handoff-timeout"
-    # A host the landing would wait on has no package at or after the merge, and the builder
-    # reports a failing reason, so no updater fire can apply it. A re-run converges once the
-    # builder publishes. See `host_published.unbuilt_hosts`.
+    # A host the landing waits on has no package at or after the merge and the builder reports a
+    # failing reason. A re-run converges once the builder publishes.
     UNBUILT = "unbuilt"
 
 
@@ -179,10 +174,8 @@ PROMOTE_TIMEOUT_NOTE = (
 )
 
 
-# What a `deferred` from step 6 means, printed by `health_verdict.health` when `probe.py health`
-# could not read its store for a tag and found no other tag unhealthy. Nothing re-gates
-# health, so this deferral never ends on its own. The landing records `Cause.GATE_UNREADABLE`,
-# and `land_probe` reports it as `gave-up`, a resume point, as it does for `promote-timeout`.
+# Nothing re-gates health, so this deferral never ends on its own. Recorded as
+# `Cause.GATE_UNREADABLE`, reported by `land_probe` as `gave-up`, a resume point.
 UNREADABLE_GATE_NOTE = (
     "  The health gate could not read its store, so the deployed workloads were not graded. "
     "This is NOT the ordinary deferral: nothing gates health again.\n"
@@ -191,10 +184,8 @@ UNREADABLE_GATE_NOTE = (
 )
 
 
-# What a `deferred` from step 6 means when the probe refused the gate's tree as older than
-# `origin/master`. The gate advances its tree to `origin/master`, so this is a master
-# that moved while the gate ran, and a re-run reads the newer tip. The landing records
-# `Cause.GATE_STALE`, and `land_probe` reports it as `gave-up`, a resume point.
+# The master moved while the gate ran, and a re-run reads the newer tip. Recorded as
+# `Cause.GATE_STALE`, reported as `gave-up`, a resume point.
 STALE_GATE_NOTE = (
     "  The health gate's tree held an older role definition than origin/master, so those "
     "workloads were not graded. This is NOT the ordinary deferral: nothing gates health again.\n"
@@ -211,7 +202,7 @@ def disarmed(where: str, consequence: str) -> str:
     return (
         f"the CI gate is disarmed{where} — await_ci requires no CI contexts, so it "
         f"reports no verdict; {consequence}. To re-arm it, set REQUIRED_CONTEXTS in "
-        "scripts/deploy_tools/await_ci.py to ci_required_contexts in inventory/group_vars/all.yml"
+        "scripts/deploy_tools/await_ci.py to ci_required_contexts in estate/vars.yml"
     )
 
 

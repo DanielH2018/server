@@ -1,7 +1,4 @@
 ---
-# Same base image as the other stdlib-only Python workloads here (monitor-bridge,
-# autofix-bridge) — artifact_server.py imports nothing off PyPI, so there is no wheel to
-# build and no image to maintain.
 artifacts_k8s_image: python:3.15-alpine@sha256:0f9552bb28711333da16915ec146f5e6bb44a7fdac9ced15dc17c2e0206346dd
 
 # Renovate stance: whether an image bump here may automerge. `promote` deploys what merges.
@@ -12,80 +9,48 @@ artifacts_k8s_image: python:3.15-alpine@sha256:0f9552bb28711333da16915ec146f5e6b
 k8s_autodeploy: true
 k8s_autodeploy_reason: "stateless RollingUpdate Deployment, no PVC, readinessProbe gates the rollout, pinned image tag"
 
-# The Python files that make up the running server, mirroring autofix-bridge's
-# `autofix_bridge_modules` and carrying the same risk: a module missing here never reaches the
-# ConfigMap, and the pod dies at import with ModuleNotFoundError.
-#
-# Each name is both the ConfigMap key and the file under `files/`, because the Deployment
-# mounts the whole ConfigMap at /app and `python3 /app/artifact_server.py` imports its
-# siblings by their plain module name. Order is the render order and nothing else.
-# ENFORCED by tests/services/test_artifacts_configmap.py, which compares this list
-# against the files on disk in both directions.
+# Each name is a ConfigMap key and a file under `files/`; a module missing here dies at import.
 artifacts_modules:
   - _gui_html.py
   - artifact_meta.py
   - artifact_server.py
 
-# hostPath pins the pod to ONE node. daniel-box is the control-plane node, where Ansible
-# runs and where most sessions work, so its tree is the local mount and every other host's
-# is synced in by daniel-box's package timer homelab-sync-artifacts, which runs on its twin
-# claude_code_artifacts_node. hosts/lib/tests/test_claude_artifacts_node_timers.py
-# holds this and every other twin below equal to the claude_code key.
+# hostPath pins the pod to ONE node; other hosts' trees are synced in by homelab-sync-artifacts.
 artifacts_k8s_node: "{{ k8s_primary_node }}"
 
 # The tree Claude Code's artifact-design skill writes to on each host.
 artifacts_host_dir: /home/ubuntu/.claude/artifacts
-# The agent user's tree (docs/claude-agent-user.md): where sessions that run as
-# `claude` write. Empty means "no agent tree" and the mount, the volume and the index source
-# all disappear. The index lists it as the host
-# `<artifacts_k8s_node>-claude`, beside the operator's `<artifacts_k8s_node>`.
-# The pod is not root: it runs as puid:pgid (the operator), so it reads this tree through the
-# group grant on the directory (2750 claude:ubuntu, default ACL g:ubuntu:rX), not through
-# DAC_OVERRIDE. This role does not create the directory; hosts/components/claude-code/ does.
+# Empty means no agent tree: the mount, volume and index source disappear.
+# The pod reads it through the group grant (2750 claude:ubuntu), not DAC_OVERRIDE; claude-code
+# creates it.
 artifacts_agent_dir: /var/lib/claude/.claude/artifacts
-# The triage controller's report tree: claude-triage-ctl writes a report
-# per episode there, apart from the agent's own tree, so a session as `claude` can neither fake
-# nor redirect one. The index lists it as `<artifacts_k8s_node>-claude-triage`. Empty means no
-# mount. It equals report_dir in hosts/components/claude-code/templates/claude-triage-pins.j2,
-# whose tmpfiles entry creates it (2750 claude-triage-ctl:ubuntu); this role does not.
-artifacts_triage_dir: "{{ '/var/lib/claude-triage-ctl/reports' if (claude_code_triage_enabled | default(false) | bool) else '' }}"
-# Where daniel-box holds the other hosts' copies: one subdirectory per host, which becomes
-# the /a/<host>/ path segment the index and the GUI filter on. hosts/components/claude-code/'s
-# peer sync writes them, from its twin claude_code_artifacts_peer_dir.
+# The triage controller's report tree, apart from the agent's so `claude` cannot fake a report.
+# Empty means no mount; equals report_dir in claude-triage-pins.j2.
+artifacts_triage_dir: "{{ '/var/lib/claude-triage-ctl/reports' if hosts[artifacts_k8s_node].claude_code_triage_enabled else '' }}"
+# One subdirectory per host, which becomes the /a/<host>/ path segment the index and GUI filter on.
 artifacts_peer_dir: /home/ubuntu/.claude/artifacts-peer
 
-# The star list the GUI writes: one `<host>/<relpath>` line per starred artifact, which
-# prune-artifacts.sh (dotfiles) on each host skips. It is the pod's only writable mount.
-# Outside /home/ubuntu because the agent user's prune reads it too, and `claude` cannot
-# traverse /home/ubuntu (0750). The dotfiles point daniel-box's CLAUDE_ARTIFACT_STARS_FILE at
-# this path, so a change here needs the same change in settings.base.json there, and in
-# claude_code_artifacts_stars_file, the copy the peer sync pushes.
+# Outside /home/ubuntu, which `claude` cannot traverse (0750). Change it with the dotfiles'
+# CLAUDE_ARTIFACT_STARS_FILE and claude_code_artifacts_stars_file.
 artifacts_stars_dir: /var/lib/artifact-stars
 artifacts_stars_name: stars.txt
 
-# The peer hosts whose artifact trees the pod serves, one read-only mount of
-# artifacts_peer_dir/<name> per entry. hosts/components/claude-code/'s peer sync pulls each onto
-# daniel-box and owns the transport fields; its twin claude_code_artifacts_peer_sources must
-# list the same entries.
+# Its twin claude_code_artifacts_peer_sources must list the same entries.
 artifacts_peer_sources:
   - name: daniel-server
     ssh_target: daniel-server
     path: /home/ubuntu/.claude/artifacts
     stars_path: /home/ubuntu/.claude/artifact-stars.txt
 
-# Platform components the index names beside the k8s services: the ones with no
-# containers_list entry, so the index would not otherwise know their names. A component that
-# gains an entry leaves this list, which test_artifacts_configmap.py holds.
+# Components with no containers_list entry; one that gains an entry leaves this list.
 artifacts_platform_services:
   - k3s
   - unbound
   - cert-manager
 
-# Services no inventory lists, but that older artifacts are about — a document reviewing the
-# kopia retirement is only findable by service if the name is still recognised. Retiring a
-# service should add its name here rather than dropping it from the index.
-# prometheus, tempo and otel-collector are live in the observability namespace, but they are
-# absent from services for the same reason, so they belong here.
+# Services no inventory lists but older artifacts mention; add a retired service here, don't drop
+# it.
+# prometheus, tempo and otel-collector are live but absent from services, so they belong here.
 artifacts_retired_services:
   - beszel
   - calibre

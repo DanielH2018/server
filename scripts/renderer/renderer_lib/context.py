@@ -1,9 +1,9 @@
 """The variables one k8s role's templates render with, built from the git tree alone.
 
-`render_context` layers role defaults, `group_vars/all.yml` and host_vars in Ansible's
+`render_context` layers role defaults, `estate/vars.yml` and `k8s/vars.yml` in Ansible's
 precedence, and adds `services` and `hosts`. This module adds two things on top:
 
-- `services` is the toposorted view: `cluster/services.yml` sorted with `toposort_containers`,
+- `services` is the toposorted view: `k8s/services.yml` sorted with `toposort_containers`,
   and templates read that order (homepage tiles, scrape jobs).
 - The stub file's variables go over every layer, as `-e @FILE` extra vars do.
 
@@ -16,7 +16,6 @@ from pathlib import Path
 
 from lib import yaml_fast
 from lib.container_entry import ContainerEntry
-from lib.inventory_lists import K8S_HOST
 from lib.estate import REPO_INVENTORY, Inventory
 from lib.render_context import render_context
 from lib.render_guard import StrictChainableUndefined
@@ -24,10 +23,6 @@ from lib.repo_paths import K8S_ROLES
 
 
 from renderer.template_filters.toposort import build_k8s_dep_map, toposort_containers
-
-
-# Host_vars keys only a host component reads; each reads a name only that component defines.
-HOST_COMPONENT_VARS = frozenset({"claude_code_watch_uids"})
 
 
 def load_stubs(path: Path) -> dict:
@@ -47,15 +42,13 @@ def sorted_services(
 def template_context(
     role_dir: Path,
     stubs: dict,
-    host: str = K8S_HOST,
     inventory: Inventory = REPO_INVENTORY,
 ) -> dict:
-    """The context `role_dir`'s templates render with on `host`.
+    """The context `role_dir`'s templates render with.
 
     Args:
         role_dir: The role directory, `k8s/roles/<tag>`.
         stubs: The stub file's variables, laid over every layer.
-        host: The inventory host the role renders for.
         inventory: Where the inventory files live; the repo's own unless a test says not.
     """
 
@@ -67,12 +60,10 @@ def template_context(
     def resolve(overrides: dict) -> dict:
         return render_context(
             role_dir,
-            host,
-            overrides,
+            overrides=overrides,
             inventory=inventory,
             base={},
             undefined_cls=StrictChainableUndefined,
-            withhold=HOST_COMPONENT_VARS,
         )
 
     first = resolve(stubs)

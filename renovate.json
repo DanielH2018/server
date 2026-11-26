@@ -95,7 +95,7 @@
     },
     {
       "customType": "regex",
-      "description": "The Vale binary CI's `hooks` job runs, pinned by version and sha256 in one match. The `vale` tool of hosts/packages/homelab-tools/package.yml is a second copy (#1703), the `{{depName}}` group puts both in one PR, and tests/repo/test_vale_matches_the_ci_pin.py ENFORCES that they agree.",
+      "description": "The Vale binary CI's `hooks` job runs, pinned by version and sha256 in one match. The `vale` tool of hosts/packages/homelab-tools/package.yml is a second copy (#1703), the `{{depName}}` group puts both in one PR, and tests/repo/ci_workflows/test_vale_matches_the_ci_pin.py ENFORCES that they agree.",
       "managerFilePatterns": [
         "/(^|/)\\.github/workflows/ci\\.yml$/"
       ],
@@ -161,7 +161,7 @@
     },
     {
       "customType": "regex",
-      "description": "The sops and chezmoi binaries the `homelab-tools` host package ships (H3.11), pinned by version and sha256 per architecture. The `{{depName}}` group puts both architectures in one PR. ENFORCED by scripts/renderer/tests/test_renderer_host_tools.py.",
+      "description": "The sops and chezmoi binaries the `homelab-tools` host package ships (H3.11), pinned by version and sha256 per architecture. The `{{depName}}` group puts both architectures in one PR. ENFORCED by scripts/renderer/tests/host/test_renderer_host_tools.py.",
       "managerFilePatterns": [
         "/(^|/)hosts/packages/homelab-tools/package\\.yml$/",
         "/(^|/)hosts/bootstrap-host\\.sh$/"
@@ -197,7 +197,7 @@
     },
     {
       "customType": "regex",
-      "description": "The kindest/node image CI's `sops_manifest_type_proof` job boots (#5173), pinned by tag and digest. Its Kubernetes minor follows `k3s_version`, which tests/repo/test_kind_node_image_follows_k3s.py holds. ENFORCED by the `kind-` rows of scripts/tests/_renovate_rule_rows.py.",
+      "description": "The kindest/node image CI's `sops_manifest_type_proof` job boots (#5173), pinned by tag and digest. Its Kubernetes minor follows `k3s_version`, which tests/repo/ci_workflows/test_kind_node_image_follows_k3s.py holds. ENFORCED by the `kind-` rows of scripts/tests/_renovate_rule_rows.py.",
       "managerFilePatterns": [
         "/(^|/)\\.github/workflows/ci\\.yml$/"
       ],
@@ -260,7 +260,7 @@
     },
     {
       "customType": "regex",
-      "description": "CI test-runner Python pin (`python-version:` in .github/actions/setup/action.yml, #3733), which helpers:pinGitHubActionDigests does not track. The literal is three-part (#2152) while `.python-version` stays two-part, and tests/repo/test_python_version_consistency.py compares them on major.minor.",
+      "description": "CI test-runner Python pin (`python-version:` in .github/actions/setup/action.yml, #3733), which helpers:pinGitHubActionDigests does not track. The literal is three-part (#2152) while `.python-version` stays two-part, and tests/repo/ci_workflows/test_python_version_consistency.py compares them on major.minor.",
       "managerFilePatterns": [
         "/(^|/)\\.github/workflows/[^/]+\\.yml$/",
         "/(^|/)\\.github/actions/[^/]+/action\\.yml$/"
@@ -374,7 +374,7 @@
     },
     {
       "customType": "regex",
-      "description": "pip pins inside the two built Dockerfiles that install from PyPI (#2149, #2150): k8s/roles/code-server and k8s/roles/homelab-mcp. ical-proxy is not here, because tests/services/test_ical_proxy_pins_match_uv_lock.py holds its pins to uv.lock. The packageRules below keep every bump manual and cap mcp at <2.",
+      "description": "pip pins inside the two built Dockerfiles that install from PyPI (#2149, #2150): k8s/roles/code-server and k8s/roles/homelab-mcp. ical-proxy is not here, because tests/services/apps/test_ical_proxy_pins_match_uv_lock.py holds its pins to uv.lock. The packageRules below keep every bump manual and cap mcp at <2.",
       "managerFilePatterns": [
         "/(^|/)k8s/roles/code-server/templates/Dockerfile\\.j2$/",
         "/(^|/)k8s/roles/homelab-mcp/templates/Dockerfile\\.j2$/"
@@ -450,11 +450,11 @@
     },
     {
       "customType": "regex",
-      "description": "Container images in k8s role defaults, inventory/group_vars/all.yml and hosts/components/registry-gc/defaults/main.yml, the cluster's only update signal. autoReplaceStringTemplate lets a tag-only pin gain an `@sha256` suffix (#2392) and must keep the literal `_image: ` prefix, because Renovate replaces the whole matched span. scripts/tests/test_renovate_managers.py asserts it reproduces every live pin byte for byte.",
+      "description": "Container images in k8s role defaults, k8s/vars.yml and hosts/components/registry-gc/defaults/main.yml, the cluster's only update signal. autoReplaceStringTemplate lets a tag-only pin gain an `@sha256` suffix (#2392) and must keep the literal `_image: ` prefix, because Renovate replaces the whole matched span. scripts/tests/test_renovate_managers.py asserts it reproduces every live pin byte for byte.",
       "managerFilePatterns": [
         "/^k8s/roles/[^/]+/defaults/main\\.yml$/",
         "/^hosts/components/registry-gc/defaults/main\\.yml$/",
-        "/^inventory/group_vars/all\\.yml$/"
+        "/^k8s/vars\\.yml$/"
       ],
       "matchStrings": [
         "_image:\\s*[\"']?(?<depName>[^:\\s\"'@]+):(?<currentValue>[^\\s\"'@]+)(?:@(?<currentDigest>sha256:[a-f0-9]+))?[\"']?"
@@ -498,7 +498,7 @@
       ],
       "matchFileNames": [
         "k8s/roles/**",
-        "inventory/group_vars/all.yml",
+        "k8s/vars.yml",
         "hosts/components/registry-gc/defaults/main.yml"
       ],
       "groupName": "k8s image {{depName}}"
@@ -513,7 +513,7 @@
       ],
       "matchFileNames": [
         "k8s/roles/**",
-        "inventory/group_vars/all.yml",
+        "k8s/vars.yml",
         "hosts/components/registry-gc/defaults/main.yml"
       ],
       "matchUpdateTypes": [
@@ -551,7 +551,7 @@
       "groupName": "kind (binary + node image)"
     },
     {
-      "description": "No major or minor update for the kindest/node image (#5173). Its Kubernetes minor follows `k3s_version` (tests/repo/test_kind_node_image_follows_k3s.py), so the person finishing a k3s upgrade moves the image.",
+      "description": "No major or minor update for the kindest/node image (#5173). Its Kubernetes minor follows `k3s_version` (tests/repo/ci_workflows/test_kind_node_image_follows_k3s.py), so the person finishing a k3s upgrade moves the image.",
       "matchManagers": [
         "custom.regex"
       ],
@@ -594,7 +594,7 @@
       ],
       "matchFileNames": [
         "k8s/roles/**",
-        "inventory/group_vars/all.yml",
+        "k8s/vars.yml",
         "hosts/components/registry-gc/defaults/main.yml"
       ],
       "matchUpdateTypes": [
@@ -630,7 +630,7 @@
       "minimumReleaseAge": "1 day"
     },
     {
-      "description": "NO automerge for an image bump in a role declaring `k8s_autodeploy: false` (#1886), because `promote` and Flux apply every merged bump. matchFileNames is the denylist spelled as paths, and tests/deploy/test_renovate_automerge_follows_the_autodeploy_denylist.py asserts the two are equal. registry-gc's defaults copy the registry role's pins (#5827), and group_vars/all.yml holds `crowdsec_k8s_image` (#1936). POSITION is load-bearing: after the rules it overrides, before the per-package manual rules. A per-package groupName carries `k8s_autodeploy: false` where a denied role owns the pin, because the title marker keeps the unattended renovate_agent off it (#1963), and `groupSingleUpdates: true` puts it in a single-dependency title (#2646).",
+      "description": "NO automerge for an image bump in a role declaring `k8s_autodeploy: false` (#1886), because `promote` and Flux apply every merged bump. matchFileNames is the denylist spelled as paths, and tests/deploy/test_renovate_automerge_follows_the_autodeploy_denylist.py asserts the two are equal. registry-gc's defaults copy the registry role's pins (#5827), and k8s/vars.yml holds `crowdsec_k8s_image` (#1936). POSITION is load-bearing: after the rules it overrides, before the per-package manual rules. A per-package groupName carries `k8s_autodeploy: false` where a denied role owns the pin, because the title marker keeps the unattended renovate_agent off it (#1963), and `groupSingleUpdates: true` puts it in a single-dependency title (#2646).",
       "matchManagers": [
         "custom.regex"
       ],
@@ -638,7 +638,7 @@
         "docker"
       ],
       "matchFileNames": [
-        "inventory/group_vars/all.yml",
+        "k8s/vars.yml",
         "k8s/roles/airflow/defaults/main.yml",
         "k8s/roles/arr-notification/defaults/main.yml",
         "k8s/roles/authelia/defaults/main.yml",
@@ -726,7 +726,7 @@
         "docker"
       ],
       "matchFileNames": [
-        "inventory/group_vars/all.yml",
+        "k8s/vars.yml",
         "k8s/roles/authelia/defaults/main.yml",
         "k8s/roles/crowdsec/defaults/main.yml",
         "k8s/roles/pihole/defaults/main.yml",
@@ -749,7 +749,7 @@
       "automerge": false
     },
     {
-      "description": "Every Python pin the repo keeps in lockstep, in ONE PR (#5479): the CI setup action, `.python-version`, Dockerfile `FROM python:` tags and the k8s `python:<minor>-alpine` pins (#8532). A PR that bumped only the CI pin stayed red against tests/repo/test_python_version_consistency.py. The group carries `k8s_autodeploy: false` because it owns denied roles' pins. ENFORCED: the `python-` rows of scripts/tests/_renovate_rule_rows.py.",
+      "description": "Every Python pin the repo keeps in lockstep, in ONE PR (#5479): the CI setup action, `.python-version`, Dockerfile `FROM python:` tags and the k8s `python:<minor>-alpine` pins (#8532). A PR that bumped only the CI pin stayed red against tests/repo/ci_workflows/test_python_version_consistency.py. The group carries `k8s_autodeploy: false` because it owns denied roles' pins. ENFORCED: the `python-` rows of scripts/tests/_renovate_rule_rows.py.",
       "matchManagers": [
         "custom.regex",
         "pyenv",
@@ -787,6 +787,18 @@
         "/linuxserver/"
       ],
       "versioning": "regex:^v?(?<major>\\d+)\\.(?<minor>\\d+)\\.(?<patch>\\d+)(?:\\.(?<build>\\d+))?(?<compatibility>[a-z]+\\d+)?-ls(?<revision>\\d+)$"
+    },
+    {
+      "description": "Sonarr runs the v5 beta, which LinuxServer tags `develop-5.0.0.N-lsNN`. This versioning matches only that channel and major, so a v4 tag, a channel change or a later major is never offered, and v5 stable needs a hand edit (#6292). A bump waits for a tick on the dependency dashboard and never automerges, because a migrated database does not downgrade. It must follow the LinuxServer rule. ENFORCED: the `sonarr-` rows and tests of scripts/tests/test_renovate_package_rules.py.",
+      "matchDatasources": [
+        "docker"
+      ],
+      "matchPackageNames": [
+        "lscr.io/linuxserver/sonarr"
+      ],
+      "versioning": "regex:^(?<compatibility>develop)-(?<major>5)\\.(?<minor>\\d+)\\.(?<patch>\\d+)\\.(?<build>\\d+)-ls(?<revision>\\d+)$",
+      "dependencyDashboardApproval": true,
+      "automerge": false
     },
     {
       "description": "Keep prek.toml hook bumps in their own group, apart from the container-image group. The non-major automerge and 7-day soak already apply; this rule only overrides the group name.",
@@ -898,7 +910,7 @@
       "automerge": false
     },
     {
-      "description": "Flux, the deploy controller (k8s/roles/flux). A `flux_version` bump is unfinished until files/gotk-components.yaml is regenerated at the new release, which Renovate cannot run, and tests/k8s/test_flux_role.py fails a bump that skipped it. Own group, no automerge, with the `k8s_autodeploy: false` marker (#1963). The rule covers every dep named `fluxcd/flux2` (#4822). ENFORCED by the `flux-` rows of scripts/tests/_renovate_rule_rows.py.",
+      "description": "Flux, the deploy controller (k8s/roles/flux). A `flux_version` bump is unfinished until files/gotk-components.yaml is regenerated at the new release, which Renovate cannot run, and tests/k8s/workloads/test_flux_role.py fails a bump that skipped it. Own group, no automerge, with the `k8s_autodeploy: false` marker (#1963). The rule covers every dep named `fluxcd/flux2` (#4822). ENFORCED by the `flux-` rows of scripts/tests/_renovate_rule_rows.py.",
       "matchDatasources": [
         "github-release-attachments",
         "github-releases"
@@ -1124,7 +1136,7 @@
       "automerge": false
     },
     {
-      "description": "mcp stays on the 1.x line, because 2.0.0 removed mcp.server.fastmcp, which homelab-mcp's app.py imports. Lift the cap together with an app.py port to 2.x. tests/services/test_homelab_mcp_pins.py asserts this rule and the pin agree (#2150).",
+      "description": "mcp stays on the 1.x line, because 2.0.0 removed mcp.server.fastmcp, which homelab-mcp's app.py imports. Lift the cap together with an app.py port to 2.x. tests/services/apps/test_homelab_mcp_pins.py asserts this rule and the pin agree (#2150).",
       "matchManagers": [
         "custom.regex"
       ],
@@ -1399,7 +1411,7 @@
       "matchFileNames": [
         "k8s/roles/*/defaults/main.yml",
         "hosts/components/registry-gc/defaults/main.yml",
-        "inventory/group_vars/all.yml",
+        "k8s/vars.yml",
         "hosts/components/pi-compose/services/*/compose.yaml.j2"
       ],
       "pinDigests": true,

@@ -23,8 +23,6 @@
 {% set spec_text %}
 # A flaky check fails rather than passing on a retry.
 backoffLimit: 0
-# Below the 600s `manifests_rollout_timeout_default` every `<tag>-verify` Kustomization takes,
-# with room for the media volume to attach, so the Job fails with its own message first.
 activeDeadlineSeconds: 300
 template:
   metadata:
@@ -36,15 +34,13 @@ template:
     automountServiceAccountToken: false
     restartPolicy: Never
     enableServiceLinks: false
-    # jellyfin's PUID and PGID, the uid jellyfin's own process reads the library as, and the
-    # render-node group jellyfin's Deployment adds. Probing as root would pass a render node
-    # or a library jellyfin itself cannot open.
+    # Runs as jellyfin's PUID/PGID and render-node group; root would pass what jellyfin cannot open.
     securityContext:
       runAsNonRoot: true
       runAsUser: {{ puid }}
       runAsGroup: {{ pgid }}
       supplementalGroups:
-        - {{ render_gid }}
+        - {{ hosts[k8s_primary_node].render_gid }}
       seccompProfile:
         type: RuntimeDefault
     containers:
@@ -64,9 +60,6 @@ template:
             value: "{{ deployment_digest8 }}"
           - name: PYTHONDONTWRITEBYTECODE
             value: "1"
-        # The device request is what puts the render node in this pod, as it does in
-        # jellyfin's. `dri_device_plugin_count` shares the one node among four pods: jellyfin,
-        # tdarr and the two verify Jobs.
         resources:
           requests:
             cpu: 10m
@@ -85,8 +78,6 @@ template:
           - name: script
             mountPath: {{ script_dir }}
             readOnly: true
-          # jellyfin's own two mounts of the library: the `media` subPath at /data, and again
-          # at /data/media. The depth is what the library check proves.
           - name: media
             mountPath: /data
             subPath: media

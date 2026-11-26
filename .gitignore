@@ -2,7 +2,7 @@
 # secrets/ and tests/.
 /*
 !/k8s
-!/inventory
+!/estate
 !/secrets
 !/tests
 !/docs
@@ -12,8 +12,6 @@
 !/evals
 # Host packages, rendered by `homelab-render host` (docs/archive/host/h3-pi-pilot.md).
 !/hosts
-# The k3s service list the renderer reads (docs/archive/host/h1-cluster-config-to-flux.md, H1.9).
-!/cluster
 !prek.toml
 !/.shellcheckrc
 !/.gitleaks.toml

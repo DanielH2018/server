@@ -2,7 +2,7 @@
 """The variable context a role template renders with, in Ansible's precedence.
 
 Every render guard under ``scripts/validate/`` builds its context here, so no validator layers
-the base stubs, ``group_vars/all.yml``, host_vars and role defaults itself: a validator that
+the base stubs, the shared vars files, a host's own file and role defaults itself: a validator that
 renders with the wrong precedence checks a value no deploy produces (failure class 2 in ``docs/failure-classes.md``).
 
 The layers, weakest first::
@@ -12,7 +12,7 @@ The layers, weakest first::
 Role defaults are Ansible's weakest real layer, so an inventory key of the same name wins.
 ``homelab-render host`` renders a component of a host package, which has no role, and passes
 its ``component.yml`` ``defaults:`` map as ``component_defaults``, at the role defaults' place.
-``services`` is ``cluster/services.yml``'s entries, every k8s service, whichever host renders.
+``services`` is ``k8s/services.yml``'s entries, every k8s service, whichever host renders.
 ``hosts`` maps each host to its literal host_vars values (`_hosts`). ``overrides`` is what a
 caller supplies that no file holds: a stub a linter needs to be plausible, a value a caller
 role passes to a shared template, a ``container_item``.
@@ -24,30 +24,25 @@ Typical usage example:
 
 from pathlib import Path
 
-# The layers and where they live are lib.estate's, which the docs generators read through too,
-# so a template render and a docs page cannot disagree about which value wins.
 from lib.cli_help import warn
 from lib.container_entry import parse_containers_list
-from lib.inventory_lists import PI_LIST_KEY
+from lib.inventory_lists import PI_LIST_KEY, host_names
 from lib.estate import (
-    PLANE_HOSTS,
     REPO_INVENTORY,
     Inventory,
     inventory_layers,
     role_defaults,
 )
 from lib.k8s_context import failed_key, resolve_vars
+from lib.repo_paths import K8S_ROLES
 from lib.render_guard import (
     BASE_CONTEXT,
     StubUndefined,
-    host_files,
     host_layer,
     k8s_services,
-    load_yaml,
 )
 
 __all__ = [
-    "PLANE_HOSTS",
     "REPO_INVENTORY",
     "Inventory",
     "UnresolvedVarsError",
@@ -89,10 +84,9 @@ def render_context(
     Args:
         path: A role template, laid out ``roles/<plane>/<role>/templates/<name>``, or the
             role directory itself. The role's ``defaults/main.yml`` is the weakest real
-            layer, and its plane picks the host from `PLANE_HOSTS` when `host` is None. None
-            for a render with no role, which then has no role defaults layer.
-        host: The inventory host whose host_vars go over ``all.yml``. None takes the plane's
-            host, or no host_vars layer for a plane without one.
+            layer. None for a render with no role, which then has no role defaults layer.
+        host: The inventory host whose host_vars go over ``all.yml``. None renders with no
+            host_vars layer. A k8s role takes none, and reads a host's value through ``hosts``.
         overrides: Values laid over every file layer. They go in before anything resolves as
             well as on top after, so a default aliasing an overridden name (``x: "{{ secret
             }}"``) expands to the override rather than to the name's stub.
@@ -125,7 +119,6 @@ def render_context(
     role_dir = None
     if path is not None:
         role_dir = path.parents[1] if path.parent.name == "templates" else path
-        host = host or inventory.plane_hosts.get(role_dir.parent.name)
     overrides = overrides or {}
     raw = {
         **base,
@@ -134,7 +127,7 @@ def render_context(
                 **(role_defaults(role_dir) if role_dir else {}),
                 **(component_defaults or {}),
             },
-            load_yaml(inventory.all_vars),
+            inventory.shared_layer(cluster=_is_cluster(role_dir, host)),
             _host_layer(inventory, host) if host_vars is None else host_vars,
         ),
         **({"role_path": str(role_dir)} if role_dir else {}),
@@ -146,18 +139,20 @@ def render_context(
     resolved, dropped = _resolve(raw, undefined_cls)
     if dropped and strict:
         raise UnresolvedVarsError(dropped)
-    # Under a strict class a dropped key needs no note: a template that reads it stops the
-    # render, as Ansible's lazy evaluation fails only the task that reads the variable.
+    # Under a strict class a dropped key needs no note: a template that reads it stops the render.
     if undefined_cls is not StubUndefined:
         dropped = {}
     for key, reason in sorted(dropped.items()):
         note = f"{key} left undefined, renders as STUB: {reason}"
-        # Once per process: every template of a role shares its defaults, so the same drop
-        # would otherwise print once for each of them.
+        # Once per process: every template of a role shares its defaults.
         if note not in _NOTED:
             _NOTED.add(note)
             warn(note)
     return {**resolved, **overrides}
+
+
+def _is_cluster(role_dir: Path | None, host: str | None) -> bool:
+    return host is None and role_dir is not None and K8S_ROLES in role_dir.parents
 
 
 def _host_layer(inventory: Inventory, host: str | None) -> dict:
@@ -170,6 +165,8 @@ _HOSTS_KEYS = (
     "compose_services",
     "claude_agent_ssh_login_enabled",
     "ssh_host_ed25519_key",
+    "render_gid",
+    "claude_code_triage_enabled",
 )
 
 
@@ -186,8 +183,8 @@ def _hosts(inventory: Inventory) -> dict[str, dict]:
     passes its own ``hosts``.
     """
     found = {}
-    for path in host_files(inventory.host_vars):
-        layer = host_layer(path.parent, path.stem)
+    for host in host_names(inventory.host_vars):
+        layer = host_layer(inventory.host_vars, host)
         literal = {
             key: layer[key]
             for key in _HOSTS_KEYS
@@ -198,7 +195,7 @@ def _hosts(inventory: Inventory) -> dict[str, dict]:
                 literal[PI_LIST_KEY], key=PI_LIST_KEY
             )
         if literal:
-            found[path.stem] = literal
+            found[host] = literal
     return found
 
 

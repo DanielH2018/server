@@ -9,8 +9,7 @@ metadata:
   name: authelia
   namespace: {{ k8s_namespace }}
 spec:
-  # The SQLite database is a ReadWriteOnce volume and two Authelias writing it is the exact
-  # corruption this instance exists to avoid — the old pod must stop before the new one starts.
+  # The SQLite database is ReadWriteOnce: the old pod must stop before the new one starts.
 {{ spec_shell('Recreate') }}
   replicas: 1
   selector:
@@ -22,19 +21,15 @@ spec:
         app: authelia
         netpol-baseline: enforced
     spec:
-      # Pinned with the rest of the home-critical chain to the node announcing its VIPs
-      # the DECIDED marker in k8s/roles/home-assistant/templates/deployment.yaml.j2 has why.
+      # Pinned to the node announcing the VIPs; the DECIDED marker in home-assistant's
+      # deployment.yaml.j2 has why.
       nodeSelector:
         kubernetes.io/hostname: {{ k8s_primary_node }}
-      # Edge/auth/DNS eviction ordering — see k8s/roles/cluster-base/templates/priorityclass.yaml.j2.
-      # Starting as UID 1000 rather than root is why this needs none of the SETUID/SETGID
-      # capabilities: the image's entrypoint only su-execs down to the authelia user when it
-      # starts as root, and skips that path entirely otherwise.
-      # fsGroup makes the config PVC writable for the SQLite database and notification file.
+      # Starting as UID 1000 needs no SETUID/SETGID: the entrypoint su-execs only when started as
+      # root.
+      # fsGroup makes the config PVC writable.
 {{ pod_shell(services | tier_priority_class('authelia'), run_as_user=puid, run_as_group=pgid, fs_group=pgid) }}
-{# Three independent sources of init containers — CrowdSec's three seeding steps, the
-   wait-for-redis gate and the claude-ui TOTP seed — each with its own lever. Gate the KEY on
-   any being on, so it is absent rather than left with no list under it. #}
+{# Gate the key on any init-container source being on, so it is absent rather than left with no list. #}
 {% if authelia_k8s_manage_crowdsec or authelia_k8s_redis_sessions | bool or authelia_k8s_manage_claude_user | bool %}
       initContainers:
 {% endif %}
@@ -93,8 +88,8 @@ spec:
             - name: TZ
               value: "{{ tz }}"
 {% if authelia_k8s_manage_oidc | bool %}
-            # The CLI loads the same configuration.yml as the portal, whose `jwks[].key` is a
-            # template expression only this filter resolves.
+            # The CLI loads the same configuration.yml as the portal, whose `jwks[].key` needs this
+            # filter.
             - name: X_AUTHELIA_CONFIG_FILTERS
               value: template
 {% endif %}
@@ -103,12 +98,8 @@ spec:
                 secretKeyRef:
                   name: authelia-config
                   key: claude-totp-secret
-          # The portal's own context, for the reason given at the portal container below:
           # Authelia does not start with a read-only root filesystem.
 {{ hardened_security_context(non_root=true) }}
-          # The portal container's mounts, so the CLI resolves the same paths: the config, the
-          # signing key its template expression reads, the database on the claim, scratch
-          # space, and the log file the config names.
           volumeMounts:
             - name: authelia-secrets
               mountPath: /secrets
@@ -165,7 +156,6 @@ spec:
               done;
               echo "authelia-redis reachable after $((i*2))s"
           env:
-            # The same Secret key the redis container's own probes read, for the same reason:
             # redis-cli takes the password from the environment, so it never reaches argv.
             - name: REDISCLI_AUTH
               valueFrom:
@@ -174,7 +164,7 @@ spec:
                   key: REDISCLI_AUTH
           # read_only: the whole program is the shell loop above and it writes nothing. non_root
           # rather than leaning on the pod-level runAsUser, so the container carries its own
-          # assertion — tests/k8s/test_container_security_context.py requires one here.
+          # assertion — tests/k8s/workloads/test_container_security_context.py requires one here.
 {{ hardened_security_context(read_only=true, non_root=true) }}
 {{ container_resources(cpu_limit='100m', mem_limit='32Mi', cpu_request='10m', mem_request='16Mi') }}
 {% endif %}
@@ -192,39 +182,27 @@ spec:
             - name: TZ
               value: "{{ tz }}"
 {% if authelia_k8s_manage_oidc | bool %}
-            # Runs Go templating over the config at start, so `jwks[].key` in
-            # config-secret.yaml.j2 can read the signing key from the authelia-oidc-jwk mount.
-            # Gated with the mount and the Secret: with OIDC off the config holds no template
-            # expression, and a value holding a template action stays plain text.
+            # Runs Go templating over the config so `jwks[].key` can read the signing key; gated
+            # with the mount and Secret.
             - name: X_AUTHELIA_CONFIG_FILTERS
               value: template
 {% endif %}
-          # NO readOnlyRootFilesystem, unlike traefik and bento-pdf. With it on, Authelia
-          # dies during provider construction — before a single startup check runs — and
-          # logs only an aggregate with no detail, at every level including trace:
-          #   level=fatal msg="Errors occurred performing startup checks"
-          # That one field is the entire difference between that and "Startup complete ...
-          # Listening ... on '0.0.0.0:9091'". It is not a plain permission problem: as uid 1000
-          # the process cannot write anywhere outside its mounts in the WORKING case either,
-          # which leaves EROFS-vs-EACCES on some path Authelia probes and never names.
+          # NO readOnlyRootFilesystem: with it on, Authelia dies during provider construction,
+          # before any startup check, and logs only "Errors occurred performing startup checks" at
+          # every level.
 {{ hardened_security_context(non_root=true) }}
           volumeMounts:
-            # Config and the users database come from the Secret, mounted OUTSIDE /config so
-            # the PVC can own /config for the database Authelia writes.
+            # Mounted OUTSIDE /config so the PVC can own /config for the database.
             - name: authelia-secrets
               mountPath: /secrets
               readOnly: true
 {% if authelia_k8s_manage_oidc | bool %}
-            # The OIDC signing key, read by the config's `secret` filter expression. A
-            # top-level path of its own: /secrets is a read-only Secret mount.
             - name: authelia-oidc-jwk
               mountPath: /oidc-jwk
               readOnly: true
 {% endif %}
             - name: authelia-config
               mountPath: /config
-            # As uid 1000 the process can write nowhere else outside its mounts, so scratch
-            # space has to come from somewhere even with a writable root filesystem.
             - name: authelia-tmp
               mountPath: /tmp
             # Shared with the crowdsec-agent sidecar below.
@@ -244,16 +222,14 @@ spec:
             periodSeconds: 30
 {{ container_resources(cpu_limit=authelia_k8s_cpu_limit, mem_limit=authelia_k8s_mem_limit, cpu_request=authelia_k8s_cpu_request, mem_request=authelia_k8s_mem_request) }}
 {% if authelia_k8s_manage_crowdsec %}
-        # Parses THIS pod's auth log into the in-cluster LAPI, so the failed-login scenarios
-        # (LePresidente/authelia) cover the cluster portal.
 {{ crowdsec_agent_sidecar('authelia', collections=authelia_k8s_agent_collections, log_volume='authelia-logs', log_dir='/var/log/authelia', cpu_limit=authelia_k8s_agent_cpu_limit, mem_limit=authelia_k8s_agent_mem_limit, cpu_request=authelia_k8s_agent_cpu_request, mem_request=authelia_k8s_agent_mem_request) }}
 {% endif %}
       volumes:
         - name: authelia-secrets
           secret:
             secretName: authelia-config
-            # 0440, not 0400: secret files are owned root:fsGroup, so a non-root container
-            # reads them via the group bit. 0400 leaves the group nothing.
+            # 0440, not 0400: secret files are owned root:fsGroup and a non-root container reads
+            # them via the group bit.
             defaultMode: 0440
 {% if authelia_k8s_manage_oidc | bool %}
         - name: authelia-oidc-jwk

@@ -3,7 +3,7 @@
 
 Two layers are merged into one page:
 
-* **Declared state** — ``containers_list`` from ``cluster/services.yml`` and ``inventory/host_vars/``,
+* **Declared state** — ``containers_list`` from ``k8s/services.yml`` and each ``hosts/<host>/vars.yml``,
   the source of truth for what is *supposed* to run where. This is what changes
   when you edit the repo.
 * **Live state** — ``kubectl`` against the k3s cluster and ``docker ps`` on
@@ -88,8 +88,6 @@ from lib.exit_codes import INFRA_MAP_LIVE_UNREADABLE
 
 from lib.kubectl import find_kubeconfig, find_tool
 
-# Re-exported so `gen_infra_map.<name>` keeps working for the cron entry point,
-# the tests, and anything else that treats this module as the public surface.
 __all__ = [
     "DEFAULT_OUTPUT",
     "HOSTS",
@@ -204,9 +202,8 @@ def main(argv: list[str] | None = None) -> int:
         else:
             live, cluster = collect_live(local_hostname, longhorn_namespace)
     except MissingToolError as exc:
-        # Deliberately leave the existing page alone. Overwriting it with a
-        # declared-only render would replace real data with a page that looks
-        # healthy and reports nothing wrong.
+        # Leave the existing page alone: a declared-only render would replace real data with a
+        # healthy-looking page.
         print(f"error: {exc}; leaving the previous map in place", file=sys.stderr)
         return INFRA_MAP_LIVE_UNREADABLE
     generated_at = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
@@ -223,9 +220,8 @@ def main(argv: list[str] | None = None) -> int:
     if args.format == "svg":
         from lib.docs_provenance import write_if_body_changed
 
-        # The SVG carries no frontmatter, so write_if_body_changed compares the whole
-        # text. That is what is wanted: an unconditional write would make the
-        # docs-refresh cron commit on every run for an identical diagram.
+        # An unconditional write would make docs-refresh commit on every run for an identical
+        # diagram.
         wrote = write_if_body_changed(args.output, render_svg(model))
         print(f"{'Wrote' if wrote else 'Unchanged'} {args.output}")
         return 0

@@ -110,8 +110,8 @@ def gate_snapshot(primary: Path, sha: str) -> Generator[Path | None]:
     nothing prunes it. Recover by hand with `rm -rf /tmp/land-gate-*` then
     `git -C <primary> worktree prune`.
     """
-    # The signal handlers wrap the try, not the reverse: they are restored only after the
-    # worktree is gone, so a second signal arriving during the removal cannot skip it.
+    # The signal handlers wrap the try so they are restored only after the worktree is gone; a
+    # second signal during removal cannot skip it.
     with _dies_on_a_signal():
         root = os.environ.get(GATE_TMP_ROOT_ENV) or GATE_TMP_ROOT
         tmp = Path(tempfile.mkdtemp(prefix="land-gate-", dir=root))
@@ -251,9 +251,8 @@ def declared_tags_at(ref: str, primary: Path) -> set[str] | None:
         return None
 
 
-# Every `files` parameter below is positional-only. The real functions and the fakes name it
-# differently (`files` against `paths`), and a Protocol matches a keyword-capable parameter by
-# NAME -- so without the `/` a fake with an equally valid signature is rejected.
+# Every `files` parameter is positional-only: a Protocol matches a keyword-capable parameter by
+# name, and the fakes name it differently.
 class PlaneNote(Protocol):
     """`land_tags.plane_note`: what a PR still needs a HUMAN to apply, or ""."""
 
@@ -284,19 +283,16 @@ class Tools:
     # Above `await_ci:`, whose field name shadows the module for the rest of this class body.
     await_ci: Callable[[str, int], CiVerdict] = await_ci_verdict
     tested_base: Callable[[str], str | None] = land_tested_base.tested_base
-    # `cwd` is the checkout the probe renders the deployed role's manifests from; None is the
-    # one this file lives in. `health_gate.check_one` carries the argument.
+    # `cwd` is the checkout the probe renders the deployed role's manifests from; None is this
+    # file's own.
     gate: Callable[..., GateResult] = health_gate
     snapshot: Callable[[Path, str], contextlib.AbstractContextManager[Path | None]] = (
         gate_snapshot
     )
     declared_at: Callable[[str, Path], set[str] | None] = declared_tags_at
     flux: land_flux.FluxReads = field(default_factory=land_flux.FluxReads)
-    # `handoff.land_through_unit`'s one boundary: starts the lander unit, reads its exit code.
-    # The landing's own modules that lag master at a base commit; None when git could not say.
     stale_code: Callable[[str], list[str] | None] = own_checkout.stale_landing_code
-    # `--fresh`: runs `land.sh <argv>` from a new checkout of origin/master; its exit code. A
-    # third argument, the landing turn's locked descriptor, passes the turn to that landing.
+    # A third argument, the landing turn's locked descriptor, passes the turn to that landing.
     fresh_landing: Callable[..., int] = fresh.land_fresh
     # `--detach`: runs the landing in a detached, logged process and returns its pid.
     fork: Callable[..., int] = detach.fork
@@ -311,15 +307,8 @@ class Tools:
     clock: Callable[[], float] = time.monotonic
     # None means `host_wait`'s own, which imports this module and so cannot be named here.
     host_targets: Callable[[Path, str], list[Any]] | None = None
-    # Takes the landing turn without waiting: the call that gives it up, or None while another
-    # landing holds it. None here means `turn.try_take`, for the same reason.
     try_turn: Callable[[], Callable[[], None] | None] | None = None
-    # The line for the landing turn (`line.py`): one operation, by name. None means the line
-    # on the turn's host, which `turn` reaches by this host's name.
     line: Callable[..., str] | None = None
-    # Locks one of the named lock files beside the turn without waiting, while other landings
-    # hold fewer than the cap of them: the call that frees it, or None. None here means the
-    # files `slots` reaches by this host's name.
     try_slot: Callable[[Sequence[str], int], Callable[[], None] | None] | None = None
     # Whether now is inside the weekly reboot's no-promotion window.
     in_reboot_window: Callable[[], bool] = in_reboot_window

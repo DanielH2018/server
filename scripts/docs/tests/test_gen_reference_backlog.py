@@ -60,9 +60,7 @@ def test_render_leaves_the_verify_by_cell_blank_without_one():
 
 
 def test_render_shows_the_claiming_worktree():
-    # Anchored on the full trailing shape, not just a substring: this also pins the Claim
-    # column BEFORE Verify-by, since "worktree-issue-1132" and "-" are distinguishable in
-    # either order — a column swap changes which cell comes last.
+    # This also pins the Claim column BEFORE Verify-by: a column swap changes which cell comes last.
     md = g.render_markdown([_row(1, claimed="worktree-issue-1132")])
     row = next(line for line in md.splitlines() if line.startswith("| [#1]"))
     assert row.rstrip().endswith("| worktree-issue-1132 | - |")
@@ -81,8 +79,6 @@ def test_render_escapes_a_pipe_in_the_claiming_worktree():
 
 
 def test_render_leaves_the_claim_cell_blank_without_one():
-    # verify_by=True gives the two trailing cells different values ("-" and "✓"), so a
-    # column swap changes this exact ending — two matching "-" cells would not have.
     md = g.render_markdown([_row(1, claimed=None, verify_by=True)])
     row = next(line for line in md.splitlines() if line.startswith("| [#1]"))
     assert row.rstrip().endswith("| - | ✓ |")
@@ -229,8 +225,6 @@ def test_help_carries_the_docstring_summary(capsys):
     """
     with pytest.raises(SystemExit):
         g.main(["--help"])
-    # argparse wraps the description at the terminal width and the formatter colours it, so
-    # the rendered text is compared with the escapes stripped and the whitespace collapsed.
     plain = " ".join(re.sub(r"\x1b\[[0-9;]*m", "", capsys.readouterr().out).split())
     assert "the findings Claude filed as GitHub Issues" in plain
 

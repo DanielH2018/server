@@ -17,7 +17,9 @@ The scripts are the `pi-heartbeats` host component's (H3.8b), and `COMPONENT_DEF
 
 import re
 
-from _helpers import HOST_VARS, REPO, load_yaml
+from _helpers import REPO, load_yaml
+from lib.estate import host_vars
+from lib.inventory_lists import PI_HOST
 from _shell_render import render_shell_script
 from lib.proc_testing import fake_bin, path_with, write_exec
 from lib.proc_testing import run as launch
@@ -26,26 +28,15 @@ from validate.render_lib.shell import COMPONENTS
 
 COMPONENT = COMPONENTS / "pi-heartbeats"
 COMPONENT_DEFAULTS = load_yaml(COMPONENT / "component.yml")["defaults"]
-# The package's copy of initial_setup's check library, M6 B5. The scripts source the package
-# path; the test sources the role's file, so it needs neither the package nor a host that has
-# installed the library.
+# The scripts source the package path; the test sources the role's file, so it needs neither the
+# package nor an installed library.
 REAL_CHECK_LIB = "/usr/lib/homelab/homelab-check-lib.sh"
 ROLE_CHECK_LIB = (
     REPO / "hosts" / "components" / "check-lib" / "files" / "homelab-check-lib.sh"
 )
 REAL_LOG = "/var/log/pi-health/health.log"
-# Enough of the docker CLI for pi-recovery-health: the `ps -q` liveness probe, `inspect`,
-# and `start`. Running containers live in $STATE_FILE, one name per line; $UNSTARTABLE names
-# those whose start fails. `inspect` answers with the
-# real CLI's shape for whatever --format asks: a running container reads status=running, a
-# stopped one carries $STUB_EXIT / $STUB_ERROR -- so a message that names an exit code proves
-# the script inspected BEFORE it started the container, not after. $STUB_DAEMON_DOWN=1 is
-# dockerd itself gone: every verb prints nothing and fails, which is what the real CLI does
-# against a dead socket ("Cannot connect to the Docker daemon", on stderr). $STUB_GONE names
-# a container the daemon no longer HAS -- mid-recreate under a deploy -- so `inspect` and
-# `start` fail for it alone while the daemon answers everything else. $STUB_DAEMON_BACK=1
-# on top of $STUB_DAEMON_DOWN is a daemon that died during the loop and answers `version`
-# again by the time the script asks it directly.
+# Knobs: $UNSTARTABLE (start fails), $STUB_EXIT/$STUB_ERROR (stopped; proves inspect ran first).
+# $STUB_DAEMON_DOWN dockerd gone, $STUB_GONE mid-recreate, $STUB_DAEMON_BACK daemon back.
 DOCKER_STUB = """\
 #!/usr/bin/env bash
 if [ "${STUB_DAEMON_DOWN:-0}" = "1" ]; then
@@ -90,42 +81,34 @@ esac
 exit 0
 """
 
-# journalctl, answering `-u docker` with $STUB_JOURNAL and recording that it was asked. The
-# real one is on /usr/bin and would read THIS host's journal, so the stub shadows it on PATH.
+# The real journalctl would read THIS host's journal, so the stub shadows it on PATH.
 JOURNALCTL_STUB = """\
 #!/usr/bin/env bash
 printf '%s\\n' "$*" >> "$JOURNALCTL_CALLS"
 printf '%b' "$STUB_JOURNAL"
 """
 
-# findmnt, answering pi-sd-health's `/var/log` mount probe with $STUB_LOG_FSTYPE. The real one
-# would read THIS host's mount table, where /var/log is no tmpfs, and every run would push down.
-# An empty value is no mount at all: the real findmnt prints nothing and exits 1.
+# The real findmnt would read THIS host's mount table, where /var/log is no tmpfs; an empty value is
+# no mount.
 FINDMNT_STUB = """\
 #!/usr/bin/env bash
 [ -n "$STUB_LOG_FSTYPE" ] || exit 1
 echo "$STUB_LOG_FSTYPE"
 """
 
-# pi-sd-health reads the ext4 error counter from a sysfs path it builds itself; point it at
-# a temp file by substituting the assignment's value.
 SD_COUNTER = "/sys/fs/ext4/mmcblk0p2/errors_count"
 
-# The component default naming the rotated-log integrity verdict pi-sd-health reads. `run()` seeds an
-# `up` verdict at a temp path under this name; test_pi_gz_integrity_sweep.py overrides it.
 GZ_STATE_VAR = "optimize_pi_gz_integrity_state_file"
 
 
-# The Pi's own compose_services, so the recovery heartbeat's watch set is the one the host
-# deploys.
-PI_HOST_VARS = load_yaml(HOST_VARS / "daniel-pi.yml")
+PI_HOST_VARS = host_vars(PI_HOST)
 
 
 def render(name, tmp_path, jinja_vars=None):
     """The real template, rendered through `_shell_render`, with its absolute paths repointed
     at temp files.
 
-    `compose_services` is the Pi's own (host_vars/daniel-pi.yml) rather than a group default, so
+    `compose_services` is the Pi's own (hosts/daniel-pi/vars.yml) rather than a group default, so
     the accessor's inventory context does not carry it -- it goes in as an override. Everything
     else the templates read (domain, the ingress VIP, the gz-integrity defaults) comes from
     that same context, the one `validate/render_lib/shell.py` lints

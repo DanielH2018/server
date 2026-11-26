@@ -105,7 +105,7 @@ runs:
     - name: Deploy the dotfiles packages the hooks and the pruner import
       shell: bash
       env:
-        DOTFILES_SHA: 7f435cb689b0a0e19ec2f6c57caed60a3676d0e8
+        DOTFILES_SHA: 87d9c3b9e7fc17d7d8cd95dd107d320be7c9c3e9
       run: |
         set -euo pipefail
         src="$RUNNER_TEMP/dotfiles"
@@ -117,7 +117,7 @@ runs:
         ln -s "$src/home/dot_local/share/claude-worktree" "$HOME/.local/share/claude-worktree"
     # Test modules skip when one of these binaries is missing, so a runner without one passes
     # them as skips and its run cannot be set beside a hosted run's. Each is in the hosted
-    # image; a runner pod's base image owes the same list. tests/repo/test_ci_baseline_binaries.py
+    # image; a runner pod's base image owes the same list. tests/repo/ci_workflows/test_ci_baseline_binaries.py
     # holds BASELINE against every skip gate in the suite.
     - name: Fail on a missing binary the suite skips without
       shell: bash

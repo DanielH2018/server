@@ -17,7 +17,7 @@ shared conventions.
   Also mounts the shared `media-data` claim (read/write, via subPath) for the files
   themselves.
 - **Flux applies it.** Its `containers_list` entry is
-  in `cluster/services.yml`, so nothing applies it by hand, and a merged change reaches the cluster when
+  in `k8s/services.yml`, so nothing applies it by hand, and a merged change reaches the cluster when
   `promote` publishes and verifies the next bundle. Its image-bump PRs therefore draw no
   `land-wait` and no `probe.py health` run. authelia, media-volume and traefik are flux-owned too,
   so the Kustomization lists them in `dependsOn`, and Flux applies this tag only after their
@@ -88,7 +88,7 @@ case outstanding here. `GET /api/episodes/wanted` and `GET /api/movies/wanted` b
 `"total": 0` on 2026-09-10: the three providers satisfy the only language profile with nothing
 missing. Against that, Whisper needs an ASR sidecar (`whisperai.endpoint` is already stubbed at
 `http://whisper:9001` in Bazarr's own defaults, pointing at nothing) and a CPU budget on
-`daniel-box` (`inventory/group_vars/all.yml:k8s_primary_node`), which is also the node running
+`daniel-box` (`k8s/vars.yml:k8s_primary_node`), which is also the node running
 the GPU transcoder and most other workloads. So
 the cost is real and the benefit was zero on 2026-09-10. **Revisit when a wanted count stays
 non-zero** — that is the measurement that would change the answer, not a judgement about the
@@ -101,6 +101,6 @@ library.
   `k8s/templates/ingressroute-default.yaml.j2`, which this role ships no template for —
   the route's hostname, port, Authelia gate and public opt-out are the `containers_list`
   entry's.
-- **The route is LAN-only.** The entry in `cluster/services.yml` sets `public_route: false`,
+- **The route is LAN-only.** The entry in `k8s/services.yml` sets `public_route: false`,
   so no public name renders whatever `k8s_public_route` says. The operator ruled it on
   2026-11-15 (#8514): WireGuard covers remote use.

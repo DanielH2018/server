@@ -10,8 +10,7 @@ metadata:
   name: tdarr
   namespace: {{ k8s_namespace }}
 spec:
-  # Both config PVCs are ReadWriteOnce on single-replica Longhorn, so a rolling update deadlocks:
-  # the new pod waits for volumes the old pod has not released.
+  # Recreate: both config PVCs are ReadWriteOnce, so a rolling update deadlocks.
 {{ spec_shell('Recreate') }}
   # The same budget as Flux's timeout. See tdarr_k8s_rollout_timeout in defaults/main.yml.
   progressDeadlineSeconds: {{ tdarr_k8s_rollout_timeout[:-1] | int }}
@@ -26,26 +25,16 @@ spec:
         netpol-baseline: enforced
     spec:
 {{ pod_shell('homelab-best-effort') }}
-      # Pinned to the node media-data's local PV names (k8s/media-volume pins it to the same
-      # `k8s_primary_node`), so the pin moves no pod: tdarr could run nowhere else. It is
-      # written here because the tdarr-prepull Job copies this pod's placement and cannot read
-      # a PV's, and the renderer refuses a pre-pull for a workload that names no node.
+      # Names the node because the tdarr-prepull Job copies this pod's placement and cannot read a
+      # PV's.
 {{ node_affinity_required(k8s_primary_node) }}
-      # The file-mode half of the GPU wiring — the device plugin below handles the cgroup
-      # half. Same pair as jellyfin; see that role for why the GID lives in host_vars.
+      # File-mode half of the GPU wiring; the device plugin handles the cgroup half.
       securityContext:
         supplementalGroups:
-          - {{ render_gid }}
-      # The VAAPI encode, before tdarr starts.
-      # tdarr's OWN bundled ffmpeg, not jellyfin's: a different binary built against different
-      # libraries, so jellyfin's encode proof does not carry over. It runs in tdarr's image with
-      # the same device request, so a broken driver, device or ffmpeg build keeps tdarr from
-      # starting instead of leaving it to fail every transcode. A Job cannot run it: its image
-      # has no ffmpeg and the Job census forbids spawning a process.
-      # The binary is located rather than hardcoded: the image has moved it between releases,
-      # and a wrong path would fail here in a way that reads like an unreachable GPU.
-      # `timeout` bounds a wedged GPU, which would otherwise hold the rollout until
-      # progressDeadlineSeconds; it is skipped if the image ever stops shipping it.
+          - {{ hosts[k8s_primary_node].render_gid }}
+      # VAAPI encode with tdarr's own ffmpeg (not jellyfin's); a failure keeps tdarr from starting.
+      # Not a Job (no ffmpeg in its image); `timeout` bounds a wedged GPU; the ffmpeg path is
+      # located.
       initContainers:
         - name: vaapi-encode
           image: {{ tdarr_k8s_image }}
@@ -61,12 +50,9 @@ spec:
               echo "using $bin"
               $limit "$bin" -v error -init_hw_device vaapi=va:/dev/dri/renderD128 -filter_hw_device va -f lavfi -i testsrc=size=1280x720:rate=30:duration=3 -vf format=nv12,hwupload -c:v h264_vaapi -f null -
               echo VAAPI_OK
-          # tdarr's PUID and PGID, the uid tdarr's own transcodes run as, with the render group
-          # from the pod securityContext above. The exec check this replaces ran as root, which
-          # would pass a render node tdarr's process cannot open.
+          # Runs as tdarr's PUID/PGID: a root check would pass a render node tdarr's process cannot
+          # open.
 {{ hardened_security_context(read_only=true, non_root=true, run_as_user=puid, run_as_group=pgid) }}
-          # The device request is what puts the render node in this container. The kubelet
-          # hands the init container's device on to tdarr's, so the pod still holds one.
 {{ container_resources(cpu_limit='1', mem_limit='512Mi', cpu_request='100m', mem_request='128Mi', extra=tdarr_k8s_dri_resource) }}
       containers:
         - name: tdarr
@@ -74,9 +60,8 @@ spec:
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: {{ tdarr_k8s_webui_port }}
-          # FOWNER and DAC_OVERRIDE stay here, unlike jellyfin where they were dropped with
-          # the Intel mod: this image chowns its own mounts on startup before dropping to
-          # PUID/PGID. The set was established by watching the container fail without them.
+          # FOWNER and DAC_OVERRIDE stay: the image chowns its own mounts before dropping to
+          # PUID/PGID.
 {{ hardened_security_context(add=['CHOWN', 'SETUID', 'SETGID', 'FOWNER', 'DAC_OVERRIDE']) }}
           env:
 {{ lsio_env() }}
@@ -92,23 +77,17 @@ spec:
               value: "true"
             - name: maxLogSizeMB
               value: "10"
-            # A 2.x server asks upstream's rollout API which engine to run on every start,
-            # unless this is set. This install moved to the Rust engine through that rollout,
-            # and Rust migrated the library DB out of the NodeJS engine's DB2/ tree, so a 2.x
-            # pod that drew NodeJS would come up on library state from before the move. 3.x
-            # runs Rust whatever this says, so the pin matters after a rollback to a 2.x tag.
+            # Pins the Rust engine: a 2.x server otherwise asks upstream each start, and a NodeJS
+            # draw would come up on pre-migration library state. 3.x runs Rust whatever this says.
             - name: TDARR_ENGINE
               value: "rust"
-            # Authelia's one_factor gate on the route is the only login. 3.x enables Tdarr's
-            # own auth on a NEW install, one whose server config file carries no `auth` key,
-            # so a fresh tdarr-configs claim would boot to an account form, and the internal
-            # node would need an apiKey. The env value outranks the config file.
+            # Authelia is the only login: 3.x enables Tdarr's own auth on a new install (no `auth`
+            # key in the server config), and the env value outranks the config file.
             - name: auth
               value: "false"
-            # The primary node's name, so it registers as `daniel-box`
-            # where the seeded database was written by a node called `daniel-server`.
-            # Check that `/api/v2/get-nodes` returns exactly ONE node if node-assigned work ever
-            # appears stuck, since that is where a stale ID would show up.
+            # Registers as `daniel-box`, where the seeded database was written by a node
+            # `daniel-server`.
+            # If work looks stuck, check `/api/v2/get-nodes` returns exactly one node.
             - name: nodeID
               value: "{{ k8s_primary_node }}"
           volumeMounts:
@@ -123,10 +102,8 @@ spec:
             - name: media
               mountPath: /media
               subPath: {{ tdarr_k8s_media_subpath }}
-            # Neither of these belongs on Longhorn. The transcode cache holds whole
-            # intermediate video files and is rewritten constantly; the logs are capped at
-            # maxLogSizeMB and rotate. Both are regenerable, and replicating either would spend
-            # the cluster's storage on data nothing would ever restore.
+            # Not on Longhorn: the transcode cache and logs are regenerable, nothing would restore
+            # them.
             - name: tdarr-transcode-cache
               mountPath: /temp
             - name: tdarr-logs
@@ -139,8 +116,7 @@ spec:
             periodSeconds: 10
 {# DECIDED: no startupProbe; its case is a first-boot DOCKER_MODS install, which this image does
    not run, and the liveness initialDelaySeconds covers a measured 60s boot. #}
-          # 120s before the first liveness check: this pod has to attach a 400 G RWX volume
-          # and let the internal node register itself before the API answers.
+          # 120s: the pod attaches a 400 G RWX volume and registers its internal node first.
           livenessProbe:
             httpGet:
               path: /api/v2/status
@@ -162,13 +138,9 @@ spec:
         - name: tdarr-db-backups
           emptyDir:
             sizeLimit: 2Gi
-        # sizeLimit IS THE POINT, not tidiness. An unbounded emptyDir is backed by the node's
-        # root filesystem, and tdarr's cache holds whole intermediate video files — unlike
-        # jellyfin's scratch, which is bounded by one client's stream. A stuck or pathological
-        # job would otherwise fill `/` on daniel-box and take k3s, Longhorn and every other pod
-        # with it. With a limit the kubelet evicts this pod instead, which is a recoverable
-        # failure affecting one service. 100Gi against 815G free and a 6.1G largest library file
-        # is ample headroom for concurrent jobs while still bounding it.
+        # sizeLimit is load-bearing: an unbounded emptyDir fills the node's root fs and takes k3s
+        # down.
+        # With a limit the kubelet evicts only this pod.
         - name: tdarr-transcode-cache
           emptyDir:
             sizeLimit: 100Gi

@@ -58,7 +58,8 @@ pin. The unit's second
 
 **The render runs on the built tree's interpreter, not the unit's.** `HOMELAB_PYTHON` runs the
 builder script only. `hosts/lib/builder_python.py:tree_python` reads `host_python_version`
-from the chosen commit's `inventory/group_vars/all.yml`, and `render_python` installs it
+from the chosen commit's `estate/vars.yml`, or its `inventory/group_vars/all.yml` when the
+commit predates ADR-0042's move, and `render_python` installs it
 with downloads allowed for that one call. `render()` passes it to `uv run --python`. A tree with no pin
 renders on `HOMELAB_PYTHON`, and a pin that is not a dotted version, or an install that fails,
 reads `reason="build"`. The unit that pins a new interpreter ships in `homelab-daniel-box`, which
@@ -75,7 +76,7 @@ nothing new publishes either. The way out is `docs/break-glass.md` item 9's by-h
 `apt-get install homelab-daniel-box=<previous>`.
 
 The component reads two values other roles own. `ci_required_contexts` and `ci_ancestor_walk_max`
-come from `inventory/group_vars/all.yml`. The Prometheus ClusterIP in `builder_prom_urls`
+come from `estate/vars.yml`. The Prometheus ClusterIP in `builder_prom_urls`
 repeats `observability_prometheus_cluster_ip`, and
 `hosts/lib/tests/test_builder_component.py::test_the_settings_carry_the_shared_ci_contexts_and_the_prometheus_cluster_ip`
 holds the two equal.

@@ -19,8 +19,6 @@ from _land_fakes import PRIMARY, Fakes, build_classifier, build_tools, make_land
 from deploy_tools.land_lib import line, options, tools, turn
 from lib.proc_testing import fake_bin, path_with
 
-# Read off the modules that consume them rather than retyped, so a knob added there is cleared
-# here without anyone remembering to.
 LAND_ENV_KNOBS = (
     *options.ENV_KNOBS,
     tools.GATE_TMP_ROOT_ENV,
@@ -88,8 +86,6 @@ def verdict_record(tmp_path_factory, monkeypatch) -> Path:
     gives; the env var reaches the modules that run the real `land.sh` too.
     """
     path = tmp_path_factory.mktemp("verdicts") / "landing-verdicts.jsonl"
-    # `verdict_log.PATH_ENV`, spelled out so this directory still collects without the
-    # module; `test_the_env_var_overrides_the_default_path` pins the name.
     monkeypatch.setenv("LAND_VERDICT_LOG", str(path))
     return path
 

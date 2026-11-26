@@ -31,10 +31,8 @@
     reload
     loadbalance
     import /etc/coredns/custom/*.override
-    # The Pi-hole entry is the DNS Service's CLUSTER IP, not the LAN VIP. A cluster workload
-    # reaching a cluster Service through kube-proxy is unaffected by the LoadBalancer's
-    # externalTrafficPolicy: Local, which blackholes VIP traffic the MetalLB announcer would
-    # otherwise have to forward to another node.
+    # The Pi-hole entry is the Service's CLUSTER IP, not the LAN VIP: externalTrafficPolicy: Local
+    # blackholes VIP traffic.
     forward . {{ coredns_upstreams | join(' ') }} {
       policy sequential
       health_check {{ coredns_health_check }}

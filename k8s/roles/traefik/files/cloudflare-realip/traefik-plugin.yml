@@ -1,8 +1,6 @@
 ---
-# The plugin manifest. The Deployment projects this file as `.traefik.yml` next to the Go
-# source, which is the name Traefik reads. `import` must start with the moduleName that
-# static-config.yaml.j2 declares under experimental.localPlugins, or Traefik rejects the
-# plugin — and a rejected plugin disables EVERY plugin, the crowdsec bouncer included.
+# `import` must start with the moduleName in static-config.yaml.j2, or Traefik rejects the plugin; a
+# rejected plugin disables EVERY plugin, the crowdsec bouncer included.
 displayName: Cloudflare real IP
 type: middleware
 import: homelab/cloudflarerealip

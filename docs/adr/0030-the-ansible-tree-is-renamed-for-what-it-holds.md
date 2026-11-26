@@ -114,7 +114,7 @@ tree. [#8372](https://github.com/DanielH2018/server/issues/8372) dropped that la
   `(^|secrets/)hosts/daniel-pi\.sops\.yaml$`. Each rule then matches a path relative to
   `secrets/`, to the repo root, or absolute, and matches no file outside `secrets/`, so
   `sops --config secrets/.sops.yaml` run on any other file finds no rule.
-  The `sops-creation-rules-*` rows of `tests/repo/test_census_rows_roles.py` hold both halves. The generic rule matches a YAML
+  The `sops-creation-rules-*` rows of `tests/repo/census_rows/test_census_rows_roles.py` hold both halves. The generic rule matches a YAML
   file directly under `secrets/` or `secrets/cluster-manifests/`, and no per-host file. The
   plaintext rotation register matches it, and no command encrypts it.
 - The secret-rotation history walk reads `secrets.yml` at both paths. A `git log` on the new

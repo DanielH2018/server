@@ -94,8 +94,8 @@ def test_the_reconcile_returns_only_the_unlisted_volumes_to_default(monkeypatch)
         return {k.removeprefix(script.LABEL_PREFIX) for k in after}
 
     assert groups("ns/plain") == {"default"}
-    # The r2 list decides the target, not the group: keying the group on it would let a volume
-    # in no list fall out of every backup.
+    # The r2 list decides the target, not the group: keying the group on it would let a volume in no
+    # list fall out of every backup.
     assert groups("ns/r2-only") == {"default"}
     assert groups("ns/listed-out") == {"no-backup"}
     assert groups("ns/weekly") == {"no-backup"}

@@ -5,16 +5,16 @@
 # auth.log.
 
 # crowdsec_k8s_image / crowdsec_k8s_sidecar_agents / crowdsec_k8s_lapi_port /
-# crowdsec_k8s_appsec_port live in group_vars/all.yml — the app pods' sidecars and traefik's
+# crowdsec_k8s_appsec_port live in k8s/vars.yml — the app pods' sidecars and traefik's
 # bouncer middleware consume them too, and role defaults are invisible across roles.
 
 # Renovate stance: whether an image bump here may automerge. `promote` deploys what merges.
 # Platform: the in-cluster LAPI + AppSec + decision engine every bouncer (including traefik's
 # middleware) queries. A failed deploy could open or close traffic unpredictably fleet-wide.
 # Also Recreate + PVC (the decision DB) on its own state, which compounds the risk but isn't
-# the primary reason. crowdsec_k8s_image itself lives in group_vars/all.yml (shared with the
+# the primary reason. crowdsec_k8s_image itself lives in k8s/vars.yml (shared with the
 # traefik sidecar and bouncer middleware), not here — this declaration covers the role, and
-# renovate.json's `manual — k8s_autodeploy: false` rule names group_vars/all.yml beside this
+# renovate.json's `manual — k8s_autodeploy: false` rule names k8s/vars.yml beside this
 # file so the pin's bump opens without automerge like any denied role's.
 k8s_autodeploy: false
 k8s_autodeploy_reason: "platform — LAPI/AppSec/decision engine every bouncer queries; a failed deploy can open or close traffic unpredictably fleet-wide. COUPLING NOTE for a future promotion: crowdsec-db also holds LAPI machine registrations; a revert past an agent registration leaves that agent's stored password valid but the machine unknown"
@@ -111,7 +111,7 @@ crowdsec_k8s_home_ips_deadline_seconds: 240
 # How long a finished crowdsec-home-ips Job, and so its pod, stays visible. A run the weekly reboot
 # interrupts fails, and without a TTL it reads Failed until two later runs fail.
 # 30 minutes clears it inside the hour after boot
-# (tests/k8s/test_reboot_window_cronjobs_age_out.py); the run's output is in Loki past that.
+# (tests/k8s/flux/test_reboot_window_cronjobs_age_out.py); the run's output is in Loki past that.
 crowdsec_k8s_home_ips_job_ttl_seconds: 1800
 # The CronJob's one-off run per role revision, `crowdsec-home-ips-deploy-gate-<spec digest8>` in
 # `crowdsec-verify`. The run

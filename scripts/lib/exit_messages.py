@@ -31,8 +31,7 @@ from lib.exit_codes import contract
 # landing's on every landing, with nothing failing. One format, a prefix per entry point, one renderer.
 VERDICT_PREFIXES = {
     "scripts/deploy_tools/land.sh": "VERDICT",
-    # A landing runs `probe.py health` and its stdout can reach the landing's log, so the probe
-    # takes its own prefix for the reason the DECIDED note above gives.
+    # The probe takes its own prefix because its stdout can reach the landing's log.
     "scripts/diagnostics/probe.py": "PROBE-VERDICT",
 }
 

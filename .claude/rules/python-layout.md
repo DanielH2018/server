@@ -25,7 +25,7 @@ test that patches one leaves the other untouched.
 `pythonpath` in `pyproject.toml` is a pytest setting, so pytest resolving a bare import
 proves nothing about the cron or hook that runs it. It lists `scripts/` and no subdirectory of
 it, so a bare sibling import fails under pytest too. The `scripts-import-their-siblings-dotted`
-row of `tests/repo/test_census_rows_layout.py` flags one.
+row of `tests/repo/census_rows/test_census_rows_layout.py` flags one.
 
 A module that imports `host_lib`, `ci_verdict`, `builder_ci_grade`, `gh_quota` or a role module
 `scripts/lib/repo_paths.py:ROLE_MODULES` lists by bare name imports `lib.host_modules` first
@@ -48,7 +48,7 @@ one changes how pytest names the test modules under them.
 
 Three or more flat siblings sharing a first or last `_`-word, one of them an entrypoint, go in a
 `<prefix>_lib/` package beside it, as `land_lib/` does. The `module-families-live-in-a-package`
-row of `tests/repo/test_census_rows_layout.py` enforces it.
+row of `tests/repo/census_rows/test_census_rows_layout.py` enforces it.
 
 Verify a moved or new entry point by RUNNING it (`uv run python scripts/<dir>/<name>.py
 --help`). The suite cannot see a missing bootstrap.
@@ -59,15 +59,30 @@ Verify a moved or new entry point by RUNNING it (`uv run python scripts/<dir>/<n
 `tests/`, a role's own logic under `k8s/roles/<role>/tests/` (the code stays
 in `files/`, which the role ships), guards over the host packages and their components in
 `hosts/tests/`, the Bash classifier in `.claude/hooks/tests/`, and `scripts/<dir>/tests/`.
-`tests/repo/test_testpaths_covers_every_test_file.py` enforces
+`tests/repo/suite/test_testpaths_covers_every_test_file.py` enforces
 it.
+
+**A suite is grouped by subject.** A directory holds at most 40 test modules. A larger suite is
+split into subject directories, named for the family its tests share
+(`scripts/dev/tests/fanout/`, `findings/`), and then holds no test module beside them. A new test
+goes in the group for its subject. Four rules keep a group collectable:
+
+- A module keeps its basename when it moves, family prefix included.
+- A helper that several groups import (`_fanout_fakes.py`) stays at the suite's root with a
+  `conftest.py`, because pytest prepends a conftest's directory to `sys.path`. The suite's root
+  is in `[tool.ty.environment] extra-paths`. A helper one group imports moves with it.
+- A test module that imports another test module sits in the same group as it.
+- A group takes no name that a `pythonpath` root holds, such as `lib`, `bridge` or `checks`.
+
+The `test-modules-are-grouped-by-subject` row of `tests/repo/census_rows/test_census_rows_layout.py` enforces
+the cap and the grouping. Its `allow` names each suite that is still flat.
 
 A role test imports its own role's `files/` modules by bare name: `k8s/conftest.py`
 puts that one directory on `sys.path`. A module shared across roles goes on `pythonpath`. A
 role that ships a `files/*.py` with logic gets a `tests/` directory. A top-level `files/*.py`
 needs a basename no other role's `files/` or `pythonpath` root uses, because a full run shares
 one session; the `no-two-import-roots-share-a-module-basename` row of
-`tests/repo/test_census_rows_python.py` enforces it.
+`tests/repo/census_rows/test_census_rows_python.py` enforces it.
 
 `tests/` is grouped by what a guard reads: `deploy/`, `k8s/`, `longhorn/`, `staging/`,
 `services/` (one role each) and `repo/` (CI, docs and the suite's own guards). A guard over the
@@ -76,37 +91,37 @@ host packages and their components under `hosts/` goes in `hosts/tests/`. The sh
 `tests/`, which `pythonpath` puts in reach of `hosts/tests/` too. A new guard keeps a unique basename, since pytest names modules by basename alone.
 
 **A one-selector, one-predicate check is a row, not a file.**
-- A property of the rendered k8s manifests goes in `tests/k8s/test_rendered_properties.py`,
+- A property of the rendered k8s manifests goes in `tests/k8s/rendered_properties/test_rendered_properties.py`,
   or in one of the `_*_property_rows.py` files beside it once that file nears the line cap.
   Extra reject and accept cases go in `more_red` and `more_green`.
 - A textual census of the tracked tree goes in a `Census` row of
-  `tests/repo/test_census_rows_python.py`, `test_census_rows_text.py`,
+  `tests/repo/census_rows/test_census_rows_python.py`, `test_census_rows_text.py`,
   `test_census_rows_roles.py`, `test_census_rows_layout.py` or `test_census_rows_suite.py`.
   A rule over the test modules goes in `scripts/tests/test_census_rows_test_modules.py` or
   `test_census_rows_test_renders.py`.
 - A property of a GitHub Actions workflow or action goes in a row of
-  `tests/repo/test_census_rows_workflows.py`, from the `_*_workflow_rows.py` module for its
+  `tests/repo/census_rows/test_census_rows_workflows.py`, from the `_*_workflow_rows.py` module for its
   workflow. `tests/repo/_workflow_rows.py:judge` runs a rule over the parsed file, and
   `tests/repo/_workflow_rows.py:mutants` builds the red half as the real file with one property
   broken.
 - An ordering or flag rule over an operator-only runbook's section goes in a `RunbookRule`
-  row of `tests/repo/test_runbook_rules.py`: the doc, the heading, the unit, a selector, and
+  row of `tests/repo/census_rows/test_runbook_rules.py`: the doc, the heading, the unit, a selector, and
   the strings it requires, the pattern it forbids or the step that must come first.
 - `tests/_row_table.py` is the harness the tables share. A property over a second render is
   still a row: it passes that render as the row's `source` (`_prepull_property_rows.py`).
   One needing a long exemption list keeps its own file.
-- The `a-single-predicate-check-is-a-row` row of `tests/repo/test_census_rows_suite.py`
+- The `a-single-predicate-check-is-a-row` row of `tests/repo/census_rows/test_census_rows_suite.py`
   refuses a module in any directory under `tests/` that reads tracked text, by a walk or by
   one file's path, and runs no code: no subprocess other than `git ls-files`, no render and
   no scratch tree, whatever its number of test functions. A call into the `renderer`
-  package or `tests/k8s/_property_table.py` counts as a render. A file that must stay
+  package or `tests/k8s/rendered_properties/_property_table.py` counts as a render. A file that must stay
   one goes in that row's `allow`, with a reason naming the join or the render that keeps it.
 
 ## A new check ships with a proof it can go red
 
 Any validator, guard, health check or probe lands with a paired test: one input it must
 accept, one it must reject. Without the rejecting half there is no evidence it can fail.
-`scripts/validate/tests/test_render_compose.py` is the worked example: name the
+`scripts/validate/tests/renders/test_render_compose.py` is the worked example: name the
 pair `..._is_clean` / `..._is_flagged`.
 
 ## A check that finds its subject by pattern names a member it must find
@@ -114,7 +129,7 @@ pair `..._is_clean` / `..._is_flagged`.
 A guard that globs for its files returns an EMPTY set once they are renamed or moved, and an
 `all(...)` over nothing passes. Assert non-vacuity against a frozenset of names the census must
 contain, so the failure names the member that went missing. `KNOWN_CONSUMERS` in
-`scripts/diagnostics/tests/test_probe_boundaries.py` is the worked example.
+`scripts/diagnostics/tests/probe_cli/test_probe_boundaries.py` is the worked example.
 
 ## A check that reaches over a network measures its transport first
 
@@ -138,5 +153,5 @@ tests. It is not a third condition: a check that never fails can still be load-b
 
 A check that pins a skill's restatement of a tool's enum retires in the PR that makes the tool
 print its own contract. Drop the check's `ENFORCED` citation in the same PR:
-`tests/repo/test_documented_paths_exist.py::test_every_cited_test_exists` fails on a
+`tests/repo/docs/test_documented_paths_exist.py::test_every_cited_test_exists` fails on a
 node id that no longer resolves.

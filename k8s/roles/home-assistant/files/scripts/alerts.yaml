@@ -1,12 +1,8 @@
 ---
 # Notification routing (bedroom_notify) and the light alert pulse. Conventions: see README.md in this directory.
 
-# Air-quality alert pulse: a brief red flash to flag bad air, then restore EXACTLY what was
-# showing. Snapshots the current light state into a throwaway scene, flashes red, and restores
-# the snapshot — so a manual scene / the morning ramp / Adaptive Lighting all come back intact
-# (vs. forcing AL and clobbering a chosen scene). Caller (bedroom_threshold_alert) gates this
-# on the lights already being on and calls it as a blocking service, so calls serialize and the
-# snapshot can never capture the red pulse itself. mode: single is belt-and-suspenders on that.
+# Snapshot into a throwaway scene, flash, restore; the caller's blocking call keeps the snapshot
+# clean.
 bedroom_alert_pulse:
   alias: "Bedroom — air-quality alert pulse"
   description: >-
@@ -34,13 +30,8 @@ bedroom_alert_pulse:
       data:
         transition: 0.5
 
-# Routed notification: the single cross-cutting layer EVERY bedroom alert calls. Picks the Android
-# channel + importance from the alert's flags and the live "quiet" state (phone DND on OR sleep mode
-# on): `pierce` always sounds (high importance — can bypass DND if you allow the "Bedroom critical"
-# channel in Android); otherwise silent (low) while quiet, default when not. `watch` also mirrors to
-# the Pixel Watch. Flags default false so a bare call is routine + phone-only. ONE-TIME phone setup:
-# mark the "Bedroom critical" channel as a DND exception (Settings → Apps → Home Assistant →
-# Notifications) after the first critical alert creates it — high importance alone doesn't pierce DND.
+# `pierce` always sounds; otherwise silent while quiet. One-time: mark the "Bedroom critical"
+# channel a DND exception.
 bedroom_notify:
   alias: "Bedroom — routed notification"
   description: >-
@@ -96,10 +87,7 @@ bedroom_notify:
         # Fails open: an unknown or unavailable tracker reads as home, so the alert pushes.
         away: "{{ states('person.daniel') not in ['home', 'unknown', 'unavailable'] }}"
         route: "{% from 'notify.jinja' import notify_route %}{{ notify_route(away, alert_class | default(''), pierce | default(false), recovery | default(false)) }}"
-    # Away-hold: an alert that can wait is parked in sensor.bedroom_held_alerts, keyed by tag, and
-    # bedroom_flush_held_notifications delivers the parked alerts as one digest on arrival.
-    # A recovery that arrives while away removes the parked alert, so a condition that clears
-    # before anyone returns is never shown.
+    # Away-hold: alerts that can wait are parked by tag and delivered as one digest on arrival.
     - if: "{{ route == 'cancel' }}"
       then:
         - event: bedroom_held_alert
@@ -119,8 +107,6 @@ bedroom_notify:
             tag: "{{ tag }}"
             title: "{{ title }}"
             message: "{{ message }}"
-        # The alert stops here only once the store shows it. A store that did not take it leaves
-        # the alert on the push path below, so a broken store costs a late push, not a lost alert.
         - wait_template: >-
             {{ state_attr('sensor.bedroom_held_alerts', 'held') is mapping
                and tag in state_attr('sensor.bedroom_held_alerts', 'held') }}
@@ -129,21 +115,9 @@ bedroom_notify:
         - if: "{{ wait.completed }}"
           then:
             - stop: "held while away"
-    # Visibility fallback for the ELEVATED tiers (pierce / watch / pushed while away): the alert ALSO lands
-    # in the HA UI as a persistent notification, so a critical/elevated event stays visible even if the
-    # mobile push fails. It runs BEFORE the pushes because a re-paired phone or watch renames its
-    # notify.mobile_app_* service, and the resulting ServiceNotFound aborts the script at that push even
-    # under continue_on_error (HA re-raises configuration errors).
-    # This is the backstop the runtime-error alert
-    # can't be: it deliberately ignores script.bedroom_notify's OWN logger to avoid a loop, so a broken
-    # notify service is otherwise invisible for these tiers (sensor-offline, air quality, extreme-temp
-    # away, UPS). notification_id = tag (a repeat replaces in place); a recovery — every recovery
-    # call-site passes recovery: true with the SAME tag — DISMISSES it once the condition clears.
-    # Severe air quality sets `pierce` but sends NO recovery push (cfg.recovery false) — the moderate
-    # recovery covers the all-clear; its persistent note is instead dismissed directly by the threshold
-    # automation's recovery else-branch (bedroom_threshold_alert) so the UI doesn't keep showing HIGH
-    # after recovery. Routine phone-only alerts (battery/humidity, and most recoveries) create no note;
-    # a stray dismiss of an absent id no-ops.
+    # Elevated tiers also land as a persistent notification, BEFORE the pushes: a renamed notify
+    # service raises ServiceNotFound and aborts the script. notification_id = tag; a same-tag
+    # recovery dismisses it.
     - choose:
         - conditions: "{{ recovery | default(false) }}"
           sequence:
@@ -157,8 +131,6 @@ bedroom_notify:
                 notification_id: "{{ tag }}"
                 title: "{{ title }}"
                 message: "{{ message }}"
-    # continue_on_error covers a failed delivery only. A renamed service still aborts here, which is
-    # why the fallback above runs first and every caller puts its own state changes before its notify.
     - service: notify.mobile_app_pixel_9_pro
       continue_on_error: true
       data:
@@ -168,8 +140,6 @@ bedroom_notify:
           tag: "{{ tag }}"
           channel: "{{ channel }}"
           importance: "{{ importance }}"
-          # Action buttons (empty list = none). Taps fire mobile_app_notification_action ->
-          # bedroom_notification_action dispatches on the BEDROOM_* action id.
           actions: "{{ actions | default([]) }}"
     - if: "{{ watch | default(false) }}"
       then:

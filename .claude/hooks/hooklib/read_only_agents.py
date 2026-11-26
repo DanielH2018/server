@@ -68,8 +68,8 @@ def read_only_agents(agents_dir=_AGENTS_DIR):
     return names
 
 
-# A write that changes nothing the repo, the cluster or GitHub holds. `2>/dev/null` is in nearly
-# every reviewer command, and a scratch file under /tmp is how an agent stages a payload to read.
+# A write that changes nothing the repo, the cluster or GitHub holds: `2>/dev/null` and scratch
+# files under /tmp.
 _SCRATCH_PREFIXES = (
     "/dev/",
     "/tmp/",
@@ -93,8 +93,8 @@ def _is_scratch(path):
     return (target + "/").startswith(_SCRATCH_PREFIXES)
 
 
-# git subcommands that write nothing whatever their arguments. `fetch` is not one: a refspec
-# such as `+x:refs/heads/master` rewrites a local branch in the `.git` every worktree shares.
+# `fetch` is not read-only: a refspec such as `+x:refs/heads/master` rewrites a branch in the shared
+# `.git`.
 _GIT_READS = {
     "status",
     "log",
@@ -211,8 +211,8 @@ def _git_problem(stage):
         for a in args
     ):
         return "names a command for git to run"
-    # `--output=<file>` writes the diff under every subcommand that takes diff options, and
-    # `git grep -O<cmd>` runs a command on the matches.
+    # `--output=<file>` writes under any subcommand taking diff options; `git grep -O<cmd>` runs a
+    # command.
     if any(a.split("=", 1)[0] == "--output" for a in args):
         return "writes git output to a file"
     if inv.sub == "grep" and any(
@@ -228,8 +228,6 @@ def _git_problem(stage):
     return f"runs `git {inv.sub}`, which is not in the read-only set"
 
 
-# `gh <group> <verb>` verbs that only read. Every other verb comments, merges, edits, creates,
-# closes, reruns or downloads.
 _GH_READ_VERBS = {"view", "list", "ls", "status", "diff", "checks", "watch"}
 _GH_READ_GROUPS = {"search", "status", "help", "version", "--version"}
 _GH_VALUE_FLAGS = {"-R", "--repo", "--hostname"}
@@ -449,8 +447,7 @@ def read_only_reason(command, repo_root, written_paths, depth=0):
     for path in written_paths(command):
         if not _is_scratch(path):
             return f"redirects output into `{path}`"
-    # `written_paths` drops a `$VAR/...` target, since it cannot resolve it. Here a target the
-    # hook cannot resolve counts as a write: `> $PWD/CLAUDE.md` is one.
+    # A target the hook cannot resolve counts as a write, such as `> $PWD/CLAUDE.md`.
     if _VARIABLE_REDIRECT.search(command):
         return "redirects output into a path held in a shell variable"
     try:

@@ -30,8 +30,6 @@ KEY = "fixture-key"
 DEFAULTS = yaml_fast.safe_load((K8S_ROLES / "lidarr/defaults/main.yml").read_text())
 PROFILES = DEFAULTS["lidarr_quality_profiles"]
 
-# Lidarr's own quality names and ids, in the order its schema lists them, cut to the ones the
-# declarations name plus a neighbour of each kind (a 24-bit FLAC, a lower MP3, a Vorbis tier).
 QUALITIES = [
     (0, "Unknown"),
     (1, "MP3-192"),

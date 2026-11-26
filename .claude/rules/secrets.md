@@ -1,7 +1,10 @@
 ---
 paths:
   - "secrets/**"
-  - "inventory/**"
+  - "estate/**"
+  - "k8s/vars.yml"
+  - "hosts/vars.yml"
+  - "hosts/*/vars.yml"
   - "secrets/.sops.yaml"
 ---
 
@@ -20,9 +23,10 @@ reads a value as `{{ name }}`. Flux decrypts the cluster's SOPS file with the cl
   updated secrets are encrypted to. SOPS searches upward from its working directory, so run
   `sops` from `secrets/` or pass `--config secrets/.sops.yaml`.
 - `.sops.yaml` gives a creation rule to a `.yml` or `.yaml` under `secrets/` only.
-  **`inventory/` is NOT auto-encrypted and NOT hook-guarded** — a secret pasted into
-  `host_vars`/`group_vars` would be committed in plaintext (gitleaks may catch it, but don't rely
-  on that). Keep secrets in `secrets/secrets.yml` and reference them from inventory, never inline them.
+  **The vars files (`estate/vars.yml`, `k8s/vars.yml`, `hosts/vars.yml`, `hosts/<host>/vars.yml`) are
+  NOT auto-encrypted and NOT hook-guarded** — a secret pasted into one would be committed in plaintext
+  (gitleaks may catch it, but don't rely on that). Keep secrets in `secrets/secrets.yml` and reference
+  them from a vars file, never inline them.
 - Key names stay plaintext in the encrypted file, so `grep -c '^<name>:'` on it checks that a key
   exists, and `grep -c '^<name>: ENC\['` checks that its value is ciphertext. Both print a count,
   never a value.

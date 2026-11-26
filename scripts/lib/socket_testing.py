@@ -19,7 +19,7 @@ Import it from any test, at any depth. `pyproject.toml` puts `scripts/` on `pyth
     with short_socket_path() as sock, listening(sock) as listener:
         ...
 
-Run: uv run pytest scripts/lib/tests/test_socket_testing.py
+Run: uv run pytest scripts/lib/tests/utils/test_socket_testing.py
 """
 
 import shutil

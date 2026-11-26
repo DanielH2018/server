@@ -33,17 +33,17 @@ routed tenant of the retired Docker edge.
 - **A stateless `RollingUpdate` Deployment with one replica.** The default surge starts the
   new pod before the old one stops, so a roll keeps one pod serving.
 - **Pinned to `k8s_primary_node` (daniel-box), not preferred.** `read_file` and `list_files`
-  serve the node's checkout of `k8s/`, `inventory/` and `tests/` through read-only hostPath
+  serve the node's checkout of `k8s/`, `estate/` and `tests/` through read-only hostPath
   mounts under `/srv/homelab-src` (`homelab_mcp_source_dirs`). Only daniel-box's package ships
   `checkout-sync`, so only its checkout stays at origin/master. A cordoned or down daniel-box
   leaves the pod Pending rather than serving a stale tree
-  (`tests/services/test_homelab_mcp_source_mounts.py`).
+  (`tests/services/apps/test_homelab_mcp_source_mounts.py`).
 - **RBAC:** `templates/rbac.yaml.j2` grants a dedicated `homelab-mcp` ServiceAccount
   `get`/`list` on pods, `pods/log`, nodes, deployments and daemonsets — no `watch`, no
   secrets, no exec. Deliberately narrower than the shell's own read-only ServiceAccount.
 - **Secrets** (SOPS keys, not values): `homelab_mcp_token`, `claude_ha_token`.
 - **Flux applies it.** Its `containers_list` entry is
-  in `cluster/services.yml`, so nothing applies it by hand, and a merged change reaches the cluster when
+  in `k8s/services.yml`, so nothing applies it by hand, and a merged change reaches the cluster when
   `promote` publishes and verifies the next bundle. Its Kustomization's `dependsOn` names no other
   role, because the role renders no route.
 - **The token Secret substitutes from `homelab-cluster-vars`.** `homelab_mcp_token` and
@@ -80,7 +80,7 @@ routed tenant of the retired Docker edge.
 - **Every Prometheus and Loki read goes through `obs_api`**, the client probe.py and
   postflight share (`scripts/diagnostics/probe_lib/obs_api.py`, #2860). The image carries it
   flat at `/app/obs_api.py`, so it stays stdlib-only with no first-party import;
-  `scripts/diagnostics/tests/test_obs_api.py` imports it with `scripts/` off the path. The file
+  `scripts/diagnostics/tests/probe_alerts/test_obs_api.py` imports it with `scripts/` off the path. The file
   is part of the build context, so a merged edit to it alone moves homelab-mcp's content tag,
   and the next promotion builds the image and rolls the pod.
 - The build paths in `defaults/main.yml` come from `role_file()`. The render context resolves

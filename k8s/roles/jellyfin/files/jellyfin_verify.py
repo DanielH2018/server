@@ -33,8 +33,7 @@ import sys
 from collections.abc import Mapping
 from pathlib import Path
 
-# The library roots Jellyfin's database stores, relative to its `/data` mount. `media/tv` is
-# the second mount, which janitorr's leaving-soon symlinks resolve through.
+# `media/tv` is the second mount, which janitorr's leaving-soon symlinks resolve through.
 LIBRARY_ROOTS = ("tv", "movies", "media/tv")
 # Present only when the volume root is mounted instead of its `media` subdirectory.
 ROOT_ONLY = "torrents"

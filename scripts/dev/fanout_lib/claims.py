@@ -9,9 +9,6 @@ branch instead, by `fanout_lib.launch`.
 import re
 import subprocess
 
-# Reach the sibling package: a directly-invoked script gets only its own directory on
-# sys.path, and pyproject's `pythonpath` is a pytest setting.
-
 
 from dev.fanout_lib.brief import WORKED_BY
 from dev.fanout_lib.target import Target

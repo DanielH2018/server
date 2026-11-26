@@ -20,7 +20,7 @@ import re
 
 from _agent_package import render_daniel_server_with
 from _helpers import load_yaml
-from lib.repo_paths import HOST_VARS
+from lib.estate import host_vars
 from _setup_render import CLAUDE_CODE, render_component_text, role_context
 
 ROLE = CLAUDE_CODE
@@ -129,8 +129,8 @@ def test_an_empty_source_never_reaches_delete():
 
 def test_armed_only_on_daniel_box_and_disarming_drops_the_units(tmp_path):
     assert DEFAULTS["claude_code_memory_sync_enabled"] is False
-    box = load_yaml(HOST_VARS / "daniel-box.yml")
-    server = load_yaml(HOST_VARS / "daniel-server.yml")
+    box = host_vars("daniel-box")
+    server = host_vars("daniel-server")
     assert box.get("claude_code_memory_sync_enabled") is True
     assert not server.get("claude_code_memory_sync_enabled", False), (
         "daniel-server must never push: it would overwrite the store sessions write"

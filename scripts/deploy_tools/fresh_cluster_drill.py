@@ -34,7 +34,8 @@ from lib import yaml_fast
 from lib.cli_help import ArgumentParser
 from lib.exit_codes import FAILED, OK
 from lib.k8s_conditions import ConditionStatus
-from lib.repo_paths import ALL_VARS, K8S_ROLES
+from lib.estate import shared_vars
+from lib.repo_paths import K8S_ROLES
 from renderer.deletion_drill import (
     FLUX_DEFAULTS,
     FLUX_NAMESPACE,
@@ -132,7 +133,7 @@ def archive(layout: Path, ref: str, out: Path) -> None:
 
 def kind_config() -> dict:
     """A kind cluster on the k3s CIDRs, so the registry's pinned ClusterIP is in range."""
-    found = yaml_fast.safe_load(ALL_VARS.read_text())
+    found = shared_vars()
     return {
         "kind": "Cluster",
         "apiVersion": "kind.x-k8s.io/v1alpha4",

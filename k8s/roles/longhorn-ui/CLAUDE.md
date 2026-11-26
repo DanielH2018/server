@@ -13,7 +13,7 @@ else (`k8s/roles/longhorn-ui/defaults/main.yml:manifests_exclude_files`).
 <!-- /generated_from -->
 
 - **Flux applies it.** Its `containers_list` entry
-  is in `cluster/services.yml`, so nothing applies it by hand, and a
+  is in `k8s/services.yml`, so nothing applies it by hand, and a
   merged change reaches the cluster when `promote` publishes and verifies the next bundle.
 - **Its render.** Three settings shape it:
     - Every object carries `namespace: longhorn-system` in its template, and

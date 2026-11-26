@@ -31,10 +31,8 @@ from lib.longhorn_lib import longhorn_backups
 # The one file an operator runs; both reapers name it in their `--apply` re-run hint.
 ENTRY_POINT = _Path(__file__).resolve().parents[1] / "longhorn_reap.py"
 
-# Groups that name no RecurringJob CR by design, hardcoded because this module reads no file.
-# The sentinel's angle brackets cannot collide with a DNS-1123 RecurringJob name, nor
-# prefix-match a snapshot's truncated `RecurringJob` label. ENFORCED:
-# tests/longhorn/test_longhorn_reap_opt_out_groups.py::test_every_jobless_storageclass_group_is_a_known_opt_out
+# Groups that name no RecurringJob CR by design. The sentinel's angle brackets cannot collide with a
+# RecurringJob name.
 OPT_OUT_GROUPS = frozenset({longhorn_backups.NO_BACKUP_GROUP})
 OWNER_NO_JOB_BY_DESIGN = "<no job by design>"
 
@@ -79,8 +77,8 @@ def parse_int_env(name: str, raw: str) -> tuple[int, str]:
         return 0, "%s expects an integer, got: %s" % (name, raw)
 
 
-# Margin the CLIENT-side subprocess cap carries over kubectl's own server-side --timeout, so the
-# subprocess can never fire first and report a still-running delete as FAILED.
+# Keeps the client subprocess cap above kubectl's server-side --timeout, so a running delete is
+# never reported FAILED.
 DELETE_TIMEOUT_MARGIN_S = 30
 
 
@@ -397,9 +395,6 @@ def classify_backups(
     valid = [b for b in longhorn_backups.from_items(backups) if b.name and b.volume]
     labelled = [b for b in longhorn_backups.completed(valid) if b.job]
 
-    # `labelled` is the set at risk: the orphan loop below iterates it and nothing else. Only
-    # rule 2 is asked -- the entry point already checked ownership against the real volume list,
-    # and `owner` here legitimately omits any volume carrying no group label.
     abort = abort_reason(volume_count=len(existing_volumes), backup_count=len(labelled))
     if abort:
         raise ReapAbort(abort)
@@ -428,11 +423,8 @@ def classify_backups(
             continue
 
         if parse_rfc3339_epoch(created) is None:
-            # `newest_first` sorts a stamp that does not parse -- "" included -- as the OLDEST,
-            # so it sorts LAST within its volume's group and can never win the FLOOR 2
-            # newest-stray slot below, leaving it to fall through to `.candidates` and be
-            # deleted on the strength of an unknown age. Longhorn populates this field on
-            # completion, so this is unreached in practice. Keep it rather than guess.
+            # An unparseable stamp sorts oldest, so it would fall through to `.candidates` on an
+            # unknown age; keep it instead.
             result.kept.append((name, vol, "unparseable snapshotCreatedAt"))
             continue
 
@@ -538,8 +530,7 @@ class Snapshot:
             volume=(s.get("spec") or {}).get("volume", ""),
             created=status.get("creationTime", ""),
             job=(status.get("labels") or {}).get("RecurringJob", ""),
-            # An unpopulated markRemoved (a snapshot read moments after creation) is absent,
-            # not `false`; it reads as not-removed. R14.
+            # An unpopulated markRemoved is absent, not `false`; it reads as not-removed.
             removed=bool(status.get("markRemoved", False)),
         )
 

@@ -26,8 +26,6 @@ CONTEXT = "prek (lint + validate + tests + secrets)"
 # The wall-clock time `decide` runs at, so a gate status's age is fixed.
 NOW = datetime(2026, 10, 16, 12, 0, tzinfo=UTC)
 CONTEXTS_YAML = f"ci_required_contexts:\n  - {CONTEXT}\n"
-# The weekly reboot as group_vars/all.yml states it: the cron fires Sunday 07:30 UTC, the hosts
-# go down at 07:35 and M2's mute ends at 08:15. NOW is a Friday, outside every window.
 REBOOT_YAML = (
     "weekly_reboot_minute: 30\nweekly_reboot_hour: 7\nweekly_reboot_weekday: 0\n"
     "weekly_reboot_shutdown_delay_minutes: 5\nweekly_reboot_timezone: UTC\n"
@@ -39,8 +37,6 @@ def digest_of(name: str) -> str:
     return "sha256:" + hashlib.sha256(name.encode()).hexdigest()
 
 
-# The bundle a commit with no published tag rendered before D3.3a: D1's empty root and the
-# renderer's digests.json for no tag. From D3.3a such a commit publishes the shared kinds.
 EMPTY_ROOT = (
     b"apiVersion: kustomize.config.k8s.io/v1beta1\nkind: Kustomization\nresources: []\n"
 )
@@ -130,8 +126,6 @@ class FakeTransport:
             return self._registry(method, parts.path)
         match = re.fullmatch(r"/repos/[^/]+/[^/]+/commits/(\w+)/check-runs", parts.path)
         if parts.netloc == "api.github.com" and match:
-            # One page holds every run a fake commit carries; `total_count` is what the reader
-            # checks its read against, as GitHub's endpoint reports it.
             runs = self.check_runs.get(match.group(1), [])
             body = {"total_count": len(runs), "check_runs": runs}
             return forge.Response(200, body=json.dumps(body).encode())
@@ -323,7 +317,7 @@ class World:
         self.repo.mkdir()
         self.tmp_path = tmp_path
         _git(self.repo, "init", "-q", "-b", "master")
-        # The contexts and the reboot schedule are both keys of group_vars/all.yml since H7.2e.
+        # The contexts and the reboot schedule are both keys of estate/vars.yml.
         assert promote.CI_CONTEXTS_SOURCE == str(reboot_window.SOURCE)
         source = self.repo / promote.CI_CONTEXTS_SOURCE
         source.parent.mkdir(parents=True)

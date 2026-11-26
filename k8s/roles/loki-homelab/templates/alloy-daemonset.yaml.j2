@@ -1,12 +1,6 @@
 {% from 'container-resources.yml.j2' import container_resources with context %}
 {% from 'workload-shell.yml.j2' import pod_shell with context %}
 ---
-# The cluster pod-log shipper, Grafana Alloy. A DaemonSet (not a Deployment) so a joining node
-# adds its own pod and host logs automatically. The config it runs is
-# templates/config/config.alloy.j2.
-#
-# This is NOT the only shipper: daniel-pi runs its own Docker copy
-# (roles/containers/alloy/) and pushes over the LAN through ingressroute-push.yaml.j2.
 apiVersion: v1
 kind: ServiceAccount
 metadata:
@@ -47,8 +41,8 @@ spec:
   template:
     metadata:
       labels:
-        # `app: alloy` is what netpol-baseline's loki-homelab policy admits and what the
-        # observability Prometheus job keeps — both move with this label.
+        # `app: alloy` is what netpol-baseline's loki-homelab policy and the observability
+        # Prometheus job match.
         app: alloy
         netpol-baseline: enforced
     spec:
@@ -60,8 +54,7 @@ spec:
           args:
             - run
             - /etc/alloy/config.alloy
-            # Alloy binds 127.0.0.1 by default; the probes and the Prometheus scrape need the
-            # pod IP.
+            # Alloy binds 127.0.0.1 by default; the probes and scrape need the pod IP.
             - --server.http.listen-addr=0.0.0.0:12345
             # The tailing cursor lives here — see the positions volume below.
             - --storage.path=/var/lib/alloy/data
@@ -70,9 +63,8 @@ spec:
             # never resolves.
             - --disable-reporting
           env:
-            # The node name, for the `machine` label and the discovery field selector. A pod's
-            # own HOSTNAME is the POD name, which would label every stream with a value that
-            # changes on every restart and match no node in the selector.
+            # A pod's own HOSTNAME is the pod name, which changes on restart and matches no node in
+            # the selector.
             - name: HOSTNAME
               valueFrom:
                 fieldRef:
@@ -90,8 +82,6 @@ spec:
             httpGet:
               path: /-/ready
               port: http-metrics
-            # A generous cold-start budget rather than Loki's tight 60s/30s: the shipper's
-            # readiness waits on discovery, which is slower and less predictable than a store's.
             initialDelaySeconds: 60
             periodSeconds: 30
             failureThreshold: 10
@@ -102,9 +92,8 @@ spec:
               drop:
                 - ALL
               add:
-                # syslog/auth.log are owned by the `syslog` user (640), so root WITHOUT
-                # this cannot read them — the recurring root-without-DAC lesson, read-only
-                # variant. Same cap the Docker shipper on the Pi carries for the same files.
+                # syslog and auth.log are 640 syslog-owned, so root needs DAC_READ_SEARCH to read
+                # them.
                 - DAC_READ_SEARCH
           volumeMounts:
             - name: alloy-config
@@ -112,23 +101,13 @@ spec:
             - name: alloy-varlog
               mountPath: /var/log
               readOnly: true
-            # The tailing cursor — losing it re-reads every log from the start, which is
-            # what the Loki ingest limits guard against.
             - name: alloy-positions
               mountPath: /var/lib/alloy/data
 {% if k3s_audit_log_enabled | default(false) %}
-            # The apiserver audit log, mounted at its real host path so the config's path
-            # needs no translation. Read-only: nothing here should ever write to the control
-            # plane's data directory.
             - name: k8s-audit
               mountPath: {{ k3s_audit_log_dir }}
               readOnly: true
 {% endif %}
-          # 1 core: a shipper's work arrives in bursts as log lines do, and a lower quota only
-          # throttles them. The request (50m) is what reserves capacity under contention.
-          # Memory: RSS peaks near 122Mi, and page cache grows to about 180Mi until the limit
-          # reclaims it, so 384Mi keeps the working set well below the limit; the request covers
-          # RSS.
 {{ container_resources(cpu_limit='1', mem_limit='384Mi', cpu_request='50m', mem_request='128Mi') }}
       volumes:
         - name: alloy-config
@@ -142,18 +121,14 @@ spec:
             path: /var/log
         - name: alloy-positions
           hostPath:
-            # A directory of its own: Alloy cannot read Promtail's positions.yaml, and sharing
-            # one would leave a stale file beside the live cursor forever.
+            # A directory of its own: Alloy cannot read Promtail's positions.yaml.
             path: /var/lib/alloy-positions
             type: DirectoryOrCreate
 {% if k3s_audit_log_enabled | default(false) %}
         - name: k8s-audit
           hostPath:
             path: {{ k3s_audit_log_dir }}
-            # DirectoryOrCreate, not Directory: this DaemonSet also lands on daniel-server,
-            # which has no apiserver and therefore no such directory. `Directory` would leave
-            # that pod stuck in ContainerCreating, taking the node's syslog and pod tailing
-            # down with it — a mount for a file one node does not have must not be able to
-            # stop the other logs that pod is responsible for.
+            # DirectoryOrCreate, not Directory: daniel-server has no apiserver directory, and
+            # Directory would stick its pod in ContainerCreating.
             type: DirectoryOrCreate
 {% endif %}

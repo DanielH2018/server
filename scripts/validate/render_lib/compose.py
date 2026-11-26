@@ -6,7 +6,7 @@ variables are stubbed, so no access to the SOPS-encrypted ``secrets.yml`` is
 needed.
 
 The service set and per-service parameters are taken from the real
-``compose_services`` in each ``inventory/host_vars/*.yml`` file (the Pi package's Compose
+``compose_services`` in each ``hosts/<host>/vars.yml`` file (the Pi package's Compose
 project, H5), so each ``hosts/components/pi-compose/services/<name>/compose.yaml.j2`` is
 exercised with the same shape it is deployed with (port, hostname, networks,
 use_authelia). Commented-out services are skipped automatically (they are not in
@@ -21,15 +21,11 @@ import yaml
 
 from lib import yaml_fast
 from validate.validate_lib.shipped_render import render_shipped
+from lib.estate import Estate
 from lib.render_context import render_context
 from lib.repo_paths import REPO
-from lib.render_guard import (
-    HOST_VARS,
-    dump_numbered,
-    host_layer,
-)
+from lib.render_guard import dump_numbered
 
-# The Pi package's services (H5): one `compose.yaml.j2` tree per `compose_services` entry.
 COMPONENT_SERVICES = REPO / "hosts" / "components" / "pi-compose" / "services"
 
 
@@ -101,27 +97,21 @@ def find_watchtower_label_bugs(docs) -> list[tuple[str, str]]:
     return bugs
 
 
-# Documented exceptions to the cap_drop: [ALL] policy (service -> why). Keep SMALL and
-# justified — the baseline expectation is that EVERY service drops all caps and adds back only
-# what it proves it needs. These three need broad host/device access by design (verified in the
-# security reviews); everything else drops ALL.
+# Keep SMALL and justified: every service drops all caps and adds back only what it proves it needs.
+# These need broad host/device access by design.
 CAP_DROP_EXEMPT: dict = {
     "cadvisor": "needs host-wide introspection (cgroups/proc, SYS_PTRACE) to read every container's stats",
     "scrutiny-web": "LSIO web UI verified to need its default caps; no-cap_drop is accepted/documented",
     "scrutiny-collector": "SMART collector runs smartctl against raw block devices (needs SYS_RAWIO/SYS_ADMIN)",
 }
 
-# Companion to CAP_DROP_EXEMPT for the `security_opt: [no-new-privileges:true]` baseline. Every
-# service should set it (it blocks a setuid binary from re-gaining a dropped capability); a service
-# that legitimately can't goes here with a reason. Kept empty until a real exception appears — the
-# whole fleet sets it today, and the guard exists so a new service (or a copy-paste that silently
-# drops the line, the way ical-proxy's indent drifted) can't omit it unnoticed.
+# Every service sets `no-new-privileges`, which blocks a setuid binary from re-gaining a dropped
+# capability; a service that cannot goes here with a reason.
 NO_NEW_PRIV_EXEMPT: dict = {}
 
-# No guard covers the mutable-tag update policy, because nothing auto-updates a container.
-# `docker_deploy.yml` deploys with `pull: policy`, which never re-pulls a mutable tag already
-# present locally, so a `latest` tag ages in place rather than drifting. An image refresh is
-# the deliberate `deploy.yml --tags <svc> -e common_pull=always`.
+# Nothing auto-updates a container: `pull: policy` never re-pulls a mutable tag already present, so
+# `latest` ages in place. A refresh is the deliberate `deploy.yml --tags <svc> -e
+# common_pull=always`.
 
 
 # Compose services whose image is built or supplied rather than pulled by tag, so there is no
@@ -140,7 +130,7 @@ def find_undigested_images(docs, exempt=frozenset()) -> list[tuple[str, str]]:
     can ever raise a PR against, and nothing in the repo records which bytes are running.
     ``tag@sha256:`` fixes both — it is reproducible on a cold pull, and it is the shape
     the k8s plane already uses (see the every-external-image-pin-carries-a-digest row of
-    tests/repo/test_census_rows_roles.py, whose selector
+    tests/repo/census_rows/test_census_rows_roles.py, whose selector
     reach k8s/roles but never the Pi's package; this is that gate's Pi half).
     """
     missing: list[tuple[str, str]] = []
@@ -242,8 +232,8 @@ def _check_rendered(
     """Render `tpl` with `ci` as its `container_item` and run every check on the result."""
     # A component template reads its secrets as plain names, and no role defaults sit under it.
     ctx = render_context(None, host=host, overrides={"container_item": ci})
-    # A template reads its OWN entry through `container_item`; leaving the lists in would let
-    # one render against another service's entry.
+    # A template reads its OWN entry through `container_item`; leaving the lists in would let one
+    # render against another service's entry.
     ctx.pop("services", None)
     ctx.pop("compose_services", None)
     rendered, err = render_shipped(tpl, ctx)
@@ -299,27 +289,29 @@ def _check_rendered(
     return None
 
 
-def run(ok: Callable[[str], None], host_vars_dir: Path = HOST_VARS) -> tuple[int, int]:
+def run(ok: Callable[[str], None]) -> tuple[int, int]:
     """Render every host's `compose_services` entries and report render/parse failures.
 
     Args:
         ok: Prints one clean template's `[ok]` line.
-        host_vars_dir: The inventory's `host_vars` directory.
 
     Returns:
         (templates checked, failures). A tree with no host_vars file is one failure.
     """
-    host_files = sorted(host_vars_dir.glob("*.yml"))
-    if not host_files:
-        print(f"  [FAIL] no host_vars found under {host_vars_dir}", file=sys.stderr)
+    estate = Estate()
+    hosts = estate.hosts()
+    if not hosts:
+        print(
+            f"  [FAIL] no host_vars found under {estate.inventory.host_vars}",
+            file=sys.stderr,
+        )
         return 0, 1
 
     failures = 0
     checked = 0
-    for host_file in host_files:
-        host_vars = host_layer(host_file.parent, host_file.stem)
-        for ci in host_vars.get("compose_services") or []:
-            err = check_component_service(host_file.stem, ci)
+    for host in hosts:
+        for ci in estate.own_vars(host).get("compose_services") or []:
+            err = check_component_service(host, ci)
             checked += 1
             if err:
                 failures += 1

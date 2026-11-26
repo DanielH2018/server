@@ -18,14 +18,8 @@ livesync_k8s_mem_limit: 1024Mi
 livesync_k8s_cpu_request: "100m"
 livesync_k8s_mem_request: 128Mi
 
-# On longhorn-NOBACKUP, and that is the deliberate part. It is a CouchDB B-tree rewritten
-# daily — a new content-defined object every snapshot, so it dedupes poorly — and it drives
-# B2 hidden-version churn. The vault's source of truth is the markdown on each Obsidian
-# client, and LiveSync's "Rebuild everything" re-uploads the DB from a device, so the server
-# copy is regenerable.
-#
-# Backing it up would therefore ADD recurring B2 load, against a Class C budget of ~1,660/day
-# with a 2,500 cap.
+# longhorn-nobackup on purpose: the CouchDB B-tree dedupes poorly and drives B2 churn; the vault is
+# regenerable by LiveSync's "Rebuild everything" from a client.
 livesync_k8s_claim: livesync-data
 livesync_k8s_storage_class: longhorn-nobackup
 livesync_k8s_size: 2Gi
@@ -37,16 +31,12 @@ k8s_claims:
     storage_class: "{{ livesync_k8s_storage_class }}"
     size: "{{ livesync_k8s_size }}"
 
-# No IngressRoute, though the entry carries a `hostname`: traefik's file-provider gate
-# (k8s/roles/traefik/templates/livesync-gate-secret.yaml.j2) routes it.
+# No IngressRoute: traefik's file-provider gate (livesync-gate-secret.yaml.j2) routes it.
 manifests_exclude_files: [ingressroute.yaml]
 
-# Each entry renders k8s/templates/secret-default.yaml.j2 as secret-<name>.yaml:
-# its `string_data` maps a Secret field to the SOPS key its value comes from.
 render_secrets:
   - name: livesync
     string_data:
-      # CouchDB's admin password. The seeded _users and _dbs shards carry
-      # its hash, and the entrypoint writes it into local.d/docker.ini only when no admin is
-      # configured, so a new value leaves the Obsidian clients' stored login rejected.
+      # A new value leaves the Obsidian clients' stored login rejected: the seeded shards carry its
+      # hash.
       COUCHDB_PASSWORD: livesync_db_password

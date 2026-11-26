@@ -4,7 +4,7 @@
 Run: uv run python scripts/dev/gen_hook_settings.py [--check | --list]
 
 WHY. A hand-written `hooks` object in `.claude/settings.json` is watched from one side only
-by two tests: `.claude/hooks/tests/test_hook_scripts_executable.py` asserts that every
+by two tests: `.claude/hooks/tests/hook_contract/test_hook_scripts_executable.py` asserts that every
 REGISTERED script exists and is executable, and `test_project_settings_shape.py` that every
 entry declares a timeout. Nothing asserts the reverse -- that every hook file on disk is
 registered somewhere -- so a hook that exists but fires nowhere is a silent gap. Each hook
@@ -87,9 +87,6 @@ SETTINGS = REPO / ".claude" / "settings.json"
 # itself, which already loads the `settings.json` its own checkout carries.
 COMMAND_PREFIX = '"$CLAUDE_PROJECT_DIR"/.claude/hooks/'
 
-# What a `.py` registration runs through: `run-hook.sh <stem> <args>`, where `args:` carries the
-# runner's posture flags (`--project`, `--ask-on-cd[=<guards>]`). One interpreter pin and one
-# failure posture for every Python hook, instead of a per-hook shim each.
 RUNNER = "run-hook.sh"
 
 # What a guard registration appends after the runner call, so a missing runner denies instead
@@ -123,8 +120,7 @@ FIELD_RE = re.compile(r"^#   ([a-zA-Z]+): (.*)$")
 REGISTER_KEYS = frozenset(
     {"event", "matcher", "timeout", "order", "args", "async", "statusMessage", "if"}
 )
-# The events this grammar accepts `if` on, as `bin/gen-hooks-lib.js` does. On an event the
-# harness does not evaluate `if` on, the handler never runs, so it is an error here.
+# On an event the harness does not evaluate `if` on, the handler never runs, so it is an error.
 IF_EVENTS = (
     "PreToolUse",
     "PostToolUse",
@@ -134,9 +130,7 @@ IF_EVENTS = (
 )
 LIBRARY_KEYS = frozenset({"reason"})
 
-# The order events are written in: the order the hand-written object had, so the first
-# generated commit is a no-op diff. An event outside this list would register a hook that
-# never fires, so it is an error, not a new key.
+# An event outside this list would register a hook that never fires, so it is an error.
 EVENT_ORDER = (
     "PreToolUse",
     "PostToolUse",

@@ -9,13 +9,13 @@
   containers of its own (traefik's fix-acme-permissions, authelia's wait-for-redis).
 
   WHAT ADDING A THIRD PROTECTED APP TAKES. An entry in `crowdsec_k8s_sidecar_agents`
-  (group_vars/all.yml), which is the machine name. The crowdsec role's LAPI registration loop,
+  (k8s/vars.yml), which is the machine name. The crowdsec role's LAPI registration loop,
   the observability role's `crowdsec-<app>-agent` scrape job and netpol-baseline's :6060
   prometheus grant (`networkpolicy-crowdsec-sidecars.yaml.j2`) all derive from that map. The
   sidecar carries the HOST pod's labels, so Prometheus reaches it as `app=<app>`, which is why
   both the job and the grant select the app label plus port 6060. Then the three calls here,
   and a `<app>-crowdsec` Secret carrying `AGENT_PASSWORD`, `acquis.yaml` and the three whitelist
-  parsers. `tests/k8s/test_crowdsec_sidecars_are_scraped.py` holds the job, the port
+  parsers. `tests/k8s/workloads/test_crowdsec_sidecars_are_scraped.py` holds the job, the port
   and the grant together.
 
   DECIDED: the Secret stays a template per app rather than a shared macro (#4088). The two copies are
@@ -26,7 +26,7 @@
   hardened_security_context(), which refuses uid 0 by convention: each one's comment says which
   uid owns the files and why root is reached for.
   The root-security-context-is-written-out-in-full row of
-  tests/repo/test_census_rows_roles.py scans this file for that.
+  tests/repo/census_rows/test_census_rows_roles.py scans this file for that.
 
   Arguments:
     app         the host workload's name. It names the `<app>-crowdsec` Secret and selects the

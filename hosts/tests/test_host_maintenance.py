@@ -20,9 +20,10 @@ import os
 import re
 
 import pytest
-from _helpers import ALL_VARS, K8S_ROLES, REPO, load_defaults
+from _helpers import K8S_ROLES, REPO, load_defaults
 from _host_packages import package, shipped_text
 from lib import yaml_fast
+from lib.estate import shared_vars
 from lib.proc_testing import fake_bin, run, write_exec
 from _aide_check_run import LOGGER_STUB
 from test_aide_check import _textfile
@@ -40,7 +41,6 @@ HISTORY = re.compile(r"present_over_time\([^)]*\[(\d+)s\]\)")
 WINDOW = re.compile(r"absent_over_time\([^)]*\[(\d+)s\]\)")
 
 EVERY_HOST = {"daniel-box", "daniel-server", "daniel-pi"}
-# Check -> (the retired cron it replaced, the alert prefix, the hosts whose rules read it).
 # daniel-box is the one host with fwupd, so it alone ships the firmware-update unit.
 JOBS = {
     "apt-autoremove": ("Weekly apt autoremove", "AptAutoremove", EVERY_HOST),
@@ -235,7 +235,7 @@ def test_a_missing_ping_key_skips_only_the_ping(unit, hosts):
 @pytest.mark.parametrize("host", sorted(EVERY_HOST))
 def test_the_reboot_fires_at_the_slot_the_mute_derives_from(host):
     """Alertmanager's `weekly-reboot` mute reads the same `weekly_reboot_*` values."""
-    values = yaml_fast.safe_load(ALL_VARS.read_text())
+    values = shared_vars()
     day = ("Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat")[
         values["weekly_reboot_weekday"]
     ]

@@ -141,12 +141,10 @@ def _readings(tools: Tools, hosts, root=None):
 
 def cmd_read(_args, tools: Tools) -> int:
     good, bad = _readings(tools, HOSTS)
-    # `signing=` makes the launch gate's verdict readable before a launch spends an agent on
-    # it. `unknown` means the registered-key read itself failed, which `launch` refuses on.
+    # `unknown` means the registered-key read itself failed, which `launch` refuses on.
     registered = registered_keys(tools)
     for r in good:
-        # Both caps, because placement scores the tighter of the two: a fleet number with
-        # room says nothing on its own about whether a batch fits.
+        # Placement scores the tighter of the fleet and plane caps.
         print(
             f"{r.host}: fleet cap={r.cap_bytes} current={r.current_bytes} "
             f"plane cap={r.plane_cap_bytes} current={r.plane_current_bytes} "
@@ -213,9 +211,6 @@ def placement(
     try:
         placed = place(batches, good, pin=pin, slots=slots)
     except NoHeadroom as exc:
-        # Capped hosts were skipped, so a refusal may name the cap rather than memory. Without
-        # the cap, placement succeeding means memory was not the reason: the cap gate then
-        # names each host that cannot fit the whole run, and the batches it holds.
         try:
             place(batches, good, pin=pin)
         except NoHeadroom:
@@ -299,8 +294,8 @@ def _launch_locked(
     )
     if excused is None:
         return FANOUT_PLACE_FAILED
-    # Read the registered keys before the first ssh: a gh outage then refuses having spent no
-    # connection against the per-host ssh limit.
+    # Read the registered keys before the first ssh so a gh outage refuses having spent no
+    # connection against the ssh limit.
     registered = registered_keys(tools)
     if isinstance(registered, str):
         error(f"{registered} — refusing to launch")
@@ -314,10 +309,8 @@ def _launch_locked(
     )
     if placed is None:
         return FANOUT_PLACE_NOTHING_PLACED
-    # Only the hosts a batch landed on. Reading every host placement looked at spends an ssh
-    # connection (`ufw limit ssh` allows 5 per 30s) on a host the signing gate or a failed
-    # headroom read dropped, and puts its banner state into briefs for agents that never run
-    # there. Sorted: set order is not stable across processes, and the lines go in verbatim.
+    # Only hosts a batch landed on: each extra read spends an ssh connection (`ufw limit ssh` allows
+    # 5 per 30s). Sorted, because set order is unstable and the lines go in verbatim.
     health = [
         ln
         for host in sorted({host for _, host in placed})
@@ -332,8 +325,8 @@ def _launch_locked(
         allowed_here = excused.get(batch, ())
         chosen = sizes.get(batch)
         if target.is_server:
-            # Claimed here, after every gate, so a refusal above leaves nothing claimed,
-            # and per batch, so a failed launch below leaves no later batch claimed.
+            # Claimed after every gate and per batch, so a refusal or failed launch leaves nothing
+            # claimed.
             batch, numbers, dropped = claims_mod.claim_batch(
                 tools, batch, numbers, holder
             )
@@ -357,9 +350,8 @@ def _launch_locked(
                 excused_paths=tuple(p for p in allowed_here if p in cited),
             )
             run.batches.append(launched)
-            # Saved per batch, not once after the loop: a launch killed between batches
-            # (a tool timeout, a ^C) otherwise leaves running agents no manifest names,
-            # so `status` and `clean` cannot find them.
+            # Saved per batch: a launch killed between batches would otherwise leave running agents
+            # no manifest names.
             manifest_mod.save(run, root=args.manifest_root)
         except launch_mod.LaunchError as exc:
             released = (
@@ -367,14 +359,9 @@ def _launch_locked(
                 if target.is_server
                 else ""
             )
-            # The remote stderr a LaunchError carries spans lines, and the prefix has to
-            # lead every line a grep for it should find.
             error(" ".join(f"{batch} on {host}: {exc}{released}".split()))
-            # The refusal is per batch, after placement, so earlier batches are already
-            # running. Name them and the run-id: the manifest is what `status` and `clean`
-            # read, and the `clean <run-id>` an `exists` refusal asks for needs the id. A
-            # run that launched nothing gets no manifest — an empty one records no work,
-            # and `launch` reads every manifest under the root before it places.
+            # A run that launched nothing gets no manifest: an empty one records no work, and
+            # `launch` reads every manifest under the root before it places.
             if not run.batches:
                 error("launched before this failure: none")
                 return FANOUT_PLACE_FAILED
@@ -468,8 +455,8 @@ def cmd_clean_one(
         def list_worktrees():
             return git("worktree", "list", "--porcelain", cwd=checkout).stdout
 
-    # Resolved paths, not exact string equality: a worktree launched through one spelling
-    # of REPO (a symlink, say) is still the tree `git worktree list` names by its target.
+    # Resolved paths, not string equality: a worktree launched through a symlinked REPO is still the
+    # tree `git worktree list` names by its target.
     wanted = Path(args.worktree).resolve()
     tree = next(
         (
@@ -626,27 +613,18 @@ def main(argv=None, tools: Tools | None = None) -> int:
     )
     run_parsers["abandon"].add_argument("batch")
     add_resume_arguments(run_parsers["resume"])
-    # No `help=` here, matching every other subparser above: argparse only lists a
-    # subcommand under "positional arguments" when its own help text is set, so leaving it
-    # unset is what keeps `clean-one` out of `--help`'s body. `help=argparse.SUPPRESS`
-    # looks like the right tool but isn't: argparse's subparser formatting doesn't filter a
-    # SUPPRESS'd choice the way it does a SUPPRESS'd ordinary argument, so it would print a
-    # literal "clean-one  ==SUPPRESS==" line instead of hiding it. Either way it still
-    # appears in the `{...}` choices list on the usage line — no argparse option removes
-    # that without also removing every visible subcommand from it.
+    # No `help=`: argparse lists a subcommand in the body only when its help is set.
+    # `help=argparse.SUPPRESS` would print a literal "==SUPPRESS==" line instead of hiding it, and
+    # the name still shows in the `{...}` choices.
     clean_one_parser = sub.add_parser("clean-one")
     clean_one_parser.add_argument("worktree")
-    # `branch` is unused by cmd_clean_one, which reads the branch off the worktree; it is a
-    # positional only so `ps` on the host names the batch, as systemd-run's --unit does.
+    # `branch` is unused by cmd_clean_one; it is a positional only so `ps` names the batch.
     clean_one_parser.add_argument("branch")
     clean_one_parser.add_argument("--repo", default=SERVER)
     clean_one_parser.set_defaults(fn=cmd_clean_one)
     args = p.parse_args(argv)
-    # The manifest-reading subcommands, checked here rather than caught around the call: a
-    # mistyped run-id or a manifest `load` refuses deserves a line, while the same error
-    # raised deeper inside one of them is a real fault and must keep its traceback. `launch`
-    # refuses with "run clean <run-id> first", so a mistyped id at that prompt is the likely
-    # way in.
+    # Checked here, not caught around the call: a mistyped run-id deserves one line, while the same
+    # error deeper inside is a real fault and keeps its traceback.
     if args.cmd in run_parsers:
         if refused := manifest_mod.unreadable(args.run_id, args.manifest_root):
             error(refused)

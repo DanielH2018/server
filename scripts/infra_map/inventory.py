@@ -10,9 +10,9 @@ from pathlib import Path
 from collections.abc import Sequence
 from typing import Any
 
-from lib import yaml_fast
 from lib.inventory_lists import K8S_HOST, PI_HOST, pi_entries_in
 from lib.container_entry import ContainerEntry
+from lib.estate import Inventory
 from lib.render_guard import host_layer, k8s_services
 
 from infra_map.constants import (
@@ -25,13 +25,11 @@ from infra_map.constants import (
 )
 
 
-# The kinds the live collector reads; a role declaring none of them is a batch
-# role. Kept in step with ``infra_map.live.WORKLOAD_KINDS`` by a test.
+# Kept in step with `infra_map.live.WORKLOAD_KINDS` by a test.
 LONG_RUNNING_KINDS = frozenset({"Deployment", "DaemonSet", "StatefulSet"})
 
-# A ``namespace:`` line whose value is a bare name. A Jinja value fails the
-# character class, so ``{{ k8s_namespace }}`` is deliberately not captured: the
-# inventory already resolves that one, and this only records the exceptions.
+# A Jinja value fails the character class on purpose: the inventory already resolves `{{
+# k8s_namespace }}`; this records the exceptions.
 _LITERAL_NAMESPACE = re.compile(
     r"^\s+namespace:\s*([a-z0-9][a-z0-9-]*)\s*$", re.MULTILINE
 )
@@ -49,10 +47,8 @@ class RoleIndex:
 
     container_owners: dict[str, str]
     batch_roles: frozenset[str]
-    # Namespaces a k8s role's manifests name literally, rather than through the
-    # ``k8s_namespace`` variable the inventory resolves for it. The map looks a
-    # role's workloads up by namespace, so a role that places one elsewhere on
-    # purpose (dri-device-plugin's DaemonSet in kube-system) is found only here.
+    # The map looks workloads up by namespace, so a role that places one elsewhere on purpose
+    # (dri-device-plugin in kube-system) is found only here.
     manifest_namespaces: dict[str, frozenset[str]] = field(default_factory=dict)
 
 
@@ -62,9 +58,6 @@ def load_roles(repo_root: Path = REPO_ROOT) -> RoleIndex:
     batch: set[str] = set()
     manifest_namespaces: dict[str, frozenset[str]] = {}
 
-    # A Pi service in the package (H5, `compose_services`) owns its `container_name`s, so a
-    # container such as `docker-proxy-lifecycle` maps to its service. The service's directory is
-    # its owner, as the role directory is for the k8s tree below.
     services = repo_root / "hosts" / "components" / "pi-compose" / "services"
     for service in sorted(p for p in services.glob("*") if p.is_dir()):
         compose = service / "compose.yaml.j2"
@@ -76,13 +69,8 @@ def load_roles(repo_root: Path = REPO_ROOT) -> RoleIndex:
         for name in names:
             owners[name] = service.name
 
-    # A k8s role that declares no long-running workload has nothing to find
-    # between deploys, so "not running" is correct for it, not a fault. That is
-    # a role with no templates directory (the seed and snapshot roles), one whose
-    # only workload is a CronJob, and one whose templates are all non-workload
-    # objects: an IngressRoute onto a chart-owned
-    # Deployment (longhorn-ui), a PVC (media-volume), NetworkPolicies
-    # (netpol-baseline). Derived from the manifests.
+    # A role with no long-running workload has nothing to find between deploys, so 'not running' is
+    # correct for it; derived from the manifests.
     k8s_roles = repo_root / "k8s" / "roles"
     for role in sorted(p for p in k8s_roles.glob("*") if p.is_dir()):
         templates = role / "templates"
@@ -135,12 +123,13 @@ def load_inventory(
     repo_root: Path = REPO_ROOT,
 ) -> tuple[dict[str, Any], dict[str, dict], tuple[ContainerEntry, ...]]:
     """Return ``(global_vars, {host: host_vars}, k8s services)`` from the inventory."""
-    inventory = repo_root / "inventory"
-    global_vars = (
-        yaml_fast.safe_load((inventory / "group_vars" / "all.yml").read_text()) or {}
-    )
-    host_vars = {host: host_layer(inventory / "host_vars", host) for host in HOSTS}
-    return global_vars, host_vars, k8s_services(repo_root / "cluster" / "services.yml")
+    global_vars = Inventory(
+        estate_vars=repo_root / "estate" / "vars.yml",
+        k8s_vars=repo_root / "k8s" / "vars.yml",
+        host_vars=repo_root / "hosts",
+    ).shared_layer()
+    host_vars = {host: host_layer(repo_root / "hosts", host) for host in HOSTS}
+    return global_vars, host_vars, k8s_services(repo_root / "k8s" / "services.yml")
 
 
 def declared_services(

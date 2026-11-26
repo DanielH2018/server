@@ -84,7 +84,7 @@ NO_SECRET_EXPRESSION = "no-secret-expression"
 # The repo filters that place an argument into their output unchanged. Rule 5 accepts a secret
 # key as an argument to a member, and refuses it as an argument to any other filter, so the set
 # is closed. A member must pass the membership test in
-# `scripts/renderer/tests/test_renderer_secret_checks.py`. The set is empty: its two members,
+# `scripts/renderer/tests/secrets/test_renderer_secret_checks.py`. The set is empty: its two members,
 # `homepage_href` and `authelia_service_rules`, took only `domain`, which is no longer a
 # secret key, and kept as members they would accept a later secret passed to either filter.
 PASSTHROUGH_FILTERS: frozenset[str] = frozenset()

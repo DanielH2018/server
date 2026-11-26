@@ -12,8 +12,7 @@ Run: uv run pytest hosts/tests/test_server_names_daniel_pi.py
 
 import pytest
 from _host_packages import package
-from lib import yaml_fast
-from lib.repo_paths import HOST_VARS
+from lib.estate import host_vars
 
 SSH_DROPINS = "/etc/ssh/ssh_config.d/"
 K3S_NODES = ("daniel-box", "daniel-server")
@@ -53,7 +52,7 @@ def _ssh_dropin_names(pkg) -> dict[str, str]:
 def test_node_pins_the_pi_host_key_under_every_name_it_gives_the_pi(host: str) -> None:
     """ssh looks a host key up under the name it connects to, so a pin under the address alone
     leaves `ssh daniel-pi` at "Host key verification failed"."""
-    pi = yaml_fast.safe_load((HOST_VARS / "daniel-pi.yml").read_text())
+    pi = host_vars("daniel-pi")
     pkg = package(host)
     body, _mode = pkg.files["/etc/ssh/ssh_known_hosts"]
     pinned: dict[str, str] = {}
@@ -69,7 +68,7 @@ def test_node_pins_the_pi_host_key_under_every_name_it_gives_the_pi(host: str) -
 
 @pytest.mark.parametrize("host", K3S_NODES)
 def test_node_names_daniel_pi_at_the_pi_address(host: str) -> None:
-    pi_ip = yaml_fast.safe_load((HOST_VARS / "daniel-pi.yml").read_text())["server_ip"]
+    pi_ip = host_vars("daniel-pi")["server_ip"]
     pkg = package(host)
     names = {**_ssh_dropin_names(pkg), **_etc_hosts_names(pkg)}
     assert names.get("daniel-pi") == pi_ip, (

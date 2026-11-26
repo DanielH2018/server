@@ -1,14 +1,15 @@
 #!/usr/bin/env python3
 """Tests for scripts/docs/service_catalog.py and the catalog_* leaves it assembles.
 
-Entirely fixture-driven — synthetic service list and roles under tmp_path, never the real inventory
+Fixture-driven — synthetic service list and roles under tmp_path, never the real service list
 (which changes; see scripts/deploy_tools/tests/test_deploy_tags.py's REAL-inventory tests for the
 pattern this deliberately does NOT follow — the catalog derives facts rather than guarding a set).
+`main` takes no group-variables override, so its test reads the repo's real shared vars.
 Run: uv run pytest scripts/docs/tests/test_service_catalog.py
 """
 
 from docs import service_catalog
-from _catalog_fixtures import make_repo, write
+from _catalog_fixtures import catalog_args, make_repo, write
 from docs.catalog_lib.catalog_facts import k8s_route
 from docs.catalog_lib.catalog_model import ServiceRow
 from docs.catalog_lib.catalog_render import render_html, render_markdown
@@ -34,7 +35,7 @@ def test_auth_tier_true_false_and_missing(tmp_path):
     )
     for role in ("shell", "mystery"):
         write(paths["k8s_roles"] / role / "defaults" / "main.yml", "---\n")
-    rows = service_catalog.build_rows(**paths)
+    rows = service_catalog.build_rows(**catalog_args(paths))
     by_name = {r.name: r for r in rows}
     assert by_name["authelia"].auth_tier == "Authelia"
     assert by_name["shell"].auth_tier == "Authelia two_factor"
@@ -46,10 +47,14 @@ def test_k8s_route_uses_hostname_default_name_when_ingressroute_exists(tmp_path)
     paths = make_repo(tmp_path)
     role = paths["k8s_roles"] / "jellyfin" / "templates"
     write(role / "ingressroute.yaml.j2", "{{ ingressroute(...) }}\n")
-    row = next(r for r in service_catalog.build_rows(**paths) if r.name == "jellyfin")
+    row = next(
+        r
+        for r in service_catalog.build_rows(**catalog_args(paths))
+        if r.name == "jellyfin"
+    )
     assert row.route.startswith("jellyfin.local.<domain>")
     entry = {"name": "jellyfin", "hostname": "jellyfin"}
-    direct = k8s_route(entry, paths["k8s_roles"], paths["all_vars"])
+    direct = k8s_route(entry, paths["k8s_roles"], catalog_args(paths)["inventory"])
     assert direct == row.route
 
 
@@ -58,26 +63,38 @@ def test_k8s_route_is_lan_only_when_public_route_is_off(tmp_path):
     paths = make_repo(tmp_path)
     role = paths["k8s_roles"] / "jellyfin" / "templates"
     write(role / "ingressroute.yaml.j2", "{{ ingressroute(...) }}\n")
-    row = next(r for r in service_catalog.build_rows(**paths) if r.name == "jellyfin")
+    row = next(
+        r
+        for r in service_catalog.build_rows(**catalog_args(paths))
+        if r.name == "jellyfin"
+    )
     assert row.route == "jellyfin.local.<domain> (LAN only)"
 
 
 def test_k8s_route_names_both_tiers_when_public_route_is_on(tmp_path):
     paths = make_repo(tmp_path)
-    write(paths["all_vars"], "k8s_namespace: homelab\nk8s_public_route: true\n")
+    write(paths["estate_vars"], "k8s_namespace: homelab\nk8s_public_route: true\n")
     role = paths["k8s_roles"] / "jellyfin" / "templates"
     write(role / "ingressroute.yaml.j2", "{{ ingressroute(...) }}\n")
-    row = next(r for r in service_catalog.build_rows(**paths) if r.name == "jellyfin")
+    row = next(
+        r
+        for r in service_catalog.build_rows(**catalog_args(paths))
+        if r.name == "jellyfin"
+    )
     assert row.route == "jellyfin.<domain> · jellyfin.local.<domain>"
 
 
 def test_k8s_route_stays_lan_only_when_the_role_opts_out(tmp_path):
     """`public=false` in the role's own macro call beats the cluster-wide flag."""
     paths = make_repo(tmp_path)
-    write(paths["all_vars"], "k8s_namespace: homelab\nk8s_public_route: true\n")
+    write(paths["estate_vars"], "k8s_namespace: homelab\nk8s_public_route: true\n")
     role = paths["k8s_roles"] / "jellyfin" / "templates"
     write(role / "ingressroute.yaml.j2", "{{ ingressroute(..., public=false) }}\n")
-    row = next(r for r in service_catalog.build_rows(**paths) if r.name == "jellyfin")
+    row = next(
+        r
+        for r in service_catalog.build_rows(**catalog_args(paths))
+        if r.name == "jellyfin"
+    )
     assert row.route == "jellyfin.local.<domain> (LAN only)"
 
 
@@ -86,7 +103,7 @@ def test_markdown_route_cells_are_linkable_but_the_row_value_is_not(tmp_path):
     paths = make_repo(tmp_path)
     role = paths["k8s_roles"] / "jellyfin" / "templates"
     write(role / "ingressroute.yaml.j2", "{{ ingressroute(...) }}\n")
-    rows = service_catalog.build_rows(**paths)
+    rows = service_catalog.build_rows(**catalog_args(paths))
     assert all("<span" not in r.route for r in rows)
     assert 'class="fqdn" data-host="jellyfin.local"' in render_markdown(rows)
 
@@ -94,7 +111,11 @@ def test_markdown_route_cells_are_linkable_but_the_row_value_is_not(tmp_path):
 def test_k8s_route_is_no_route_when_role_has_no_ingressroute_template(tmp_path):
     paths = make_repo(tmp_path)
     # authelia gets no ingressroute.yaml.j2 in this fixture (e.g. an infra-only role).
-    row = next(r for r in service_catalog.build_rows(**paths) if r.name == "authelia")
+    row = next(
+        r
+        for r in service_catalog.build_rows(**catalog_args(paths))
+        if r.name == "authelia"
+    )
     assert row.route == "no route (infra role)"
 
 
@@ -104,7 +125,11 @@ def _jellyfin_row(tmp_path):
         paths["k8s_roles"] / "jellyfin" / "defaults" / "main.yml",
         "k8s_autodeploy: true\n",
     )
-    return next(r for r in service_catalog.build_rows(**paths) if r.name == "jellyfin")
+    return next(
+        r
+        for r in service_catalog.build_rows(**catalog_args(paths))
+        if r.name == "jellyfin"
+    )
 
 
 def test_autodeploy_of_a_k8s_entry_names_flux(tmp_path):
@@ -116,7 +141,7 @@ def test_autodeploy_of_a_k8s_entry_names_flux(tmp_path):
 
 def test_render_html_is_self_contained_and_lists_every_service(tmp_path):
     paths = make_repo(tmp_path)
-    rows = service_catalog.build_rows(**paths)
+    rows = service_catalog.build_rows(**catalog_args(paths))
     out = render_html(rows)
     assert "<!doctype html>" in out
     assert "<style>" in out
@@ -138,8 +163,6 @@ def test_main_writes_output_file(tmp_path):
             str(paths["k8s_roles"]),
             "--k3s-defaults",
             str(paths["k3s_defaults"]),
-            "--all-vars",
-            str(paths["all_vars"]),
         ]
     )
     assert exit_code == 0
@@ -158,8 +181,7 @@ def test_markdown_has_one_row_per_service():
         _ROW("wg-easy", "daniel-pi", "LAN-direct", "none", "none", "no"),
     ]
     out = render_markdown(rows)
-    # Count ROWS, not substrings: a service whose route equals its name puts the same
-    # "| name |" text in two cells of one line.
+    # Count ROWS, not substrings: a route equal to its name puts the same text in two cells.
     lines = out.splitlines()
     assert sum(1 for ln in lines if ln.startswith("| sonarr |")) == 1
     assert sum(1 for ln in lines if ln.startswith("| wg-easy |")) == 1

@@ -209,7 +209,7 @@ data:
       # item on monitor-bridge's entry, because the deploy tags derive a change to that field
       # onto every role that reads it. The port is monitor-bridge's
       # monitor_bridge_deploy_pipeline_port, which this role cannot read, and
-      # tests/services/test_deploy_pipeline_scrape.py holds the two equal.
+      # tests/services/scraping/test_deploy_pipeline_scrape.py holds the two equal.
       # `ScrapeTargetDown` (service monitor-bridge, files/rules/scrape-targets.yaml) pages a
       # failed scrape.
       - job_name: deploy-pipeline
@@ -829,7 +829,7 @@ data:
       # HTTP and no auth by k3s's design — the port is protected the same way :10250 is, by the
       # host's default-deny UFW policy, and it carries no cluster data, only counters.
       #
-      # ONE switch drives both halves — `k3s_etcd_expose_metrics` in group_vars/all.yml gates
+      # ONE switch drives both halves — `k3s_etcd_expose_metrics` in k8s/vars.yml gates
       # this job and the k3s flag alike, so they cannot drift into "port open, nobody scraping"
       # or "job armed, port closed". They still land in two runs: flip the var, run
       # k3s-bringup.yml to rewrite the unit and restart k3s, THEN deploy observability. Deploying
@@ -837,7 +837,7 @@ data:
       - job_name: etcd
         scrape_interval: 30s
         static_configs:
-          - targets: ['{{ server_ip }}:2381']
+          - targets: ['{{ hosts[k8s_primary_node].server_ip }}:2381']
             labels:
               instance_role: control-plane
 {% endif %}

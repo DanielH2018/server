@@ -2,7 +2,7 @@
 """claude-pipeline-timeline snapshots the PR timeline daily, before its journal inputs rotate (#5661).
 
 The joiner is `scripts/dev/pipeline_timeline.py`, tested in
-`scripts/dev/tests/test_pipeline_timeline.py`. This module pins what that test cannot see
+`scripts/dev/tests/ci/test_pipeline_timeline.py`. This module pins what that test cannot see
 about the unit:
 
 1. The command. A window of days and the daniel-server pull, because a bare run reads seven
@@ -18,7 +18,7 @@ import re
 from _agent_package import render_daniel_server_with
 from _helpers import load_yaml, REPO
 from _setup_render import CLAUDE_CODE, render_component_text
-from lib.repo_paths import HOST_VARS
+from lib.estate import host_vars
 
 ROLE = CLAUDE_CODE
 DEFAULTS = load_yaml(ROLE / "defaults" / "main.yml")
@@ -63,8 +63,8 @@ def test_the_window_survives_a_missed_run():
 
 def test_armed_only_on_daniel_box_and_disarming_drops_the_units(tmp_path):
     assert DEFAULTS[KEY] is False
-    assert load_yaml(HOST_VARS / "daniel-box.yml").get(KEY) is True
-    assert not load_yaml(HOST_VARS / "daniel-server.yml").get(KEY, False)
+    assert host_vars("daniel-box").get(KEY) is True
+    assert not host_vars("daniel-server").get(KEY, False)
 
     on = render_daniel_server_with(tmp_path / "on", **{KEY: True})
     off = render_daniel_server_with(tmp_path / "off", **{KEY: False})

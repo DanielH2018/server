@@ -24,13 +24,9 @@
 {% set head %}
 # A flaky check fails rather than passing on a retry.
 backoffLimit: 0
-# Below the 600s `manifests_rollout_timeout_default` every `<tag>-verify` Kustomization takes.
-# Two reads of at most 30s each, plus the helper's 60s of retries on the first connect.
 activeDeadlineSeconds: 300
 {% endset %}
 {% set env %}
-# The Service by its cluster name: the Job runs in the cluster, so the ClusterIP
-# lookup `tasks/verify.yml` needs on the node is not needed here.
 - name: SONARR_URL
   value: http://{{ container_item.name }}.{{ k8s_namespace }}.svc.cluster.local:{{ container_item.port }}
 - name: SONARR_API_KEY

@@ -22,7 +22,7 @@ and contract unchanged.
   the *arr Discord webhook
 - **Depends on:** sonarr and radarr, at runtime
 - **Flux applies it.** Its `containers_list` entry
-  is in `cluster/services.yml`, so nothing applies it by hand, and a
+  is in `k8s/services.yml`, so nothing applies it by hand, and a
   merged change reaches the cluster when `promote` publishes and verifies the next bundle. The
   Deployment is `Recreate` with one
   replica, so a roll stops the loop until the new pod starts. It has no readinessProbe, so the
@@ -50,7 +50,7 @@ here must satisfy this summary.
 - **Mode (per actuator, explicit + reversible):** sidecar `DRY_RUN` (live, in
   `k8s/roles/autofix-bridge/templates/deployment.yaml.j2`) and fake-remux
   `FAKE_REMUX_REPLACE_MODE` (off/shadow/live, run `live` by host_vars:
-  `inventory/host_vars/daniel-box.yml:autofix_fake_remux_replace_mode`). Returning either
+  `hosts/daniel-box/vars.yml:autofix_fake_remux_replace_mode`). Returning either
   plane to report-only is one env flip, merged (the sidecar's reaches the pod through
   `promote`) or deployed (fake-remux's through daniel-box's package) — preserve that.
 - **Authoritative sources:** the *arr `/api/v3/queue` (`k8s/roles/autofix-bridge/files/autofix.py:run_once`)
@@ -117,7 +117,7 @@ here must satisfy this summary.
   edit the owning role's. `templates/script-configmap.yaml.j2` embeds
   every module into the rendered ConfigMap `autofix-bridge-script`, so an edit to any of the
   three changes this role's render, and an edit to `jobs_metrics.py` rolls the crowdsec pod too. The renderer's restart annotation (`RESTART_ANNOTATION` in
-  `scripts/renderer/renderer_lib/restart.py`) hashes the ConfigMap into the pod template. `scripts/renderer/tests/test_renderer_autofix_bridge_script.py` holds both the
+  `scripts/renderer/renderer_lib/restart.py`) hashes the ConfigMap into the pod template. `scripts/renderer/tests/manifests/test_renderer_autofix_bridge_script.py` holds both the
   embed and the checksum.
 - Manifests: `templates/deployment.yaml.j2`, which carries every setting as an `env` value,
   the `autofix-bridge-env` Secret from

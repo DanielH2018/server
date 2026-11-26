@@ -34,9 +34,8 @@ AGENT_ENV = {
     "K3S_TOKEN": "secret-token-value",
 }
 
-# Records what the installer was given, then creates the unit its mode names. A case that sets
-# WRONG_UNIT=1 makes it create the other mode's unit, FAIL_RUNS=n makes its first n runs fail, and
-# HANG_RUNS=n makes its first n runs wait on a child process that does not return.
+# WRONG_UNIT=1 creates the other mode's unit, FAIL_RUNS=n fails the first n runs, HANG_RUNS=n makes
+# the first n runs wait on a child process that does not return.
 INSTALLER = """#!/bin/sh
 echo run >> "$HOMELAB_ROOT/installer.runs"
 if [ "$(wc -l < "$HOMELAB_ROOT/installer.runs")" -le "${HANG_RUNS:-0}" ]; then
@@ -61,9 +60,8 @@ case "$mode" in
 esac
 """
 K3S_BINARY = "#!/bin/sh\necho 'k3s version v1.37.2+k3s1'\n"
-# `uv run ... render --out DIR` writes the three packages at the paths the renderer uses, with
-# homelab-tools under its architecture; the anchor call exits ANCHOR_EXIT; the first
-# VENV_FAILURES `python --version` calls fail; `fetch-tools` lists its cache in tools-cache.listing.
+# ANCHOR_EXIT is the anchor call's exit; the first VENV_FAILURES `python --version` calls fail;
+# `fetch-tools` lists its cache in tools-cache.listing.
 UV_STUB = """#!/bin/sh
 echo "$PWD: $*" >> "$HOMELAB_ROOT/uv.calls"
 case "$*" in
@@ -80,9 +78,7 @@ case "$*" in
         ls "$cache" > "$HOMELAB_ROOT/tools-cache.listing" ;;
 esac
 """
-# Given a sysusers.d file, adds each `g` group missing from the fake group file at its declared
-# gid, and each `u` user missing from the fake passwd file at its declared uid and gid. As
-# sysusers does, a held uid or gid is replaced by the first free one down from 999.
+# As sysusers does, a held uid or gid is replaced by the first free one down from 999.
 SYSUSERS_STUB = """echo "sysusers $*" >> {log}
 [ -n "$1" ] || exit 0
 while read -r kind name ids _; do
@@ -255,12 +251,14 @@ class FakeHost:
             old = group(rf"  {tool}:\n    amd64:\n.*?sha256: (\w+)", script, re.DOTALL)
             self.pin(old, sha256(data))
 
-    def clone(self, tmp_path: Path) -> Path:
-        """A one-commit git clone holding the file the script reads host_python_version from."""
+    def clone(
+        self, tmp_path: Path, pin_file: str = "inventory/group_vars/all.yml"
+    ) -> Path:
+        """A one-commit git clone holding `pin_file`, which pins host_python_version."""
         clone = tmp_path / "clone"
-        variables = clone / "inventory" / "group_vars"
-        variables.mkdir(parents=True)
-        (variables / "all.yml").write_text('host_python_version: "3.14.6"\n')
+        variables = clone / pin_file
+        variables.parent.mkdir(parents=True)
+        variables.write_text('host_python_version: "3.14.6"\n')
         git = [
             "git",
             "-C",

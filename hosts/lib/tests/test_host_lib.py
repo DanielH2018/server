@@ -145,12 +145,6 @@ def test_discord_post_clamps_the_marked_message_and_keeps_the_truncation_marker(
     assert content.endswith(host_lib.DISCORD_TRUNCATED)
 
 
-# --- kubectl_runner ------------------------------------------------------------------------
-# The single source for what janitorr_health.py and configarr_health.py each carried a
-# byte-identical copy of. Each rule is an accept/reject pair: what the runner must return on a
-# clean call, and what it must return on each failure it is supposed to distinguish.
-
-
 class _Proc:
     def __init__(self, returncode, stdout="", stderr=""):
         self.returncode, self.stdout, self.stderr = returncode, stdout, stderr
@@ -251,10 +245,8 @@ def test_the_rest_of_the_environment_survives(monkeypatch):
     assert seen["env"]["KUBECONFIG"] == "/home/ubuntu/.kube/config"
 
 
-# ── rfc3339_to_epoch: shared with longhorn_backup_health_logic.py and longhorn_reap_lib/logic.py ──
-#
-# The parser is shared because separate copies diverge: a copy that does not strip fractional
-# seconds returns None for a Longhorn `snapshotCreatedAt` that another copy parses.
+# Shared because separate copies diverge: one that does not strip fractional seconds returns None
+# for a Longhorn snapshotCreatedAt.
 
 
 def test_rfc3339_to_epoch_parses_a_plain_z_timestamp():

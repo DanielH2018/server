@@ -39,8 +39,8 @@ DEFAULTS = ROLE_DIR / "defaults" / "main.yml"
 FLEET_CONF = "fleet-slice-caps.conf.j2"
 RC_UNIT = "claude-rc.service.j2"
 
-# The vars this module reads. Asserted present before anything is compared, so a rename that
-# empties the parse fails here rather than passing an all() over nothing.
+# Asserted present first, so a rename that empties the parse fails here rather than passing an all()
+# over nothing.
 REQUIRED_VARS = frozenset(
     {
         "claude_code_fleet_slice",
@@ -123,8 +123,8 @@ def test_parent_cap_renders_from_the_fleet_variables(
         f"MemorySwapMax must render defaults' {swap}"
     )
 
-    # Sentinels no default holds, so "followed the variable" cannot be satisfied by the
-    # inventory value already being there.
+    # Sentinels no default holds, so the inventory value already being there cannot satisfy
+    # "followed the variable".
     raised = render(
         FLEET_CONF,
         claude_code_fleet_memory_high="97G",
@@ -256,8 +256,8 @@ def test_a_global_oom_ranks_each_fleet_process_above_every_burstable_pod(
     assert oom_score_adjust(render(template, claude_code_fleet_oom_score_adjust=7)) == 7
 
 
-# daniel-box's claude_code_login_uids is empty, yet its fan-out and background jobs still run
-# as 1000, so 1000 is in the fleet on both hosts.
+# daniel-box's claude_code_login_uids is empty, yet its fan-out and background jobs run as 1000, so
+# 1000 is in the fleet on both hosts.
 @pytest.mark.parametrize("host", ["daniel-server", "daniel-box"])
 def test_each_fleet_uids_user_manager_gets_the_oom_drop_in_and_no_restart(
     host: str,
@@ -284,26 +284,33 @@ def test_each_fleet_uids_user_manager_gets_the_oom_drop_in_and_no_restart(
 
 
 @pytest.mark.parametrize("host", ["daniel-server", "daniel-box"])
-def test_the_operators_zsh_login_raises_the_oom_score_of_what_it_starts(
+def test_every_zsh_of_the_operator_raises_the_oom_score_of_what_it_starts(
     host: str, tmp_path
 ) -> None:
-    """The operator's ssh login is a zsh login shell, which inherits sshd's 0."""
+    """The operator's ssh session inherits sshd's 0, and the desktop app's is no login shell.
+
+    zsh reads zshenv for `ssh host cmd` and zprofile only for a login.
+    """
     from lib.proc_testing import run
     from renderer.renderer_lib import host as host_mode
 
     package = host_mode.render_host(host)
-    (edit,) = [e for e in package.lines if e["path"] == "/etc/zsh/zprofile"]
+    (edit,) = [
+        e
+        for e in package.lines
+        if e["path"] == "/etc/zsh/zshenv" and "oom_score_adj" in e["marker"]
+    ]
     # The arm would create a missing /etc/zsh 0700, so zsh has to install the file first.
     assert "zsh" in package.depends
-    profile = tmp_path / "zprofile"
-    profile.write_text(edit["block"])
+    zshenv = tmp_path / "zshenv"
+    zshenv.write_text(edit["block"])
     child = run(
         [
             "sh",
             "-c",
             'cat /proc/self/oom_score_adj && . "$1" && cat /proc/self/oom_score_adj',
             "-",
-            str(profile),
+            str(zshenv),
         ],
         check=True,
     )
@@ -314,3 +321,16 @@ def test_the_operators_zsh_login_raises_the_oom_score_of_what_it_starts(
             "process cannot lower, so the write would change nothing to observe"
         )
     assert after > BURSTABLE_POD_MAX_OOM_SCORE_ADJ
+
+
+@pytest.mark.parametrize("host", ["daniel-server", "daniel-box"])
+def test_the_installed_zprofile_block_stays_declared_and_runs_nothing(
+    host: str,
+) -> None:
+    """An undeclared block stays in the file, where it outlives a change of the score."""
+    from renderer.renderer_lib import host as host_mode
+
+    package = host_mode.render_host(host)
+    (edit,) = [e for e in package.lines if e["path"] == "/etc/zsh/zprofile"]
+    assert edit["marker"] == "# {mark} homelab claude-code — fleet oom_score_adj"
+    assert all(line.startswith("#") for line in edit["block"].splitlines())

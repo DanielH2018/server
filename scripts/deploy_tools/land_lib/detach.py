@@ -33,7 +33,7 @@ leaves its landing running to its verdict. The log's first line names the scope 
 THE LANDING'S EXIT CODE IS THE AUTHORITY, NEVER THE GREP. A grandchild cannot be reaped by the
 waiter, so the landing records its own exit code in `<log stem>.rc` after flushing its last line.
 `land_probe.py` reads that file first and the log second. A landing can exit with no `VERDICT:`
-line at all (`tests/test_land_broad_fallback_verdict.py` covers a truncated file list; a
+line at all (`tests/land_deploy/test_land_broad_fallback_verdict.py` covers a truncated file list; a
 landing-policy refusal leaves only its `land:` line, which `error_in` reads), and a
 waiter that ended on the grep alone would either race the last flush or wait out its whole budget
 on a run that had already finished. A landing that dies without writing the file -- SIGKILL, OOM
@@ -69,11 +69,8 @@ from lib.detach_fork import (  # noqa: F401 -- the record readers are this modul
     recorded_pid,
 )
 
-# Where a detached landing writes. `$CLAUDE_JOB_DIR/tmp` is what the skill told sessions to
-# use, and it is per-session and cleaned up; this falls back to /tmp so the flag works from a
-# plain shell and from a systemd unit. The fallback is one directory per user, suffixed with
-# the user's name: the first landing creates it under its own umask, and the operator's 0007
-# made a shared one 0770, which shut the `claude` agent user out.
+# Fallback /tmp dir is per user, suffixed with the user's name: a shared one created under the
+# operator's 0007 umask shut the `claude` user out.
 LOG_DIR_ENV = "CLAUDE_JOB_DIR"
 FALLBACK_LOG_DIR = Path("/tmp/homelab-landings")
 
@@ -214,8 +211,8 @@ def _run_landing(
         os.dup2(out, 1)
         os.dup2(out, 2)
         close_inherited(keep)
-        # Before `landing` starts anything: a child started while the move is pending stays
-        # in the unit's cgroup.
+        # Before `landing` starts anything: a child started while the move is pending stays in the
+        # unit's cgroup.
         moved = leave_unit_cgroup(scope_prefix)
         if moved:
             print(moved, flush=True)

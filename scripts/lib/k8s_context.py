@@ -47,9 +47,6 @@ _DEFAULTS_PLUGIN_FILTERS = (
     "combine",
 )
 
-# The heavy-tier tests a role's DEFAULTS call, wrapped the same lazy way. netpol-baseline's
-# `netpol_baseline_traefik_https_sources` drops the IPv6 half of `cloudflare_ips` with
-# `reject('search', ':')`.
 _DEFAULTS_PLUGIN_TESTS = ("search",)
 
 
@@ -86,10 +83,8 @@ def _expansion_env(undefined_cls):
     """The environment `resolve_vars` expands values in, built once per undefined class."""
     env = make_env([SHARED_TPL], undefined_cls=undefined_cls)
     env.keep_trailing_newline = False
-    # `bool` is an Ansible filter, not a Jinja builtin, so a group_var that uses it renders
-    # here as "No filter named 'bool'" — a render failure pointing at a variable that is
-    # perfectly valid under Ansible. `ansible_bool` is the filter `register_ansible_filters`
-    # gives every render guard, and importing it costs this module nothing.
+    # `bool` is an Ansible filter, not a Jinja builtin; without it a valid group_var fails to
+    # render.
     env.filters["bool"] = ansible_bool
     for name in _DEFAULTS_PLUGIN_FILTERS:
         env.filters[name] = _lazy_plugin_filter(name)
@@ -166,8 +161,7 @@ def resolve_vars(
                 return node
             pure = _PURE_TEMPLATE.fullmatch(node.removesuffix("\n"))
             if pure:
-                # `compile_expression` would turn an undefined result into None, which a
-                # strict caller must see raise instead.
+                # `compile_expression` turns undefined into None; a strict caller must see it raise.
                 value = _compiled_expression(undefined_cls, pure.group("expr"))(**ctx)
                 if isinstance(value, StrictUndefined):
                     value._fail_with_undefined_error()

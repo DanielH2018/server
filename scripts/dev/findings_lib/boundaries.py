@@ -48,8 +48,6 @@ from lib.worktrees import worktree_facts as read_worktree_facts
 from lib.gh import gh, gh_json
 from lib.json_types import JsonValue
 
-# (worktrees, dirty, merged, ok) — `lib.worktrees.worktree_facts`'s own return, named here
-# so the field below reads as one thing rather than a four-element tuple spelled out.
 WorktreeFacts = tuple[list[Any], Callable[[str], bool], Callable[[Any], bool], bool]
 
 
@@ -86,29 +84,13 @@ class FindingsTools:
     # `gh_calls.run` and the create path, which append it to each write, so a `--dry-run`
     # prints the repo it would write to. `aimed` sets it and wraps the reads to match.
     repo: str | None = None
-    # `(orchestrator_branch, repo) -> batch branches` from the fan-out run manifests, which
-    # `claims --worktree` adds to the branches it keeps. A field so a test never reads the
-    # real `~/.claude/fanout`.
     launched_branches: Callable[[str, str], set[str]] = branches_launched_by
-    # `(repo, stale issue numbers) -> {issue: BatchHold}` for the issues a still-running fan-out
-    # batch works, which keeps their claims live after the orchestrator's session dies.
-    # None is this repo, as for `repo` above.
     running_batch_holds: Callable[
         [str | None, Collection[int]], Mapping[int, BatchHold]
     ] = running_batch_holds
-    # `(repo) -> worktrees` the other host's checkout registers, or None when it cannot be
-    # read. Asked only when a claim names no local worktree. None is this repo, as above.
     peer_worktrees: Callable[[str | None], list[Worktree] | None] = _no_peer_worktrees
-    # `(worktree path) -> bool`: whether a live process works in the tree, which keeps a claim
-    # on an unlocked tree live. A field so a test never scans the real /proc.
     tree_held: Callable[[str], bool] = _never_held
-    # `(issue numbers, repo, dry_run=) -> {issue: (outcome, detail)}`, `board.sync_board`'s
-    # contract. None is this repo, as above.
     sync_board: Callable[..., dict[int, tuple[str, str]]] = sync_board
-    # `(branch, OWNER/NAME, dry_run=) -> title or None` and
-    # `(OWNER/NAME, held, dry_run=) -> closed titles`, `milestone.attach_target`'s and
-    # `milestone.close_idle`'s contracts. Fields because `claim` and `reap` call them on every
-    # run, so a test drives either without restating the milestone REST reads.
     attach_milestone: Callable[..., str | None] = milestone.attach_target
     close_idle_milestones: Callable[..., list[str]] = milestone.close_idle
     # `() -> the register's tracked files`, which `issue_model.cited_paths` resolves an

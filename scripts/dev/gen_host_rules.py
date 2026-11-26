@@ -10,7 +10,7 @@ promtool tests load by path. A rule's `service` must be a literal
 (`scripts/validate/alert_conventions.py`), and a node has no workload-service join, so the
 expansion happens here rather than in PromQL. `--check` exits 1 when a committed rule file
 differs from the render; the `gen-host-rules` prek hook and
-`scripts/dev/tests/test_gen_host_rules.py` run it.
+`scripts/dev/tests/repo_tools/test_gen_host_rules.py` run it.
 
 THE HOST TABLE is `observability_expected_hosts` in the role's defaults: each host's scrape `job`
 and its `limit_seconds` for `HostUpdateStale`. A new host is one entry there. Every rule whose
@@ -44,10 +44,10 @@ from pathlib import Path
 
 import yaml
 
-from lib import yaml_fast
+from lib import estate, yaml_fast
 from lib.cli_help import ArgumentParser
 from lib.inventory_lists import host_names
-from lib.repo_paths import HOST_VARS, K8S_ROLES, REPO
+from lib.repo_paths import K8S_ROLES, REPO
 
 SELF = "scripts/dev/gen_host_rules.py"
 ROLE = K8S_ROLES / "observability"
@@ -86,9 +86,7 @@ def untabled_hosts(table: dict[str, dict], inventory: Iterable[str]) -> list[str
     ]
 
 
-def host_facts(
-    hosts: dict[str, dict], repo: Path = REPO, host_vars: Path = HOST_VARS
-) -> dict[str, dict]:
+def host_facts(hosts: dict[str, dict], repo: Path = REPO) -> dict[str, dict]:
     """Each host's selector facts: its table entry, package components and host_vars."""
     facts = {}
     for host, entry in hosts.items():
@@ -96,7 +94,7 @@ def host_facts(
         facts[host] = {
             **entry,
             "components": set(package.get("components") or []),
-            "host_vars": _load(host_vars / f"{host}.yml"),
+            "host_vars": estate.host_vars(host),
         }
     return facts
 

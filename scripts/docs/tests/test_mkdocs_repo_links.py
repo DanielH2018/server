@@ -18,8 +18,8 @@ from lib.repo_paths import REPO
 DOCS = REPO / "docs"
 SCRIPTS_MD = DOCS / "reference/scripts.md"
 
-# Built pages, mirroring what `on_files` hands the hook. mkdocs excludes these two, so the
-# real index never holds a key for them -- a link to an unbuilt page would 404.
+# mkdocs excludes these two, so the real index holds no key for them; a link to an unbuilt page
+# would 404.
 _EXCLUDED = ("superpowers/", "adr/template.md")
 
 
@@ -119,8 +119,6 @@ def test_a_docs_page_resolves_to_itself(index: dict[str, tuple[str, str]]) -> No
         # Config the site has no page about.
         "mkdocs.yml",
         "pyproject.toml",
-        # A role file. The Services page documents the SERVICE -- route, auth, backup tier --
-        # and nothing about either of these, which would land on the same row regardless.
         "k8s/roles/netpol-baseline/tasks/main.yml",
         "k8s/roles/netpol-baseline/defaults/main.yml",
         "tasks/main.yml",
@@ -204,8 +202,6 @@ def test_an_unresolvable_span_is_untouched() -> None:
         "<pre><code>uv run {path} --tags docs</code></pre>",
         # Already a link: nesting an anchor inside one produces invalid HTML.
         '<p><a href="../deploying/"><code>{path}</code></a></p>',
-        # A heading carries its own permalink, and the Usage headings on the Scripts page
-        # would otherwise link two screens up the page they are already on.
         '<h3 id="sample-tool"><code>{path}</code></h3>',
         # The id says this cell IS the target; linking it would point it at itself.
         '<td><code id="script-dev-sample_tool-py">{path}</code></td>',

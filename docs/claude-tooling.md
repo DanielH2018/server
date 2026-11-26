@@ -39,7 +39,7 @@ shares one vocabulary (#4454). `--json` and `--dry-run` print no verdict line, b
 line would break a JSON document or a command list. The prefix is not bare `VERDICT:`, because a
 landing's log carries `probe.py health` output and is grepped for `^VERDICT:`.
 `subcommands.VERDICT_SUBCOMMANDS` lists the verdict subcommands.
-`scripts/diagnostics/tests/test_probe_registry.py` checks that the subcommands `cli_parser.py`
+`scripts/diagnostics/tests/probe_landing/test_probe_registry.py` checks that the subcommands `cli_parser.py`
 accepts equal the registry's names, and that every `probe_lib` module with a `run_*`/`main` entry point is
 registered.
 
@@ -428,7 +428,7 @@ then `mcp__homelab-ui__browser_close` followed by any `mcp__homelab-ui__browser_
 The `-m ui` suite is unaffected either way — it launches its own server per run, so it reads the
 state file as it stands.
 
-`scripts/diagnostics/tests/test_ui_state_reload.py` (marker `ui`) guards this procedure, so a
+`scripts/diagnostics/tests/ui_smoke/test_ui_state_reload.py` (marker `ui`) guards this procedure, so a
 `@playwright/mcp` bump that changes what `browser_close` disposes fails a test. It launches its
 own server against a private state file (`UI_MCP_STATE_PATH`, which `ui_mcp.sh` takes in place
 of the tier's shared jar), so it can swap the file under a running server without touching the
@@ -454,7 +454,7 @@ not route around it either — the read-only ServiceAccount is denied `create po
 
 ### The regression suite
 
-`uv run pytest -m ui` (`scripts/diagnostics/tests/test_ui_smoke.py`) drives this same MCP server over
+`uv run pytest -m ui` (`scripts/diagnostics/tests/ui_smoke/test_ui_smoke.py`) drives this same MCP server over
 stdio, so a break in the wrapper's DNS pin, session minting or launch config fails a test rather
 than silently degrading a Claude session. The `ui` marker is deselected by `addopts`, because
 these tests need the host's age key, LAN reachability and a browser — none of which a GitHub
@@ -739,7 +739,7 @@ the text runs against an allowlist. The allowlist is
 `.claude/hooks/hooklib/read_only_commands.py` for ordinary commands, and a read-only set of git
 and gh verbs such as `git log`, `git branch -a`, `gh pr view` and a `gh api` GET. A command the
 allowlist does not name is denied, so a read it lacks costs the agent one rephrased command.
-`.claude/hooks/tests/test_block_protected_bash_read_only.py::test_read_only_agents_run_only_what_the_hook_allows`
+`.claude/hooks/tests/bash_guards/test_block_protected_bash_read_only.py::test_read_only_agents_run_only_what_the_hook_allows`
 judges every command a read-only agent's file names in backticks the same way, and fails on a
 refusal the file does not mark with `(refused` after the span. The arm reads past wrappers such as `timeout`, `xargs` and `uv run`. It judges the body of a `$( )`
 and an `ssh` remote command as commands of their own. The reviewer agents and the skeptic read
@@ -989,7 +989,7 @@ hosts' Claude Code exports OTLP to their own node's collector hostPort (127.0.0.
 removes `/audit-permissions` from every session opened here and nothing in a session says so. The
 plugin registers no hooks of its own: it ships the skill and the Loki reader, so enabling it adds
 `/audit-permissions` and changes nothing else about a session.
-`.claude/hooks/tests/test_project_settings_shape.py::test_no_plugin_is_disabled_here_without_a_reason_on_the_list`
+`.claude/hooks/tests/hook_contract/test_project_settings_shape.py::test_no_plugin_is_disabled_here_without_a_reason_on_the_list`
 fails if a disable for it comes back without a reason written here.
 
 The events land in **observability's Loki** (`observability` namespace, Service `loki`), not in

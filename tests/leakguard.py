@@ -41,7 +41,7 @@ run, and fail CI. So the shim set is intersected with what is actually installed
 run a real systemd unit or a real container; handing them a stub would leave them
 passing while proving nothing, which is the failure mode this whole guard is about.
 
-**A `ui`-marked test runs with the real PATH too.** `scripts/diagnostics/tests/test_ui_smoke.py`
+**A `ui`-marked test runs with the real PATH too.** `scripts/diagnostics/tests/ui_smoke/test_ui_smoke.py`
 drives a real Chromium against this homelab's LAN routes, and its fixtures read the SOPS
 `domain` and `grafana_admin_password` before anything renders. Reaching live infrastructure is
 the test there, so a stubbed `sops` errors the whole tier in fixture setup
@@ -83,7 +83,7 @@ command string gets the same swap for each word naming such a path, such as
 `"/usr/bin/logger x"`. The wrapper sees only the direct child, so a script that
 hardcodes `/usr/bin/logger` and runs it itself would still reach the real binary. The
 `scripts-run-no-shimmed-binary-by-hardcoded-path` row of
-`tests/repo/test_census_rows_text.py` refuses that path in every script a test can run,
+`tests/repo/census_rows/test_census_rows_text.py` refuses that path in every script a test can run,
 unless it is only the default of a variable the test can set. A script that puts a fixed
 directory ahead of the `PATH` it inherited, such as `export PATH="/usr/local/bin:${PATH}"`,
 hides this stub directory the same way, and the `scripts-append-to-path-rather-than-prepend`
@@ -131,8 +131,7 @@ from pathlib import Path
 
 import pytest
 
-# Every binary here leaves the process: it talks to a daemon, a cluster, a remote host, or an
-# API. A test needing one stubs it itself; this catches the ones that forgot.
+# Every binary here leaves the process; a test needing one stubs it itself.
 SHIMMED_BINARIES = (
     "at",
     "busctl",
@@ -158,31 +157,21 @@ SHIMMED_BINARIES = (
     "wget",
 )
 
-# Tests that reach real infrastructure on purpose. Each is documented in its module docstring
-# and skips where that infrastructure is missing. They run with the real PATH: a stub would
-# leave them green while checking nothing.
+# Run with the real PATH: a stub would leave them green while checking nothing.
 _LIVE_API_TESTS = frozenset(
     {
-        # It starts and stops a real systemd user unit, because the behaviour under test is what its
-        # stop kills. Skipped where no user manager answers.
-        "scripts/deploy_tools/tests/test_land_detach.py::test_stopping_the_callers_unit_leaves_the_landing_running_to_its_verdict",
-        # It restarts, stops and kills stand-in systemd user units, because what a restart does
-        # to the Pi's watchdog daemon is decided by systemd's job queue. Skipped where no user
-        # manager answers.
+        "scripts/deploy_tools/tests/land_merge/test_land_detach.py::test_stopping_the_callers_unit_leaves_the_landing_running_to_its_verdict",
+        # Restarts, stops and kills stand-in systemd user units.
         "hosts/lib/tests/test_pi_watchdog_dropin.py::test_a_restart_leaves_the_watchdog_daemon_running_and_a_stop_or_a_crash_starts_the_keepalive",
     }
 )
 
-# The marker `scripts/diagnostics/tests/test_ui_smoke.py` carries, whose tests drive a live
+# The marker `scripts/diagnostics/tests/ui_smoke/test_ui_smoke.py` carries, whose tests drive a live
 # browser and read SOPS on purpose. Named here rather than spelled inline so the non-vacuity
 # test can assert that module still carries it — see the module docstring.
 _LIVE_MARKER = "ui"
 
-# The marker on tests that run a script inside a pinned container image with `docker run`
-# (tests/longhorn/test_longhorn_restore_drill_image.py,
-# k8s/roles/crowdsec/tests/test_jobs_image.py). They reach the Docker socket
-# and pull from a registry on purpose. `addopts` deselects them from the `pytest` shards,
-# and `.github/workflows/image-leg.yml` runs them.
+# These reach the Docker socket and a registry on purpose.
 _IMAGE_MARKER = "image"
 
 
@@ -195,9 +184,7 @@ def _runs_against_live_infra(item: pytest.Item) -> bool:
     )
 
 
-# The shim records the call rather than only blocking it, so the failure message can name the
-# argv. It exits non-zero and says so on stderr: a test that leaks then fails with a message
-# naming this guard, instead of failing on a confusing empty read several asserts later.
+# Records the call so the failure message can name the argv.
 _SHIM = """#!/bin/sh
 printf '%s %s\\n' "$(basename "$0")" "$*" >> "$LEAKGUARD_CALLS"
 echo "LEAKGUARD: $(basename "$0") is stubbed during tests - see tests/leakguard.py" >&2
@@ -206,13 +193,11 @@ exit 127
 
 _state: dict[str, object] = {}
 
-# What `git commit` exports to its hooks. Each one redirects every git call in the process,
-# including one aimed at a `tmp_path` repo with `-C`, at the committing repository.
+# Each redirects every git call in the process, including `-C` at a `tmp_path` repo.
 GIT_HOOK_VARS = frozenset({"GIT_DIR", "GIT_INDEX_FILE", "GIT_WORK_TREE"})
 
 
-# What the agent user's login profile exports and a module reads at import. Each one swaps an
-# operator path that a test asserts for the agent user's own.
+# Each swaps an operator path that a test asserts for the agent user's own.
 AGENT_PROFILE_VARS = frozenset({"RUN_HOOK_PROJECT_DIR"})
 
 
@@ -224,9 +209,8 @@ def strip_env(environ, names) -> list[str]:
     return removed
 
 
-# What the `Popen` wrapper copies from this process into an explicit child `env` that lacks
-# them. `pytest_configure` sets both, so a child built from scratch still writes its textfile
-# under the stub directory and still records a shim call.
+# What the `Popen` wrapper copies into an explicit child `env` that lacks them, so a from-scratch
+# child still writes its textfile under the stub dir and records a shim call.
 CARRIED_VARS = ("TEXTFILE_DIR", "LEAKGUARD_CALLS")
 
 
@@ -266,8 +250,7 @@ def _in_real_dir(found: str) -> str:
     )
 
 
-# At import rather than in a hook: the controller strips before xdist spawns its workers, each
-# worker strips again as it loads the plugin, and no session fixture runs first.
+# At import, not in a hook: the controller strips before xdist spawns workers.
 strip_env(os.environ, GIT_HOOK_VARS | AGENT_PROFILE_VARS)
 
 
@@ -583,11 +566,7 @@ def pytest_runtest_setup(item: pytest.Item) -> None:
     real_path = _state.get("real_path")
     if not isinstance(stub_dir, str) or not isinstance(real_path, str):
         return
-    # Remember where the record stood, so teardown can attribute only what THIS test added.
-    # Keyed by nodeid rather than kept as a single value: teardown runs even when setup did
-    # not — a `skipif` that fires, or a fixture that raises — and a single value would then
-    # hand this test's calls to whichever test ran next. The five allowlisted tests all skip
-    # on a runner with no cluster, so that path is exercised in CI and not here.
+    # Keyed by nodeid: teardown runs even when setup did not (a `skipif`, a raising fixture).
     _marks()[item.nodeid] = len(_calls_seen())
     # One decision, both probes. See the module docstring for why teardown does not clear it.
     exempt = _runs_against_live_infra(item)

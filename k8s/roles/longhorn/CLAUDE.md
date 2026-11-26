@@ -14,7 +14,7 @@ A bad apply here detaches volumes under every stateful service while host probes
 - **Claims:** none (no PVC)
 <!-- /generated_from -->
 
-- **Flux applies it.** Its `containers_list` entry is in `cluster/services.yml`. A rebuilt cluster
+- **Flux applies it.** Its `containers_list` entry is in `k8s/services.yml`. A rebuilt cluster
   gets it from the `longhorn` Kustomization at step 6 of `docs/flux-deploy-plane.md`'s
   *Bootstrapping Flux on a rebuilt cluster*. The `longhorn-backup` Kustomization depends on it and
   creates the backup targets once it reads `Ready`.
@@ -80,6 +80,7 @@ A bad apply here detaches volumes under every stateful service while host probes
       an immutable parameter changes.
     - `templates/networkpolicy-metrics.yaml.j2` renders the policy that admits Prometheus to
       the manager's metrics port.
+    - `templates/networkpolicy-ui.yaml.j2` renders the policy that admits only Traefik to the UI.
 - **A DataEngineSpecific Setting's value is a JSON map serialised as a string.**
   `default-replica-count` and both `snapshot-data-integrity` Settings render
   `{"v1":"...","v2":"..."}` in the compact form the manager stores, so the render equals the
@@ -140,7 +141,7 @@ A bad apply here detaches volumes under every stateful service while host probes
   A timeout on this forward-only tag writes `DEPLOY_HOLD`, so the value carries that headroom.
 - **`NEVER_SHED` names the tag** in `scripts/renderer/template_filters/service_tier.py`. The role is
   untiered, and the lost-node break-glass must not scale the storage control plane down.
-  `tests/k8s/test_shed_set_is_derived_from_tier.py::test_never_shed_matches_the_untiered_roles_that_never_prune`
+  `tests/k8s/workloads/test_shed_set_is_derived_from_tier.py::test_never_shed_matches_the_untiered_roles_that_never_prune`
   holds the set equal to the untiered roles that set `flux_prune: false`.
 
 ## Host tasks and the backup plane

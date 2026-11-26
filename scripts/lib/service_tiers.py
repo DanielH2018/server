@@ -12,8 +12,7 @@ shed set ``probe.py shed-set`` prints, from the same module.
 """
 
 from lib.k8s_roles import k8s_entries
-from lib.render_guard import load_yaml
-from lib.repo_paths import ALL_VARS
+from lib.estate import shared_vars
 from renderer.template_filters.longhorn_groups import (
     longhorn_nobackup_claims,
     longhorn_r2_claims,
@@ -28,30 +27,28 @@ def r2_volumes(
     """``k3s_longhorn_r2_volumes`` as the k3s role computes it.
 
     Args:
-        entries: the service entries to derive from; ``cluster/services.yml``'s when omitted.
+        entries: the service entries to derive from; ``k8s/services.yml``'s when omitted.
         namespace: the namespace for an entry that names none; ``k8s_namespace`` from
-            ``group_vars/all.yml`` when omitted.
+            ``k8s/vars.yml`` when omitted.
     """
     if entries is None:
         entries = list(k8s_entries().values())
     if namespace is None:
-        namespace = load_yaml(ALL_VARS)["k8s_namespace"]
+        namespace = shared_vars()["k8s_namespace"]
     return longhorn_r2_claims(entries, namespace)
 
 
 def shed_set(entries: list[dict] | None = None) -> list[str]:
-    """The k8s services to scale down when one node is lost, in ``cluster/services.yml`` order.
+    """The k8s services to scale down when one node is lost, in ``k8s/services.yml`` order.
 
     Args:
-        entries: the service entries to derive from; ``cluster/services.yml``'s when omitted.
+        entries: the service entries to derive from; ``k8s/services.yml``'s when omitted.
     """
     if entries is None:
         entries = list(k8s_entries().values())
     return [entry["name"] for entry in shed_entries(entries)]
 
 
-# Each tier list the k3s role derives, and the filter that derives it from
-# ``(entries, namespace)``.
 _DERIVED = {
     "k3s_longhorn_r2_volumes": longhorn_r2_claims,
     "k3s_longhorn_weekly_volumes": longhorn_weekly_claims,
@@ -76,7 +73,7 @@ def resolved_tier_lists(k3s_defaults: dict, entries: list[dict] | None = None) -
             caller has one. Its ``k8s_namespace``, when present, is the namespace the
             expressions derive with.
         entries: The service entries the expressions derive from; the repo's
-            ``cluster/services.yml`` entries when omitted. A caller reading an injected
+            ``k8s/services.yml`` entries when omitted. A caller reading an injected
             inventory passes that inventory's entries, or the derivation reads the repo's.
     """
     resolved = dict(k3s_defaults)
@@ -87,7 +84,7 @@ def resolved_tier_lists(k3s_defaults: dict, entries: list[dict] | None = None) -
         entries = list(k8s_entries().values())
     namespace = k3s_defaults.get("k8s_namespace")
     if namespace is None:
-        namespace = load_yaml(ALL_VARS)["k8s_namespace"]
+        namespace = shared_vars()["k8s_namespace"]
     for key in pending:
         resolved[key] = _DERIVED[key](entries, namespace)
     return resolved

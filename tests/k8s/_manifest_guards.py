@@ -7,26 +7,27 @@ deploy's own context and does not serve that shape.
 
 from pathlib import Path
 
+from lib.estate import host_vars, shared_vars
 from lib import yaml_fast
 from lib.guard_jinja_env import template_env
 from lib.render_context import render_context
 from lib.container_entry import ContainerEntry
-from lib.render_guard import host_layer, k8s_services
+from lib.render_guard import k8s_services
 from jinja2 import Undefined
 
 from lib.k8s_roles import manifest_template
 from lib.k8s_yaml import make_lookup
 from _helpers import K8S_ROLES
-from lib.repo_paths import ALL_VARS, HOST_VARS, K3S_DEFAULTS
+from lib.repo_paths import K3S_DEFAULTS
 
 
 K8S = K8S_ROLES
 
-ALL_VARS_VALUES = yaml_fast.safe_load(ALL_VARS.read_text())
+ALL_VARS_VALUES = shared_vars()
 
-BOX_VARS = host_layer(HOST_VARS, "daniel-box")
+BOX_VARS = host_vars("daniel-box")
 
-SERVER_VARS = yaml_fast.safe_load((HOST_VARS / "daniel-server.yml").read_text())
+SERVER_VARS = host_vars("daniel-server")
 
 
 def _render(path: Path, **ctx) -> str:
@@ -74,8 +75,8 @@ def _role_context(role: str, **overrides) -> dict:
     """The context `role`'s templates render with in a deploy, `overrides` laid on top.
 
     `lib.render_context`'s, the one the validator and `_k8s_render` render with: role defaults
-    under all.yml and daniel-box's host_vars, which is Ansible's own precedence. A context built
-    here by hand put the defaults over all.yml and left host_vars out, so it agreed with the
+    under all.yml, which is Ansible's own precedence. A context built
+    here by hand put the defaults over all.yml, so it agreed with the
     deploy only while no inventory key shared a name with a default.
 
     `overrides` go in before anything resolves, so a default that reads an overridden name

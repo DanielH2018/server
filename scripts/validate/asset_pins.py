@@ -84,8 +84,7 @@ DIGEST_KEYS = ("sha256", "md5")
 FETCH_TIMEOUT = 60.0
 CHUNK = 1 << 20
 
-# Pins the census must find, by name. A member going missing names what moved. Cover every
-# shape and every plane: a flat `_md5` pair, a flat `_sha256` pair whose URL is templated, a
+# Covers every shape and plane: a flat `_md5` pair, a flat `_sha256` pair with a templated URL, a
 # setup-role pin and a list-shaped pin.
 KNOWN_PINS = frozenset(
     {
@@ -502,13 +501,13 @@ def main(
     if args.refresh and (args.only or args.skip or args.list):
         parser.error("--refresh takes its own names; drop --only, --skip and --list")
     report = io.StringIO()
-    # sys.stderr is read here, not bound as a default like `out`, so a test that swaps it
-    # for capsys's stream receives the report.
+    # sys.stderr is read here, not bound as a default, so a test swapping it for capsys's stream
+    # receives the report.
     try:
         code = _run(args, report, fetcher, discover, known, root, annotated)
     except BaseException:
-        # A download that dies mid-body raises out of the run. The report still names
-        # every digest `--refresh` rewrote before it.
+        # A download that dies mid-body raises out of the run; the report still names every digest
+        # `--refresh` rewrote before it.
         sys.stderr.write(report.getvalue())
         raise
     (out if code == 0 else sys.stderr).write(report.getvalue())
@@ -540,8 +539,7 @@ def _run(
         pinned_deps = {dep for pin in pins for dep in pin.dep_names}
         unknown = wanted - names - pinned_deps
         if unknown:
-            # An annotated version with no digest beside it is a valid name with no work: the
-            # annotated-pin packageRule names this command on every annotated PR.
+            # An annotated version with no digest is a valid name with no work.
             digestless = unknown & annotated()
             for dep in sorted(digestless):
                 print(f"nothing to refresh: {dep} pins no digest", file=out)

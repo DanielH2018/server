@@ -56,8 +56,8 @@ def test_a_filled_declared_volume_fails_and_stamps_nothing(tmp_path: Path) -> No
     proc = run(restore="pass", env={"K3S_STUB_PROBE": EMPTY_PROBE})
     assert proc.returncode == 1
     assert "the waiver does not apply" in proc.stderr, proc.stderr
-    # Neither stamp: check 7 would read the first as "the nightly drill is alive" and check 8 the
-    # second as "this volume restores", both off a run that brought back nothing.
+    # Neither stamp: check 7 would read the first as the nightly drill being alive and check 8 the
+    # second as the volume restoring, off a run that brought back nothing.
     assert "last-success" not in run.cm
     assert f"success.{pvc}" not in run.cm
 

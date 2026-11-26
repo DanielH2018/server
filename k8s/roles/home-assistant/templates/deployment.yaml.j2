@@ -2,9 +2,8 @@
 {% from 'security-context.yml.j2' import hardened_security_context with context %}
 {% from 'workload-shell.yml.j2' import spec_shell, pod_shell with context %}
 {% from 'lsio-env.yml.j2' import lsio_env with context %}
-{# The config trees configmap.yaml.j2 builds, keyed the same way: the ConfigMap and the
-   subdirectory of /config it lands in ('root' is /config itself). The three subdirectories
-   are swept by pattern before the install; the root is not (see the init container). #}
+{# Keyed as in configmap.yaml.j2; the three subdirectories are swept by pattern before the install,
+   the root is not. #}
 {% set config_trees = [
      ('home-assistant-config', 'root'),
      ('home-assistant-automations', 'automations'),
@@ -23,8 +22,8 @@ metadata:
   name: home-assistant
   namespace: {{ k8s_namespace }}
 spec:
-  # Recreate is load-bearing: the PVC is RWO, and two HAs against one MQTT
-  # broker and one recorder lineage must never coexist.
+  # Recreate is load-bearing: the PVC is RWO, and two HAs on one MQTT broker and recorder must never
+  # coexist.
 {{ spec_shell('Recreate') }}
   replicas: 1
   selector:
@@ -43,31 +42,15 @@ spec:
       # a second node whose loss breaks SSO and home automation. Pinning them costs no
       # availability the VIP pins had not already spent, and the pin moves with
       # k8s_primary_node. The `home-critical-workloads-pinned-to-the-vip-node`
-      # row in tests/k8s/_edge_property_rows.py derives the set from `tier`.
+      # row in tests/k8s/rendered_properties/_edge_property_rows.py derives the set from `tier`.
       nodeSelector:
         kubernetes.io/hostname: {{ k8s_primary_node }}
 {{ pod_shell(services | tier_priority_class('home-assistant')) }}
-      # No pod-level runAsUser/fsGroup: the LSIO image starts as root and s6 drops to
-      # PUID/PGID itself, chowning /config on the way — same contract as under Docker.
       initContainers:
-        # Lay the git-owned config plane into the PVC on every start (see the ConfigMap's
-        # comment). Each ConfigMap is mounted under /cm/<tree> and installed by glob: the
-        # ConfigMap holds exactly the files its list in defaults/main.yml names, so the glob
-        # cannot pick up anything the list left out, and the file lists live in one place. The
-        # root glob is `*` because that list carries .py scripts as well as .yaml; it skips the
-        # mount's own `..data` entries, which start with a dot.
-        # .storage/, the recorder DB, secrets consumers, custom_components/ are PVC state this
-        # never touches.
-        #
-        # automations/, scripts/ and custom_templates/ are CLEARED before the install because
-        # `install` only overwrites what it is given: a file dropped from the ConfigMap would
-        # otherwise survive on the PVC and keep being loaded, green deploy and all, with the
-        # repo showing it gone. All three directories are git-owned, so deleting them wholesale
-        # is safe. The root of /config is NOT swept — the PVC's own files live there — so the
-        # root files are each overwritten every start and cannot go stale, but REMOVING one
-        # from the list still leaves the PVC copy behind, and that needs a manual delete. The
-        # `rm -f` retires the pre-split single files for the same reason; harmless once
-        # nothing includes them, but a stale copy invites confusion.
+        # Each ConfigMap is mounted at /cm/<tree> and installed by glob; the root glob is `*`
+        # because it carries .py too.
+        # automations/, scripts/, custom_templates/ are cleared first (`install` only overwrites); a
+        # removed root file needs a manual PVC delete.
         - name: config-install
           image: {{ home_assistant_k8s_init_image }}
           imagePullPolicy: IfNotPresent
@@ -84,14 +67,8 @@ spec:
               find /config/{{ subdir }} -maxdepth 1 -name '{{ pattern }}' -delete
               install -m 644 /cm/{{ subdir }}/{{ pattern }} /config/{{ subdir }}/
 {% endfor %}
-          # As PUID, not root: the seeded /config is uid-1000-owned and this container drops
-          # ALL caps (no DAC_OVERRIDE), so only the owner can overwrite the previous copies.
-          # Root-with-no-caps fails exactly there ("can't create: File
-          # exists"). The MAIN container can't take a pod-level runAsUser — LSIO s6 must
-          # start as root — which is why this lives here per-container.
-          # Asserted here, not on the pod: the main container below must still start as
-          # root for LSIO's s6 chown-then-drop, so this container-level runAsUser is the
-          # only place a non-root assertion is safe.
+          # Run as PUID, not root: all caps are dropped, so root without DAC_OVERRIDE cannot
+          # overwrite uid-1000 files.
 {{ hardened_security_context(read_only=true, non_root=true, run_as_user=puid, run_as_group=pgid) }}
           volumeMounts:
 {% for configmap_name, subdir in config_trees %}

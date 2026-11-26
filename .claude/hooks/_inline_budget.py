@@ -24,14 +24,10 @@ from typing import NamedTuple
 
 _QUOTES = "\"'"
 
-# A `whole` row this close to a limit is marked `near`. The character mark covers a deeper
-# trigger, which lengthens the header. The line mark covers growth only, because the header
-# is always one line.
+# The character mark covers a deeper trigger; the line mark covers growth only.
 NEAR_CHARS = 200
 NEAR_LINES = 10
 
-# The harness loads the root `CLAUDE.md` whole at session start, and Anthropic recommends
-# keeping it under 200 lines.
 ROOT_TARGET_LINES = 200
 
 

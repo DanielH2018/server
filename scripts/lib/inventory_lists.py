@@ -8,7 +8,7 @@ was split out of ``render_guard``. ``containers_list`` is parsed by
 
 Three host roles a script must name without parsing YAML: ``LANDING_HOST``, ``PI_HOST``
 and ``K8S_HOST`` below. Each is a literal rather than a read of the inventory var that confers the
-role, because this module imports no YAML loader. ``scripts/lib/tests/test_inventory_lists.py``
+role, because this module imports no YAML loader. ``scripts/lib/tests/k8s/test_inventory_lists.py``
 pins each literal to that var instead, so moving the role in the inventory fails a test rather
 than leaving every script naming the old host.
 
@@ -34,14 +34,13 @@ K8S_HOST = "daniel-box"
 
 
 def host_vars_file(host: str, host_vars: Path = HOST_VARS) -> Path:
-    """The host_vars file Ansible reads for `host`, under `host_vars`."""
-    return host_vars / f"{host}.yml"
+    """`host`'s own vars file under the hosts directory `host_vars`: ``<host>/vars.yml``."""
+    return host_vars / host / "vars.yml"
 
 
 PI_HOST_VARS = host_vars_file(PI_HOST)
 
 
-# The key that lists the Pi's services, which the `homelab-daniel-pi` package deploys (H5).
 PI_LIST_KEY = "compose_services"
 
 
@@ -63,11 +62,15 @@ def pi_entries_in(data: dict | None) -> list[dict]:
 
 
 def host_names(host_vars: Path = HOST_VARS) -> tuple[str, ...]:
-    """Every inventory host, sorted: one per ``host_vars`` file.
+    """Every inventory host, sorted: one per ``<host>/vars.yml`` under `host_vars`.
 
-    A ``_``-prefixed file, such as ``_example.yml``, is a template for a new host, not a host.
+    A ``_``-prefixed directory, such as ``_example``, is a template for a new host, not a host.
     A missing directory reads as no hosts.
     """
     return tuple(
-        sorted(p.stem for p in host_vars.glob("*.yml") if not p.name.startswith("_"))
+        sorted(
+            p.parent.name
+            for p in host_vars.glob("*/vars.yml")
+            if not p.parent.name.startswith("_")
+        )
     )

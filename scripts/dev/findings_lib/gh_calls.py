@@ -17,9 +17,6 @@ from collections.abc import Mapping
 from dataclasses import replace
 import sys
 
-# Reach the sibling package directories: a directly-invoked script gets only its own
-# directory on sys.path, and pyproject's `pythonpath` is a pytest setting.
-
 
 from dev.findings_lib.issue_model import (
     _LIST_FIELDS,
@@ -56,8 +53,6 @@ def _warn_at_the_comment_cap(issues: list[Issue]) -> list[Issue]:
     return issues
 
 
-# An aliased `issue(number:)` lookup of the field values alone: one request and one point for
-# the 113 open issues, 0.79s, measured 2026-11-19. `gh issue list --json` cannot return them.
 _FIELDS_PER_CALL = 100
 _FIELD_VALUES = """issueFieldValues(first: 25) { nodes {
       ... on IssueFieldSingleSelectValue { name field { ... on IssueFieldSingleSelect { name } } }
@@ -253,20 +248,8 @@ def _operator_issues(issues: list[Issue]) -> list[Issue]:
 # narrow slices `load_backlog_issues` names.
 ISSUE_LIST_CAP = 1000
 
-# `lib.gh.gh`'s default timeout is 60s, which a whole-register `--state all` fetch outgrows:
-# asking for `body` and `comments` on every `claude` issue in every state takes about 58s per
-# 1000 issues, so EVERY findings.py subcommand would fail, `open` included, with a bare "gh
-# failed: ... timed out after 60.0 seconds". Raising the timeout only moves the wall (300s
-# breaks at about 5,100 issues), and a fetch that times out never reaches the cap warning that
-# would have explained it.
-#
-# NARROWING THE FIELD SET IS THE WRONG LEVER — the field set is not what makes a fetch slow,
-# the STATE is (`--state all` takes about a minute, `--state open` under a second), and
-# `issue_model.issue_rows` structurally needs `body` for `verify_by` and `paths` and
-# `comments` for `claimed` and `reobservations`. Narrowing the QUERY is the lever:
-# `fingerprint_match` for `open`, `load_backlog_issues` for the cron. This timeout is a
-# ceiling over fetches measured in seconds, kept because the register keeps growing and a
-# slow LAN is not a reason to lose the page.
+# gh's 60s default timeout is outgrown by a whole-register `--state all` fetch.
+# Narrow the query (`fingerprint_match`, `load_backlog_issues`), not the field set.
 REGISTER_FETCH_TIMEOUT = 300.0
 
 
@@ -315,13 +298,8 @@ def load_issues(
     )
 
 
-# The labels `findings.py close` writes on its two not-planned outcomes, and the whole of
-# what the settled register renders. `NO_REOPEN` is the same pair read for the other half of
-# the contract — `open` refusing to re-file either.
 SETTLED_LABELS = ("refuted", "accepted")
 
-# A not-planned close that carries neither settled label: closed by hand, outside
-# `findings.py close`, so no ruling was recorded.
 UNRULED_CLOSE_SEARCH = "reason:not-planned " + " ".join(
     f"-label:{label}" for label in SETTLED_LABELS
 )
@@ -354,10 +332,6 @@ def load_backlog_issues(tools: FindingsTools | None = None) -> list[Issue]:
     return list(by_number.values())
 
 
-# How many search hits `fingerprint_match` reads back. A fingerprint is a 12-hex string that
-# appears once, in the body of the one issue that owns it, so a second hit is a comment or a
-# PR body quoting it. 30 leaves room for a well-discussed finding without paying for the
-# register.
 FINGERPRINT_SEARCH_LIMIT = 30
 
 
@@ -400,9 +374,8 @@ def fingerprint_match(fp: str, tools: FindingsTools) -> Issue | None:
     if found is not None:
         return attach_fields([found], tools)[0]
     if len(hits) >= FINGERPRINT_SEARCH_LIMIT:
-        # The one way this returns a wrong None: the owning issue was pushed out of the page
-        # by issues that merely mention the fingerprint. Says so rather than filing a silent
-        # duplicate, because the caller's next act is to create one.
+        # The owner may be pushed out of the page by issues quoting the fingerprint: warn rather
+        # than file a duplicate.
         sys.stderr.write(
             f"warning: {FINGERPRINT_SEARCH_LIMIT} search hits for fingerprint {fp} and none "
             "owns it -- the owning issue may be past the page, so check before filing\n"

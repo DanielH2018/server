@@ -13,13 +13,8 @@ import re
 from diagnostics.probe_lib.longhorn_cluster import B2_BACKUP_TARGET_NAME
 
 
-# Longhorn logs one of these per backup, naming the delta it processed:
-#   "Created snapshot changed blocks: 46 mappings, 46 blocks and 45 new blocks"
-# `blocks` is the delta it walks, and it issues one HeadObject per block to decide whether the
-# block is already in the store — so that count IS the backup's Class B transaction cost. `new`
-# is what it then uploaded, which is Class A and unmetered. B2 publishes no usage endpoint (its
-# per-class counters are Partner-tier only), so this line is the closest thing to a meter the
-# backup plane has, and it costs nothing because the logs are already in Loki.
+# `blocks` is the delta walked, one HeadObject (Class B) each; `new` is Class A and unmetered. B2
+# has no usage endpoint.
 BACKUP_BLOCKS_RE = re.compile(
     r"Created snapshot changed blocks: \d+ mappings, (\d+) blocks and (\d+) new blocks"
 )
@@ -130,8 +125,7 @@ def format_backup_spend(vols, window, names=None, ledger=None, targets=None):
                 "  %d Class B on the %s target, excluded — its caps are not B2's"
                 % (_sum(other[target], "blocks"), target)
             )
-        # Gated on the block count, not on `unknown` being non-empty: the "unattributed" row
-        # is routinely present with 0 blocks, and a line reporting 0 costs a reread.
+        # Gated on block count: the 'unattributed' row is routinely present with 0 blocks.
         if _sum(unknown, "blocks"):
             rows.append(
                 "  includes %d Class B from %d volume(s) whose target did not resolve, counted "

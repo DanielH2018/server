@@ -20,13 +20,11 @@ The names are fixed too. Notification-controller's status description carries on
 reason, so `verify` cannot tell the replaced pod's "health check failed" from a real one, and
 a name outside this set that fails during the hop stays final.
 
-Run: imported only. `uv run pytest scripts/deploy_tools/tests/test_verify_promotion_controller_rollout.py`
+Run: imported only. `uv run pytest scripts/deploy_tools/tests/promote/test_verify_promotion_controller_rollout.py`
 """
 
 from collections.abc import Iterable
 
-# The Kustomization that deploys kustomize-controller, so its presence in the changed set is
-# what makes the controller's own Deployment a candidate for change.
 STAGE_TAG = "flux"
 # The names whose reconcile the replaced pod was running, besides STAGE_TAG.
 ALSO_REPLACED = frozenset({"soak"})

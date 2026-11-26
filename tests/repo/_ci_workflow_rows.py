@@ -30,8 +30,6 @@ CASE_JOBS = (LEGS_JOB, BOOTSTRAP_JOB, "k3s_download")
 HANDOFF = ".github/actions/host-packages-handoff/action.yml"
 HANDOFF_USES = "$/.github/actions/host-packages-handoff"
 CASES_STEP = "Run the updater cases in systemd containers"
-# The cases glob each side's updater .deb out of the build step's output and boot the image the
-# image step tags, so a run that skips either fails the cases rather than running them.
 BUILD_STEP = "Build both renders with the pinned nfpm"
 IMAGE_STEP = "Build the test image for this release"
 CASES_READ = "steps.render.outputs.cases == 'true'"
@@ -241,7 +239,7 @@ CI_ROWS = (
                 "The bootstrap cases run in the `host_packages_bootstrap` job and nowhere else. "
                 "Inside the legs they were the longest case group, 338-477 s against 214-271 s "
                 "for the next, and their offline builds shared the leg's CPUs with every other "
-                "group. `tests/repo/test_every_ci_job_is_gated.py` holds the job inside the "
+                "group. `tests/repo/ci_workflows/test_every_ci_job_is_gated.py` holds the job inside the "
                 "`prek` gate."
             ),
             offence=judge(_only_one_job_bootstraps),
@@ -299,7 +297,7 @@ CI_ROWS = (
             reason=(
                 "A PR that changes only the container cases' inputs runs those cases on both "
                 "legs. `host_packages.py cases-changed` decides whether the PR changes an input "
-                "of the cases, and `scripts/validate/tests/test_validate_host_packages.py` "
+                "of the cases, and `scripts/validate/tests/host_cases/test_validate_host_packages.py` "
                 "tests that decision. The render step writes the verdict to `cases`, and every "
                 "gate between it and the cases reads that output. The image and cases steps "
                 "carry no `if:` of their own, so the job's `run-cases` gate decides them."

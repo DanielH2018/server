@@ -1,10 +1,5 @@
 {% from 'ingressroute.yml.j2' import ingressroute, monitoring_route with context %}
 ---
-{#
-  csp-karakeep rides on the main route only. The bypass documents the macro renders from
-  bridge_bypass_prefixes carry rate-limit alone, and that is fine: they serve JSON, and a CSP on
-  JSON does nothing.
-#}
 {{ ingressroute(
     container_item.name,
     container_item.hostname | default(container_item.name),
@@ -25,7 +20,7 @@
   next-auth's `/api/auth/*`, the password login that stays behind Authelia on the public name
   and would be open to every pod on the `.local` one. Widen it only with the
   widget source in hand, and never past `/api/v1/`:
-  tests/services/test_karakeep_public_bypass.py refuses a prefix that reaches next-auth.
+  tests/services/apps/test_karakeep_public_bypass.py refuses a prefix that reaches next-auth.
 #}
 {{ monitoring_route(
     container_item.name,

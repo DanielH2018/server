@@ -126,8 +126,7 @@ def _cause_expr() -> str:
     return expr
 
 
-# The verdicts other than `deploy-failed` that carry a cause, with the cause each carries.
-# No table in outcome.py pairs them; ledger.py's docstring names the same one.
+# No table in outcome.py pairs these verdicts with their causes.
 _CAUSE_BESIDE_ANOTHER_VERDICT = [
     (Verdict.DEFERRED, Cause.PROMOTE_TIMEOUT),
     (Verdict.DEFERRED, Cause.GATE_UNREADABLE),

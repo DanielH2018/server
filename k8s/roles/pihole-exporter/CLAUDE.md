@@ -13,7 +13,7 @@ secret of its own (`k8s/roles/pihole-exporter/defaults/main.yml:manifests_outsid
 <!-- /generated_from -->
 
 - **Flux applies it.** Its `containers_list` entry
-  is in `cluster/services.yml`, so nothing applies it by hand, and a
+  is in `k8s/services.yml`, so nothing applies it by hand, and a
   merged change reaches the cluster when `promote` publishes and verifies the next bundle. Its
   image-bump PRs therefore draw no `land-wait` and no `probe.py health` run.
 - **Its rollout.** The Kustomization's `wait` holds the rollout.
@@ -44,7 +44,7 @@ redundant, and a scrape job pointed straight at the Pi-holes would be simpler an
 
 DNS is load-balanced across two independent FTLs (`pihole` and `pihole-2`), each keeping its
 own `pihole-FTL.db`
-(`tests/services/test_pihole_redundancy.py::test_both_instances_are_selected_by_the_dns_service`). A scrape that reached one of them would report roughly **half** the
+(`tests/services/network/test_pihole_redundancy.py::test_both_instances_are_selected_by_the_dns_service`). A scrape that reached one of them would report roughly **half** the
 house's query volume — silently, with a graph that looks entirely plausible.
 
 So `PIHOLE_HOSTNAME` carries both Services
@@ -56,7 +56,7 @@ Instance 2's Service, `pihole-2-web`, was added to the pihole role for this. It 
 IngressRoute and must not get one: the admin UI is deliberately pinned to instance 1, because a
 session round-robined across two FTLs 401s at random (the comment on the `pihole` Service says
 so at the line, and
-`tests/services/test_pihole_redundancy.py::test_only_the_web_service_is_pinned_to_one_instance`
+`tests/services/network/test_pihole_redundancy.py::test_only_the_web_service_is_pinned_to_one_instance`
 holds the pin).
 
 ## It holds no credential of its own
@@ -77,13 +77,13 @@ digest, and Flux rolls the pod when it applies that revision (#5416).
 The declaration also makes `secret_rotation.py consumers pihole_password` list this role,
 because the census greps role files for the key name. A stale password still shows as
 `up{job="pihole"}` at 0.
-`scripts/renderer/tests/test_renderer_restart.py::test_every_outside_secret_declares_the_keys_its_owning_role_renders`
+`scripts/renderer/tests/manifests/test_renderer_restart.py::test_every_outside_secret_declares_the_keys_its_owning_role_renders`
 holds the declared keys equal to the placeholders the pihole role's `pihole-env` renders.
 
 ## Two things that bite
 
 **The probes are `tcpSocket`, not `httpGet` on `/metrics`.** A kubelet probe against a metrics
-route is the shape `tests/k8s/_scrape_property_rows.py` refuses below a 300s
+route is the shape `tests/k8s/rendered_properties/_scrape_property_rows.py` refuses below a 300s
 period, after node-exporter's probes produced 97% of this namespace's Loki ingest. Whether
 Pi-hole is reachable is Prometheus's `up{job="pihole"}` to report, not a reason to restart this
 pod.
@@ -96,7 +96,7 @@ bump; `promote`'s verification gates the apply.
 ## NetworkPolicy
 
 The pod carries `netpol-baseline: enforced`, which is what admits Prometheus to it
-(`tests/k8s/test_netpol_baseline_labels.py::test_exactly_the_fenced_roles_carry_the_baseline_label`).
+(`tests/k8s/edge/test_netpol_baseline_labels.py::test_exactly_the_fenced_roles_carry_the_baseline_label`).
 Its outbound polls are admitted by the `app: pihole-exporter` podSelector added to
 `k8s/roles/netpol-baseline/templates/networkpolicy-pihole.yaml.j2`, on port 80 — a podSelector and not an
 ipBlock, because pod → ClusterIP → pod traffic keeps the caller's pod IP.

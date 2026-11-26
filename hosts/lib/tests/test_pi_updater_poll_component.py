@@ -145,8 +145,7 @@ class Pi:
                     "for unit; do :; done\n"
                     "case $1 in\n"
                     f"  is-enabled) [ -e {self.masked} ] && echo masked || echo enabled ;;\n"
-                    # A unit listed in `active` is a running oneshot, as the real
-                    # tool reports one; is-active exits 3 for it.
+                    # A unit in `active` is a running oneshot: is-active exits 3 for it.
                     f'  show) grep -qx "$unit" {self.active} && echo activating || echo inactive ;;\n'
                     f'  is-active) grep -qx "$unit" {self.active} && echo activating; exit 3 ;;\n'
                     "esac\n"

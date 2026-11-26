@@ -23,6 +23,7 @@ BLACKLIST = "/etc/modprobe.d/blacklist-rare-network.conf"
 TMPFILES = "/usr/lib/tmpfiles.d/homelab-hardening.conf"
 KEEP_CONFFILES = "/etc/apt/apt.conf.d/53homelab-keep-conffiles"
 APPORT_DROPIN = "/usr/lib/systemd/system/apport.service.d/50-homelab.conf"
+LXD_INSTALLER_DROPIN = "/usr/lib/systemd/system/lxd-installer.socket.d/50-homelab.conf"
 BANNER = (
     "WARNING: Unauthorized access to this system is prohibited.\n"
     "All connections are monitored and recorded.\n"
@@ -46,8 +47,7 @@ WRITTEN = {
         "[Coredump]\nStorage=none\nProcessSizeMax=0\n"
     ),
 }
-# The one directive in SUDOERS; the file's comment header is the component's own. It sets no
-# timestamp type, because sudo-rs, 26.04's default sudo, refuses that setting.
+# No timestamp type: sudo-rs, 26.04's default sudo, refuses that setting.
 SUDOERS_DIRECTIVE = "Defaults timestamp_timeout=60"
 # Where each visudo lives: the alternatives symlink, classic sudo's beside sudo-rs, sudo-rs's.
 VISUDO_PATHS = ("/usr/sbin/visudo", "/usr/sbin/visudo.ws", "/usr/lib/cargo/bin/visudo")
@@ -168,7 +168,7 @@ def test_the_blacklist_edits_adopt_the_lines_the_task_wrote(package):
 @pytest.mark.skipif(not shutil.which("apt-config"), reason="needs apt's apt-config")
 def test_apt_parses_the_conffile_option_unattended_upgrade_requires(package, tmp_path):
     # Without --force-confold or --force-confnew, unattended-upgrade skips a package whose conffile
-    # would prompt, so base-files and kmod would wait for a hand run.
+    # would prompt.
     conf = tmp_path / "keep.conf"
     conf.write_bytes(package.files[KEEP_CONFFILES][0])
     dump = subprocess.run(
@@ -199,8 +199,8 @@ def test_the_package_depends_on_what_the_package_tasks_installed(package):
 
 @pytest.mark.parametrize("host", ["daniel-box", "daniel-server", "daniel-pi"])
 def test_every_host_drops_in_on_apport_and_reconcile_restarts_it(host):
-    # A unit with a drop-in and no policy is restarted when the drop-in lands, so apport's stop
-    # writes fs.suid_dumpable 0 without waiting for a reboot.
+    # A unit with a drop-in and no policy restarts when the drop-in lands, so apport's stop writes
+    # fs.suid_dumpable 0 without a reboot.
     rendered = host_mode.render_host(host)
     assert APPORT_DROPIN in rendered.files
     units = json.loads(rendered.files[MANIFEST][0])["units"]
@@ -225,3 +225,15 @@ def test_the_apport_dropin_condition_never_holds(package):
     # A line systemd cannot parse also exits 1, so each condition must be reported as failed.
     for condition in conditions:
         assert f"{condition} failed." in result.stderr, result.stderr
+
+
+@pytest.mark.parametrize("host", ["daniel-box", "daniel-server", "daniel-pi"])
+def test_every_host_stops_the_lxd_installer_socket(host):
+    rendered = host_mode.render_host(host)
+    assert (
+        rendered.files[LXD_INSTALLER_DROPIN][0]
+        .decode()
+        .endswith("ConditionPathExists=!/\n")
+    )
+    units = json.loads(rendered.files[MANIFEST][0])["units"]
+    assert units["lxd-installer.socket"] == {}

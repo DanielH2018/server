@@ -45,8 +45,6 @@ GENERATORS = {
     f"{DOCS}/reference/state.py": ("package_timers",),
 }
 
-# Runs a script the way `python <path>` does (its own directory at sys.path[0]), then reports
-# the file every loaded module came from, so the test judges by origin and not by import name.
 _RUN_AS_SCRIPT = """
 import json, os, runpy, sys
 path = sys.argv[1]

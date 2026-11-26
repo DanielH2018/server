@@ -130,16 +130,9 @@ def pinned_keys(repo: Path, rel: str) -> frozenset[str]:
     return frozenset(keys)
 
 
-# ── image pins, for the `version-as-fact` lint ───────────────────────────────────────────
-#
-# Every image the tree pins by tag, read from where the tree pins it: the top-level `*_image`
-# keys in role defaults and inventory vars, and the `image:` lines in the Pi's compose
-# templates, whose pins live nowhere else. A value holding `{{` is a built image whose tag
-# the play computes, so it pins nothing a sentence could restate.
 _VAR_FILES = re.compile(
-    r"^(?:k8s/roles/[^/]+/defaults/[^/]+|inventory/(?:group|host)_vars/[^/]+)\.ya?ml$"
+    r"^(?:k8s/roles/[^/]+/defaults/[^/]+|(?:estate|k8s|hosts|hosts/[^/]+)/vars)\.ya?ml$"
 )
-# The Pi's compose templates: the package component's per-service trees (H5).
 _COMPOSE_FILES = re.compile(
     r"^hosts/components/pi-compose/services/[^/]+/compose\.ya?ml\.j2$"
 )

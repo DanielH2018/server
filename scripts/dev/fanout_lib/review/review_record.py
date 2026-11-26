@@ -9,8 +9,6 @@ import re
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 
-# Reach the sibling package: a directly-invoked script gets only its own directory on
-# sys.path, and pyproject's `pythonpath` is a pytest setting.
 from pathlib import Path as _Path
 
 
@@ -28,10 +26,8 @@ BLOCKER_CHARS = 500
 # The name `review.Pipeline._save` gives a record, `<batch>-<saved>.json`, as its readers parse it.
 SAVED_FORMAT = "%Y%m%dT%H%M%SZ"
 RECORD_NAME = re.compile(r"^(?P<batch>\d+)\S*-(?P<saved>\d{8}T\d{6}Z)\.json$")
-# The `test` findings the fix round takes at any severity: a test that checks nothing. The
-# severity floor would drop most of the reviewer's test findings, these among them. A
-# `scaffold` finding is mostly a duplicate of a stronger test, while a vacuous one is real, so
-# a scaffold or missing-coverage finding keeps the severity floor.
+# A `scaffold` finding is mostly a duplicate of a stronger test, so only `vacuous` bypasses the
+# severity floor.
 ACTED_ON_TEST_SUBKINDS = frozenset({"vacuous"})
 
 
@@ -61,64 +57,37 @@ class Record:
 
     batch: str
     pr: str = ""
-    # The `--effort` every reviewer call passes, read from here so the record names what ran
-    # and actionable findings per PR can be compared between settings. A record
-    # written before this field existed has no key.
     review_effort: str = REVIEWER.effort
-    # The `fanout_lib.sizing` rung every phase that runs or resumes the implementer passes,
-    # read from here for the same reason as `review_effort`.
     implementer: Rung = DEFAULT
     costs: dict[str, float] = field(default_factory=dict)
     review_error: str = ""
     findings: list[dict] = field(default_factory=list)
     actionable: list[dict] = field(default_factory=list)
     remaining: list[dict] = field(default_factory=list)
-    # The findings the delta review reported without a quote the fix head's file holds near
-    # the cited line (`delta_confirm`). They are carried, not left: they hold nothing.
     unverified: list[dict] = field(default_factory=list)
-    # How many fix rounds ran: 0 with no actionable finding, 2 when a medium-or-worse finding
-    # survived the first delta review.
     fix_rounds: int = 0
-    # The PR's new test nodes, those of them that pass with its code changes taken out
-    # (`base_check`), and why the check could not run, if it could not.
     base_tests: int = 0
     base_passing: list[str] = field(default_factory=list)
     base_error: str = ""
-    # How the batch ended, so the records count the batches that never reached a PR:
-    # `failed`, `needs-input` or `no-pr` before a PR exists, then `pr` once one does, or
-    # `failed` / `needs-input` when the last phase says so.
     outcome: str = ""
-    # The `needs input:` or `failed:` line the last phase's report ended on, "" when it ended
-    # on none, so the records can say why a batch stopped as well as that it did.
     blocker: str = ""
-    # The head the last reviewer read: the head the first review read, or the fix round's head
-    # when a delta review read that. `fanout_lib.autoland` lands a PR unattended only
-    # while GitHub still shows this head, so a push after the review stops at the PR. "" in a
-    # record written before this field existed.
+    # `fanout_lib.autoland` lands a PR unattended only while GitHub still shows this head, so a push
+    # after the review stops at the PR.
     head: str = ""
     # The VERDICT line of the landing the pipeline ran, "" when it ran none.
     verdict: str = ""
-    # Why a daniel-server pipeline left its PR for the server lander rather than landing it
-    # (`review_ci.server_lands`): "" when it landed it, or on daniel-box.
     land_hold: str = ""
-    # True when the server lander's PR rule (`own_surface.pr_problems`) made that hold. The PR
-    # then stays a draft with no CI until a person's `land.sh` marks it ready at its turn.
+    # The PR then stays a draft with no CI until a person's `land.sh` marks it ready.
     person_lands: bool = False
-    # The CI wait a batch that does not land runs: "" when it ran none, else its
-    # result in words, whether the implementer was resumed for a red verdict, and whether
-    # the failed jobs were re-run after a resume that pushed nothing.
     ci_gate: str = ""
     ci_resumed: bool = False
     ci_rerun: bool = False
-    # The jobs the first CI attempt failed, kept when the gate re-ran them: `ci_gate`
-    # names jobs only while the head is still red. [] in a record written before this field.
     ci_rerun_jobs: list[str] = field(default_factory=list)
     # Per phase: wall-clock seconds, and the tool calls the classifier denied.
     durations: dict[str, float] = field(default_factory=dict)
     permission_denials: dict[str, int] = field(default_factory=dict)
-    # True for the record of a unit `fanout.py place resume` started, which ran only the
-    # conflict phases. The batch's first record carries the rest, so `review_stats` counts
-    # this one's cost and no second batch.
+    # The batch's first record carries the rest, so `review_stats` counts this one's cost and no
+    # second batch.
     resumed: bool = False
 
     def settle(self, report: dict, has_pr: bool) -> None:
@@ -301,8 +270,6 @@ def comment_body(record: Record) -> str:
             f"{held} security findings are held off this public page and kept in the "
             "orchestrator's local record."
         )
-    # Only the actionable findings are listed: 77% of all findings sat below the
-    # confidence floor, and the full list stays in the local record.
     shown = [f for f in record.actionable if not is_held(f)]
     below = len(record.findings) - len(record.actionable)
     if below:

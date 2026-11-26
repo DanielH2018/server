@@ -23,7 +23,8 @@ from _updater_host import reconcile_ok as _ok
 
 from lib import yaml_fast
 from lib.proc_testing import run, write_exec
-from lib.repo_paths import ALL_VARS, REPO
+from lib.estate import shared_vars
+from lib.repo_paths import REPO
 from reconcile_lib import lines
 from renderer.renderer_lib import host as host_mode
 
@@ -44,16 +45,12 @@ COMPOSE_UNIT = "/usr/lib/systemd/system/homelab-compose.service"
 ENGINE_UNIT = "/usr/lib/systemd/system/homelab-docker-engine.service"
 ENGINE_TIMER = "/usr/lib/systemd/system/homelab-docker-engine.timer"
 UPDATER_DROPIN = "/usr/lib/systemd/system/homelab-updater.timer.d/50-homelab.conf"
-# The Pi's quiet window, in UTC (the Pi's clock). It opens after the midnight cluster (23:55 to
-# 00:10) and closes before man-db starts at 01:00; the updater's daily fire is 03:05. The 04:00 to
-# 05:59 gap is out: pi-peer-backup pulls at 04:00 or 05:00 UTC and the apt timers run at 04:20
-# and 05:20. The DECIDED comment in units/homelab-docker-engine.timer has the full reasoning.
+# Quiet window (UTC): after the midnight cluster (23:55-00:10), before man-db at 01:00; the
+# 04:00-05:59 gap is out (pi-peer-backup pulls, apt timers run).
 QUIET_WINDOW = (15 * 60, 59 * 60 + 59)
 _DAY = date(2026, 11, 3)
 CONTAINERD_CONFIG = "/etc/containerd/config.toml"
 SUFFIX = "~ubuntu.26.04~resolute"
-# `grep -v '^#' /etc/containerd/config.toml` on daniel-pi, with the
-# markers the Ansible task wrote around its block.
 LIVE_CONTAINERD = """disabled_plugins = ["cri"]
 
 # BEGIN ANSIBLE MANAGED BLOCK (roles/setup/docker_install)
@@ -364,7 +361,7 @@ def test_a_wait_at_reconciles_thirty_minutes_is_flagged(package):
 
 def engine_moves(nfpm: dict, files: dict) -> list[str]:
     """What in a rendered package could move a held engine package without the engine unit."""
-    held = set(yaml_fast.safe_load(ALL_VARS.read_text())["docker_engine_packages"])
+    held = set(shared_vars()["docker_engine_packages"])
     depends = {re.split(r"[\s(]", d, maxsplit=1)[0] for d in nfpm.get("depends", [])}
     found = [f"Depends on {name}" for name in sorted(depends & held)]
     found += [dst for dst in files if dst.startswith("/etc/apt/preferences")]
@@ -374,9 +371,7 @@ def engine_moves(nfpm: dict, files: dict) -> list[str]:
 def test_the_package_cannot_move_the_engine_is_clean(package):
     nfpm = {"depends": package.depends}
     assert engine_moves(nfpm, package.files) == []
-    assert _pins(package).keys() == set(
-        yaml_fast.safe_load(ALL_VARS.read_text())["docker_engine_packages"]
-    )
+    assert _pins(package).keys() == set(shared_vars()["docker_engine_packages"])
 
 
 def test_a_versioned_depends_on_the_engine_is_flagged(package):
@@ -533,8 +528,7 @@ def test_an_updater_that_fires_in_the_quiet_window_is_flagged(package):
     assert problems and all("the updater fires" in p for p in problems)
 
 
-# What a nightly run may do. Anything here that a run at the pins performs is a change the timer
-# would make on every night, not only after a pin moved.
+# Anything here that a run at the pins performs would be a change the timer makes every night.
 _ACTING_SYSTEMCTL = {"mask", "unmask", "start", "stop", "restart"}
 
 

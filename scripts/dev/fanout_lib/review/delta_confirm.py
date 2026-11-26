@@ -12,9 +12,6 @@ as unverified: the PR comment and the local record name it, and it does not hold
 
 from collections.abc import Callable
 
-# Reach the sibling package: a directly-invoked script gets only its own directory on
-# sys.path, and pyproject's `pythonpath` is a pytest setting.
-
 
 # A fix that adds or removes a few lines moves the cited line, so the quote is looked for around the line, not on it.
 WINDOW = 10

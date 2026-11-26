@@ -27,7 +27,7 @@
 #   64  usage
 #
 # Environment (each has a default; the tests override them):
-#   Z2M_MQTT_HOST         broker address (default: mqtt_k8s_vip from group_vars/all.yml)
+#   Z2M_MQTT_HOST         broker address (default: mqtt_k8s_vip from k8s/vars.yml)
 #   Z2M_SECRETS_FILE      SOPS file holding mqtt_username / mqtt_password
 #   Z2M_READBACK_TIMEOUT  seconds to wait for the republished state
 #
@@ -42,8 +42,6 @@ usage() {
   exit 64
 }
 
-# `--help` is a question, not a usage error, so it prints the leading comment block on stdout
-# and exits 0 — the repo-wide convention `scripts/lib/cli_help.py` states.
 if [ "${1:-}" = "-h" ] || [ "${1:-}" = "--help" ]; then
   awk 'NR>1 && /^#/ {sub(/^# ?/, ""); print; next} NR>1 {exit}' "$0"
   exit 0
@@ -60,7 +58,7 @@ secrets_file=${Z2M_SECRETS_FILE:-$repo_root/secrets/secrets.yml}
 timeout_s=${Z2M_READBACK_TIMEOUT:-20}
 
 if [[ -z "${Z2M_MQTT_HOST:-}" ]]; then
-  Z2M_MQTT_HOST=$(sed -n 's/^mqtt_k8s_vip:[[:space:]]*//p' "$repo_root/inventory/group_vars/all.yml")
+  Z2M_MQTT_HOST=$(sed -n 's/^mqtt_k8s_vip:[[:space:]]*//p' "$repo_root/k8s/vars.yml")
 fi
 [[ -n "$Z2M_MQTT_HOST" ]] || { echo "set_device_option: no broker address (Z2M_MQTT_HOST unset, mqtt_k8s_vip not in group_vars)" >&2; exit 64; }
 
@@ -80,9 +78,8 @@ p=$(sops -d --extract '["mqtt_password"]' "$secrets_file")
 state_file=$(mktemp)
 trap 'rm -f "$state_file"' EXIT
 
-# Subscribe first, then publish: Z2M republishes the device state right after a /set, and a
-# subscriber started afterwards can miss it. -C 1 returns on the first message, -W bounds
-# the wait so a silent device cannot hang the caller.
+# Subscribe first, then publish: Z2M republishes the state right after a /set, and a later
+# subscriber can miss it. -W bounds the wait so a silent device cannot hang.
 mosquitto_sub -h "$Z2M_MQTT_HOST" -u "$u" -P "$p" \
   -t "zigbee2mqtt/$device" -C 1 -W "$timeout_s" >"$state_file" 2>/dev/null &
 sub_pid=$!

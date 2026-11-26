@@ -18,8 +18,6 @@
 - platform: threshold
   name: "Bedroom VOC high"          # -> binary_sensor.bedroom_voc_high
   entity_id: sensor.bedroom_airgradient_one_voc_index
-  # Sits just above this room's normal band (median 124, p95 171, spikes ~290) so a
-  # genuine VOC elevation alerts; 250 only catches near-max events.
   upper: 200                         # alerts >= 225, clears <= 175 (index)
   hysteresis: 25
 - platform: threshold
@@ -27,11 +25,8 @@
   entity_id: sensor.bedroom_airgradient_one_nox_index
   upper: 50                          # alerts >= 60, clears <= 40 (index)
   hysteresis: 10
-# SEVERE air-quality tier — a higher cutoff per pollutant that fires its OWN edge when air gets
-# genuinely unhealthy. Feeds the `airqualitysevere` category of bedroom_threshold_alert, the only
-# alerts that PIERCE DND/sleep with sound (the moderate ones above are routine). Escalation-aware:
-# a gradual CO2 climb trips the moderate sensor first (routine nudge), then these (critical wake).
-# Cutoffs are STARTING POINTS.
+# Severe tier fires its own edge and feeds the `airqualitysevere` category, the only alerts that
+# PIERCE DND/sleep. Cutoffs are starting points.
 - platform: threshold
   name: "Bedroom CO2 severe"        # -> binary_sensor.bedroom_co2_severe
   entity_id: sensor.bedroom_airgradient_one_carbon_dioxide
@@ -52,11 +47,8 @@
   entity_id: sensor.bedroom_airgradient_one_nox_index
   upper: 200                         # alerts >= 210, clears <= 190 (index)
   hysteresis: 10
-# Low-battery thresholds — the LOWER-bound mirror of the air-quality ones above. A `lower`
-# threshold is `on` (low) when value <= lower-hysteresis and `off` (recovered) when >= lower+
-# hysteresis. Battery drain is monotonic (only jumps up on replacement), so flapping is a
-# non-issue. Consumed by the bedroom_threshold_alert automation (files/automations/alerts.yaml).
-# Starting points — tune per device. Adding a battery = one block here + add it to the automation.
+# A `lower` threshold is on when value <= lower-hysteresis and off when >= lower+hysteresis.
+# Adding a battery = one block here + one in bedroom_threshold_alert.
 - platform: threshold
   name: "Bedroom FP300 battery low"     # -> binary_sensor.bedroom_fp300_battery_low
   entity_id: sensor.aqara_fp300_battery
@@ -67,8 +59,6 @@
   entity_id: sensor.0x001788010f0ccda4_battery
   lower: 20                             # alerts <= 15%, clears >= 25%
   hysteresis: 5
-# The two coin-cell devices alert higher: a CR2450/CR2032 percentage can be voltage-derived and
-# fall late, so 20% may already be close to dead. No discharge curve observed yet (both read 100%).
 - platform: threshold
   name: "Bedroom T1 battery low"        # -> binary_sensor.bedroom_t1_battery_low
   entity_id: sensor.aqara_t1_battery
@@ -118,10 +108,7 @@
   entity_id: sensor.bedroom_airgradient_one_temperature
   lower: 50                          # alerts <= 48 °F, clears >= 52 (heating failure / freeze risk)
   hysteresis: 2
-# Outdoor air quality (source = Open-Meteo sensor.outdoor_pm2_5, files/rest.yaml). Two tiers like
-# the indoor air-quality sensors: moderate (high) and the wildfire/"unhealthy" cutoff (severe).
-# Feed the airqualityoutdoor / airqualityoutdoorsevere categories of bedroom_threshold_alert AND
-# the smoke guard in the window advisor. Starting points — tune with the indoor ones.
+# Also feeds the smoke guard in the window advisor.
 - platform: threshold
   name: "Outdoor PM2.5 high"        # -> binary_sensor.outdoor_pm2_5_high
   entity_id: sensor.outdoor_pm2_5

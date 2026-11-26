@@ -121,17 +121,15 @@ def _is_disabled_by_packagerule(
 N8N_ROLE_DIR = REPO / "k8s/roles/n8n"
 N8N_PIN_HISTORY = N8N_ROLE_DIR / "base-pin-history.tsv"
 
-# image -> the Dockerfile whose FROM must equal that image's last ledger entry. Named rather
-# than globbed: a census that discovers its own subjects returns an empty set the moment a file
-# is renamed, and an `all()` over nothing passes.
+# Named rather than globbed: a census that discovers its subjects returns an empty set after a
+# rename, and `all()` over nothing passes.
 N8N_PINS = {
     "n8nio/n8n": "templates/Dockerfile.j2",
     "n8nio/runners": "templates/Dockerfile-runners.j2",
 }
 
-# The note that makes a version decrease deliberate. A channel pin follows what upstream
-# promotes, so moving back with a withdrawn release is legitimate — what must not happen is
-# moving back silently.
+# A channel pin follows what upstream promotes, so moving back is legitimate; moving back silently
+# is not.
 DOWNGRADE_ACK = "DOWNGRADE-ACK:"
 
 

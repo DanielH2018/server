@@ -29,7 +29,7 @@ import re
 import pytest
 from homelab_repo_sign import COMPONENT, SUITE
 from lib import yaml_fast
-from _helpers import ALL_VARS
+from lib.repo_paths import HOSTS_SHARED_VARS
 from _host_packages import HOSTS, shipped_text
 
 DROP_IN = "/etc/apt/apt.conf.d/52unattended-upgrades-local"
@@ -37,8 +37,8 @@ DROP_IN = "/etc/apt/apt.conf.d/52unattended-upgrades-local"
 VAR = "unattended_upgrades_origins_patterns"
 # `origin=gh`, `archive=${distro_codename}-updates`, `n=stable` — a matcher, `=`, a value.
 TOKEN_RE = re.compile(r"^[a-z]+=[^=,]+$")
-# The matcher names unattended-upgrade's match_whitelist_string() accepts. Anything else
-# raises UnknownMatcherError at run time, which surfaces only in the daily timer's log.
+# A matcher beyond unattended-upgrade's match_whitelist_string() raises UnknownMatcherError,
+# surfacing only in the daily timer's log.
 MATCHERS = {
     "o",
     "origin",
@@ -56,14 +56,14 @@ MATCHERS = {
 
 
 def patterns() -> list[str]:
-    value = yaml_fast.safe_load(ALL_VARS.read_text())[VAR]
+    value = yaml_fast.safe_load(HOSTS_SHARED_VARS.read_text())[VAR]
     assert isinstance(value, list), f"{VAR} must be a list, got {type(value).__name__}"
     return value
 
 
 def test_var_is_defined():
-    assert VAR in yaml_fast.safe_load(ALL_VARS.read_text()), (
-        f"{VAR} is missing from group_vars/all.yml; the unattended-upgrades component renders it unconditionally "
+    assert VAR in yaml_fast.safe_load(HOSTS_SHARED_VARS.read_text()), (
+        f"{VAR} is missing from hosts/vars.yml; the unattended-upgrades component renders it unconditionally "
         f"and a tag-scoped run would die on the undefined var."
     )
 
@@ -83,7 +83,6 @@ MATCHER_FIELDS = {
     "n": "codename",
     "codename": "codename",
 }
-# `apt-cache policy` on daniel-pi, 2026-11-07. A repository may publish no codename.
 DOCKER = {
     "origin": "Docker",
     "label": "Docker CE",

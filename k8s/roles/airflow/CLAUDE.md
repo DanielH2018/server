@@ -36,7 +36,7 @@ Airflow 3 with the KubernetesExecutor, plus one Postgres holding the metadata da
   cannot connect to `airflow`. Their image is the
   GHCR ref written out, because the renderer's GHCR rewrite does not reach ConfigMap text
   (`k8s/roles/airflow/defaults/main.yml:DECIDED: the task pods' image is the GHCR ref`).
-  `tests/services/test_airflow_task_image.py::test_the_task_pod_template_names_the_schedulers_image_at_ghcr`
+  `tests/services/apps/test_airflow_task_image.py::test_the_task_pod_template_names_the_schedulers_image_at_ghcr`
   holds it to the scheduler's.
 - **Three additive fences.** `k8s/roles/airflow/templates/networkpolicy.yaml.j2` admits
   `airflow-task` and `airflow-dag-processor` to 8080, from the entry's `netpol_from`. The same
@@ -96,7 +96,7 @@ Airflow 3 with the KubernetesExecutor, plus one Postgres holding the metadata da
   than that loses days for good.
   `k8s/roles/airflow/tests/test_ha_rollup.py::test_the_backfill_window_matches_the_recorders_purge_setting`
   holds the window to HA's setting. Task pods reach HA through home-assistant's `netpol_from`
-  entry in `cluster/services.yml`.
+  entry in `k8s/services.yml`.
 - **`claude_usage_rollup`** loads `claude.usage_daily`: spend, tokens, sessions, active time,
   lines, commits and PRs, summed by node, entrypoint, model and type, so no session id or
   account reaches the warehouse. Claude Code exports one cumulative counter per session, so
@@ -194,8 +194,8 @@ Airflow 3 with the KubernetesExecutor, plus one Postgres holding the metadata da
   nothing in Loki. The `base` container's command in
   `k8s/roles/airflow/templates/pod-template.yaml.j2` runs the image's entrypoint, sleeps,
   then exits with the task's status
-  (`tests/services/test_airflow_task_log_linger.py::test_the_task_pod_outlives_alloys_file_sync_after_the_task_exits`,
-  `tests/services/test_airflow_task_log_linger.py::test_the_executors_args_reach_the_entrypoint_and_its_status_is_the_pods`).
+  (`tests/services/apps/test_airflow_task_log_linger.py::test_the_task_pod_outlives_alloys_file_sync_after_the_task_exits`,
+  `tests/services/apps/test_airflow_task_log_linger.py::test_the_executors_args_reach_the_entrypoint_and_its_status_is_the_pods`).
 - **To read one task attempt's log in Grafana**, open Explore on the `loki-homelab`
   datasource. A task's pod is named for its DAG and task, with `_` written as `-`, and each
   attempt has its own pod. First find the attempt's pod: its `Executing workload` line names

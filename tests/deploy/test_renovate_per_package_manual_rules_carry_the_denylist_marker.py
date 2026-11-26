@@ -40,8 +40,6 @@ _RENOVATE = REPO / "renovate.json"
 
 DENYLIST_MARKER = "k8s_autodeploy: false"
 
-# The per-package groups the census must find owning a denied role's pin, so a rename that
-# drops one out of the census fails as a missing member rather than passing over nothing.
 KNOWN_DENIED_PER_PACKAGE_GROUPS = frozenset(
     {"crowdsec bouncer plugin", "meilisearch", "karakeep time-tagger pip deps", "n8n"}
 )
@@ -49,12 +47,8 @@ KNOWN_DENIED_PER_PACKAGE_GROUPS = frozenset(
 
 _ROLES = REPO / "k8s" / "roles"
 
-# Built-in managers that read no file a role deploys, each with its default
-# `managerFilePatterns` (upstream `lib/modules/manager/<name>/index.ts`). A rule whose
-# `matchManagers` names only these reads its pin from a workflow or a local action, so no role
-# owns the pin and no deploy follows its merge. Such a rule is outside this census rather than
-# unmappable: the cosign binary in the promote and prune workflows is one.
-# `test_no_role_file_is_read_by_a_non_role_manager` checks the "no role file" half.
+# Built-in managers that read no file a role deploys: a rule matching only these reads its pin from
+# a workflow or local action, so no deploy follows its merge.
 NON_ROLE_MANAGERS = {
     "github-actions": (
         "/(^|/)(workflow-templates|\\.(?:github|gitea|forgejo)/(?:workflows|actions))/.+\\.ya?ml$/",

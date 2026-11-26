@@ -19,8 +19,6 @@ from lib.proc_testing import fake_bin, path_with
 SCRIPT = HYPERVISOR / "files" / "suc-rehearsal-guest-run.sh"
 GUEST_IP = "10.0.0.9"
 
-# Counters live in $T. A kubectl call is logged as `k3s <args>`, and an `apply -f -` is logged with
-# the kind it carries, so a test reads the order of events from `calls`.
 K3S = """\
 #!/bin/bash
 args="$*"
@@ -60,8 +58,6 @@ case "$args" in
 esac
 exit 0
 """
-# The registry answers on the REG_AFTER+1th probe; `flux push` fails until it has,
-# when REG_AFTER asks for that race.
 CURL = """\
 #!/bin/bash
 n=$(( $(cat "$T/curl" 2>/dev/null || echo 0) + 1 )); echo "$n" >"$T/curl"

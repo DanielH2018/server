@@ -31,8 +31,6 @@ def test_claims_line_carries_each_claims_tier_and_moves_with_the_tier_lists(tmp_
     (role / "defaults").mkdir()
     (role / "defaults" / "main.yml").write_text("---\n")
     (role / "tasks").mkdir()
-    # The three declaration shapes: inline PVC, a volume-claim include, a `claimName:`
-    # reference to a claim another role declares off Longhorn.
     (role / "templates" / "pvc.yaml.j2").write_text(
         "apiVersion: v1\nkind: PersistentVolumeClaim\nmetadata:\n  name: svc-cache\n"
         "spec:\n  storageClassName: longhorn-nobackup\n"
@@ -86,7 +84,7 @@ def test_the_committed_blocks_name_a_tier_from_each_list():
 
 
 def test_claims_line_reads_a_group_vars_override_of_a_tier_list(tmp_path):
-    """An all.yml override of a tier list moves the claim's tier, as in a deploy."""
+    """An estate-vars override of a tier list moves the claim's tier, as in a deploy."""
     roles = tmp_path / "roles"
     role = roles / "svc"
     (role / "templates").mkdir(parents=True)
@@ -144,9 +142,16 @@ def test_stale_k8s_docs_derives_the_r2_set_from_the_injected_service_list(tmp_pa
     }
     services = tmp_path / "services.yml"
     services.write_text(yaml.safe_dump({"containers_list": [entry]}))
-    all_vars = tmp_path / "all.yml"
-    all_vars.write_text("k8s_namespace: lab\n")
-    estate = g.Estate(Inventory(all_vars=all_vars, services=services))
+    estate_vars = tmp_path / "estate-vars.yml"
+    estate_vars.write_text("k8s_namespace: lab\n")
+    estate = g.Estate(
+        Inventory(
+            estate_vars=estate_vars,
+            k8s_vars=tmp_path / "k8s-vars.yml",
+            host_vars=tmp_path / "hosts",
+            services=services,
+        )
+    )
     g.stale_k8s_docs(
         write=True, estate=estate, k8s_roles=roles, k3s_defaults=k3s_defaults
     )

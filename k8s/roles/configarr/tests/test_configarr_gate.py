@@ -32,8 +32,7 @@ TAG = "configarr"
 VERIFY = f"{TAG}-verify"
 DOTENV = "peanut_password=ENC[AES256_GCM,data:eA==,iv:aQ==,tag:dA==,type:str]\n"
 
-# A full commit SHA: a branch or tag can move between the gate run and the next, so the second
-# run would apply different templates from the first.
+# A full commit SHA: a branch or tag can move between gate runs.
 _PINNED = re.compile(r"[0-9a-f]{40}")
 
 
@@ -131,9 +130,8 @@ def test_the_reconcile_gate_is_a_rerun_safe_mutation_the_health_reader_counts(re
         RERUN_SAFE: "k8s/roles/configarr/tests/test_configarr_gate.py"
         "::test_a_second_sync_reports_no_change",
     }
-    # configarr_health.py lists Jobs by `-l app=configarr` and picks the latest by finish time,
-    # so the Job label, not the name, is what keeps a gate run counted. The reader's own
-    # predicate judges the renamed Job, as it judges the one `k8s/cronjob-gate` created.
+    # The Job label, not the name, keeps a gate run counted: the reader lists Jobs by
+    # `-l app=configarr`.
     assert job["metadata"]["labels"] == {"app": "configarr"}
     assert is_configarr_job(job, "configarr")
     assert job["spec"]["template"]["metadata"]["labels"]["app"] == "configarr"
@@ -169,8 +167,6 @@ def test_the_reconcile_waits_for_both_arrs_to_read_ready(tmp_path):
 
 
 def test_both_gates_pass_the_job_census(rendered):
-    # The CronJobs' own directory comes too: a gate copy is exempt from the census's script
-    # delivery rows only when its pod template equals a CronJob's there (`is_gate_copy`).
     loaded = load(rendered)
     bundle = {TAG: loaded[TAG], VERIFY: loaded[VERIFY]}
     names = sorted(

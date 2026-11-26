@@ -11,7 +11,7 @@ from typing import Any
 
 from docs.catalog_lib.catalog_model import K8S_ROLES, UNKNOWN
 from lib.k8s_roles import manifest_template
-from lib.render_guard import ALL_VARS
+from lib.estate import REPO_INVENTORY, Inventory
 from docs.catalog_lib.route_facts import reachability, route_cell
 
 __all__ = [
@@ -26,42 +26,31 @@ __all__ = [
 def k8s_route(
     entry: dict[str, Any],
     k8s_roles: Path = K8S_ROLES,
-    all_vars: Path = ALL_VARS,
+    inventory: Inventory = REPO_INVENTORY,
 ) -> str:
     """Derive a k8s service's route cell from its role's IngressRoute template, if any.
 
     Args:
         entry: The service's `containers_list` entry.
         k8s_roles: Root directory of the k8s roles.
-        all_vars: Path to `group_vars/all.yml`, read for the public-route default.
+        inventory: The inventory whose group variables hold the public-route default.
 
     Returns:
         A route cell string, or "no route (infra role)" when the role has no IngressRoute.
     """
     name = entry["name"]
     role_dir = k8s_roles / name
-    # Own template or the shared default: 16 roles' IngressRoute moved to
-    # `k8s/templates/ingressroute-default.yaml.j2`, and asking the role directory
-    # alone printed "no route" for every one of them.
+    # Own template or the shared default: asking the role directory alone printed 'no route' for
+    # roles using `ingressroute-default.yaml.j2`.
     if manifest_template(name, "ingressroute.yaml", k8s_roles, entry) is None:
         return "no route (infra role)"
-    # ingressroute.yml.j2's own macro call is uniformly
-    # `container_item.hostname | default(container_item.name)` — see the shared macro
-    # docstring at k8s/templates/ingressroute.yml.j2.
     label = entry.get("hostname") or name
-    # Reachability comes from route_facts so this page and networking.md cannot disagree
-    # about the same service. It reads the role's own `public=false` and the cluster-wide
-    # k8s_public_route together, rather than hedging with "if k8s_public_route" — that flag
-    # has a value in plaintext group_vars, so printing the condition instead of the answer
-    # made the reader do a lookup this generator can do for them.
-    return route_cell(label, reachability(role_dir, all_vars, entry))
+    # Reachability comes from route_facts so this page and networking.md cannot disagree.
+    return route_cell(label, reachability(role_dir, inventory, entry))
 
 
-# Auth tier — containers_list.use_authelia is read directly by the IngressRoute macro
-# (`container_item.use_authelia`), so this
-# is a direct field read, not an inference from the route template. The policy beside it
-# (`auth_tier: one_factor | two_factor`) is what the authelia role renders into its
-# access_control rules, so an SSO entry reports both.
+# `use_authelia` is a direct field read; `auth_tier` is what the authelia role renders into
+# access_control.
 
 
 def auth_tier(entry: dict[str, Any]) -> str:

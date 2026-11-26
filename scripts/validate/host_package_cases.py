@@ -166,7 +166,6 @@ class Cases:
         self.no_verdict: list[str] = []
         self.debs: dict[str, Path] = {}
         self.versions: dict[str, str] = {}
-        # The head homelab-tools build the real Pi package Depends on (H3.11), if any.
         self.tools: tuple[str, ...] = ()
         self._prepare(args.render.resolve(), args.debs.resolve())
 
@@ -178,8 +177,8 @@ class Cases:
         for side in ("base", "head"):
             (deb,) = (debs / side).glob(f"{UPDATER}_*.deb")
             self.add(f"updater-{side}", deb)
-        # The base is master before H3.6 or after it, so only the head build is sure to hold
-        # the real Pi package. The fixture's head build carries the same file name.
+        # Only the head build is sure to hold the real Pi package; the fixture's head build carries
+        # the same file name.
         (deb,) = (debs / "head").glob(f"{HOST_PKG}_*.deb")
         self.add("pi-head", deb, name=f"real-{deb.name}")
         for deb in sorted((debs / "head").glob("homelab-tools_*_amd64.deb")):
@@ -322,8 +321,8 @@ class Cases:
         def stopped_server() -> None:
             # The red proof reaches a change to step 3 only through the head's updater.
             self.expect_installed(c, "updater-head", "host-head")
-            # last_success holds whole seconds, so a run inside the same second as the
-            # first would write the same value and hide a fetch let through.
+            # last_success holds whole seconds, so a run in the same second would write the same
+            # value and hide a fetch let through.
             time.sleep(1.1)
             before = (c.read(LAST_SUCCESS), success_timestamp(c.read(PROM)))
             expect(before[0] != "", f"{LAST_SUCCESS} is empty before the case")
@@ -337,9 +336,8 @@ class Cases:
             expect(after == before, f"the success timestamp moved: {before} -> {after}")
 
         def expired_release() -> None:
-            # The Valid-Until half of stopped_server: the server answers, but with an index
-            # whose re-sign stopped. apt refuses it only because the source checks InRelease
-            # against TEST_KEYRING; with no signature check it would accept it.
+            # The server answers, but with an index whose re-sign stopped; apt refuses it only
+            # because the source checks InRelease against TEST_KEYRING.
             self.expect_installed(c, "updater-head", "host-head")
             time.sleep(1.1)
             before = (c.read(LAST_SUCCESS), success_timestamp(c.read(PROM)))
@@ -463,8 +461,8 @@ class Cases:
 
         self.case(c, "install the base version", install_base)
         self.case(c, "upgrade to the head version", upgrade)
-        # After the upgrade, so the run is the head build's updater. The base build's is
-        # master's, which a pull request's change to step 3 does not reach.
+        # After the upgrade, so the run is the head build's updater, which a PR's change to step 3
+        # reaches.
         self.case(c, "the stopped server", stopped_server, fetch=False)
         self.case(c, "a Release past its Valid-Until", expired_release)
         self.case(c, "upgrade homelab-updater under a running updater", unit_change)
@@ -507,8 +505,8 @@ class Cases:
                 f"/srv/debs/{self.debs[label].name}"
                 for label in ("updater-head", "pi-head", *self.tools)
             )
-            # apt-get, as bootstrap-host.sh installs on a host. dpkg -i leaves a package whose
-            # Depends is not installed unconfigured, so H3.7's `Depends: tree` would fail here.
+            # apt-get as bootstrap-host.sh installs; `dpkg -i` leaves a package whose Depends is not
+            # installed unconfigured.
             c.ok(f"DEBIAN_FRONTEND=noninteractive apt-get install -y {debs}")
             # Joins the start the postinst queued, and returns once that reconcile ends.
             c.ok("systemctl start homelab-reconcile.service")

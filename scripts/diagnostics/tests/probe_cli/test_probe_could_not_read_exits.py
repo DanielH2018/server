@@ -1,0 +1,180 @@
+"""A could-not-read exit is `PROBE_UNREADABLE` (75), or says why it is 1.
+
+1 is the verdict "the probe looked and saw something bad". Each path below observed nothing
+about its subject, so it either exits 75 with the failure on stderr, or carries a `# DECIDED:`
+marker at the code that chooses 1, saying why 1 is its verdict. A test accepts either and refuses
+the bare 1.
+
+Each test drives the real code and stubs only the process boundary under it:
+`subprocess.run` for kubectl, sops and curl, or a state directory in `tmp_path`.
+
+Run: uv run pytest scripts/diagnostics/tests/probe_cli/test_probe_could_not_read_exits.py
+"""
+
+import inspect
+import json
+import shutil
+import subprocess
+
+
+from diagnostics import probe
+from diagnostics.probe_lib import ha, health
+from diagnostics.probe_lib.core import SECRETS_PATH
+from lib import kubectl
+from lib.exit_codes import FAILED, PROBE_UNREADABLE
+
+DECIDED = "# DECIDED:"
+NOW = 1_800_000_000.0
+
+
+def _exit_code(call):
+    """The code the process would exit with: a returned int, or a raised SystemExit's code.
+
+    A fix may return 75 or raise `core.Unreadable`; both exit 75, so both count.
+    """
+    try:
+        return call()
+    except SystemExit as exc:
+        if exc.code is None:
+            return 0
+        return exc.code if isinstance(exc.code, int) else FAILED
+
+
+def _decided_at(func, anchor):
+    """Whether the blank-line-delimited block of `func` holding `anchor` has a DECIDED marker.
+
+    The block, not the whole function: `health.run_health` already carries an unrelated marker
+    further down, and that one says nothing about the cluster refusal.
+    """
+    lines = inspect.getsource(func).splitlines()
+    hits = [i for i, line in enumerate(lines) if anchor in line]
+    if not hits:
+        return False
+    start = end = hits[0]
+    while start > 0 and lines[start - 1].strip():
+        start -= 1
+    while end + 1 < len(lines) and lines[end + 1].strip():
+        end += 1
+    return any(DECIDED in line for line in lines[start : end + 1])
+
+
+def test_wrong_cluster_refusal_from_a_handler_exits_unreadable(
+    tmp_path, monkeypatch, capsys
+):
+    """`vip-placement` on a kubectl that serves stage, not the prod it asked about.
+
+    `lib.kubectl.kubectl` refuses before it runs anything, so nothing about the VIPs was read.
+    """
+    kubeconfig = tmp_path / "kubeconfig"
+    kubeconfig.write_text("apiVersion: v1\n")
+    monkeypatch.setenv("KUBECONFIG", str(kubeconfig))
+    monkeypatch.setattr(shutil, "which", lambda name, path=None: f"/usr/bin/{name}")
+    stage_nodes = json.dumps({"items": [{"metadata": {"name": "daniel-stage"}}]})
+    monkeypatch.setattr(
+        subprocess,
+        "run",
+        lambda argv, **_: subprocess.CompletedProcess(argv, 0, stage_nodes, ""),
+    )
+    # The identity read is cached per process; a cached `prod` would skip the stub above.
+    kubectl.forget_served_cluster()
+    try:
+        rc = _exit_code(lambda: probe.main(["vip-placement"]))
+    finally:
+        kubectl.forget_served_cluster()
+    err = capsys.readouterr().err
+    if _decided_at(probe._dispatch, "except WrongCluster"):
+        return
+    assert rc == PROBE_UNREADABLE, f"a WrongCluster refusal exited {rc}"
+    assert kubectl.cluster_refusal("prod", "stage") in err
+
+
+def test_health_cluster_refusal_exits_unreadable(capsys):
+    """`health --cluster stage` on a kubectl that serves prod: no workload was looked at."""
+    rc = _exit_code(
+        lambda: health.run_health("authelia", cluster="stage", served="prod")
+    )
+    err = capsys.readouterr().err
+    if _decided_at(health.run_health, "cluster_refusal("):
+        return
+    assert rc == PROBE_UNREADABLE, f"health's cluster refusal exited {rc}"
+    assert kubectl.cluster_refusal("stage", "prod") in err
+
+
+def test_health_unconfirmable_cluster_exits_unreadable(capsys):
+    """A node read that named no known cluster (`served=None`) is a read that failed."""
+    rc = _exit_code(lambda: health.run_health("authelia", cluster="prod", served=None))
+    err = capsys.readouterr().err
+    if _decided_at(health.run_health, "cluster_refusal("):
+        return
+    assert rc == PROBE_UNREADABLE, f"an unconfirmable cluster exited {rc}"
+    assert kubectl.cluster_refusal("prod", None) in err
+
+
+def test_ha_state_non_json_body_exits_unreadable(monkeypatch, capsys):
+    """HA answered `/api/states/<id>` with an error page, so the entity was never read."""
+    body = "<html><body>502 Bad Gateway</body></html>\n"
+
+    def run(argv, **_):
+        # sops answers the token; curl answers the GET with the error page.
+        reply = "example.test\n" if SECRETS_PATH in argv else body
+        return subprocess.CompletedProcess(argv, 0, reply, "")
+
+    monkeypatch.setattr(subprocess, "run", run)
+    rc = _exit_code(lambda: probe.main(["ha", "state", "fan.tower_fan"]))
+    out, err = capsys.readouterr()
+    if _decided_at(ha.run_ha, "json.JSONDecodeError"):
+        return
+    assert rc == PROBE_UNREADABLE, f"a non-JSON `ha state` body exited {rc}"
+    assert body.strip() in err
+    assert body.strip() not in out
+
+
+SOPS_NO_KEY = "Failed to get the data key required to decrypt the SOPS file."
+
+
+def _sops_fails(monkeypatch, config_dir):
+    """Stub sops to fail and point every age key source this user could hold at `config_dir`."""
+    for name in (
+        "SOPS_AGE_KEY",
+        "SOPS_AGE_KEY_FILE",
+        "SOPS_AGE_KEY_CMD",
+        "SOPS_AGE_SSH_PRIVATE_KEY_FILE",
+    ):
+        monkeypatch.delenv(name, raising=False)
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(config_dir))
+
+    def run(argv, **_):
+        if SECRETS_PATH in argv:
+            return subprocess.CompletedProcess(argv, 1, "", SOPS_NO_KEY + "\n")
+        return subprocess.CompletedProcess(argv, 0, "{}", "")
+
+    monkeypatch.setattr(subprocess, "run", run)
+
+
+def test_sops_read_without_an_age_key_names_the_cause_and_the_operator(
+    tmp_path, monkeypatch, capsys
+):
+    """The `claude` user holds no age key, so `ha state` says so and sends it to the operator."""
+    _sops_fails(monkeypatch, tmp_path)
+    rc = _exit_code(lambda: probe.main(["ha", "state", "fan.tower_fan"]))
+    err = capsys.readouterr().err
+    assert rc == PROBE_UNREADABLE
+    assert "holds no age key" in err
+    assert "operator" in err
+    assert "docs/claude-agent-user.md" in err
+    assert SOPS_NO_KEY in err
+
+
+def test_sops_read_with_an_age_key_does_not_blame_a_missing_key(
+    tmp_path, monkeypatch, capsys
+):
+    """A user with keys.txt whose decrypt still fails gets sops' own error, not the no-key one."""
+    keys = tmp_path / "sops" / "age" / "keys.txt"
+    keys.parent.mkdir(parents=True)
+    keys.write_text("AGE-SECRET-KEY-PLACEHOLDER\n")
+    _sops_fails(monkeypatch, tmp_path)
+    rc = _exit_code(lambda: probe.main(["ha", "state", "fan.tower_fan"]))
+    err = capsys.readouterr().err
+    assert rc == PROBE_UNREADABLE
+    assert "holds no age key" not in err
+    assert SOPS_NO_KEY in err

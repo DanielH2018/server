@@ -90,9 +90,9 @@ test modules are these:
   `status_of` from `lib.facts.relations`.
 - `scripts/lib/facts/report.py` imports `LOCK_REL` and `parse_lock` from `.lock`.
 - `scripts/lib/facts/lint.py` imports `LOCK_REL` and `lock_tampered` from `.lock`.
-- `scripts/dev/tests/test_facts_cli.py` imports `read_lock`.
-- `scripts/lib/tests/test_facts_lint.py` imports `LOCK_REL` and `write_lock`.
-- `scripts/lib/tests/test_facts_report.py` imports `LOCK_REL` and `verify_units`.
+- `scripts/dev/tests/repo_tools/test_facts_cli.py` imports `read_lock`.
+- `scripts/lib/tests/facts/test_facts_lint.py` imports `LOCK_REL` and `write_lock`.
+- `scripts/lib/tests/facts/test_facts_report.py` imports `LOCK_REL` and `verify_units`.
 - `test_facts_lock_matches_tree.py` and `test_facts_lock_units_lint_clean.py` import from
   `lib.facts.lock`.
 - `.claude/hooks/_facts_line.py` names `lib.facts.lock` in a docstring. It imports nothing
@@ -124,7 +124,7 @@ Two shared helpers live inside modules G2 deletes:
   `scripts/docs/tests/test_gen_reference_decisions.py` assert the exclusion:
   `test_the_facts_lock_is_excluded`, and one line of
   `test_live_tree_excludes_its_own_generator_and_test_file`.
-- `scripts/lib/tests/test_facts_lint.py:test_rule_census` lists `lock-tampered`.
+- `scripts/lib/tests/facts/test_facts_lint.py:test_rule_census` lists `lock-tampered`.
 - `.claude/rules/facts.md`:
     - a `paths:` glob for `docs/facts.lock`, which
       `test_rules_globs_match_a_tracked_file.py` (`.claude/hooks/tests/`) reads;
@@ -148,7 +148,7 @@ Two shared helpers live inside modules G2 deletes:
   `test_every_recorded_atom_hashes_as_recorded`*.
 - `docs/claude-tooling.md`: one paragraph on the `_facts_line` injection line.
 - `mkdocs.yml` lists every ADR in its nav by hand.
-  `tests/repo/test_adr_links.py:test_the_nav_lists_every_adr` fails an ADR the nav
+  `tests/repo/docs/test_adr_links.py:test_the_nav_lists_every_adr` fails an ADR the nav
   leaves out.
 
 **Generated pages that carry rows from the lock's code.** `docs/reference/decisions.md`
@@ -440,12 +440,12 @@ The pre-flip PR therefore takes the label PR 2b.
         - `test_facts_lock_matches_tree.py`;
         - `cmd_status`, `cmd_verify`, `cmd_reverify`, `cmd_forget` and their argparse
           entries, which span 142 lines of `fact_status.py`;
-        - their tests in `scripts/dev/tests/test_facts_cli.py`, which span 184 lines, and
+        - their tests in `scripts/dev/tests/repo_tools/test_facts_cli.py`, which span 184 lines, and
           that file's `read_lock` import.
     - `fact_status.py` drops its `lib.facts.lock` and `lib.facts.relations` imports.
     - Replace `lock-tampered` with `lock-retired` in `lint.py`, which drops its `.lock`
       import. Rewrite the `lint_sections` docstring that names `lock.check_lock`.
-    - In `scripts/lib/tests/test_facts_lint.py`, replace the tampered test with the
+    - In `scripts/lib/tests/facts/test_facts_lint.py`, replace the tampered test with the
       `lock-retired` pair, update `test_rule_census`, and drop the `lib.facts.lock` import.
     - `prek.toml`:
         - delete the `facts-reverify-changed` block;
@@ -543,10 +543,10 @@ The first `git grep` matches these files at `70591c307`. Each match leaves in th
 | Match | Cleared by |
 |---|---|
 | `test_facts_lock_units_lint_clean.py` | PR 2b |
-| `scripts/lib/tests/test_facts_report.py` (`verify_units`) | PR 2 |
+| `scripts/lib/tests/facts/test_facts_report.py` (`verify_units`) | PR 2 |
 | `test_facts_lock_matches_tree.py` | PR 3 |
 | `scripts/dev/fact_status.py` (imports and calls) | PR 3 |
-| `scripts/dev/tests/test_facts_cli.py` (`read_lock`) | PR 3 |
+| `scripts/dev/tests/repo_tools/test_facts_cli.py` (`read_lock`) | PR 3 |
 | `scripts/lib/facts/lint.py` (`lock_tampered`) | PR 3 |
 | `scripts/lib/facts/pins.py` (module docstring) | PR 3 |
 | `.claude/rules/facts.md` (*Commands*) | PR 3 |
@@ -598,12 +598,12 @@ Red-proof for each new check, as paired tests:
     - The same fixture, citing a symbol that exists, is clean.
     - Non-vacuity: the live walk reaches at least 400 sections. It must find a section of the
       root `CLAUDE.md` and one of `k8s/roles/traefik/CLAUDE.md`.
-- **The plain replay window** (`scripts/lib/tests/test_facts_report.py`, PR 2).
+- **The plain replay window** (`scripts/lib/tests/facts/test_facts_report.py`, PR 2).
     - A fixture history has a lock commit well before the `--days` boundary and commits on
       both sides of the boundary. The replay's first commit falls inside the boundary. G1's
       anchor fails this test, because it starts the window at the lock commit.
     - The same history with no lock commit gives the same window.
-- **`lock-retired`** (`scripts/lib/tests/test_facts_lint.py`).
+- **`lock-retired`** (`scripts/lib/tests/facts/test_facts_lint.py`).
     - A fixture with a `docs/facts.lock` file yields one `lock-retired` error.
     - The same fixture without the file yields none.
 - **The ADR marker.** `test_adr_links.py` already proves each direction can fail. PR 1's
@@ -749,7 +749,7 @@ Each risk is checked against `docs/failure-classes.md`.
       nav line;
     - the `ci.yml` marker. `ci.yml` is a full-sweep path, so the PR runs every hook.
 - **PR 2:**
-    - `scripts/lib/tests/test_facts_report.py`, which drops its `lib.facts.lock` import.
+    - `scripts/lib/tests/facts/test_facts_report.py`, which drops its `lib.facts.lock` import.
       G1's replay tests there change with the parity rows and the anchor:
         - the tests of the `listed`, `miss` and `hashing` classes, and both `split` tests,
           leave with parity. The second `split` test pins the window to a lock commit, so
@@ -758,9 +758,9 @@ Each risk is checked against `docs/failure-classes.md`.
           assertion and drops its zero-miss assertion;
         - the `crashed` test stays;
         - the plain-window pair from *Verification* joins the file;
-    - `test_report_json_ranks_the_sections_not_in` in `scripts/dev/tests/test_facts_cli.py`,
+    - `test_report_json_ranks_the_sections_not_in` in `scripts/dev/tests/repo_tools/test_facts_cli.py`,
       because the ranking it asserts changes;
-    - a pair in `scripts/lib/tests/test_facts_citations.py` for `citations.repo_citations`:
+    - a pair in `scripts/lib/tests/facts/test_facts_citations.py` for `citations.repo_citations`:
       a tracked path citation is kept, and an untracked one is dropped. The only test that
       calls it at `70591c307`,
       `test_facts_lock.py:test_a_reader_given_the_parsed_citations_reads_them_not_the_tree`,
@@ -900,7 +900,7 @@ Findings raised, all fixed except where marked:
     - PR 3's counts are restated from measured spans at `70591c307`. The four subcommands
       and their argparse entries span 142 lines of `fact_status.py`. Their CLI tests span
       184 lines of `test_facts_cli.py`.
-    - Refuted: `status` cannot leave first. In `scripts/dev/tests/test_facts_cli.py`, eight
+    - Refuted: `status` cannot leave first. In `scripts/dev/tests/repo_tools/test_facts_cli.py`, eight
       tests of `verify`, `forget` and `reverify` assert through `main(["status", ...])`.
       Examples are `test_verify_then_status_is_clean`, `test_forget_then_status_is_clean`
       and `test_reverify_folds_a_prose_edit_into_the_commit`. `cmd_verify` and
@@ -975,7 +975,7 @@ Findings raised: two. Both are fixed, and none is refuted.
     - PR 2 now returns the window to the plain `--days` boundary and drops the anchor with
       `split`. It spells out which parity rows leave, and which replay keys stay, among them
       the `moved` and `moved_prose_edited` keys G3 reads.
-    - *Verification* gains the paired test in `scripts/lib/tests/test_facts_report.py`. A
+    - *Verification* gains the paired test in `scripts/lib/tests/facts/test_facts_report.py`. A
       fixture with a lock commit well before the boundary starts its replay inside the
       boundary, and a fixture with no lock commit gives the same window.
     - *Tests and docs*, PR 2, names the G1 replay tests that leave or change with parity

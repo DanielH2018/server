@@ -26,8 +26,8 @@ from lib import yaml_fast
 HOST_FILES_DEFAULTS = _REPO / "hosts/components/registry-gc/defaults/main.yml"
 K8S_ROLES = _REPO / "k8s/roles"
 
-# The copies the census must find, so a moved or renamed pin fails as a missing member rather
-# than passing over an empty census.
+# Named so a moved or renamed pin fails as a missing member rather than passing over an empty
+# census.
 KNOWN_COPIES = frozenset({"registry_k8s_image", "registry_k8s_netpol_probe_image"})
 
 FIELDS = (

@@ -103,7 +103,7 @@ dispatch runs every module. A push whose tree a pull-request run tested runs not
   is empty, and that leg skips every step after its select step. A run with no base, and a
   run whose plan failed, starts every leg. A failed plan still fails the gate, so its run
   needs a rerun. The plan step and every leg diff against the same base, which
-  `tests/repo/test_ci_pytest_selects_affected_modules.py` checks for each event `ci.yml`
+  `tests/repo/ci_workflows/test_ci_pytest_selects_affected_modules.py` checks for each event `ci.yml`
   runs on. Each leg passes the plan back to `pytest_shard.py --planned`, and the leg fails
   when its own selection fills more legs than the plan started. `scripts/dev/ci_slot_cost.py
   --recent 20 --pull-requests` counts the empty legs.
@@ -119,7 +119,7 @@ dispatch runs every module. A push whose tree a pull-request run tested runs not
   pull request's head whether the legs ran the whole census or a selection. The push run of
   the same tree would diff it against the same base with the same table, so its selection
   would be the one the pull-request run already ran, and it skips every job
-  (`tests/repo/test_ci_skip_proven_master.py::test_a_run_records_the_tree_it_tested_unless_it_was_proven`).
+  (`tests/repo/ci_workflows/test_ci_skip_proven_master.py::test_a_run_records_the_tree_it_tested_unless_it_was_proven`).
   A landing batch's run records its members the same way. Its selection comes from the
   diff of every member stacked on master, so it holds each module any one member can
   affect.
@@ -129,7 +129,7 @@ dispatch runs every module. A push whose tree a pull-request run tested runs not
   gate passed. The legs select the modules the diff from that base can affect. The base is
   not always the parent. A selection against a parent whose run is red would leave out
   what the parent broke, and master would read green with that module failing
-  (`scripts/dev/tests/test_tested_tree.py::test_a_red_or_unfinished_parent_is_skipped_for_the_ancestor_behind_it`).
+  (`scripts/dev/tests/ci/test_tested_tree.py::test_a_red_or_unfinished_parent_is_skipped_for_the_ancestor_behind_it`).
   A parent whose run has not finished is skipped the same way. With no green ancestor
   within `MAX_BASE_WALK` commits, or a lookup that fails, the push runs every module.
 
@@ -145,7 +145,7 @@ dependency the module gained, which no selected run is told to run.
 - **It grades no commit.** No job in it carries the name of the `prek` gate, so
   `hosts/lib/ci_verdict.py:ci_verdict` never reads it and a red sweep holds no landing
   (the `pytest-sweep-result-cannot-grade-a-commit` row of
-  `tests/repo/test_census_rows_workflows.py`).
+  `tests/repo/census_rows/test_census_rows_workflows.py`).
 - **It reports through one issue.** `scripts/dev/scheduled_report.py` opens an issue titled
   `Nightly pytest sweep is red` that names the failed modules, comments on it while the
   sweep stays red, and closes it on the next green sweep. The issue carries no `claude`
@@ -156,7 +156,7 @@ dependency the module gained, which no selected run is told to run.
   runs `-m image` over the whole tree after the suite, red or green, and appends to the
   log the sweep issue reads its failed modules from. The step needs Docker, so the sweep
   stays on a hosted runner (the `pytest-sweep-runs-the-image-tests` row of
-  `tests/repo/test_census_rows_workflows.py`).
+  `tests/repo/census_rows/test_census_rows_workflows.py`).
 - **It shares its tool installs with the pytest legs.** Both call
   `.github/actions/pytest-tools`, which holds the SOPS, age, apt-utils and dotfiles steps.
 - **To run the whole suite on a branch,** dispatch it there:
@@ -1045,7 +1045,7 @@ what has changed it:
   ships no wheel for the pinned Python), and the binaries test modules skip without. It puts
   `~/.local/bin` on PATH. The last step of `pytest-tools` fails a leg that lacks one of those
   binaries, so a pod's run cannot pass the gated tests as skips.
-  `tests/repo/test_ci_baseline_binaries.py` holds the step's list against every skip gate in
+  `tests/repo/ci_workflows/test_ci_baseline_binaries.py` holds the step's list against every skip gate in
   the suite. `strace` is the one gated binary the hosted image lacks, so its test skips on both
   runner types. One gate reads a fixed path the census cannot see: a `scripts/lib` kubectl
   test skips unless `/usr/local/bin/kubectl` exists, so the base image installs kubectl there. `HOME` must be writable, because `~/.local/bin`, the dotfiles packages and
@@ -1070,7 +1070,7 @@ The decisions, all the operator's:
   keeps every job hosted, because a runner on the host would run a fork's code beside the age
   key, a `gh` token and a cluster node. A runner pod holds none of the three: it has no host
   mount, no ServiceAccount token and no privilege, and it runs one job. Two things stay
-  true. Egress NetworkPolicies are not enforced on this cluster, so a job in a pod can reach
+  true. No egress NetworkPolicy fences the runner pods, so a job in a pod can reach
   the LAN. A container escape would land on a production node. ADR-0032 is the record.
 - **Which credential registers a runner. Decided on 2026-11-13: it stays on daniel-box.** The
   launcher mints a one-job runner configuration with the token the lander uses, and creates the

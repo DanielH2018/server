@@ -8,23 +8,15 @@ spec:
     # Advisory. See media_volume_size in the role defaults — no quota enforces this.
     storage: {{ media_volume_size }}
   accessModes:
-    # RWX because nine pods mount this at once. Safe, and not a distributed-filesystem claim:
-    # nodeAffinity below pins every one of them to this node, where the kubelet simply
-    # bind-mounts the same directory into each. RWO would also work (it means one NODE, not one
-    # pod) but would misdescribe the intent to the next reader.
+    # RWX is accurate: nodeAffinity pins every pod to this node, which bind-mounts one directory.
+    # RWO would also work but misdescribe the intent.
     - ReadWriteMany
-  # Retain, not Delete: deleting the claim must not delete a library that nothing backs up
-  # (nothing backs up containers/data/).
-  #
-  # THE RECOVERY TRAP that buys: the binding controller stamps the PVC's UID into claimRef at
-  # bind time. Delete the PVC and this PV goes Released holding a UID that no longer exists, so
-  # recreating a same-named PVC will NOT rebind — the data is intact and the volume silently
-  # refuses to mount. Clear the stale reference to recover:
-  #   k3s kubectl patch pv {{ media_volume_claim }} -p '{"spec":{"claimRef":null}}'
+  # Retain: deleting the claim must not delete an unbacked library. Recovery trap: deleting the PVC
+  # leaves the PV Released holding a stale claimRef UID, so a same-named PVC will not rebind.
+  # Clear it: k3s kubectl patch pv {{ media_volume_claim }} -p '{"spec":{"claimRef":null}}'
   persistentVolumeReclaimPolicy: Retain
   storageClassName: {{ media_volume_storage_class }}
-  # `local` rather than `hostPath`: it is the node-local volume type that supports nodeAffinity,
-  # which is what makes the scheduler enforce the pin instead of leaving it to hope.
+  # `local`, not `hostPath`: it supports nodeAffinity, so the scheduler enforces the pin.
   local:
     path: {{ media_volume_host_path }}
   nodeAffinity:
@@ -35,8 +27,7 @@ spec:
               operator: In
               values:
                 - {{ k8s_primary_node }}
-  # Pre-bound to its claim by name, so this PV can never be captured by some other PVC that
-  # happens to ask for the same class and size.
+  # Pre-bound by name so no other PVC of the same class and size can capture it.
   claimRef:
     namespace: {{ k8s_namespace }}
     name: {{ media_volume_claim }}

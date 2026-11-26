@@ -78,20 +78,12 @@ _MARKER_OPENS_LINE_RE = re.compile(
 _COMMENT_LINE_RE = re.compile(rf"^\s*{_COMMENT_LEADER}")
 _SENTENCE_START_RE = re.compile(r"[.!?]\s+$")
 
-# Directories a tree-wide text scan must prune: VCS internals, other sessions' worktrees,
-# build output and virtualenvs. Pruning, not filtering, is what keeps this fast — see
-# _mkdocs_repo_links.py's identical rationale for the same skip list.
+# Pruning, not filtering, keeps this fast.
 _SKIP_DIR_NAMES = {".git", ".venv", "site", "node_modules", "__pycache__"}
 _SKIP_PATH_PARTS = (".claude/worktrees",)
 
-# This generator's own source, its dedicated test fixtures, and the page it writes all name
-# the literal marker text while explaining or exercising the convention -- not recording a
-# project trade-off. Left unexcluded, this generator's docstring and this test file's escaped
-# fixture strings (each a real grep hit, since the scan IS a grep) render as garbled rows, and
-# the generated page's own "N markers found" sentence would count itself, so a second run
-# always finds one more marker than the first. Excluded by exact path rather than a pattern,
-# so a rename breaks this loudly (an unrecognised path just re-appears in the output) instead
-# of silently widening what else gets skipped.
+# Excluded by exact path: this generator, its fixtures and its page all name the marker text, and
+# the page's own count would include itself. A rename breaks loudly.
 _SELF_PATHS = frozenset(
     {
         "scripts/docs/reference/decisions.py",
@@ -100,10 +92,8 @@ _SELF_PATHS = frozenset(
     }
 )
 
-# A line-comment prefix: leading whitespace, then one comment token, then a space or EOL.
-# Matches `# `, `    # `, `// `, `-- `, `; `. Deliberately excludes Jinja's `{# #}` and
-# C-style `/* */` block comments — no marker in the tree today uses either, and detecting a
-# block comment's continuation needs a close token this page does not need to chase.
+# Deliberately excludes Jinja `{# #}` and C-style block comments: continuation needs a close token
+# this page does not chase.
 _COMMENT_PREFIX_RE = re.compile(r"^(\s*(?:#|//|--|;))(?:\s|$)")
 
 # Where the "first sentence" ends: a period followed by a space or end of string. A period
@@ -113,7 +103,6 @@ _SENTENCE_END_RE = re.compile(r"\.(?:\s|$)")
 
 _PLANES: list[tuple[str, str]] = [
     ("k8s/roles/", "k8s/roles"),
-    # The Pi's Compose services (H5); H5.12 deleted the `roles/containers` tree they came from.
     # Before the host components, because the first matching prefix names the plane.
     ("hosts/components/pi-compose/services/", "pi-compose"),
     ("hosts/components/", "host components"),
@@ -121,19 +110,11 @@ _PLANES: list[tuple[str, str]] = [
     ("docs/", "docs"),
 ]
 
-# Near-duplicate detection: two normalised first sentences at or above this similarity are
-# flagged. 1.0 is exact (after case/whitespace normalisation); this is deliberately looser so
-# a marker copied and lightly edited still surfaces.
+# Looser than exact so a marker copied and lightly edited still surfaces.
 _DUPLICATE_THRESHOLD = 0.90
 
-# A repo-relative path a marker names: a top-level directory, slash-separated segments, and one
-# of these extensions. The top-level directory must exist under `root` (checked at match time,
-# see `_pointers_in`), so a fixture tree resolves its own paths and a stray `foo/bar.md` in
-# prose is not read as a repo path. The extension set is what a census found markers pointing
-# at (43 pointers in 312 markers, every one of them in this set); a pointer with no extension
-# (`gitops_deploy.py`'s bare module name, a directory) is not a path this can resolve and is
-# left alone. The trailing lookahead refuses a `.`-then-word so `foo.sh.j2` is taken whole
-# rather than as `foo.sh`, while a sentence-ending `foo.md.` still matches `foo.md`.
+# The top-level directory must exist under `root`, so a stray `foo/bar.md` is no repo path.
+# The lookahead takes `foo.sh.j2` whole but still matches a sentence-ending `foo.md.`
 _REPO_PATH_RE = re.compile(
     r"(?<![\w/.-])([\w.-]+(?:/[\w.-]+)+\.(?:md|py|j2|yml|yaml|sh|toml|json))(?!\.?[\w/-])"
 )
@@ -141,14 +122,12 @@ _ADR_RE = re.compile(r"\bADR-(\d{4})\b")
 _THIS_ROLE_RE = re.compile(r"this role'?s `?CLAUDE\.md`?", re.IGNORECASE)
 _ROLE_DIR_RE = re.compile(r"^(k8s/roles/[^/]+)/")
 
-# (marker file, pointer) pairs that name a path which must NOT exist: the marker quotes the
-# stale path as the counterexample its own guard rejects. Keyed by file and token rather than
-# line, so an edit above the marker does not silently drop the entry; a marker that moves to
-# another file re-appears as unresolved and the entry is updated by hand.
+# Pairs naming a path that must NOT exist: the marker quotes the stale path as a counterexample.
+# Keyed by file and token, not line.
 _COUNTEREXAMPLE_POINTERS = frozenset(
     {
         (
-            "tests/repo/test_documented_paths_exist.py",
+            "tests/repo/docs/test_documented_paths_exist.py",
             "scripts/gen_infra_map.py",
         ),
     }
@@ -159,7 +138,7 @@ def _tracked_files(root: Path) -> list[str] | None:
     """`git ls-files` under `root`, or None when `root` is not a git repository.
 
     DECIDED: `git ls-files`, not a walk plus a hand-maintained skip list — the same
-    reasoning `tests/repo/test_documented_paths_exist.py` gives for the same
+    reasoning `tests/repo/docs/test_documented_paths_exist.py` gives for the same
     choice. A walk sees whatever happens to be on disk, and this repo grows untracked
     trees during ordinary work: `.venv`, `__pycache__`, and — the concrete miss that motivated this — `.mkdocs-strict-check/`,
     the prek hook's own build output, which is not one of those named exceptions and
@@ -335,9 +314,8 @@ def build_rows(root: Path = REPO, repo: Path = REPO) -> list[dict[str, str]]:
                     "plane": _plane(rel_path),
                     "first_sentence": first_sentence,
                     "text": full_text or "(no text after the marker)",
-                    # The whole block, not the first-sentence cut `text` renders: a pointer
-                    # usually sits in the marker line's SECOND sentence ("…, not X. See
-                    # ADR-0011."), which `text` drops.
+                    # The whole block: a pointer usually sits in the marker's second sentence, which
+                    # `text` drops.
                     "block": " ".join([after, *continuation]).strip(),
                     "decided": _blame_date(rel_path, idx + 1, repo),
                 }

@@ -13,7 +13,7 @@ Typical usage example:
 
     subprocess.run(snapshot_uv.argv(snapshot, "python", "scripts/x.py"), cwd=snapshot)
 
-Run: uv run pytest scripts/lib/tests/test_snapshot_uv.py
+Run: uv run pytest scripts/lib/tests/git_and_gh/test_snapshot_uv.py
 """
 
 import shlex

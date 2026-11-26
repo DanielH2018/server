@@ -10,8 +10,8 @@ metadata:
   name: freshrss
   namespace: {{ k8s_namespace }}
 spec:
-  # The PVC is ReadWriteOnce and Longhorn runs one replica, so a rolling update would deadlock:
-  # the new pod waits for a volume the old pod still holds.
+  # ReadWriteOnce PVC: a rolling update would deadlock, the new pod waiting for a volume the old one
+  # holds.
 {{ spec_shell('Recreate') }}
   replicas: 1
   selector:

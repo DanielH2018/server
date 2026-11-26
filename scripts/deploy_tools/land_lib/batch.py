@@ -90,8 +90,6 @@ LABEL = "landing-batch"
 MAX_STACKED = 4
 # The seconds the batch's one full run may take. A run can take 993 s under a saturated pool.
 RUN_TIMEOUT_S = 2700
-# The seconds one member's merge may take: its own run is two short jobs, which can take 164 s
-# from the ready flip with the runner pool saturated.
 MEMBER_TIMEOUT_S = 600
 
 # What GitHub failing to answer looks like, for a call the batch makes.
@@ -527,9 +525,8 @@ def _merge_members(ln: Landing) -> None:
     if ln.batch and not ln.tested_on:
         say("the batch's run no longer stands, so its other PRs land alone")
         return
-    # What is left of the two merge budgets this landing's own wait could use, which is all
-    # `LAND_DEADLINE` counts for merging. A member's wait takes twice `MEMBER_TIMEOUT_S` when
-    # its branch is updated, so a member is merged only while that much is left.
+    # A member's wait takes twice `MEMBER_TIMEOUT_S` when its branch is updated, so merge a member
+    # only while that much budget is left.
     left = 2 * ln.opts.merge_timeout - ln.merge_wait_s
     before = ln
     for member in ln.batch:

@@ -81,18 +81,16 @@ HEALTH_MAX_AGE = int(_env("HEALTH_MAX_AGE", str(3 * POLL_INTERVAL + 30)))
 
 # parsing (pure) — the genuinely per-game part; see the module docstring.
 HANDSHAKE_RE = re.compile(r"Got handshake from client (?P<steam_id>\d{5,25})")
-# Non-greedy name up to the ` : ` separator. The ZDO id is signed in the wild, and the
-# `0:0` form is the death sentinel — captured here and split by kind below rather than
-# by a second regex, so a name containing " : " can never make the two disagree.
+# The `0:0` ZDO id is the death sentinel, captured here and split by kind, so a name containing " :
+# " cannot make two regexes disagree.
 ZDOID_RE = re.compile(
     r"Got character ZDOID from (?P<name>.+?) : (?P<zdo>-?\d+):(?P<idx>\d+)\s*$"
 )
 CLOSING_RE = re.compile(r"Closing socket (?P<steam_id>\d{5,25})")
-# Shutdown, and the world load that follows a start (the only marker a crash leaves):
-# after either, no session from before it can still be open.
+# Shutdown, and the world load after a start (the only crash marker): no earlier session can still
+# be open.
 RESTART_RE = re.compile(r"Game - OnApplicationQuit|ZNet\.LoadWorld: ")
-# Periodic server heartbeat, every ~10 min. Independent, directly-observed truth about
-# how many peers are connected — see valheim_connections in render_metrics.
+# Server heartbeat, every ~10 min: the directly observed connected-peer count.
 CONNECTIONS_RE = re.compile(r"Connections (?P<n>\d+) ZDOS:(?P<zdos>\d+)")
 
 
@@ -106,9 +104,8 @@ def parse_line(line):
     m = ZDOID_RE.search(line)
     if m:
         name = m.group("name")
-        # `0:0` means the character's ZDO was destroyed — the death sentinel. Any other
-        # id is a spawn, which ALSO fires on respawn, so the state machine must treat a
-        # spawn while a session is already open as a no-op rather than a new session.
+        # `0:0` is the death sentinel; any other id is a spawn, which also fires on respawn, so a
+        # spawn with an open session is a no-op.
         if m.group("zdo") == "0" and m.group("idx") == "0":
             return ("death", name)
         return ("spawn", name)
@@ -156,8 +153,6 @@ class StatsState:
         self.pending_steam_id = None
         # name -> last heartbeat whose count covered every open session, theirs included.
         self.last_present = {}
-        # The last heartbeat counted more than 0 but fewer than the open sessions, so
-        # which session is stale is unknown.
         self.ambiguous = False
         # name -> highest playtime a read has returned for the open session.
         self.exposed = {}
@@ -248,13 +243,9 @@ class StatsState:
         """
         self.last_event_ts = max(self.last_event_ts, ts)
         if kind == "connect":
-            # Held until the next spawn names the character. The binding is ADJACENCY —
-            # the handshake and the spawn that follows it — which is how the other
-            # published parsers do it too, because the console never puts the SteamID
-            # and the character name on the same line. Two players completing a
-            # handshake before either spawns can therefore cross-bind; with a homelab
-            # player count that is rare and self-corrects on their next join. Playtime
-            # is the only thing affected: deaths are attributed by name directly.
+            # The binding is ADJACENCY (handshake then spawn): the console never puts SteamID and
+            # name on one line.
+            # Two simultaneous handshakes can cross-bind; only playtime is affected.
             self.pending_steam_id = value
         elif kind == "spawn":
             p = self._player(value)
@@ -262,8 +253,7 @@ class StatsState:
                 self.steam_to_name[self.pending_steam_id] = value
                 self.pending_steam_id = None
             if p["open_start"] is None:
-                # New session. A spawn with a session already open is a RESPAWN after
-                # death and must not count as a second session.
+                # A spawn with a session already open is a RESPAWN, not a second session.
                 p["open_start"] = ts
                 if p["first_seen"] is None:
                     p["first_seen"] = ts
@@ -358,10 +348,9 @@ def render_metrics(state, now):
         "counter",
         [state.total_deaths()],
     )
-    # Cross-check gauge, not a duplicate. valheim_players_online is DERIVED from the
-    # session state machine; valheim_connections is the number the server itself reports
-    # in its ~10 min heartbeat. online_count() caps the derived count at the server's,
-    # so a derived count below the server's is the drift signal (a missed spawn).
+    # valheim_players_online is derived; valheim_connections is the server's own heartbeat count.
+    # online_count() caps the derived count at it, so a derived count below it signals a missed
+    # spawn.
     stats_lib.render_family(
         out,
         "valheim_players_online",
@@ -408,8 +397,7 @@ def apply_entries(state, entries):
         if ev is not None:
             kind, value = ev
             state.apply(kind, value, ts_ns / 1e9)
-            # Heartbeats are every-10-min noise with no per-player meaning; keeping them
-            # out of the audit table stops it dwarfing the events worth reading.
+            # Heartbeats carry no per-player meaning; keep them out of the audit table.
             if kind != "heartbeat":
                 events.append((ts_ns, str(value), kind, line))
         elif is_unparsed_player_line(line):
@@ -431,8 +419,7 @@ class Store(stats_lib.SqliteStore):
             death_count INTEGER NOT NULL DEFAULT 0,
             first_seen REAL, last_seen REAL,
             current_session_start REAL)""")
-        # Survives a restart so a session that spans one is still attributable, and so a
-        # disconnect arriving after a stats restart can still resolve to a name.
+        # Survives a restart so a session spanning one stays attributable.
         conn.execute("""CREATE TABLE IF NOT EXISTS steam_names(
             steam_id TEXT PRIMARY KEY, name TEXT NOT NULL)""")
 
@@ -457,9 +444,6 @@ class Store(stats_lib.SqliteStore):
                 "last_seen": ls,
                 "open_start": css,
             }
-            # Same caveat as terraria-stats: last_event_ts is approximated from last_seen
-            # on reload and can lag. Only the observability gauge is affected; the cursor
-            # drives every correctness decision.
             if ls:
                 st.last_event_ts = max(st.last_event_ts, ls)
         for steam_id, name in self.conn.execute(
@@ -532,8 +516,8 @@ def main():
             backfill_days=BACKFILL_DAYS,
             page_limit=LOKI_PAGE_LIMIT,
             poll_interval=POLL_INTERVAL,
-            # No default: the port is the `valheim-stats` metrics item on the containers_list
-            # entry, and the Deployment passes it in. A default here would be a second copy.
+            # No default: the port is the `valheim-stats` metrics item on the containers_list entry;
+            # a default would be a second copy.
             metrics_port=int(os.environ["METRICS_PORT"]),
             health_max_age=HEALTH_MAX_AGE,
         ),

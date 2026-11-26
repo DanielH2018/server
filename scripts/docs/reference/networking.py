@@ -22,7 +22,6 @@ import re
 from pathlib import Path
 
 from docs.catalog_lib.route_facts import (
-    GROUP_VARS,
     LAN,
     ingressroute_templates,
     linkify_fqdns,
@@ -30,12 +29,10 @@ from docs.catalog_lib.route_facts import (
     route_cell,
 )
 from lib.cli_help import ArgumentParser
-from lib.estate import Estate, Inventory
+from lib.estate import REPO_INVENTORY, Estate, Inventory
 from lib.inventory_lists import K8S_HOST
 from lib.repo_paths import K8S_ROLES, K8S_SERVICES
 
-# The macro applies these to every route it renders, in this order. Read from
-# k8s/templates/ingressroute.yml.j2 rather than assumed; see _baseline_middlewares.
 _ALWAYS = "rate-limit"
 
 _EXTRA_MW_RE = re.compile(r"extra_middlewares\s*=\s*\[([^\]]*)\]")
@@ -43,12 +40,10 @@ _QUOTED_RE = re.compile(r"['\"]([^'\"]+)['\"]")
 
 
 def build_rows(
-    services: Path = K8S_SERVICES,
-    k8s_roles: Path = K8S_ROLES,
-    group_vars: Path = GROUP_VARS,
+    inventory: Inventory = REPO_INVENTORY, k8s_roles: Path = K8S_ROLES
 ) -> list[dict[str, str]]:
-    """One row per k8s service that declares a route."""
-    estate = Estate(Inventory(services=services))
+    """One row per k8s service in `inventory` that declares a route."""
+    estate = Estate(inventory)
     host = K8S_HOST
     rows = []
     for entry in estate.services:
@@ -66,7 +61,7 @@ def build_rows(
             middlewares.extend(_QUOTED_RE.findall(match.group(1)))
 
         label = str(entry.get("hostname", name))
-        reach = reachability(k8s_roles / str(name), group_vars, entry)
+        reach = reachability(k8s_roles / str(name), inventory, entry)
         rows.append(
             {
                 "name": str(name),
@@ -144,7 +139,7 @@ def main(argv: list[str] | None = None) -> int:
 
     from lib.docs_provenance import finish_generator
 
-    rows = build_rows(args.services, args.k8s_roles)
+    rows = build_rows(Inventory(services=args.services), args.k8s_roles)
     return finish_generator(
         "docs.reference.networking", args.out, rows, render_markdown, "route"
     )

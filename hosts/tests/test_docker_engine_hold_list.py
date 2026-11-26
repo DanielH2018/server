@@ -13,19 +13,15 @@ upgrades a host's packages.
 Run: uv run pytest hosts/tests/test_docker_engine_hold_list.py
 """
 
-from lib import yaml_fast
-from _helpers import ALL_VARS
+from lib.estate import shared_vars
 
 PACKAGES_VAR = "docker_engine_packages"
-# The census must keep finding these two. containerd.io is the one whose upgrade swaps the
-# shim; docker-ce is the one whose postinst restarts the daemon and the socket.
+# containerd.io's upgrade swaps the shim; docker-ce's postinst restarts the daemon and the socket.
 MUST_BE_HELD = frozenset({"docker-ce", "containerd.io"})
 
 
 def test_the_shared_package_list_names_the_engine():
-    packages = yaml_fast.safe_load(ALL_VARS.read_text()).get(PACKAGES_VAR)
-    assert isinstance(packages, list), (
-        f"{PACKAGES_VAR} is not a list in group_vars/all.yml"
-    )
+    packages = shared_vars().get(PACKAGES_VAR)
+    assert isinstance(packages, list), f"{PACKAGES_VAR} is not a list in hosts/vars.yml"
     missing = MUST_BE_HELD - set(packages)
     assert not missing, f"{PACKAGES_VAR} no longer lists {sorted(missing)}"

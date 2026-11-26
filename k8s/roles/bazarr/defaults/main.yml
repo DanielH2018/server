@@ -12,24 +12,18 @@ bazarr_k8s_image: lscr.io/linuxserver/bazarr:v1.6.2-ls367@sha256:c1673816321156b
 # reverts the claim through docs/volume-snapshot-drills.md.
 k8s_autodeploy: true
 k8s_autodeploy_reason: "migrating state — Recreate + RWO PVC, protected by the bazarr-snapshot Job before each revision and an operator revert to it after a failed one; -lsNN versioning still hides a breaking bump as a patch bump. WEIGHED: bazarr also mounts media-data (shared RWX, not reverted); a revert forgets subtitle files it already wrote there, largely self-healing since bazarr checks existence before re-downloading"
-# The claim snapshotted before each revision applies. Under Flux the renderer turns this
-# list into the bazarr-snapshot Kustomization, whose Job snapshots it before bazarr applies.
-# The snapshot is the recovery point this role's auto-deploy depends on.
 k8s_autodeploy_snapshot_pvcs: [bazarr-config]
-# Claims this role MOUNTS but does not revert — the WEIGHED clause in the reason above, stated
-# where a test can read it. media-data is rendered by k8s/media-volume, so no guard that reads
-# what this role creates can see the coupling.
+# Claims this role MOUNTS but does not revert; media-data is rendered elsewhere, so no guard sees
+# the coupling.
 k8s_autodeploy_unreverted_claims: [media-data]
 
 # 3.7 M — the smallest *arr config, but still the database holding the paths.
 bazarr_k8s_claim: bazarr-config
-# `longhorn` — backed up. Excluding it (`longhorn-nobackup`) leaves a single frozen restore
-# point, and nothing Longhorn or B2 expose shows whether steady-state incrementals drive B2's
-# TRANSACTION cap. B2 Reachable is the readout. docs/archive/b2-transaction-cap-monitoring-gaps.md.
+# `longhorn`, backed up: excluding it (`longhorn-nobackup`) leaves a single frozen restore point.
 bazarr_k8s_storage_class: longhorn
 
-# Mounted at /data/media via subPath — NOT the whole tree. bazarr never imports, so it has no
-# hardlink seam to preserve and no reason to see /data/torrents.
+# Mounted via subPath, NOT the whole tree: bazarr never imports, so it needs no hardlink seam or
+# /data/torrents.
 bazarr_k8s_media_claim: media-data
 
 # Mirrors resources('1.0', '1024M', '0.10', '128M').
@@ -38,8 +32,6 @@ bazarr_k8s_mem_limit: 1024Mi
 bazarr_k8s_cpu_request: "100m"
 bazarr_k8s_mem_request: 128Mi
 
-# The claim the renderer emits for this role. The bazarr Kustomization applies it after the
-# bazarr-snapshot Job.
 k8s_claims:
   - name: "{{ bazarr_k8s_claim }}"
     storage_class: "{{ bazarr_k8s_storage_class }}"

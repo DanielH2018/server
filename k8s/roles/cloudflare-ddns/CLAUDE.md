@@ -18,7 +18,7 @@ conventions.
   manager.
 - **Secret** (a SOPS key, not a value): `cloudflare_dns_token`.
 - **Flux applies it.** Its `containers_list` entry
-  is in `cluster/services.yml`, so nothing applies it by hand, and a
+  is in `k8s/services.yml`, so nothing applies it by hand, and a
   merged change reaches the cluster when `promote` publishes and verifies the next bundle. Both
   Deployments are `RollingUpdate`
   with one replica and no readinessProbe, so the Kustomization's `wait` reads a pod Ready as
@@ -38,7 +38,7 @@ conventions.
   named after the service.
   `k8s/roles/cloudflare-ddns/defaults/main.yml:manifests_extra_rollouts` names both explicitly,
   and that is what restarts them on a Secret change
-  (`scripts/renderer/tests/test_renderer_restart.py::test_cloudflare_ddns_two_deployments_each_get_the_annotation`), since `manifests_rollout: ''` names no restart
+  (`scripts/renderer/tests/manifests/test_renderer_restart.py::test_cloudflare_ddns_two_deployments_each_get_the_annotation`), since `manifests_rollout: ''` names no restart
   target. Rotating a token without both names in
   `manifests_extra_rollouts` leaves both pods running on the stale token (found 2026-08-30,
   both monitors DOWN behind a green deploy).

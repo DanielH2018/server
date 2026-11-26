@@ -40,6 +40,7 @@ def _bump(old=f"ghcr.io/x/y:1.2@sha256:{OLD}", new=f"ghcr.io/x/y:1.2@sha256:{NEW
         "conftest.py",
         "k8s/roles/sonarr/tests/deep/conftest.py",
         "k8s/roles/monitor-bridge/files/registry.py",
+        "k8s/services.yml",
         "docs/CLAUDE.md",
     ],
 )
@@ -210,8 +211,7 @@ def test_a_soak_status_that_is_not_renovates_success_is_flagged(statuses, names)
 # or listed here.
 OFF_FLOOR = {
     "k8s": "its floor paths are listed one by one: templates, role tests and role code",
-    "inventory": "host and group vars the renderer reads, with no code a session runs",
-    "cluster": "services.yml is on the floor; the rest is k8s content Flux applies",
+    "estate": "estate-wide vars the renderer reads, with no code a session runs",
     "docs": "pages a session may read, with no code a session runs",
     "CLAUDE.md": "on the floor through **/CLAUDE.md",
     "README.md": "prose",

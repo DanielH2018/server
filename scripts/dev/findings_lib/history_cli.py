@@ -22,9 +22,6 @@ import json
 import re
 import sys
 
-# Reach the sibling package directories: a directly-invoked script gets only its own
-# directory on sys.path, and pyproject's `pythonpath` is a pytest setting.
-
 
 # DECIDED: imported as `dev.findings_lib.<leaf>`, never as bare siblings — see the marker in findings.py.
 from dev.findings_lib.boundaries import FindingsTools
@@ -43,8 +40,8 @@ from dev.findings_lib.issue_model import (
 from lib.json_types import as_object
 from lib.exit_codes import FINDINGS_BAD_ARGS
 
-# `plan_close` writes this comment on `close --fixed --pr N`. A close that way leaves
-# `closedByPullRequestsReferences` empty, because no closing keyword in a PR closed the issue.
+# `close --fixed --pr N` leaves closedByPullRequestsReferences empty, so this comment records the
+# PR.
 _FIXED_BY_RE = re.compile(r"^Fixed by PR (?:([\w.-]+/[\w.-]+))?#(\d+)\.", re.M)
 
 

@@ -16,9 +16,7 @@ import pytest
 import host_lib
 from host_lib import UnitEnd
 
-# 2026-10-15 18:30 UTC: the cap tests date their records against this, never the live clock.
 T0 = 1792089000.0
-# 2026-11-14 12:00 UTC, the day the cap tests count runs on.
 CAP_DAY = 1794657600
 HOSTILE = '<script>alert(1)</script>"><img src=x onerror=alert(2)>'
 
@@ -76,7 +74,6 @@ def test_session_output_is_escaped_in_the_report() -> None:
     assert "<script>" not in page
     assert "<img" not in page
     assert "&lt;script&gt;" in page
-    # The operator ruled out resuming an unattended session in place (2026-11-14).
     assert "claude --resume" not in page
 
 
@@ -197,7 +194,6 @@ def test_a_run_with_no_diagnosis_still_leaves_a_record_a_report_and_a_page(
 
 
 def test_a_failed_session_says_why_in_the_record_and_the_report(tmp_path) -> None:
-    # The shape of the 2026-10-17 drill: a rejected credential, no diagnosis.
     body = json.dumps(
         {
             "is_error": True,

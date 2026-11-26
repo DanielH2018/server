@@ -116,9 +116,8 @@ def read(run_ids: list[str], status: StatusReader = read_status) -> dict:
         # which cc-wait retries and then gives up on with exit 2.
         raise Unreadable(f"no batch row in `status` output for {', '.join(run_ids)}")
     if running or awaiting:
-        # Counts, not names: cc-wait prints a line whenever the detail changes, so a finish
-        # still prints one, and an earlier finish is not re-listed on every poll. A
-        # batch that needs a hand keeps its name, because the orchestrator acts on it.
+        # Counts, not names: cc-wait prints a line whenever the detail changes, so a finish still
+        # prints once. A batch needing a hand keeps its name.
         stuck = [
             f"{batch} {state}" for batch, state, _ in finished if state not in _SUCCESS
         ]
@@ -129,8 +128,7 @@ def read(run_ids: list[str], status: StatusReader = read_status) -> dict:
             detail += f" ({', '.join(stuck)})"
         return {"state": "running", "detail": detail}
     attention = [line for _batch, state, line in finished if state not in _SUCCESS]
-    # By name, not by `>=`: `status` exits 75 for a timed-out read, a larger number than 5.
-    # An unread batch counts as running and returns above, so 75 does not reach this line.
+    # By name, not `>=`: `status` exits 75 for a timed-out read, larger than 5.
     worst = exit_tier(tiers)
     state = (
         "failed"

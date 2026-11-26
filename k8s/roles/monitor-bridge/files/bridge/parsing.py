@@ -17,7 +17,7 @@ The rule that follows, and the only one that keeps this split honest:
   A function may live here only if it is never patched AND reads no patched
   module-level name. Everything it needs arrives as an argument.
 
-That is why these five are pure and take their inputs explicitly. The config constants
+That is why these three are pure and take their inputs explicitly. The config constants
 moved to bridge/config.py on 2026-09-01 under a different rule — the tests now patch them
 THERE and check.py reads them as `cfg.X` at call time — and the I/O primitives
 (`_get_json`, `prom_scalar`, `push`) followed into bridge/net.py the same way. This module
@@ -28,7 +28,7 @@ autofix.py carried a byte-identical copy — bridge/common.py is the module both
 autofix.py import it from now. Its header states the same rule this one does, checked against
 both files' test suites rather than just this one's.
 
-ENFORCED by tests/services/test_monitor_bridge_modules.py, which re-derives the patched
+ENFORCED by tests/services/monitor_bridge/test_monitor_bridge_modules.py, which re-derives the patched
 set from the test sources on every run. Deriving it is the point: the first census here
 was a grep for one spelling of `setattr`, and it silently missed both the line-wrapped
 form and every `check.X = ...` assignment.
@@ -39,7 +39,6 @@ import is safe under the rule above.
 """
 
 import urllib.parse
-from datetime import datetime
 
 FETCH_BODY_MAX = 180
 
@@ -56,29 +55,6 @@ def parse_duration(s: str) -> float:
     if s and s[-1] in units:
         return float(s[:-1]) * units[s[-1]]
     return float(s)
-
-
-def parse_rfc3339(ts: str) -> datetime:
-    """Parse an RFC3339 timestamp, tolerating nanosecond precision and a trailing 'Z'.
-
-    datetime.fromisoformat only accepts 3- or 6-digit fractional seconds, but Kopia
-    emits 9 (nanoseconds), so truncate the fractional part to microseconds first.
-    """
-    ts = ts.strip()
-    if ts.endswith("Z"):
-        ts = ts[:-1] + "+00:00"
-    if "." in ts:
-        head, frac = ts.split(".", 1)
-        digits = ""
-        rest = ""
-        for i, ch in enumerate(frac):
-            if ch.isdigit():
-                digits += ch
-            else:
-                rest = frac[i:]
-                break
-        ts = head + "." + digits[:6] + rest
-    return datetime.fromisoformat(ts)
 
 
 def endpoint_label(url: str) -> str:

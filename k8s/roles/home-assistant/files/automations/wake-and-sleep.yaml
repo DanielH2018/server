@@ -1,14 +1,7 @@
 ---
 # The morning wake sequence and the bedtime prompt/sleep-mode entry. Conventions: see README.md in this directory.
 
-# Morning reset + gentle wake, driven by the REAL alarm. The `alarm` trigger fires at
-# sensor.bedroom_wake_start (watch alarm - 15 min, morning-only — see configuration.yaml); the
-# `fallback` at 09:00 guarantees the overnight overrides clear even on a no-alarm day. Both clear the
-# overrides (manual-off, fan-manual, sleep mode, AL sleep) and re-apply the fan if home; only the
-# `alarm` trigger runs the wake ramp. The `fallback` touches the lights in one case only — a night
-# that was still running at 09:00, where it re-applies natural lighting — so it still cannot
-# clobber a scene you set after waking. The alarm encodes the day, so there is no weekday/weekend
-# split.
+# `alarm` runs the wake ramp; `fallback` (09:00) clears overrides on a no-alarm day.
 - id: bedroom_morning_reset
   alias: Bedroom morning reset and wake
   description: At the alarm (wake ramp) + a 09:00 fallback (hygiene) — clear overnight overrides; gently wake if home.
@@ -32,20 +25,11 @@
     # shared script so sleep state / manual-off can't persist into the day. Single source of truth
     # with the test-harness reset (script.bedroom_clear_overrides).
     - service: script.bedroom_clear_overrides
-    # Re-apply the fan now the sleep cap is cleared — only when home (this calls the fan script
-    # DIRECTLY, bypassing bedroom_fan_temperature's home gate).
     - if: "{{ is_state('person.daniel', 'home') }}"
       then:
         - service: script.bedroom_apply_fan
-    # Wake ramp: ONLY on the alarm trigger and only if HOME — gated on the GEOFENCE (person.daniel),
-    # NOT the FP300 room sensor. At motion_sensitivity:high (no setting separates the
-    # fan from a person — see the role CLAUDE.md) the radar drops a
-    # motionless sleeper, so `presence` can read `off` at the exact moment you need waking. person.daniel
-    # == home is the reliable "you're here to be woken" signal and still won't ramp an empty bedroom while
-    # away (an FP300 dog/false-positive can't trigger the wake either). apply_natural's wake exception
-    # delegates to script.bedroom_apply_wake (the gentle-then-steep 30-min ramp, alarm at midpoint),
-    # which automation.bedroom_wake_ramp then drives per-minute. The 09:00 fallback runs no ramp; its
-    # one lights branch is the next one down.
+    # Gate on person.daniel, not the FP300: it drops a motionless sleeper, so presence can read off
+    # when you need waking.
     - if: "{{ trigger.id == 'alarm' and is_state('person.daniel', 'home') }}"
       then:
         # Record the wake so bedroom_fallback_wake knows today is handled (never double-wake).
@@ -58,46 +42,20 @@
           data:
             reason: "natural"
 
-    # Fallback trigger only: hand the room back to automatic lighting when the night ran all the
-    # way to 09:00. bedroom_bedtime fades to scene.bedroom_nightlight (rgb_color [255, 140, 40] at
-    # 3%, files/scenes.yaml) and marks AL manually controlled, and NOTHING else undoes that on
-    # a no-alarm morning: bedroom_color_track needs color_mode == 'color_temp' and the RGB scene
-    # left the bulb in xy mode, light_decision's `presence` branch returns noop while the light is
-    # already on, and only the wake-ramp release branches clear AL's manual_control. The room
-    # therefore sits at amber 3% for the rest of the day.
-    #
-    # `was_sleeping` is the discriminator, not the light's colour: the alarm trigger's own
-    # clear_overrides turns sleep mode off hours earlier, so sleep mode still on at 09:00 means no
-    # other path ended this night, and a scene set after a real wake can never be clobbered. The
-    # `light_on` term keeps this from lighting an empty room — sleep mode on with the lights off is
-    # a night you left, and the presence path owns relighting that.
-    #
-    # reason "natural" goes through the single sanctioned writer and is ungated (the caller
-    # pre-gates), so it reaches bedroom_apply_natural: sleep mode is already cleared and 09:00 is
-    # outside both exception windows, so that lands on bedroom_set_natural_brightness, which puts
-    # the bulb back in color-temp mode and ARMS the colour tracker. It does not release AL's
-    # manual_control — the tracker is the auto-drivable half this restores, the same hand-off every
-    # other natural write makes. natural_brightness reads the FP300 illuminance with the lights on,
-    # which its "read while OFF" precondition disallows; a 3% nightlight against morning daylight
-    # moves that reading far less than the ~100% wake-ramp case the precondition was written for.
+    # Fallback: a no-alarm morning leaves the amber nightlight; `was_sleeping` keeps a real wake
+    # from being clobbered.
     - if: "{{ trigger.id == 'fallback' and was_sleeping and light_on }}"
       then:
         - service: script.bedroom_lights_set
           data:
             reason: "natural"
 
-# Per-minute sunrise ramp. While inside the 45-min wake window, set the current ramp frame
-# (script.bedroom_apply_wake) each minute — stateless ticks resume cleanly after an HA restart. On
-# the tick where the window just ended (elapsed 45..46), hand the lights back to Adaptive Lighting
-# for the day (apply_natural default = ambient-fill). The ramp climbs all the way to 100% by window
-# end, so AL takes over at full brightness — no sudden pop. Gated on home + not manual-off; the wake
-# math (window + curve) lives in lighting.jinja.
+# Stateless ticks resume after an HA restart. At window end (elapsed 45..46) hand back to AL;
+# wake math lives in lighting.jinja.
 - id: bedroom_wake_ramp
   alias: Bedroom wake ramp
   description: Drive the sunrise ramp once a minute through the wake window; hand back to AL at window end.
   mode: single
-  # Fires every minute, so HA's default of 5 traces covers 5 minutes. 90 keeps a whole wake
-  # window for `probe.py ha why` the morning after.
   trace:
     stored_traces: 90
   trigger:
@@ -115,9 +73,8 @@
         ws: "{{ states('sensor.bedroom_wake_start') }}"
         elapsed: "{{ (now() - as_datetime(ws)).total_seconds() / 60 if ws not in ['unknown', 'unavailable'] else -1 }}"
         in_window: "{% from 'lighting.jinja' import in_wake_window %}{{ in_wake_window(elapsed) | bool }}"
-        # AL is "still paused for this room" when its manual_control list is non-empty. NB: AL lists
-        # the individual member BULBS (light.0x0017...), not the group light.bedroom_lights, so test
-        # the list length, never membership of the group id.
+        # AL lists member bulbs in manual_control, not the group id: test the list length, never
+        # membership.
         al_still_manual: "{{ (state_attr('switch.bedroom_adaptive_lighting_bedroom', 'manual_control') or []) | count > 0 }}"
         release_due: "{% from 'lighting.jinja' import in_wake_release_window %}{{ in_wake_release_window(elapsed) | bool and al_still_manual }}"
     - choose:
@@ -159,24 +116,12 @@
                 entity_id: switch.bedroom_adaptive_lighting_bedroom
                 turn_on_lights: false
 
-# Fallback wake — safety net for when the WATCH alarm sensor lags or is absent (a Wear OS next_alarm
-# can hold an already-fired alarm for hours), so sensor.bedroom_wake_start holds no valid future time
-# and the real wake ramp never arms. Weekday 06:00: a gentle warm ramp over the
-# 45-min window using the SAME tested wake_brightness curve. STATELESS per-minute ticks (time_pattern
-# /1) mirroring bedroom_wake_ramp: an in-process repeat.while loop would die on an HA restart/deploy
-# mid-window and not resume. Each independent tick
-# recomputes the frame from the persisted anchor (input_datetime.bedroom_last_wake), so a restart just
-# picks up on the next minute. The anchor is stamped at the START of the window (this automation's own
-# equivalent of bedroom_morning_reset, which the real ramp relies on and the fallback has none of).
-# Defers to a real wake whenever sensor.bedroom_wake_start is available AND dated today (no_real_wake),
-# so it can never double-drive the lights alongside bedroom_wake_ramp. (Accepted: a no-alarm weekday
-# still wakes at 06:00.)
+# Safety net when the watch alarm lags or is absent; defers to a real wake so the ramps never both
+# drive lights.
 - id: bedroom_fallback_wake
   alias: Bedroom fallback wake (no watch alarm)
   description: Weekday 06:00 safety-net wake ramp (stateless per-minute) when the watch alarm didn't arm the real wake.
   mode: single
-  # Fires every minute, so HA's default of 5 traces covers 5 minutes. 90 keeps a whole wake
-  # window for `probe.py ha why` the morning after.
   trace:
     stored_traces: 90
   trigger:
@@ -192,13 +137,10 @@
   action:
     - variables:
         ws: "{{ states('sensor.bedroom_wake_start') }}"
-        # A real wake is NOT armed for today -> the fallback owns this morning. A today-dated watch
-        # alarm (available even post-fire under wake_start's 2h grace) defers us to bedroom_wake_ramp,
-        # so the two ramps can never both drive the lights. Gates every branch below.
+        # A today-dated watch alarm (even post-fire, under wake_start's 2h grace) defers to
+        # bedroom_wake_ramp.
         no_real_wake: >-
           {{ ws in ['unknown', 'unavailable'] or (as_datetime(ws) | as_local).date() != now().date() }}
-        # A wake (fallback or real) already stamped for TODAY. input_datetime state is a NAIVE local
-        # string, so compare .date() directly (no as_local, which would treat it as UTC and shift the day).
         lw: "{{ states('input_datetime.bedroom_last_wake') }}"
         wake_today: >-
           {{ lw not in ['unknown', 'unavailable', ''] and as_datetime(lw).date() == now().date() }}
@@ -206,24 +148,18 @@
         # anchor once); after that, elapsed since the anchor drives the frames so a late start / an HA
         # restart resumes cleanly regardless of the clock.
         in_start_window: "{{ now().hour == 6 and now().minute < 45 }}"
-        # Minutes since the stamped anchor. input_datetime exposes an epoch `timestamp` attr — use it
-        # so the arithmetic can't mix now()'s aware datetime with the naive input_datetime state. -1
-        # until an anchor is stamped today (lazy `if wake_today` avoids reading a missing timestamp).
+        # Epoch `timestamp` avoids mixing now()'s aware datetime with the naive state; -1 until an
+        # anchor is stamped today.
         elapsed: >-
           {{ (now().timestamp() - state_attr('input_datetime.bedroom_last_wake', 'timestamp')) / 60
              if wake_today else -1 }}
         in_window: "{% from 'lighting.jinja' import in_wake_window %}{{ in_wake_window(elapsed) | bool }}"
         target: "{% from 'lighting.jinja' import wake_brightness %}{{ wake_brightness(elapsed) | int }}"
-        # AL is "still paused for this room" when its manual_control list is non-empty (it lists the
-        # member BULBS, not the group id — test length, not membership).
         al_still_manual: "{{ (state_attr('switch.bedroom_adaptive_lighting_bedroom', 'manual_control') or []) | count > 0 }}"
         release_due: "{% from 'lighting.jinja' import in_wake_release_window %}{{ in_wake_release_window(elapsed) | bool and al_still_manual }}"
     - choose:
-        # START (first eligible minute of the window, nothing stamped yet today): stamp the anchor,
-        # clear overnight overrides, re-apply the fan (person-home is a top-level condition, so no
-        # extra `if home`), apply the first frame (~1%), then greet last, because a renamed notify
-        # service aborts whatever follows it. Setup runs EXACTLY once because
-        # stamping last_wake flips wake_today true on the next tick.
+        # START: stamp the anchor, clear overrides, apply the first frame, then greet LAST (a
+        # renamed notify aborts what follows).
         - conditions:
             - "{{ no_real_wake }}"
             - "{{ in_start_window }}"
@@ -284,11 +220,8 @@
                 entity_id: switch.bedroom_adaptive_lighting_bedroom
                 turn_on_lights: false
 
-# Sleep-mode fan reapply: when bedroom_sleep_mode is toggled DIRECTLY (dashboard tile / voice), the
-# fan's level cap (L2 in sleep mode) should engage/release immediately — otherwise it waits for the
-# next temperature report. The bedtime / Tap-Dial / morning-reset callers flip sleep_mode
-# programmatically and re-apply the fan themselves; those writes carry no user_id, so the user_id gate
-# skips them and only a toggle a person made through HA reaches the mediator.
+# Only a person's toggle (user_id set) reaches the mediator; programmatic callers re-apply the fan
+# themselves.
 - id: bedroom_sleep_mode_fan
   alias: Bedroom sleep mode fan reapply
   description: Re-apply the fan (via the bedroom_fan_set mediator) when sleep_mode is toggled directly, so its level cap engages/releases at once.
@@ -303,12 +236,8 @@
       from: "on"
       to: "off"
   condition:
-    # A person's toggle only (same discriminator as bedroom_manual_light_detect). Not parent_id: the
-    # MQTT- and time-triggered callers run in a root context, so their writes have none either.
     - condition: template
       value_template: "{{ trigger.to_state.context.user_id is not none }}"
-    # Respect a manual fan override, and don't spin the fan in an empty house (same gates as
-    # bedroom_fan_temperature).
     - condition: state
       entity_id: input_boolean.bedroom_fan_manual
       state: "off"
@@ -320,11 +249,8 @@
       data:
         reason: "auto"
 
-# Bedtime: when the phone's Bedtime mode turns on (surfaced by the Pixel Watch companion app) while
-# home, run the sleep routine (script.bedroom_bedtime: quiet fan cap + AL sleep mode + nightlight).
-# The Tap Dial button-2 hold (in bedroom_tap_dial_control) is the manual fallback. Gated on home so
-# it never sets the room up for sleep — or switches the fan on — while away. The morning reset
-# unwinds it. Charging is deliberately NOT a trigger (the operator charges in-room at a desk).
+# Gated on home so it never sets up sleep or turns the fan on while away. Charging is deliberately
+# NOT a trigger.
 - id: bedroom_bedtime
   alias: Bedroom bedtime
   description: When phone Bedtime mode turns on while home, run the bedtime/sleep routine.
@@ -365,13 +291,8 @@
     - condition: state
       entity_id: person.daniel
       state: "home"
-    # The 22:30 fallback fires when there's no LIVE alarm-anchored dynamic prompt for tonight: the
-    # winddown sensor is unavailable (no morning alarm set), OR it's available but its value is already
-    # PAST -> an alarm set AFTER its own winddown time had passed (e.g. a 06:00 alarm created at 23:00
-    # -> winddown 22:00), so the dynamic `at:` trigger had nothing future to fire on and the sensor's
-    # own `> now()` guard can't catch it (the ALARM is future). The `in [...]` term short-circuits, so
-    # as_datetime() never runs on unknown/unavailable. A future winddown (a normal alarm night) keeps
-    # the fallback suppressed -> no double prompt on top of the dynamic trigger.
+    # The 22:30 fallback fires when no live dynamic prompt exists tonight (winddown unavailable or
+    # already past).
     - condition: template
       value_template: >-
         {{ trigger.id == 'dynamic'

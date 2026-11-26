@@ -4,7 +4,7 @@ D5's first crowdsec conversion installed the timer through `setup/k8s_host_files
 hold what the move added: the script and unit paths, the timer's enable link, the legacy entries
 that retire the Ansible-era units, and the one `User=` every unit writing `/var/log/pi-health/`
 declares. The script's behaviour is run against a stub `curl` in
-`tests/services/test_crowdsec_edge_probe_contract.py`.
+`tests/services/crowdsec/test_crowdsec_edge_probe_contract.py`.
 
 Run: uv run pytest hosts/lib/tests/test_crowdsec_probe_component.py
 """
@@ -20,8 +20,6 @@ from renderer.renderer_lib import host as host_mode
 
 UNITS = "/usr/lib/systemd/system"
 SCRIPT = "/usr/lib/homelab/crowdsec-edge-probe"
-# Every unit that declares LogsDirectory=pi-health in the Pi package: the five heartbeats and
-# the journal copier of pi-heartbeats, and this component's probe. The census must find all seven.
 LOGS_DIRECTORY_UNITS = frozenset(
     f"homelab-{name}.service"
     for name in (

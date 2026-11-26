@@ -147,7 +147,7 @@ Five decisions inside it are deliberate:
   rather than a key each, because a key whose whole value is one secret is a standalone Flux
   placeholder, and Flux types its value by its text (`docs/homelab-render.md`, *The
   standalone-value guard*). The ConfigMap that stages the
-  code holds no secret (`tests/k8s/test_no_secret_in_a_moved_jobs_configmap.py`).
+  code holds no secret (`tests/k8s/flux/test_no_secret_in_a_moved_jobs_configmap.py`).
 - **The exit codes are a contract**: `EXIT_OK` (0), `EXIT_UNREACHABLE` (1), `EXIT_BAD_ARGS` (2),
   `EXIT_DRIFT` (3, `--dry-run` only). Before 2026-08-27, `--dry-run` returned 0 whether or not
   anything had drifted, so a scheduled caller could not have branched on it. `prefs_check.py`

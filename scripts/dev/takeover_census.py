@@ -48,8 +48,7 @@ live field of a declares-nothing object other than the expected `last-applied-co
 proves nothing, so it never passes.
 """
 
-# `diagnostics` lives beside `dev` under `scripts/`, and a directly-run script gets only its own
-# directory on sys.path. This has to sit ABOVE the imports below.
+# Must sit above the imports: a directly-run script gets only its own directory on sys.path.
 from pathlib import Path as _Path
 
 

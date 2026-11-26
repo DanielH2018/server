@@ -32,8 +32,7 @@ from pathlib import Path
 from lib.cli_help import answer_help
 from lib.repo_paths import K8S, REPO
 
-# The collision itself. Deliberately narrow: `${` on its own is ordinary Jinja-safe shell, and
-# the compose `$$`-escaping rule is validate/render_lib/compose.py's job.
+# Deliberately narrow: `${` alone is ordinary Jinja-safe shell.
 COLLISION = "${#"
 
 _RAW_OPEN = re.compile(r"\{%-?\s*raw\s*-?%\}")

@@ -90,8 +90,7 @@ def test_extra_rollout_entry_with_a_second_key_hides_no_later_entry(
         templates={},
     )
     assert _extra_rollouts(after_a_blank_line) == {"widget-direct"}
-    # scrutiny lists scrutiny-collector after a `restart_on: []` entry, the real-role shape
-    # a bare `- name:` pattern misses.
+    # scrutiny lists scrutiny-collector after a `restart_on: []` entry.
     assert _extra_rollouts(_K8S_ROLES / "scrutiny") == {
         "scrutiny-influxdb",
         "scrutiny-collector",

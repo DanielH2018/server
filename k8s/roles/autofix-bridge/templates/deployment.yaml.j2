@@ -8,8 +8,8 @@ metadata:
   name: autofix-bridge
   namespace: {{ k8s_namespace }}
 spec:
-  # One remediation actor at a time: the candidate-grace streaks are in-process, and two
-  # pods could each independently act on the same queue item.
+  # One remediation actor: candidate-grace streaks are in-process, and two pods could act on one
+  # item.
 {{ spec_shell('Recreate') }}
   replicas: 1
   selector:
@@ -22,8 +22,7 @@ spec:
         netpol-baseline: enforced
     spec:
 {{ pod_shell('homelab-best-effort', run_as_user=puid, run_as_group=pgid, non_root=true) }}
-      # Off daniel-server for the same reason as the monitor-bridge twin: the drain and
-      # its cold boot must not take the remediation loop down alongside the Docker estate.
+      # Off daniel-server: its drain and cold boot must not take the remediation loop down.
       nodeSelector:
         kubernetes.io/hostname: {{ k8s_primary_node }}
       containers:
@@ -35,9 +34,8 @@ spec:
             - name: checks
               containerPort: {{ services | metrics_port('autofix-bridge') }}
 {{ hardened_security_context(read_only=true) }}
-          # The settings, as plain values; the credentials come from render_secrets. A
-          # quoted number belongs here, never in the Secret: Flux's typed patch reads a
-          # Secret's "300" back as a number and refuses it.
+          # A quoted number belongs here, never in the Secret: Flux's typed patch reads a Secret's
+          # "300" back as a number and refuses it.
           env:
             - name: TZ
               value: "{{ tz }}"
@@ -47,13 +45,9 @@ spec:
               value: "1"
             - name: INTERVAL
               value: "300"
-            # The port the check exporter serves /metrics on (jobs_metrics.py, through
-            # autofix.py): the `autofix-bridge` item on this role's containers_list entry, which
-            # also renders the scrape job and the Service port.
             - name: CHECK_EXPORTER_PORT
               value: "{{ services | metrics_port('autofix-bridge') }}"
-            # LIVE remediation: the autonomous-role contract (this role's CLAUDE.md) governs any
-            # change here.
+            # LIVE remediation: this role's CLAUDE.md autonomous-role contract governs any change.
             - name: DRY_RUN
               value: "false"
             - name: GRACE_CYCLES
@@ -69,8 +63,8 @@ spec:
           envFrom:
             - secretRef:
                 name: autofix-bridge-env
-          # autofix.py touches /tmp/heartbeat after every completed cycle; a stale mtime
-          # means the loop HUNG. Same contract as the Docker healthcheck+autoheal pair.
+          # autofix.py touches /tmp/heartbeat after every completed cycle; a stale mtime means the
+          # loop HUNG.
           livenessProbe:
             exec:
               command:
@@ -86,16 +80,12 @@ spec:
               readOnly: true
             - name: autofix-bridge-tmp
               mountPath: /tmp
-          # 1 core, not 100m: a periodic poller bursts then sleeps, so a 100m quota (10ms of every
-          # 100ms period) is exhausted by a sub-second burst while the minute average reads near
-          # zero. The request is what earns this pod CPU under contention; the limit only clips
-          # bursts.
+          # 1 core, not 100m: a periodic poller's sub-second burst exhausts a 100m quota while the
+          # average reads near zero.
 {{ container_resources(cpu_limit='1', mem_limit='64Mi', cpu_request='20m', mem_request='32Mi') }}
       volumes:
         - name: autofix-bridge-script
           configMap:
-            # templates/script-configmap.yaml.j2. Flat keys mounted back at their paths -- see
-            # monitor-bridge's deployment for why.
             name: autofix-bridge-script
             items:
 {% for item in autofix_bridge_modules %}

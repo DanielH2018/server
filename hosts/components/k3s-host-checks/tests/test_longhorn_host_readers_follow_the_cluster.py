@@ -8,7 +8,7 @@ and a baked value would then disagree with the cluster until someone ran `k3s-br
 hand. Before H1.7b the `setup/k3s` tasks write the objects, and the reader reports them.
 
 The stubs and the env builder are in `_longhorn_reader_stubs.py`, whose `_CLUSTER_OBJECTS_PY`
-documents the knobs. `scripts/validate/tests/test_backup_health_shim.py` holds the shim's side:
+documents the knobs. `scripts/validate/tests/renders/test_backup_health_shim.py` holds the shim's side:
 no export of the four arm and schedule vars, and a render that does not move when their keys do.
 
 Run: uv run pytest hosts/components/k3s-host-checks/tests/test_longhorn_host_readers_follow_the_cluster.py
@@ -33,8 +33,7 @@ from validate.validate_lib.shipped_render import render_shipped_text
 
 SHIM = K3S_HOST_CHECKS / "templates" / "longhorn-backup-health.sh.j2"
 
-# The shim exports that are thresholds. The rest name host paths and binaries, which a test
-# points at a temporary directory or a stub instead.
+# Shim exports that are thresholds; the rest are paths and binaries a test points at a stub.
 _THRESHOLD = re.compile(
     r"LONGHORN_(?:[A-Z_]*MAX_AGE_HOURS|DAILY_BACKUP_BUDGET|RESTORE_DRILL_(?:MAX_AGE|COVERAGE_SLACK)\w*"
     r"|CRON_EVIDENCE_WINDOW_HOURS)"

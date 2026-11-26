@@ -125,12 +125,15 @@ own rank between `host_vars` and the stub file. Ansible gave them that rank as i
 and no inventory file sets one, so they now resolve as the role defaults they are. A render
 key that does not resolve still fails the render.
 
+**Amended 2026-11-25 (ADR-0042):** a k8s render merges no `host_vars` file, so the third layer
+is gone. `hosts` also carries `render_gid` and `claude_code_triage_enabled`.
+
 A value resolves after the layers merge, so a default that names a variable reads the winning
 layer's value.
 
 `hosts` holds one entry per `host_vars` file, with that host's literal `server_ip`,
 `compose_services`, `claude_agent_ssh_login_enabled` and `ssh_host_ed25519_key`. `services` holds every entry of
-`cluster/services.yml`.
+`k8s/services.yml`.
 
 An undefined variable fails the render and the error names it. `default` is the way to read a
 name that may be absent.
@@ -168,5 +171,5 @@ this list names.
 
 - `scripts/renderer/renderer_lib/dialect.py#a closed list, read by the refusal and the census`:
   the literal sets.
-- `scripts/renderer/tests/test_renderer_dialect.py` holds the literals, the census and this
+- `scripts/renderer/tests/manifests/test_renderer_dialect.py` holds the literals, the census and this
   record's tables.

@@ -7,7 +7,7 @@ when that tag exists. It prints one line per version deleted, then a summary lin
 read deletes nothing.
 
 It reaches GitHub and GHCR only through `forge.py`, as `promote.py` does
-(scripts/deploy_tools/tests/test_promote_forge_boundary.py). `promote.py` hands it the two
+(scripts/deploy_tools/tests/promote/test_promote_forge_boundary.py). `promote.py` hands it the two
 reads it shares with `decide`: `prod`'s commit and the checkout's ancestry answer.
 
 Run: uv run python scripts/deploy_tools/promote.py prune
@@ -43,8 +43,8 @@ class ReadError(RuntimeError):
     """A read outside the forge failed: the checkout's contexts file, or a git command."""
 
 
-# Both mean "this fact could not be read". `promote.py` raises this same ReadError, so a
-# failed ancestry read reaches `_read` as a fact that failed rather than as a crash.
+# `promote.py` raises this same ReadError, so a failed ancestry read reaches `_read` as a failed
+# fact, not a crash.
 READ_ERRORS = (ReadError, forge.ForgeError)
 
 
@@ -193,8 +193,6 @@ def prune(
             ok = False
 
     listed = facts.versions if isinstance(facts.versions, list) else []
-    # Open question 8 reads these: whether GHCR lists cosign's bundles as package versions.
-    # `untagged` answers from the first run; a subject is read only once a version is old.
     untagged = sum(not v.tags for v in listed)
     signed = sum(isinstance(subject, str) for subject in facts.subjects.values())
     print(

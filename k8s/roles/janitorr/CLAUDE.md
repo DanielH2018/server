@@ -29,7 +29,7 @@ See repo-root `CLAUDE.md` for shared conventions.
 - **HISTORY — the health reader was a daniel-box host cron until H2.5c.** `homelab-reconcile`
   removed the cron, its script and the `janitorr` drift fragment from daniel-box.
 - **The pod holds no Secret.** The reader's code ships in the `janitorr-health` ConfigMap,
-  beside `host_lib.py`. No secret goes in the ConfigMap (`tests/k8s/test_no_secret_in_a_moved_jobs_configmap.py`).
+  beside `host_lib.py`. No secret goes in the ConfigMap (`tests/k8s/flux/test_no_secret_in_a_moved_jobs_configmap.py`).
 - **The reader also exports its verdict** (M6 B6b). It patches `homelab/check-verdict`,
   `homelab/check-last-run` and `homelab/check-message` onto the `janitorr-health-verdict`
   ConfigMap, which the role renders with no annotations so the reader is their only writer.
@@ -83,7 +83,7 @@ See repo-root `CLAUDE.md` for shared conventions.
   which is the same assertion a gate would make, made where the revision's soak acts on it. (2) An unbounded wait trades a bounded
   post-boot crash loop for an indefinite `Init` stall, with no restart count and no
   CrashLoopBackOff to notice — see the docstring of
-  `tests/services/test_karakeep_backend_policies.py`, which is where that pattern
+  `tests/services/apps/test_karakeep_backend_policies.py`, which is where that pattern
   DOES apply and what it costs. (3) A pod that never leaves `Init` after a node reboot waits for
   a human, because no apply runs then and no Kustomization `wait` sees it, and this is the one
   role in the fleet that deletes real media. Contradict this at a cited `file:line` with new evidence.
