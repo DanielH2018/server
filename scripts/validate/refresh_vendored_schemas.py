@@ -4,7 +4,7 @@
 Three sets, refreshed together because they age the same way and are reviewed the same way:
 Kubernetes' own OpenAPI v3 schemas for the core kinds ``validate/render_lib/k8s.py`` checks
 manifests against, the CRD schemas it checks custom resources against, and Authelia's own
-configuration schema that ``tests/services/test_authelia_config_schema.py`` checks the
+configuration schema that ``tests/services/authelia/test_authelia_config_schema.py`` checks the
 rendered portal config against.
 
 THE CORE SCHEMAS COME FROM KUBERNETES ITSELF. They are the per-group files under

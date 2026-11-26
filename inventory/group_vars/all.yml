@@ -246,7 +246,7 @@ k8s_primary_node: daniel-box
 #
 # A consumer that cannot render a var is compared against it instead: the Grafana dashboards,
 # the observability deploy-annotation expr, probe.py's alert reconstruction and monitor-bridge's
-# Python constants. tests/services/test_loki_stream_labels.py holds both directions:
+# Python constants. tests/services/scraping/test_loki_stream_labels.py holds both directions:
 # every value here is emitted, and every `job` value a consumer selects is one listed here.
 #
 # Only daniel-pi's streams name a `machine`. A cluster stream's machine is the node's HOSTNAME,
@@ -502,7 +502,7 @@ k8s_registry_pull_host: "localhost:{{ k8s_registry_port }}"
 # Where a Flux-owned tag pulls each built image. The renderer rewrites every container `image:`
 # naming a built image to this host (scripts/renderer/renderer_lib/images.py:GHCR); a ref
 # the rewrite cannot reach, such as one inside ConfigMap text, names it directly.
-# tests/services/test_airflow_task_image.py holds the two equal.
+# tests/services/apps/test_airflow_task_image.py holds the two equal.
 k8s_ghcr_pull_host: ghcr.io/danielh2018
 # The registry Service's pinned ClusterIP (spec.clusterIP in the registry role) — pinned
 # because agents' registries.yaml must name it as the mirror endpoint, and containerd is a

@@ -241,21 +241,21 @@ SINGLE_PREDICATE_CHECK_IS_A_ROW = Census(
             "a join of the Vale version and sha256 CI installs against the "
             "homelab-tools package pin"
         ),
-        "tests/services/test_ha_trusted_proxies_cover_cloudflare.py": (
+        "tests/services/network/test_ha_trusted_proxies_cover_cloudflare.py": (
             "a join of Home Assistant's trusted_proxies against the pod CIDR and the "
             "Cloudflare ranges in the group vars"
         ),
-        "tests/services/test_scrape_target_flap_rule.py": (
+        "tests/services/alert_rules/test_scrape_target_flap_rule.py": (
             "a join of the flap rules against the promtool cases that exercise them"
         ),
-        "tests/services/test_rule_thresholds_owned_by_rules_files.py": (
+        "tests/services/alertmanager/test_rule_thresholds_owned_by_rules_files.py": (
             "a join of each pinned threshold against its rule's span in two "
             "directories, and of the rules files against the routing table"
         ),
-        "tests/services/test_host_check_rule_literals.py": (
+        "tests/services/alert_rules/test_host_check_rule_literals.py": (
             "a join of the rule file against the inventory, which #9019 rewrites"
         ),
-        "tests/services/test_claude_cgroup_consumers_agree_with_the_writer.py": (
+        "tests/services/alert_rules/test_claude_cgroup_consumers_agree_with_the_writer.py": (
             "a join of the writer script's metrics against the alert rules and the "
             "Grafana board that read them"
         ),
@@ -282,15 +282,15 @@ SINGLE_PREDICATE_CHECK_IS_A_ROW = Census(
             "a join of ty's include and extra-paths against pytest's pythonpath and "
             "testpaths and every tracked Python file"
         ),
-        "tests/services/test_alert_runbook_urls.py": (
+        "tests/services/alert_rules/test_alert_runbook_urls.py": (
             "a join of the alert rules against the docs pages and headings they link, "
             "the inventory hosts, the group vars' domain and the promtool cases"
         ),
-        "tests/services/test_storage_rule_literals.py": (
+        "tests/services/alert_rules/test_storage_rule_literals.py": (
             "a join of storage.yaml against the Longhorn robustness allow-list, the "
             "roles' snapshot caps and transients, and the host checks' disk floor"
         ),
-        "tests/services/test_pi_peer_backup_schedule_clears_the_longhorn_slots.py": (
+        "tests/services/pi_peer_backup/test_pi_peer_backup_schedule_clears_the_longhorn_slots.py": (
             "a join of pi-peer-backup's schedule against two other roles' Longhorn "
             "slots and the group vars' time zone"
         ),

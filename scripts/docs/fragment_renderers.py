@@ -150,7 +150,7 @@ def deadman_crons(
 ) -> list[tuple[str, str, str]]:
     """(slug, cron, source) per Healthchecks.io slug, assembled from the variables that set it.
 
-    Shared with tests/services/test_monitor_bridge_healthchecks_expected.py, which holds
+    Shared with tests/services/monitor_bridge/test_monitor_bridge_healthchecks_expected.py, which holds
     monitor-bridge's console expectations to these same crons.
 
     The weekly reboot pings a slug for each of `hosts`, and the Docker prune pings one for

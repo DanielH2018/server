@@ -19,7 +19,7 @@ automations do.
     `client, edge`. HA skips the edge because `http.trusted_proxies` lists the Cloudflare ranges
     beside the pod CIDR. Until 2026-09-28 it listed the pod CIDR alone, so HA resolved the EDGE
     as the client and a ban could lock out everyone behind that edge.
-    `tests/services/test_ha_trusted_proxies_cover_cloudflare.py` keeps the literal list
+    `tests/services/network/test_ha_trusted_proxies_cover_cloudflare.py` keeps the literal list
     equal to `cloudflare_ips`. Only failed PASSWORD logins count — tokens/app/webhooks
     unaffected.
     **The ban applies to every request, not just logins, and that reaches infrastructure.** HA's

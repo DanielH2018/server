@@ -98,7 +98,7 @@ jellyfin_k8s_published_url: "http://{{ jellyfin_k8s_lan_ip }}:8096"
 # 12.4. Raise this and the image together, never the plugin alone. The Renovate PR for
 # this pin is deliberately manual (renovate.json names it): Renovate can bump the version but
 # not the image, the asset filename (it leads with the targetAbi) or the MD5.
-# tests/services/test_anisync_pin_matches_server.py refuses the mismatch.
+# tests/services/jellyfin/test_anisync_pin_matches_server.py refuses the mismatch.
 jellyfin_k8s_anisync_version: "4.7.0.0"
 # URL and checksum both come from the plugin's published manifest.json.
 jellyfin_k8s_anisync_url: "https://github.com/vosmiic/jellyfin-ani-sync/releases/download/v4.7/12.4.0.-.ani-sync_4.7.0.0.zip"

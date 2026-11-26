@@ -28,7 +28,7 @@ _spec.loader.exec_module(_mod)
 # The primary checkout the dirty-primary read is pointed at.
 _PRIMARY = "/home/ubuntu/server"
 
-_DIRTY = " M tests/services/test_traefik_edge_selfcheck.py\n"
+_DIRTY = " M tests/services/traefik/test_traefik_edge_selfcheck.py\n"
 
 
 def _problems(porcelain=""):
@@ -44,7 +44,7 @@ def test_dirty_primary_checkout_is_flagged():
     lines = _problems(porcelain=_DIRTY)
     assert len(lines) == 1
     assert "/home/ubuntu/server" in lines[0]
-    assert "tests/services/test_traefik_edge_selfcheck.py" in lines[0]
+    assert "tests/services/traefik/test_traefik_edge_selfcheck.py" in lines[0]
     # The consequence, not just the state: the job the dirty tree parks.
     assert "homelab-checkout-sync" in lines[0]
     assert "exit 4" not in lines[0]

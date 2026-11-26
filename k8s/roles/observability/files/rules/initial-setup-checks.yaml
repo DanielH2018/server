@@ -11,7 +11,7 @@
 # absent_over_time over the same deadline, and leaves a dead exporter to the `targets` check.
 #
 # Each deadline is the DEADLINE_S its producer renders. Both literals of a NotReporting rule
-# are pinned to it by tests/services/test_not_reporting_rule_deadlines.py (M1 convention 1).
+# are pinned to it by tests/services/alert_rules/test_not_reporting_rule_deadlines.py (M1 convention 1).
 #
 # The weekly reboot (about 07:35 to 07:50) leaves every writer's gap inside its deadline: the
 # hourly witness writes at 07:23 and 08:23, and the daily and weekly checks run outside the

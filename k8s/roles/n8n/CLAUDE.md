@@ -75,7 +75,7 @@ gone, and only git history has it; `containers/n8n/data` is on disk.
 - **The one npm package both images add, `fuzzball`, is pinned by exact version** (#2213,
   #5391). One renovate.json regex manager reads both pins over the npm datasource and opens a
   manual PR in its own `n8n fuzzball` group; a merged bump moves both content tags, and
-  `promote` builds and rolls them. `tests/services/test_n8n_build_is_pinned.py` refuses a bare or
+  `promote` builds and rolls them. `tests/services/apps/test_n8n_build_is_pinned.py` refuses a bare or
   ranged install in either Dockerfile and asserts the manager's matchString finds both pins.
 - **The runners image installs fuzzball outside the runner's own tree.** A `pnpm add` inside
   `/opt/runners/task-runner-javascript` prunes everything its `package.json` does not declare,

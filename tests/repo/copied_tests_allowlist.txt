@@ -42,7 +42,7 @@ tests/repo/test_census_rows_roles.py 1
 tests/repo/test_census_rows_suite.py 1
 tests/repo/test_census_rows_text.py 1
 tests/repo/test_census_rows_workflows.py 1
-tests/services/test_introskipper_install.py 1
-tests/services/test_mergeversions_install.py 1
+tests/services/jellyfin/test_introskipper_install.py 1
+tests/services/jellyfin/test_mergeversions_install.py 1
 tests/staging/test_bootstrap_drill_mode.py 1
 tests/staging/test_suc_rehearsal_mode.py 1

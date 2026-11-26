@@ -37,7 +37,7 @@ Measured 2026-09-10:
 The issue asked for an `intel_gpu_top`-based exporter. That would have instrumented
 daniel-server — where, on the day it was filed, **no transcoding was happening**. jellyfin and
 tdarr both request `devic.es/dri`
-(`tests/services/test_dri_resource_name_agrees.py::test_every_consumer_requests_the_same_resource_name`)
+(`tests/services/media/test_dri_resource_name_agrees.py::test_every_consumer_requests_the_same_resource_name`)
 and both were scheduled on daniel-box, the AMD node. Both are pinned to `k8s_primary_node` by a required node affinity
 (`k8s/roles/jellyfin/templates/deployment.yaml.j2`, `k8s/roles/tdarr/templates/deployment.yaml.j2`),
 so a change to that pin moves them both.

@@ -78,7 +78,7 @@ data:
             # router and only then does the lookup fail, so an excluded router would log
             # nothing at all. Dropping crowdsec here would remove real enforcement to silence
             # a startup line or two. ENFORCED by
-            # tests/services/test_traefik_http_entrypoint_crowdsec.py.
+            # tests/services/traefik/test_traefik_http_entrypoint_crowdsec.py.
             - {{ k8s_namespace }}-crowdsec@kubernetescrd
 {% endif %}
       https:

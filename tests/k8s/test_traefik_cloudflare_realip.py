@@ -13,7 +13,7 @@ have to agree for Traefik to load it. A mismatch renders and applies cleanly, pa
 a whole-edge 404. The last test pins that agreement.
 
 Checked on the RENDERED templates, the same way as the sibling
-tests/services/test_traefik_http_entrypoint_crowdsec.py.
+tests/services/traefik/test_traefik_http_entrypoint_crowdsec.py.
 """
 
 from pathlib import Path

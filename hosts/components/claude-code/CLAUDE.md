@@ -294,7 +294,7 @@ template carries why it is a host timer at all.
   through `write_check_textfile` in `homelab-check-lib.sh`. The `ArtifactsSync*` and `OtlpDoor*`
   rules in observability's `host-checks.yaml` page from those files. Each script renders its
   deadline from its own minute default, so that default must stay `*/N`, and
-  `tests/services/test_b6a_rule_literals.py` pins the rules to it.
+  `tests/services/alert_rules/test_b6a_rule_literals.py` pins the rules to it.
 
 ## Autonomous-role contract (`claude-guardrail-audit`, the audit watches on the guardrail paths)
 
@@ -485,7 +485,7 @@ at 09:00 UTC, and 10 minutes after each activation of the timer.
 - **Evidence:** the post itself, a `status=` line under `journalctl -t claude-weekly-summary`,
   and `claude-weekly-summary.prom`, which `ClaudeWeeklySummaryFailed` and
   `ClaudeWeeklySummaryNotReporting` read. The deadline is a week plus an hour, 608400 seconds
-  (`tests/services/test_b6a_rule_literals.py::test_the_weekly_summary_rules_carry_the_deadline_its_config_renders_is_clean`).
+  (`tests/services/alert_rules/test_b6a_rule_literals.py::test_the_weekly_summary_rules_carry_the_deadline_its_config_renders_is_clean`).
 - **Next-run review:** when C2's autopr-repair profile starts writing records, add its source
   and check the first post that carries it.
 

@@ -42,7 +42,7 @@ fence — so a dropped tunnel sustains itself until someone deletes the pod (9 h
 3.5 days on 2026-09-13, #1838) unless the reset below runs. It presents as a restart loop rather
 than an error, because the init container exits **0**. The netns reset below clears it without a
 human
-(`tests/services/test_qbittorrent_sidecar_resets_the_netns.py::test_the_sidecar_runs_the_reset_before_init_and_keeps_init_as_pid_1`),
+(`tests/services/media/test_qbittorrent_sidecar_resets_the_netns.py::test_the_sidecar_runs_the_reset_before_init_and_keeps_init_as_pid_1`),
 and `delete pod` is the escape hatch if that reset is ever removed.
 
 ## The sidecar resets the netns on every start
@@ -57,7 +57,7 @@ the pod's default route.
   exits 1 and touches nothing** — the old deadlock, never a leak.
 - **The gate exempts fwmark 51820, and must.** WireGuard's carrier packets still belong to
   qbittorrent's socket, so a gate without that exemption leaves a Ready pod at `DHT: 0 nodes`.
-  `tests/services/test_qbittorrent_sidecar_resets_the_netns.py` holds it.
+  `tests/services/media/test_qbittorrent_sidecar_resets_the_netns.py` holds it.
 - **A failed tunnel start deletes the pod's default route, and the reset puts it back.** LSIO's
   `svc-wireguard` runs `ip route del default` when `wg-quick up` fails, such as on Mullvad's
   `KEY_LIMIT_REACHED`. Every later start then had no route to CoreDNS or Mullvad until a pod delete
@@ -68,7 +68,7 @@ the pod's default route.
   only LSIO's graceful finish script removes wg-quick's `resolvconf -a wg0` entry. A start that
   finds no openresolv signature saves the file to `/config/.netns-reset-resolv.conf`. A start
   that finds the signature writes that copy back (#8489).
-  `tests/services/test_netns_reset_restores_resolv_conf.py` holds it.
+  `tests/services/network/test_netns_reset_restores_resolv_conf.py` holds it.
 - **The reset does not fetch the mod or bring the tunnel up.** A start whose API call still fails
   restarts every ~5 minutes on the startup probe, gate holding.
 

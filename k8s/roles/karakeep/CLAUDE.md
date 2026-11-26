@@ -71,7 +71,7 @@ loop to auto-tag bookmarks
   no restart count to read. karakeep itself only DEGRADES without meilisearch — it logs search
   errors and serves — so the warrant is the init gate rather than the app, which is the one
   difference from authelia's session store (#1609, where the app exits).
-  `tests/services/test_karakeep_backend_policies.py` pins the co-location, the ports and
+  `tests/services/apps/test_karakeep_backend_policies.py` pins the co-location, the ports and
   the two files' place in the role's resolved `manifests_files`. Each port and caller list is a `netpol_fences` item with
   `role_owned: true` on this role's containers_list entry, and each template renders its item
   through the `networkpolicy` macro. The policies carry no `netpol_baseline_enforced` branch: that

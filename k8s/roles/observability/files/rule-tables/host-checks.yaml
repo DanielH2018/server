@@ -37,7 +37,7 @@ groups:
       # exporter to the bridge's `targets` check, so one dead exporter pages once.
       #
       # Both 1500s literals equal the DEADLINE_S that disk-health.sh.j2 renders from
-      # k3s_disk_health_cron_minute. tests/services/test_disk_health_rule_literals.py
+      # k3s_disk_health_cron_minute. tests/services/alert_rules/test_disk_health_rule_literals.py
       # pins them to it.
       - alert: DiskHealthNotReporting
         hosts: {component: k3s-host-checks}
@@ -63,7 +63,7 @@ groups:
       # Both producers are daniel-box crons that write a check file through
       # homelab-check-lib.sh. Each NotReporting pair mirrors DiskHealthNotReporting, and its two
       # literals equal the deadline the producer renders from its own cron minute:
-      # tests/services/test_b6a_rule_literals.py pins them. The rules are `warning`, so
+      # tests/services/alert_rules/test_b6a_rule_literals.py pins them. The rules are `warning`, so
       # Discord alone. No inhibit: each NotReporting rule carries its own
       # `unless on (origin) (up{job="node"} == 0)`, and a dead exporter leaves each Failed rule
       # no series, so `ScrapeTargetDown` is the one page.
@@ -133,7 +133,7 @@ groups:
       # Claude Code's guardrail paths every 5 minutes, and its textfile says whether auditd runs
       # with every watch in place. One pair per host that runs Claude Code. The NotReporting
       # literals equal the DEADLINE_S the script renders, which
-      # tests/services/test_b6a_rule_literals.py pins.
+      # tests/services/alert_rules/test_b6a_rule_literals.py pins.
       - alert: ClaudeGuardrailAuditFailed
         hosts: {component: claude-code}
         expr: homelab_check_success{check="claude-guardrail-audit",origin="${host}"} == 0
@@ -273,7 +273,7 @@ groups:
       # These rules are the pager for the two k3s crons. Each check has the DiskHealth pair:
       # `Failed` reads the verdict, and `NotReporting` reads the file's age. The deadline
       # literal in a NotReporting rule equals the DEADLINE_S its producer renders, and
-      # tests/services/test_b1_rule_literals.py pins the two together. A daily check
+      # tests/services/alert_rules/test_b1_rule_literals.py pins the two together. A daily check
       # gets a day plus an hour (k3s_daily_check_deadline_s).
       # The `unless` clause leaves a dead exporter to the bridge's `targets` check.
       #
@@ -1038,7 +1038,7 @@ groups:
           runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#wiredgatewaychecknotreporting
       # checkout-sync fast-forwards the primary checkout of each host whose package lists the
       # component. The deadline literals equal hosts/lib/checkout_sync.py:DEADLINE_S, which
-      # tests/services/test_b6a_rule_literals.py pins.
+      # tests/services/alert_rules/test_b6a_rule_literals.py pins.
       - alert: CheckoutSyncFailed
         hosts: {component: checkout-sync}
         expr: homelab_check_success{check="checkout-sync",origin="${host}"} == 0

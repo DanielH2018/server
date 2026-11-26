@@ -2,7 +2,7 @@
 
 Two guards hold selectors to the streams Alloy emits:
 `k8s/roles/monitor-bridge/tests/test_check_loki.py` for monitor-bridge's selectors and
-`tests/services/test_loki_stream_labels.py` for the Loki ruler's rule files. Both read
+`tests/services/scraping/test_loki_stream_labels.py` for the Loki ruler's rule files. Both read
 the label vocabulary, the Pi's streams and the matcher from here, so the two cannot disagree
 about what a selector selects.
 """

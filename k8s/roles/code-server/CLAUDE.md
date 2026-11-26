@@ -63,7 +63,7 @@ its `containers_list` entry is in `k8s/services.yml`.
   no datasource for a VS Code extension, so those bump by hand — the base-image PR is the
   natural moment. The exception is `Anthropic.claude-code`: it moves with every Renovate
   bump of the CLI, in the same PR, and the `code-server build pins` group name says so
-  (#4584). `tests/services/test_code_server_build_is_pinned.py` refuses a
+  (#4584). `tests/services/apps/test_code_server_build_is_pinned.py` refuses a
   floating input.
 - **Rust is one pinned stable toolchain with no rustup** (2026-10-12). The image installs
   rustc, cargo, clippy, rustfmt and rust-src from the standalone tarballs into `/usr/local`,
@@ -77,7 +77,7 @@ its `containers_list` entry is in `k8s/services.yml`.
     `/config/workspace`. That path is on the 1 Gi backed-up claim, and one `target/` reaches
     several GiB. Every project shares the one target directory, so `cargo run` works as usual
     but the binaries are under `/config/.cargo-target/debug/`, not `./target/`.
-    `tests/services/test_code_server_build_is_pinned.py::test_cargo_writes_stay_off_the_backed_up_claim`
+    `tests/services/apps/test_code_server_build_is_pinned.py::test_cargo_writes_stay_off_the_backed_up_claim`
     refuses a cargo path under a backed-up mount.
   - The editor side is rust-analyzer, Even Better TOML and CodeLLDB. CodeLLDB is pinned to its
     GitHub release, not Open VSX; its defaults entry says why.

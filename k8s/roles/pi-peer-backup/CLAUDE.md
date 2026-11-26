@@ -52,7 +52,7 @@ weekly shard (weekly-backup-d6) carries it to B2; the pi-peer-backup entry's
   validates the request structurally rather than pinning the argv, because rsync's
   short-option blob is version-negotiated and moves with the alpine base image. Until
   2026-09-17 the key carried no options, so reading the Secret was a shell as a NOPASSWD-sudo
-  user on the Pi (#1927). `tests/services/test_pi_peer_backup_forced_command.py` runs
+  user on the Pi (#1927). `tests/services/pi_peer_backup/test_pi_peer_backup_forced_command.py` runs
   the wrapper against the captured request and eight refusals.
 - **sudo rsync** on the Pi is required (files are root-owned); the ubuntu user there
   has NOPASSWD sudo. The wrapper's exec'd argv stays `sudo rsync …`, so it works under a
@@ -61,7 +61,7 @@ weekly shard (weekly-backup-d6) carries it to B2; the pi-peer-backup entry's
   with the rsync error or the file-count-floor breach (>= 2 files required; no `--delete`, so
   an empty source can never wipe the copy). A host key that no longer matches the pin reports
   down with `daniel-pi host key differs from the committed pin` instead of the generic rsync
-  error. `tests/services/test_pi_peer_backup_host_key_failure.py` holds that branch
+  error. `tests/services/pi_peer_backup/test_pi_peer_backup_host_key_failure.py` holds that branch
   apart from an unreachable Pi, which also exits 255. The verdict reaches Prometheus through the
   ConfigMap below, and the `pods` rules page it. The job also pings an off-premises
   Healthchecks.io check (`HC_PING_URL`, slug `pi-peer-backup`) when one is configured, because a

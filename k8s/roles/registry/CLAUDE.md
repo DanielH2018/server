@@ -181,7 +181,7 @@ karakeep, which no consumer pulls. See repo-root `CLAUDE.md` for shared conventi
   - **The `PVCFull` rule's page is the bound** (#5752). It pages when a claim passes
     85%, and `registry-data` is not in its `persistentvolumeclaim!~` exclusion. On 2026-10-24 the claim was 38% full
     (3.98 GB), so at about 1 GiB a year of pins it pages years before the claim fills.
-    `tests/services/test_storage_rule_literals.py::test_no_uncollected_claim_is_excluded_from_the_fullness_page`
+    `tests/services/alert_rules/test_storage_rule_literals.py::test_no_uncollected_claim_is_excluded_from_the_fullness_page`
     fails if the claim joins the exclusion. When it pages, `docs/registry-push-store-gc.md` is
     the procedure. The operator untags what nothing runs while the registry serves, then
     suspends the `registry` Kustomization before scaling `deploy/registry` to zero, so Flux

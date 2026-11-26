@@ -6,7 +6,7 @@ monitor_bridge_k8s_image: python:3.15-alpine@sha256:0f9552bb28711333da16915ec146
 # serves rather than pushes. config/env.yaml.j2 hands it to the process, the Service and the
 # container port read it, and observability's deploy-pipeline scrape job targets it as a literal,
 # because role defaults do not cross the deploy play's include_role loop.
-# tests/services/test_deploy_pipeline_scrape.py holds that literal to this value.
+# tests/services/scraping/test_deploy_pipeline_scrape.py holds that literal to this value.
 monitor_bridge_deploy_pipeline_port: 9180
 
 # The host-package builder's two page bounds (h3-pi-pilot.md, *Builder arms*), rendered into
@@ -25,7 +25,7 @@ monitor_bridge_builder_max_fetch_age_s: 1800
 #
 # Deliberately explicit rather than a `files/*.py` glob: files/ also holds the pytest suite
 # and conftest.py, which must not reach the image.
-# ENFORCED by tests/services/test_monitor_bridge_modules.py, which fails when a runtime module
+# ENFORCED by tests/services/monitor_bridge/test_monitor_bridge_modules.py, which fails when a runtime module
 # in files/ is absent here, unless that test's CHECKOUT_ONLY set names it.
 # Paths relative to files/. Each module ships in its own ConfigMap, named from the path with
 # `.py` dropped and `/` and `_` replaced by `-`. Its key is the path with `/` replaced by `_`
@@ -84,7 +84,7 @@ k8s_autodeploy_reason: "observability — this IS the alert pipeline; a broken d
 #
 # A literal rather than a reference to the cron variables, because those live in host components'
 # defaults and in the pi-peer-backup, registry and observability roles' defaults, and role
-# defaults do not cross the deploy play's include_role loop. tests/services/test_monitor_bridge_healthchecks_expected.py holds
+# defaults do not cross the deploy play's include_role loop. tests/services/monitor_bridge/test_monitor_bridge_healthchecks_expected.py holds
 # this list to those variables (through the deadman-cadences fragment's reader), so a cron
 # cannot move in one place alone. The period-and-grace table in
 # docs/healthchecks-io-deadman.md is the deadman-graces fragment, rendered from this list.
@@ -101,7 +101,7 @@ monitor_bridge_healthchecks_expected:
   - {slug: etcd-snapshot-offbox, kind: cron, schedule: "45 2 * * *", tz: UTC, grace: 3600}
   - {slug: pi-peer-backup, kind: cron, schedule: "0 23 * * *", tz: "{{ tz }}", grace: 7200}
   # Two hours covers registry-gc.sh's worst case of two mirror phases, about 6000s.
-  # tests/services/test_registry_gc_watchers_cover_the_worst_run.py derives it.
+  # tests/services/registry_gc/test_registry_gc_watchers_cover_the_worst_run.py derives it.
   - {slug: registry-gc, kind: cron, schedule: "20 4 * * 0", tz: UTC, grace: 7200}
   # initial_setup's three pinging crons: the weekly reboot pings one slug per host, and the Docker
   # prune and the worktree sweep one per host whose package lists the pi-docker or worktree-sweep

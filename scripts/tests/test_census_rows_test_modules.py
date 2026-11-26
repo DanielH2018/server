@@ -280,7 +280,7 @@ ROWS = (
                 "the shipped-files row that refuses a stub citation names the directory in "
                 "its pattern and subjects; it reads no plan"
             ),
-            "tests/services/test_alert_runbook_urls.py": (
+            "tests/services/alert_rules/test_alert_runbook_urls.py": (
                 "its `CITED_PAGE` pattern excludes a design-doc citation from the runbook "
                 "rule, and its fixture is an alert description; it reads no plan"
             ),
@@ -365,7 +365,7 @@ ROWS = (
                     "hosts/tests/test_nut_host_secondary.py",
                     "hosts/tests/test_unattended_origins_pattern.py",
                     "tests/deploy/test_renovate_automerge_follows_the_autodeploy_denylist.py",
-                    "tests/services/test_strangler_bridge.py",
+                    "tests/services/monitor_bridge/test_strangler_bridge.py",
                 ),
                 "it reads the file's text or asserts which file declares a key, which "
                 "ADR-0042 step 6 decides per key",

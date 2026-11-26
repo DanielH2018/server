@@ -204,7 +204,7 @@ http:
   # attributed to its real source. The ranges are literal because this file ships verbatim
   # (lookup('file')) and cannot template `cloudflare_ips`. Literal rather than a `!secret`
   # because nothing validates the CIDRs before HA reads them, and a malformed entry can
-  # crash-loop HA. ENFORCED: tests/services/test_ha_trusted_proxies_cover_cloudflare.py
+  # crash-loop HA. ENFORCED: tests/services/network/test_ha_trusted_proxies_cover_cloudflare.py
   # fails when this list and group_vars/all.yml `cloudflare_ips` differ, or an entry is not a
   # strict network. When monitor-bridge's cloudflare_ips_drift tile goes red and all.yml is
   # updated, that test goes red until this list follows.

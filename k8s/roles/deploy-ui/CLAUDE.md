@@ -54,4 +54,4 @@ The daemon the route fronts ships in daniel-box's host package (`hosts/component
 
 Authelia policy: `auth_tier: two_factor` on the containers_list entry, which the authelia role
 renders into its access_control rules. ENFORCED for every SSO entry by
-`tests/services/test_authelia_access_tiers.py`.
+`tests/services/authelia/test_authelia_access_tiers.py`.

@@ -374,7 +374,7 @@
     },
     {
       "customType": "regex",
-      "description": "pip pins inside the two built Dockerfiles that install from PyPI (#2149, #2150): k8s/roles/code-server and k8s/roles/homelab-mcp. ical-proxy is not here, because tests/services/test_ical_proxy_pins_match_uv_lock.py holds its pins to uv.lock. The packageRules below keep every bump manual and cap mcp at <2.",
+      "description": "pip pins inside the two built Dockerfiles that install from PyPI (#2149, #2150): k8s/roles/code-server and k8s/roles/homelab-mcp. ical-proxy is not here, because tests/services/apps/test_ical_proxy_pins_match_uv_lock.py holds its pins to uv.lock. The packageRules below keep every bump manual and cap mcp at <2.",
       "managerFilePatterns": [
         "/(^|/)k8s/roles/code-server/templates/Dockerfile\\.j2$/",
         "/(^|/)k8s/roles/homelab-mcp/templates/Dockerfile\\.j2$/"
@@ -1136,7 +1136,7 @@
       "automerge": false
     },
     {
-      "description": "mcp stays on the 1.x line, because 2.0.0 removed mcp.server.fastmcp, which homelab-mcp's app.py imports. Lift the cap together with an app.py port to 2.x. tests/services/test_homelab_mcp_pins.py asserts this rule and the pin agree (#2150).",
+      "description": "mcp stays on the 1.x line, because 2.0.0 removed mcp.server.fastmcp, which homelab-mcp's app.py imports. Lift the cap together with an app.py port to 2.x. tests/services/apps/test_homelab_mcp_pins.py asserts this rule and the pin agree (#2150).",
       "matchManagers": [
         "custom.regex"
       ],

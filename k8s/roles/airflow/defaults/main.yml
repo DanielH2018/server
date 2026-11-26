@@ -11,7 +11,7 @@ airflow_k8s_image: "{{ k8s_registry_pull_host }}/airflow:{{ k8s_built_image_tags
 # DECIDED: the task pods' image is the GHCR ref, written out. It sits in the pod-template
 # ConfigMap as text, and the renderer's GHCR rewrite (scripts/renderer/renderer_lib/images.py:
 # ghcr_text) moves only a container's `image:` key, so the in-cluster ref above would reach
-# every task pod unrewritten. tests/services/test_airflow_task_image.py holds it equal to the
+# every task pod unrewritten. tests/services/apps/test_airflow_task_image.py holds it equal to the
 # scheduler's rewritten ref.
 airflow_k8s_task_image: "{{ k8s_ghcr_pull_host }}/airflow:{{ k8s_built_image_tags.get('airflow', 'latest') }}"
 
