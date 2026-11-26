@@ -54,7 +54,7 @@ which `pytest_shard.py --refresh-runner` refreshes from CI's own logs), and
 (what each test module depends on, which `affected_tests.py record` traces and a pull
 request's CI run selects its test modules from).
 Adding a fifth means editing the cron's `git add` and
-`hosts/tests/test_docs_refresh_records_shard_weights.py`, which holds each table against it. The
+`hosts/tests/repo_crons/test_docs_refresh_records_shard_weights.py`, which holds each table against it. The
 cron works in its own worktree, so a path written but not staged parks nothing: the run reports
 it as a stray write, reads DOWN, and the next run discards it.
 

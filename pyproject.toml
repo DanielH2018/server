@@ -404,6 +404,7 @@ extra-paths = [
   "tests/k8s",
   "tests/repo",
   "scripts/renderer/tests",
+  "hosts/tests",
   "scripts/docs/tests",
 ]
 

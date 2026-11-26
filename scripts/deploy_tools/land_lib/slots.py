@@ -19,7 +19,7 @@ host is bounded on its own until the turn host answers again.
 
 The slots are not a safety gate. A landing waits for one only as long as its two merge budgets
 leave, which is what `LAND_DEADLINE` counts before the master CI wait
-(`hosts/tests/test_lander_deadlines_cover_the_soak.py`), then goes on without one. A landing
+(`hosts/tests/repo_crons/test_lander_deadlines_cover_the_soak.py`), then goes on without one. A landing
 that cannot open the lock files goes on without one at once.
 
 `turn.TURN_DIR_ENV` moves the slots with the turn into a directory on this host, so a test that

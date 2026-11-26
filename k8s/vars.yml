@@ -176,7 +176,7 @@ k8s_pi_client_ip: "{{ hosts['daniel-pi'].server_ip }}"
 k8s_node_client_ip: "{{ hosts['daniel-box'].server_ip }}"
 # Duplicated from `k3s_host_dns_metrics_port` on purpose (role defaults are out of scope in the k8s
 # play);
-# hosts/tests/test_coredns_metrics_port_agrees.py keeps them equal.
+# hosts/tests/k3s/test_coredns_metrics_port_agrees.py keeps them equal.
 k8s_node_dns_metrics_port: 9253
 # PUSH from builder pods via the Service name (`localhost` is the pod); PULL by containerd via a
 # loopback hostPort (a host process resolves no cluster names). Global for k3s-server.

@@ -13,7 +13,7 @@ Tempo's otlp-grpc 4317 skips the pin: two hostPorts on one number wedge a pod in
 **Prometheus keeps only the `claude_code_*` names from the collector.** The fenced triage and
 Renovate sessions export here, and they read untrusted text. A metric they forged under any
 other name could fire a routed triage alert
-(`hosts/tests/test_claude_triage_alert_inputs.py::test_no_routed_alert_reads_a_series_a_session_can_send_is_clean`).
+(`hosts/tests/claude_code/test_claude_triage_alert_inputs.py::test_no_routed_alert_reads_a_series_a_session_can_send_is_clean`).
 
 Flux applies the role (its entry is in `k8s/services.yml`).
 

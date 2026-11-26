@@ -66,10 +66,8 @@ def check_scrutiny(cfg: Config, src: Sources) -> tuple[bool, str]:
     if not health.ok:
         return health
     fresh_msg, health_msg = fresh.msg, health.msg
-    # Folded into this check rather than given its own, because wear answers the same
-    # question device_status does — is the drive still
-    # fit to hold the data on it — just months earlier. Fetched only once freshness passes, so a
-    # dead collector costs no per-device calls.
+    # Folded into this check because wear answers the same question as device_status, months
+    # earlier; fetched only once freshness passes.
     if not cfg.SCRUTINY_WEAR_MAX:
         return True, "%s; %s" % (fresh_msg, health_msg)
     wear = CheckResult.of(

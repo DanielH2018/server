@@ -1,0 +1,263 @@
+#!/usr/bin/env python3
+"""Guards on the host-side secondary upsmon — the process that performs the real poweroff.
+
+daniel-box draws from the UPS: `upsc` sampled against a modulated 16-core burn moves
+ups.load by ~5 points ≈ 45 W, three transitions phase-locked across two cycles. Without a
+secondary upsmon it has no orderly shutdown at all: no /etc/nut, no nut-monitor, no cron,
+no HA automation with a power-off action.
+
+Two properties are load-bearing here, and each one fails in a way that looks like success:
+
+THE HOST HALF IS PACKAGE-OWNED. Since H4.3c the homelab-daniel-server package installs the udev
+rule, and since H7.33 both cluster nodes' packages install the secondary upsmon. The role is one
+unconditional `end_role`, so one path never has two writers.
+
+THE ENDPOINT IS PINNED. The nut Service pins its clusterIP, and daniel-box's package renders that
+literal address. An address nothing re-resolves would install a shutdown chain that never fires,
+indistinguishable from a working one until the power cut it exists for.
+
+Run: uv run pytest hosts/tests/host_config/test_nut_host_secondary.py
+"""
+
+from lib import yaml_fast
+from _helpers import K8S_ROLES
+
+from _shell_render import rendered_shell_text
+from lib.estate import shared_vars
+from lib.proc_testing import run
+from lib.repo_paths import REPO
+
+
+NUT_DEFAULTS = K8S_ROLES / "nut" / "defaults" / "main.yml"
+NUT_SERVICE = K8S_ROLES / "nut" / "templates" / "service.yaml.j2"
+NUT_COMPONENT = REPO / "hosts" / "components" / "nut-secondary" / "component.yml"
+NUT_TIMER = NUT_COMPONENT.parent / "units" / "homelab-ups-watchdog.timer.j2"
+
+# A floor, not a guarantee: runtime falls with battery age and load, so the ceiling below reserves a
+# large slice.
+MEASURED_RUNTIME_S = 987
+# Deliberately generous: it also covers the runtime this UPS will not have in two years.
+SHUTDOWN_RESERVE_S = 300
+# Residential outages are mostly shorter than this, and stopping inside that window trades a clean
+# shutdown for a full cluster restart.
+BLIP_RIDE_OUT_S = 300
+
+
+def daniel_box_package(tmp_path):
+    """daniel-box's package rendered against a stand-in ciphertext file.
+
+    The real `secrets/hosts/daniel-box.sops.yaml` is operator-written, so the render
+    reads a placeholder here; only the rendered templates are under test.
+    """
+    from renderer.renderer_lib import host as host_mode
+
+    (tmp_path / "daniel-box.sops.yaml").write_text("placeholder: ENC[AES256_GCM,x]\n")
+    return host_mode.render_host("daniel-box", sops_dir=tmp_path)
+
+
+def test_daniel_boxs_package_names_the_pinned_clusterip(tmp_path):
+    """A cross-node secondary cannot use the pod's loopback hostPort; it names the pinned Service.
+
+    The pin sits in two files, the nut role's defaults and the component's defaults, because
+    the host render cannot read a k8s role. This pins them together, and pins the rendered
+    MONITOR line to the value, so a spelling the extractor misses cannot empty the guard.
+    """
+    pin = yaml_fast.safe_load(NUT_DEFAULTS.read_text())["nut_k8s_cluster_ip"]
+    component = yaml_fast.safe_load(NUT_COMPONENT.read_text())
+    assert component["defaults"]["nut_host_upsd_clusterip"] == pin
+    assert "clusterIP: {{ nut_k8s_cluster_ip }}" in NUT_SERVICE.read_text()
+    package = daniel_box_package(tmp_path)
+    template = "/usr/lib/homelab/secret-templates/etc/nut/upsmon.conf"
+    monitor = [
+        ln
+        for ln in package.files[template][0].decode().splitlines()
+        if ln.startswith("MONITOR ")
+    ]
+    assert len(monitor) == 1, f"expected one MONITOR line, got {monitor}"
+    assert monitor[0].split()[1] == f"apc-ups@{pin}"
+
+
+def test_daniel_boxs_watchdog_unit_loads_no_credential(tmp_path):
+    """M6 batch B4's Cutover-2 dropped the Kuma push, the only reader of the token."""
+    package = daniel_box_package(tmp_path)
+    unit = package.files["/usr/lib/systemd/system/homelab-ups-watchdog.service"][0]
+    assert b"LoadCredential=" not in unit
+    # B4's token PR retired the token.
+    assert "ups_secondary_push_token" not in package.credentials
+
+
+# Too short stops the control plane during a blip the battery would have carried; too long spends
+# the runtime the poweroffs need.
+
+
+def onbatt_delay_verdict(delay: int, armed_beyond_ups_host: bool) -> str | None:
+    """Return why `delay` is wrong for this arming, or None if it is inside the band.
+
+    Pure so both arms can be exercised: the repo's real values are checked below, and the
+    rejecting inputs prove the check can still go red.
+    """
+    if not armed_beyond_ups_host:
+        return None
+    if delay < BLIP_RIDE_OUT_S:
+        return (
+            "delay %ds stops an armed control-plane node inside the %ds blip window; most "
+            "outages end sooner, so this trades a clean stop for a full cluster restart"
+            % (delay, BLIP_RIDE_OUT_S)
+        )
+    ceiling = MEASURED_RUNTIME_S - SHUTDOWN_RESERVE_S
+    if delay > ceiling:
+        return (
+            "delay %ds leaves under the %ds reserve against %ds of measured runtime; the "
+            "poweroffs would race the battery, and LOWBATT would become the real trigger"
+            % (delay, SHUTDOWN_RESERVE_S, MEASURED_RUNTIME_S)
+        )
+    return None
+
+
+def _armed_hosts_beyond_ups_host() -> list[str]:
+    """Hosts other than ups_host whose package lists the nut-secondary component."""
+    ups_host = shared_vars()["ups_host"]
+    return [
+        path.parent.name
+        for path in sorted((REPO / "hosts").glob("*/package.yml"))
+        if path.parent.name != ups_host
+        and "nut-secondary" in yaml_fast.safe_load(path.read_text())["components"]
+    ]
+
+
+def test_daniel_box_counts_as_armed_beyond_ups_host():
+    """The census must find the one armed host it exists to find, or the band check is vacuous."""
+    assert _armed_hosts_beyond_ups_host() == ["daniel-box"]
+
+
+def test_the_repos_onbatt_delay_suits_its_arming():
+    """The live pairing of arm flags and timer must sit inside the band."""
+    delay = yaml_fast.safe_load(NUT_DEFAULTS.read_text())["nut_onbatt_shutdown_delay"]
+    reason = onbatt_delay_verdict(delay, bool(_armed_hosts_beyond_ups_host()))
+    assert reason is None, reason
+
+
+def test_a_delay_inside_the_band_is_clean():
+    assert onbatt_delay_verdict(300, True) is None
+    assert onbatt_delay_verdict(687, True) is None
+
+
+def test_a_delay_below_the_blip_window_is_flagged():
+    """The original short delay, which is what made arming a regression rather than a fix."""
+    assert onbatt_delay_verdict(120, True) is not None
+
+
+def test_a_delay_that_outlasts_the_battery_is_flagged():
+    assert onbatt_delay_verdict(900, True) is not None
+
+
+def test_the_band_binds_only_once_a_second_host_is_armed():
+    """With ups_host alone armed, an agent node stopping early is its own business."""
+    assert onbatt_delay_verdict(120, False) is None
+
+
+# The `wait_for` proves reachability once, at deploy; these guard the 10-minute check, where a wrong
+# address or leaked credential looks like a working one.
+
+WATCHDOG = rendered_shell_text(
+    "components", "nut-secondary", "ups-secondary-health.sh.j2"
+)
+NUT_HOST_DEFAULTS = yaml_fast.safe_load(
+    (NUT_COMPONENT.parent / "defaults" / "main.yml").read_text()
+)
+
+# The fifth field is a fake stand-in for the credential, searched for in the extractor's output.
+_FAKE_CREDENTIAL = "not-a-real-value-xyz"
+_MONITOR_LINE = f"MONITOR apc-ups@10.43.171.124 1 upsmon {_FAKE_CREDENTIAL} secondary"
+
+
+def _endpoint_extractor() -> str:
+    """The awk program the shipped script uses, taken from the render rather than retyped.
+
+    Retyping it would guard a copy: the script could switch to a bare grep and these tests
+    would keep passing against the awk they still held.
+    """
+    import re
+
+    match = re.search(r"ENDPOINT=\"\$\(awk '([^']+)'", WATCHDOG)
+    assert match, (
+        "no awk endpoint extraction found in the watchdog — did it change shape?"
+    )
+    return match.group(1)
+
+
+def _extract_endpoint(conf_text: str) -> str:
+
+    return run(
+        ["awk", _endpoint_extractor()], input=conf_text, check=True
+    ).stdout.strip()
+
+
+def test_the_extractor_returns_the_endpoint():
+    assert _extract_endpoint(_MONITOR_LINE) == "apc-ups@10.43.171.124"
+
+
+def test_the_extractor_never_prints_the_fifth_field():
+    """The rejecting half, and the reason this is awk rather than grep.
+
+    `grep MONITOR upsmon.conf` returns the whole line — including the credential in field 5 —
+    into syslog and into any transcript that ran the check, so the credential needs rotating.
+    """
+    assert _FAKE_CREDENTIAL not in _extract_endpoint(_MONITOR_LINE)
+
+
+def test_the_extractor_is_empty_when_no_monitor_line_exists():
+    """Drives the script's `no MONITOR line` DOWN branch — an empty result must not read clean."""
+    assert _extract_endpoint("MINSUPPLIES 1\nPOLLFREQ 5\n") == ""
+
+
+def test_the_watchdog_reads_the_deployed_conf_not_an_ansible_var():
+    """A templated address could differ from the file upsmon actually reads.
+
+    The check would then pass against an address upsmon does not use, reproducing the
+    blindness it exists to remove.
+    """
+    assert "UPSMON_CONF=/var/lib/homelab-secrets/etc/nut/upsmon.conf" in WATCHDOG
+    assert "nut_host_upsd_host" not in WATCHDOG
+
+
+def test_the_watchdog_checks_both_the_unit_and_the_link():
+    """Either alone is a half-check: a live nut-monitor talking to nothing still never fires."""
+    assert "systemctl is-active nut-monitor" in WATCHDOG
+    assert "upsc" in WATCHDOG
+
+
+def test_the_watchdog_logs_above_the_journald_store_cap():
+    """journald here is capped at MaxLevelStore=notice, so an info line never reaches Loki."""
+    assert "daemon.notice" in WATCHDOG
+    assert "daemon.info" not in WATCHDOG
+
+
+def test_the_watchdog_is_armable_and_armed():
+    assert NUT_HOST_DEFAULTS["nut_host_watchdog_armed"] is True
+    assert NUT_HOST_DEFAULTS["nut_host_watchdog_interval_minutes"] == 10
+    assert "*:0/{{ nut_host_watchdog_interval_minutes }}" in NUT_TIMER.read_text()
+    enable = yaml_fast.safe_load(NUT_COMPONENT.read_text())["enable"]
+    assert enable["homelab-ups-watchdog.timer"]["when"] == "nut_host_watchdog_armed"
+
+
+def test_the_watchdog_does_not_page_on_battery_state():
+    """check_ups already owns battery state; alerting on OB here double-pages one event."""
+    assert "ups.status" in WATCHDOG
+    assert '"OB"' not in WATCHDOG
+
+
+def test_the_watchdog_keeps_upsc_stdout_and_stderr_apart():
+    """`2>&1` on the upsc call puts its diagnostics inside the VALUE.
+
+    upsc writes "Init SSL without certificate database" to stderr on every successful call
+    against this endpoint. Folding the streams makes the logged message multi-line and makes the
+    empty-status branch unreachable, since the noise is never empty.
+    """
+    assert 'upsc "$ENDPOINT" ups.status 2>&1' not in WATCHDOG
+    assert 'ups.status 2>"$UPSC_STDERR"' in WATCHDOG
+
+
+def test_the_watchdog_collapses_newlines_out_of_its_message():
+    """A newline in either half breaks the syslog line."""
+    assert WATCHDOG.count("tr '\\n' ' '") >= 2

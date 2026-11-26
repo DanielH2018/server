@@ -227,6 +227,52 @@ tests:
               service: flux
             exp_annotations: *not_ready_kustomization
 
+  # A soak waiting on its Job reads Unknown; only the other Kustomization fires.
+  - interval: 1m
+    input_series:
+      - series: 'gotk_resource_info{job="kube-state-metrics", instance="kube-state-metrics:8080", customresource_group="kustomize.toolkit.fluxcd.io", customresource_kind="Kustomization", customresource_version="v1", exported_namespace="flux-system", name="soak", ready="Unknown", revision="master@sha1:df49ee19e0fb69c90b2a2dd5db3fc9f4785fc062", source_name="homelab"}'
+        values: '1x60'
+      - series: 'gotk_resource_info{job="kube-state-metrics", instance="kube-state-metrics:8080", customresource_group="kustomize.toolkit.fluxcd.io", customresource_kind="Kustomization", customresource_version="v1", exported_namespace="flux-system", name="homelab", ready="False", revision="master@sha1:df49ee19e0fb69c90b2a2dd5db3fc9f4785fc062", source_name="homelab"}'
+        values: '1x60'
+    alert_rule_test:
+      - eval_time: 60m
+        alertname: FluxNotReady
+        exp_alerts:
+          - exp_labels:
+              customresource_kind: Kustomization
+              exported_namespace: flux-system
+              name: homelab
+              severity: warning
+              service: flux
+            exp_annotations: *not_ready_kustomization
+
+  # A failed soak flips False/Unknown on each retry and still fires.
+  - interval: 1m
+    input_series:
+      - series: 'gotk_resource_info{job="kube-state-metrics", instance="kube-state-metrics:8080", customresource_group="kustomize.toolkit.fluxcd.io", customresource_kind="Kustomization", customresource_version="v1", exported_namespace="flux-system", name="soak", ready="False", revision="master@sha1:df49ee19e0fb69c90b2a2dd5db3fc9f4785fc062", source_name="homelab"}'
+        values: '1 1 stale 1 1 stale 1 1 stale 1 1 stale 1 1 stale 1 1 stale 1 1'
+      - series: 'gotk_resource_info{job="kube-state-metrics", instance="kube-state-metrics:8080", customresource_group="kustomize.toolkit.fluxcd.io", customresource_kind="Kustomization", customresource_version="v1", exported_namespace="flux-system", name="soak", ready="Unknown", revision="master@sha1:df49ee19e0fb69c90b2a2dd5db3fc9f4785fc062", source_name="homelab"}'
+        values: 'stale stale 1 stale stale 1 stale stale 1 stale stale 1 stale stale 1 stale stale 1 stale stale'
+    alert_rule_test:
+      - eval_time: 14m
+        alertname: FluxNotReady
+        exp_alerts: []
+      - eval_time: 15m
+        alertname: FluxNotReady
+        exp_alerts:
+          - exp_labels:
+              customresource_kind: Kustomization
+              exported_namespace: flux-system
+              name: soak
+              severity: warning
+              service: flux
+            exp_annotations:
+              summary: 'flux: the Kustomization soak has not been Ready for 15 minutes.'
+              description: >-
+                The Kustomization soak in flux-system is not Ready after 15 minutes; read its
+                conditions.
+              runbook_url: https://docs.local.daniel-hunter.com/flux-deploy-plane/#alerts
+
   - interval: 1m
     input_series:
       - series: 'gotk_resource_info{job="kube-state-metrics", instance="kube-state-metrics:8080", customresource_group="kustomize.toolkit.fluxcd.io", customresource_kind="Kustomization", customresource_version="v1", exported_namespace="flux-system", name="homelab", ready="False", revision="master@sha1:df49ee19e0fb69c90b2a2dd5db3fc9f4785fc062", source_name="homelab"}'

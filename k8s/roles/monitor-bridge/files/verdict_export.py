@@ -29,8 +29,7 @@ import threading
 
 from deploy_pipeline import Exposition
 
-# Cycles a row's timestamp may age before it reads stale. One missed cycle is a slow body and
-# two is a hung one, so the third is the first that is not noise.
+# Cycles a row's timestamp may age before it reads stale.
 DEADLINE_CYCLES = 3
 
 ROWS_GAUGE = (

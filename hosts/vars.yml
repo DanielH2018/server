@@ -23,7 +23,7 @@ docker_engine_packages:
   - docker-compose-plugin
   - docker-buildx-plugin
 # daniel-pi overrides false: rsyslog is masked there (journald is the log of record).
-# ENFORCED by hosts/tests/test_journald_syslog_forwarding.py.
+# ENFORCED by hosts/tests/host_config/test_journald_syslog_forwarding.py.
 has_rsyslog: true
 has_repo_checkout: true
 

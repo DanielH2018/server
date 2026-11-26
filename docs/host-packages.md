@@ -124,7 +124,7 @@ design is [the H4 plan](archive/host/h4-secrets-unit.md), *The restart contract*
   files with unpredictable names into it. Step 1 stops a dropped unit mid-run, so its scratch tree
   stays behind, and an `rmdir` in step 4 would fail the run and hold the host. The package lists
   only the files with fixed names, such as a lock file, and leaves the directory out. The operator
-  removes the directory by hand if it matters. `hosts/tests/test_legacy_cache_directories.py`
+  removes the directory by hand if it matters. `hosts/tests/host_config/test_legacy_cache_directories.py`
   refuses a `legacy:` path that is `/var/cache` or any `.cache` directory, such as
   `/var/lib/claude/.cache` in the agent user's home, or a directory directly inside one.
 - **No legacy unit.** A legacy entry is a `path` or a `cron`. The render refuses a `path` under

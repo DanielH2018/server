@@ -301,7 +301,7 @@ def test_the_census_contains_the_modules_this_guard_exists_for():
     required = frozenset(
         {
             ".claude/hooks/tests/hook_contract/test_fanout_stop.py",
-            "hosts/tests/test_claude_lander.py",
+            "hosts/tests/claude_code/test_claude_lander.py",
             "tests/conftest.py",
             "tests/_k8s_render.py",
             # Imports its role's `files/` module through k8s/conftest.py alone.
