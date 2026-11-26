@@ -64,7 +64,12 @@ NOTIFICATIONS = [
     }
 ]
 
-ROUTES = {"qualityprofile": QUALITY_PROFILES, "notification": NOTIFICATIONS}
+ROUTES = {
+    "qualityprofile": QUALITY_PROFILES,
+    "notification": NOTIFICATIONS,
+    "release?albumId=1": [],
+}
+SLOW_ROUTE = "release?albumId=1"
 
 FAKE_KUBECTL = """
 args = sys.argv[1:]
@@ -88,9 +93,12 @@ print(LIDARR_KEY)
 
 FAKE_CURL = """
 url, config = sys.argv[-1], sys.stdin.read()
+max_time = int(sys.argv[sys.argv.index("--max-time") + 1])
 if os.environ.get("FAKE_RUNS_ON", HERE) != os.environ["LIDARR_NODE"]:
     sys.exit("curl: (7) Failed to connect")
 prefix = f"http://{LIDARR_IP}:8686/api/v1/"
+if url == prefix + SLOW_ROUTE and max_time < 120:
+    sys.exit(f"curl: (28) Operation timed out after {max_time}001 milliseconds")
 if not url.startswith(prefix) or LIDARR_KEY not in config:
     print("<html>401 Unauthorized</html>")
 elif url[len(prefix):] not in ROUTES:
@@ -119,7 +127,7 @@ def fake_lidarr(tmp_path, monkeypatch):
     prelude = (
         f"#!{sys.executable}\nimport json, os, shlex, subprocess, sys\n"
         f"LIDARR_IP = {LIDARR_IP!r}\nLIDARR_KEY = {LIDARR_KEY!r}\nROUTES = {ROUTES!r}\n"
-        f"HERE = {HERE!r}\n"
+        f"HERE = {HERE!r}\nSLOW_ROUTE = {SLOW_ROUTE!r}\n"
     )
     bin_dir = fake_bin(
         tmp_path / "bin",
@@ -189,3 +197,29 @@ def test_a_pod_on_the_other_node_is_read_from_that_node(capsys, monkeypatch):
         "Standard",
         "Lossless",
     }
+
+
+@pytest.mark.parametrize(
+    ("argv", "max_time"),
+    [
+        (["arr", "sonarr", "release?episodeId=19288"], "120"),
+        (["arr", "sonarr", "api/v3/release?episodeId=1", "--timeout", "30"], "30"),
+        (["arr", "sonarr", "releaseprofile"], "10"),
+    ],
+)
+def test_arr_max_time_is_long_only_for_a_release_search(capsys, argv, max_time):
+    rc = arr.run_arr(_parse(["--dry-run", *argv]))
+    assert rc == 0
+    words = capsys.readouterr().out.split()
+    assert words[words.index("--max-time") + 1] == max_time
+
+
+@pytest.mark.usefixtures("fake_lidarr")
+@pytest.mark.parametrize("node", [HERE, f"not-{HERE}"], ids=["local", "over-ssh"])
+def test_a_release_search_outlasts_the_ten_second_curl_default(
+    capsys, monkeypatch, node
+):
+    monkeypatch.setenv("LIDARR_NODE", node)
+    rc = arr.run_arr(_parse(["arr", "lidarr", "release?albumId=1", "--json"]))
+    assert rc == 0
+    assert json.loads(capsys.readouterr().out) == []
