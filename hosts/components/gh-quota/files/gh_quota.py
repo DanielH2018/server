@@ -62,6 +62,8 @@ _API_VALUE_FLAGS = frozenset(
     }
 )  # fmt: skip
 _API_BODY_FLAGS = ("-f", "-F", "--field", "--raw-field", "--input")
+_OWNER_SEGMENT = {"repos": ("{o}", "{r}"), "orgs": ("{o}",), "users": ("{u}",)}
+_SHA = re.compile(r"(?=[0-9a-f]*\d)[0-9a-f]{7,64}\Z")
 _SUBCOMMAND = re.compile(r"[a-z][a-z-]*\Z")
 # Porcelain subcommands that send a POST, PATCH, PUT or DELETE.
 _WRITE_SUBCOMMANDS = frozenset(
@@ -95,8 +97,8 @@ def classify(args: Sequence[str]) -> tuple[str, str] | None:
     """The quota bucket and the call class of a `gh` argv, or None when the call is free.
 
     The class is the command and its subcommand, such as `pr list`. A `gh api` read is
-    `api graphql` or `api rest`, a `gh api` write is `api mutation` or `api write`, and
-    `gh api rate_limit` is free because GitHub does not count it. The bucket is an estimate
+    `api graphql` or `api rest <path template>`, a `gh api` write is `api mutation` or
+    `api write`, and `gh api rate_limit` is free because GitHub does not count it. The bucket is an estimate
     for a porcelain command: gh does not say which API it used.
     """
     words = [arg for arg in args if not arg.startswith("-")]
@@ -110,7 +112,9 @@ def classify(args: Sequence[str]) -> tuple[str, str] | None:
         if path == "graphql":
             mutates = any("mutation" in arg for arg in args)
             return ("graphql", "api mutation" if mutates else "api graphql")
-        return ("core", "api write" if _api_writes(args) else "api rest")
+        if _api_writes(args):
+            return ("core", "api write")
+        return ("core", f"api rest {_path_template(path)}")
     sub = words[1] if len(words) > 1 and _SUBCOMMAND.match(words[1]) else ""
     return ("core" if command in _REST else "graphql", f"{command} {sub}".strip())
 
@@ -121,6 +125,17 @@ def is_write(argv_class: str) -> bool:
         return True
     command, _, sub = argv_class.partition(" ")
     return command != "api" and sub in _WRITE_SUBCOMMANDS
+
+
+def _path_template(path: str) -> str:
+    """The REST path with its owner, repo, numbers and SHAs folded, such as `repos/{o}/{r}/pulls/{n}`."""
+    first, *rest = path.partition("?")[0].strip("/").split("/")
+    owners = _OWNER_SEGMENT.get(first, ())
+    tail = [
+        "{n}" if seg.isdigit() else "{sha}" if _SHA.match(seg) else seg
+        for seg in rest[len(owners) :]
+    ]
+    return "/".join([first, *owners, *tail])
 
 
 def _api_path(args: Sequence[str]) -> str:

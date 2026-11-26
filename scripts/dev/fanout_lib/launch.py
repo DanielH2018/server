@@ -46,8 +46,8 @@ def claude_prefix(rung: Rung, prompt: str) -> str:
 # Claude Code loads project settings from the session's cwd, so a batch in this repo's
 # worktree gets the hook from `.claude/settings.json`, and a batch in the dotfiles worktree,
 # which has no such file, got no hook at all. Passing it here for the server target
-# too would run it twice per stop and spend the hook's block cap at double speed. A probe on
-# 2026-10-03 confirmed a `--settings` Stop hook fires under `claude -p`. The hook command
+# too would run it twice per stop and spend the hook's block cap at double speed. A probe
+# confirmed a `--settings` Stop hook fires under `claude -p`. The hook command
 # names this repo's primary checkout by absolute path, where `.claude/settings.json` uses
 # `$CLAUDE_PROJECT_DIR`: the hook's cwd follows the agent's `cd`, so the command names the
 # batch's own snapshot of this repo by absolute path instead; see `snapshot_root`.
