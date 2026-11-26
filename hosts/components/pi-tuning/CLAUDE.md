@@ -18,6 +18,24 @@
   seconds. The next boot or 05:05 run retries it. `docs/pi-host-tuning-record.md` has the
   planned-upgrade steps that lift the hold.
 
+## Autonomous-role contract (log2ram syncs /var/log to the card before each unattended upgrade)
+
+- **Scope:** one log2ram write, `systemctl reload log2ram.service`, as the first step of
+  `apt-daily-upgrade.service` on daniel-pi. It copies the `/var/log` tmpfs to
+  `/var/hdd.log` on the SD card and rotates the journal, as log2ram-daily's 23:55 write does.
+- **Mode:** the `apt-daily-upgrade.service` drop-in arms it on every upgrade run, at 05:20 UTC
+  plus up to 10 minutes. Dropping the drop-in from a package version leaves only the 23:55
+  write.
+- **Authoritative sources:** `/var/log/log2ram.log`, which gains one sync before each upgrade
+  run, and the mtime of `/var/hdd.log/log2ram.log`.
+- **Abort valves:** the `-` prefix lets the upgrade run when the write fails, as it does while
+  log2ram.service is inactive.
+- **Required evidence:** `journalctl -u apt-daily-upgrade` on daniel-pi shows the reload before
+  the upgrade, and after a reset `/var/log/apt/history.log` keeps the entries up to that run.
+- **Next-run review:** a failed write leaves a non-zero ExecStartPre line in that journal; the
+  next morning's run and the 23:55 write retry it. Each write adds a journal archive, so
+  `60-homelab-pi.conf` sizes `SystemMaxFiles` for five a day.
+
 ## Autonomous-role contract (logrotate runs hourly on daniel-pi)
 
 - **Scope:** Ubuntu's own `logrotate.service` over `/etc/logrotate.conf`, on daniel-pi only.
