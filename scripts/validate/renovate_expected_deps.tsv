@@ -35,6 +35,7 @@ regex	.github/workflows/promote.yml	gitleaks/gitleaks	github-releases	-	-
 regex	.github/workflows/promote.yml	gitleaks/gitleaks	github-releases	-	-
 regex	.github/workflows/promote.yml	sigstore/cosign	github-release-attachments	digest	-
 regex	.github/workflows/prune-artifacts.yml	sigstore/cosign	github-release-attachments	digest	-
+regex	.github/workflows/render-diff.yml	homeport/dyff	github-release-attachments	digest	-
 regex	.vale.ini	vale-cli/Google	github-releases	-	-
 regex	hosts/bootstrap-host.sh	astral-sh/uv	github-release-attachments	digest	-
 regex	hosts/bootstrap-host.sh	astral-sh/uv	github-release-attachments	digest	-

@@ -4,6 +4,7 @@ Split out of probe.py, which had grown to 1349 lines across thirteen subcommands
 """
 
 import json
+import re
 import socket
 
 
@@ -21,6 +22,10 @@ from lib.kubectl import DEFAULT_CLUSTER, kubectl_json
 ARR_PORTS = {"sonarr": 8989, "radarr": 7878, "prowlarr": 9696, "lidarr": 8686}
 ARR_API_VERSION = {"sonarr": "v3", "radarr": "v3", "prowlarr": "v1", "lidarr": "v1"}
 
+# `release?episodeId=<id>` searches every indexer before it answers, so it outlasts the 10s default.
+RELEASE_SEARCH_TIMEOUT = 120
+_RELEASE_PATH_RE = re.compile(r"(^|/)release(\?|$)")
+
 
 def arr_url(ip, app, path):
     """Build an *arr API URL.
@@ -36,6 +41,13 @@ def arr_url(ip, app, path):
     if p.startswith(ver + "/"):
         p = p[len(ver) + 1 :]
     return f"http://{ip}:{ARR_PORTS[app]}/api/{ver}/{p}"
+
+
+def default_timeout(path):
+    """curl `--max-time` for an *arr path: long for an interactive release search."""
+    if _RELEASE_PATH_RE.search(path):
+        return RELEASE_SEARCH_TIMEOUT
+    return core.DEFAULT_TIMEOUT
 
 
 def arr_curl_config(api_key):
@@ -167,11 +179,13 @@ def run_arr(ns):
     directly instead of going through k8s_endpoint like every other cluster subcommand.
     Pulls <app>_api_key from SOPS and passes it via stdin. Pretty-prints JSON by
     default; `--json` prints it on one line. Credential-bearing values are redacted
-    unless `--show-secrets` is passed — see redact_arr_payload.
+    unless `--show-secrets` is passed — see redact_arr_payload. `--timeout` overrides curl's
+    `--max-time`, which is 120s for a `release` search and 10s otherwise.
     """
+    timeout = ns.timeout or default_timeout(ns.path)
     if ns.dry_run:
         print(
-            " ".join(ha_curl_argv(arr_url("<arr-clusterip>", ns.app, ns.path)))
+            " ".join(ha_curl_argv(arr_url("<arr-clusterip>", ns.app, ns.path), timeout))
             + "   # + X-Api-Key: <redacted> (via --config stdin)"
         )
         return 0
@@ -181,6 +195,7 @@ def run_arr(ns):
         url,
         arr_curl_config(core.sops_extract(f"{ns.app}_api_key")),
         host=curl_host(ns.app, cluster),
+        timeout=timeout,
     )
     text, rc = format_arr_response(
         body, as_json=ns.json, show_secrets=getattr(ns, "show_secrets", False)
