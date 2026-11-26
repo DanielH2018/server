@@ -244,6 +244,9 @@ def test_one_conflicting_read_behind_a_serial_landing_waits_on_and_merges(landin
     )
     _land(ln)
     assert "merge" in call_order(calls)
+    names = [n for n in _names(calls) if n in ("gh:mergeable", "sleep")]
+    first = names.index("gh:mergeable")
+    assert names[first : first + 3] == ["gh:mergeable", "sleep", "gh:mergeable"]
 
 
 def test_a_serial_pr_out_of_the_turn_waits_for_the_serial_landing_to_end(landing):
