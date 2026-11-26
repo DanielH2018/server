@@ -53,6 +53,7 @@ def lay_home(tmp_path, mcp_version: str = MCP):
     bin_dir = home / ".local" / "share" / "node" / f"node-v{NODE}-linux-x64" / "bin"
     write_exec(bin_dir / "node", NODE_STUB.format(log=log, version=mcp_version))
     write_exec(bin_dir / "npm", STUB.format(log=log))
+    write_exec(bin_dir / "playwright-mcp", STUB.format(log=log))
     write_exec(home / ".local" / "bin" / "claude", STUB.format(log=log))
     return home, log
 
@@ -91,6 +92,7 @@ def test_a_first_run_links_the_pinned_node_and_registers_the_server(tmp_path):
     assert (node_dir / "current").readlink().name == f"node-v{NODE}-linux-x64"
     made = calls(log)
     assert f"npm install --global --no-fund --no-audit @playwright/mcp@{MCP}" in made
+    assert "playwright-mcp install-browser chromium" in made
     assert any(
         c.startswith("claude mcp add-json --scope user homelab-ui ") for c in made
     )
