@@ -1,6 +1,7 @@
 {#
-  The seed Job that declares Sonarr's air-date Release Profile; `files/seed_sonarr_release_profile.py`
-  has the rule and why anime is excluded. The renderer emits it into `sonarr-verify`, which Flux
+  The seed Job that declares Sonarr's air-date Release Profile and the Auto Tagging rules that tag
+  its excluded series types; `files/seed_sonarr_release_profile.py` has the rule and why anime is
+  excluded. The renderer emits it into `sonarr-verify`, which Flux
   applies once `sonarr` is Ready, beside the verify Job and arr-notification's seed.
 
   DECIDED: this Job owns the profile, not configarr. configarr 1.39.2 refuses a negative
@@ -17,12 +18,13 @@
   'name': sonarr_k8s_air_date_profile_name,
   'air_date_grace_hours': sonarr_k8s_air_date_grace_hours | int,
   'excluded_tags': sonarr_k8s_air_date_excluded_tags,
+  'excluded_series_types': sonarr_k8s_air_date_excluded_series_types,
 } %}
 {% set head %}
 # One retry. A second run reads the profile again and writes only what still differs.
 backoffLimit: 1
 # Below the 600s `manifests_rollout_timeout_default` every `<tag>-verify` Kustomization takes.
-# Three API calls of at most 30s each, plus the helper's 60s of retries on the first connect.
+# Up to seven API calls of at most 30s each, plus the helper's 60s of retries on the first connect.
 activeDeadlineSeconds: 300
 {% endset %}
 {% set env %}

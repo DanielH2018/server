@@ -71,9 +71,12 @@ sonarr_k8s_air_date_profile_name: Reject early releases
 # the 16 grabs marked failed by hand and 1 real release. At -3 it removes all 16 and 5 real ones,
 # all Netflix or Disney+ drops whose TVDB air date is a later broadcast.
 sonarr_k8s_air_date_grace_hours: -24
-# Series carrying one of these Sonarr tags are exempt. TVDB air dates for anime are off by up to
-# a week, so the rule would reject real anime releases.
-sonarr_k8s_air_date_excluded_tags: [anime]
+# Series carrying one of these Sonarr tags are exempt. A tag named here must already exist.
+sonarr_k8s_air_date_excluded_tags: []
+# Series of these Sonarr series types (standard, daily, anime) are exempt. The seed creates a tag
+# named after each type and an Auto Tagging rule that adds it to every series of that type.
+# TVDB air dates for anime are off by up to a week, so the rule would reject real anime releases.
+sonarr_k8s_air_date_excluded_series_types: [anime]
 
 # Named by fake-remux's config in hosts/components/fake-remux/defaults/main.yml; change both.
 sonarr_k8s_cluster_ip: 10.43.114.186
