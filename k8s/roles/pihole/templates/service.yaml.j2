@@ -1,14 +1,6 @@
 ---
-# Web UI, reached only through the IngressRoute (Authelia-gated) — the macro targets a
-# Service named after the containers_list entry.
-#
-# Pinned to instance 1 ONLY (`instance: pihole`), unlike pihole-dns below. Pi-hole v6 keeps
-# admin sessions in FTL's own memory, so a session round-robined across two independent FTLs
-# 401s at random, and homepage's widget polling would report whichever pod it happened to
-# hit — half the real query volume, flapping between refreshes. The admin UI is a
-# single-user surface, so pinning it costs nothing. DNS stays load-balanced across both
-# instances because each query is stateless and redundancy is the point. Don't "fix" this
-# inconsistency without re-reading why the split exists.
+# Instance 1 ONLY, unlike pihole-dns: admin sessions live in one FTL's memory, so round-robin 401s.
+# DNS stays balanced across both because queries are stateless; do not "fix" this split.
 apiVersion: v1
 kind: Service
 metadata:
@@ -23,13 +15,8 @@ spec:
       port: {{ container_item.port }}
       targetPort: {{ container_item.port }}
 ---
-# Instance 2's web port, and the ONLY caller is pihole-exporter. DNS is load-balanced across two
-# independent FTLs, each keeping its own pihole-FTL.db,
-# so a metrics scrape that reached only the Service above would report roughly HALF the house's
-# query volume — silently, and with a plausible-looking graph. There is no IngressRoute for it
-# and there must not be one: the reason the admin UI is pinned to instance 1 (see above) is that
-# a session round-robined across two FTLs 401s at random, and a second route would reintroduce
-# exactly that.
+# Instance 2's web port, for pihole-exporter only: scraping one instance reports half the queries.
+# No IngressRoute: a second admin route would reintroduce the random 401s.
 apiVersion: v1
 kind: Service
 metadata:
