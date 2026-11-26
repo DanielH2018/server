@@ -395,6 +395,11 @@ def _build_parser():
     )
     ar.add_argument("app", choices=sorted(ARR_PORTS))
     ar.add_argument("path", help="api path, e.g. health, indexerstatus, notification")
+    ar.add_argument(
+        "--timeout",
+        type=int,
+        help="curl --max-time in seconds (default 120 for a `release` search, else 10)",
+    )
     _flag(ar, "--json", "print one-line JSON instead of pretty-printed")
     _flag(
         ar,

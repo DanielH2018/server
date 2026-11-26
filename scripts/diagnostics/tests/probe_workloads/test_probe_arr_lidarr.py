@@ -189,3 +189,19 @@ def test_a_pod_on_the_other_node_is_read_from_that_node(capsys, monkeypatch):
         "Standard",
         "Lossless",
     }
+
+
+@pytest.mark.parametrize(
+    ("argv", "max_time"),
+    [
+        (["arr", "sonarr", "release?episodeId=19288"], "120"),
+        (["arr", "sonarr", "api/v3/release?episodeId=1", "--timeout", "30"], "30"),
+        (["arr", "sonarr", "health"], "10"),
+        (["arr", "sonarr", "releaseprofile"], "10"),
+    ],
+)
+def test_arr_max_time_is_long_only_for_a_release_search(capsys, argv, max_time):
+    rc = arr.run_arr(_parse(["--dry-run", *argv]))
+    assert rc == 0
+    words = capsys.readouterr().out.split()
+    assert words[words.index("--max-time") + 1] == max_time
