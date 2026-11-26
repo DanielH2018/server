@@ -51,9 +51,8 @@
   'flux_job_connect.py': flux_job_connect,
 } %}
 {% set configmap_name = 'janitorr-verify-' + ({'data': data, 'binaryData': {}} | to_json(sort_keys=True, separators=(',', ':')) | hash('sha256'))[:8] %}
-{#- The pod's roll inputs, as `checksum/restart` hashes them; see the note above. The Secret
-    template and the config it renders are read raw, never rendered, and `cluster-vars.source`
-    holds a digest of each key's ciphertext, so no value enters the hash. -#}
+{#- The pod's roll inputs as `checksum/restart` hashes them; the Secret template and config are read
+   raw, and cluster-vars.source holds a ciphertext digest, so no value enters the hash. -#}
 {% set roll = namespace(
   text=lookup('template', 'deployment.yaml.j2'),
   secrets=lookup('file', role_file('templates/config-secret.yaml.j2'))
@@ -66,8 +65,8 @@
 {% set spec_text %}
 # A flaky check fails rather than passing on a retry, and a retry would write a second probe.
 backoffLimit: 0
-# Below the 600s `manifests_rollout_timeout_default` every `<tag>-verify` Kustomization takes.
-# Three reach legs of up to 60s of connect retries each, and the walk to the first episode.
+# Below the 600s `manifests_rollout_timeout_default`: three reach legs of up to 60s of connect
+# retries each, plus the walk to the first episode.
 activeDeadlineSeconds: 300
 template:
   metadata:
@@ -80,9 +79,8 @@ template:
     automountServiceAccountToken: false
     restartPolicy: Never
     enableServiceLinks: false
-    # The uid janitorr and jellyfin both run the library as, so the read leg reads as they do.
-    # Deliberately NO fsGroup, unlike janitorr's own pod: on this claim it would make the
-    # kubelet chown the whole library on every mount, as media-volume's verify Job records.
+    # The uid janitorr and jellyfin run the library as. No fsGroup (unlike janitorr's pod): on this
+    # claim the kubelet would chown the whole library on every mount.
     securityContext:
       runAsNonRoot: true
       runAsUser: {{ puid }}
@@ -132,8 +130,7 @@ template:
             mountPath: /config/application.yml
             subPath: application.yml
             readOnly: true
-          # jellyfin's two media mounts, read-write so the probe link can be written; see the
-          # second DECIDED note above.
+          # jellyfin's two media mounts, read-write so the probe link can be written.
           - name: media
             mountPath: /data
             subPath: media

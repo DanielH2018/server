@@ -10,19 +10,14 @@ file-system:
   free-space-check-dir: "/data"
 
 application:
-  # Live: janitorr actually deletes per the rules below. The *arr tags
-  # janitorr-keep / janitorr-keep-too exclude media from cleanup.
-  #
-  # Templated rather than hardcoded so the role can run dry without forking this file — the
-  # k8s role renders it through lookup('template') and overrides the default.
+  # Templated so the role can run dry without forking this file.
   dry-run: {{ janitorr_k8s_dry_run | default('false') }}
   run-once: false
   whole-tv-show: false
   whole-show-seeding-check: false
   leaving-soon: 14d
-  # Janitorr matches these by EXACT label equality (RadarrRestService: exclusionTags.contains(label)).
-  # Radarr/Sonarr tag labels are validated against ^[a-z0-9-]+$ — no underscores — so the upstream
-  # default `janitorr_keep` can never be created and would silently never match. Keep these hyphenated.
+  # Labels match by EXACT equality and Radarr/Sonarr tags allow only ^[a-z0-9-]+$, so the upstream
+  # default `janitorr_keep` can never be created or match; keep these hyphenated.
   exclusion-tags: # Set these tags on movies/TV shows in the *arrs to exclude media from being cleaned up
     - "janitorr-keep"
     - "janitorr-keep-too"
@@ -50,12 +45,8 @@ application:
       20: 120d # 4 months
       25: 240d # 8 months - the Longhorn floor, see DECIDED above
 
-  # DISABLED: both features ship enabled with janitorr's upstream DEMO tag placeholders —
-  # "5 - demo" / "10 - demo" (spaces) and janitorr_daily (underscore) — which all violate the
-  # *arr ^[a-z0-9-]+$ tag-label rule (same trap as exclusion-tags above), so no such tag can
-  # exist and neither feature ever matches any media. Turned OFF rather than "fixed": they are
-  # not operator-wired (no matching tag exists in Sonarr/Radarr) and janitorr deletes for real.
-  # To use one, set enabled: true with HYPHENATED, operator-created tags.
+  # DISABLED: upstream's demo tags violate the *arr ^[a-z0-9-]+$ rule so neither can match; off
+  # because janitorr deletes for real.
   tag-based-deletion:
     enabled: false
     minimum-free-disk-percent: 100
@@ -90,18 +81,9 @@ clients:
     determine-age-by: MOST_RECENT
 {# DECIDED: import-exclusions, not Radarr's autoUnmonitor flag; with only-delete-files: false
    Janitorr removes the record, so the state that flag governs never occurs. #}
-    # true here but false for sonarr above, and the asymmetry is the point. With
-    # `only-delete-files: false` a cleanup removes the movie from Radarr entirely, so an import
-    # list re-adds it on its next sync and the file is downloaded again through the VPN — the
-    # exclusion is what stops that loop. Sonarr needs no equivalent because it carries
-    # `autoUnmonitorPreviouslyDownloadedEpisodes: true` in its own (live, un-templated) config,
-    # while Radarr's mirror of that setting is false. Radarr's setting would not help anyway: it
-    # governs a movie whose file is gone but whose record survives, which is a state
-    # `only-delete-files: false` never produces.
-    #
-    # The cost, deliberately accepted: re-adding an excluded movie later means clearing the
-    # exclusion in Radarr first. Not latent — the media-deletion block above has no
-    # minimum-free-disk-percent gate, so deletion fires on the age tiers regardless of headroom.
+    # true here, false for sonarr, on purpose: `only-delete-files: false` removes the movie from
+    # Radarr, an import list re-adds it and it re-downloads; the exclusion stops that. Cost: clear
+    # the exclusion in Radarr to re-add.
     import-exclusions: true
 
   ## User login is only needed if deletion is enabled.

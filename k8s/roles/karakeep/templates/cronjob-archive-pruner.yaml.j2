@@ -1,14 +1,6 @@
 {% from 'container-resources.yml.j2' import job_container_resources with context %}
 {% from 'security-context.yml.j2' import job_hardened_security_context with context %}
-{#
-  Prunes archived bookmarks by age: detaches the screenshot after
-  karakeep_k8s_pruner_screenshot_days, deletes the bookmark after karakeep_k8s_pruner_delete_days
-  unless a person marked it. files/karakeep_archive_pruner.py holds the rules and why each one
-  is safe; this file only schedules it.
-
-  karakeep_k8s_pruner_apply gates every change. False, a run logs what it would do and changes
-  nothing, so each revision's gate run (the `karakeep-verify` Job) is a dry-run report.
-#}
+{# karakeep_k8s_pruner_apply false: a run only logs, so each gate run is a dry-run report. #}
 ---
 apiVersion: batch/v1
 kind: CronJob
@@ -18,9 +10,7 @@ metadata:
 spec:
   schedule: "{{ karakeep_k8s_pruner_schedule }}"
   timeZone: "{{ tz }}"
-  # The deploy gate creates a Job from this CronJob out of schedule. Forbid stops a scheduled
-  # run starting under it; the rules key on age, so the run that overlaps the other way does
-  # nothing the first one would not.
+  # Forbid stops a scheduled run starting under the deploy gate's out-of-schedule Job.
   concurrencyPolicy: Forbid
   startingDeadlineSeconds: 600
   successfulJobsHistoryLimit: 3
@@ -29,8 +19,6 @@ spec:
     spec:
       activeDeadlineSeconds: {{ karakeep_k8s_pruner_deadline_seconds }}
       ttlSecondsAfterFinished: {{ karakeep_k8s_pruner_job_ttl_seconds }}
-      # No retry. A failed run leaves the library as it was, and tomorrow's run picks up the
-      # same work.
       backoffLimit: 0
       template:
         metadata:
@@ -44,8 +32,8 @@ spec:
           priorityClassName: homelab-best-effort
           containers:
             - name: archive-pruner
-              # The tagger's image, for its python3 and uid 1000. The script is stdlib only,
-              # so nothing installs at start and the root filesystem can stay read-only.
+              # Stdlib-only script: nothing installs at start, so the root filesystem stays
+              # read-only.
               image: {{ karakeep_k8s_tagger_image }}
               # Built in-cluster: see the `built-images-pull-always` row of
               # tests/k8s/rendered_properties/_workload_property_rows.py.

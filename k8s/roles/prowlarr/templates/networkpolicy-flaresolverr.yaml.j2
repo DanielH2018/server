@@ -1,18 +1,6 @@
 {% from 'networkpolicy.yml.j2' import networkpolicy with context %}
 ---
-# The subject of this policy is FLARESOLVERR, not prowlarr — it lives in the prowlarr role
-# because flaresolverr has no role of its own, and prowlarr is its only caller. prowlarr's own
-# policy is the sibling `networkpolicy-prowlarr.yaml.j2`.
-#
-# It keeps a headless browser that renders attacker-supplied Cloudflare pages reachable by
-# prowlarr and nothing else. Without it every workload in
-# {{ k8s_namespace }} could reach it — including qbittorrent's untrusted payloads and jellyfin —
-# the same argument n8n-broker's policy makes.
-#
-# INGRESS: the exposure is who reaches this port. The prowlarr-verify Job (templates/verify/job.yaml.j2) checks it on every revision that edits
-# this policy or flaresolverr's Deployment, rather than trusting the asymmetry.
-#
-# Rendered from the shared macro with literal arguments rather than a `netpol_fences` item on
-# prowlarr's entry: the port is `prowlarr_k8s_flaresolverr_port`, a role default the inventory
-# cannot read, and copying it there as a literal would give the port two sources.
+# Fences flaresolverr (no role of its own): only prowlarr may reach this headless browser.
+# Literal macro args: the port is a role default the inventory cannot read, so it would get two
+# sources.
 {{ networkpolicy('flaresolverr', prowlarr_k8s_flaresolverr_port, ['prowlarr']) }}
