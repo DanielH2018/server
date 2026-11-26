@@ -5,6 +5,7 @@ The row sits in its own module because `test_census_rows_python.py`, which impor
 """
 
 import ast
+import sys
 from pathlib import Path
 
 from _helpers import is_test_file
@@ -34,8 +35,90 @@ def _forwarded(call: ast.Call) -> list[str] | None:
     return names
 
 
-def _callee(fn: ast.FunctionDef | ast.AsyncFunctionDef) -> str | None:
-    """The name `fn` only passes its arguments to, or None when its body does more."""
+def _imported_non_stdlib(tree: ast.Module) -> frozenset[str]:
+    """The names the module's imports bind to a module outside the standard library."""
+    bound = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            bound |= {
+                (a.asname or a.name).split(".")[0]
+                for a in node.names
+                if a.name.split(".")[0] not in sys.stdlib_module_names
+            }
+        elif isinstance(node, ast.ImportFrom) and (
+            node.level
+            or (node.module or "").split(".")[0] not in sys.stdlib_module_names
+        ):
+            bound |= {a.asname or a.name for a in node.names}
+    return frozenset(bound)
+
+
+def _callee_name(func: ast.expr, modules: frozenset[str]) -> str | None:
+    """`func` as written, when it is a bare name or an attribute of an imported module."""
+    if isinstance(func, ast.Name):
+        return func.id
+    root = func
+    while isinstance(root, ast.Attribute):
+        root = root.value
+    if isinstance(root, ast.Name) and root.id in modules:
+        return ast.unparse(func)
+    return None
+
+
+def _defaults(node: ast.stmt) -> dict[str, str]:
+    """Each defaulted parameter of a function, or field of a class, to its default's source."""
+    if isinstance(node, _FUNCTIONS):
+        a = node.args
+        positional = [*a.posonlyargs, *a.args]
+        pairs = list(
+            zip(
+                positional[len(positional) - len(a.defaults) :], a.defaults, strict=True
+            )
+        )
+        pairs += [
+            (p, d)
+            for p, d in zip(a.kwonlyargs, a.kw_defaults, strict=True)
+            if d is not None
+        ]
+        return {p.arg: ast.unparse(d) for p, d in pairs}
+    if isinstance(node, ast.ClassDef):
+        return {
+            s.target.id: ast.unparse(s.value)
+            for s in node.body
+            if isinstance(s, ast.AnnAssign)
+            and isinstance(s.target, ast.Name)
+            and s.value is not None
+        }
+    return {}
+
+
+def _supplies_a_default(
+    fn: ast.FunctionDef | ast.AsyncFunctionDef, callee: str, tree: ast.Module
+) -> bool:
+    """Whether `fn` sets a default its callee does not, read where the callee is in `tree`.
+
+    A callee defined elsewhere cannot be read, so any default of `fn` counts.
+    """
+    mine = _defaults(fn)
+    if not mine:
+        return False
+    local = [
+        n
+        for n in tree.body
+        if isinstance(n, (*_FUNCTIONS, ast.ClassDef)) and n.name == callee
+    ]
+    if not local:
+        return True
+    theirs = _defaults(local[0])
+    return any(theirs.get(name) != default for name, default in mine.items())
+
+
+def _callee(
+    fn: ast.FunctionDef | ast.AsyncFunctionDef,
+    tree: ast.Module,
+    modules: frozenset[str],
+) -> str | None:
+    """The callable `fn` only passes its arguments to, or None when its body does more."""
     body = fn.body
     if (
         body
@@ -45,18 +128,17 @@ def _callee(fn: ast.FunctionDef | ast.AsyncFunctionDef) -> str | None:
         body = body[1:]
     if fn.decorator_list or len(body) != 1 or not isinstance(body[0], ast.Return):
         return None
-    if fn.args.defaults or any(d is not None for d in fn.args.kw_defaults):
-        return None
     value = body[0].value
     if isinstance(value, ast.Await):
         value = value.value
-    if not isinstance(value, ast.Call) or not isinstance(value.func, ast.Name):
+    if not isinstance(value, ast.Call):
         return None
+    callee = _callee_name(value.func, modules)
     params = _params(fn)
     names = _forwarded(value)
-    if not params or names is None or sorted(names) != sorted(params):
+    if callee is None or not params or names is None or sorted(names) != sorted(params):
         return None
-    return value.func.id
+    return None if _supplies_a_default(fn, callee, tree) else callee
 
 
 def _top_level_functions(
@@ -73,10 +155,11 @@ def _pass_through_offence(subject: Subject) -> list[str]:
         tree = ast.parse(subject.text)
     except SyntaxError:
         return []
+    modules = _imported_non_stdlib(tree)
     return [
         f"line {fn.lineno}: {fn.name} only passes its arguments to {callee}"
         for fn in _top_level_functions(tree)
-        if (callee := _callee(fn))
+        if (callee := _callee(fn, tree, modules))
     ]
 
 
@@ -91,8 +174,8 @@ NO_PASS_THROUGH_FUNCTIONS = Census(
         "and hides nothing, so a reader follows two definitions for one behaviour. Call the "
         "callee, and keep the name that convention asks for, such as monitor-bridge's "
         "`check_*` bodies. Not flagged: a wrapper a decorator registers, one that supplies a "
-        "default, a call through an attribute, and a closure a factory returns. One that must "
-        "stay goes in `allow` with the reason."
+        "default its callee lacks, a call through a value or a standard-library module, and a "
+        "closure a factory returns. One that must stay goes in `allow` with the reason."
     ),
     files=_production_modules,
     offence=_pass_through_offence,
@@ -104,6 +187,16 @@ NO_PASS_THROUGH_FUNCTIONS = Census(
         ),
         Subject(
             "c.py", "async def run(*args, **kw):\n    return await go(*args, **kw)\n"
+        ),
+        Subject(
+            "d.py",
+            "from probe_lib import health\n\n\ndef ref(tag, query):\n"
+            "    return health.flux_reference(tag, query)\n",
+        ),
+        Subject(
+            "e.py",
+            "def inner(cfg, now=None):\n    return now\n\n\n"
+            "def check(cfg, now=None):\n    return inner(cfg, now=now)\n",
         ),
     ),
     green=(
@@ -117,13 +210,22 @@ NO_PASS_THROUGH_FUNCTIONS = Census(
         Subject(
             "f.py", "def code(value, remedy=''):\n    return Code(value, remedy)\n"
         ),
-        Subject("g.py", "def env(name):\n    return os.environ.get(name)\n"),
+        Subject(
+            "g.py",
+            "import os\n\n\ndef env(name):\n    return os.environ.get(name)\n",
+        ),
         Subject(
             "h.py",
             "def lazy(name):\n    def call(*a):\n        return heavy(*a)\n\n    return call\n",
         ),
     ),
     min_matches=200,
+    allow={
+        "scripts/lib/exit_codes.py": (
+            "`_c` repeats `Code`'s defaults, and stays so each `CONTRACTS` row is one short "
+            "call (#10079 ruled to keep it)."
+        ),
+    },
     must_find=frozenset(
         {
             "k8s/roles/monitor-bridge/files/checks/b2.py",
