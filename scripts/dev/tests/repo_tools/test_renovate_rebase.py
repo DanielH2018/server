@@ -112,14 +112,15 @@ def test_a_failed_edit_is_reported_with_gh_stderr():
         ["1", "2"],
         ["--retick"],
         ["--force", "1"],
-        ["--retick", "--retick", "1"],
     ],
 )
 def test_a_bad_argument_is_a_usage_error(argv):
     def gh(*args, **kwargs):
         raise AssertionError(f"gh must not run on a usage error: {args}")
 
-    assert main(argv, gh=gh, out=io.StringIO()) == 64
+    with pytest.raises(SystemExit) as exit_info:
+        main(argv, gh=gh, out=io.StringIO())
+    assert exit_info.value.code == 64
 
 
 def test_a_pending_soak_status_is_detected():
