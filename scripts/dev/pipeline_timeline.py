@@ -288,9 +288,7 @@ def reverts(prs: list[dict]) -> dict[int, int]:
 
 
 def _epoch(iso: str | None) -> float | None:
-    return (
-        datetime.fromisoformat(iso.replace("Z", "+00:00")).timestamp() if iso else None
-    )
+    return datetime.fromisoformat(iso).timestamp() if iso else None
 
 
 def _gap(a: float | None, b: float | None) -> float | None:

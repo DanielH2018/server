@@ -55,6 +55,7 @@ from renderer.renderer_lib.cluster import RenderRefused
 from renderer.renderer_lib.host_manifest import UNIT_NAME
 from renderer.renderer_lib.host_package import Package
 from renderer.renderer_lib.host_sources import file_mode
+from renderer.renderer_lib.key_models import key_errors, keys_model
 from renderer.renderer_lib.placeholders import Sentinels
 
 # Not `secrets`: the tooling guard denies agent writes under any `secrets/` directory.
@@ -69,8 +70,12 @@ OUTPUT_ROOTS = {False: "/run/homelab-secrets", True: "/var/lib/homelab-secrets"}
 STATE_NAMES = frozenset({".digests", ".hmac-key", "pending.json", "pending.lock"})
 SOPS_SUFFIX = ".sops.yaml"
 
-REQUIRED = frozenset({"src", "path", "owner", "group", "mode", "keys"})
-OPTIONAL = frozenset({"destination", "persist", "dependents", "link", "format"})
+# One `outputs:` entry.
+OutputEntry = keys_model(
+    "OutputEntry",
+    ("destination", "persist", "dependents", "link", "format"),
+    required=("src", "path", "owner", "group", "mode", "keys"),
+)
 # The script escapes each value of a json output for a JSON string.
 FORMATS = frozenset({"dotenv", "json"})
 # The script's `NAME` and `KEY`: a placeholder name, and a credential's file name.
@@ -118,8 +123,7 @@ def add_output(
     """
     if not isinstance(entry, dict):
         raise RenderRefused(f"{directory}: output {entry!r} is not a map")
-    missing = sorted(REQUIRED - set(entry))
-    unknown = sorted(set(entry) - REQUIRED - OPTIONAL)
+    missing, unknown = key_errors(OutputEntry, entry)
     if missing or unknown:
         raise RenderRefused(
             f"{directory}: output {entry.get('path')!r} lacks {missing} or has unknown keys {unknown}"

@@ -201,6 +201,24 @@ def test_declared_keys_must_match_what_the_template_reads(
         tree.render()
 
 
+@pytest.mark.parametrize(
+    ("extra", "dropped", "message"),
+    [
+        ({"persits": True}, (), r"lacks \[\] or has unknown keys \['persits'\]"),
+        ({}, ("owner", "keys"), r"lacks \['keys', 'owner'\]"),
+    ],
+    ids=["misspelt-key", "missing-keys"],
+)
+def test_an_output_with_a_misspelt_or_missing_key_fails_naming_it(
+    tree, extra, dropped, message
+):
+    (entry,) = output(**extra)["outputs"]
+    kept = {k: v for k, v in entry.items() if k not in dropped}
+    tree.component(sources={"o.j2": "{{ alpha_token }}\n"}, outputs=[kept])
+    with pytest.raises(RenderRefused, match=message):
+        tree.render()
+
+
 def test_the_host_context_carries_inventory_hostname(tree):
     source = "{% if inventory_hostname == 'daniel-server' %}127.0.0.1{% endif %}\n"
     tree.component(

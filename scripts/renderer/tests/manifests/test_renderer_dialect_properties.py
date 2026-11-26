@@ -1,13 +1,13 @@
 """Generated templates inside ADR-0028's subset pass the census, and one construct outside fails it.
 
 Each template is a run of pieces, and each piece names its constructs in one of the positions
-`dialect.constructs` reads. The property tests take a fixed seed and no example database, so a CI
-run cannot differ from a local one.
+`dialect.constructs` reads. The property tests run under the profile
+`tests/hypothesis_profiles.py` loads.
 """
 
 from typing import NamedTuple
 
-from hypothesis import given, settings
+from hypothesis import given
 from hypothesis import strategies as st
 
 from renderer.renderer_lib.dialect import (
@@ -19,7 +19,6 @@ from renderer.renderer_lib.dialect import (
     off_the_list,
 )
 
-FIXED = settings(derandomize=True, database=None, deadline=None, max_examples=300)
 
 _KEYWORDS = frozenset(
     {"and", "or", "not", "in", "is", "if", "else", "true", "false", "none"}
@@ -156,7 +155,6 @@ off_carriers = st.builds(
 )
 
 
-@FIXED
 @given(st.lists(in_subset_pieces, min_size=1, max_size=6))
 def test_a_template_inside_the_subset_names_its_constructs_and_passes(pieces):
     source = "\n".join(piece.text for piece in pieces)
@@ -164,7 +162,6 @@ def test_a_template_inside_the_subset_names_its_constructs_and_passes(pieces):
     assert off_the_list(source) == set()
 
 
-@FIXED
 @given(
     st.lists(in_subset_pieces, max_size=5),
     st.one_of(off_by_name, off_by_variable),
@@ -179,7 +176,6 @@ def test_a_template_one_construct_outside_the_subset_is_refused_by_that_construc
     assert off_the_list("\n".join(texts)) == {construct}
 
 
-@FIXED
 @given(st.lists(in_subset_pieces, max_size=5), off_carriers, st.data())
 def test_an_off_list_filter_that_takes_a_test_by_name_is_refused_with_that_test(
     pieces, carrier, data

@@ -881,11 +881,10 @@ YAML file holds the key at the base and at the merge commit, and refuses five sh
 - **A pin set outside the role file that holds it.** Inventory, play vars, `include_role`
   vars and `set_fact` override a role default, so a pin there would move the deployed version
   while the role file stays put. The check matches the key at any indent, as YAML `key:` or
-  INI `key=`, in every YAML file under `k8s/` and `estate/`, in `hosts/vars.yml` and in each
-  `hosts/<host>/vars.yml`. It skips a comment, which starts at a `#` that opens the line
-  or follows whitespace outside a quoted value, or at a `;` that opens the line. A quoted
-  `#`, as in `note="a #b"`, is part of the value. A `-e` passed at run time is outside
-  its reach.
+  flow `{key: v}`, in every YAML file under `k8s/` and `estate/`, in `hosts/vars.yml` and in
+  each `hosts/<host>/vars.yml`. It skips a comment, which starts at a `#` that opens the line
+  or follows whitespace outside a quoted value. A quoted `#`, as in `{note: "a #b"}`, is part
+  of the value. A `-e` passed at run time is outside its reach.
 
 A PR that moves a key into another role at the same version is no bump, so none of the first
 four applies to it. A key set in two role files at one commit, or a value that is not `vX.Y.Z`,

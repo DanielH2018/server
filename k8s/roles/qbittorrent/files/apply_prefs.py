@@ -91,6 +91,8 @@ DESIRED: dict[str, bool | int | str] = {
     "preallocate_all": True,
     # Group piece requests by file extent, reducing write scatter. Modest on NVMe, free.
     "enable_piece_extent_affinity": True,
+    # A torrent under the slow_torrent_* rates frees its max_active_downloads slot; a dead swarm held one.
+    "dont_count_slow_torrents": True,
     # Not throughput: skips fake-release executables/archives and RARs, which nothing here unpacks.
     "excluded_file_names_enabled": True,
     # The WebUI API joins and splits this list on "\n" (appcontroller.cpp).
