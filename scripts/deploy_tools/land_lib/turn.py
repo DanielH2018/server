@@ -51,13 +51,14 @@ import os
 import shlex
 import subprocess
 from collections.abc import Callable, Generator, Sequence
+from typing import NoReturn
 
 from pathlib import Path as _Path
 
 from deploy_tools.land_lib import line
 from deploy_tools.land_lib.fresh import TURN_FD_ENV
 from deploy_tools.land_lib.landing import Landing
-from deploy_tools.land_lib.outcome import say
+from deploy_tools.land_lib.outcome import Verdict, say
 from deploy_tools.land_lib.serial_lock import (
     LOCK_DIR,
     TURN_DIR_ENV,
@@ -300,6 +301,15 @@ def line_of(ln: Landing) -> line.Line:
     return ln.tools.line or _line(ln.tools.hostname())
 
 
+def _conflicts(ln: Landing) -> NoReturn:
+    ln.die(
+        f"the landing that holds the turn found PR #{ln.opts.pr}'s head conflicts with "
+        "master — rebase it, push, then re-run this",
+        1,
+        Verdict.MERGE_CONFLICT,
+    )
+
+
 def _lands_alone(ln: Landing) -> None:
     say(f"a batch that tested PR #{ln.opts.pr} was not green; it lands alone")
     ln.lands_alone = True
@@ -340,6 +350,9 @@ def _wait(ln: Landing, draft: str) -> tuple[Callable[[], None] | None, int]:
                         f"the landing that holds the turn merged PR #{o.pr} with its own"
                     )
                     return None, waited
+                if answer == line.CONFLICT:
+                    release()
+                    _conflicts(ln)
                 # `split`: the batch's holder stepped out of the turn before its own run decided.
                 if answer in (line.ALONE, line.SPLIT):
                     _lands_alone(ln)
@@ -355,6 +368,8 @@ def _wait(ln: Landing, draft: str) -> tuple[Callable[[], None] | None, int]:
             if answer == line.MERGED:
                 say(f"the landing that holds the turn merged PR #{o.pr} with its own")
                 return None, waited
+            if answer == line.CONFLICT:
+                _conflicts(ln)
             if answer == line.ALONE:
                 _lands_alone(ln)
                 place.leave()

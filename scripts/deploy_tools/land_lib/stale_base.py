@@ -26,7 +26,7 @@ import subprocess
 from lib.json_types import as_list, as_object, as_object_list
 from deploy_tools.land_lib import gh_read, policy
 from deploy_tools.land_lib.landing import BRANCH, Landing
-from deploy_tools.land_lib.outcome import Outcome, say
+from deploy_tools.land_lib.outcome import Outcome, Verdict, say
 from deploy_tools.land_lib.pr_json import parse_file
 
 # GitHub's compare endpoint lists at most this many files; a list this long may omit a path.
@@ -187,6 +187,7 @@ def update_branch(ln: Landing, head: str, moved: list[str]) -> None:
         )
     except subprocess.CalledProcessError as exc:
         why = (exc.stderr or "").strip() or f"gh exited {exc.returncode}"
+        refuse_conflict(ln, why)
         rebase = f"rebase it onto origin/{BRANCH}, push, and re-run this"
         ln.die(
             f"PR #{ln.opts.pr}'s base is behind {BRANCH} and GitHub refused to update its "
@@ -201,8 +202,65 @@ def update_branch(ln: Landing, head: str, moved: list[str]) -> None:
         )
 
 
+# GitHub applies a branch update asynchronously, usually within seconds; wait this long before
+# marking the PR ready anyway.
+NEW_HEAD_WAIT_S = 60
+NEW_HEAD_POLL_S = 3
+
+
+def update_for_run(ln: Landing, head: str, draft: bool) -> bool:
+    """Update the PR's branch at `head` from master, for the run its turn is about to start.
+
+    For a draft, waits up to `NEW_HEAD_WAIT_S` for GitHub to show the new head, so the ready
+    flip after it starts the run there. Any refusal but a conflict leaves the PR the run it
+    has.
+
+    Returns:
+        Whether the branch was updated.
+
+    Raises:
+        Outcome: `merge-conflict`, when GitHub refuses the update as a conflict.
+    """
+    try:
+        moved = master_paths_since(ln, head)
+        if not moved:
+            return False
+        update_branch(ln, head, moved)
+    except Outcome as exc:
+        if exc.verdict == Verdict.MERGE_CONFLICT:
+            raise
+        say(f"{exc.error}; going on with the run the PR has")
+        return False
+    waited = 0
+    while draft and waited < NEW_HEAD_WAIT_S:
+        if (ln.view("state,mergeable,headRefOid").get("headRefOid") or head) != head:
+            break
+        ln.tools.sleep(NEW_HEAD_POLL_S)
+        waited += NEW_HEAD_POLL_S
+    return True
+
+
 def _why(exc: subprocess.CalledProcessError | subprocess.TimeoutExpired) -> str:
     return (getattr(exc, "stderr", None) or str(exc)).strip()
+
+
+# What gh prints when GitHub refuses a branch update because the head conflicts with master.
+CONFLICT_REFUSAL = "merge conflict between base and head"
+
+
+def refuse_conflict(ln: Landing, why: str) -> None:
+    """End the landing `merge-conflict` when `why`, a refused branch update, is a conflict.
+
+    GitHub's merge follows no rename, so a PR that edits a file master moved conflicts here
+    although a local `git merge` of the same two commits is clean.
+    """
+    if CONFLICT_REFUSAL in why:
+        ln.die(
+            f"PR #{ln.opts.pr} conflicts with {BRANCH}: GitHub refused to update its branch "
+            f"({why}) — rebase it, push, then re-run this",
+            1,
+            Verdict.MERGE_CONFLICT,
+        )
 
 
 def ready_again(ln: Landing) -> None:
@@ -265,6 +323,7 @@ def rejoin_line(ln: Landing, head: str, conflicting: bool) -> bool:
     except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as exc:
         say(f"could not update PR #{pr}'s branch ({_why(exc)}); marking it ready again")
         ready_again(ln)
+        refuse_conflict(ln, _why(exc))
         return False
     say(
         f"{BRANCH} changed {len(moved)} path(s) since the master PR #{pr}'s run tested; "

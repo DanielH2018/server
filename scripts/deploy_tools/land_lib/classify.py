@@ -20,7 +20,7 @@ from deploy_tools.land_lib.fresh import (
 from deploy_tools.land_lib.own_checkout import OWN_CHECKOUT
 from deploy_tools.land_lib.outcome import Outcome, Verdict, say
 from deploy_tools.land_lib.land_tags import DeriveSource
-from deploy_tools.land_lib.promotion import moves_the_bundle
+from lib.path_kinds import moves_the_bundle
 from lib.exit_codes import LAND_BAD_ARGS
 from lib.k8s_role_callers import CannotNarrow
 from renderer.renderer_lib.host_inputs import HOST_INPUTS
@@ -295,7 +295,7 @@ def shortcut_if_nothing(ln: Landing) -> None:
     """A PR reaching no tag, no plane and no host candidate has nothing to wait for.
 
     A PR whose paths may move the bundle reaches none of them and still waits on a promotion
-    (`promotion.moves_the_bundle`), whose changed set names its tags (D6.12).
+    (`lib.path_kinds.moves_the_bundle`), whose changed set names its tags (D6.12).
     """
     cl = ln.classification
     if not (
