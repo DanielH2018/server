@@ -19,8 +19,7 @@ from host_lib import logfmt
 
 # The credential the unit imports: the `homelab-games` ServiceAccount's token (ADR-0033).
 GAMES_TOKEN = "games_panel_token"
-# The field manager every scale write carries. Flux's takeover strips only kubectl's managers
-# and its own, so a count written under this name survives a reconcile.
+# Flux strips only kubectl's and its own field managers, so a count under this name survives.
 GAMES_FIELD_MANAGER = "deploy-ui-games"
 GAME_ACTIONS = ("start", "stop", "restart")
 

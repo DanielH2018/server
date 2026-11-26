@@ -80,12 +80,12 @@ PATHS = (
     ("/usr/lib/homelab", "registry-gc.sh"),
     ("/etc/systemd/system", "*.service"),
 )
-# The only files tier 2 prints. A new printing source needs a structural argument for why the
-# filter redacts it cleanly: netplan is YAML, whose every line is a key, a list item or a
-# comment, so no line reaches the output except as a key and a plain value.
+# A new printing source needs a structural argument that the filter redacts it cleanly.
+# Netplan is YAML: every line is a key, a list item or a comment, so only keys and plain values
+# print.
 CAT = (("/etc/netplan", "*.yaml"),)
-# Refused even when a list above admits the path. Matched against the path and each of its
-# ancestors, and fnmatch's `*` crosses `/`. An independent second layer.
+# Refused even when a list above admits the path: an independent second layer.
+# Matched against the path and each ancestor; fnmatch's `*` crosses `/`.
 DENY = (
     "/etc/shadow*",
     "/etc/gshadow*",
@@ -109,10 +109,9 @@ DENY = (
     "/etc/wireguard",
     "*.psk",
 )
-# Content that withholds the whole output rather than redacting it. The last four rows are the
-# shapes the tree itself renders into the hosts: a push token in an `/api/push/` path, netplan's
-# Wi-Fi `password:`, a healthchecks ping UUID, and a secret passed as the next word after its
-# flag. A `${VAR}` reference in those places names a secret without holding it, so it passes.
+# Withholds the whole output. The last four rows are shapes this tree renders: an `/api/push/`
+# token, netplan's Wi-Fi `password:`, a ping UUID, a flag's secret argument; `${VAR}` references
+# pass.
 REFUSE = re.compile(
     r"-----BEGIN [A-Z ]*PRIVATE KEY"
     r"|AGE-SECRET-KEY-"
@@ -133,8 +132,7 @@ REFUSE = re.compile(
     r"|(?:\s-u|--user)\s+[^\s:$]+:[^\s$]"
     r"|\bmysql\w*\b.*\s-p[^\s$]"
 )
-# A key whose name says it holds a credential, with a literal value after `=` or `:`. Such
-# output is withheld whole; the redaction below would hide the value anyway.
+# Credential-named key with a literal value: withheld whole (redaction would hide the value anyway).
 _KEYED = re.compile(
     r"(?<![A-Za-z0-9_.-])([\"']?)([A-Za-z_][A-Za-z0-9_.-]*)\1\s*[:=]\s*"
     r"(?=(\"[^\"\n]*\"|'[^'\n]*'|[^\s,;&}\]]*))"
@@ -150,13 +148,11 @@ OUT_MAX = 256 * 1024
 TIMEOUT_S = 30
 ENV = {"PATH": "/usr/sbin:/usr/bin:/sbin:/bin", "LC_ALL": "C"}
 
-# Every value the filter prints matches one of these, or it becomes a placeholder. They live
-# in one place so that what can reach the output is read here, not inferred from the code.
+# Every printed value matches one of these or becomes a placeholder.
 NUMBER = re.compile(r"-?\d{1,7}(?:\.\d{1,6})?")  # 8+ digits can be a PIN or an id
 DURATION = re.compile(r"\d{1,7}(?:us|ms|s|sec|m|min|h|hr|d|w)")
 BOOLEAN = re.compile(r"(?i:yes|no|true|false|on|off)")
-# An absolute path under a standard top-level directory. A bare leading `/` is not enough:
-# about one random base64 token in 64 starts with one.
+# A bare leading `/` is not enough: about one random base64 token in 64 starts with one.
 FHS_PATH = re.compile(
     r"/(?:(?:etc|usr|var|run|srv|opt|home|root|tmp|dev|proc|sys|bin|sbin|lib|lib64|mnt"
     r"|media|boot|snap)(?:/[A-Za-z0-9._@%+-]*)*)?"
@@ -222,8 +218,8 @@ SSHD_WORDS = frozenset(
     permissive deny-all unlimited publickey password keyboard-interactive hostbased
     gssapi-with-mic sha256 md5""".split()
 )
-# sshd's algorithm names are built from these segments, joined by `-`, with an optional
-# @openssh.com or @libssh.org suffix: a closed vocabulary rather than a word shape.
+# sshd algorithm names are these segments joined by `-`, with an optional @openssh.com or
+# @libssh.org suffix.
 ALG_SEGMENTS = frozenset(
     """ssh ed25519 ed448 ecdsa sha2 sha1 sha256 sha512 nistp256 nistp384 nistp521 cert v01 rsa
     sk dss chacha20 poly1305 aes128 aes192 aes256 ctr cbc gcm umac 64 96 128 etm hmac md5 256 384 512 521
@@ -371,8 +367,7 @@ def holds_credential(text: str) -> bool:
         key, value = match.group(2), match.group(3).strip("\"'")
         if not _CREDENTIAL_NAME.search(key.lower()):
             continue
-        # Under four characters is prose, such as `K3S_TOKEN=xxx` in a usage comment. A short
-        # value still never prints: the redaction replaces every credential-named value.
+        # Under four characters is prose, such as `K3S_TOKEN=xxx` in a usage comment.
         if len(value) < 4 or value[0] in "$<{%" or plain(value):
             continue
         return True
@@ -475,8 +470,8 @@ def redact_text_line(line: str) -> str:
     if len(fields) == 6 and all(CRON_FIELD.fullmatch(f) for f in fields[:5]):
         return " ".join(fields[:5]) + " " + redact_command(fields[5])
     m = _KV.fullmatch(line)
-    # A word ending in `=` with nothing after it can be base64 padding rather than a key, and
-    # YAML never writes a list item as `- key=value`, so neither prints as a key.
+    # A word ending in `=` can be base64 padding, and YAML never writes a list item as
+    # `- key=value`.
     if m and "=" in m.group(3) and ("-" in m.group(1) or not m.group(4).strip()):
         return "<line>"
     if m:
@@ -579,8 +574,8 @@ def tier1(verb: str, path: str, args: list[str]) -> int:
     if verb == "matches" and not HEX64.fullmatch(args[0]):
         raise Refused("matches takes PATH and the 64-hex SHA-256 the shim computed")
     data = read_file(path)
-    # A hash of a file that holds a credential is an offline guessing oracle for it, such as
-    # the netplan Wi-Fi password, so tier 1 refuses that file just as tier 2 would.
+    # A hash of a credential file is an offline guessing oracle, so tier 1 refuses it as tier 2
+    # would.
     if holds_credential(data.decode("utf-8", "replace")):
         raise Refused(f"{path} matches a credential pattern, so it is not hashed")
     digest = hashlib.sha256(data).hexdigest()

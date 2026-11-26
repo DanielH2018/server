@@ -8,7 +8,5 @@ Type=oneshot
 SyslogLevel=notice
 User={{ sys_user }}
 ExecStart=/usr/lib/homelab/pi-sd-health
-# /var/log/pi-health holds health.log, and /var/lib/pi-health the integrity verdict this
-# heartbeat reads. systemd creates both, owned by User=.
 LogsDirectory=pi-health
 StateDirectory=pi-health

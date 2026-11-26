@@ -124,19 +124,14 @@ ROOT=${HOMELAB_ROOT:-}
 KEYRING=/usr/share/keyrings/homelab-archive-keyring.gpg
 SOURCES=/etc/apt/sources.list.d/homelab.sources
 K3S_BIN=/usr/local/bin/k3s
-# Six minutes of waits between the first and last attempt: GitHub's release host has answered
-# 504 for about five minutes, and a wrong pin costs the same wait to fail.
 RETRY_ATTEMPTS=13
 RETRY_DELAY=30
-# Covers the whole transfer: uv, the largest archive at 17 MB, needs 140 KB/s to finish in time.
-# curl's own --retry repeats a timed-out request, so a host that stalls every request takes
-# about 110 minutes to reach die.
+# Bounds the whole transfer; --retry repeats a timed-out request, so a stall takes ~110 min to die.
 FETCH_MAX_TIME=120
 # install.sh's own curl has no limit. The k3s binary is 82 MB, which needs 140 KB/s to finish in time.
 K3S_INSTALLER_MAX_TIME=600
 SYSTEMD_DIR=/etc/systemd/system
-# The update reads the homelab source alone, and List-Cleanup=0 keeps the other sources' lists,
-# as the updater's own fetch does.
+# List-Cleanup=0 keeps the other sources' lists; the update reads the homelab source alone.
 HOMELAB_APT="-o Dir::Etc::sourcelist=sources.list.d/homelab.sources -o Dir::Etc::sourceparts=- -o APT::Get::List-Cleanup=0"
 
 DEBIAN_FRONTEND=noninteractive
@@ -154,8 +149,6 @@ die() {
     exit 1
 }
 
-# phase <what>: print to stderr the seconds since the previous phase ended, or since the local
-# build started. bootstrap_case.py prints these lines under each case's verdict.
 phase() {
     phase_end=$(date +%s)
     echo "bootstrap-host: $1 took $((phase_end - phase_start))s" >&2
@@ -244,8 +237,6 @@ if [ -n "$tools_seed" ]; then
     [ -d "$tools_seed" ] || die "--tools-seed: $tools_seed is not a directory"
 fi
 
-# The Ubuntu installer leaves the root LV at about half the disk. This warns and changes nothing;
-# a host without vgs, such as the Pi, prints nothing.
 vgs --noheadings --nosuffix --units g -o vg_name,vg_free 2> /dev/null |
     awk 'NF == 2 && $2 + 0 > 10 {
         print "bootstrap-host: warning: volume group " $1 " has " $2 "G unallocated, so" \
@@ -268,8 +259,7 @@ keyring=$(dirname "$0")/homelab-archive-keyring.gpg
 [ -r "$keyring" ] || die "cannot read $keyring"
 gnupg_home=$(mktemp -d)
 CLEAN="$gnupg_home"
-# A primary key's fingerprint is the first fpr record after its pub record. A keyring gpg
-# cannot read yields no fingerprint, which the comparison below refuses.
+# A keyring gpg cannot read yields no fingerprint, which the comparison below refuses.
 fingerprints=$(gpg --homedir "$gnupg_home" --batch --with-colons --show-keys "$keyring" |
     awk -F: '$1 == "pub" { want = 1; next }
              $1 == "fpr" && want { print toupper($10); want = 0 }
@@ -293,8 +283,6 @@ EOF
 fi
 stop_after 2
 
-# update_all_sources: update every apt source. Offline, a source on a GitHub host is left out, and
-# the next online updater run reads it again.
 update_all_sources() {
     update_dir=/etc/apt/sources.list.d
     if [ -n "$kit" ]; then
@@ -311,11 +299,9 @@ update_all_sources() {
     apt-get update -o "Dir::Etc::sourceparts=$update_dir"
 }
 
-# Step 3: install age if missing, then create the age key if missing and print its public half.
-# A stock image carries no age and no package lists, and homelab-<hostname>'s Depends on age comes
-# too late at step 5. The key is written to a temporary name under umask 077 and renamed, so a
-# failed age-keygen leaves no partial key that the next run would take for a real one. The private
-# half is never printed.
+# age is installed first because homelab-<hostname>'s Depends on it comes too late at step 5.
+# The key is written under a temporary name and renamed, so a failed age-keygen leaves no partial
+# key.
 if ! command -v age-keygen > /dev/null; then
     apt-get install -y --no-install-recommends age ||
         { update_all_sources && apt-get install -y --no-install-recommends age; } ||
@@ -364,7 +350,6 @@ sha_of() {
     sha256sum "$1" | awk '{ print $1 }'
 }
 
-# retry <what> <command...>: run the command up to RETRY_ATTEMPTS times, RETRY_DELAY seconds apart.
 # A release outage outlasts curl's own --retry, whose backoff totals 7 seconds.
 retry() {
     what=$1
@@ -392,9 +377,7 @@ fetch() {
     [ "$(sha_of "$3")" = "$2" ] || die "$name does not match its pinned sha256 $2"
 }
 
-# place_k3s <dir> <label>: install <dir>/$k3s_file once it matches <dir>'s copy of the release's
-# checksum list. install.sh fetches the binary from GitHub unless one is placed first.
-# <label> names <dir> in each refusal.
+# install.sh fetches the binary from GitHub unless one is placed first.
 place_k3s() {
     k3s_sums=sha256sum-$arch.txt
     [ -f "$1/$k3s_file" ] || die "$2 has no $k3s_file"
@@ -405,15 +388,13 @@ place_k3s() {
     install -D -m 0755 "$1/$k3s_file" "$ROOT$K3S_BIN"
 }
 
-# Builds the repo venv with the flags every later `uv run` uses. uv can download the interpreter
-# from the release host fetch reads, so this runs under retry on an online build.
+# Runs under retry on an online build: uv can download the interpreter from the release host.
 build_repo_venv() {
     # shellcheck disable=SC2086
     (cd "$work/tree" && $uv_run python --version)
 }
 
-# The installer's mode is explicit, and K3S_URL and K3S_TOKEN reach it on an agent only.
-# Neither the token nor the environment is printed.
+# K3S_URL and K3S_TOKEN reach the installer on an agent only; neither is printed.
 run_k3s_installer() {
     if [ "$k3s_mode" = server ]; then
         env -u K3S_URL -u K3S_TOKEN \
@@ -429,9 +410,8 @@ run_k3s_installer() {
     fi
 }
 
-# mask_unit <unit>: disable, mask and stop a unit, each behind a read of its state.
-# A mask leaves the unit's Alias= and WantedBy= links in place, so the disable comes first. The mask
-# comes before the stop, so an activating socket cannot start the unit again.
+# Disable first, because a mask leaves the unit's Alias= and WantedBy= links in place.
+# Mask before stop, so an activating socket cannot start the unit again.
 mask_unit() {
     if [ "$(systemctl is-enabled "$1" 2> /dev/null)" = enabled ]; then
         systemctl disable "$1" || die "cannot disable $1"
@@ -447,8 +427,8 @@ mask_unit() {
 
 # Step 4: the one-time host steps, each behind a guard that reads the state first.
 if [ "$host" = daniel-pi ]; then
-    # Heavy apt OOM-kills dpkg on the 512 MB board without disk-backed swap, so this precedes the
-    # purge below and step 5's install. The file gets its final name only once it is formatted.
+    # Heavy apt OOM-kills dpkg on the 512 MB board without disk-backed swap; this precedes the
+    # purge.
     if [ ! -e "$ROOT$PI_SWAPFILE" ]; then
         rm -f "$ROOT$PI_SWAPFILE.tmp"
         fallocate -l "$PI_SWAPFILE_SIZE" "$ROOT$PI_SWAPFILE.tmp" ||
@@ -466,8 +446,7 @@ if [ "$host" = daniel-pi ]; then
         swapon "$ROOT$PI_SWAPFILE" || die "cannot activate $PI_SWAPFILE"
     fi
     purge=""
-    # appstream's apt hook thrashes the 512 MB board for an hour on every apt-get update
-    # (docs/pi-host-tuning-record.md).
+    # appstream's apt hook thrashes the 512 MB board for an hour on every apt-get update.
     for package in openvswitch-switch-dpdk openvswitch-switch openvswitch-common snapd fwupd appstream; do
         if dpkg-query -W -f='${Status}' "$package" 2> /dev/null | grep -q 'install ok installed'; then
             purge="$purge $package"
@@ -493,8 +472,7 @@ if [ "$host" = daniel-pi ]; then
 fi
 
 if [ "$host" = daniel-server ]; then
-    # The Ubuntu Server installer seeded these on this one machine. lxd goes before the bases it
-    # uses, and snapd itself stays.
+    # lxd goes before the bases it uses; snapd itself stays.
     for snap in lxd core20 core22; do
         if snap list "$snap" > /dev/null 2>&1; then
             snap remove "$snap" || die "cannot remove the $snap snap"
@@ -541,8 +519,8 @@ if [ -n "$k3s_mode" ]; then
             place_k3s "$tools_seed" "the tools seed"
             skip_download=true
         fi
-        # install.sh's binary download makes one request, and a failed one writes nothing to the
-        # host. Every write after it replaces its target, so a rerun is safe at any point.
+        # A failed download writes nothing and every later write replaces its target, so a rerun is
+        # safe.
         retry "the k3s installer" run_k3s_installer || die "the k3s installer failed"
     fi
     # Exactly one k3s unit exists, the one this host's role names.
@@ -551,12 +529,8 @@ if [ -n "$k3s_mode" ]; then
 fi
 stop_after 4
 
-# create_declared_users <deb>: create the users the .deb declares in sysusers.d, and die unless
-# each holds its declared uid and gid. A Depends that creates a system user takes the next free
-# uid down from 999. The host packages declare uids in 900-949 below that, and this runs before
-# any install so a Depends cannot take one first. sysusers gives a user whose declared uid is
-# already held another uid and exits 0, so the ids are compared here, while step 5 can still be
-# rerun.
+# A Depends that creates a system user takes the next free uid down from 999.
+# sysusers gives a user whose uid is held another uid and exits 0, so the ids are compared here.
 create_declared_users() {
     users_dir=$(mktemp -d)
     CLEAN="$CLEAN $users_dir"
@@ -575,8 +549,6 @@ create_declared_users() {
     done < "$users_conf"
 }
 
-# Step 5: create the users homelab-<hostname> declares, install the three packages, then create
-# each directory a package declares in tmpfiles.d.
 # $HOMELAB_APT is unquoted so that each option is its own argument.
 if [ -z "$clone" ]; then
     # shellcheck disable=SC2086
@@ -636,10 +608,8 @@ else
         echo "bootstrap-host: --offline: the clone at $sha is unchecked; the operator who chose it is its trust root"
         phase "the copy of the kit's caches"
     else
-        # build_repo_venv builds the repo venv, and PyYAML ships no wheel for every
-        # interpreter host_python_version can name. pyproject.toml forces its libyaml
-        # extension, so that build needs a compiler and libyaml's headers; the host package
-        # that depends on libyaml-dev is not installed yet. A kit's uv-cache holds the build.
+        # PyYAML ships no wheel for every host_python_version; its libyaml build needs gcc and
+        # libyaml-dev, which the host package has not installed yet.
         build_deps="gcc libc6-dev libyaml-dev"
         # shellcheck disable=SC2086
         installed=$(dpkg-query -W -f='${Status}\n' $build_deps 2>/dev/null |
@@ -680,8 +650,6 @@ else
     done
     phase "the three nfpm builds"
 
-    # The whole sources.list.d is read, so apt resolves the packages' Depends against Ubuntu's
-    # archive.
     update_all_sources || die "apt-get update failed; the .deb Depends need Ubuntu's archive"
     phase "the apt-get update"
     # One install, so apt resolves the three packages' Depends among themselves.
@@ -700,15 +668,13 @@ if [ -n "$k3s_unit" ]; then
 fi
 stop_after 5
 
-# Step 6: the hosts whose package ships /etc/resolv.conf: the Pi and daniel-box. The package ships
-# the Pi's engine unit as a manual one, so nothing else starts it.
 if [ "$host" = daniel-pi ] || [ "$host" = daniel-box ]; then
-    # Never before step 5: its apt-get reaches Ubuntu's archive by name, through the stub resolver
-    # that /etc/resolv.conf links to until the package replaces the link with a regular file.
+    # Never before step 5: apt-get reaches Ubuntu's archive through the stub resolver that
+    # resolv.conf links to.
     [ ! -L "$ROOT/etc/resolv.conf" ] ||
         die "/etc/resolv.conf is still a symlink after the install, so stopping systemd-resolved would leave this host without DNS"
-    # daniel-box's file names 127.0.0.1 and nothing else, so the forwarder must answer before
-    # resolved goes. A public name: this proves the forwarder, not Pi-hole, which may be down.
+    # daniel-box's file names only 127.0.0.1, so the forwarder must answer before resolved stops.
+    # A public name proves the forwarder, not Pi-hole.
     if [ "$host" = daniel-box ]; then
         answered=no
         for _ in 1 2 3 4 5 6 7 8; do
@@ -739,20 +705,16 @@ if [ "$host" = daniel-pi ]; then
 fi
 stop_after 6
 
-# Step 7: the integrity-scans component's one-time state. It runs last, so the baselines record
-# every package the earlier steps installed. Each baseline is guarded by the file it creates:
-# rerunning one would bless whatever changed since, and a live host whose database goes missing
-# must stay red until the operator looks.
+# Runs last so baselines record every package installed earlier.
+# Each baseline is guarded by the file it creates, since a rerun would bless whatever changed since.
 UNIT_DIR=/usr/lib/systemd/system
 # A <name>.pending file here records a first baseline this script started and has not finished.
 PENDING_DIR=/var/lib/homelab/bootstrap
 
-# first_baseline <name> <database> <log>...: refuse to write <database> when one of the logs
-# exists, because a host that logged an init or a scan had a baseline, and its loss is a finding.
-# The init writes its log while it runs, so an interrupted or failed first init also leaves one.
-# The <name>.pending marker tells that case apart: this script writes it before the init and
-# removes it after the init succeeds, so a marker means the log is our own unfinished first init,
-# and the rerun resumes it. On a pass, the function writes the marker.
+# Refuses when a log exists: a host that logged an init or scan had a baseline, so its loss is a
+# finding.
+# The <name>.pending marker, written before the init and removed after, marks our own unfinished
+# init.
 first_baseline() {
     marker=$ROOT$PENDING_DIR/$1.pending
     database=$2
@@ -780,9 +742,8 @@ if [ -e "$ROOT$UNIT_DIR/homelab-rkhunter-check.timer" ] &&
     echo "bootstrap-host: wrote the first rkhunter baseline"
 fi
 if [ -e "$ROOT$UNIT_DIR/homelab-aide-check.timer" ]; then
-    # The aide package's own timer runs a second, nightly full scan. It is masked before the
-    # hour-long aideinit, so a failed init still leaves it masked. A mask survives a package
-    # upgrade, which a disable does not.
+    # Masked before the hour-long aideinit so a failed init leaves it masked; a mask survives
+    # upgrades.
     if [ "$(systemctl is-enabled dailyaidecheck.timer 2> /dev/null)" != masked ]; then
         systemctl mask --now dailyaidecheck.timer || die "cannot mask dailyaidecheck.timer"
         echo "bootstrap-host: masked dailyaidecheck.timer"

@@ -20,26 +20,22 @@
 # override the installer's `dhcp4: true` and the DNS file's overrides still merge on top.
 network:
   version: 2
-  # A loop over at most one link, so the empty default renders `ethernets:` with no links rather than a
-  # bare `:` (static-address.yml skips the task then anyway).
+  # Loop over at most one link, so the empty default renders no links rather than a bare `:`.
   ethernets:
 {% for link in [k3s_node_static_link] | select %}
     {{ link }}:
       dhcp4: false
-      # The IPv6 default route arrives by router advertisement, and networkd gives it the
-      # `[DHCP] RouteMetric`, or 1024 with none. netplan 1.1.2 has no `ra-overrides` metric key
-      # and emits `[DHCP]` only with a DHCP client on, so `dhcp4: false` alone leaves the RA route
-      # at 1024, behind wifi's 600, and IPv6 egress takes wlo1. `dhcp6: true` adds no
-      # client in practice: the gateway's RA sets the M flag, so networkd already runs DHCPv6.
+      # netplan 1.1.2 has no `ra-overrides` metric key, so the RA route gets 1024 (behind wifi's
+      # 600)
+      # and IPv6 egress takes wlo1; `dhcp6: true` sets its metric and adds no client (the RA's M
+      # flag).
       dhcp6: true
       dhcp6-overrides:
         route-metric: 100
-      # Configure the address even with no link: a gateway that is also the switch loses power
-      # and takes the link with it, and k3s on this node needs the address to bind whether or not
-      # anything can reach it.
-      # This also keeps the default route below installed with no carrier, so static-address.yml
-      # sets ignore_routes_with_linkdown on the link, for IPv4 and IPv6, to let a fallback route
-      # win.
+      # Configure the address even with no carrier: k3s needs it to bind when the gateway switch
+      # loses power.
+      # That keeps the default route with no carrier, so static-address.yml sets
+      # ignore_routes_with_linkdown.
       ignore-carrier: true
       addresses:
         - "{{ server_ip }}/{{ lan_subnet.split('/')[1] }}"

@@ -23,11 +23,8 @@ SyslogLevel=notice
 SyslogIdentifier=homelab-checkout-sync
 # Well under the 10-minute timer interval, so a slow walk cannot hold the tree from the next run.
 TimeoutStartSec=150
-# -n: a run that finds the tree lock held skips with 75 rather than waiting, and the next run
-# 10 minutes later tries again.
-# Deliberately WITHOUT --no-python-downloads, like gitops-deploy.service: a missing interpreter
-# must not stop the sync, because every landing tool refuses to work from a stale checkout.
-# hosts/tests/test_host_python_invocations.py pins the exemption.
+# Deliberately without --no-python-downloads: a missing interpreter must not stop the sync, because
+# every landing tool refuses a stale checkout.
 ExecStart=/usr/bin/flock -n -E 75 {{ server_git_tree_lock }} /usr/bin/uv run --no-project --python {{ host_python_version }} /usr/lib/homelab/checkout-sync/checkout_sync.py
 SuccessExitStatus=75
 ExecStopPost=/bin/sh -c 'test "$EXIT_STATUS" = 75 && echo "homelab-checkout-sync: skipped, {{ server_git_tree_lock }} was held" || true'

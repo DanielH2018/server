@@ -42,17 +42,14 @@ source /usr/lib/homelab/homelab-check-lib.sh || {
 DEADLINE_S={{ k3s_daily_check_deadline_s }}
 TEXTFILE_DIR=${TEXTFILE_DIR:-/var/lib/node-exporter-textfile}
 
-# Off-premises dead-man's switch — see longhorn-backup-health.sh.j2 for the full rationale.
-# Prometheus runs on the cluster this backs up, so an outage silences both the textfile and the
-# rules; hc-ping.com alerts on the silence instead. A credential, not inlined: this script is 0755.
+# Off-site dead-man's switch; the key is a credential, not inlined, because this script is 0755.
 push_healthchecks() {
   local status="$1"
   HC_PING_KEY=""
   if [[ -r "${CREDENTIALS_DIRECTORY:-/nonexistent}/healthchecks_ping_key" ]]; then
     HC_PING_KEY="$(<"$CREDENTIALS_DIRECTORY/healthchecks_ping_key")"
   fi
-  # Positive `-n` guard rather than an early `-z` return: test_healthchecks_pings.py matches this
-  # shape specifically, so that an unconfigured host provably cannot curl a malformed URL.
+  # Positive `-n` guard, not an early `-z` return: test_healthchecks_pings.py matches this shape.
   if [[ -n "$HC_PING_KEY" ]]; then
     # Bare slug, never ?create=1 — a typo would silently create an unwatched, permanently-green check.
     local url="https://hc-ping.com/${HC_PING_KEY}/etcd-snapshot-offbox"
@@ -71,32 +68,16 @@ push_healthchecks() {
 report() {
   local status="$1" msg="$2" success=0
   logger -t etcd-snapshot-offbox "status=${status} ${msg}"
-  # Every path out of this script reports through here, so the textfile carries each verdict. It
-  # is written before the ping, which must not delay it. A failed write logs and the ping goes on.
+  # Every exit path reports here; the textfile is written before the ping, which must not delay it.
   [[ "$status" == "up" ]] && success=1
   write_check_textfile etcd-snapshot-offbox "$success" "$(date +%s)" "$DEADLINE_S" \
     || logger -t etcd-snapshot-offbox "textfile write to ${TEXTFILE_DIR} failed (status=${status})"
   push_healthchecks "$status"
 }
 
-# Has the cluster token drifted from the copy that can actually decrypt the off-box snapshots?
-#
-# The token is what decrypts the /bootstrap blob in every snapshot (see the header). It is held out
-# of band, in the password manager, and docs/k3s-etcd-restore.md correctly says nothing can check
-# THAT COPY STILL EXISTS. But that exemption is narrower than it reads: whether the LIVE token still
-# matches what was copied is a sha256 comparison. `k3s token rotate --new-token` exists on the
-# installed binary, so one deliberate command leaves the cluster Ready, every monitor green, and
-# every snapshot from that moment on undecryptable with the copy anyone holds. The weekly restore
-# drill cannot see it either — it reads the LIVE token off this disk, so it passes identically
-# before and after a rotation.
-#
-# The stamp is written BY THE OPERATOR, at the moment the out-of-band copy is taken, and by nothing
-# else. The package must never create it: an absent -> create step would cure the condition before this
-# check could report it, making the check a tautology on any host that lost the stamp. That is the
-# same self-re-baselining hole that rules out recording the hash in host_vars.
-#
-# What it proves is narrow, and saying so here is deliberate: "unchanged since stamped", NOT "the
-# off-box copy is valid". A green check is not a reason to skip re-copying the token.
+# Only the operator writes the stamp, when the off-box copy is taken; a package-made one hides
+# drift.
+# Proves 'unchanged since stamped', NOT that the off-box copy is valid.
 TOKEN_FILE=/var/lib/rancher/k3s/server/token
 TOKEN_STAMP=/var/lib/homelab/etcd-token.sha256
 DRIFT_MSG=""
@@ -113,8 +94,8 @@ else
   if [[ -z "$LIVE_HASH" || -z "$STAMPED_HASH" ]]; then
     DRIFT_MSG="cluster-token hash unreadable on one side — drift UNVERIFIED"
   elif [[ "$LIVE_HASH" != "$STAMPED_HASH" ]]; then
-    # Only the first 8 hex chars, and only of a HASH — enough to tell two states apart in a
-    # message, never enough to reconstruct the token.
+    # Only 8 hex chars of a hash: enough to tell states apart, never enough to reconstruct the
+    # token.
     DRIFT_MSG="CLUSTER TOKEN ROTATED since the off-box copy was taken (live ${LIVE_HASH:0:8}… vs stamped ${STAMPED_HASH:0:8}…) — every off-box snapshot is undecryptable with the held copy until you re-copy it and re-stamp"
   fi
 fi

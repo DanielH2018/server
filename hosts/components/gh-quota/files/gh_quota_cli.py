@@ -12,8 +12,7 @@ import sys
 from collections.abc import Sequence
 from datetime import UTC, datetime
 
-# The package ships gh_quota.py to /usr/lib/homelab. Appended, so a checkout's copy found
-# earlier on the path wins in a test run.
+# Appended, so a checkout's copy found earlier on the path wins in a test run.
 sys.path.append("/usr/lib/homelab")
 from gh_quota import (
     ATTENTION_SHARE,

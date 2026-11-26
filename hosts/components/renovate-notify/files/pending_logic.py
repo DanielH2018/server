@@ -272,14 +272,8 @@ def render_pending(items: list[tuple[str, str, int]], limit: int = 1500) -> str:
     return "\n".join(out)
 
 
-# --- Dwell-state loss -------------------------------------------------------------------
-#
-# `stale_pending` treats an item with no first-seen entry as first seen NOW, so a lost or
-# unparseable `pending_seen.json` is indistinguishable from the intended first-run bootstrap:
-# every clock restarts at zero and the check can find nothing for soak + grace — 14 days for a
-# version bump, 10 for a digest one, with the run reporting healthy throughout.
-#
-# A check that cannot fire is reporting nothing, not reporting healthy — so the run says so.
+# A lost or unparseable pending_seen.json looks like first-run bootstrap: every clock restarts at
+# zero and the check finds nothing; the run reports that instead of healthy.
 PENDING_RESET_MSG = (
     "Renovate — the pending-item dwell state was lost, so every stuck-pending "
     "clock restarted at zero. The stuck-pending check can find nothing until %s for a "

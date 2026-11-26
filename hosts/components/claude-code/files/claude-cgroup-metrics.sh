@@ -24,8 +24,7 @@ for arg in "$@"; do
   esac
 done
 
-# Overridable so the paired test below can point this at a fixture tree instead of the real
-# cgroupfs; unset in production, where both default to the real paths.
+# Overridable so the paired test can point these at a fixture tree; defaults are the real paths.
 TEXTFILE_DIR=${TEXTFILE_DIR:-/var/lib/node-exporter-textfile}
 CGROOT=${CGROOT:-/sys/fs/cgroup}
 PROCROOT=${PROCROOT:-/proc}
@@ -36,19 +35,15 @@ OUT="$TEXTFILE_DIR/claude_cgroup.prom"
 
 # label -> cgroup path relative to CGROOT
 declare -A CGROUPS=(
-  # The fleet's shared parent. user.slice carries the ONE MemoryHigh/MemorySwapMax
-  # for the whole Claude fleet, so this is the cgroup whose memory.events{event="high"}
-  # counts the fleet hitting its bound; its counters include both planes below.
+  # user.slice carries the ONE MemoryHigh/MemorySwapMax for the fleet; its memory.events counters
+  # include both planes.
   [fleet]=user.slice
   [user-1000-slice]=user.slice/user-1000.slice
 )
 
-# claude-rc.service sits under user.slice, the fleet's shared parent, from the start after its
-# Slice= line landed, and under system.slice until then, so resolve the path instead of
-# hardcoding either one, or this label goes silently absent, leaving a green scrape with one
-# plane missing.
-# homelab-claude-rc.service is the same host under its packaged name; the label stays
-# claude-rc so the dashboards read one series across hosts.
+# Resolve the path rather than hardcode it: claude-rc.service sits under user.slice or system.slice,
+# and a wrong guess leaves a green scrape with one plane missing. The label stays claude-rc on every
+# host.
 for candidate in user.slice/claude-rc.service system.slice/claude-rc.service \
   user.slice/homelab-claude-rc.service system.slice/homelab-claude-rc.service; do
   if [ -d "$CGROOT/$candidate" ]; then
@@ -75,8 +70,7 @@ trap 'rm -f "$TMP"' EXIT
     [ -r "$f" ] && printf 'claude_cgroup_memory_swap_current_bytes{cgroup="%s"} %s\n' "$label" "$(cat "$f")"
   done
 
-  # high/max/oom/oom_kill are cumulative counters: `high` counts every time MemoryHigh throttled
-  # the cgroup.
+  # high/max/oom/oom_kill are cumulative counters; `high` counts every MemoryHigh throttle.
   printf '# HELP claude_cgroup_memory_events_total memory.events counters (low/high/max/oom/oom_kill) for the cgroup.\n'
   printf '# TYPE claude_cgroup_memory_events_total counter\n'
   for label in "${!CGROUPS[@]}"; do
@@ -88,8 +82,8 @@ trap 'rm -f "$TMP"' EXIT
     done < "$f"
   done
 
-  # memory.events counts descendants too, so the fleet's `high` includes each fan-out batch's
-  # own MemoryHigh. memory.events.local counts only the cgroup's own limit firing.
+  # memory.events counts descendants too, so the fleet's `high` includes each fan-out batch's own
+  # MemoryHigh.
   printf '# HELP claude_cgroup_memory_events_local_total memory.events.local counters: events from the cgroup'"'"'s own limits, not its descendants'"'"'.\n'
   printf '# TYPE claude_cgroup_memory_events_local_total counter\n'
   for label in "${!CGROUPS[@]}"; do
@@ -101,9 +95,8 @@ trap 'rm -f "$TMP"' EXIT
     done < "$f"
   done
 
-  # PSI: cumulative stalled-time counters (the `total=` field), not the kernel's own
-  # avg10/60/300 — a counter survives a `rate()` the way the kernel's own decaying averages do
-  # not, and matches how node_pressure_* already exposes PSI host-wide.
+  # Cumulative stalled-time counters (`total=`), not avg10/60/300: a counter survives rate(), as
+  # node_pressure_* does.
   printf '# HELP claude_cgroup_memory_pressure_stalled_usec_total PSI memory.pressure cumulative stalled microseconds for the cgroup.\n'
   printf '# TYPE claude_cgroup_memory_pressure_stalled_usec_total counter\n'
   for label in "${!CGROUPS[@]}"; do
@@ -132,11 +125,9 @@ trap 'rm -f "$TMP"' EXIT
     [ -r "$f" ] && printf 'claude_cgroup_pids_current{cgroup="%s"} %s\n' "$label" "$(cat "$f")"
   done
 
-  # The fleet against the homelab plane, the measurement the fleet cap is derived from.
-  # MemAvailable is close to MemTotal minus the anon and kernel memory of these three slices,
-  # because their page cache is reclaimable and counts as available. cAdvisor reports
-  # kubepods.slice but never system.slice, where k3s itself runs. A separate family keeps the
-  # homelab slices out of the ClaudeCgroup* alerts, which select claude_cgroup_* by name alone.
+  # cAdvisor reports kubepods.slice but never system.slice, where k3s runs.
+  # A separate family keeps the homelab slices out of the ClaudeCgroup* alerts, which select by
+  # name.
   printf '# HELP claude_host_plane_memory_bytes Memory of each top-level plane: anon, file and kernel from memory.stat, swap from memory.swap.current.\n'
   printf '# TYPE claude_host_plane_memory_bytes gauge\n'
   for plane in user kubepods system; do
@@ -150,12 +141,9 @@ trap 'rm -f "$TMP"' EXIT
       printf 'claude_host_plane_memory_bytes{plane="%s",kind="swap"} %s\n' "$plane" "$(cat "$d/memory.swap.current")"
   done
 
-  # One series set per live fan-out batch unit (fanout-<batch>.service), wherever a user
-  # manager put it, so each batch's use can be set against placement.py's RESERVATION_BYTES.
-  # memory.current and systemd's "memory peak" both count page cache, so anon and file are split
-  # here, because anon is what the reservation has to cover. A unit's cgroup goes when it stops,
-  # so its last sample is the one before; systemd's "Consumed" journal line keeps the total.
-  # The batch label adds about 50 short-lived series a day per family.
+  # memory.current counts page cache, so anon and file are split; anon is what the reservation
+  # covers.
+  # A stopped unit's cgroup goes away, so its last sample is the one before.
   batch_dirs=("$CGROOT"/user.slice/user-*.slice/user@*.service/*/fanout-*.service)
   batch_label() { local unit=${1##*/}; unit=${unit#fanout-}; printf '%s' "${unit%.service}"; }
 
@@ -164,8 +152,8 @@ trap 'rm -f "$TMP"' EXIT
   for d in "${batch_dirs[@]}"; do
     [ -d "$d" ] || continue
     b=$(batch_label "$d")
-    # The shell opens the file, so a unit stopping mid-scan fails the redirect quietly
-    # instead of making awk fatal (the trap the uid block below describes).
+    # The shell opens the file, so a unit stopping mid-scan fails the redirect quietly instead of
+    # making awk fatal.
     awk -v b="$b" '
       $1 == "anon" || $1 == "file" {
         printf "claude_fanout_batch_memory_bytes{batch=\"%s\",kind=\"%s\"} %s\n", b, $1, $2
@@ -190,15 +178,8 @@ trap 'rm -f "$TMP"' EXIT
     [ -n "$pids" ] && printf 'claude_fanout_batch_pids_current{batch="%s"} %s\n' "$(batch_label "$d")" "$pids"
   done
 
-  # Slice 6 of docs/claude-agent-user.md: a uid listed in CLAUDE_WATCH_UIDS (the unit sets it
-  # from claude_code_watch_uids) must run no Claude Code. Each one gets an explicit series, 0
-  # included, so a quiet uid reads as checked rather than as absent. The real uid and the exact
-  # process name come from /proc/<pid>/status.
-  #
-  # cat reads the files, not awk: a process that exits between the glob and the read leaves a
-  # path that cannot be opened, and gawk treats that as fatal, so the whole count came back
-  # empty and the series read a false 0 on some runs. cat skips the file and goes
-  # on. Name: is the first line of every status file, so it resets the record without FNR.
+  # cat reads the files, not awk: a path that vanishes between glob and read is fatal to gawk, which
+  # made the count empty and the series a false 0. Name: is the first line, so it resets the record.
   if [[ -n "${CLAUDE_WATCH_UIDS:-}" ]]; then
     printf '# HELP claude_uid_processes Processes named claude whose real uid is this watched uid.\n'
     printf '# TYPE claude_uid_processes gauge\n'
@@ -214,6 +195,5 @@ trap 'rm -f "$TMP"' EXIT
   fi
 } > "$TMP"
 
-# 0644: node-exporter's container reads this as its own (non-root) user — mktemp creates 0600
-# and the collector would otherwise get "permission denied" (node_textfile_scrape_error 1).
+# 0644: node-exporter's container reads this as a non-root user, and mktemp creates 0600.
 chmod 0644 "$TMP" && mv "$TMP" "$OUT"

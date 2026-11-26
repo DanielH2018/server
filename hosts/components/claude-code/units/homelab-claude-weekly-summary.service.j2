@@ -11,9 +11,8 @@ Type=oneshot
 LoadCredential=discord_webhook:/run/credstore/discord_alert_webhook
 Environment=PYTHONDONTWRITEBYTECODE=1
 TimeoutStartSec=10min
-# Root has no pinned interpreter of its own, so the unit keeps one in its state directory, as the
-# builder does. ExecStartPre= installs it, which downloads, and does nothing once it is present.
-# Only ExecStart= sets UV_PYTHON_DOWNLOADS=never.
+# Root has no pinned interpreter, so the unit keeps one in its state directory, as the builder does.
+# ExecStartPre= installs it; only ExecStart= sets UV_PYTHON_DOWNLOADS=never.
 StateDirectory=homelab-claude-weekly-summary
 StateDirectoryMode=0700
 Environment=UV_CACHE_DIR=/var/lib/homelab-claude-weekly-summary/uv-cache

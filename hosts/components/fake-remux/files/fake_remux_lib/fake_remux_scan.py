@@ -36,8 +36,6 @@ import urllib.request
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from fake_remux_lib import fake_remux_logic as frl
 
-# host_lib's `log` writes no timestamp: each cron pipes its output to `logger`, and journald
-# stamps every line it receives.
 from host_lib import (
     atomic_write,
     discord_post,
@@ -48,8 +46,7 @@ from host_lib import (
 
 CONFIG_PATH = os.environ.get("FAKE_REMUX_CONFIG", "/etc/autofix-fake-remux/config.env")
 USER_AGENT = "autofix-fake-remux"
-# Where a post the host could not deliver waits for the next run of any of the three crons.
-# They hold fake_remux_lock while they run, so they never flush it at the same time.
+# They hold fake_remux_lock, so they never flush the spool at the same time.
 DISCORD_SPOOL_DIR = "/var/lib/autofix-fake-remux/discord-spool"
 DISCORD_MARKER = (
     "📼 fake-remux:"  # self-identifying prefix on posts (the UA is header-only)
@@ -281,8 +278,7 @@ def scan(cfg, sonarr_cls=Sonarr, post=discord_post):
     fakes = frl.select_fakes(
         probed, window_s, gop_max_s, frl.DEFAULT_RE_ENCODER_MARKERS
     )
-    # A fake whose file no longer maps to a monitored episode (e.g. unmonitored since) can't be
-    # handed to the reconciler, which correlates everything by episodeId — drop it.
+    # Drop a fake with no monitored episode: the reconciler correlates everything by episodeId.
     fakes = [
         {**f, "episodeId": file_to_episode[f["fileId"]]}
         for f in fakes

@@ -42,8 +42,7 @@ services:
     image: willfarrell/autoheal:latest@sha256:02bcb7b529d0e51424b2e9b67b43f639af454258924ab3a3b97f1cc7e6da367f
     tty: true
     container_name: autoheal
-    # Read-only rootfs: `docker diff` shows zero writes (busybox sh polling the lifecycle
-    # proxy; jq streams in memory) — no tmpfs needed.
+    # Read-only rootfs: `docker diff` shows zero writes, so no tmpfs.
     read_only: true
     cap_drop:
       - ALL
@@ -51,26 +50,19 @@ services:
       - no-new-privileges:true
     environment:
       - AUTOHEAL_CONTAINER_LABEL=all
-      # Default poll is 5s: each cycle fetches the full container list through the
-      # proxy and parses it with jq — constant CPU churn on the Pi (Zero 2 W), where
-      # the jq pass alone is visible in top under load. 30s detection
-      # latency for an unhealthy container is fine for this fleet.
+      # Default poll is 5s; each cycle fetches and parses the full container list, constant CPU
+      # churn on the Zero 2 W.
+      # 30s detection latency is fine.
       - AUTOHEAL_INTERVAL=30
-      # A restart leaves no trace outside the Pi's own docker logs, so this posts it to the
-      # general-purpose `monitor_discord_webhook_url` — the same channel Alertmanager and
-      # monitor-bridge post to — rather than a webhook nobody would remember to rotate.
+      # Posts to monitor_discord_webhook_url, the channel Alertmanager and monitor-bridge use; a
+      # restart leaves no other trace.
       - WEBHOOK_URL={{ monitor_discord_webhook_url }}
-      # The image POSTs `{"<WEBHOOK_JSON_KEY>": "<message>"}` and defaults the key to `text`
-      # (see /docker-entrypoint in the image). Discord's webhook
-      # API reads `content` and rejects `text` with a 400, so the default would notify nobody
-      # while every other signal — container healthy, deploy green — read fine.
+      # The image POSTs `{WEBHOOK_JSON_KEY: message}` with default key `text`; Discord reads
+      # `content` and rejects `text` with 400, which would notify nobody.
       - WEBHOOK_JSON_KEY=content
-      # A startup sleep before the FIRST poll, not a per-container grace period: Docker
-      # already suppresses `unhealthy` during a container's own healthcheck start_period.
-      # What this covers is the Pi rebooting, when autoheal and everything it watches come up
-      # together and the slow starters would otherwise be restarted mid-boot. The cost is that
-      # a deploy that recreates autoheal also blinds it for this long, which is why it is 120s
-      # and not the several minutes a full boot takes.
+      # Startup sleep before the FIRST poll: covers a Pi reboot, when slow starters would be
+      # restarted mid-boot.
+      # A deploy that recreates autoheal also blinds it this long, so 120s.
       - AUTOHEAL_START_PERIOD=120
       - DOCKER_SOCK=tcp://docker-proxy-lifecycle:2375
     healthcheck:
@@ -94,7 +86,6 @@ services:
 {% for net in container_item.networks %}
       - {{ net }}
 {% endfor %}
-    # Resource caps for blast-radius containment (M1); tune from cAdvisor/Grafana.
     deploy:
       resources:
         limits:

@@ -33,19 +33,15 @@ class Unavailable(Failure):
     """A download whose transient errors outlasted `TOOL_RETRY_WINDOW_S`."""
 
 
-# A rendered `homelab-tools` tree carries its pins in this file beside `nfpm.yaml`, and the
-# package installs each binary under `TOOLS_BIN` in its `root/`. A test holds both equal to
-# scripts/renderer/renderer_lib/host_tools.py, which this script cannot import.
+# A test holds these equal to host_tools.py in the renderer, which this script cannot import.
 PINS_FILE = "tools.json"
 TOOLS_BIN = "root/usr/lib/homelab/bin"
 TOOLS_CACHE = "tools-cache"
-# A download, or a file inside one, larger than this fails the build. The largest pin is
-# about 60 MB.
+# A download, or a file inside one, larger than this fails the build.
 TOOL_MAX_BYTES = 256 * 1024 * 1024
 TOOL_TIMEOUT_S = 120
-# One pin's retries stop this long after its first request, because the release host has answered
-# 504 for five minutes. A fetch gives up within window + delay + timeout, 8.5 minutes, and the
-# first pin to give up ends the run, so it stays well inside the builder's TimeoutStartSec.
+# A fetch gives up within window + delay + timeout (8.5 minutes), inside the builder's
+# TimeoutStartSec; the first pin to give up ends the run.
 TOOL_RETRY_WINDOW_S = 360
 TOOL_RETRY_DELAY_S = 30
 _TOOL_NAME = re.compile(r"[a-z0-9][a-z0-9-]*")

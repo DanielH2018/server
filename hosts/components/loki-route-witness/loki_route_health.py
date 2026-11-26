@@ -25,8 +25,7 @@ carries. Exits 64 when the argument is missing or not an integer.
 import json
 import sys
 
-# The message goes into a syslog line, so a whole 404 page or a Python traceback is trimmed
-# rather than carried.
+# The message goes into a syslog line, so a whole 404 page or traceback is trimmed.
 _MAX_DETAIL = 160
 
 # `lib/exit_codes.py:USAGE_ERROR`, which this host-shipped script cannot import.
@@ -45,8 +44,8 @@ def verdict(rc: int, body: str) -> tuple[str, str]:
     try:
         data = json.loads(body)
     except ValueError:
-        # The dominant failure: Traefik refusing the route answers `404 page not found`, which
-        # is not JSON and which probe.py reports with exit 0.
+        # The dominant failure: Traefik refusing the route answers `404 page not found`, not JSON;
+        # probe.py reports it with exit 0.
         return "down", f"the Loki read route did not answer with JSON: {_detail(body)}"
     if not isinstance(data, dict) or data.get("status") != "success":
         return "down", f"Loki answered without status=success: {_detail(body)}"

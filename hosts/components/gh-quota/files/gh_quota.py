@@ -43,8 +43,7 @@ KEEP_S = 8 * 24 * 3600
 # two graphql counters for one token reset about 21 minutes apart. Two tokens of one user
 # report resets within this of each other too, because they spend one quota.
 RESET_DRIFT_S = 120
-# How long a ledger write waits for another writer before the call goes unrecorded. Every
-# counted `gh` call can wait this long, so it stays a few seconds.
+# Max wait for another writer before a call goes unrecorded; every `gh` call can wait this long.
 LOCK_WAIT_S = 5.0
 # `status` lists a session at or above this share of a bucket's limit.
 ATTENTION_SHARE = 0.2
@@ -291,16 +290,15 @@ def _shared(windows: Iterable[tuple[float, Window]]) -> list[Window]:
 
 
 def _one_counter(a: tuple[float, Window], b: tuple[float, Window]) -> bool:
-    # One user's counter only rises within a window, so a later sample below an earlier one
-    # is another user's.
+    # One user's counter only rises within a window, so a lower later sample is another user's.
     (_, earlier), (_, later) = sorted((a, b), key=lambda sw: sw[0])
     return earlier.used <= later.used
 
 
 @contextmanager
 def _write(db: sqlite3.Connection) -> Generator[None, None, None]:
-    # IMMEDIATE takes the write lock at BEGIN, where the busy timeout applies. A deferred
-    # transaction that reads first can fail its upgrade to a write without waiting at all.
+    # IMMEDIATE takes the write lock at BEGIN, where the busy timeout applies.
+    # A deferred read-then-write can fail its upgrade without waiting.
     db.execute("BEGIN IMMEDIATE")
     try:
         yield
@@ -500,8 +498,7 @@ class Ledger:
         return dict(self.env, GH_PROMPT_DISABLED="1", GH_NO_UPDATE_NOTIFIER="1")
 
     def _identity(self) -> str:
-        # GitHub meters per token owner, and `gh` alone knows which token this environment
-        # gives it: a variable, another config directory, or the login it has stored.
+        # GitHub meters per token owner, and only `gh` knows which token the environment gives it.
         token = self.env.get("GH_TOKEN") or self.env.get("GITHUB_TOKEN")
         if not token:
             try:
@@ -553,8 +550,8 @@ class Ledger:
         return row[0] if row else reset
 
     def _take_sample(self, db: sqlite3.Connection) -> _Sample | None:
-        # Claims the next sample in one short write, then asks GitHub while holding no lock:
-        # the subprocess can take its full 10 s, and every other writer would wait on it.
+        # Claim the sample in a short write, then ask GitHub holding no lock: the call can take 10
+        # s.
         now = self.now()
         claimed = db.execute(
             "INSERT INTO meta VALUES ('next_sample', ?) "
@@ -575,8 +572,8 @@ class Ledger:
             ).stdout
             resources = json.loads(out)["resources"]
             seen = [(bucket, resources[bucket]) for bucket in BUCKETS]
-            # An unused bucket reports a reset an hour ahead of every sample, so it has no
-            # window to name yet.
+            # An unused bucket reports a reset an hour ahead of every sample, so it has no window
+            # yet.
             sample.counts = [
                 (bucket, int(s["used"]), int(s["limit"]), int(s["reset"]))
                 for bucket, s in seen

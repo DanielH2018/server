@@ -14,12 +14,12 @@ SyslogLevel=notice
 # Checked before it is applied, so a ruleset nft rejects changes nothing.
 ExecStartPre=/usr/sbin/nft -c -f /usr/lib/homelab/t2-egress/t2-egress.nft
 ExecStart=/usr/sbin/nft -f /usr/lib/homelab/t2-egress/t2-egress.nft
-# A changed ruleset is reloaded, not restarted: the file is idempotent, so the sets keep what they
-# recorded, and once B3-2 enforces, no session runs unfenced between a stop and a start.
+# Reloaded, not restarted: the file is idempotent, so the sets keep what they recorded and no
+# session runs unfenced.
 ExecReload=/usr/sbin/nft -c -f /usr/lib/homelab/t2-egress/t2-egress.nft
 ExecReload=/usr/sbin/nft -f /usr/lib/homelab/t2-egress/t2-egress.nft
-# No ExecStop: reconcile restarts this unit when its file changes, and a stop that deleted the
-# table would empty the sets and, once B3-2 enforces, unfence the sessions until the start.
+# No ExecStop: a stop that deleted the table would empty the sets and unfence the sessions until the
+# start.
 
 [Install]
 WantedBy=multi-user.target

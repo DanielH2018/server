@@ -57,16 +57,13 @@
 
 services:
   wg-easy:
-    # Pinned to the v14 tag + digest (the bcrypt PASSWORD_HASH auth model). The `:14` keeps the
-    # major visible so a v15 bump is a deliberate PR; the digest keeps it immutable within v14.x.
-    # MUST NOT float to :latest → v15, which drops PASSWORD_HASH for an interactive setup wizard.
+    # Pinned to the v14 tag + digest: MUST NOT float to :latest (v15), which drops PASSWORD_HASH for
+    # an interactive setup wizard.
     image: ghcr.io/wg-easy/wg-easy:14@sha256:5f26407fd2ede54df76d63304ef184576a6c1bb73f934a58a11abdd852fab549
     container_name: wg-easy
-    # NET_ADMIN to create the wg interface + apply rules; NET_RAW because wg-quick runs
-    # iptables (the iptables CLI opens a raw socket to init the 'nat' table — fails with
-    # "can't initialize iptables table `nat`: Permission denied" without it). SYS_MODULE
-    # not needed: the host loads wireguard (host-hardening) and the legacy iptables tables
-    # (pi-compose's modules-load.d/wg-easy.conf). Verify on deploy (docker logs wg-easy).
+    # NET_ADMIN creates the wg interface and rules; NET_RAW because iptables opens a raw socket to
+    # init the 'nat' table.
+    # SYS_MODULE is not needed: the host loads wireguard and the legacy iptables tables.
     cap_drop:
       - ALL
     cap_add:
@@ -79,8 +76,8 @@ services:
       - net.ipv4.conf.all.src_valid_mark=1
     ports:
       - "{{ container_item.udp_port }}:{{ container_item.udp_port }}/udp"
-      # LAN-only host (daniel-pi): bind the admin UI to the host's LAN IP, not 0.0.0.0,
-      # so it isn't reachable on the WireGuard tunnel or other interfaces.
+      # Bind the admin UI to the LAN IP, not 0.0.0.0, so it is not reachable on the WireGuard
+      # tunnel.
       - "{{ server_ip }}:{{ container_item.port }}:51821/tcp"
     environment:
       - LANG=en
@@ -88,24 +85,17 @@ services:
       - WG_PORT={{ container_item.udp_port }}
       - WG_PERSISTENT_KEEPALIVE=25
     volumes:
-      # The WireGuard keys and client config. The source is the project directory's `config/`,
-      # which the role created and the container populates as root. The tmpfiles line for it
-      # copies its live mode and owner, so a rebuilt Pi gets the directory before the container.
+      # The source is the project's `config/`, which the container populates as root. The tmpfiles
+      # line copies its live mode and owner, so a rebuilt Pi gets the directory before the
+      # container.
       - type: bind
         source: ./config
         target: /etc/wireguard
         bind: {create_host_path: false}
-    # TIMING ONLY, no `test:` — this is not a redundant probe. The image ships its own
-    # HEALTHCHECK (`wg show | grep -q interface`) and Docker keeps it:
-    # dockerd merges an unset `Test` from the image config when the container config carries a
-    # healthcheck (`merge()` in daemon/commit.go): a container created with only
-    # `--health-interval/--health-timeout/--health-retries` inspects with the image's `wg show`
-    # Test. Without this block the container runs Docker's defaults (30s interval, 30s timeout,
-    # 3 retries) — the image's Dockerfile puts its `--interval=1m --timeout=5s --retries=3`
-    # INSIDE the CMD string, where they are positional args to `sh -c`, so `Config.Healthcheck`
-    # carries no timing at all. Under the deploy-window stall that the other Pi probes widen
-    # for, a `wg show` exec through runc can outlast 30s three times running and autoheal
-    # restarts a working VPN.
+    # Timing only, no `test:`: dockerd keeps the image's `wg show` Test; its own timings sit inside
+    # CMD, so are lost.
+    # Without this, Docker's 30s defaults let a deploy-window stall get a working VPN restarted by
+    # autoheal.
     healthcheck:
       interval: {{ container_healthcheck_interval | default('30s') }}
       timeout: {{ container_healthcheck_timeout | default('30s') }}
@@ -115,7 +105,6 @@ services:
 {% for net in container_item.networks %}
       - {{ net }}
 {% endfor %}
-    # Resource caps for blast-radius containment (M1); tune from cAdvisor/Grafana.
     deploy:
       resources:
         limits:

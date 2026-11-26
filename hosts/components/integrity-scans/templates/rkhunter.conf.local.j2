@@ -4,22 +4,18 @@
 # host raised every week from benign causes, so that rkhunter-check.sh can page on any warning
 # that is left. Add a line here only for a warning whose cause you have confirmed.
 
-# Both are written by systemd packaging, and rkhunter reports both as hidden files:
-# /etc/.updated is the systemd-update-done stamp, and the backup is left by the
-# systemd-resolved package.
+# systemd packaging writes both: /etc/.updated is the systemd-update-done stamp, the backup is
+# systemd-resolved's.
 ALLOWHIDDENFILE=/etc/.updated
 ALLOWHIDDENFILE=/etc/.resolv.conf.systemd-resolved.bak
 
-# rkhunter reads PermitRootLogin from a file named sshd_config and never follows its Include, so
-# SSH_CONFIG_DIR cannot point it at a drop-in. Where this role hardens a drop-in and the main file
-# carries no PermitRootLogin line (daniel-pi), rkhunter warns "has not been set" every week.
-# The task that renders this file sets `no` where the main file carries the line and `unset`
-# where it does not.
+# rkhunter reads PermitRootLogin only from sshd_config, never its Include drop-ins.
+# So `no` where the main file carries the line, `unset` where it does not (daniel-pi).
 ALLOW_SSH_ROOT_USER={{ integrity_scans_rkhunter_allow_ssh_root_user }}
 {% if inventory_hostname in integrity_scans_squid_hosts %}
 
-# The t2-egress squid (hosts/components/t2-egress) keeps its collapsed-forwarding segments in
-# /dev/shm, and rkhunter reports them as suspicious file types. The glob covers the name's token.
+# The t2-egress squid keeps collapsed-forwarding segments in /dev/shm, which rkhunter reports as
+# suspicious.
 ALLOWDEVFILE=/dev/shm/squid-*-cf__metadata.shm
 ALLOWDEVFILE=/dev/shm/squid-*-cf__queues.shm
 ALLOWDEVFILE=/dev/shm/squid-*-cf__readers.shm

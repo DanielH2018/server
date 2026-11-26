@@ -1,6 +1,5 @@
 {% import 'templates/claude-triage-pins.j2' as pins with context -%}
-# Shipped by the claude-code host component. claude-triage@<episode>.service starts it and waits
-# for it; nothing enables it, and reconcile never restarts it (`policy: manual`).
+# Nothing enables it, and reconcile never restarts it (`policy: manual`).
 [Unit]
 Description=Unattended triage session for the episode claude-triage@ prepared, as the session user
 {% if t2_egress_proxy is defined %}
@@ -10,10 +9,10 @@ After=squid.service
 
 [Service]
 Type=oneshot
-# The session user: the episode text is untrusted, and this user holds no
-# GitHub token, no start right, no sudo and no read on /home. It reads the controller's clone and
-# toolchain through its group and writes only its tmpfs mounts and the exchange's out/.
-# docs/claude-agent-user.md, "Alert-triggered triage", has the design.
+# The episode text is untrusted: this user holds no GitHub token, start right, sudo or read on
+# /home.
+# It reads the controller's clone and toolchain through its group and writes only its tmpfs mounts
+# and out/.
 User={{ pins.session_user }}
 WorkingDirectory={{ pins.clone_dir }}
 Environment=HOME={{ pins.session_home }}
@@ -21,17 +20,16 @@ Environment=HOME={{ pins.session_home }}
 # real shell.
 Environment=SHELL=/bin/bash
 # systemd's PATH is as minimal as cron's: without /usr/local/bin the session loses kubectl and
-# reports an empty cluster rather than failing.
+# reports an empty cluster.
 Environment=PATH={{ pins.tools_dir }}/.local/bin:/usr/local/bin:/usr/bin:/bin
 Environment=KUBECONFIG={{ pins.kubeconfig }}
-# The clone belongs to the controller, so git would refuse it as dubious ownership. The unit
-# names it safe here, where the session has no file to edit.
+# The clone belongs to the controller, so git would refuse it as dubious ownership; the session has
+# no file to edit.
 Environment=GIT_CONFIG_COUNT=1
 Environment=GIT_CONFIG_KEY_0=safe.directory
 Environment=GIT_CONFIG_VALUE_0={{ pins.clone_dir }}
-# The repo's hook shim resolves the clone and uv from these. A guard that cannot start turns
-# every Bash call into an ask, and nobody answers one here. The controller syncs the clone's venv
-# before each run, so a hook never tries to write it.
+# A guard that cannot start turns every Bash call into an ask, and nobody answers one here.
+# The controller syncs the clone's venv before each run, so a hook never tries to write it.
 Environment=RUN_HOOK_PROJECT_DIR={{ pins.clone_dir }}
 Environment=RUN_HOOK_UV={{ pins.tools_dir }}/.local/bin/uv
 Environment=UV_NO_SYNC=1
@@ -52,8 +50,8 @@ Environment=GH_TELEMETRY=false
 Environment=CLAUDE_CODE_DISABLE_AUTO_MEMORY=1
 Environment=PYTHONDONTWRITEBYTECODE=1
 {% if t2_egress_proxy is defined %}
-# The T2 egress proxy (hosts/components/t2-egress). curl reads only the lowercase names, and Go
-# tools both. Loopback stays direct: the kubeconfig names the host's LAN address instead.
+# curl reads only the lowercase names, and Go tools both. Loopback stays direct: the kubeconfig
+# names the host's LAN address.
 Environment=HTTPS_PROXY=http://{{ t2_egress_proxy }} https_proxy=http://{{ t2_egress_proxy }}
 Environment=HTTP_PROXY=http://{{ t2_egress_proxy }} http_proxy=http://{{ t2_egress_proxy }}
 Environment=NO_PROXY=localhost,127.0.0.1,::1 no_proxy=localhost,127.0.0.1,::1
@@ -66,8 +64,8 @@ Environment=HOMELAB_PROBE_VIA_PROXY=1
 # there; the session script joins the whole file.
 LoadCredential=claude_oauth_token:/etc/claude-triage/oauth-token
 SyslogLevel=notice
-# The session's wall clock. SIGINT ends its turn cleanly; SIGTERM exits 143 with the turn
-# unrecorded. The runner reads Result=timeout as a timed-out session.
+# SIGINT ends the turn cleanly; SIGTERM exits 143 with the turn unrecorded. The runner reads
+# Result=timeout as a timed-out session.
 KillSignal=SIGINT
 TimeoutStartSec={{ pins.run_timeout_s }}
 NoNewPrivileges=yes
@@ -76,9 +74,8 @@ NoNewPrivileges=yes
 UMask=0027
 ProtectHome=yes
 ProtectProc=invisible
-# Nothing the session writes reaches a later run: every other path is
-# read-only, and each writable one but out/ is a tmpfs that ends with the unit. The runner keeps
-# the transcript out of out/ and then deletes it.
+# Nothing a session writes reaches a later run: each writable path but out/ is a tmpfs.
+# The runner keeps the transcript out of out/ and then deletes it.
 ProtectSystem=strict
 TemporaryFileSystem={{ pins.session_home }}:mode=0700,uid={{ pins.session_uid }},gid={{ pins.session_uid }},size={{ pins.home_size }}
 TemporaryFileSystem=/tmp:mode=1777,size={{ pins.tmp_size }}

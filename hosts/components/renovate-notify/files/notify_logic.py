@@ -38,10 +38,8 @@ class PR:
     created_at: str = (
         ""  # GitHub's PR `created_at` (ISO-8601), already in the pulls-list payload
     )
-    # The PR's changed files, and whether any of them still exists on the base branch. Populated
-    # only for conflicting PRs (see build_pr) — it costs one extra API call each, and the question
-    # is meaningless for a PR that merges cleanly. `None` = not looked up, which is NOT the same as
-    # "looked up and found nothing".
+    # None means not looked up, which is NOT the same as looked up and found nothing. Only populated
+    # for conflicting PRs (one extra API call each).
     dead_paths: tuple[str, ...] | None = None
 
 
@@ -215,9 +213,8 @@ def is_dead_path(pr: PR) -> bool:
 def classify_pr(pr: PR) -> str:
     """Bucket one PR as "dead-path", "manual", "stuck", or "on-track"."""
     if is_dead_path(pr):
-        # Ahead of the automerge check on purpose: a dead-path PR needs a human whether or not
-        # automerge was ever enabled on it, and "manual" would file it with PRs that are merely
-        # waiting to be reviewed.
+        # Ahead of the automerge check: a dead-path PR needs a human whether or not automerge was
+        # enabled.
         return "dead-path"
     if not pr.automerge:
         return "manual"
@@ -245,8 +242,6 @@ _BUCKET_HEADER = {
 }
 
 
-# Days-stuck thresholds for the fingerprint's age dimension. Ascending so the loop below keeps
-# overwriting `bucket` with the largest one crossed.
 _STUCK_AGE_THRESHOLDS = (1, 3, 7, 14)
 
 
@@ -300,8 +295,8 @@ def should_notify(prev_fp: str, cur_fp: str) -> tuple[bool, str]:
 
 def _pr_note(pr: PR) -> str:
     if is_dead_path(pr):
-        # Names the remedy, because the whole failure mode is that "conflicting" implies a rebase
-        # will fix it and here nothing will: the files are gone from the base branch.
+        # Names the remedy: "conflicting" implies a rebase fixes it, but the files are gone from the
+        # base branch.
         return (
             "DEAD PATH: conflicting against deleted path(s) — close it, Renovate recreates: %s"
             % (", ".join(pr.dead_paths or ()),)
@@ -495,8 +490,6 @@ def render_autoclosed(items: list[Autoclosed]) -> str:
     return "\n".join(lines)
 
 
-# The least room the PR digest keeps however long the sections before it run: its head, a
-# bucket header and a few PRs.
 DIGEST_FLOOR = 600
 
 

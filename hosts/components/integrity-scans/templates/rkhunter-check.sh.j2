@@ -33,19 +33,16 @@ source {{ integrity_scans_host_lib_dir }}/homelab-check-lib.sh || {
   exit 1
 }
 
-# The longest legitimate gap between two textfile writes: the timer runs weekly (Wednesday
-# 02:00, hosts/components/integrity-scans/units/homelab-rkhunter-check.timer), 604800s, and the
-# extra 2h is the slack for a run that takes far longer than the last. Move it with the timer.
-# hosts/tests/test_integrity_scan_rule_literals.py pins the rules' literals to it.
+# Weekly timer, 604800s, plus 2h slack for a run far longer than the last; move it with the timer.
 DEADLINE_S=612000
 
-# rkhunter's LOGFILE default in /etc/rkhunter.conf. rkhunter truncates and rewrites it on every
-# run, so its mtime and its summary say whether THIS run finished.
+# rkhunter rewrites its log every run, so its mtime and summary say whether THIS run finished.
 RKHUNTER_LOG=/var/log/rkhunter.log
 
-# Captured whole rather than piped, because a pipeline's exit status is its last command's, which
-# would lose rkhunter's. --report-warnings-only keeps the journal to the warnings and any
-# error rkhunter prints; the full report stays in the log file.
+# Captured whole, not piped: a pipeline's exit status is its last command's and would lose
+# rkhunter's.
+# --report-warnings-only keeps the journal to warnings and errors; the full report is in the log
+# file.
 printf -v START_EPOCH '%(%s)T' -1
 START=$SECONDS
 OUTPUT=$(/usr/bin/nice -n19 /usr/bin/ionice -c3 /usr/bin/rkhunter --check --nocolors --skip-keypress --report-warnings-only 2>&1)
@@ -87,8 +84,8 @@ else
   COUNTS="${WARNINGS} warnings, ${SUSPECT:-?} suspect files, ${ROOTKITS:-?} possible rootkits (exit ${RC}, run ${RUN_TIME})"
   FIRST_WARNING=$(grep -m1 '^\[[0-9:]*\] Warning:' "$RKHUNTER_LOG" | sed 's/^\[[0-9:]*\] Warning: //')
   if [[ -z "$ROOTKITS" || -z "$SUSPECT" ]]; then
-    # A group of checks was skipped or the summary changed shape: a count the alert pages on is
-    # unreadable, so the scan cannot be called clean.
+    # A skipped group or changed summary shape makes the paged count unreadable, so it cannot be
+    # called clean.
     STATUS=down
     MSG="the summary in ${RKHUNTER_LOG} lacks a Possible rootkits or Suspect files count: ${COUNTS}"
   elif ((ROOTKITS > 0)); then
@@ -106,13 +103,11 @@ else
   fi
 fi
 
-# Unconditional, so a DOWN leaves a durable record in syslog and Loki beside the textfile. NOTICE
-# rather than INFO — journald here caps MaxLevelStore=notice, so an info line is dropped from the
-# journal and from forwarding.
+# Unconditional, so a DOWN leaves a record in syslog and Loki. NOTICE, not INFO:
+# journald caps MaxLevelStore=notice, dropping info lines.
 logger -p daemon.notice -t rkhunter-check "status=${STATUS} ${MSG}"
 
-# A DOWN is the verdict, not this unit's failure: exiting 1 for it would put the unit under
-# `systemctl --failed` and page SystemdUnitsFailed beside RkhunterScanFailed.
+# A DOWN is the verdict, not this unit's failure: exiting 1 would also page SystemdUnitsFailed.
 write_check_textfile rkhunter-check "$([[ "$STATUS" == up ]] && echo 1 || echo 0)" "$(date +%s)" "$DEADLINE_S" || {
   logger -t rkhunter-check "textfile write failed (status=${STATUS})"
   exit 1

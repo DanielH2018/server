@@ -84,8 +84,7 @@ source /usr/lib/homelab/homelab-check-lib.sh || {
 # tests/services/registry_gc/test_registry_gc_watchers_cover_the_worst_run.py pins all three.
 DEADLINE_S=612000
 
-# The k3s installer puts the binary in /usr/local/bin. A run from a bare environment lacks it, and
-# every kubectl call below would silently resolve to nothing.
+# The k3s installer puts the binary in /usr/local/bin; a bare environment lacks it.
 export PATH="${PATH}:/usr/local/bin"
 export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
 
@@ -113,8 +112,7 @@ STATE_FILE="${STATE_DIR}/state.json"
 # The stamp and the lock the header describes.
 MIRROR_STAMP="${STATE_DIR}/ghcr-mirror-down"
 LOCK_FILE={{ registry_k8s_gc_lock_file }}
-# The mirror's loopback hostPort. This unit runs on the registry node, which reaches it there,
-# as that node's registries.yaml entry does.
+# Loopback hostPort: this unit runs on the registry node, which reaches it there.
 MIRROR_URL="http://{{ k8s_registry_host_ip }}:{{ k8s_registry_ghcr_mirror_port }}"
 # Every manifest type a registry can store, as node-exporter's mirror pull checks send.
 ACCEPT=application/vnd.oci.image.index.v1+json,application/vnd.oci.image.manifest.v1+json,application/vnd.docker.distribution.manifest.list.v2+json,application/vnd.docker.distribution.manifest.v2+json
@@ -122,8 +120,6 @@ WARM_BUDGET_S={{ registry_gc_ghcr_mirror_warm_budget_s }}
 # The upstream's refs write_mirror_keep_set read, one `<repo>@<digest>` or `<repo>:<tag>` per line.
 WARM_REFS=""
 
-# Points every per-mirror global above at the dockerhub-mirror and resets the phase's state.
-# Called only once the ghcr-mirror's phase has restored that mirror.
 use_dockerhub_store() {
   MIRROR_DEPLOY=dockerhub-mirror
   MIRROR_UPSTREAM=docker.io
@@ -143,23 +139,17 @@ MSG="did not complete"
 
 finish() {
   mkdir -p "$STATE_DIR"
-  # jq, not printf: MSG carries crane and kubectl error text, and a backslash, newline or
-  # control character in it makes the file unreadable by the jq an operator reads it with.
+  # jq, not printf: MSG carries error text whose backslashes or control characters would break jq.
   jq -nc --arg ts "$(date -Is)" --arg status "$STATUS" --arg msg "$MSG" \
     '{ts: $ts, status: $status, msg: $msg}' > "$STATE_FILE"
-  # Explicit, because root's umask here renders this 0640 and the operator reading it after a
-  # run is not root. Nothing secret is in it — a status, a timestamp and a count.
+  # Explicit: root's umask renders 0640, and the operator reading it is not root.
   chmod 0644 "$STATE_FILE"
 
   write_check_textfile registry-gc "$([[ "$STATUS" == up ]] && echo 1 || echo 0)" "$(date +%s)" \
     "$DEADLINE_S" || logger -t registry-gc "textfile write failed (status=${STATUS})"
 
-  # Off-premises dead-man's switch — see longhorn-backup-health.sh.j2 for the full rationale.
-  # Prometheus runs on the cluster this mutates, so a cluster outage silences both the textfile
-  # above and the rules waiting for it. Skipped when no key is configured.
-  # Names mirror longhorn-backup-health.sh.j2 exactly: test_healthchecks_pings.py selects the
-  # files it audits by matching HC_PING_KEY / HC_URL, so a locally-renamed variable drops this
-  # script out of the parametrization and the guards silently stop being checked.
+  # Prometheus runs on the cluster this mutates, so an outage silences the textfile and its rules.
+  # Names mirror longhorn-backup-health.sh.j2: test_healthchecks_pings.py selects by HC_PING_KEY.
   local HC_PING_KEY=""
   if [[ -r "${CREDENTIALS_DIRECTORY:-/nonexistent}/healthchecks_ping_key" ]]; then
     HC_PING_KEY="$(<"$CREDENTIALS_DIRECTORY/healthchecks_ping_key")"
@@ -173,9 +163,7 @@ finish() {
   fi
 }
 
-# Scales Deployment $1 to zero and waits for its pod to exit. Scaling returns immediately, and
-# GC must not start while the old process still holds the store. Each Deployment's pods carry
-# `app: <its name>`.
+# Scaling returns immediately, and GC must not start while the old process still holds the store.
 stop_deploy() {
   $KUBECTL scale "deploy/${1}" --replicas=0 >/dev/null 2>&1
   $KUBECTL wait --for=delete pod -l app="${1}" --timeout=120s >/dev/null 2>&1
@@ -186,11 +174,8 @@ start_deploy() {
   $KUBECTL rollout status "deploy/${1}" --timeout=180s >/dev/null 2>&1
 }
 
-# The mirror Job mounts the same RWO claim the ghcr-mirror pod does, and both land on one node,
-# so nothing stops the pod starting while the prune is still unlinking revisions. A Job not
-# known to have finished is deleted, and waited for, before the mirror serves the store again.
-# One that succeeded or failed stays until its TTL, so the log a failure MSG names is still
-# there. Either way its prune lines reach the journal first.
+# The Job mounts the mirror pod's RWO claim on one node, so an unfinished Job is deleted and waited
+# for before the mirror serves again; a finished one stays until its TTL for its log.
 restore_mirror_store() {
   [[ "$MIRROR_DOWN" == 1 ]] || return 0
   MIRROR_DOWN=0
@@ -212,9 +197,7 @@ restore_mirror_store() {
   return 1
 }
 
-# The mirror MUST come back even if GC dies or the deadline trips. Without this
-# a failed run leaves the cluster unable to pull that upstream's images during a WAN outage until
-# a human notices, which is the outage the mirror exists to prevent.
+# Must run even if GC dies or the deadline trips, or the cluster cannot pull during a WAN outage.
 scale_up_and_report() {
   restore_mirror_store || FAILED=1
   if [[ "$COMPLETED" == 1 && "$FAILED" == 0 ]]; then
@@ -230,8 +213,7 @@ scale_up_and_report() {
 }
 trap scale_up_and_report EXIT
 
-# Copies the mirror prune's per-revision lines to the journal and prints them. The prune names
-# every revision it removed, and the Job log goes when the Job's TTL runs out.
+# The Job log goes when its TTL runs out, so copy the per-revision prune lines to the journal.
 journal_mirror_prune() {
   local lines
   lines=$($KUBECTL logs "job/${MIRROR_JOB}" -c prune 2>/dev/null \
@@ -241,33 +223,8 @@ journal_mirror_prune() {
   printf '%s\n' "$lines"
 }
 
-# ── keep set ─────────────────────────────────────────────────────────────────────────────────
-# Each mirror's store is pruned offline by its GC Job (files/ghcr-mirror-prune.sh), which
-# has no API access. It reads the digests to keep from a ConfigMap this function writes before
-# the scale-down.
-#
-# EVERY NAMESPACE, AND SPECS AS WELL AS STATUSES. A `registries.yaml` mirror covers the whole
-# ghcr.io host, so Flux's controllers in flux-system pull through it as much as anything here.
-# A CronJob's pod is not running at 04:20 on a Sunday, so its pinned digest comes from its spec.
-# Every sha256 digest in the JSON is kept, for either store, which can only keep more than
-# strictly needed.
-#
-# LSCR.IO REFS COUNT AS GHCR.IO REFS. registries.yaml points lscr.io at this same mirror, and
-# lscr.io serves ghcr.io's repositories under the same paths, so
-# `lscr.io/linuxserver/x` is cached as `linuxserver/x` beside the ghcr.io refs. Both prefixes
-# strip to that one repo path.
-#
-# TAG REFS TOO. A flux-owned built image runs as `ghcr.io/danielh2018/<name>:<tag>` with no
-# digest, so a workload of one scaled to zero leaves no digest anywhere. Its spec still names
-# the tag, and the prune keeps whatever revision that tag points at in the store. Each ref goes
-# in as `<repo>:<tag>`; a digest-pinned ref also yields one, which only keeps more. MIRROR_REFS
-# names the function that reads the store's refs out of the JSON.
-#
-# FAIL CLOSED. The previous run's ConfigMap is deleted first, and the Job mounts it as optional,
-# so a run that could not build the set prunes nothing rather than pruning by last week's. A
-# skip reports the run down: a cause that persists would otherwise skip every week behind a
-# green tile while the claim fills. A cluster running pods always has an imageID digest, so an
-# empty set is a fault as well.
+# Keep set: every namespace, specs and statuses; lscr.io counts as ghcr.io; tag refs too. Fail
+# closed: the old ConfigMap is deleted first; a skip reports down; an empty set is a fault.
 write_mirror_keep_set() {
   local json refs keep tags
   if ! $KUBECTL delete configmap "$MIRROR_KEEP_CM" --ignore-not-found >/dev/null 2>&1; then
@@ -295,18 +252,12 @@ write_mirror_keep_set() {
   fi
 }
 
-# Prints each ghcr.io or lscr.io ref in the JSON on stdin as `<repo>[:<tag>][@<digest>]`, the
-# path the ghcr-mirror caches it under.
 ghcr_refs() {
   grep -oE '(ghcr|lscr)\.io/[a-z0-9._/-]+(:[A-Za-z0-9._-]+)?(@sha256:[0-9a-f]{64})?' \
     | sed -E 's#^(ghcr|lscr)\.io/##' | sort -u
 }
 
-# Prints each docker.io ref in the JSON on stdin as `<repo>[:<tag>][@<digest>]`, the path the
-# dockerhub-mirror caches it under. A docker.io ref has no host to grep for, so this reads
-# every `image` and `imageID` value. A first path component holding `.` or `:`, or `localhost`,
-# names another registry. `docker.io/` and `index.docker.io/` are stripped, and a one-component
-# name such as `alpine` is `library/alpine`, as containerd asks the mirror for it.
+# A docker.io ref has no host to grep, so read every image/imageID; a bare name is library/<name>.
 dockerhub_refs() {
   jq -r '.. | objects | (.image?, .imageID?) | strings' 2>/dev/null \
     | sed -E 's#^(index\.)?docker\.io/##' \
@@ -317,9 +268,8 @@ dockerhub_refs() {
     | grep -E '^[a-z0-9._/-]+(:[A-Za-z0-9._-]+)?(@sha256:[0-9a-f]{64})?$' | sort -u
 }
 
-# Prints the mirror Job's terminal condition, Complete or Failed, once it has one. Returns 1 when
-# it has neither by the deadline. A failed Job never completes, so waiting on Complete alone
-# holds the mirror down for the whole deadline over a Job that died in seconds.
+# A failed Job never completes, so waiting on Complete alone holds the mirror down for the whole
+# deadline.
 wait_mirror_job() {
   local deadline=$((SECONDS + {{ registry_k8s_gc_deadline_s }})) types
   while ((SECONDS < deadline)); do
@@ -334,9 +284,7 @@ wait_mirror_job() {
   return 1
 }
 
-# Journals each of the mirror Job's terminated containers as `<name> exit=<code> reason=<reason>`
-# and the gc container's log tail, then prints the container lines. The pod goes with the Job's
-# TTL, and with it the only record of why the Job failed.
+# The pod goes with the Job's TTL, and with it the only record of why the Job failed.
 journal_mirror_failure() {
   local states logs
   states=$($KUBECTL get pods -l "job-name=${MIRROR_JOB}" -o json 2>/dev/null \
@@ -352,8 +300,6 @@ journal_mirror_failure() {
   printf '%s\n' "$states"
 }
 
-# Waits for the mirror Job and records its result in MIRROR_MSG. Returns 1 when the Job failed or
-# did not finish, or when the keep set was skipped.
 report_mirror_job() {
   local pruned blobs result states
   if ! result=$(wait_mirror_job); then
@@ -376,10 +322,7 @@ report_mirror_job() {
   fi
 }
 
-# ── A mirror store's phase ───────────────────────────────────────────────────────────────────
-# Scales only deploy/${MIRROR_DEPLOY}, never the push store.
-# containerd falls back to the upstream while it is down. The stamp goes down before the
-# scale-down, so a run killed at any point after it is one the next run repairs.
+# The stamp goes down before the scale-down, so the next run repairs a run killed after it.
 collect_mirror_store() {
   write_mirror_keep_set || return 1
   [[ -n "$MIRROR_NOTE" ]] && logger -t registry-gc "$MIRROR_NOTE"
@@ -401,9 +344,7 @@ collect_mirror_store() {
   report_mirror_job
 }
 
-# ── Warming a mirror ─────────────────────────────────────────────────────────────────────────
-# Prints manifest $2 (a tag or a digest) of repository $1, read through the mirror. Reads
-# warm_mirror's `start`, so the read ends with the warm budget, and reads nothing once it is spent.
+# Reads warm_mirror's `start`: reads end with the warm budget, and nothing is read once spent.
 mirror_manifest() {
   local left=$((WARM_BUDGET_S - (SECONDS - start)))
   ((left > 0)) || return 1
@@ -411,8 +352,7 @@ mirror_manifest() {
   curl -fs --max-time "$left" -H "Accept: ${ACCEPT}" "${MIRROR_URL}/v2/${1}/manifests/${2}"
 }
 
-# Prints the config and layer digests of image $1 at $2, one per line. An index resolves to its
-# linux/amd64 child, the platform both nodes run. An index with no such child prints nothing.
+# An index resolves to its linux/amd64 child, the platform both nodes run.
 mirror_blob_digests() {
   local manifest child
   manifest=$(mirror_manifest "$1" "$2") || return 1
@@ -480,8 +420,7 @@ warm_mirror() {
   return 0
 }
 
-# A previous run that died between its scale-down and its restore left the stamp. Its Job may
-# still be pruning, so restore_mirror_store deletes an unfinished one before the pod returns.
+# A run that died between scale-down and restore left the stamp; its Job may still be pruning.
 restore_stranded_mirror() {
   [[ -e "$MIRROR_STAMP" ]] || return 0
   logger -t registry-gc "a previous run left deploy/${MIRROR_DEPLOY} scaled down — restoring it first"
@@ -513,10 +452,8 @@ if ! take_lock; then
   exit 1
 fi
 run_mirror_phase || FAILED=1
-# The next phase starts only with this mirror serving, so this run never holds both down. The
-# stamp, not MIRROR_DOWN, says so: a failed restore clears MIRROR_DOWN and leaves the stamp.
-# A dockerhub-mirror a killed run stranded is still restored: that scales nothing down, and
-# skipping it would leave the mirror at zero for another week.
+# The stamp, not MIRROR_DOWN, says a mirror is down: a failed restore clears MIRROR_DOWN. A stranded
+# dockerhub-mirror is still restored: that scales nothing down.
 if [[ -e "$MIRROR_STAMP" ]]; then
   DONE_MSG="${MIRROR_MSG}; dockerhub-mirror not collected"
   use_dockerhub_store

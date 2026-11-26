@@ -45,8 +45,6 @@ import urllib.parse
 import urllib.request
 from collections.abc import Callable
 
-# The poller runs from /opt/claude-triage, where component.yml's `lib:` entries ship host_lib.py
-# and prom_envelope.py beside it.
 from host_lib import WARNING, atomic_write, log, parse_env_file
 from prom_envelope import PromAnswerError, prom_result
 from weekly_window import in_weekly_window
@@ -57,8 +55,8 @@ ALERTS_QUERY = (
     'ALERTS{alertstate="firing", alertname!="Watchdog", shadow!="true", drill!="true"}'
 )
 PROM_AGE_QUERY = 'time() - process_start_time_seconds{job="prometheus"}'
-# Rules with `for:` up to 10m refire within it; a longer one is restored with Prometheus's
-# 10-minute --rules.alert.for-grace-period. Twenty minutes covers both with room.
+# Rules with `for:` up to 10m refire within it; longer ones return after Prometheus's 10-minute
+# grace period.
 ALERTS_SETTLE_S = 1200
 HOLD_ALERT = "DeployHoldActive"
 EPISODE_MAX = 63

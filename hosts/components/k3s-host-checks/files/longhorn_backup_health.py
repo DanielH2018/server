@@ -112,8 +112,7 @@ MAX_AGE_HOURS = _require_int_env("LONGHORN_BACKUP_MAX_AGE_HOURS")
 WEEKLY_MAX_AGE_HOURS = _require_int_env("LONGHORN_WEEKLY_BACKUP_MAX_AGE_HOURS")
 ERROR_MAX_AGE_HOURS = _require_int_env("LONGHORN_BACKUP_ERROR_MAX_AGE_HOURS")
 DAILY_BACKUP_BUDGET = _require_int_env("LONGHORN_DAILY_BACKUP_BUDGET")
-# The drill's stamp ConfigMap lives in the drill's namespace, not Longhorn's, so it gets its own
-# runner rather than a second `-n` passed through the longhorn-system one.
+# The drill's stamp ConfigMap lives in the drill's namespace, so it gets its own runner.
 DRILL_NAMESPACE = _require_env("LONGHORN_RESTORE_DRILL_NAMESPACE")
 drill_kubectl = host_lib.kubectl_runner(KUBECTL_BIN, DRILL_NAMESPACE, TIMEOUT)
 DRILL_MAX_AGE_DAYS = _require_int_env("LONGHORN_RESTORE_DRILL_MAX_AGE_DAYS")
@@ -121,9 +120,8 @@ DRILL_COVERAGE_SLACK_DAYS = _require_int_env(
     "LONGHORN_RESTORE_DRILL_COVERAGE_SLACK_DAYS"
 )
 CRON_EVIDENCE_WINDOW_HOURS = _require_int_env("LONGHORN_CRON_EVIDENCE_WINDOW_HOURS")
-# Check 10's B2 timers. The path, the fire stamp and the expected flag are shim-exported for the
-# reason the transport settings are: a value only the shim knows must not sit here as a default a
-# wrong export would shadow. The B2-accounting task is gated on `has_repo_checkout`.
+# Shim-exported: a value only the shim knows must not sit here as a default a wrong export would
+# shadow.
 B2_DELETIONS_CRON = cron_evidence.cron_state(
     "b2-deletions",
     _require_env("LONGHORN_B2_DELETIONS_CRON_FILE"),
@@ -145,9 +143,7 @@ B2_RETENTION_CRON = cron_evidence.cron_state(
 # Check 12's drop-in. The schedule and the arm state are read from it each run.
 ETCD_DROP_IN = Path(_require_env("LONGHORN_ETCD_DROP_IN"))
 
-# Check 9's B2 transport. Its own deadline rather than TIMEOUT: journalctl answers from a local
-# file in milliseconds, and the shim sizes the reader's worst-case run against its 600s cron
-# period.
+# Its own deadline, not TIMEOUT: journalctl reads a local file in milliseconds.
 journal = host_lib.journal_reader(
     _require_env("LONGHORN_JOURNALCTL"),
     CRON_EVIDENCE_WINDOW_HOURS,
@@ -417,9 +413,7 @@ def main(now: float | None = None) -> int:
     problems: list[tuple[int, str]] = []
     classes = _ProblemClasses(problems)
 
-    # ── targets (armed only) and disarmed set ─────────────────────────────────────────────
-    # The arm state is the live URL: blank is disarmed (`cluster_state.watch_plan` has the rule
-    # and why a target the list lacks stays watched).
+    # The arm state is the live URL: blank is disarmed (`cluster_state.watch_plan` has the rule).
     targets = _fetch_targets(problems)
     backup_targets, disarmed_targets, plan_problems = cluster_state.watch_plan(targets)
     problems += plan_problems
@@ -429,9 +423,8 @@ def main(now: float | None = None) -> int:
     )
     classes.close("targets")
 
-    # ── run times, for the first-run grace ────────────────────────────────────────────────
-    # From each tier's live RecurringJob. One whose cron is missing or malformed degrades the
-    # first-run grace for that tier, not the reader.
+    # From each tier's live RecurringJob; a missing or malformed cron degrades only that tier's
+    # first-run grace.
     job_crons = _fetch_job_crons(problems)
     classes.close("recurring-jobs")
     run_hhmm = cluster_state.run_times(job_crons or {})
@@ -443,17 +436,13 @@ def main(now: float | None = None) -> int:
             )
     daily_run_hhmm = run_hhmm[backups.DAILY_JOB]
 
-    # One fetch feeds checks 2 to 5. On a failed fetch each of them is skipped rather than fed
-    # an empty list, so the one fetch problem is the one thing reported.
+    # One fetch feeds checks 2 to 5; on failure they are skipped rather than fed an empty list.
     backup_items = _fetch_backups_json(problems)
     backup_list = backups.from_items(backup_items) if backup_items is not None else None
     classes.close("backup-list")
 
-    # ── check 2: freshness ────────────────────────────────────────────────────────────────
-    # On a failed fetch, check_freshness is skipped rather than fed a None newest_ts: that path
-    # reports "no backups exist", a claim about the data plane this reader has not seen. `age_s`
-    # stays 0 and is never read — the fetch problem already forces build_verdict's DOWN branch,
-    # and only the green summary prints an age.
+    # Skip check_freshness on a failed fetch: a None newest_ts would claim 'no backups exist'.
+    # `age_s` stays 0, never read: the fetch problem already forces DOWN.
     age_s = 0.0
     if backup_list is not None:
         newest = backups.newest(backup_list)
@@ -498,9 +487,7 @@ def main(now: float | None = None) -> int:
             for shard in range(backups.WEEKLY_SHARDS)
         ],
     ]
-    # The whole loop is skipped when the backup list fetch failed: every tier is matched
-    # against those rows, so feeding it an empty list would report all eight tiers' volumes as
-    # uncovered over one unread fetch. The fetch's own problem is already in `problems`.
+    # Skip the loop when the fetch failed: an empty list would report every volume uncovered.
     coverage_rows = [(b.volume, b.created, b.job) for b in backup_list or []]
     # Check 11's scope: the weekly-shard volumes on an armed target, as volume -> claim. The
     # daily tier is left out on purpose: `DECIDED: only weekly-tier volumes are checked` in
@@ -551,8 +538,8 @@ def main(now: float | None = None) -> int:
     # ── check 5: recent-backup budget ─────────────────────────────────────────────────────
     day_ago_s = now_s - 86400
     r2_volumes = _fetch_r2_volumes(problems)
-    # recent_n reaches build_verdict, which prints it only on the green summary — a failed fetch
-    # here has already put its own problem in the list, so the 0 is never reported as a count.
+    # recent_n is only printed on the green summary, so the 0 after a failed fetch is never
+    # reported.
     recent_n = 0
     if backup_list is not None and r2_volumes is not None:
         recent_n, recent_bytes = logic.compute_recent_backups(
@@ -601,8 +588,6 @@ def main(now: float | None = None) -> int:
     )
     classes.close("recurring-job-logs")
 
-    # ── checks 9 and 10: what the trim and the B2 timers said, and whether they ran ──────
-    # A failed CronJob read is rank 4, the evidence plane's rank, not `_fetch_text`'s rank 1.
     trim_read, trim_cronjob = _fetch_trim_cronjob()
     if trim_read:
         problems.extend(
@@ -619,9 +604,6 @@ def main(now: float | None = None) -> int:
         )
     classes.close("b2-timers")
 
-    # ── check 11: weekly volumes a backup RecurringJob skipped ───────────────────────────
-    # Skipped with the backup list, like check 4, since `weekly_watched` and the coverage rows
-    # come from it.
     if backup_list is not None and pod_log is not None:
         skipped_problem = skipped.check_skipped_weekly_volumes(
             skipped.parse_skipped_volumes(pod_log), weekly_watched, coverage_rows
@@ -652,9 +634,7 @@ def main(now: float | None = None) -> int:
         msg += f", newest S3 etcd snapshot {int(etcd_age_s / 3600)}h old"
         push_msg = msg
 
-    # Log the FULL verdict before printing the ranked one, unconditionally — matching the
-    # original script's "log before push" ordering, so a DOWN status logged here still leaves a
-    # journalctl trail even though only `push_msg` reaches the wrapper's stdout.
+    # Log the FULL verdict before printing the ranked one, so a DOWN leaves a journalctl trail.
     _syslog(f"status={status} {msg}")
 
     for name in classes.names:

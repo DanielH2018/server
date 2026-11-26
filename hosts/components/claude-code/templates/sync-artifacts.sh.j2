@@ -27,55 +27,38 @@ done
 # the peer list can be empty, and an unused variable is a shellcheck failure in the rendered
 # script (validate/render_lib/shell.py renders with the loop unrolled to nothing).
 
-# The lock and the per-peer failure counters. The override exists so the tests can run the
-# rendered script against a temporary directory; the unit passes nothing and gets /tmp, where a
-# reboot clears every counter — which is the right reset, since a reboot ends any outage the
-# counters were tracking.
+# The override lets tests run the rendered script against a temporary directory.
+# The unit uses /tmp, where a reboot clears every counter: the right reset, as a reboot ends any
+# outage.
 state_dir="${SYNC_ARTIFACTS_STATE_DIR:-/tmp}"
 
-# One sync at a time. The timer interval is far longer than a run, but a slow or hung ssh must
-# not stack copies of rsync against the same destination.
+# One sync at a time: a slow or hung ssh must not stack rsync copies against the same destination.
 exec 9>"${state_dir}/sync-artifacts.lock"
 flock -n 9 || exit 0
 
 status=0
-# The verdict, recorded once after every peer has run. It goes down only when a peer's
-# streak has reached the same threshold as the stderr line, so a peer that is briefly off stays up
-# with its streak named in the report.
+# Goes down only when a peer's streak reaches the stderr-line threshold, so a briefly-off peer stays
+# up.
 verdict=up
 report=""
 {% set _ssh = 'ssh -o BatchMode=yes -o ConnectTimeout=10 -o ClearAllForwardings=yes${RUNTIME_DIRECTORY:+ -o ControlMaster=auto -o ControlPath=$RUNTIME_DIRECTORY/%C -o ControlPersist=60}' %}
 {% for peer in claude_code_artifacts_peer_sources %}
-# --delete, so an artifact pruned on {{ peer.name }} stops being served here too; the index
-# would otherwise keep offering links to documents that no longer exist anywhere.
-# ConnectTimeout keeps a rebooting peer from holding the lock for the whole interval, and
-# BatchMode makes a missing key fail rather than prompt.
-# ClearAllForwardings drops any LocalForward this host's ~/.ssh/config attaches to
-# {{ peer.ssh_target }}: rsync's transport needs no forwarding, and a forward whose local port is
-# already held fails the whole ssh with "bind [127.0.0.1]:<port>: Address already in use"
-# rather than just declining the tunnel.
-# --chmod=D0750 sets every directory's mode here instead of copying the peer's. With the
-# trailing slash, -a would put the peer root's mode on the top directory every run, and
-# homelab-artifacts.conf's `d` line, which this unit's ExecStartPre= applies, sets it back to
-# 0750 on every run.
-# Keep the two modes equal.
+# ClearAllForwardings: a LocalForward from ~/.ssh/config whose local port is held fails the whole
+# ssh.
+# --chmod=D0750 must equal the mode of homelab-artifacts.conf's `d` line, or -a flips it each run.
 {% if peer.stars_path | default('') %}
-# The star list goes back over the same transport, after the pull, and a failed push counts
-# toward the same streak: until it lands, {{ peer.name }}'s prune can delete an artifact starred
-# here. No list yet means nothing was ever starred, and there is nothing to push.
+# Until the star list lands, {{ peer.name }}'s prune can delete an artifact starred here.
+# A failed push counts toward the same streak.
 {% endif %}
-# The pull and the push share one ssh connection through a control socket in the unit's
-# RuntimeDirectory, so each run is one sshd login on the peer, not two. ControlPersist keeps the
-# master alive between the two rsyncs; systemd stops it with the oneshot's cgroup. With no
-# RUNTIME_DIRECTORY, as in the tests, each rsync opens its own connection.
+# The pull and push share one ssh connection through a control socket: one sshd login per run.
+# With no RUNTIME_DIRECTORY, as in the tests, each rsync opens its own connection.
 if rsync -a --delete --chmod=D0750 --timeout=60 \
     -e "{{ _ssh }}" \
     "{{ peer.ssh_target }}:{{ peer.path }}/" "{{ claude_code_artifacts_peer_dir }}/{{ peer.name }}/"{% if peer.stars_path | default('') %} \
   && { [ ! -f "{{ claude_code_artifacts_stars_file }}" ] || rsync -a --timeout=60 \
     -e "{{ _ssh }}" \
     "{{ claude_code_artifacts_stars_file }}" "{{ peer.ssh_target }}:{{ peer.stars_path }}"; }{% endif %}; then
-  # A run that recovers says so in the journal and forgets the streak, so the next outage
-  # starts counting from zero rather than inheriting the last one's total.
+  # A recovered run forgets the streak, so the next outage counts from zero.
   if [ -f "${state_dir}/sync-artifacts-{{ peer.name }}.fails" ]; then
     logger -t sync-artifacts "{{ peer.name }} recovered after \
 $(cat "${state_dir}/sync-artifacts-{{ peer.name }}.fails") failed run(s)"
@@ -97,8 +80,7 @@ else
   if [ "$fails" -eq {{ claude_code_artifacts_sync_alert_after_failures }} ]; then
     echo "sync-artifacts: {{ peer.name }} has failed $fails consecutive runs" >&2
   fi
-  # -ge, not the -eq the stderr line uses: that line fires once per outage, but the verdict must
-  # stay down on every run past the threshold, or it would go green again mid-outage.
+  # -ge, not the stderr line's -eq: the verdict must stay down on every run past the threshold.
   if [ "$fails" -ge {{ claude_code_artifacts_sync_alert_after_failures }} ]; then
     verdict=down
     report="${report:+$report; }{{ peer.name }} failed $fails consecutive runs"

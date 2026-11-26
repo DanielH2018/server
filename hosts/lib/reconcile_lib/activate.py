@@ -123,8 +123,7 @@ def perform(
         return True
     if kind == "reboot":
         REBOOT_PENDING.parent.mkdir(parents=True, exist_ok=True)
-        # Never re-touch: the flag's mtime is when the host first owed a reboot since its last
-        # boot, which homelab_host_reboot_pending_since_seconds exports.
+        # Never re-touch: the flag's mtime is when the host first owed a reboot since its last boot.
         if not REBOOT_PENDING.exists():
             REBOOT_PENDING.touch()
         return True

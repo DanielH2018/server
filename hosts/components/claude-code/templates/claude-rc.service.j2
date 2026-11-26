@@ -6,10 +6,8 @@ After=network-online.target
 Wants=network-online.target
 OnFailure={{ claude_code_rc_alert_unit }}
 {% if claude_code_user != sys_user %}
-# The runtime directory BindPaths= below exposes is created when the agent's user manager
-# starts. The agent lingers, so logind starts that manager at boot, but nothing orders it
-# before this unit: a bind whose source is missing fails the unit's start. Wants= also starts
-# the manager if linger is ever off.
+# Nothing orders the user manager before this unit; a missing BindPaths= source fails the start.
+# Wants= also starts the manager if linger is ever off.
 Wants=user@{{ claude_code_user_uid }}.service
 After=user@{{ claude_code_user_uid }}.service
 {% else %}
@@ -68,14 +66,12 @@ PrivateTmp=yes
 UMask=0027
 
 {% endif %}
-{#- The agent's uid is claude_code_user_uid, which has no default. The operator's is
-    claude_code_login_uid, never claude_code_user_uid: daniel-box keeps that var at the agent's
-    uid when its rollback sets claude_code_user back to the operator. The inline if evaluates
-    one side only, so an agent render without claude_code_user_uid still fails. #}
+{#- The operator's uid is claude_code_login_uid, never claude_code_user_uid, which daniel-box keeps at
+   the agent's uid on rollback. The inline if evaluates one side only, so an agent render without it
+   still fails. #}
 {% set runtime_uid = claude_code_user_uid if claude_code_user != sys_user else claude_code_login_uid %}
-# A system unit gets neither variable, and sd-bus finds the user bus through one of them. With
-# both unset, `systemd-run --user` and `systemctl --user` fail with "No medium found". The
-# operator's unit needs them as much as the agent's.
+# A system unit gets neither variable, and sd-bus finds the user bus through one of them;
+# without both, `systemd-run --user` and `systemctl --user` fail "No medium found".
 Environment=XDG_RUNTIME_DIR=/run/user/{{ runtime_uid }}
 Environment=DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/{{ runtime_uid }}/bus
 
@@ -103,24 +99,19 @@ Environment=DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/{{ runtime_uid }}/bus
 # deploy that lands this restarts the host and drops the sessions it had spawned.
 Slice={{ claude_code_fleet_slice }}
 
-# Claude Code is a PER-USER install (binary under ~/.local/share/claude, launcher symlinked
-# at ~/.local/bin/claude) and reads its OAuth token from ~/.claude/.credentials.json, so
-# HOME must be the real user's home and not systemd's default.
+# Claude Code is a per-user install reading ~/.claude/.credentials.json, so HOME must be the real
+# user's home.
 Environment=HOME={{ claude_code_user_home }}
 
-# systemd supplies a minimal PATH, exactly as cron does, and this is the same trap already
-# recorded for the host crons: without /usr/local/bin a spawned session loses kubectl and
-# uv, then reports an EMPTY CLUSTER rather than failing. The failure is silent in precisely
-# the direction that reads like a working session.
-# Node comes from the operator's fnm default alias: ~/.zshrc returns before fnm for the
-# non-interactive shell a session snapshots. The agent's home holds no fnm.
+# A minimal PATH lacks /usr/local/bin, so a session loses kubectl and uv and reports an EMPTY
+# CLUSTER.
+# Node comes from the operator's fnm default alias: ~/.zshrc returns before fnm in a session's
+# shell.
 {% set fnm_node = claude_code_user_home ~ '/.local/share/fnm/aliases/default/bin:' if claude_code_user == sys_user else '' %}
 Environment=PATH={{ fnm_node }}{{ claude_code_user_home }}/.local/bin:/usr/local/bin:/usr/bin:/bin
 Environment=KUBECONFIG={{ claude_code_user_home }}/.kube/config
 
-# A spawned session reports session_kind="remote-control", a value from
-# scripts/dev/fanout_lib/telemetry.py:SessionKind. A settings `env` replaces the whole
-# OTEL_RESOURCE_ATTRIBUTES value, so the agent's settings.json, which sets process.owner,
+# A settings `env` replaces the whole OTEL_RESOURCE_ATTRIBUTES, so the agent's settings.json
 # displaces this line; the agent's ExecStart passes both labels through --settings instead.
 Environment=OTEL_RESOURCE_ATTRIBUTES=session.kind=remote-control
 
@@ -146,15 +137,10 @@ Environment=OTEL_RESOURCE_ATTRIBUTES=session.kind=remote-control
 Environment=CLAUDE_CODE_DISABLE_BG_SHELL_PRESSURE_REAP=1
 {% endif %}
 
-# Bound the pytest fan-out. `addopts` in pyproject.toml carries `-n auto`, which pytest-xdist
-# resolves to one worker per core — 16 on daniel-box. Nothing caps how many pytest runs the
-# sessions on this host launch at once, so nine concurrent runs resolve `auto` nine times over
-# and put ~144 workers in this cgroup.
-#
-# xdist reads this variable FIRST in `pytest_xdist_auto_num_workers` and returns it before any
-# CPU detection (`xdist/plugin.py`, verified against the installed 3.8.0), so it governs both
-# `-n auto` and `-n logical`. Setting it here rather than in pyproject.toml is deliberate: it
-# scopes the cap to sessions this host spawns, leaving CI and a human's own shell at full width.
+# `-n auto` resolves to one worker per core (16 here), and nothing caps concurrent pytest runs per
+# host.
+# xdist reads this first, governing `-n auto` and `-n logical`; CI and a human's shell keep full
+# width.
 Environment=PYTEST_XDIST_AUTO_NUM_WORKERS={{ claude_code_rc_pytest_workers }}
 
 # DECIDED: --spawn is passed EXPLICITLY and must stay that way. With it omitted the process
@@ -219,13 +205,10 @@ MemoryHigh={{ claude_code_rc_memory_high }}
 # cgroup safe; claude_code_rc_pytest_workers is still the bound on the fan-out that fills it.
 MemorySwapMax={{ claude_code_rc_memory_swap_max }}
 
-# A global OOM picks a fleet process before a pod. defaults/main.yml beside
-# claude_code_fleet_oom_score_adjust says why the value is the maximum.
 OOMScoreAdjust={{ claude_code_fleet_oom_score_adjust }}
 
-# Stopping the host is meant to stop the sessions it spawned; they are its children, so the
-# default control-group kill is the wanted behaviour. The timeout gives them a chance to
-# flush transcripts first.
+# Stopping the host stops its child sessions via the default control-group kill; the timeout lets
+# them flush transcripts.
 TimeoutStopSec=30
 
 [Install]

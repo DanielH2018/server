@@ -73,8 +73,8 @@ def ask(path: str, line: str) -> bytes:
             try:
                 chunk = conn.recv(65536)
             except OSError:
-                # A reset or a timeout mid-answer leaves a partial answer, which decode()
-                # refuses; it is not the same fault as a socket that cannot be reached.
+                # A reset or timeout mid-answer leaves a partial answer, which decode() refuses;
+                # unlike an unreachable socket.
                 break
             if not chunk:
                 break

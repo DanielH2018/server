@@ -35,8 +35,7 @@ done
 
 [[ "$(id -u)" == "0" ]] || die "must run as root"
 
-# The orchestrator polls STAGE/STEP.rc over fresh ssh sessions, so no session is held open for a
-# step that builds a venv, installs three packages and writes the AIDE baseline.
+# The orchestrator polls STAGE/STEP.rc over fresh ssh sessions, holding none open for a long step.
 cmd_detached() {
   local step="$1"
   shift
@@ -48,12 +47,11 @@ cmd_detached() {
 }
 
 cmd_prepare() {
-  # Step 1 of bootstrap-host.sh refuses any hostname but the one it is given; the seed names the
-  # guest etcd-drill.
+  # Step 1 of bootstrap-host.sh refuses any other hostname; the seed names the guest etcd-drill.
   hostnamectl set-hostname daniel-box || die "cannot set the hostname"
   grep -q '[[:space:]]daniel-box$' "$ROOT/etc/hosts" || echo "127.0.1.1 daniel-box" >>"$ROOT/etc/hosts"
-  # A first boot's cloud-init and apt-daily jobs hold dpkg's lock, and step 5's install does not
-  # wait for it. The stop waits for a running job to end.
+  # First-boot cloud-init and apt-daily jobs hold dpkg's lock, which step 5 does not wait for.
+  # The stop waits for a running job to end.
   cloud-init status --wait >/dev/null 2>&1 || true
   systemctl stop apt-daily.timer apt-daily-upgrade.timer apt-daily.service apt-daily-upgrade.service \
     || die "cannot stop the apt-daily jobs"
@@ -74,8 +72,9 @@ bootstrap() {
 
 cmd_deviate() {
   local unit
-  # The packaged 50-homelab.yaml pins both to daniel-box's LAN address, which this guest must
-  # never hold. etcd-s3 is off because Flux, which applies its credential Secret, never runs here.
+  # The packaged 50-homelab.yaml pins both to daniel-box's LAN address, which this guest must never
+  # hold.
+  # etcd-s3 is off because Flux, which applies its credential Secret, never runs here.
   install -d "$ROOT/etc/rancher/k3s/config.yaml.d"
   printf 'node-ip: "%s"\nadvertise-address: "%s"\netcd-s3: false\n' "$1" "$1" \
     >"$ROOT/etc/rancher/k3s/config.yaml.d/90-drill.yaml" || die "cannot write 90-drill.yaml"
@@ -88,8 +87,9 @@ cmd_deviate() {
   done <"$STAGE/masks"
   systemctl daemon-reload || die "daemon-reload failed"
   command -v ufw >/dev/null || apt-get install -y ufw || die "apt-get install ufw failed"
-  # Added while the ruleset is empty, so it sits above the ssh limit rule the ufw arm appends and
-  # the orchestrator's polling is never rate-limited. No `homelab:` comment, so the arm keeps it.
+  # Added while the ruleset is empty, so it sits above the ssh limit rule and polling is never
+  # limited.
+  # No `homelab:` comment, so the arm keeps it.
   ufw allow from "$2" to any port 22 proto tcp || die "ufw allow from $2 failed"
 }
 
