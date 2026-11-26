@@ -147,7 +147,7 @@ def check_shape(bookmarks: list[dict]) -> None:
 
 
 def parse_ts(value: str) -> datetime:
-    return datetime.fromisoformat(value)
+    return datetime.fromisoformat(value.replace("Z", "+00:00"))
 
 
 def display_title(bookmark: dict) -> str:

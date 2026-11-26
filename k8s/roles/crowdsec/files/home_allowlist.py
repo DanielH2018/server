@@ -109,7 +109,7 @@ def plan(wanted: Mapping[int, str], stored: list[str]) -> Plan:
 def age_seconds(stamp: str, now: datetime) -> float | None:
     """Seconds since `stamp`, an ISO UTC time, or None when it cannot be read."""
     try:
-        when = datetime.fromisoformat(stamp)
+        when = datetime.fromisoformat(stamp.replace("Z", "+00:00"))
     except ValueError:
         return None
     if when.tzinfo is None:

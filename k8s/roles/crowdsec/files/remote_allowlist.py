@@ -152,8 +152,9 @@ def parse_expiration(raw):
     """An allowlist item's expiry as an aware datetime, or None when it never expires."""
     if not raw or str(raw).startswith("0001-01-01"):
         return None
+    text = str(raw).replace("Z", "+00:00")
     try:
-        parsed = datetime.fromisoformat(str(raw))
+        parsed = datetime.fromisoformat(text)
     except ValueError:
         return None
     return parsed if parsed.tzinfo else parsed.replace(tzinfo=UTC)

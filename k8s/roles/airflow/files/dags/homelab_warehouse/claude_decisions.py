@@ -192,7 +192,7 @@ def fetch_events(
 
 
 def _ms(event: Mapping) -> int:
-    stamp = datetime.fromisoformat(event["event_timestamp"])
+    stamp = datetime.fromisoformat(event["event_timestamp"].replace("Z", "+00:00"))
     return int(stamp.timestamp() * 1000)
 
 

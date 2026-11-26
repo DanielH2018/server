@@ -25,4 +25,13 @@ NO_Z_REPLACEMENT = Census(
     green=(Subject("a.py", "datetime.fromisoformat(s)"),),
     min_matches=100,
     must_find=frozenset({"hosts/lib/host_lib.py"}),
+    allow={
+        rel: "role payload, lands one role per PR in #10312"
+        for rel in (
+            "k8s/roles/airflow/files/dags/homelab_warehouse/claude_decisions.py",
+            "k8s/roles/crowdsec/files/home_allowlist.py",
+            "k8s/roles/crowdsec/files/remote_allowlist.py",
+            "k8s/roles/karakeep/files/karakeep_archive_pruner.py",
+        )
+    },
 )
