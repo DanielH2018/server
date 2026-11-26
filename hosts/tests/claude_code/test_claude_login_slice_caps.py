@@ -10,8 +10,9 @@ This module tests the two artifacts that close that gap:
 
 1. `login-slice-caps.conf.j2` — a systemd drop-in on user-<uid>.slice, read by every login
    session's cgroup regardless of how the session started.
-2. `pytest-fanout-cap.conf.j2` — a `~/.config/environment.d/` file, read by pam_systemd into
-   every login session's PAM environment at session start.
+2. `pytest-fanout-cap.conf.j2` — an `environment.d` file, read by every user manager, so every
+   `systemd-run --user` unit inherits it. No ssh session reads it.
+3. `sshd-pytest-cap.conf.j2` — an sshd `SetEnv` drop-in, which reaches every ssh session.
 
 Both must render from the SAME variables the unit already uses
 (claude_code_rc_memory_high, claude_code_rc_memory_swap_max, claude_code_rc_pytest_workers)
@@ -30,6 +31,8 @@ import pytest
 from _helpers import load_yaml
 from _setup_render import CLAUDE_CODE, render_component_text, role_context
 
+from renderer.renderer_lib import host as host_mode
+
 COMPONENT = "claude-code"
 ROLE_DIR = CLAUDE_CODE
 TEMPLATES = ROLE_DIR / "templates"
@@ -37,6 +40,8 @@ DEFAULTS = ROLE_DIR / "defaults" / "main.yml"
 
 SLICE_UNIT = "login-slice-caps.conf.j2"
 PYTEST_UNIT = "pytest-fanout-cap.conf.j2"
+SSHD_UNIT = "sshd-pytest-cap.conf.j2"
+SSHD_DROP_IN = "/etc/ssh/sshd_config.d/20-homelab-claude-pytest-cap.conf"
 
 
 def render(template: str, **overrides: object) -> str:
@@ -135,6 +140,35 @@ def test_pytest_cap_follows_the_same_variable_as_the_unit(
         "PYTEST_XDIST_AUTO_NUM_WORKERS in pytest-fanout-cap.conf.j2 must render from "
         "claude_code_rc_pytest_workers — the same variable the RC unit's Environment= line "
         "reads — or raising the unit's cap leaves a login session's cap at the old value"
+    )
+
+
+def test_ssh_sessions_get_the_pytest_cap_from_the_same_variable(
+    defaults: dict[str, object],
+) -> None:
+    """pam_env reads no environment.d file, so `ssh host cmd` reads only this SetEnv line."""
+    workers = defaults["claude_code_rc_pytest_workers"]
+    assert f"SetEnv PYTEST_XDIST_AUTO_NUM_WORKERS={workers}\n" in render(SSHD_UNIT)
+
+    raised = render(SSHD_UNIT, claude_code_rc_pytest_workers=97)
+    assert "SetEnv PYTEST_XDIST_AUTO_NUM_WORKERS=97\n" in raised, (
+        "the sshd drop-in must render from claude_code_rc_pytest_workers, or raising the "
+        "unit's cap leaves every ssh session at the old value"
+    )
+
+
+@pytest.mark.parametrize("host", ["daniel-box", "daniel-server"])
+def test_each_host_package_ships_the_sshd_cap_and_reloads_sshd(host: str) -> None:
+    """sshd reads a drop-in only at its reload, and keeps the first SetEnv it reads."""
+    package = host_mode.render_host(host)
+    assert package.activations[SSHD_DROP_IN] == "reload:ssh.service"
+    shipped = sorted(
+        path
+        for path, (body, *_) in package.files.items()
+        if path.startswith("/etc/ssh/sshd_config.d/") and b"SetEnv" in body
+    )
+    assert shipped == [SSHD_DROP_IN], (
+        f"{host}: only the pytest cap may set SetEnv: {shipped}"
     )
 
 

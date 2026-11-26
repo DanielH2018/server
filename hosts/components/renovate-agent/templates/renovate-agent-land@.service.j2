@@ -26,19 +26,16 @@ Environment=LAND_REQUIRE_AUTHOR=app/renovate
 # applies waits on the soak, so this leaves land-wait room for `verify`'s wait on the rendered
 # soak plus promote's `render`, `images` and `publish`, after the merge and CI waits.
 Environment=LAND_DEADLINE=41460
-# The reboot window's grace, as claude-land sets it. The session's own run_timeout_s does not
-# bound a landing: this unit runs on after the session ends, so one started late on a Saturday
-# can still be waiting on Sunday's window.
+# The session's run_timeout_s does not bound a landing: this unit outlives the session and may wait
+# on Sunday's window.
 Environment=LAND_WINDOW_GRACE=22200
 # /var/lib/renovate-agent-land/<n>.verdict is what the runner reads back as the controller,
 # so the directory is world-readable and only this unit writes it.
 StateDirectory=renovate-agent-land
 StateDirectoryMode=0755
 SyslogLevel=notice
-# Room for the flock wait below, the script's own checks and LAND_TIMEOUT_S, so the script
-# reports a slow landing itself rather than systemd killing it inside an Ansible run. systemd
-# counts the lock wait too: a landing queued 40 minutes behind another would otherwise be
-# killed 20 minutes in, with no verdict line.
+# Room for the flock wait, the script's checks and LAND_TIMEOUT_S: systemd counts the lock wait, so
+# a landing queued behind another could be killed with no verdict line.
 TimeoutStartSec=1071min
 # land_renovate_pr.py's REFUSED_EXIT: a refusal before any merge is an expected end, so it leaves
 # the unit inactive and SystemdUnitsFailed quiet. The runner reads the verdict file, not this.
@@ -48,9 +45,7 @@ SuccessExitStatus=3
 # this PR for the session to read as today's. The prompt stops landing on any VERDICT line but
 # `settled`, which is the right answer when another landing holds the lock.
 ExecStartPre=/bin/sh -c 'echo "VERDICT: none (the lander did not get its lock)" > "$1"' sh /var/lib/renovate-agent-land/%i.verdict
-# One landing at a time: two would race for the same tick and the same service locks. The wait
-# is short because the session lands one PR at a time and blocks on each, so only a hand-started
-# unit queues here, and a longer wait would come out of the landing's share of TimeoutStartSec.
+# One landing at a time: two would race for the same tick and the same service locks.
 ExecStart=/usr/bin/flock -w 180 /var/lock/renovate-agent-land.lock \
   /usr/bin/uv run --no-project --no-python-downloads --python {{ host_python_version }} \
   /usr/lib/homelab/renovate-agent/land_renovate_pr.py %i

@@ -1,15 +1,16 @@
 # Shipped by the claude-code host component — do not edit by hand.
 #
-# Caps pytest-xdist's fan-out for every login session on the host — ssh, tty, or a `claude`
-# process started directly from either. The package ships one copy to /usr/lib/environment.d,
-# which every user manager reads. None of those sessions read claude-rc.service's own
+# Caps pytest-xdist's fan-out for every unit a user manager starts, `systemd-run --user`
+# fan-out batches included. The package ships one copy to /usr/lib/environment.d, which every
+# user manager reads at its start. None of those units read claude-rc.service's own
 # PYTEST_XDIST_AUTO_NUM_WORKERS Environment= line; that reaches only the unit's cgroup.
-# pam_systemd reads environment.d and exports it into the session's PAM environment at login, so
-# this is the mechanism that reaches a process none of the other three locations do.
+#
+# An ssh session does not read this file: pam_env reads /etc/environment and pam_env.conf, not
+# environment.d. sshd-pytest-cap.conf.j2 carries the cap to ssh sessions.
 #
 # Same value as claude_code_rc_pytest_workers, not a separate number — raise them together,
 # or the cap depends on how the session started (this role's CLAUDE.md has the third
 # location, ~/.claude/settings.json's env block in the chezmoi repo).
 #
-# Takes effect on the NEXT login; an already-open session keeps whatever it started with.
+# Takes effect when the user manager next starts; a running manager keeps what it started with.
 PYTEST_XDIST_AUTO_NUM_WORKERS={{ claude_code_rc_pytest_workers }}

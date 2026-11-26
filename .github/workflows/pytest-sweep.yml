@@ -26,8 +26,7 @@ on:
     - cron: "30 9 * * *" # 04:30 America/Chicago, half an hour after the Renovate canary
   workflow_dispatch: # on a branch, to run the whole suite there without ci.yml's other jobs
 
-# One run per ref. A dispatch on a branch therefore never cancels master's nightly run, and
-# the workflow name keeps every group here apart from ci.yml's.
+# One run per ref, so a dispatch on a branch never cancels master's nightly run.
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
@@ -66,22 +65,16 @@ jobs:
           set -euo pipefail
           uv run --with pytest-randomly python -m pytest --github-report | tee "$RUNNER_TEMP/sweep.log"
 
-      # `-m image` replaces addopts' deselection. No paths: collecting the tree costs about
-      # 25 seconds and finds a marked test wherever it lives. It runs after a red suite too,
-      # and appends to the log the list step reads. `-n 0` keeps each image pull on one process.
+      # `-m image` replaces addopts' deselection; no paths, because collecting the tree finds a
+      # marked test wherever it lives.
       - name: Run the image-marked tests
         if: ${{ !cancelled() }}
         run: |
           set -euo pipefail
           uv run python -m pytest -n 0 -m image --github-report | tee -a "$RUNNER_TEMP/sweep.log"
 
-      # The one writer of ci.yml's rewrite cache: this run collects every module, so its entry
-      # holds whatever a leg's shard runs. It restores nothing first, so an entry never carries
-      # a deleted module's file or one named for an older pytest. A red sweep saves too: a failed
-      # test or a collection error leaves every module rewritten. A run that crashes partway saves
-      # only the modules it reached, and until the next sweep each leg rewrites the rest itself.
-      # A timed-out run is cancelled and saves nothing. pytest checks each file against its
-      # source's hash, so a partial entry costs time, never a wrong result.
+      # The one writer of ci.yml's rewrite cache: it collects every module and restores nothing
+      # first, so an entry never carries a deleted module.
       - name: Save pytest's rewritten test modules
         if: ${{ !cancelled() && github.ref == 'refs/heads/master' }}
         uses: actions/cache/save@v6.1.0
@@ -89,9 +82,7 @@ jobs:
           path: "**/__pycache__/*-pytest-*.pyc"
           key: pytest-rewrite-${{ runner.os }}-${{ github.run_id }}-${{ github.run_attempt }}
 
-      # pytest's short summary names each failure as `FAILED <module>::<test>` and each
-      # collection error as `ERROR <module>`. The list is capped so a suite-wide break
-      # cannot outgrow an issue body.
+      # The list is capped so a suite-wide break cannot outgrow an issue body.
       - name: List the modules that failed
         id: failed
         if: failure()
@@ -101,8 +92,7 @@ jobs:
             | cut -d' ' -f2 | sort -u | head -n 40 | tr '\n' ' ')
           echo "modules=$modules" >> "$GITHUB_OUTPUT"
 
-  # `issues: write` sits on this job alone, which runs one script and no test. A dispatch on
-  # a branch reports nothing: the issue speaks for master.
+  # `issues: write` sits on this job alone, which runs one script and no test.
   report:
     name: report the sweep
     needs: sweep

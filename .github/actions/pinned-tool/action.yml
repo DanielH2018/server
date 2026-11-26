@@ -30,9 +30,7 @@ inputs:
 runs:
   using: composite
   steps:
-    # The cache holds the download, never the installed binary, so the digest check below runs
-    # on a hit too. promote.yml's inline fetches write the same key, path and file name, so a
-    # cache entry from either serves both.
+    # The cache holds the download, never the binary, so the digest check runs on a hit too.
     - name: Cache the ${{ inputs.tool }} release
       uses: actions/cache@v6.1.0  # zizmor: ignore[unpinned-uses]
       with:

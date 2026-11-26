@@ -24,9 +24,8 @@ on:
     - cron: "0 9 * * *" # 04:00 America/Chicago; nobody is landing, so a red run is not mistaken for a red merge
   workflow_dispatch: # after touching renovate.json on master, or when a Renovate major lands
 
-# One run at a time: a `workflow_dispatch` near 09:00 UTC otherwise overlaps the scheduled run
-# on the same master head. The superseded run is cancelled, not queued, because no run here is
-# a commit's verdict.
+# One run at a time; the superseded run is cancelled, not queued, because no run here is a commit's
+# verdict.
 concurrency:
   group: ${{ github.workflow }}
   cancel-in-progress: true
