@@ -20,21 +20,11 @@ from pathlib import Path
 
 import yaml
 
-from lib import yaml_fast
+from lib import prom_duration, yaml_fast
 
 TESTS_KEY = "tests:\n"
 GROUP_START = "  - "
 ANCHOR_NAME = re.compile(r"[&*]([A-Za-z0-9_-]+)")
-DURATION_PART = re.compile(r"(\d+)(ms|s|m|h|d|w|y)")
-SECONDS = {
-    "ms": 0.001,
-    "s": 1,
-    "m": 60,
-    "h": 3600,
-    "d": 86400,
-    "w": 604800,
-    "y": 31536000,
-}
 
 
 def _group_starts(lines: list[str], count: int) -> list[int] | None:
@@ -62,10 +52,7 @@ def group_cost(group: object) -> float:
     ]
     return max(
         (
-            sum(
-                int(n) * SECONDS[unit]
-                for n, unit in DURATION_PART.findall(str(c.get("eval_time", "")))
-            )
+            prom_duration.seconds(str(c.get("eval_time", ""))) or 0.0
             for c in checks
             if isinstance(c, dict)
         ),

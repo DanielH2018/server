@@ -11,6 +11,7 @@ import sys as _sys
 # Use `core.<name>` for anything tests monkeypatch: a `from core import` binds a snapshot the patch
 # never reaches.
 from diagnostics.probe_lib import core
+from lib import prom_duration
 from diagnostics.probe_lib.core import (
     loki_endpoint,
     loki_query_url,
@@ -25,16 +26,6 @@ from diagnostics.probe_lib.core import (
 # measures what is held and says so.
 
 _RANGE_SELECTOR = re.compile(r"\[\s*((?:\d+(?:ms|[smhdwy]))+)\s*(?::[^\]]*)?\]")
-_DURATION_COMPONENT = re.compile(r"(\d+)(ms|[smhdwy])")
-_UNIT_SECONDS = {
-    "ms": 0.001,
-    "s": 1,
-    "m": 60,
-    "h": 3600,
-    "d": 86400,
-    "w": 7 * 86400,
-    "y": 365 * 86400,
-}
 
 # One instant query: the prometheus IngressRoute admits only `/api/v1/query` and `/api/v1/targets`.
 # `time()` is Prometheus' own clock.
@@ -54,14 +45,10 @@ def requested_range_seconds(promql):
     The longest, because a query holding several selectors is truncated as soon as its
     widest one outruns retention.
     """
-    spans = []
-    for match in _RANGE_SELECTOR.finditer(promql):
-        spans.append(
-            sum(
-                int(count) * _UNIT_SECONDS[unit]
-                for count, unit in _DURATION_COMPONENT.findall(match.group(1))
-            )
-        )
+    found = (
+        prom_duration.seconds(m.group(1)) for m in _RANGE_SELECTOR.finditer(promql)
+    )
+    spans = [s for s in found if s is not None]
     return max(spans) if spans else None
 
 
