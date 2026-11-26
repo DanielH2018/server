@@ -14,7 +14,7 @@ decision. The ledger records and refuses nothing.
 | 1 | A ledger that `ghread` and `lib/gh.py` record each call in, and `gh-quota status` | Deployed on 2026-11-14: [server#8717](https://github.com/DanielH2018/server/pull/8717) for the module and `lib/gh.py`, and [dotfiles#1336](https://github.com/DanielH2018/dotfiles/pull/1336) for `ghread`, `cc-wait` and the claude-guard rule. Its week of measurement ends on 2026-11-21. |
 | 2 | The session ceiling, the reserve and the write pace, enforced inside those two wrappers | Planned |
 | 3 | The REST readers that do not run `gh` record and obey the same ledger | Recording built: `github_rest.github_get` records each authenticated read, and `forge.py`'s `GitHub` client each REST request. `admit` and `If-None-Match` are planned. |
-| 4 | Identical reads from many sessions cost one GitHub call | Planned |
+| 4 | Identical reads from many sessions cost one GitHub call | Not planned: the operator ruled it out on 2026-11-26, from the measurement in [Issue and board state is read live](#issue-and-board-state-is-read-live) |
 | Identity | Agent sessions stop spending the operator's quota | Owned by [slice 6 of the agent-user plan](claude-agent-user.md#status) |
 
 ## What exhausts the quota
@@ -391,22 +391,14 @@ change of their own.
 kept in the ledger. `await_ci.py` polls the same run list every 20 seconds, and a poll that
 returns `304` costs nothing.
 
-### Identical reads cost one call
+### Identical reads are not shared
 
-`gh_quota` keeps the stdout of a read a wrapper has just run, keyed by identity and exact
-argv, for 15 seconds. A second caller with the same argv inside that time gets the kept
-answer and makes no GitHub call. A caller that arrives while the first is still running waits
-for it instead of starting its own.
-
-- Only an allow-list of read subcommands is kept: `pr list`, `pr view`, `issue list`,
-  `issue view`, `run list`, `run view` and a `gh api` GET. Only an exit status of 0 is kept.
-- A write through `lib/gh.py` drops every kept answer for that repository.
-- A write the ledger does not see is up to 15 seconds stale: one made elsewhere, or a bare
-  `gh pr create` in a session's shell. The polling loops here wait 20 to 30 seconds between
-  reads, so the staleness is inside one poll.
-
-This turns the second root-cause property around for the reads that matter. 39 sessions that
-run `findings.py claims` in the same quarter minute cost one call, not 39.
+**HISTORY —** The design kept each read's stdout for 15 seconds, keyed by identity and argv,
+so that a second session asking the same question within that time made no GitHub call. The
+operator ruled it out on 2026-11-26. Sessions rarely ask the same question within 15 seconds,
+so it would save about 3 reads a day. [Issue and board state is read live](#issue-and-board-state-is-read-live)
+holds the measurement. A `cc-wait` source that declares `remote` still shares one read per
+interval among its waiters.
 
 ### `gh-quota`, the way to read and reverse it
 
@@ -464,8 +456,9 @@ missing. `record` runs before the call, so a write GitHub refused is still count
   through a different setting. Its outage is the outage it exists to prevent.
 - **No identity per session.** GitHub's terms forbid it, as above.
 - **No webhook receiver.** GitHub recommends webhooks over polling, and a receiver needs a
-  public route and a state store. The 15-second read cache removes most duplicate polls for
-  far less. Revisit it if the ledger shows polling is still most of the spend after slice 4.
+  public route and a state store. GitHub sends Projects events only for an organization's
+  projects, so a receiver could not see the board. The other reasons are in
+  [Issue and board state is read live](#issue-and-board-state-is-read-live).
 - **No GitHub App for the reads the lander makes.** An installation token has its own quota,
   and minting one needs an RS256 signature the standard library cannot make. The identity
   split already keeps agent sessions out of the quota the lander spends.
@@ -477,8 +470,71 @@ missing. `record` runs before the call, so a write GitHub refused is still count
 | Wait after a 403, as today | No | No | No | The first 403 arrives when the pool is empty. |
 | Identity split alone | No | Yes | No | Kept, but one agent session still starves the rest. |
 | A `gh` shim on `PATH` | Yes | Yes | Yes | A second shim beside `ghread`. See *What the design leaves out*. |
-| A reader daemon that mirrors GitHub state | For reads | Partly | Yes | A daemon and a second copy of state; the read cache gets most of it with neither. |
+| A reader daemon that mirrors GitHub state | For reads | Partly | Yes | A daemon and a second copy of state, for a saving measured at about 1% of the GraphQL quota ([Issue and board state is read live](#issue-and-board-state-is-read-live)). |
 | An intercepting proxy | Yes, exactly | Yes | Yes | See *What the design leaves out*. |
+
+## Issue and board state is read live
+
+The repo does not keep a local copy of its issues, claims or Project board, and refreshes
+none by diffs. The operator asked for the measurement and ruled on 2026-11-26. Every figure
+below was measured on 2026-11-25 from both hosts' ledgers and 8 days of session transcripts.
+
+**The exhaustion of 2026-11-18 and 2026-11-19 came from one poller.** The `operator` session
+key made 35,697 calls on those two days. Its `variable get`, `issue list` and `api graphql`
+counts were near equal, which matches `probe.py landing --json` run once a minute in every
+session by the deck mod. The ledger keeps no argv, so the match is an inference. Commit
+`780c95548` removed the mod. From 2026-11-21 to 2026-11-25 the highest GraphQL window in
+either ledger was 1,657 of 5,000 points, and the highest core window was 3,125 of 5,000.
+
+**What a local copy could save is small.** Each figure is an upper bound per day:
+
+- **Quota:** about 1,280 GraphQL points of 120,000. Both hosts made about 320 open-list
+  reads a day. Each costs 3 points for the list and 1 for the issue fields.
+- **Unchanged reads:** about 80% of those, an estimate. 79% of 10-minute slots over 77 hours
+  held no issue event and no comment.
+- **Wall time:** about 3 minutes. Agents ran `findings.py next`, `list` or `claims` about 48
+  times a day. Each spends 3.2 to 4.3 seconds in `gh`.
+- **Tokens:** none from a cache, because the command prints the same answer. A diff-style
+  output could omit about 5,500 of 2.4 million tokens of tool output.
+
+**The state is smaller than a diff of it.** The register held 45 open issues, one page of
+254 KB over REST. A `since=` read covering one day returned 261 KB, because it carries
+closed issues and pull requests too.
+
+**Few reads are shared.** Of 383 agent runs of `next`, `list` and `claims`, 27 came within 15
+seconds of another session's run, and 71 within 90 seconds.
+
+**A copy would also be wrong in ways GitHub does not signal.**
+
+- A cross-reference does not move an issue's `updated_at`. In 16 of 119 issues whose last
+  event was a cross-reference, it was newer than `updated_at`.
+- A board edit does not move the issue's `updated_at` either. 39 of 271 project items were
+  newer than their issue, by up to 1,139 seconds.
+- A comment does move it, so a new claim does.
+- A read-only probe cannot tell whether a label, milestone, issue type, issue field,
+  sub-issue or blocked-by change moves it. None was the last event on any of 300 issues.
+- A blocker that closes changes nothing on the issue it blocked, so a copy would keep
+  hiding an issue that has just become free.
+- GitHub documents its repository events API as 30 seconds to 6 hours behind. It does not
+  redeliver a failed webhook, and it sends `projects_v2_item` events only for an
+  organization's projects.
+
+A claim decides who works an issue, and the earliest `Claim:` comment wins
+([the claim record](issue-claiming-and-fanout.md#the-claim-record)). A cached claim is
+therefore a race, so every option kept the claim reads live.
+
+**Options weighed.** The estimated line counts are for each option's own code:
+
+- A shared reader writing a snapshot and a change log: 500 to 800 lines, a unit and an alert.
+  It would keep one copy per user and per host, and still need full reads to catch the holes
+  above.
+- A git-backed mirror: 600 lines or more, plus push races.
+- A webhook store: 500 lines or more, a public route, and a full reconcile on top.
+- The 15-second shared read of slice 4: about 80 lines in two repos, for about 3 reads a day.
+
+**Revisit** when open `claude` issues pass 100, so that the list takes two pages. Also
+revisit when a GraphQL window reaches 50% on two different days and no runaway session
+explains it.
 
 ## Complexity
 
@@ -584,21 +640,11 @@ every session at once.
 - **To exercise it,** run `await_ci.py` against a finished SHA twice and read `core` in
   `gh-quota status --all`: the second run's polls record as `304` at no cost.
 
-### Slice 4: identical reads cost one call
+### Slice 4: not planned
 
-```diff
- hosts/components/gh-quota/
-   files/gh_quota.py        + kept answers: allow-list, 15 s, dropped on a write
- scripts/lib/gh.py          + serve a kept answer; wait on a read in flight
-
- dotfiles repo, its own PR:
-   home/dot_local/bin/executable_ghread   + the same two behaviours
-```
-
-- **To exercise it,** run the same `findings.py claims` from two sessions inside 15 seconds.
-  `gh-quota status --all` shows one call and one kept answer.
-- **The tests** cover the write that drops a kept answer, the non-zero exit that is not
-  kept, and two concurrent callers that produce one upstream call.
+The operator ruled slice 4 out on 2026-11-26, and
+[Issue and board state is read live](#issue-and-board-state-is-read-live) holds the
+measurement behind the ruling.
 
 ## Open questions
 
