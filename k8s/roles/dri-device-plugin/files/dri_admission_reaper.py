@@ -67,8 +67,6 @@ API = "https://kubernetes.default.svc"
 TOKEN_FILE = "/var/run/secrets/kubernetes.io/serviceaccount/token"
 # The seconds each API call may take. `open_url` retries a refused connect on top.
 CALL_TIMEOUT = 10
-# The kubelet's admission-failure reasons: the device manager's, and the resource fit's
-# `OutOf<resource>` (pkg/kubelet/lifecycle/predicate.go).
 ADMISSION_REASON = "UnexpectedAdmissionError"
 OUT_OF_PREFIX = "OutOf"
 

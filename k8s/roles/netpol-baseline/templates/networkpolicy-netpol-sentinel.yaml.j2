@@ -5,21 +5,10 @@
    peers, and its header rules out growing it to absorb another shape.
 #}
 ---
-# The probes' POSITIVE CONTROL, and the reason it is a policy rather than an accident.
-#
-# Every probe job needs one leg that MUST succeed. Without it, an inverted leg ("this connection
-# must be refused") passes for the wrong reason whenever the probe pod has no network, DNS is
-# down, or the target is simply dead. No pod in this namespace is unfenced under
-# `podSelector: {}`, so the control target is named here. That is STRICTLY STRONGER than
-# reaching an unfenced pod, which proves only that the probe has a network: reaching a FENCED
-# pod that admits us proves the admit path itself still works, which distinguishes "denied by
-# policy" from "the policy engine is dropping everything".
-#
-# speedtest, deliberately, and NOT littlelink: littlelink is the verify Job's DENIED target, so
-# admitting the probes there would make that probe report POLICY NOT ENFORCED. speedtest is a
-# static bandwidth page, is no probe's target, and has no data and no dependents.
-#
-# Adding a probe? Give its pod `netpol-probe: control` and dial `speedtest:80`.
+# Positive control: a FENCED pod that admits the probe proves the admit path works, which an
+# unfenced pod cannot.
+# speedtest, not littlelink (the verify Job's DENIED target). A new probe's pod gets
+# `netpol-probe: control` and dials `speedtest:80`.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -32,13 +21,10 @@ spec:
   policyTypes:
     - Ingress
   ingress:
-{# Renders allow-all when the flag is false, so `netpol_baseline_enforced` is a real rollback
-   lever. `| bool` for the string trap. Both explained in full in
-   networkpolicy-traefik.yaml.j2. #}
+{# Allow-all when the flag is false, the rollback lever. `| bool`: a string 'false' is truthy to
+   Jinja. #}
 {% if netpol_baseline_enforced | bool %}
-    # speedtest's real callers (traefik, prometheus) come from the baseline policy, which already
-    # selects it. This rule adds the probe pods and nothing else. Port 80 is the containerPort,
-    # which for speedtest equals the Service port.
+    # Adds the probe pods only; speedtest's real callers come from the baseline.
     - from:
         - podSelector:
             matchLabels:

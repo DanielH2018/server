@@ -17,29 +17,13 @@ spec:
   policyTypes:
     - Ingress
   ingress:
-{# Renders allow-all when the flag is false, so `netpol_baseline_enforced` is a real rollback
-   lever. `| bool` for the string trap. Both explained in full in
-   networkpolicy-traefik.yaml.j2. BOTH rules below sit inside this conditional. #}
+{# Allow-all when the flag is false, the rollback lever. `| bool`: a string 'false' is truthy to
+   Jinja. #}
 {% if netpol_baseline_enforced | bool %}
-    # zigbee2mqtt and home-assistant. DO NOT DELETE THESE TWO podSelectors -- they are the only
-    # thing admitting the MQTT clients, and a log observation will not show you that. A
-    # long-lived MQTT client logs one "New connection" when it first connects and nothing
-    # afterwards, so its absence from the log does not mean it never connects. The connections
-    # in the log from 10.42.0.1 are kubelet probes (a connect, then "connection closed by
-    # client", at the readiness and liveness periods in mosquitto/templates/deployment.yaml.j2),
-    # not MQTT clients.
-    #
-    # No ipBlock substitutes for these podSelectors: pod -> ClusterIP -> pod traffic PRESERVES
-    # the caller's pod IP, same-node and cross-node alike. It is NOT masqueraded to the cni0
-    # bridge address. Deleting them breaks MQTT at the next reconnect -- delayed, and hard to
-    # trace back to this file.
-    #
-    # The two cni0 ipBlocks are what admits the kubelet probes. They duplicate
-    # netpol_baseline_node_cidrs ONLY ONCE mosquitto carries `netpol-baseline: enforced` and the
-    # always-on baseline selects it. During the deploy step that applies this policy the label
-    # is not on the pod yet, so in that window they are the only admission a host-side caller
-    # has. Do not delete them as "redundant with the baseline" without confirming the label has
-    # landed.
+    # DO NOT DELETE the zigbee2mqtt and home-assistant podSelectors: they alone admit the MQTT
+    # clients, and no ipBlock substitutes (pod -> ClusterIP -> pod preserves the pod IP).
+    # The cni0 ipBlocks admit kubelet probes and duplicate the baseline only once the pod carries
+    # `netpol-baseline: enforced`; keep them until that label lands.
     - from:
         - podSelector:
             matchLabels:
@@ -54,10 +38,8 @@ spec:
       ports:
         - port: 1883
           protocol: TCP
-    # blackbox-exporter's `tcp_connect` probe connects to the mosquitto-lan VIP
-    # (10.0.0.242:1883). It is a pod on either node, and a cross-node hop arrives as its own
-    # real pod IP -- not SNAT'd, because ETP=Local on mosquitto-lan preserves the client
-    # address for a cross-node LoadBalancer hop.
+    # blackbox-exporter's tcp_connect to the mosquitto-lan VIP arrives as its real pod IP
+    # (ETP=Local).
     - from:
         - podSelector:
             matchLabels:

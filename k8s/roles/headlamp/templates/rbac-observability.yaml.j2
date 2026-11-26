@@ -40,8 +40,6 @@ subjects:
   - kind: ServiceAccount
     name: headlamp
     namespace: {{ k8s_namespace }}
-  # The OIDC identity, bound ALONGSIDE the SA — see the header for why, and for why it grants
-  # nobody anything yet.
   - kind: Group
     name: {{ headlamp_k8s_oidc_group }}
     apiGroup: rbac.authorization.k8s.io

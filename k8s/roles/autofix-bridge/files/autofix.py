@@ -47,9 +47,8 @@ from bridge.common import HTTP_TIMEOUT, _env, clamp_discord, sanitize
 
 INTERVAL = int(_env("INTERVAL", "300"))
 HEARTBEAT_FILE = _env("HEARTBEAT_FILE", "/tmp/heartbeat")
-# The cycle's verdict leaves the pod as gauges. The deadline is three cycles: one missed cycle
-# is a slow poll and two is a hung one, so the third is the first that is not noise.
-# Unset or 0 serves nothing, which keeps a hand-run and the tests off the port.
+# The deadline is three cycles: one missed is a slow poll, two a hung one. Unset or 0 serves
+# nothing.
 CHECK_EXPORTER_PORT = int(_env("CHECK_EXPORTER_PORT", "0"))
 CHECK = "arr-autoblock"
 DEADLINE_CYCLES = 3
@@ -345,9 +344,8 @@ def run_once(state):
         app_name, base, key, item = candidates[k]
         streak = state.streaks.get(k, GRACE_CYCLES)
         if not DRY_RUN:
-            # Mutate FIRST: if the DELETE/search raises, it must propagate (cycle_verdict()
-            # records a `down`) without a false "Blocklisted" report having already gone to
-            # Discord.
+            # Mutate FIRST: a raising DELETE/search must propagate (cycle_verdict records `down`)
+            # before a false "Blocklisted" report reaches Discord.
             _request(
                 "%s/api/v3/queue/%s?removeFromClient=true&blocklist=true"
                 % (base, item["id"]),

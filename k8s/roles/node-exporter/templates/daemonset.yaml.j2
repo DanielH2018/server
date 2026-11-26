@@ -1,8 +1,6 @@
 {% from 'container-resources.yml.j2' import container_resources with context %}
 {% from 'security-context.yml.j2' import hardened_security_context with context %}
 {% from 'workload-shell.yml.j2' import pod_shell with context %}
-{# The dockerhub-mirror-pull sidecar GETs this image's own manifest by digest. docker.io names a
-   one-component repository under library/. #}
 {% set exporter_repository = node_exporter_k8s_image.split('@')[0].rsplit(':', 1)[0] %}
 {% set exporter_repository = exporter_repository if '/' in exporter_repository else 'library/' ~ exporter_repository %}
 ---
@@ -22,12 +20,9 @@ spec:
         netpol-baseline: enforced
     spec:
 {{ pod_shell('homelab-best-effort') }}
-      # Host networking + PID so node_* describes the NODE (network interfaces, /proc)
-      # rather than a pod netns — the standard node-exporter posture. The 9100 listener
-      # this opens on each node is host-firewalled by ufw's default-deny INPUT except
-      # for the server node's LAN IP (k3s_join_agent_ports): under hostNetwork the
-      # "pod IP" prometheus scrapes IS the node's LAN IP, and cross-node that traffic
-      # arrives masqueraded from the scraping node, NOT over the vxlan the join allows.
+      # The 9100 listener is host-firewalled except for the server node's LAN IP
+      # (k3s_join_agent_ports);
+      # cross-node scrapes arrive masqueraded, not over the vxlan.
       hostNetwork: true
       hostPID: true
       containers:
@@ -38,11 +33,8 @@ spec:
             - --path.procfs=/host/proc
             - --path.rootfs=/rootfs
             - --path.sysfs=/host/sys
-            # var/lib/kubelet is excluded only down to its pods/ subtree: the per-pod bind mounts
-            # there are unbounded (one set per running pod), but Longhorn's CSI global mounts under
-            # var/lib/kubelet/plugins/ stay scraped, the only place node_filesystem_readonly can see
-            # a CSI volume's ext4 journal abort remount it read-only. That is ~40 attached volumes
-            # x ~7 series, not the per-pod cardinality the exclusion cuts off.
+            # Exclusion stops at var/lib/kubelet/pods: Longhorn's CSI mounts under plugins/ stay
+            # scraped so node_filesystem_readonly sees a journal-abort remount.
             - --collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc|var/lib/kubelet/pods)($|/)
             - --collector.textfile.directory=/textfile
             # The iscsi-sessions sidecar's directory, a second instance of the repeatable flag.
@@ -53,26 +45,23 @@ spec:
             - --collector.textfile.directory=/dockerhub-mirror-textfile
           ports:
             - containerPort: 9100
-          # Host access is READ-ONLY and comes from the hostPath mounts below, not from a uid.
-          # The image's own USER is 65534; pinning it guards an image bump that changes that.
-          # An HTTP probe on /metrics floods the log: kubelet's prober reads a bounded prefix and
-          # closes, and node_exporter logs one `connection reset by peer` line per family it could
-          # not write (~280 per probe). busybox wget reads the whole body, so nothing resets.
+          # Host access is READ-ONLY via hostPath; the pinned uid guards an image bump.
+          # No HTTP probe on /metrics: kubelet closes early and node_exporter logs a
+          # `connection reset`
+          # line per family.
 {{ hardened_security_context(read_only=true, non_root=true, run_as_user=65534) }}
           livenessProbe:
-            # The one probe that renders metrics, because only a probe that asks for them times
-            # out on a WEDGED collector: a dead NFS mount leaves / answering while /metrics hangs.
+            # Renders metrics on purpose: only that times out on a WEDGED collector (a dead NFS
+            # mount leaves / answering).
             exec:
               command: [wget, -q, -T, "5", -O, /dev/null, "http://127.0.0.1:9100/metrics"]
             initialDelaySeconds: 15
             periodSeconds: 60
             # A render takes ~50ms; the headroom covers growth in the mount and disk count.
             timeoutSeconds: 5
-          # Without a readiness probe, `rollout status` gates on numberAvailable meaning "Running",
-          # and goes green on a container that never served a scrape. `/` gates the rollout as
-          # well as /metrics does, because both paths share ONE listener that binds after the
-          # collectors register. It does not catch a wedged collector (liveness does) or
-          # collectors that all fail: node_exporter answers 200 either way.
+          # Without a readiness probe the rollout goes green on a container that never served a
+          # scrape.
+          # `/` gates as well as /metrics (one listener); a wedged collector is liveness's job.
           readinessProbe:
             httpGet:
               path: /
@@ -90,10 +79,8 @@ spec:
             - name: node-exporter-rootfs
               mountPath: /rootfs
               readOnly: true
-              # Without this, a mount created on the HOST after pod start never enters /rootfs
-              # (hostPath propagation is private by default). Longhorn creates a CSI global mount
-              # at attach time, so the filesystem collector would see nothing there. One-way
-              # (host -> container), so the pod can never mount INTO the host.
+              # Without it a mount created on the HOST after pod start never enters /rootfs.
+              # One-way, so the pod cannot mount into the host.
               mountPropagation: HostToContainer
             - name: node-exporter-textfile
               mountPath: /textfile
@@ -107,16 +94,13 @@ spec:
             - name: node-exporter-dockerhub-mirror-textfile
               mountPath: /dockerhub-mirror-textfile
               readOnly: true
-          # 1 core, not 200m. The exporter renders ~320 metric families per request, and at
-          # 200m it was throttled on 42% of CFS periods, which slows every scrape and probe.
+          # 1 core, not 200m: at 200m the exporter throttled on 42% of CFS periods, slowing every
+          # scrape and probe.
 {{ container_resources(cpu_limit='1', mem_limit='128Mi', cpu_request='20m', mem_request='32Mi') }}
-        # Writes iscsi-sessions.prom, the node's iSCSI session states, every 60s. A
-        # sidecar rather than a host timer because this DaemonSet reaches both nodes, mounts /sys
-        # and is applied by Flux. The script is inlined, not mounted from a ConfigMap, so a change
-        # to it rolls the DaemonSet. It reuses the exporter's image for its busybox shell. No
-        # probes: pod Ready is the AND of its containers, and a readiness probe here would let
-        # this check pull the exporter out of the Kustomization's wait. A wedged loop surfaces
-        # as IscsiSessionsNotReporting.
+        # A sidecar, not a host timer: this DaemonSet reaches both nodes and Flux applies it. The
+        # script is inlined so a change rolls it.
+        # No probes: a readiness probe would let this check pull the exporter out of the
+        # Kustomization's wait.
         - name: iscsi-sessions
           image: {{ node_exporter_k8s_image }}
           imagePullPolicy: IfNotPresent
@@ -133,13 +117,9 @@ spec:
             - name: node-exporter-iscsi-textfile
               mountPath: /iscsi-textfile
 {{ container_resources(cpu_limit='100m', mem_limit='16Mi', cpu_request='5m', mem_request='8Mi') }}
-        # Writes ghcr-mirror-pull.prom, whether this node's ghcr.io mirror endpoint serves nut's
-        # manifest, every 600s. Here because this pod is hostNetwork on every node: its
-        # GET leaves the host network namespace as containerd's pulls do, so the mirror's fence
-        # judges it by the same node grant. A pod network check would be refused by that fence,
-        # which the registry's isolation Job proves. The endpoint is the one registries.yaml
-        # names on the node (hosts/components/k3s-{server,agent}/templates/registries.yaml.j2). It
-        # reuses the exporter's image for busybox's shell and wget. No probes, as for iscsi-sessions above.
+        # Here because this pod is hostNetwork on every node: its GET leaves the host netns as
+        # containerd's pulls do, so the mirror's fence judges it by the same node grant. No probes,
+        # as for iscsi-sessions.
         - name: ghcr-mirror-pull
           image: {{ node_exporter_k8s_image }}
           imagePullPolicy: IfNotPresent
@@ -213,14 +193,11 @@ spec:
         - name: node-exporter-rootfs
           hostPath:
             path: /
-        # The textfile collector directory. This role's CLAUDE.md names its producers and the
-        # contract a new *.prom file follows.
         - name: node-exporter-textfile
           hostPath:
             path: /var/lib/node-exporter-textfile
             type: DirectoryOrCreate
-        # The iscsi-sessions sidecar writes here and the exporter reads it. An emptyDir, not the
-        # hostPath above, so the sidecar needs no write access to the host.
+        # An emptyDir, not the hostPath, so the sidecar needs no write access to the host.
         - name: node-exporter-iscsi-textfile
           emptyDir:
             sizeLimit: 1Mi
@@ -232,10 +209,9 @@ spec:
         - name: node-exporter-dockerhub-mirror-textfile
           emptyDir:
             sizeLimit: 1Mi
-        # nut's role renders the repository and tag the sidecar GETs. A directory mount, never a
-        # subPath, so the kubelet swaps in a new tag without a roll. Optional, so a missing
-        # ConfigMap leaves the files absent and the check reports down rather than blocking the
-        # pod's start.
+        # A directory mount, never a subPath, so the kubelet swaps in a new tag without a roll.
+        # Optional:
+        # a missing ConfigMap reports down.
         - name: node-exporter-ghcr-mirror-probe
           configMap:
             name: nut-ghcr-mirror-probe

@@ -30,9 +30,8 @@
 {% set spec_text %}
 # A second attempt of a deterministic filesystem test tells nothing the first did not.
 backoffLimit: 0
-# Below the 600s `manifests_rollout_timeout_default` every `<tag>-verify` Kustomization takes.
-# The claim binds only once this pod schedules (WaitForFirstConsumer), so a Pending pod that
-# runs into the deadline means the PV's node pin is wrong, not the hardlink.
+# The claim binds only once this pod schedules, so a Pending pod hitting the deadline means the PV's
+# node pin is wrong, not the hardlink.
 activeDeadlineSeconds: 300
 template:
   metadata:
@@ -44,9 +43,7 @@ template:
     automountServiceAccountToken: false
     restartPolicy: Never
     enableServiceLinks: false
-    # The uid the media stack runs as, so the Job also proves that user can write the volume.
-    # Deliberately NO fsGroup: it would make the kubelet chown the whole library on every
-    # mount, and the files are already {{ puid }}:{{ pgid }}.
+    # Deliberately NO fsGroup: the kubelet would chown the whole library on every mount.
     securityContext:
       runAsNonRoot: true
       runAsUser: {{ puid }}
