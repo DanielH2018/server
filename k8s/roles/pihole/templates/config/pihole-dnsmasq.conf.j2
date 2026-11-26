@@ -37,49 +37,19 @@ address=/local.{{ domain }}/{{ pihole_wildcard_ip | default(k3s_metallb_ingress_
    "--address=/example.com/1.2.3.4 --local=/example.com/" restores the pre-2.86 NoData. #}
 local=/local.{{ domain }}/
 
-# k3s-hosted services answer with the cluster's MetalLB ingress VIP instead of the wildcard
-# above. dnsmasq resolves the most specific `address=` match, so these override
-# local.<domain> for exactly these names and nothing else.
-#
-# Derived from daniel-box's inventory rather than hand-listed: a hand-maintained list here is a
-# second source of truth that silently rots
-# the first time someone forgets it. Entries without a `hostname` (traefik itself) have no
-# route of their own and are skipped.
-#
-# `extra_hostnames` covers an entry that fronts MORE THAN ONE routed workload — observability
-# runs Grafana, Prometheus, Loki and Tempo under a single containers_list entry, so its
-# `hostname` can only name one of them. Without this, a second workload's IngressRoute exists
-# in the cluster but its name falls through to the local.<domain> wildcard above, resolves to
-# daniel-server, and the Docker Traefik answers its own 404 — which reads like a broken route
-# rather than a missing DNS record.
+# `extra_hostnames` covers an entry fronting several routed workloads; otherwise a second name falls
+# through to the local.<domain> wildcard and the Docker Traefik answers 404.
 {% for name in services | lan_hostnames %}
 address=/{{ name }}.local.{{ domain }}/{{ k3s_metallb_ingress_vip }}
 {% endfor %}
 
-# daniel-pi is LAN-only. Use a private `.lan` TLD (resolves only here, via Pi-hole) instead
-# of a <domain> subdomain: Traefik sets HSTS with stsIncludeSubdomains on the real domain,
-# which force-upgrades any *.<domain> name to HTTPS and breaks the Pi's plain-HTTP services
-# (SSL_ERROR_RX_RECORD_TOO_LONG). `.lan` sidesteps HSTS entirely. Reach the Pi's LAN-bound
-# services at daniel-pi.lan:<port>. IP via hostvars since the Pi isn't the host running Pi-hole.
+# Private `.lan` TLD, not a <domain> subdomain: HSTS with stsIncludeSubdomains force-upgrades
+# *.<domain> to HTTPS and breaks the Pi's plain-HTTP services.
 host-record=daniel-pi.lan,{{ hosts['daniel-pi'].server_ip }}
 
-# The two cluster nodes, under BOTH the `.lan` name and the bare hostname. daniel-box reaches
-# daniel-server through a client-side alias in its own SSH client config, and that file is
-# deliberately not deployed to any of the three homelab hosts (see `.chezmoiignore` in the
-# dotfiles repo — its key paths name credentials these machines do not hold), so the reverse
-# direction has nothing to resolve with. otel-sweep-watch on daniel-server would otherwise
-# report `box: unreachable (Could not resolve hostname daniel-box)` on every run — a daily
-# false finding on the check whose whole purpose is to be believed, and the exact failure that
-# check's own header warns gets it muted.
-#
-# The BARE name is the load-bearing half. otel-sweep addresses its machines from a fixed
-# enum that is deliberately not caller-configurable, and that enum holds `daniel-box` and
-# `daniel-server` — so a `.lan`-only record would leave it exactly as broken. The `.lan`
-# name comes along because it is the convention daniel-pi above already sets.
-#
-# /etc/hosts still wins for a node's own name (`127.0.1.1 daniel-box`, files before dns in
-# nsswitch), so a node keeps resolving itself to loopback and the sweep's self-detection is
-# untouched.
+# The BARE names are load-bearing: otel-sweep addresses `daniel-box`/`daniel-server` from a fixed
+# enum and the client SSH alias is not deployed to these hosts. /etc/hosts still resolves a node's
+# own name.
 host-record=daniel-box.lan,daniel-box,{{ hosts['daniel-box'].server_ip }}
 host-record=daniel-server.lan,daniel-server,{{ hosts['daniel-server'].server_ip }}
 

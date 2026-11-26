@@ -1,53 +1,24 @@
 server:
 {% if pihole_unbound_port is defined %}
-    # k8s pod only: Pi-hole's FTL owns :53 in the shared network namespace, so unbound moves
-    # off it. `port:` retargets the image's bare `interface: 0.0.0.0` line (no @port pin).
+    # Pod only: FTL owns :53 in the shared network namespace, so unbound moves off it.
     port: {{ pihole_unbound_port }}
 {% endif %}
     verbosity: 1
     do-ip6: no
 
-    # Run 2 recursion threads instead of the image default of 1 so a burst of
-    # cache-miss lookups resolves concurrently instead of serialising through one
-    # thread and piling up in Pi-hole's dnsmasq forward queue (dns-forward-max=150,
-    # the "Maximum number of concurrent DNS queries reached" warning). so-reuseport
-    # defaults to yes, so each thread gets its own listening socket. NB: outgoing-range
-    # (8192, from the base config) is PER THREAD — 2 threads need ~16k outgoing sockets,
-    # so nofile must cover both threads (containerd's 1048576 default does).
+    # 2 threads so cache-miss bursts do not queue behind one (dnsmasq dns-forward-max=150).
+    # outgoing-range is PER THREAD: 2 threads need ~16k sockets, so nofile must cover both.
     num-threads: 2
 
-    # ── Caching ──────────────────────────────────────────────────────────────
-    # DO NOT add prefetch / prefetch-key / msg-cache-size / rrset-cache-size /
-    # serve-expired here. The klutchell/unbound base config this file is included
-    # INTO (include-toplevel: /etc/unbound/custom.conf.d/*.conf) already sets every
-    # one of them, and at the values a tuning pass would land on anyway:
-    #   prefetch: yes            prefetch-key: yes
-    #   msg-cache-size: 64m      rrset-cache-size: 128m
-    #   serve-expired: yes       serve-expired-ttl: 86400
-    #   serve-expired-client-timeout: 1800
-    # Verified against rootfs_overlay/etc/unbound/unbound.conf at the pinned tag
-    # (pihole_k8s_unbound_image, klutchell/unbound v1.25.2). Restating them here
-    # would fork the values from the image's on the next bump — this file is an
-    # OVERLAY, so only genuine divergences belong in it. That is what the whole
-    # cache block reduced to: one knob.
-    #
-    # cache-min-ttl is the exception — unset in the base, so unbound's default of 0
-    # applies and a CDN's 30-60s TTL is honoured literally. Every one of those
-    # expiries is a fresh recursion for a name the house asks for constantly.
-    # 60s floors that without meaningfully blunting DNS-based failover, which is
-    # what a larger value (300+) would cost: a provider steering traffic away from
-    # a dead endpoint expects its short TTL to be respected.
+    # Do not restate prefetch, cache sizes or serve-expired: the base config already sets them.
+    # cache-min-ttl is unset there; 60 floors short TTLs, while 300+ would blunt DNS failover.
     cache-min-ttl: 60
 
     # Set to 0 to use system default and avoid startup warnings
     so-sndbuf: 0
 
-    # Ensure kernel buffer is large enough to not lose messages in traffic spikes
-    # (requires CAP_NET_ADMIN or privileged)
     so-rcvbuf: 0
 
-    # The netblock is given as an IP4 or IP6 address with /size appended for a
-    # classless network block. The action can be deny, refuse, allow or allow_snoop.
     access-control: 127.0.0.0/8 allow
     access-control: 10.0.0.0/8 allow
     access-control: 172.16.0.0/12 allow
