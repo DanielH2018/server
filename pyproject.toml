@@ -485,7 +485,7 @@ missing-union-attribute = "ignore"
 include = [
   ".claude/hooks/_claude_guard.py",
   ".claude/hooks/_hook_common.py",
-  ".claude/hooks/tests/test_claude_guard_import.py",
+  ".claude/hooks/tests/bash_guards/test_claude_guard_import.py",
 ]
 [tool.ty.overrides.rules]
 import-not-found = "ignore"

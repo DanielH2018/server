@@ -179,7 +179,7 @@ worked case in *Verification*.
   non-zero.
 - **The hook already handles an oversized doc.** `_head_block` cuts at a heading, and the
   trailer names up to `TRAILER_MAX_HEADINGS` (40) headings it did not reach.
-  `.claude/hooks/tests/test_inject_nested_docs_head.py` (141 lines) covers that path.
+  `.claude/hooks/tests/instructions/test_inject_nested_docs_head.py` (141 lines) covers that path.
 - **Four places tie the hook to the CI test.**
     - The hook's docstring says the head path retires only when the `over_ceiling` lists
       are empty.
@@ -200,7 +200,7 @@ worked case in *Verification*.
     - The `DECIDED` header of `module_length_allowlist.txt` (#3661) says to split a module
       over the cap when each piece reads alone, and to use a `conjoined:` reason only when
       every split leaves a piece conjoined with its parent.
-    - `.claude/hooks/tests/test_inject_nested_docs.py` was 456 lines against
+    - `.claude/hooks/tests/instructions/test_inject_nested_docs.py` was 456 lines against
       `_ratchet.py:TEST_CAP`, which was 500 raw lines.
 
   **HISTORY —** #6173 changed the ratchet to count code lines: `_ratchet.py:code_lines`
@@ -349,7 +349,7 @@ notice's length already counts toward the head arithmetic, so the head stays ins
 payload.
 
 **The budget pin moves to the hook's tests.** The test that pins 7,500 and 7,272 leaves
-with the size arm. PR 2 adds the same pin to `.claude/hooks/tests/test_inject_nested_docs.py`,
+with the size arm. PR 2 adds the same pin to `.claude/hooks/tests/instructions/test_inject_nested_docs.py`,
 beside the `< 8000` assertion:
 
 - `INLINE_MAX_CHARS` is 7,500 and `INLINE_MAX_LINES` is 190.
@@ -469,10 +469,10 @@ budget, and the report reads the hook's own constants.
       from `pyproject.toml`.
     - Remove the size arms and tests listed in *Design* from `test_role_claude_md.py`, and
       rewrite its module docstring. Add the `# DECIDED` block that *Design* describes.
-    - Add the budget pin to `.claude/hooks/tests/test_inject_nested_docs.py`, as *Design*
+    - Add the budget pin to `.claude/hooks/tests/instructions/test_inject_nested_docs.py`, as *Design*
       describes.
     - Change `_notice` to state the doc's own budget. Add its paired tests to
-      `.claude/hooks/tests/test_inject_nested_docs_head.py`.
+      `.claude/hooks/tests/instructions/test_inject_nested_docs_head.py`.
     - Rewrite the hook docstring sentence that ties the head path to `over_ceiling`.
     - Rewrite both `_doc_size.py:MAX_CHARS` sentences in `docs/claude-tooling.md`, whether
       or not G2's PR 4 has landed:
