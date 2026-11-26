@@ -30,13 +30,10 @@ TEXTFILE_DIR=${TEXTFILE_DIR:-/iscsi-textfile}
 INTERVAL_S=${INTERVAL_S:-60}
 ONCE=${ONCE:-0}
 CHECK=iscsi-sessions
-# The longest legitimate gap between two writes: five intervals. The IscsiSessionsNotReporting
-# rules in observability's host-checks.yaml carry it as a literal, and
-# k8s/roles/node-exporter/tests/test_iscsi_sessions.py pins the two together.
+# Five intervals; the IscsiSessionsNotReporting rules carry it as a literal, pinned by
+# test_iscsi_sessions.py.
 DEADLINE_S=$((INTERVAL_S * 5))
 
-# One label value as read from sysfs: the file's first line, or `unknown` when it is missing.
-# A sysfs attribute holds no quote or backslash, so no escaping is needed.
 read_attr() {
   value=$(head -n 1 "$1" 2>/dev/null) || value=
   [ -n "$value" ] || value=unknown
@@ -67,9 +64,8 @@ write_once() {
     printf '# HELP homelab_iscsi_sessions_not_logged_in Sessions whose state is not LOGGED_IN.\n'
     printf '# TYPE homelab_iscsi_sessions_not_logged_in gauge\n'
     printf 'homelab_iscsi_sessions_not_logged_in %s\n' "$stale"
-    # The homelab_check_* HELP lines must match disk-health.sh's byte for byte. node_exporter
-    # drops a family whose HELP differs from an earlier file's and sets
-    # node_textfile_scrape_error, so a mismatch loses these series on daniel-box.
+    # HELP lines must match disk-health.sh byte for byte: node_exporter drops a family whose HELP
+    # differs.
     printf "# HELP homelab_check_success 1 when the check's last verdict was up, 0 when down.\n"
     printf '# TYPE homelab_check_success gauge\n'
     printf 'homelab_check_success{check="%s"} %s\n' "$CHECK" "$([ "$stale" -eq 0 ] && echo 1 || echo 0)"
@@ -80,8 +76,7 @@ write_once() {
     printf '# TYPE homelab_check_deadline_seconds gauge\n'
     printf 'homelab_check_deadline_seconds{check="%s"} %s\n' "$CHECK" "$DEADLINE_S"
   } > "$tmp"
-  # mktemp creates 0600; the exporter in the other container reads as the same uid, and 0644
-  # keeps the contract's mode for any other reader.
+  # 0644 keeps the contract's mode for other readers (mktemp creates 0600).
   if ! { chmod 0644 "$tmp" && mv "$tmp" "$TEXTFILE_DIR/$CHECK.prom"; }; then
     rm -f "$tmp"
     echo "$CHECK: cannot replace $TEXTFILE_DIR/$CHECK.prom" >&2

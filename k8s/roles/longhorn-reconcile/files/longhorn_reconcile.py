@@ -88,25 +88,20 @@ TIERS_FILE = "/config/tiers.json"
 # The seconds each API call may take. `open_url` retries a refused connect on top.
 CALL_TIMEOUT = 10
 
-# A Volume CR's recurring-job group labels. The names are a contract with the cluster, held
-# equal to `scripts/lib/longhorn_lib/longhorn_backups.py` by tests/test_longhorn_reconcile.py.
+# Contract with the cluster, held equal to longhorn_backups.py by tests/test_longhorn_reconcile.py.
 LABEL_PREFIX = "recurring-job-group.longhorn.io/"
 DEFAULT = "default"
 NO_BACKUP = "no-backup"
 SHARDS = range(7)
 ENABLED = "enabled"
 
-# The per-job label that puts a volume in the `trim` RecurringJob. It is a per-JOB label, never a
-# `recurring-job-group.longhorn.io/trim` group label: four readers treat every key under
-# LABEL_PREFIX as a backup tier. tests/test_longhorn_reconcile_trim.py types the literal out.
+# A per-JOB label, never a `trim` group label: four readers treat every key under LABEL_PREFIX as a
+# backup tier.
 TRIM_LABEL = "recurring-job.longhorn.io/trim"
-# The workload kinds whose volume the trim may join: a CronJob's Job leaves its volume detached
-# between runs, and the trim must not attach it.
+# A CronJob's Job leaves its volume detached between runs, and the trim must not attach it.
 TRIM_WORKLOAD_TYPES = ("ReplicaSet", "StatefulSet")
 
-# The BackupTarget names a Volume CR's `spec.backupTargetName` takes: `default` is the B2 target
-# and `r2` the Cloudflare one. They are a contract with the cluster, held equal to
-# `scripts/lib/longhorn_lib/longhorn_backups.py` by tests/test_longhorn_reconcile.py.
+# Contract with the cluster, held equal to longhorn_backups.py by tests/test_longhorn_reconcile.py.
 B2_TARGET = "default"
 R2_TARGET = "r2"
 
@@ -273,8 +268,8 @@ def desired_labels(
             move(DEFAULT, shard_group(shard))
         elif weekly[claim] != shard:
             move(shard_group(weekly[claim]), shard_group(shard))
-    # 6. The trim label. A volume that gains it and sits in the daily tier is also put in
-    #    `default` explicitly, so it keeps exactly one group label.
+    # A volume gaining the trim label in the daily tier is also put in `default`, so it keeps one
+    # group label.
     if not trim:
         state.pop(TRIM_LABEL, None)
         return state

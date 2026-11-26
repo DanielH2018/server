@@ -17,35 +17,13 @@ spec:
   policyTypes:
     - Ingress
   ingress:
-{# `| bool` for the string trap networkpolicy.yaml.j2 spells out in full: a string
-   `'false'` is truthy to bare Jinja and False to `netpol_baseline_probe_active`. #}
 {% if netpol_baseline_enforced | bool %}
-    # Four in-cluster callers plus the host-side shutdown chain, all on upsd's :3493.
-    #
-    # peanut is the web UI. nut-exporter renders UPS variables as network_ups_tools_* series for
-    # Prometheus (k8s/roles/nut-exporter). home-assistant runs HA's NUT integration; HA sits on
-    # daniel-box, nut is pinned to daniel-server, and nut's hostPort binds `hostIP: 127.0.0.1`,
-    # so HA's only path is the ClusterIP. blackbox-exporter dials
-    # nut.{{ k8s_namespace }}.svc.cluster.local:3493 for the `blackbox-extra` probe.
-    #
-    # Each of them needs a podSelector, and no ipBlock substitutes for one: pod -> ClusterIP ->
-    # pod traffic PRESERVES the caller's pod IP, same-node and cross-node alike. It is NOT
-    # masqueraded to the cni0 bridge address. So the node ipBlocks below cover host processes
-    # only; they never cover these pod callers.
-    #
-    # The node entries are daniel-server's shutdown chain: upsmon runs as a host process there,
-    # so it arrives as a node address, not a pod. nut is permanently pinned to daniel-server
-    # (nodeSelector in nut/templates/deployment.yaml.j2 -- the UPS is USB-attached there), so
-    # this is not about the pod moving.
-    # The two cni0 entries (`k3s_cni0_gateways`) duplicate netpol_baseline_node_cidrs
-    # ONLY ONCE nut carries `netpol-baseline: enforced` and the baseline selects it. During the
-    # deploy step that applies this policy the label is not on the pod yet, so in that window
-    # they are the only admission a host-side caller has. Do not delete them as "redundant with
-    # the baseline" without first confirming the label has landed.
-    # The two flannel.1 entries (`k3s_flannel_node_ips`) are NOT in
-    # netpol_baseline_node_cidrs and are load-bearing at all times: a cross-node host->pod
-    # packet arrives as the SENDING node's flannel.1 address, so daniel-box host processes
-    # reaching the pinned pod on daniel-server show up as daniel-box's flannel.1, not its cni0.
+    # No ipBlock substitutes for the pod callers (pod -> ClusterIP -> pod preserves the pod IP); the
+    # node entries cover host processes.
+    # The cni0 entries duplicate the baseline only once nut carries `netpol-baseline: enforced`;
+    # keep them until then.
+    # The flannel.1 entries are load-bearing: a cross-node host packet arrives as the SENDING node's
+    # flannel.1 address.
     - from:
         - podSelector:
             matchLabels:

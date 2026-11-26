@@ -18,9 +18,8 @@ groups:
   - name: homelab-logs
     interval: 5m
     rules:
-      # The host file-tail arm. The `machine` matcher keeps daniel-pi's syslog stream out: a
-      # Pi stream in this union would hold the count above zero through a total cluster
-      # outage, and the rule would never fire.
+      # The `machine` matcher keeps daniel-pi's syslog out: a Pi stream would keep the count above
+      # zero in a cluster outage.
       - alert: LokiHostLogsSilent
         expr: absent_over_time({job=~"authlog|syslog", machine!="daniel-pi"}[3h])
         labels:
@@ -33,8 +32,6 @@ groups:
             No authlog or syslog line from daniel-box or daniel-server reached loki-homelab in
             3 hours, so the Alloy file-tail pipeline is down. Read the alloy DaemonSet's pods
             and their log in the homelab namespace.
-      # The pod arm. Every pod's stdout is the busiest stream, so 30 minutes of silence is
-      # already a fault.
       - alert: LokiPodLogsSilent
         expr: absent_over_time({job="k8s"}[30m])
         labels:
@@ -83,24 +80,10 @@ groups:
             {{ $labels.container }} logged {{ $value }} lines matching panic, fatal, traceback
             or out of memory in the last hour, so it may be failing at its job while its pod
             reads Ready. Read that container's log in loki-homelab to see the lines.
-      # The host counterpart of WorkloadLogErrors: the same pattern over the cluster hosts'
-      # syslog, keyed by the rsyslog program tag that config.alloy.j2's `loki.process "host"`
-      # stage extracts into `program`.
-      #
-      # The window is 6h, not WorkloadLogErrors' 1h. A failing `uv run` cron writes one
-      # `Traceback` line per run, so an hourly cron that fails every run reaches 4 lines inside
-      # one window and pages, where a 1h window would hold it at 1 forever. `> 3` keeps a single
-      # transient failure quiet. `uv` merges every `uv run` cron into one key, so the line
-      # itself names the script.
-      #
-      # Only `syslog`, and only the cluster hosts. Authlog stays out because sudo's `COMMAND=`
-      # lines echo their arguments, so a `grep fatal` run under sudo would count. daniel-pi's
-      # `pi_health` stream also carries job="syslog" but never passes the stage, so it has no
-      # `program` and the `machine` matcher keeps it out.
-      #
-      # No `shadow` label: no other pager covers host syslog. `service` is a literal, as on
-      # every rule here, because test_alertmanager_routing.py routes each rule by its own
-      # labels; the alert's `machine` label names the host.
+      # 6h window: an hourly cron failing every run reaches 4 Tracebacks, so `> 3` pages on it but
+      # not on one failure.
+      # Syslog only: authlog's sudo `COMMAND=` lines echo arguments. No `shadow` label; `service`
+      # stays literal.
       - alert: HostLogErrors
         expr: sum by (machine, program) (count_over_time({job="syslog", machine!="daniel-pi"} |~ `(?i)(panic:|fatal|traceback|out of memory)` [6h])) > 3
         labels:
@@ -114,16 +97,9 @@ groups:
             {{ $labels.program }} on {{ $labels.machine }} logged {{ $value }} syslog lines
             matching panic, fatal, traceback or out of memory in the last 6 hours. Read
             {job="syslog", program="{{ $labels.program }}"} in loki-homelab to see the lines.
-      # A host-wide OOM kill pages on the first one. The kernel writes one "Out of memory:
-      # Killed process" line per kill, which HostLogErrors' `> 3` would never reach. The match is
-      # case-sensitive on purpose: a container hitting its own limit logs "Memory cgroup out of
-      # memory: Killed process" in lower case, which HostLogErrors counts and the shadow
-      # ContainerOOMKilled covers.
-      #
-      # The second arm is daniel-pi's. Its `pi_health` stream carries no `program` label, so the
-      # arm matches the kernel's line inside the journal.log file that the Pi's journal-warnings
-      # timer writes. It is a separate selector because the `machine!="daniel-pi"` exclusion is
-      # what keeps the Pi out of LokiHostLogsSilent's count.
+      # Case-sensitive on purpose: a container's own cgroup OOM logs lower case and is covered
+      # elsewhere.
+      # The second arm is daniel-pi's, whose `pi_health` stream has no `program` label.
       - alert: HostOutOfMemoryKill
         expr: >-
           (
@@ -140,14 +116,8 @@ groups:
             The kernel on {{ $labels.machine }} logged {{ $value }} OOM kills in the last hour, so
             the node ran out of memory. Read {job="syslog", program="kernel"} in loki-homelab, or
             on daniel-pi {machine="daniel-pi", filename="/var/log/pi-health/journal.log"}.
-      # An ext4 filesystem the kernel remounted read-only after I/O errors pages on the first
-      # line. It catches a remount that clears before Prometheus scrapes again after its own node
-      # boots: Longhorn devices on daniel-server can stay read-only for minutes while Prometheus
-      # has no samples, and the lines reach this Loki once Alloy resumes. It shares that node, so
-      # a remount of this Loki's own claim that never clears stores no line;
-      # KubeletCSIMountReadOnly pages on that one instead. The 1h range keeps a post-boot remount
-      # firing past the weekly reboot's Alertmanager mute, which ends
-      # `weekly_reboot_mute_recovery_minutes` (40) after the reboot.
+      # The 1h range keeps a post-boot remount firing past the weekly reboot's mute.
+      # A remount of this Loki's own claim stores no line; KubeletCSIMountReadOnly pages on that.
       - alert: HostFilesystemRemountedReadOnly
         expr: >-
           sum by (machine) (count_over_time({job="syslog", machine!="daniel-pi", program="kernel"} |= "Remounting filesystem read-only" [1h])) > 0
@@ -163,10 +133,6 @@ groups:
             filesystem read-only" lines in the last hour; {job="syslog", program="kernel"} in
             loki-homelab names the device.
           runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#hostfilesystemremountedreadonly
-      # Home Assistant's Cast connect-back loop. pychromecast logs "Heartbeat timeout,
-      # resetting connection" at INFO each time it drops the Nest Hub's socket, and nothing else
-      # signals the loop. Storms log 57-119 per hour and an ordinary hour at most 19, so 30 sits
-      # between them.
       - alert: HomeAssistantCastHeartbeatStorm
         expr: >-
           sum(count_over_time({job="k8s", container="home-assistant"} |= "Heartbeat timeout" [1h])) > 30
@@ -182,20 +148,9 @@ groups:
             hour, so the Cast connect-back loop is running and dashboard casts to the Nest Hub
             fail. k8s/roles/home-assistant/docs/platform.md describes the loop and the
             quit-app fallback.
-      # The update line of each cloudflare-ddns Deployment. favonia's image serves no metrics,
-      # so the log is the only evidence an update cycle succeeded. Every 5m cycle logs, per
-      # domain, either "are already up to date" (a cached or a checked no-op) or, on a real
-      # change, "Updated an outdated" or "Added a new". A failed cycle logs "Could not confirm
-      # update" or "No valid IPv4 addresses were detected" and none of the three, so 15m (three
-      # cycles) without one is a dead or failing updater. The filter deliberately leaves out the
-      # "Checking the IP addresses in about" line, which prints whether or not the update worked.
-      # A single failed cycle is a retry, not a page. The two Deployments share the
-      # `cloudflare-ddns` container name, so the pod name separates them; the `pod` regex is the
-      # Deployment name plus the ReplicaSet and pod suffixes.
-      #
-      # Their alerts never reach Prometheus `ALERTS`, so `probe.py health cloudflare-ddns` cannot
-      # see them; CloudflareDdnsUnavailable in observability's `pods` group covers a dead pod
-      # instead. Every edit of this file restarts Loki.
+      # A failed cycle logs none of the three success lines, so 15m (three cycles) without one is a
+      # dead updater.
+      # The `pod` regex is the Deployment name plus ReplicaSet and pod suffixes. Edits restart Loki.
       - alert: CloudflareDdnsDirectUpdateSilent
         expr: absent_over_time({job="k8s", container="cloudflare-ddns", pod=~"cloudflare-ddns-direct-.*"} |~ `are already up to date|Updated an outdated|Added a new` [15m])
         labels:

@@ -28,8 +28,6 @@ spec:
           image: {{ loki_homelab_k8s_image }}
           imagePullPolicy: IfNotPresent
           args: ["-config.file=/etc/loki/loki.yaml"]
-          # No readOnlyRootFilesystem: Loki writes its WAL and compactor scratch outside the
-          # /loki mount, and the fleet-standard pair is what actually closes the gap here.
 {{ hardened_security_context(non_root=true) }}
           ports:
             - name: http
@@ -39,9 +37,8 @@ spec:
               mountPath: /etc/loki
             - name: loki-homelab-data
               mountPath: /loki
-            # The ruler's tenant directory (configmap.yaml.j2's ruler block). A whole-directory
-            # mount of its own, outside /etc/loki, so the config volume's atomic swap never
-            # touches it. Loki skips the mount's `..data` directories and loads each key.
+            # A mount of its own outside /etc/loki, so the config volume's atomic swap never touches
+            # it.
             - name: loki-homelab-rules
               mountPath: /etc/loki-rules/fake
               readOnly: true

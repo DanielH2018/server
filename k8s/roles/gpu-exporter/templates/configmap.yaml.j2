@@ -1,11 +1,7 @@
 ---
-# The exporter's source, carried verbatim into the cluster.
-#
-# lookup('file'), not a template: gpu_exporter.py is Jinja-hostile — it renders Prometheus
-# label sets, so `{card="card1",driver="amdgpu"}` would be read as a Jinja expression.
-#
-# Rendering it here puts it inside the manifests the shared rollout gate hashes, so an edit to
-# the script rolls the pods without this role needing its own `checksum/` pod annotation.
+# lookup('file'), not a template: label sets like `{card="card1",driver="amdgpu"}` would be read as
+# Jinja.
+# Rendered here so an edit rolls the pods without a `checksum/` annotation.
 apiVersion: v1
 kind: ConfigMap
 metadata:
