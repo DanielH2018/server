@@ -56,8 +56,9 @@ SLOT_NAMES = tuple(f"homelab-land-slot-{n}.lock" for n in range(COUNT))
 # merge to its verdict (the `landing-annotation` records' wait_ci plus deploy). A landing stuck
 # on a soak for longer would otherwise hold the turn for two merge budgets.
 DRAIN_S = 2400
-# How often a landing waiting for the serial landing reads whether its PR conflicts. One REST
-# read each, so 15 waiting landings spend 180 core calls an hour.
+# DECIDED: 300 s, how often a landing waiting for the serial landing reads whether its PR
+# conflicts. One REST read each: 15 waiting landings spend 180 core calls an hour, where a read
+# every poll would spend 1,800.
 CONFLICT_READ_S = 300
 _SERIAL_LIVE = f"landing of a PR that changes {live_limit.SERIAL_WHAT} is live"
 # The kinds of PR that change a k8s role, which a hold and the no-promotion window bar.

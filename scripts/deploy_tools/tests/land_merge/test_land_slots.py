@@ -12,7 +12,7 @@ import pytest
 
 from _land_fakes import Fakes
 from _land_turn_fakes import HEAD, MERGED, OPEN, START_VIEW, UPDATED, call_order
-from deploy_tools.land_lib import batch, pr_json, serial_lock, slots, turn
+from deploy_tools.land_lib import batch, serial_lock, slots, turn
 from deploy_tools.land_lib.outcome import Outcome, Verdict
 from deploy_tools.promote_lib.wait import WaitResult, WaitVerdict
 from lib.proc_testing import fake_bin, path_with
@@ -125,12 +125,13 @@ _SCRIPT = ["scripts/lib/git.py"]
 _FILES = "gh:files,headRefOid"
 
 
-def _merging(landing, paths, draft=False, **fakes):
+def _merging(landing, paths, draft=False, views=None, **fakes):
     """A landing of a PR changing `paths`, whose head reads green and merges."""
     views = {
         "state,mergeable,headRefOid": [OPEN, MERGED],
         START_VIEW: {"isDraft": draft, **OPEN},
         "files,headRefOid": {"files": [{"path": p} for p in paths], "headRefOid": HEAD},
+        **(views or {}),
     }
     ln, calls = landing(Fakes(gh_views=views, **fakes))
     ln.direct_merge_subject = "Take turns"
@@ -219,8 +220,12 @@ _MERGEABLE = {"mergeable": "MERGEABLE"}
 def test_a_landing_behind_a_serial_landing_ends_merge_conflict_once_its_pr_conflicts(
     landing,
 ):
-    ln, calls = _merging(landing, _SCRIPT, serial=[False] * 100 + [True])
-    ln.tools.gh_json = _with_mergeable(ln, [_MERGEABLE, _CONFLICTING])
+    ln, calls = _merging(
+        landing,
+        _SCRIPT,
+        views={"mergeable": [_MERGEABLE, _CONFLICTING]},
+        serial=[False] * 100 + [True],
+    )
     with pytest.raises(Outcome) as stop:
         _land(ln)
     assert stop.value.verdict == Verdict.MERGE_CONFLICT
@@ -231,23 +236,14 @@ def test_a_landing_behind_a_serial_landing_ends_merge_conflict_once_its_pr_confl
 
 
 def test_one_conflicting_read_behind_a_serial_landing_waits_on_and_merges(landing):
-    ln, calls = _merging(landing, _SCRIPT, serial=[False] * 30 + [True])
-    ln.tools.gh_json = _with_mergeable(ln, [_CONFLICTING, _MERGEABLE])
+    ln, calls = _merging(
+        landing,
+        _SCRIPT,
+        views={"mergeable": [_CONFLICTING, _MERGEABLE]},
+        serial=[False] * 30 + [True],
+    )
     _land(ln)
     assert "merge" in call_order(calls)
-
-
-def _with_mergeable(ln, answers):
-    """`ln`'s gh_json, answering the reads of `mergeable` alone with `answers` in turn."""
-    fake, reads = ln.tools.gh_json, iter(answers)
-    only_mergeable = pr_json.rest_filter("mergeable")
-
-    def gh_json(*args, **kwargs):
-        if args[-1] == only_mergeable:
-            return next(reads, answers[-1])
-        return fake(*args, **kwargs)
-
-    return gh_json
 
 
 def test_a_serial_pr_out_of_the_turn_waits_for_the_serial_landing_to_end(landing):
