@@ -43,6 +43,7 @@ PROBES = {
     "jellyfin": ("tcp_connect", ":8096"),
     "zigbee2mqtt": ("tcp_connect", ":6638"),
     "nut": ("tcp_connect", ":3493"),
+    "airflow": ("http_2xx", ":8974/health"),
 }
 TIERED_PROBES = {"mosquitto", "pihole"}
 EDGE_SELFCHECK_PATH = "/.well-known/traefik-edge-selfcheck"

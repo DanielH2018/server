@@ -1,5 +1,5 @@
 {% from 'service.yml.j2' import service with context %}
 {% set health = container_item.netpol_fences | selectattr('app', 'equalto', 'airflow-scheduler') | first %}
 ---
-# The scheduler's health server, by name, for monitor-bridge's airflow_scheduler row.
+# The scheduler's health server, by name, for the blackbox-extra probe.
 {{ service(health.app, health.port) -}}
