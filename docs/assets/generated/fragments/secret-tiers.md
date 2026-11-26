@@ -2,9 +2,9 @@
 | Tier | Cadence | Registered |
 |---|---|---|
 | `assisted` | 365 d | 94 |
-| `external` | 365 d | 14 |
+| `external` | 365 d | 15 |
 | `external-90d` | 90 d | 1 |
 | `pinned` | 730 d | 2 |
 | `ignore` | — | 11 |
 
-122 secrets are registered.
+123 secrets are registered.

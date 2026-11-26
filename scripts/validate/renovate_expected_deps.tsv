@@ -205,6 +205,7 @@ regex	k8s/roles/system-upgrade/defaults/main.yml	rancher/system-upgrade-controll
 regex	k8s/roles/system-upgrade/defaults/main.yml	rancher/system-upgrade-controller	github-releases	-	-
 regex	k8s/roles/tdarr/defaults/main.yml	ghcr.io/haveagitgat/tdarr	docker	digest	-
 regex	k8s/roles/texbrain/defaults/main.yml	ghcr.io/danielh2018/texbrain	docker	digest	-
+regex	k8s/roles/tft-assistant/defaults/main.yml	ghcr.io/danielh2018/tft-assistant	docker	digest	-
 regex	k8s/roles/traefik/defaults/main.yml	alpine	docker	digest	-
 regex	k8s/roles/traefik/defaults/main.yml	maxlerebourg/crowdsec-bouncer-traefik-plugin	github-releases	-	-
 regex	k8s/roles/traefik/defaults/main.yml	traefik	docker	digest	-
