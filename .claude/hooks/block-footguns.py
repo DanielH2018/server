@@ -564,7 +564,8 @@ def decide(
     found = _first_problem(runs, cwd=cwd)
     if found:
         return "deny", found
-    asked = next(filter(None, map(deploy_plane_variable_ask, runs[0][1])), None)
+    stages = (stage for _, run_stages in runs for stage in run_stages)
+    asked = next(filter(None, map(deploy_plane_variable_ask, stages)), None)
     return ("ask", asked) if asked else (None, None)
 
 

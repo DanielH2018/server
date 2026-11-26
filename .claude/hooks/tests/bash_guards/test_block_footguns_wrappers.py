@@ -89,6 +89,10 @@ def test_decide_denies_a_footgun_in_a_command_substitution():
     assert _mod.decide("echo `gh issue create --title x`")[0] == "deny"
 
 
+def test_decide_asks_about_a_deploy_plane_write_in_a_command_substitution():
+    assert _mod.decide("echo $(gh variable set DEPLOY_HOLD --body none)")[0] == "ask"
+
+
 def test_a_footgun_in_single_quotes_is_only_text():
     assert _mod.problem("echo '$(kubectl rollout restart deploy/x)'") is None
 
