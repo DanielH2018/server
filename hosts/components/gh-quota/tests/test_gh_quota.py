@@ -447,3 +447,28 @@ def test_the_command_says_so_when_the_host_does_not_record(tmp_path: Path, capsy
     mode, status = capsys.readouterr().out.splitlines()
     assert mode == "off"
     assert "gh-quota is off on this host" in status
+
+
+def test_status_all_totals_each_rest_path_template_across_sessions():
+    window = Window(
+        identities=("uid-1000",),
+        bucket="core",
+        used=100,
+        quota=5000,
+        reset=RESET,
+        sessions={
+            "a": Counter({"pr view": 50, "api rest repos/{o}/{r}/pulls": 3}),
+            "b": Counter(
+                {"api rest repos/{o}/{r}/pulls": 4, "api rest search/issues": 1}
+            ),
+        },
+    )
+    shown = render([window], [], failures=0, every=True)
+    assert shown[-2:] == [
+        "  api rest repos/{o}/{r}/pulls x7",
+        "  api rest search/issues x1",
+    ]
+    assert not any(
+        line.startswith("  api rest")
+        for line in render([window], [], failures=0, every=False)
+    )
