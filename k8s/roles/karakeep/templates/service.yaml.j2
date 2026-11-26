@@ -2,11 +2,8 @@
 ---
 {{ service('karakeep', container_item.port) -}}
 ---
-# THE NAMES ARE LOAD-BEARING. karakeep reaches these by name
-# (MEILI_ADDR=http://karakeep-meilisearch:7700, BROWSER_WEB_URL=http://karakeep-chrome:9222), so
-# the k8s Services have to answer to the same names or the app starts fine and then fails at the
-# first search or the first page snapshot — neither of which is a startup error. Same class of
-# trap as freshrss's feed-cache.
+# Names are load-bearing: karakeep dials them by name, and a mismatch fails only at first search or
+# snapshot.
 {{ service('karakeep-chrome', 9222) -}}
 ---
 {{ service('karakeep-meilisearch', 7700) -}}

@@ -1,29 +1,5 @@
 {% from 'networkpolicy.yml.j2' import networkpolicy with context %}
 ---
-# NOTE: this role's OTHER policy file, networkpolicy-flaresolverr.yaml.j2, fences flaresolverr and
-# is unrelated to this one. Both are applied.
-#
-# This rule is PORT-SCOPED: the baseline admits none of monitor-bridge, sonarr, radarr or
-# prowlarr-verify, so they reach prowlarr only through this rule and only on this one port.
-#
-# TRAEFIK IS LISTED DELIBERATELY — do not remove it as redundant. While prowlarr carries the
-# baseline label the union is the same with or without it. The entry matters for a pod that
-# lacks the label, which this policy alone selects, and it keeps this policy's caller set
-# complete if the baseline's traefik rule is ever port-scoped.
-#
-# sonarr and radarr reach prowlarr by bare name from their own application databases — the indexer
-# definitions live on their PVCs, not in this repo.
-#
-# prowlarr-verify is the CONTROL leg of this role's OWN isolation check, the Job in
-# templates/verify/ that Flux runs in the `prowlarr-verify` Kustomization: before it asserts
-# flaresolverr is unreachable from outside prowlarr, it proves its own pod networking works by
-# dialling prowlarr on this port. Fence that leg out and the control can never pass, so the Job
-# fails on every revision — a negative test with no working control proves nothing. Same shape as
-# k8s/roles/registry/templates/networkpolicy.yaml.j2 admitting its own selftest Jobs. Do not
-# "clean this up" as an unused caller. It must never join flaresolverr's fence, which the same Job
-# proves refuses it.
-#
-# The caller list is `netpol_from:` on this role's containers_list entry (cluster/services.yml),
-# each caller's reason beside it. `netpol_role_owned: true` keeps netpol-baseline from
-# rendering a second copy.
+# Keep traefik (covers a pod lacking the baseline label) and prowlarr-verify (the verify Job's
+# control leg; removing it fails the Job). prowlarr-verify must never join flaresolverr's fence.
 {{ networkpolicy(container_item.name, container_item.port, container_item | netpol_callers) }}

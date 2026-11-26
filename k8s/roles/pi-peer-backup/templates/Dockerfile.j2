@@ -12,12 +12,10 @@ FROM alpine:3.24@sha256:f59abe656b692d901e184be3445e084786602108599d2a51d229c0f5
 # DECIDED: apk packages resolve at build time — an `=version` pin 404s once the branch
 # supersedes it and nothing bumps it; the base digest is the pin.
 RUN apk add --no-cache bash rsync openssh-client curl
-# ssh refuses to run as a uid with no passwd entry ("No user exists for uid 1000") —
-# the pod runs as {{ puid }} via securityContext, so give that uid a name.
+# ssh refuses a uid with no passwd entry, so give the pod's uid a name.
 RUN adduser -D -u {{ puid }} puller
 
-# COPY . (not a per-file COPY): the build context is a ConfigMap mount — see the nut
-# Dockerfile for the symlink trap this avoids.
+# COPY . not per-file: the build context is a ConfigMap mount (symlink trap; see nut Dockerfile).
 COPY . /build-context/
 RUN install -m 0755 /build-context/pull-pi-peers.sh /usr/local/bin/pull-pi-peers.sh \
     && rm -rf /build-context

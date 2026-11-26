@@ -8,8 +8,7 @@ metadata:
   name: janitorr
   namespace: {{ k8s_namespace }}
 spec:
-  # Recreate, not RollingUpdate: two janitorrs running at once would both walk the library and
-  # both act on it. Harmless while dry-run is on and not worth relying on afterwards.
+  # Recreate: two janitorrs at once would both walk the library and act on it.
 {{ spec_shell('Recreate') }}
   replicas: 1
   selector:
@@ -35,19 +34,17 @@ spec:
               mountPath: /config/application.yml
               subPath: application.yml
               readOnly: true
-            # READ-WRITE, and the whole tree. janitorr creates the leaving-soon symlinks and
-            # deletes files here; a readOnly mount would fail the first cleanup rather than
-            # making it safe. `dry-run` is what makes it safe.
+            # READ-WRITE, whole tree: janitorr creates symlinks and deletes files here; a readOnly
+            # mount would fail the first cleanup, not make it safe.
             - name: media
               mountPath: /data
-            # The JVM writes /tmp/hsperfdata_* and a truststore even with everything else
-            # read-only.
+            # The JVM writes /tmp/hsperfdata_* and a truststore even with everything else read-only.
             - name: janitorr-tmp
               mountPath: /tmp
 {{ container_resources(cpu_limit=janitorr_k8s_cpu_limit, mem_limit=janitorr_k8s_mem_limit, cpu_request=janitorr_k8s_cpu_request, mem_request=janitorr_k8s_mem_request) }}
           livenessProbe:
-            # PID 1 is the JVM. It proves the process
-            # is alive and nothing more — janitorr's real failures are logged, not exposed.
+            # Proves the process is alive and nothing more; janitorr's real failures are logged, not
+            # exposed.
             exec:
               command: [sh, -c, "grep -q java /proc/1/comm"]
             initialDelaySeconds: 60

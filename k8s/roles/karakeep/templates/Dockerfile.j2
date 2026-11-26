@@ -27,10 +27,8 @@
 # tests/repo/ci_workflows/test_python_version_consistency.py holds; uv publishes 3.15 on trixie only.
 FROM ghcr.io/astral-sh/uv:python3.15-trixie-slim@sha256:980d6aa868431fd4ef2b32481e934ef5ee3b662c5decade3aa2d7e7ffb8075e4
 
-# Read off the interpreter rather than written out, so a base-image bump to python3.15 cannot
-# leave this layer chowning a directory that no longer exists while the build still reports
-# success. The `test -d` is this layer's own red proof: `chown -R` on a missing path fails, but
-# `sysconfig` returning a path for an interpreter that ships no such directory would not.
+# Read off the interpreter so a base-image bump cannot leave this chowning a missing path; `test -d`
+# fails the build.
 RUN set -eu; \
     purelib="$(python3 -c 'import sysconfig; print(sysconfig.get_paths()["purelib"])')"; \
     scripts="$(python3 -c 'import sysconfig; print(sysconfig.get_paths()["scripts"])')"; \
