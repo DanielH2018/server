@@ -157,6 +157,14 @@ dependency the module gained, which no selected run is told to run.
   log the sweep issue reads its failed modules from. The step needs Docker, so the sweep
   stays on a hosted runner (the `pytest-sweep-runs-the-image-tests` row of
   `tests/repo/census_rows/test_census_rows_workflows.py`).
+- **It runs the suite in random order.** `uv run --with pytest-randomly` adds the plugin
+  to this run only, so a test that depends on an earlier test's state fails here and in no
+  leg. The log's header prints `Using --randomly-seed=N`. The seed fixes the collection
+  order, but `--dist loadscope` hands modules to workers as each one frees up, so a rerun
+  can put a polluting module on a different worker. To replay one order for the seed, run
+  the whole suite serially with
+  `uv run --with pytest-randomly pytest -n 0 --randomly-seed=N`. A single module
+  cannot reproduce a dependency on state another module left behind.
 - **It shares its tool installs with the pytest legs.** Both call
   `.github/actions/pytest-tools`, which holds the SOPS, age, apt-utils and dotfiles steps.
 - **To run the whole suite on a branch,** dispatch it there:
