@@ -45,11 +45,10 @@ PROJECT_HOOKS = '"$CLAUDE_PROJECT_DIR"/.claude/hooks/'
 # write, which is what holding the hooks prevents.
 UNHELD_EVENTS = ("SessionStart",)
 # Trees a hook reaches through its own `__file__`: `block-footguns.py` imports from `scripts/`, the
-# inventory and each host's `vars.yml` are data `lib.inventory_lists` reads, and
-# `block-protected-bash.py` reads the agents' frontmatter.
+# hosts' `vars.yml` files are the data `lib.inventory_lists.host_names` reads, and
+# `block-protected-bash.py` reads the agents' frontmatter. No hook reads `lib.estate`'s shared files.
 HELD_TREES = (
     (Path("scripts"), "*.py"),
-    (Path("inventory"), "*"),
     (Path("hosts"), "vars.yml"),
     (Path(".claude") / "agents", "*.md"),
 )
