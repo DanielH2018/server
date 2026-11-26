@@ -6,7 +6,7 @@ invariant in its own docstring — ``rotation_tools.py`` says it "names ``secret
 at import time or later", ``lib/script_classify.py`` says "a leaf never imports the facade it was
 split out of", and ``docs/catalog_lib/catalog_model.py`` says it again in its own words. A docstring
 is not a check. Monitor-bridge's split is guarded by
-``tests/services/test_bridge_patch_boundary.py``, but nothing walked ``scripts/``, so a late
+``tests/services/monitor_bridge/test_bridge_patch_boundary.py``, but nothing walked ``scripts/``, so a late
 ``import secret_rotation`` inside a leaf function would have landed green.
 
 WHY THE DIRECTION MATTERS, not just tidiness. Every facade here is also an entry point run as

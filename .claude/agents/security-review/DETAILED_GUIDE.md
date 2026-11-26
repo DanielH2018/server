@@ -147,7 +147,7 @@ These risks are minimal in an infrastructure repo but apply to:
 | `hosts/components/k3s-server/` | Cluster RBAC, the read-only ServiceAccount |
 | `hosts/components/pi-compose/services/*/compose.yaml.j2` | No hardcoded secrets (daniel-pi tier); a secret arrives through `compose.env` |
 | `inventory/group_vars/all.yml` | No secrets, only non-sensitive vars |
-| `inventory/host_vars/` | No secrets |
+| `hosts/<host>/vars.yml` | No secrets |
 | `scripts/*.py` | Input sanitisation, no hardcoded credentials |
 | `.env` files (if any) | Must not contain real values |
 | `.gitignore` | Ensure `*.env`, `secrets/`, and runtime data are excluded |

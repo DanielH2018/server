@@ -26,11 +26,8 @@ import os
 import runpy
 import sys
 
-# Imported only from the dotfiles deploy at `~/.local/share/claude-guard`, which CI does not
-# have. `_claude_guard` is the in-tree bootstrap whose whole job is that import.
+# `_claude_guard` is the in-tree bootstrap; the dotfiles deploy is absent in CI.
 OUT_OF_TREE = frozenset({"claude_guard", "_claude_guard"})
-# The function parameters an insert's local variable may be built from, and the value each is
-# bound to: the checkout the hook runs against.
 PARAMETERS = ("repo_root",)
 
 

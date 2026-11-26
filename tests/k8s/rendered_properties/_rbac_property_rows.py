@@ -1,0 +1,335 @@
+"""Rendered-manifest property rows about who a role binds to which RBAC role, and what it may scale.
+
+`test_rendered_properties.py` runs these rows beside its own. A row lives here only to keep that
+file under the test-module length cap; the rules for what makes a row are in its docstring.
+"""
+
+from lib.estate import shared_vars
+from lib.repo_paths import K8S_ROLES
+
+from _helpers import load_yaml
+from _property_table import Property
+
+_CLUSTER_BASE = K8S_ROLES / "cluster-base"
+_DEFAULTS = load_yaml(_CLUSTER_BASE / "defaults" / "main.yml")
+READONLY_SA = _DEFAULTS["cluster_base_readonly_sa_name"]
+READONLY_NS = _DEFAULTS["cluster_base_readonly_sa_namespace"]
+
+# `system:authenticated` is left out: it is the same for every credential.
+READONLY_GROUPS = frozenset(
+    {"system:serviceaccounts", f"system:serviceaccounts:{READONLY_NS}"}
+)
+
+# A binding from any other role to a roleRef outside these is a new grant to the identity.
+ALLOWED_CLUSTER_ROLES = frozenset({"view", READONLY_SA})
+ALLOWED_ROLES = frozenset({(READONLY_NS, f"{READONLY_SA}-kcm-lease")})
+
+BINDING_KINDS = frozenset({"ClusterRoleBinding", "RoleBinding"})
+
+
+def _names_the_identity(binding: dict) -> bool:
+    namespace = binding["metadata"].get("namespace")
+    for subject in binding.get("subjects") or []:
+        if subject.get("kind") == "Group" and subject.get("name") in READONLY_GROUPS:
+            return True
+        if (
+            subject.get("kind") == "ServiceAccount"
+            and subject.get("name") == READONLY_SA
+            and (subject.get("namespace") or namespace) == READONLY_NS
+        ):
+            return True
+    return False
+
+
+def _readonly_identity_bindings(role: str, tpl: str, doc: dict):
+    if doc.get("kind") in BINDING_KINDS and _names_the_identity(doc):
+        yield f"{role}:{doc['kind']}/{doc['metadata']['name']}", doc
+
+
+def _readonly_binding_offence(role: str, doc: dict) -> str | None:
+    ref = doc["roleRef"]
+    if ref["kind"] == "ClusterRole" and ref["name"] in ALLOWED_CLUSTER_ROLES:
+        return None
+    if (
+        ref["kind"] == "Role"
+        and (
+            doc["metadata"].get("namespace"),
+            ref["name"],
+        )
+        in ALLOWED_ROLES
+    ):
+        return None
+    return f"binds the read-only identity to {ref['kind']} {ref['name']!r}"
+
+
+def binding_doc(
+    kind: str, name: str, ref_kind: str, ref_name: str, subjects, namespace=None
+):
+    metadata = {"name": name, **({"namespace": namespace} if namespace else {})}
+    return {
+        "kind": kind,
+        "metadata": metadata,
+        "roleRef": {"kind": ref_kind, "name": ref_name},
+        "subjects": subjects,
+    }
+
+
+def _identity_subject() -> dict:
+    return {"kind": "ServiceAccount", "name": READONLY_SA, "namespace": READONLY_NS}
+
+
+_ALL_VARS = shared_vars()
+GAMES_SA = load_yaml(K8S_ROLES / "deploy-ui" / "defaults" / "main.yml")[
+    "deploy_ui_games_sa_name"
+]
+GAMES_NS = _ALL_VARS["k8s_namespace"]
+GAME_DEPLOYMENTS = frozenset(
+    d for game in _ALL_VARS["game_servers"] for d in game["deployments"]
+)
+
+
+def _names_the_games_identity(binding: dict) -> bool:
+    namespace = binding["metadata"].get("namespace")
+    return any(
+        s.get("kind") == "ServiceAccount"
+        and s.get("name") == GAMES_SA
+        and (s.get("namespace") or namespace) == GAMES_NS
+        for s in binding.get("subjects") or []
+    )
+
+
+def _games_identity_grants(role: str, tpl: str, doc: dict):
+    kind, meta = doc.get("kind"), doc.get("metadata", {})
+    if kind in BINDING_KINDS and _names_the_games_identity(doc):
+        yield f"{role}:{kind}/{meta['name']}", doc
+    elif (
+        kind == "Role"
+        and meta.get("name") == GAMES_SA
+        and meta.get("namespace") == GAMES_NS
+    ):
+        yield f"{role}:Role/{meta['name']}", doc
+
+
+def _games_grant_offence(role: str, doc: dict) -> str | None:
+    if doc["kind"] in BINDING_KINDS:
+        ref = doc["roleRef"]
+        if ref["kind"] == "Role" and ref["name"] == GAMES_SA:
+            return None
+        return f"binds the games identity to {ref['kind']} {ref['name']!r}"
+    for rule in doc.get("rules") or []:
+        if rule.get("apiGroups") != ["apps"] or rule.get("resources") != [
+            "deployments/scale"
+        ]:
+            return f"grants {rule.get('resources')} in {rule.get('apiGroups')}, not apps deployments/scale"
+        names = set(rule.get("resourceNames") or [])
+        if not names or not names <= GAME_DEPLOYMENTS:
+            return f"names {sorted(names - GAME_DEPLOYMENTS) or 'no'} Deployments outside game_servers"
+    return None
+
+
+def _games_role(rules: list[dict]) -> dict:
+    return {
+        "kind": "Role",
+        "metadata": {"name": GAMES_SA, "namespace": GAMES_NS},
+        "rules": rules,
+    }
+
+
+def _scale_rule(**overrides) -> dict:
+    return {
+        "apiGroups": ["apps"],
+        "resources": ["deployments/scale"],
+        "resourceNames": ["valheim"],
+        "verbs": ["get", "patch", "update"],
+        **overrides,
+    }
+
+
+def _games_subject() -> dict:
+    return {"kind": "ServiceAccount", "name": GAMES_SA, "namespace": GAMES_NS}
+
+
+def _game_deployments(role: str, tpl: str, doc: dict):
+    meta = doc.get("metadata", {})
+    if doc.get("kind") == "Deployment" and meta.get("name") in GAME_DEPLOYMENTS:
+        yield f"{role}:Deployment/{meta['name']}", doc
+
+
+def _renders_a_replica_count(role: str, doc: dict) -> str | None:
+    if "replicas" in doc.get("spec", {}):
+        return (
+            f"renders spec.replicas: {doc['spec']['replicas']}, which Flux would reset"
+        )
+    return None
+
+
+def _game_deployment(spec: dict) -> dict:
+    return {"kind": "Deployment", "metadata": {"name": "valheim"}, "spec": spec}
+
+
+RBAC_PROPERTIES = (
+    Property(
+        name="read-only-identity-is-bound-only-to-read-roles",
+        reason=(
+            "Plain `kubectl` in a session runs as the read-only ServiceAccount that cluster-base "
+            "defines, and the rule that Flux and `promote` are the only write path to the "
+            "cluster holds only while that identity's roleRefs stay read-only. "
+            "test_k8s_manifests_rbac.py audits the bindings that cluster-base and headlamp "
+            "render, and test_aggregated_clusterroles.py refuses a binding to `edit` or "
+            "`admin`. Neither reads a binding that another role renders for this identity, "
+            "whether it names the ServiceAccount or a `system:serviceaccounts` group that "
+            "contains it, to a role that writes. This row reads every rendered binding."
+        ),
+        select=_readonly_identity_bindings,
+        offence=_readonly_binding_offence,
+        red=(
+            "rogue-role",
+            binding_doc(
+                "ClusterRoleBinding",
+                "rogue-admin",
+                "ClusterRole",
+                "cluster-admin",
+                [_identity_subject()],
+            ),
+        ),
+        more_red=(
+            (
+                "rogue-role",
+                binding_doc(
+                    "ClusterRoleBinding",
+                    "rogue-group",
+                    "ClusterRole",
+                    "edit",
+                    [{"kind": "Group", "name": "system:serviceaccounts"}],
+                ),
+            ),
+            (
+                "rogue-role",
+                binding_doc(
+                    "ClusterRoleBinding",
+                    "rogue-namespace-group",
+                    "ClusterRole",
+                    "admin",
+                    [
+                        {
+                            "kind": "Group",
+                            "name": f"system:serviceaccounts:{READONLY_NS}",
+                        }
+                    ],
+                ),
+            ),
+            (
+                "rogue-role",
+                binding_doc(
+                    "RoleBinding",
+                    "rogue-local",
+                    "ClusterRole",
+                    "edit",
+                    [{"kind": "ServiceAccount", "name": READONLY_SA}],
+                    namespace=READONLY_NS,
+                ),
+            ),
+            (
+                "rogue-role",
+                binding_doc(
+                    "RoleBinding",
+                    "rogue-lease",
+                    "Role",
+                    f"{READONLY_SA}-kcm-lease",
+                    [_identity_subject()],
+                    namespace="fake-namespace",
+                ),
+            ),
+        ),
+        green=(
+            READONLY_SA,
+            binding_doc(
+                "ClusterRoleBinding",
+                "ok-view",
+                "ClusterRole",
+                "view",
+                [_identity_subject()],
+            ),
+        ),
+        more_green=(
+            (
+                READONLY_SA,
+                binding_doc(
+                    "RoleBinding",
+                    "ok-lease",
+                    "Role",
+                    f"{READONLY_SA}-kcm-lease",
+                    [_identity_subject()],
+                    namespace=READONLY_NS,
+                ),
+            ),
+        ),
+        min_matches=3,
+        must_find=frozenset(
+            {
+                f"cluster-base:ClusterRoleBinding/{READONLY_SA}-view",
+                f"cluster-base:ClusterRoleBinding/{READONLY_SA}",
+                f"cluster-base:RoleBinding/{READONLY_SA}-kcm-lease",
+            }
+        ),
+    ),
+    Property(
+        name="games-identity-only-scales-the-game-deployments",
+        reason=(
+            "deploy.local's Games panel holds the homelab-games token, and any pod in the "
+            "cluster can reach that panel without Authelia. ADR-0033 accepts that only because "
+            "the identity can change the replica count of the game Deployments and nothing "
+            "else. Patch on `deployments` could rewrite a pod spec, and PSA only warns here, so "
+            "a wider grant would turn a leaked token into root on a node. This row reads every "
+            "rendered Role named for the identity and every binding that names it."
+        ),
+        select=_games_identity_grants,
+        offence=_games_grant_offence,
+        red=("deploy-ui", _games_role([_scale_rule(resources=["deployments"])])),
+        more_red=(
+            ("deploy-ui", _games_role([_scale_rule(resourceNames=["traefik"])])),
+            ("deploy-ui", _games_role([_scale_rule(resourceNames=[])])),
+            (
+                "rogue-role",
+                binding_doc(
+                    "RoleBinding",
+                    "rogue-games",
+                    "ClusterRole",
+                    "edit",
+                    [_games_subject()],
+                    namespace=GAMES_NS,
+                ),
+            ),
+        ),
+        green=("deploy-ui", _games_role([_scale_rule()])),
+        min_matches=2,
+        must_find=frozenset(
+            {
+                f"deploy-ui:Role/{GAMES_SA}",
+                f"deploy-ui:RoleBinding/{GAMES_SA}",
+            }
+        ),
+    ),
+    Property(
+        name="game-deployments-render-no-replica-count",
+        reason=(
+            "deploy.local's Games panel owns the replica count of every Deployment "
+            "`game_servers` lists, through the homelab-games identity (ADR-0033). A template "
+            "that renders `spec.replicas` there makes Flux reset each start or stop at its next "
+            "reconcile, so a game the operator started stops again within the interval."
+        ),
+        select=_game_deployments,
+        offence=_renders_a_replica_count,
+        red=("valheim", _game_deployment({"replicas": 0, "selector": {}})),
+        green=("valheim", _game_deployment({"selector": {}})),
+        min_matches=len(GAME_DEPLOYMENTS),
+        must_find=frozenset(
+            {
+                "terraria:Deployment/terraria",
+                "valheim:Deployment/valheim",
+                "game-stats:Deployment/terraria-stats",
+                "game-stats:Deployment/valheim-stats",
+            }
+        ),
+    ),
+)

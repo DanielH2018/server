@@ -70,8 +70,7 @@ BG_RED_REPO = "bg-red"
 BG_MARKER = "bg-marker"
 BG_RED_MARKER = "bg-red-marker"
 BG_SECRET = "flux-break-glass-key"
-# What a failed verification says, as source-controller words it. A registry or transport
-# failure carries none of these, so it cannot read as a refusal.
+# A registry or transport failure carries none of these words, so it cannot read as a refusal.
 VERIFICATION_WORDS = re.compile(r"verif|signature|cosign", re.IGNORECASE)
 
 

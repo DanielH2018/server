@@ -18,7 +18,7 @@ visible decision:
   them. ENFORCED: `hosts/lib/tests/test_deploy_ui_component.py`.
 - Authelia `two_factor` gates `deploy.local`: `auth_tier: two_factor` on the `deploy-ui`
   containers_list entry, rendered into the authelia role's access_control rules.
-  ENFORCED: `tests/services/test_authelia_access_tiers.py`.
+  ENFORCED: `tests/services/authelia/test_authelia_access_tiers.py`.
 
 DECIDED: a pod inside the cluster reaches the daemon without Authelia. Accepted 2026-09-10 —
 a hostile pod already has kubectl-adjacent reach. Nothing stops it at the network layer:
@@ -115,9 +115,9 @@ Land and cancel each emit one logfmt line via `logger -t deploy-ui`
 (`hosts/components/deploy-ui/files/deploy_ui_lib/deploy_ui_writes.py:audit`). The page reads
 no hold itself: `land.sh` meets `DEPLOY_HOLD` on its own. A PR that bumps a forward-only pin
 is refused before it merges
-(`scripts/deploy_tools/tests/test_land_pin_gate.py::test_a_bump_is_refused_unless_deploy_hold_reads_none`).
+(`scripts/deploy_tools/tests/land_deploy/test_land_pin_gate.py::test_a_bump_is_refused_unless_deploy_hold_reads_none`).
 Any other landing under the hold merges and ends `deploy-failed` with cause `promote-held`
-(`scripts/deploy_tools/tests/test_promote_land_wait.py::test_a_hold_set_before_the_merge_ends_the_wait_at_the_first_poll`).
+(`scripts/deploy_tools/tests/promote/test_promote_land_wait.py::test_a_hold_set_before_the_merge_ends_the_wait_at_the_first_poll`).
 The hold is cleared with `gh variable set DEPLOY_HOLD --body none`, never from this page.
 
 Log names carry a `mkstemp` suffix as well as the second-granular timestamp

@@ -9,7 +9,7 @@ on 2026-11-11 thirteen live landings spent it.
 THE READS FAIL OPEN. A read that fails lowers nothing and bars nothing. `gh api rate_limit`
 costs no core quota.
 
-Run: uv run pytest scripts/deploy_tools/tests/test_land_live_limit.py
+Run: uv run pytest scripts/deploy_tools/tests/land_merge/test_land_live_limit.py
 """
 
 from collections.abc import Callable, Iterable

@@ -25,8 +25,7 @@ spec:
         spec:
           restartPolicy: Never
           enableServiceLinks: false
-          # The token is for one call: the script's verdict export PATCHes the verdict ConfigMap
-          # (rbac.yaml.j2 grants `patch` on that one name). The backup itself never calls the API.
+          # The token is for the verdict-export PATCH only; the backup never calls the API.
           serviceAccountName: pi-peer-backup
           automountServiceAccountToken: true
           securityContext:
@@ -38,22 +37,18 @@ spec:
           containers:
             - name: pi-peer-backup
               image: {{ pi_peer_backup_k8s_image }}
-              # Built in-cluster to a mutable :latest; explicit for the reason terraria's
-              # deployment records.
+              # Mutable :latest tag, so always pull.
               imagePullPolicy: Always
               env:
                 - name: PI_SRC
                   value: "{{ pi_peer_backup_ssh_user }}@{{ hosts['daniel-pi'].server_ip }}:{{ pi_peer_backup_src_dir }}"
-                # Optional off-premises ping; empty when unconfigured. No checksum/config
-                # annotation is needed to pick up a Secret change here the way a Deployment
-                # would: each scheduled run creates a fresh pod that reads the Secret at start.
+                # No checksum annotation needed: each scheduled run is a fresh pod that reads the
+                # Secret at start.
                 - name: HC_PING_URL
                   valueFrom:
                     secretKeyRef:
                       name: pi-peer-backup-ssh
                       key: hc_ping_url
-                # The ConfigMap the verdict is also written to (verdict-configmap.yaml.j2). The
-                # script skips the export on the gate run.
                 - name: VERDICT_CONFIGMAP
                   value: "{{ pi_peer_backup_k8s_verdict_configmap }}"
                 # ssh insists on resolving HOME even with every path given explicitly.
@@ -73,14 +68,12 @@ spec:
             - name: pi-peer-backup-data
               persistentVolumeClaim:
                 claimName: {{ pi_peer_backup_k8s_claim }}
-            # Both Secrets at /ssh: known_hosts from pi-peer-backup-ssh, and the private key
-            # `id`, which has a Secret of its own because its multi-line value cannot pass
-            # through a Flux placeholder (templates/ssh-key-secret.yaml.j2).
+            # Both Secrets mount at /ssh; the key has its own Secret since placeholders cannot carry
+            # newlines.
             - name: pi-peer-backup-ssh
               projected:
-                # Group-readable for the fsGroup (root-owned files, same trap the bridge
-                # twin hit) — but ssh refuses a group-readable identity, so the script
-                # stages a 0400 copy under $HOME before connecting.
+                # Group-readable for the fsGroup; ssh refuses that identity, so the script stages a
+                # 0400 copy.
                 defaultMode: 0440
                 sources:
                   - secret:

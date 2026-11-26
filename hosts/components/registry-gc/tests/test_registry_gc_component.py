@@ -12,6 +12,7 @@ import pytest
 import yaml
 
 from lib.estate import role_defaults
+from lib.inventory_lists import host_vars_file
 from lib.repo_paths import REPO
 from renderer.renderer_lib import host as host_mode
 
@@ -117,12 +118,10 @@ def test_the_toggle_drops_the_files_the_link_and_the_policy(tmp_path):
     (root / "daniel-box" / "package.yml").write_text(
         yaml.safe_dump({"components": ["registry-gc"]})
     )
-    host_vars = tmp_path / "host_vars"
-    host_vars.mkdir()
-    box = host_mode.REPO_INVENTORY.host_vars / "daniel-box.yml"
+    box = host_vars_file("daniel-box", host_mode.REPO_INVENTORY.host_vars)
     body = {**yaml.safe_load(box.read_text()), "registry_k8s_manage_gc": False}
-    (host_vars / "daniel-box.yml").write_text(yaml.safe_dump(body))
-    inventory = dataclasses.replace(host_mode.REPO_INVENTORY, host_vars=host_vars)
+    host_vars_file("daniel-box", root).write_text(yaml.safe_dump(body))
+    inventory = dataclasses.replace(host_mode.REPO_INVENTORY, host_vars=root)
 
     package = host_mode.render_host("daniel-box", root, inventory=inventory)
 

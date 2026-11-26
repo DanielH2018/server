@@ -7,7 +7,7 @@ traefik_k8s_image: traefik:v3.7.18@sha256:9c437ac4f09ce6f4980a8544902d3475fdf70a
 
 # The CRDs are a role of their own, `traefik-crds`, whose defaults pin its in-tree copy of
 # upstream's definitions. That copy's version must share this image's minor:
-# tests/k8s/test_traefik_crds.py fails a minor bump here until the copy is refreshed.
+# tests/k8s/edge/test_traefik_crds.py fails a minor bump here until the copy is refreshed.
 
 # Renovate stance: whether an image bump here may automerge. `promote` deploys what merges.
 # Platform: this is the ingress edge everything else routes through. A failed deploy removes
@@ -17,8 +17,6 @@ traefik_k8s_image: traefik:v3.7.18@sha256:9c437ac4f09ce6f4980a8544902d3475fdf70a
 k8s_autodeploy: false
 k8s_autodeploy_reason: "platform — ingress edge; a failed deploy removes the ability to reach or fix anything else, and host probes stay green through that kind of outage. COUPLING NOTE for a future promotion: the traefik-acme PVC holds the ACME account key and issued certs; reverting past a real rotation reinstates stale cert state"
 
-# Unprivileged ports inside the pod; the Service maps 80 -> http and 443 -> https. Binding
-# :80/:443 in the container would need NET_BIND_SERVICE and a root-ish user for no gain.
 traefik_k8s_http_port: 8000
 traefik_k8s_https_port: 8443
 traefik_k8s_ping_port: 8082
@@ -39,7 +37,7 @@ traefik_k8s_uid: 65532
 # Namespaces this cluster's Traefik watches. rbac.yaml.j2 renders one namespaced Role per
 # entry, and static-config.yaml.j2 lists the same set as `providers.kubernetesCRD.namespaces`.
 # ONE variable, so the two cannot drift.
-# ENFORCED by tests/services/test_traefik_watched_namespaces.py, which compares the RENDERED
+# ENFORCED by tests/services/traefik/test_traefik_watched_namespaces.py, which compares the RENDERED
 # manifests (Role namespaces vs the provider list), not the templates' text.
 #
 # Scoped to named namespaces: Traefik should not pick up an IngressRoute someone drops in an
@@ -97,34 +95,20 @@ traefik_k8s_bouncer_key_precheck: true
 # not something a deploy can arrange.
 traefik_k8s_manage_livesync_gate: true
 
-# Let's Encrypt directory. Empty means production. Set to
-#   https://acme-staging-v02.api.letsencrypt.org/directory
-# while iterating: both Traefik instances request the SAME SAN set, so they share one
-# duplicate-certificate limit (5/week), and a debugging loop against production burns it.
-# Flipping back is `rm` on acme.json in the PVC plus a redeploy, not a rebuild.
+# Empty is production; staging while iterating avoids the shared 5/week duplicate-cert limit.
+# Switching back needs `rm` of acme.json in the PVC plus a redeploy.
 traefik_k8s_acme_ca_server: ""
 
-# acme.json only. Regenerable — losing it costs one ACME re-issue, not data — so it is
-# small.
 traefik_k8s_acme_storage: 128Mi
 
-# Plain `longhorn`, so the claim rides the daily R2 tier, though nothing on it is load-bearing:
-# acme.json is regenerable, and losing it costs one ACME re-issue rather than data.
 traefik_k8s_acme_storage_class: longhorn
 
-# The ACME claim the renderer emits for this role, which the traefik Kustomization applies. An
-# expression rather than a plain list, because traefik_k8s_manage_acme must reach the claim: a
-# staging cluster with ACME off renders no claim at all. `dict(...)` rather than a `{...}`
-# literal: the offline renders (scripts/lib/k8s_context.py:_PURE_TEMPLATE) evaluate a
-# whole-value expression to its own type only when it holds no brace, and otherwise hand on the
-# list's text.
+# An expression so traefik_k8s_manage_acme gates the claim; dict(...), not a brace literal, because
+# offline renders keep a whole-value expression's type only when it holds no brace.
 k8s_claims: >-
   {{ [dict(name='traefik-acme', storage_class=traefik_k8s_acme_storage_class, size=traefik_k8s_acme_storage)] if traefik_k8s_manage_acme | bool else [] }}
 
-# "1", not "1.0": Kubernetes canonicalises quantities, so a manifest saying 1.0 produces a live
-# object saying 1. kubectl's last-applied-configuration annotation then differs, so every
-# `kubectl apply` reports the Deployment "configured" forever, while `kubectl diff` shows
-# nothing. Keep resource quantities in the form the API server stores.
+# Quantities in stored form ("1", not "1.0"): else every `kubectl apply` reports configured.
 traefik_k8s_cpu_limit: "1"
 traefik_k8s_mem_limit: 512Mi
 traefik_k8s_cpu_request: "100m"
@@ -138,48 +122,33 @@ traefik_k8s_mem_request: 192Mi
 # renovate: datasource=github-releases depName=maxlerebourg/crowdsec-bouncer-traefik-plugin
 traefik_k8s_bouncer_plugin_version: v1.8.2
 
-# The Cloudflare real-IP middleware: an in-repo Traefik local plugin (files/cloudflare-realip/),
-# not a downloaded one, so it has no version to pin — git holds its source. The name is the key
-# under experimental.localPlugins and under the Middleware's `plugin:`. The module is the
-# directory under /plugins-local/src/ and must prefix the manifest's `import`
-# (files/cloudflare-realip/traefik-plugin.yml). tests/k8s/test_traefik_cloudflare_realip.py
-# checks all four agree.
+# In-repo local plugin, no version to pin. The name and module must agree with the manifest's
+# `import`; tests/k8s/edge/test_traefik_cloudflare_realip.py checks all four.
 traefik_k8s_realip_plugin_name: cloudflarerealip
 traefik_k8s_realip_plugin_module: homelab/cloudflarerealip
 traefik_k8s_agent_collections: >-
   crowdsecurity/traefik crowdsecurity/http-cve crowdsecurity/whitelist-good-actors
-# Hub parsers on top of the collections. jellyfin-whitelist drops the 403 Jellyfin answers to
-# a playback progress POST and the 404 on a missing thumbnail.
+# jellyfin-whitelist drops the 403 on playback progress POSTs and the 404 on missing thumbnails.
 traefik_k8s_agent_parsers: crowdsecurity/jellyfin-whitelist
 traefik_k8s_agent_cpu_limit: "0.5"
 traefik_k8s_agent_mem_limit: 256Mi
 traefik_k8s_agent_cpu_request: 50m
 traefik_k8s_agent_mem_request: 128Mi
-# The access log lives on an emptyDir shared between traefik, the crowdsec-agent sidecar, and
-# the access-log-rotate sidecar below. sizeLimit is a BACKSTOP: the sidecar copytruncates the
-# file well before it is reached, so hitting it means rotation itself has stopped working.
+# sizeLimit is a backstop: hitting it means the rotate sidecar has stopped working.
 traefik_k8s_access_log_size: 1Gi
 
-# Alpine's busybox provides everything the access-log-rotate sidecar's script needs: sh, tail,
-# cp, mv, wc.
 traefik_k8s_logrotate_image: alpine:3.24@sha256:f59abe656b692d901e184be3445e084786602108599d2a51d229c0f5a48c71bf
 traefik_k8s_logrotate_cpu_limit: "100m"
 traefik_k8s_logrotate_mem_limit: 64Mi
 traefik_k8s_logrotate_cpu_request: "10m"
 traefik_k8s_logrotate_mem_request: 16Mi
 
-# Rotation policy for the shared access log (copytruncate, see deployment.yaml.j2's
-# access-log-rotate sidecar). A 100Mi threshold plus 2 rotated generations plus the live file
-# caps the volume at ~300Mi worst case, under the 1Gi emptyDir cap above even through a traffic
-# spike that fills the live file between checks.
+# Threshold plus 2 generations plus the live file is ~300Mi worst case, under the 1Gi cap.
 traefik_k8s_access_log_rotate_mb: 100
 traefik_k8s_access_log_keep: 2
 
-# rbac.yaml holds the cluster-scoped role and one Role and RoleBinding per watched
-# namespace, in ONE file so a single apply moves both halves (see its header).
-# The ACME Secret is concatenated rather than listed, because dropping its name is the only
-# way traefik_k8s_manage_acme reaches it — the manifest has no template branch to gate. The
-# ACME claim is `k8s_claims` in this file, gated on the same flag.
+# The ACME Secret is concatenated: dropping its name is how traefik_k8s_manage_acme reaches it.
+# rbac.yaml is one file so a single apply moves the cluster and namespaced halves together.
 manifests_files: >-
   {{ ['rbac.yaml', 'rbac-binding.yaml', 'static-config.yaml', 'dynamic.yaml',
       'deployment.yaml', 'service.yaml', 'metrics-service.yaml',

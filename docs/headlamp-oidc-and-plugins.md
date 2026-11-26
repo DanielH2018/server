@@ -25,7 +25,7 @@ every touch of the role (#2985).
   so a Renovate bump rewrites the whole URL.
 - **The Flux plugin (#5221) reads through `view`.** Flux's vendored `flux-view-flux-system`
   aggregates its six `*.toolkit.fluxcd.io` groups into `view`, read-only
-  (`tests/k8s/test_aggregated_clusterroles.py` pins it), and `headlamp-cluster-read`
+  (`tests/k8s/rbac/test_aggregated_clusterroles.py` pins it), and `headlamp-cluster-read`
   already grants `customresourcedefinitions`, which the plugin's overview reads to decide
   whether Flux is installed. No `headlamp_k8s_crd_api_groups` entry is needed. The plugin's
   sync, suspend and resume buttons fail as Forbidden, which is intended: writes to Flux go
@@ -36,7 +36,7 @@ every touch of the role (#2985).
   on `services/proxy` pinned to `prometheus:9090`. The network hop is the API server's,
   admitted by `netpol_baseline_obs_node_cidrs`, not by anything on the headlamp pod. Label,
   Service name/port and the Role's `resourceNames` must agree;
-  `tests/k8s/test_k8s_manifests_rbac.py` checks they do, because a mismatch shows as
+  `tests/k8s/rbac/test_k8s_manifests_rbac.py` checks they do, because a mismatch shows as
   empty charts with no error.
 - **Charts are off per browser.** The "Show Prometheus metrics" button on a workload's detail
   page toggles them, stored in that browser's localStorage; nothing in IaC can pre-enable it.
@@ -104,4 +104,4 @@ bounds what a leaked one is worth.
 
 To change the length, edit `lifespans.custom.headlamp`. Every other client keeps the global
 lifespans. `test_headlamp_login_lasts_eighteen_hours` in
-`tests/k8s/test_k8s_headlamp_oidc.py` pins the value.
+`tests/k8s/edge/test_k8s_headlamp_oidc.py` pins the value.

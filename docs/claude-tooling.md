@@ -739,7 +739,7 @@ the text runs against an allowlist. The allowlist is
 `.claude/hooks/hooklib/read_only_commands.py` for ordinary commands, and a read-only set of git
 and gh verbs such as `git log`, `git branch -a`, `gh pr view` and a `gh api` GET. A command the
 allowlist does not name is denied, so a read it lacks costs the agent one rephrased command.
-`.claude/hooks/tests/test_block_protected_bash_read_only.py::test_read_only_agents_run_only_what_the_hook_allows`
+`.claude/hooks/tests/bash_guards/test_block_protected_bash_read_only.py::test_read_only_agents_run_only_what_the_hook_allows`
 judges every command a read-only agent's file names in backticks the same way, and fails on a
 refusal the file does not mark with `(refused` after the span. The arm reads past wrappers such as `timeout`, `xargs` and `uv run`. It judges the body of a `$( )`
 and an `ssh` remote command as commands of their own. The reviewer agents and the skeptic read
@@ -989,7 +989,7 @@ hosts' Claude Code exports OTLP to their own node's collector hostPort (127.0.0.
 removes `/audit-permissions` from every session opened here and nothing in a session says so. The
 plugin registers no hooks of its own: it ships the skill and the Loki reader, so enabling it adds
 `/audit-permissions` and changes nothing else about a session.
-`.claude/hooks/tests/test_project_settings_shape.py::test_no_plugin_is_disabled_here_without_a_reason_on_the_list`
+`.claude/hooks/tests/hook_contract/test_project_settings_shape.py::test_no_plugin_is_disabled_here_without_a_reason_on_the_list`
 fails if a disable for it comes back without a reason written here.
 
 The events land in **observability's Loki** (`observability` namespace, Service `loki`), not in

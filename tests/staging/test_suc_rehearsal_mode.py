@@ -50,8 +50,6 @@ FILES = HYPERVISOR / "files"
 # The guest-side subcommands, in the order the orchestrator runs them.
 STEPS = ["k3s", "flux-cli", "base", "publish"]
 
-# Stands in for `ssh <guest> ...`. The orchestrator hands it the guest-side subcommand after
-# `sudo /usr/local/bin/suc-rehearsal-guest-run`, or a shell snippet that ships a file or a tar.
 SSH = """\
 #!/bin/bash
 args="$*"
@@ -269,10 +267,8 @@ def test_without_the_flag_the_orchestrator_is_the_drill_and_with_it_the_tag_is_i
     assert "unknown argument" in sourced(r, "--bogus").stderr
 
 
-# The k3s installer returns before the kubelet registers the Node, and `kubectl wait --all` exits
-# at once with "no matching resources found" while there is none.
-# This `k3s` stub reports no node for the first NODE_AFTER `get nodes` calls, then one, and its
-# `wait` fails at once while there is none.
+# The k3s installer returns before the kubelet registers the Node, and `kubectl wait --all` exits at
+# once while there is none.
 GUEST_STUBS = {
     "id": "#!/bin/bash\necho 0\n",
     "curl": '#!/bin/bash\nwhile [[ $# -gt 1 ]]; do [[ $1 == -o ]] && echo "#!/bin/sh" >"$2"; shift; done\n',

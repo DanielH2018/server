@@ -20,7 +20,7 @@ The names are fixed too. Notification-controller's status description carries on
 reason, so `verify` cannot tell the replaced pod's "health check failed" from a real one, and
 a name outside this set that fails during the hop stays final.
 
-Run: imported only. `uv run pytest scripts/deploy_tools/tests/test_verify_promotion_controller_rollout.py`
+Run: imported only. `uv run pytest scripts/deploy_tools/tests/promote/test_verify_promotion_controller_rollout.py`
 """
 
 from collections.abc import Iterable

@@ -6,7 +6,7 @@
 # lokitool parses every expression in the validate-alert-rules hook. LogQL has no counterpart
 # to `promtool test rules`, so nothing here is unit-tested into firing; M5's slice plan
 # (docs/archive/monitoring/m5-loki-ruler.md, *The rules*) states what checks each
-# rule instead. tests/services/test_loki_stream_labels.py holds every selector to the
+# rule instead. tests/services/scraping/test_loki_stream_labels.py holds every selector to the
 # labels and values Alloy emits, and holds each silence rule to its side of the Pi boundary.
 #
 # Every selector is a literal copied from `loki_streams` in group_vars/all.yml, because this

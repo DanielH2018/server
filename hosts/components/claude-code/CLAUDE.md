@@ -172,7 +172,7 @@ directory.
   drops every `homelab_check_*` series whose file omits the HELP and TYPE lines the other
   check files declare. The file's mtime still reaches Prometheus, so the only symptom is the
   check's `NotReporting` alert. The `host-check-textfiles-go-through-host-lib` row of
-  `tests/repo/test_census_rows_python.py` refuses a hand-written series.
+  `tests/repo/census_rows/test_census_rows_python.py` refuses a hand-written series.
 
 ## The fleet bound, and why it lives on `user.slice`
 
@@ -294,7 +294,7 @@ template carries why it is a host timer at all.
   through `write_check_textfile` in `homelab-check-lib.sh`. The `ArtifactsSync*` and `OtlpDoor*`
   rules in observability's `host-checks.yaml` page from those files. Each script renders its
   deadline from its own minute default, so that default must stay `*/N`, and
-  `tests/services/test_b6a_rule_literals.py` pins the rules to it.
+  `tests/services/alert_rules/test_b6a_rule_literals.py` pins the rules to it.
 
 ## Autonomous-role contract (`claude-guardrail-audit`, the audit watches on the guardrail paths)
 
@@ -324,7 +324,7 @@ runs `hosts/components/claude-code/templates/claude-guardrail-audit.sh.j2` as ro
   (`hosts/tests/test_claude_guardrail_audit.py::test_a_watch_that_will_not_load_is_flagged_by_path`).
   `ClaudeGuardrailAuditNotReporting` pages a timer that stopped. Each watched write lands in
   `/var/log/audit/audit.log`, which loki-homelab's Alloy ships as `{job="audit"}`
-  (`tests/k8s/test_alloy_ships_audit_log.py::test_the_source_tails_auditds_log_into_this_block`). Its SYSCALL line carries the key and the
+  (`tests/k8s/alloy/test_alloy_ships_audit_log.py::test_the_source_tails_auditds_log_into_this_block`). Its SYSCALL line carries the key and the
   writing process, so a Bash write shows apart from the Write tool's.
 - **Next-run review:** before adding a path, check that a write to it is rare. Every write to
   a watched path is a shipped record.
@@ -485,7 +485,7 @@ at 09:00 UTC, and 10 minutes after each activation of the timer.
 - **Evidence:** the post itself, a `status=` line under `journalctl -t claude-weekly-summary`,
   and `claude-weekly-summary.prom`, which `ClaudeWeeklySummaryFailed` and
   `ClaudeWeeklySummaryNotReporting` read. The deadline is a week plus an hour, 608400 seconds
-  (`tests/services/test_b6a_rule_literals.py::test_the_weekly_summary_rules_carry_the_deadline_its_config_renders_is_clean`).
+  (`tests/services/alert_rules/test_b6a_rule_literals.py::test_the_weekly_summary_rules_carry_the_deadline_its_config_renders_is_clean`).
 - **Next-run review:** when C2's autopr-repair profile starts writing records, add its source
   and check the first post that carries it.
 

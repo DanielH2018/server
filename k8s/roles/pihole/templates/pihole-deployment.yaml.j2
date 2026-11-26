@@ -14,7 +14,7 @@
 
   This file renders to nothing on its own, and pihole's include names it in
   `manifests_exclude_files`, so no deploy ever stages it. It is `.yaml.j2` rather than `.yml.j2` all the same: the shell-macro census, the
-  workload-shell-comes-from-the-macros row of tests/repo/test_census_rows_roles.py, globs
+  workload-shell-comes-from-the-macros row of tests/repo/census_rows/test_census_rows_roles.py, globs
   `templates/*.yaml.j2` and reads
   `kind:` out of the TEXT, and it cannot see through a macro call — so the body has to be the
   file that census scans or pihole's Deployments leave it silently.

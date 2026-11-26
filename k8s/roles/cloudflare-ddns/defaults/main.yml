@@ -12,23 +12,18 @@ cloudflare_ddns_k8s_mem_limit: 64Mi
 cloudflare_ddns_k8s_cpu_request: "50m"
 cloudflare_ddns_k8s_mem_request: 16Mi
 
-# This role ships two Deployments and neither is named after the service, so the shared
-# wait cannot find one.
+# Two Deployments, neither named after the service, so the shared wait cannot find one.
 manifests_rollout: ""
 
-# `manifests_rollout: ""` above opts out of the shared WAIT, and the shared rollout-RESTART
-# is gated on that same variable being non-empty, so emptying it silently drops the restart
-# with it. Naming both Deployments here restores the restart: the extra-rollouts task
-# carries no such gate.
+# Emptying manifests_rollout also drops the shared rollout-RESTART; naming both Deployments here
+# restores it.
 manifests_extra_rollouts:
   - name: cloudflare-ddns-direct
   - name: cloudflare-ddns-proxied
 
-# Each entry renders k8s/templates/secret-default.yaml.j2 as secret-<name>.yaml:
-# its `string_data` maps a Secret field to the SOPS key its value comes from.
 render_secrets:
   - name: cloudflare-ddns
     string_data:
-      # The zone-edit token traefik also uses. Mounted as a file for
-      # CLOUDFLARE_API_TOKEN_FILE, so the value stays out of `kubectl describe pod`.
+      # Mounted as a file for CLOUDFLARE_API_TOKEN_FILE, so the value stays out of
+      # `kubectl describe pod`.
       cf_dns_token: cloudflare_dns_token

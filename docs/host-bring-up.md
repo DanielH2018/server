@@ -64,12 +64,12 @@ source ~/.bashrc   # (or re-login) to pick up ~/.local/bin on PATH
 
 ## 4. Add the host to inventory
 
-`inventory/host_vars/<host>.yml` describes each host to the renderer and the host
+`hosts/<host>/vars.yml` describes each host to the renderer and the host
 packages: one file is one inventory host, and a host without a file matches nothing. Before
 touching SOPS:
 
-1. Create `inventory/host_vars/<host>.yml` — copy
-   `inventory/host_vars/_example.yml`, which lists every variable a
+1. Create `hosts/<host>/vars.yml` — copy
+   `hosts/_example/vars.yml`, which lists every variable a
    new host can set with its default and why it matters. At minimum:
    - `server_ip` — the host's LAN IP (no default exists; every role that publishes a
      LAN-bound port or firewalls by IP needs it).

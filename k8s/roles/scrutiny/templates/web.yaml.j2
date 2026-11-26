@@ -3,9 +3,7 @@
 {% from 'pod-affinity.yml.j2' import node_affinity_preference with context %}
 {% from 'workload-shell.yml.j2' import spec_shell, pod_shell with context %}
 ---
-# Web UI + API. The Service is named `scrutiny` (not scrutiny-web) because the shared
-# ingressroute macro names the Service after the containers_list entry — and it keeps
-# COLLECTOR_API_ENDPOINT=http://scrutiny:8080 resolving for the DaemonSet below.
+# The Service is named `scrutiny` so the ingressroute macro and COLLECTOR_API_ENDPOINT resolve.
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -26,30 +24,10 @@ spec:
 {{ pod_shell('homelab-best-effort') }}
 {{ node_affinity_preference('daniel-server') }}
       initContainers:
-        # scrutiny-web calls InfluxDB's `/api/v2/setup` during AppEngine.Setup and PANICS on a
-        # connection error instead of retrying. The `panic(err)` is upstream in
-        # webapp/backend/pkg/web/middleware/repository.go and the error string is built in
-        # webapp/backend/pkg/database/scrutiny_repository.go. Neither has a retry (the
-        # middleware file's last commit is from 2022), so the rolling `master-web` digest this
-        # role pins will not fix this on
-        # its own, and this gate stays needed until upstream retries.
-        #
-        # A readiness/liveness tweak cannot cover it — the panic happens during startup, before
-        # either probe is in play. Connecting to the SERVICE rather than a pod is what makes
-        # this a readiness gate: scrutiny-influxdb has no endpoints until its `influx ping`
-        # probe passes. The retry also absorbs kube-router's source-pod lookup lagging pod
-        # creation, which a single connect attempt at init time would trip over.
-        #
-        # Bounded, not unbounded — 60 x 2s, the same shape as crowdsec's wait-for-lapi. If
-        # influxdb is still unreachable after two minutes the init container fails and the pod
-        # backs off exactly as it does today, so this can only improve on the current behaviour,
-        # never mask a genuinely dead influxdb.
-        #
-        # The web image is debian-slim carrying `curl` (upstream docker/Dockerfile.web) and is
-        # already this pod's own image, so nothing extra is pulled. `-sf`, not bare `-s`: curl
-        # exits 0 on a 5xx without `-f`. `--max-time 5` so a half-open connection retries rather
-        # than stalling the loop. `/api/v2/setup` is the exact unauthenticated request that
-        # panics, so this gates on the request scrutiny actually makes rather than a neighbour.
+        # scrutiny-web panics instead of retrying when InfluxDB is down at startup, before any probe
+        # runs.
+        # Gates on the Service (no endpoints until influx ping passes); needs -f, as curl exits 0 on
+        # 5xx.
         - name: wait-for-influxdb
           image: {{ scrutiny_k8s_web_image }}
           imagePullPolicy: IfNotPresent
@@ -64,20 +42,16 @@ spec:
                 sleep 2;
               done;
               echo "scrutiny-influxdb reachable after $((i*2))s"
-          # read_only: the whole program is the shell loop above, and curl writes to /dev/null.
-          # It needs no writable path, so no emptyDir goes with this.
 {{ hardened_security_context(read_only=true) }}
 {{ container_resources(cpu_limit='250m', mem_limit='128Mi', cpu_request='10m', mem_request='16Mi') }}
       containers:
         - name: web
           image: {{ scrutiny_k8s_web_image }}
           imagePullPolicy: IfNotPresent
-          # No _FILE convention in scrutiny, so a wrapper exports the influxdb token from
-          # the Secret mount before exec'ing the binary, which keeps it out of the pod spec.
-          # The wrapper exports nothing else. Scrutiny's own shoutrrr alert is not used: it paged
-          # a second time for one failed disk; monitor-bridge's
-          # check_scrutiny is the single pager. This role's CLAUDE.md has the reasoning
-          # and the two upstream traps a re-add would meet.
+          # No _FILE convention: a wrapper exports the token from the Secret mount, off the pod
+          # spec.
+          # Scrutiny's shoutrrr alert is unused: monitor-bridge's check_scrutiny is the single
+          # pager.
           command:
             - /bin/sh
             - -c

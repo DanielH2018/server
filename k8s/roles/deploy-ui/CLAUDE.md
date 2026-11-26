@@ -40,12 +40,12 @@ and `update` on `deployments/scale` for the Deployments `game_servers` lists, an
 The Games panel starts and stops the game servers with it, under ADR-0033.
 
 - **It is the second write path to the cluster, and the Role is its bound.** The
-  `games-identity-only-scales-the-game-deployments` row in `tests/k8s/_rbac_property_rows.py`
+  `games-identity-only-scales-the-game-deployments` row in `tests/k8s/rendered_properties/_rbac_property_rows.py`
   holds every rendered Role named for the identity and every binding that names it to that
   rule.
 - **It lives here, not in cluster-base.** A rebuilt cluster applies cluster-base at step 6 of
   the DR order, before anything creates `homelab`, and a `homelab` object there would stall the
-  bring-up (`tests/k8s/test_step6_tags_render_into_created_namespaces.py`).
+  bring-up (`tests/k8s/flux/test_step6_tags_render_into_created_namespaces.py`).
 - **The operator mints the host's copy of the token.** It reads the token Secret, stores it in
   daniel-box's host secrets, and deploy-ui imports it with `ImportCredential=` (**operator-only**).
   Deleting the Secret revokes the token.
@@ -54,4 +54,4 @@ The daemon the route fronts ships in daniel-box's host package (`hosts/component
 
 Authelia policy: `auth_tier: two_factor` on the containers_list entry, which the authelia role
 renders into its access_control rules. ENFORCED for every SSO entry by
-`tests/services/test_authelia_access_tiers.py`.
+`tests/services/authelia/test_authelia_access_tiers.py`.

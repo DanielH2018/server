@@ -30,13 +30,10 @@ from _shell_render import rendered_shell_texts
 from backup.longhorn_reap_lib import logic
 from backup.tests._reap_entrypoint_harness import _backup
 
-# `{range .metadata.labels}` and friends. Ranging .items[*] is fine and ubiquitous — that IS a
-# list. This matches ranging into a map-valued field, which is the defect.
+# Ranging `.items[*]` is a list and fine; ranging into a map-valued field is the defect.
 MAP_RANGE = re.compile(r"\{range\s+\.(metadata|status)\.(labels|annotations)\}")
 
 
-# The templates the jsonpath sweep below must reach. Named rather than counted: the (plane, role)
-# filter reads empty the day a script moves, and an `all(...)` over nothing passes.
 GUARDED_TEMPLATES = frozenset({"longhorn-backup-health.sh.j2"})
 
 
@@ -162,10 +159,8 @@ def test_deleted_volume_strays_need_their_own_flag():
     result = logic.classify_backups(
         [_backup("stray", "gone-vol", "2026-08-14T00:00:00Z", "daily-backup")],
         owner={},
-        # A live volume alongside the deleted one. An EMPTY set is the separate case
-        # classify_backups refuses outright: it means the volume read returned nothing,
-        # not that every volume was deleted, and orphaning the whole backup set on it is the
-        # failure that refusal prevents.
+        # A live volume alongside the deleted one: an EMPTY set is refused by classify_backups,
+        # since it means the volume read returned nothing.
         existing_volumes={"live-vol"},
     )
     assert result.candidates == []

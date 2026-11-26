@@ -41,7 +41,8 @@ import yaml
 from lib import yaml_fast
 from lib.git import git_stdout
 from renderer.renderer_lib.documents import parse_documents
-from lib.repo_paths import ALL_VARS, JOB_FILES, K8S_ROLES, REPO, SCRIPTS
+from lib.estate import shared_vars
+from lib.repo_paths import JOB_FILES, K8S_ROLES, REPO, SCRIPTS
 from renderer.renderer_lib.bundle import (
     CLUSTER_DIR,
     FLUX_DIR,
@@ -277,7 +278,7 @@ def rbac() -> list[dict]:
 
 def _settings() -> dict:
     """The group variables the Job reads: the rollout floor of W and Prometheus's namespace."""
-    found = yaml_fast.safe_load(ALL_VARS.read_text()) or {}
+    found = shared_vars()
     return {
         "stabilise": int(found["k8s_rollout_stabilise_seconds"]),
         "observability": str(found["k8s_observability_namespace"]),

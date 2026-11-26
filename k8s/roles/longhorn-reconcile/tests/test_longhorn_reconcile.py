@@ -7,7 +7,7 @@ would follow a rename and pass, and a one-byte change in a live label drops the 
 its RecurringJob with nothing failing.
 
 The CronJob's RBAC against these calls is in
-tests/k8s/test_rbac_against_rest_script.py, and the render in test_longhorn_reconcile_render.py.
+tests/k8s/rbac/test_rbac_against_rest_script.py, and the render in test_longhorn_reconcile_render.py.
 
 Run: uv run pytest k8s/roles/longhorn-reconcile/tests/test_longhorn_reconcile.py
 """
@@ -163,8 +163,6 @@ def test_the_group_names_are_the_ones_setup_k3s_and_the_recurring_jobs_use():
     assert len(lr.SHARDS) == 7
 
 
-# (claim, target before) -> target after. The r2 list holds `homelab/traefik-acme` only.
-# A blank target on an unlisted claim stays blank.
 TARGET_TRANSITIONS = [
     pytest.param(
         "homelab/traefik-acme", "default", "r2", id="listed-claim-moves-to-r2"

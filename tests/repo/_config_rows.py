@@ -71,8 +71,6 @@ FIX_SKEPTIC_PASS_INSTRUCTED = Census(
 
 _DESIGNS = ".claude/skills/homelab-review/accepted-designs.md"
 _REGISTER = "docs/reference/backlog.md"
-# The domain each pointed agent reviews, keyed by its file name. A new reviewer agent that
-# carries a domain section joins here so the pointer check covers it.
 _POINTED_AGENTS = {
     "homelab-container-reviewer.md": "container",
     "homelab-cicd-reviewer.md": "cicd",

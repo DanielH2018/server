@@ -1,17 +1,4 @@
 ---
-# For configuration options and examples, please see:
-# https://gethomepage.dev/latest/configs/bookmarks
-#
-# DELIBERATELY EMPTY, and it must stay present rather than be deleted. homepage seeds any
-# config file it finds MISSING into /app/config at startup, which EROFSes on this role's
-# read-only mount and crash-loops the pod — an empty file is not a missing one.
-#
-# The five personal links are SERVICE tiles in the `Calendar` group of services.yaml.j2. That is
-# the only way to place them in the calendar column: a bookmark group cannot be laid out inside
-# `Top Row` at any depth, and homepage says nothing when it refuses — it drops the group out and
-# renders it last at full width.
-#
-# Re-adding a bookmark here also needs a `Bookmarks:` entry in settings.yaml.j2's `layout`, at
-# TOP LEVEL. Without one the group still renders, but below every laid-out group and one column
-# wide.
+# Deliberately empty but must stay present: homepage seeds a missing file, which EROFSes and
+# crash-loops the pod.
 []

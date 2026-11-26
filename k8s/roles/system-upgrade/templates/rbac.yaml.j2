@@ -50,8 +50,7 @@ subjects:
     name: k3s-plan
     namespace: system-upgrade
 ---
-# The CoreDNS rollout read and the server-restart signal: the `kube-controller-manager` Lease
-# changes holder when the server restarts (H6, *Gates at apply time*).
+# The kube-controller-manager Lease changes holder when the server restarts.
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:

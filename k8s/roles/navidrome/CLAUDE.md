@@ -58,7 +58,7 @@ to its web UI and to Subsonic clients.
   both off. Last.fm needs an API account and two secrets that this setup does not have.
 - **Each user turns on scrobbling in the UI:** Personal settings, ListenBrainz, then paste the
   user token from listenbrainz.org/settings. Nothing about it is in git.
-- **It stays in `BORN_FENCED_ROLES`** (`tests/k8s/test_netpol_baseline_labels.py`).
+- **It stays in `BORN_FENCED_ROLES`** (`tests/k8s/edge/test_netpol_baseline_labels.py`).
   Traefik and Prometheus are its only callers, and the baseline admits both. Its calls to
   ListenBrainz and Deezer are egress, which the baseline does not fence
   (`docs/networkpolicy-default-deny.md`).

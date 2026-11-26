@@ -14,8 +14,9 @@ from typing import NamedTuple
 
 
 from lib.repo_paths import HOST_VARS, REPO
-from lib.inventory_lists import PI_HOST, host_vars_file, pi_entries_in
-from lib.render_guard import entry_tags, k8s_services, load_yaml, services_file
+from lib.estate import Estate, Inventory
+from lib.inventory_lists import PI_HOST, pi_entries_in
+from lib.render_guard import entry_tags, services_file
 from lib.summary import grouped
 from diagnostics.probe_lib.health_checkout import STALE_CHECKOUT
 from lib.exit_codes import PROBE_NOT_APPLICABLE, PROBE_UNREADABLE
@@ -26,7 +27,7 @@ from lib import snapshot_uv
 HOST_VARS_REL = HOST_VARS.relative_to(REPO)
 
 
-def tag_platforms(tag: str, host_vars: Path = HOST_VARS) -> set[str]:
+def tag_platforms(tag: str, host_vars: Path) -> set[str]:
     """The platforms that declare `tag` in the tree whose host_vars are `host_vars`.
 
     `k8s` for a `k8s/services.yml` entry, `docker` for an entry of the Pi's
@@ -34,9 +35,10 @@ def tag_platforms(tag: str, host_vars: Path = HOST_VARS) -> set[str]:
     the cluster to check, and probing it there first could find a same-named cluster workload
     (loki-homelab's Alloy DaemonSet) and report the Pi's undeployed container healthy.
     """
-    pi = load_yaml(host_vars_file(PI_HOST, host_vars))
+    estate = Estate(Inventory(host_vars=host_vars, services=services_file(host_vars)))
+    pi = estate.own_vars(PI_HOST)
     sources = {
-        "k8s": k8s_services(services_file(host_vars)),
+        "k8s": estate.services,
         "docker": pi_entries_in(pi) if pi else [],
     }
     return {

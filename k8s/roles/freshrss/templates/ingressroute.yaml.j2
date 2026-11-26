@@ -8,10 +8,6 @@
   )
 }}
 ---
-{#
-  Homepage's FreshRSS widget (session-less greader login) reaches this route from the pod
-  CIDR. The path is the greader API endpoint itself.
-#}
 {{ monitoring_route(
     container_item.name,
     container_item.hostname | default(container_item.name),

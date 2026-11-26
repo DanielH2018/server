@@ -17,7 +17,8 @@ import shutil
 import pytest
 from _helpers import registry_secret_names
 from lib import yaml_fast
-from lib.repo_paths import HOST_VARS, K3S_DEFAULTS, K3S_SERVER, K8S_ROLES, REPO
+from lib.estate import host_vars
+from lib.repo_paths import K3S_DEFAULTS, K3S_SERVER, K8S_ROLES, REPO
 from lib.longhorn_lib import longhorn_etcd_s3_logic as etcd_s3
 from renderer.renderer_lib import host as host_mode
 from renderer.renderer_lib.environment import RenderError
@@ -265,7 +266,7 @@ def test_each_node_renders_its_own_memory_low_and_k3s_fits_inside_system_slice(
     host = node_package.name.removeprefix("homelab-")
     values = {
         **yaml_fast.safe_load(K3S_DEFAULTS.read_text()),
-        **yaml_fast.safe_load((HOST_VARS / f"{host}.yml").read_text()),
+        **host_vars(host),
     }
     dropin = "60-homelab-memory-low.conf"
     rendered = {

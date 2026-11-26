@@ -1,29 +1,6 @@
 ---
-# Scrutiny's time-series store. scrutiny-web is the only client: it reads
-# SCRUTINY_WEB_INFLUXDB_HOST / _PORT=8086 (web.yaml.j2). The collector DaemonSet does NOT write
-# here — it posts to scrutiny-web's API, which does the InfluxDB writes.
-#
-# THIS POLICY SHIPS WITH THE ROLE THAT NEEDS IT, not with netpol-baseline, which is one role away
-# from the Deployment whose startup depends on it. scrutiny-web EXITS rather than degrades when
-# InfluxDB is unreachable: it calls `/api/v2/setup` during AppEngine.Setup and `panic(err)`s on
-# a connection error instead of retrying (upstream
-# webapp/backend/pkg/web/middleware/repository.go, read against upstream master —
-# see web.yaml.j2's `wait-for-influxdb` comment). That gate is bounded at 60 x 2s, so with this
-# policy absent the pod fails init after two minutes and backs off. `build_k8s_dep_map` cannot
-# see a split like it — it derives a role's edges from templates inside that role's own
-# directory (scripts/renderer/template_filters/toposort.py), so a dependency expressed in a sibling role
-# produces no edge and no ordering constraint to violate.
-# tests/services/test_scrutiny_influxdb_policy.py pins the co-location.
-#
-# 8086 is the containerPort AND the Service port, and that
-# same test keeps them matching.
-#
-# NO `netpol_baseline_enforced` BRANCH, unlike netpol-baseline's own policies. That lever is a
-# role default of netpol-baseline, and Ansible role defaults are role-scoped: it does not
-# resolve here, and `| default(true)` would read as honouring the lever while ignoring it.
-# Dropping it is also the right behaviour rather than a concession — the lever exists to
-# restore reachability in a rollback, and the only path that reaches InfluxDB at all is the one
-# this file grants, so leaving it on cannot be what an operator is rolling back from.
+# Ships with this role, not netpol-baseline: scrutiny-web panics when InfluxDB is unreachable.
+# No `netpol_baseline_enforced` branch: that lever is role-scoped to netpol-baseline.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:

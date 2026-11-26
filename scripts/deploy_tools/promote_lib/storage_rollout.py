@@ -32,7 +32,7 @@ only a hand clear lifts. More hops without provisional failures would not change
 `verify_promotion.expected_set` reads `grace_s` and `rollout_s` into `Expected`, and
 `verify_promotion.verify` asks a `Window` whether the failures it read end the wait.
 
-Run: imported only. `uv run pytest scripts/deploy_tools/tests/test_verify_promotion_storage_rollout.py`
+Run: imported only. `uv run pytest scripts/deploy_tools/tests/promote/test_verify_promotion_storage_rollout.py`
 """
 
 from collections.abc import Iterable, Mapping

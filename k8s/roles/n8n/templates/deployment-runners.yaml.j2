@@ -22,14 +22,8 @@ spec:
     spec:
 {{ pod_shell('homelab-best-effort') }}
       initContainers:
-        # A start gate on n8n's READINESS, which k8s has no `depends_on` equivalent for.
-        # Connecting to the SERVICE rather than the pod is what makes this a gate
-        # on readiness: a Service has no endpoints until its probe passes, so this cannot succeed
-        # until n8n's /healthz does.
-        #
-        # Port 5679 rather than 5678 deliberately — that is the port the runner actually needs,
-        # so this also proves the NetworkPolicy admits this pod. A gate on 5678 would pass while
-        # the thing it is gating stayed unreachable.
+        # Gate on the SERVICE (no endpoints until ready), on port 5679 so it also proves the
+        # NetworkPolicy admits this pod.
         - name: wait-for-broker
           image: {{ n8n_k8s_wait_image }}
           imagePullPolicy: IfNotPresent
@@ -45,13 +39,8 @@ spec:
         - name: n8n-runners
           image: {{ n8n_k8s_runners_image }}
           imagePullPolicy: Always
-          # `USER runner` named in the comment below is an image property, so it is pinned here
-          # rather than trusted. This is the workload where it matters most: it executes
-          # arbitrary workflow code, so an image rebuild that moved the uid to 0 would hand
-          # that code root.
-          # Executes arbitrary workflow code — the most code-exposed workload in the fleet,
-          # so drop everything. The image ends `USER runner`, talks only to the broker, and
-          # binds no port, so it needs none.
+          # Pinned uid: the image's `USER runner` could move to 0 on a rebuild, and this workload
+          # runs arbitrary workflow code.
 {{ hardened_security_context(non_root=true, run_as_user=1000) }}
           env:
             - name: N8N_RUNNERS_TASK_BROKER_URI
@@ -61,21 +50,15 @@ spec:
                 secretKeyRef:
                   name: n8n
                   key: N8N_RUNNERS_AUTH_TOKEN
-            # The launcher's own defaults, from task-runner-launcher internal/config/config.go. The
-            # launcher passes both to each runner today as legacy behaviour that upstream is
-            # deprecating. n8n-task-runners.json.j2 lists them in every runner's `allowed-env`,
-            # so they keep arriving after that legacy path is removed. `allowed-env` passes only
-            # what is set in the launcher's own environment, which is why they are set here.
-            #
-            # 60 s is the Code-node limit, and the n8n Deployment sets the broker's
-            # N8N_RUNNERS_TASK_TIMEOUT to the same value. The runner aborts a task at its
-            # own timeout whatever the broker allows, so raising one alone changes nothing.
+            # Launcher defaults; `allowed-env` passes only what is set in the launcher's
+            # environment.
+            # 60 s is the Code-node limit and must match the n8n Deployment's
+            # N8N_RUNNERS_TASK_TIMEOUT, since the runner aborts at its own timeout.
             - name: N8N_RUNNERS_TASK_TIMEOUT
               value: "60"
             - name: N8N_RUNNERS_AUTO_SHUTDOWN_TIMEOUT
               value: "15"
-          # `pgrep -f task-runner-launcher` — a liveness test with no network component, so an
-          # exec probe. There is no HTTP endpoint to probe: this workload listens on nothing.
+          # No HTTP endpoint to probe: exec probe on the launcher process.
           livenessProbe:
             exec:
               command:

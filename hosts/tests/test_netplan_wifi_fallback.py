@@ -11,7 +11,8 @@ The subject is the file each node's package installs: the k3s components'
 
 import types
 
-from lib.repo_paths import HOST_VARS, REPO
+from lib.estate import host_vars
+from lib.repo_paths import REPO
 from lib import yaml_fast
 from renderer.renderer_lib import host as host_mode
 
@@ -65,9 +66,7 @@ def test_each_node_installs_a_fallback_behind_its_pin() -> None:
     # The sentinel carries the characters a JSON string must escape.
     ssid, password = "home: net", 'p"a#ss\\ word'
     for host in _NODES:
-        link = yaml_fast.safe_load((HOST_VARS / f"{host}.yml").read_text()).get(
-            "k3s_node_wifi_link"
-        )
+        link = host_vars(host).get("k3s_node_wifi_link")
         assert link, f"{host} sets no k3s_node_wifi_link"
         text = _installed_wifi_file(host, ssid, password)
         assert wifi_fallback_problems(text, link, ssid, password) == [], host

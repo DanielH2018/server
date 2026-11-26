@@ -154,8 +154,7 @@ _OBSERVABILITY_EXEMPT_SET_IS_EMPTY = Census(
 
 # ── No inventory block scalar carries a `#`-led continuation line ───────────────────────
 
-# `key: |`, `- |`, `key: >-`, `key: |2+` … with an optional trailing comment. The indicator
-# starts a block; the indentation of the line that carries it ends one.
+# The indicator starts a block; the indentation of the line that carries it ends one.
 _BLOCK_START = re.compile(r"^(\s*)(?:[^#\s][^#]*?:|-)\s*[|>][0-9+-]*\s*(?:#.*)?$")
 
 
@@ -196,8 +195,8 @@ _INVENTORY_BLOCK_SCALARS_HAVE_NO_COMMENT_SHAPED_LINE = Census(
     ),
     files=lambda: [
         rel
-        for rel in tracked("inventory/*.yml", "inventory/*.yaml")
-        if not PurePosixPath(rel).name.startswith("_")
+        for rel in tracked("inventory/*.yml", "inventory/*.yaml", "hosts/*/vars.yml")
+        if not any(part.startswith("_") for part in PurePosixPath(rel).parts)
     ],
     offence=_comment_shaped_continuations,
     red=(
@@ -222,9 +221,9 @@ _INVENTORY_BLOCK_SCALARS_HAVE_NO_COMMENT_SHAPED_LINE = Census(
     must_find=frozenset(
         {
             "inventory/group_vars/all.yml",
-            "inventory/host_vars/daniel-box.yml",
-            "inventory/host_vars/daniel-server.yml",
-            "inventory/host_vars/daniel-pi.yml",
+            "hosts/daniel-box/vars.yml",
+            "hosts/daniel-server/vars.yml",
+            "hosts/daniel-pi/vars.yml",
         }
     ),
 )

@@ -19,8 +19,8 @@ metadata:
 spec:
   interval: 1m
 {% if flux_break_glass | bool %}
-  # The break-glass form: the in-cluster registry, which serves plain HTTP, and the
-  # operator's key in place of the keyless identity. docs/break-glass.md has the runbook.
+  # The break-glass form: the plain-HTTP in-cluster registry and the operator's key in place of the
+  # keyless identity.
   url: {{ flux_break_glass_url }}
   insecure: true
   ref:
@@ -33,8 +33,6 @@ spec:
   url: {{ flux_artifact_url }}
   ref:
     tag: {{ flux_artifact_tag }}
-  # An artifact that anything but the `promote` workflow on master signed fails here, and
-  # kustomize-controller never sees it.
   verify:
     provider: cosign
     matchOIDCIdentity:
@@ -42,9 +40,8 @@ spec:
         subject: '{{ flux_signer_subject }}'
 {% endif %}
 ---
-# The base the soak Job diffs R's changed set against: `settle` moves the `last-good`
-# tag to each verified commit. No Kustomization reads it. The same `verify` block as `homelab`,
-# so source-controller serves the Job only a `digests.json` the `promote` workflow signed.
+# `settle` moves the `last-good` tag to each verified commit; no Kustomization reads this. Same
+# `verify` block as `homelab`.
 apiVersion: source.toolkit.fluxcd.io/v1
 kind: OCIRepository
 metadata:
@@ -62,10 +59,8 @@ spec:
         subject: '{{ flux_signer_subject }}'
 {% if flux_verify_drill %}
 ---
-# The signature drill: the unsigned tag `promote.yml`'s `verify_drill` dispatch pushes, checked
-# against the same identity, so it must read Ready=False. No Kustomization reads it, and the
-# `deploy-errors` Alert does not name it as a source. While flux_verify_drill is false the
-# render drops it, and `flux-deferred`'s prune deletes it (prune: true).
+# No Kustomization reads it and the `deploy-errors` Alert does not name it; while the lever is false
+# the render drops it.
 apiVersion: source.toolkit.fluxcd.io/v1
 kind: OCIRepository
 metadata:
@@ -83,9 +78,8 @@ spec:
         subject: '{{ flux_signer_subject }}'
 {% endif %}
 ---
-# The root. `wait: false` because it applies only Kustomization
-# objects, each of which reports its own health and status. Orphan means deleting the root
-# never cascades.
+# `wait: false`: the root applies only Kustomization objects, each reporting its own health.
+# Orphan means deleting the root never cascades.
 apiVersion: kustomize.toolkit.fluxcd.io/v1
 kind: Kustomization
 metadata:
@@ -103,8 +97,8 @@ spec:
   wait: false
   deletionPolicy: Orphan
 ---
-# Commit statuses with the context `flux/<kustomization>`. notification-controller posts on the
-# commit the artifact's origin revision names, never on a trigger that commit superseded.
+# Posts on the commit the artifact's origin revision names, never on a trigger that commit
+# superseded.
 apiVersion: notification.toolkit.fluxcd.io/v1beta3
 kind: Provider
 metadata:

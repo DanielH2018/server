@@ -22,7 +22,7 @@ and the *Mode* bullet below says why.
 - **It is a tag of its own, not part of `longhorn`.** The drill's objects live in `homelab`.
   The disaster-recovery order waits on `longhorn` at step 6, and nothing creates `homelab`
   until step 8, so a `homelab` object in `longhorn` would stall step 6.
-  `tests/k8s/test_step6_tags_render_into_created_namespaces.py` holds that. The
+  `tests/k8s/flux/test_step6_tags_render_into_created_namespaces.py` holds that. The
   generated `homelab-namespace` kind gives this tag its `dependsOn`, so it waits for `homelab`.
 - **The tag renders no Namespace.** A Namespace object here would be a second writer of
   `homelab` beside the generated `homelab-namespace` kind.
@@ -30,13 +30,13 @@ and the *Mode* bullet below says why.
   makes Flux create it once and never revert the drill's writes to its data.
   `kustomize.toolkit.fluxcd.io/prune: disabled` keeps it when a render drops it, because the
   tag prunes like any per-tag Kustomization and no render restores its state.
-  `tests/k8s/test_restore_drill_stamps.py::test_the_stamp_configmap_renders_empty_with_both_annotations`
+  `tests/k8s/flux/test_restore_drill_stamps.py::test_the_stamp_configmap_renders_empty_with_both_annotations`
   holds both.
 - **A revert of the tag leaves the ConfigMap live**, because `prune: disabled` keeps it.
   Deleting it is **operator-only**.
 - **`longhorn_drill_namespace` mirrors `k3s_longhorn_restore_drill_namespace`.** Backup health's
   readers read the second.
-  `tests/k8s/test_restore_drill_stamps.py::test_the_stamp_namespace_equals_the_host_drills`
+  `tests/k8s/flux/test_restore_drill_stamps.py::test_the_stamp_namespace_equals_the_host_drills`
   holds the pair equal.
 - **The census names the ConfigMap and the CronJob.**
   `scripts/deploy_tools/bundle_census.py:NAMED_MEMBERS` lists both, so a published render that
@@ -77,9 +77,9 @@ real, and tears everything down.
   also deletes those objects for any `restore-drill-` Volume older than the Job's deadline plus
   its grace period, whichever PVC that Volume restored.
   `templates/rbac.yaml.j2` grants exactly the calls the script makes.
-  `tests/k8s/test_rbac_against_script_drill.py::test_the_drill_role_grants_every_call_its_script_makes`
+  `tests/k8s/rbac/test_rbac_against_script_drill.py::test_the_drill_role_grants_every_call_its_script_makes`
   holds that, and
-  `tests/k8s/test_rbac_against_script_drill.py::test_a_drill_role_without_the_volume_delete_wait_is_flagged`
+  `tests/k8s/rbac/test_rbac_against_script_drill.py::test_a_drill_role_without_the_volume_delete_wait_is_flagged`
   is its red half.
 - **The drill's three bounds** are an operator pin, an empty-restore waiver with a size ceiling and
   one retry per failure. `docs/k3s-node-plane-crons-and-incidents.md` derives them, and a test

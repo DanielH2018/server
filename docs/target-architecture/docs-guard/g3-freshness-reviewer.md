@@ -145,7 +145,7 @@ tier.
   crons' path, and it runs `gh` through `subprocess`, so no PreToolUse hook sees it. The
   user-level guard reads `gh pr create` titles, so the command shape is stable.
 - **Hook tests can build real repositories.** `scripts/lib/git_testing.py:init_repo` and
-  `commit` run git under `scrubbed_env`. `.claude/hooks/tests/test_hook_common.py` already
+  `commit` run git under `scrubbed_env`. `.claude/hooks/tests/hook_contract/test_hook_common.py` already
   imports `lib.git_testing` from a hook test. The `repo` fixture of `test_inject_nested_docs.py`
   makes only an empty `.git` directory, with no commit and no ref. The census row
   `tests-run-no-git-write-through-subprocess` in `scripts/tests/test_census_rows_test_modules.py`

@@ -236,9 +236,6 @@ def test_report_only_names_the_trim_change_and_writes_nothing(tmp_path, capsys):
     assert world.writes() == []
 
 
-# The reconcile Role and ClusterRole grants against a run that exercises the trim arm. The
-# repo-wide derivation is tests/k8s/test_rbac_against_rest_script.py; this one keeps the
-# arm's own calls inside the grants without leaving the role's tests.
 def _granted() -> set[tuple[str, str]]:
     docs = yaml_fast.safe_load_all(
         render_role_template("longhorn-reconcile", "rbac.yaml.j2")

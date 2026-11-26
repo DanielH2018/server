@@ -16,7 +16,7 @@
 # THE LITERALS. Each threshold mirrors a value the deleted bridge rows carried. A ported
 # threshold's `DECIDED:` marker on its rule is what a retune is reviewed against. A literal
 # another role declares (valheim's transient, jellyfin's snapshot cap, the Longhorn disk floor)
-# is held to that role by tests/services/test_storage_rule_literals.py.
+# is held to that role by tests/services/alert_rules/test_storage_rule_literals.py.
 #
 # THE `for:` HOLDS. A bridge streak of N cycles is N x 300s, as in A2. The rows with no streak
 # (fullness, the free-space floor, the read-only mount and the etcd size) hold for one bridge

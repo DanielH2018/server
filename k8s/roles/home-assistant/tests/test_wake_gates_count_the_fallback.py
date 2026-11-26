@@ -129,8 +129,8 @@ def test_the_other_gates_treat_the_window_as_a_wake():
 
 
 def test_apply_natural_keeps_its_wake_start_only_read():
-    # bedroom_apply_wake halts without wake_start, so a fallback morning read as a wake here would
-    # turn every natural apply during the fallback ramp into a no-op.
+    # bedroom_apply_wake halts without wake_start, so a fallback morning read as a wake would no-op
+    # every natural apply.
     scripts = yaml.safe_load((FILES / "scripts" / "lighting.yaml").read_text())
     steps = scripts["bedroom_apply_natural"]["sequence"]
     exception = next(s for s in steps if "variables" in s)["variables"]["exception"]

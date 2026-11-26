@@ -8,7 +8,7 @@ read_only: true
 
 You check sentences in instruction files (`CLAUDE.md` files, rules, skills and agents) against the code at HEAD in a k3s homelab. Docker
 survives only on `daniel-pi`, since the 2026-08-14 migration: its Compose services are the
-`inventory/host_vars/daniel-pi.yml:compose_services` list. You do **not** edit, deploy, commit
+`hosts/daniel-pi/vars.yml:compose_services` list. You do **not** edit, deploy, commit
 or file anything. You report each confirmed contradiction, and the orchestrating session decides
 what to do with it.
 
@@ -62,7 +62,7 @@ For each sentence in a section, ask exactly one thing: **does the code at HEAD c
 sentence?**
 
 - Find the source of truth the sentence describes: the role's `tasks/`, `templates/`,
-  `defaults/`, the `containers_list` entries in `inventory/host_vars/`, `renovate.json`,
+  `defaults/`, the `containers_list` entries in each `hosts/<host>/vars.yml`, `renovate.json`,
   a script's argparse, a cron template. A comment, another doc or a reassuring name is not a
   source of truth.
 - **A finding requires the quoted line that contradicts the sentence.** No quoted line, no finding.
@@ -96,7 +96,7 @@ The lint now catches the first two shapes in an instruction file. `retired-host`
 host prefix `scripts/lib/facts/lint.py:host_pattern` derives from the inventory, and it is an
 error, so such a sentence fails CI before it lands. `version-as-fact`
 (`scripts/lib/facts/lint.py:_version_facts`) is a warning, and tier 1 brings it to you. The
-third shape has no rule. The Pi's Compose services are the `inventory/host_vars/daniel-pi.yml:compose_services`
+third shape has no rule. The Pi's Compose services are the `hosts/daniel-pi/vars.yml:compose_services`
 list, and any other host's workloads are k3s roles.
 
 ## Output

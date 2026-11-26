@@ -11,7 +11,6 @@ Run: uv run pytest hosts/lib/tests/test_box_k3s_host_half.py
 import dataclasses
 import json
 import os
-import shutil
 
 import pytest
 from _readonly_kubeconfig import TOKEN, run_kubeconfig, written_kubeconfig
@@ -20,8 +19,10 @@ from _wifi_fallback import WIFI_FILE, WIFI_RENDERED, installed_wifi_file
 
 from lib import yaml_fast
 from lib.estate import REPO_INVENTORY, Estate, role_defaults
+from lib.inventory_lists import host_vars_file
 from lib.proc_testing import run, write_exec
 from lib.render_context import render_context
+from lib.render_guard import copy_host_files
 from lib.repo_paths import K3S_DEFAULTS, K3S_SERVER, K8S_ROLES, REPO
 from renderer.renderer_lib import host as host_mode
 
@@ -339,9 +340,8 @@ def test_the_wifi_copy_leaves_the_old_file_when_netplan_refuses(tmp_path):
 
 
 def test_emptying_the_wifi_link_drops_the_units_and_retires_both_copies(tmp_path):
-    host_vars = tmp_path / "host_vars"
-    shutil.copytree(REPO_INVENTORY.host_vars, host_vars)
-    box = host_vars / f"{HOST}.yml"
+    host_vars = copy_host_files(tmp_path / "hosts", REPO_INVENTORY.host_vars)
+    box = host_vars_file(HOST, host_vars)
     named = "k3s_node_wifi_link: wlp4s0"
     assert named in box.read_text()
     box.write_text(box.read_text().replace(named, 'k3s_node_wifi_link: ""'))

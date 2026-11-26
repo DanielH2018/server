@@ -7,8 +7,7 @@ metadata:
   name: nut
   namespace: {{ k8s_namespace }}
 spec:
-  # Recreate: the USB device and the loopback hostPort are both node-exclusive — a
-  # rolling update would leave the new pod fighting the old one for both.
+  # Recreate: the USB device and loopback hostPort are node-exclusive.
 {{ spec_shell('Recreate') }}
   replicas: 1
   selector:
@@ -20,36 +19,26 @@ spec:
         app: nut
         netpol-baseline: enforced
     spec:
-      # The UPS is USB-attached to daniel-server. This pin is physical, not a scheduling
-      # preference — it does NOT unwind with the drain's L2/VIP pins.
+      # Physical pin (USB UPS), not a preference: it does NOT unwind with the drain's L2/VIP pins.
       nodeSelector:
         kubernetes.io/hostname: daniel-server
 {{ pod_shell(services | tier_priority_class('nut')) }}
       containers:
         - name: nut
           image: {{ nut_k8s_image }}
-{# nut's ref is the in-cluster registry's, whose tags are mutable: `:latest`
-   moves on every build, and a forced rebuild re-pushes an unchanged content tag with new
-   bytes. A node's cached copy under that name can be stale, so it pulls `Always`, for the
-   reason terraria's deployment records. A flux-owned tag's ref is a GHCR content tag instead,
-   which `ci_images` never re-pushes, and the renderer sets `IfNotPresent` beside it
-   (scripts/renderer/renderer_lib/images.py:ghcr_refs), so a node that holds the tag restarts
-   the pod with no WAN. A Jinja comment, so an edit here never changes nut's render. #}
+{# Pulls `Always`: the in-cluster registry's tags are mutable, so a node's cached copy can be stale.
+   A Jinja comment, so an edit never changes nut's render. #}
           imagePullPolicy: Always
           ports:
             - containerPort: 3493
-              # Loopback publish for the HOST's own upsmon (secondary, nut_host role):
-              # it monitors apc-ups@127.0.0.1 and is what actually runs
-              # `systemctl poweroff` when FSD is raised — the pod cannot power off the
-              # node.
+              # Loopback publish for the HOST's secondary upsmon, which runs the real
+              # `systemctl poweroff`.
               hostIP: 127.0.0.1
               hostPort: 3493
           securityContext:
-            # privileged: k8s has no `devices:` whitelist, so a hostPath'd /dev/bus/usb node is
-            # refused by a non-privileged pod's device cgroup regardless of file permissions. The
-            # containment that remains: our own built image, pinned to one node, with
-            # only a loopback hostPort exposed. A generic USB device plugin could
-            # restore the unprivileged posture.
+            # privileged: k8s has no `devices:` whitelist, so a hostPath'd USB node is refused by a
+            # non-privileged pod's cgroup.
+            # Containment: own built image, pinned node, loopback hostPort only.
             privileged: true
           env:
             - name: TZ
@@ -68,9 +57,8 @@ spec:
                 - upsc {{ nut_ups_name | default('apc-ups') }}@localhost battery.charge
             initialDelaySeconds: 30
             periodSeconds: 30
-          # upsd binds 3493 only after it has enumerated the USB UPS, which takes a few
-          # seconds. Without this the Service publishes the pod immediately and peanut and
-          # Home Assistant's NUT integration get connection-refused on every deploy.
+          # upsd binds 3493 only after enumerating the USB UPS; without this peanut and HA get
+          # connection-refused on every deploy.
           readinessProbe:
             tcpSocket:
               port: 3493

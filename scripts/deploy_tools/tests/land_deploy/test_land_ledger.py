@@ -1,0 +1,123 @@
+"""`annotation_line`, field by field, and the `cause` vocabulary the Ledger enforces.
+
+The Landings board parses this line, so a field that changes shape or a `cause` nobody
+expected is a dashboard change, not a refactor. `annotation_line` appeared in no test of its
+own until this file existed.
+
+Run: uv run pytest scripts/deploy_tools/tests/land_deploy/test_land_ledger.py
+"""
+
+import pytest
+
+from deploy_tools.land_lib.ledger import Ledger, annotation_line, result_line
+from deploy_tools.land_lib.outcome import CAUSES, Cause, Outcome
+
+SHA = "0123456789abcdef0123456789abcdef01234567"
+
+
+def _fields(line: str) -> dict[str, str]:
+    """The logfmt line as a dict."""
+    return dict(token.split("=", 1) for token in line.split(" ") if "=" in token)
+
+
+def _filled() -> Ledger:
+    return Ledger(
+        pr="1031",
+        t_start=100.0,
+        t_merged=110.0,
+        t_ci=140.0,
+        t_deploy=500.0,
+        merge_sha=SHA,
+        verdict="deploy-failed",
+        cause="tag-miss",
+        tags_label="sonarr,radarr",
+        turn_wait=420,
+        batch=3,
+    )
+
+
+@pytest.mark.parametrize(
+    "field, value",
+    [
+        ("event", "landing"),
+        ("pr", "1031"),
+        ("sha", SHA[:8]),
+        ("verdict", "deploy-failed"),
+        ("cause", "tag-miss"),
+        ("exit", "1"),
+        ("wait_merge", "10"),
+        ("wait_ci", "30"),
+        ("deploy", "360"),
+        ("total", "400"),
+        ("tags", "sonarr,radarr"),
+        ("turn_wait", "420"),
+        ("batch", "3"),
+    ],
+)
+def test_every_field_of_a_filled_ledger(field, value):
+    assert _fields(annotation_line(_filled(), 1, 400.0))[field] == value
+
+
+@pytest.mark.parametrize(
+    "field, value",
+    [
+        ("pr", "unknown"),
+        ("sha", ""),
+        ("verdict", "aborted"),
+        ("cause", ""),
+        ("wait_merge", ""),
+        ("wait_ci", ""),
+        ("deploy", ""),
+        ("tags", "none"),
+        ("turn_wait", ""),
+        ("batch", ""),
+    ],
+)
+def test_an_unreached_stamp_leaves_its_field_empty(field, value):
+    """A landing that died in step 1: every later stamp is None and must read as empty."""
+    line = annotation_line(Ledger(pr="", t_start=0.0), 75, 5.0)
+    assert _fields(line)[field] == value
+
+
+def test_a_partial_landing_stamps_the_phases_it_reached_and_no_later_one():
+    """Reaching master CI but not the deploy leaves `deploy=` empty, not 0."""
+    ledger = Ledger(pr="7", t_start=0.0, t_merged=1.0, t_ci=5.0)
+    fields = _fields(annotation_line(ledger, 1, 9.0))
+    assert (fields["wait_ci"], fields["deploy"]) == ("4", "")
+
+
+def test_every_cause_a_phase_writes_is_in_the_vocabulary():
+    for cause in Cause:
+        assert cause in CAUSES
+
+
+def test_an_unknown_cause_is_coerced_on_assignment(capsys):
+    """The reject half. The board groups by this field, so an invented value would become
+    a bar; it is coerced to one named bucket and warned, not raised, because the write
+    happens after the deploy ran and a traceback there loses the `VERDICT:` line."""
+    ledger = Ledger(pr="1", t_start=0.0)
+    ledger.cause = "deploy-exit-9"
+    assert ledger.cause == Cause.INVALID
+    assert "unknown ledger cause 'deploy-exit-9'" in capsys.readouterr().err
+
+
+def test_an_unknown_cause_is_coerced_at_construction_too():
+    assert Ledger(pr="1", t_start=0.0, cause="whatever").cause == Cause.INVALID
+
+
+def test_the_empty_cause_stays_legal():
+    """An empty cause is the no-cause value beside every verdict but deploy-failed."""
+    assert Ledger(pr="1", t_start=0.0).cause == ""
+
+
+def test_the_result_line_counts_tags_and_fills_unreached_fields():
+    line = result_line(_filled(), Outcome(1, "x", verdict="deploy-failed"))
+    assert line == (
+        "LAND-RESULT: verdict=deploy-failed cause=tag-miss exit=1 pr=1031 "
+        f"sha=01234567 tags=2 hold_sha=- hold_owner=- merge={SHA}"
+    )
+    bare = result_line(Ledger(pr="7", t_start=0.0), Outcome(64, "x"))
+    assert bare == (
+        "LAND-RESULT: verdict=- cause=- exit=64 pr=7 sha=- tags=0 "
+        "hold_sha=- hold_owner=- merge=-"
+    )

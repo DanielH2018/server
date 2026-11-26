@@ -31,7 +31,7 @@ agent), and `daniel-pi` (the one remaining Docker host). The
 The operator runs as `ubuntu`, so a command in a runbook runs from that shell as written.
 A command that needs root, such as every `k3s` subcommand, starts with `sudo`. A step that
 holds a root shell opens its code block with `sudo -i` and shows the commands after it without
-`sudo`. the `runbook-k3s-commands-carry-sudo` row of `tests/repo/test_census_rows_text.py` fails on a fenced `k3s` command that has
+`sudo`. the `runbook-k3s-commands-carry-sudo` row of `tests/repo/census_rows/test_census_rows_text.py` fails on a fenced `k3s` command that has
 neither. Plain `kubectl` needs no `sudo`, because the `ubuntu` kubeconfig reads the cluster.
 
 ## What generates what

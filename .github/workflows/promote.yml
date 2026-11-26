@@ -69,7 +69,7 @@ name: promote
 # Every commit merged in the window was published by its own run, so this one skips render,
 # images and publish and starts at `promote`.
 #
-# The promote rows of tests/repo/test_census_rows_workflows.py hold every guard, permission and
+# The promote rows of tests/repo/census_rows/test_census_rows_workflows.py hold every guard, permission and
 # handoff here.
 
 on:
@@ -83,7 +83,7 @@ on:
   # The weekly reboot's no-promotion window ends here, at the cron's 07:30 UTC Sunday plus the
   # 5-minute shutdown delay and the mute's 40-minute recovery, all from
   # inventory/group_vars/all.yml. GitHub reads this literal, so
-  # scripts/deploy_tools/tests/test_promote_reboot_window.py derives it and fails a drift.
+  # scripts/deploy_tools/tests/promote/test_promote_reboot_window.py derives it and fails a drift.
   schedule:
     - cron: "15 8 * * 0"
   workflow_dispatch:
@@ -116,12 +116,12 @@ permissions: {}
 # literal `::error::` here would show in every step's log, and test_promote_workflow_retry.py
 # fails one.
 # prune-artifacts.yml carries a copy, and the `prune-retry-helper-equals-promotes` row of
-# tests/repo/test_census_rows_workflows.py holds the two equal.
+# tests/repo/census_rows/test_census_rows_workflows.py holds the two equal.
 env:
   # Every `uv run` here installs pyproject.toml's [project] dependencies and skips both default
   # groups, so an unreachable tool download (actionlint-py's build) cannot block a
   # promotion. UV_NO_DEV drops only `dev`. The promote-env-installs-no-default-group row
-  # of tests/repo/test_census_rows_workflows.py fails a workflow without them.
+  # of tests/repo/census_rows/test_census_rows_workflows.py fails a workflow without them.
   UV_NO_DEV: "1"
   UV_NO_GROUP: lint
   # The flux CLI this workflow's flux steps fetch, equal to flux_version in k8s/roles/flux and to
@@ -313,7 +313,7 @@ jobs:
       # from out/images/ and refuses a render without tags.json.
       # The promote-render-no-tag-branch-renders-the-shared-kinds and
       # promote-render-tag-branch-writes-every-image-context rows of
-      # tests/repo/test_census_rows_workflows.py fail either branch without it.
+      # tests/repo/census_rows/test_census_rows_workflows.py fail either branch without it.
       - name: Build the bundle
         id: build
         run: |

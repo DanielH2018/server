@@ -10,7 +10,7 @@ A failed read of `prod` keeps the wait going and never reads as superseded, so a
 registry cannot end a verification. A run is superseded only while `promote.SUPERSEDE` is
 on. docs/archive/deploy/d7-superseding-promotions.md has the design.
 
-Run: imported only. `uv run pytest scripts/deploy_tools/tests/test_verify_promotion_superseded.py`
+Run: imported only. `uv run pytest scripts/deploy_tools/tests/promote/test_verify_promotion_superseded.py`
 """
 
 from collections.abc import Callable

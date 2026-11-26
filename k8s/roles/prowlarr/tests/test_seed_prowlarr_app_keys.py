@@ -31,8 +31,6 @@ from renderer.tests._job_census import problems
 TAG = "prowlarr"
 VERIFY = f"{TAG}-verify"
 CRONJOB = "prowlarr-app-keys"
-# Prowlarr raises `ApplicationLongTermStatusCheck`, which `ProwlarrAppSyncFailing` reads, after
-# six hours of failed syncs.
 LONG_TERM_STATUS_HOURS = 6
 APPS = ("sonarr", "radarr", "lidarr")
 MASK = "********"
@@ -134,8 +132,6 @@ def test_find_application_refuses_none_or_two(count):
 
 
 def test_the_seed_gate_passes_every_job_census_row(bundle):
-    # The CronJob's directory comes too: `is_gate_copy` exempts the gate from the script
-    # delivery rows only when its pod template equals a CronJob's there.
     _job(bundle)
     assert problems(bundle) == []
 

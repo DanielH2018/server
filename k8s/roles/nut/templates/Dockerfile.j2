@@ -14,12 +14,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     util-linux \
     && rm -rf /var/lib/apt/lists/*
 
-# /etc/nut is NOT baked in: this image is pushed to the
-# unauthenticated in-cluster registry, and upsd.users carries passwords. Config mounts
-# from the nut-config Secret at /nut-config; the entrypoint stages it into /etc/nut.
-# COPY . (not per-file COPYs): the context is a ConfigMap mount, whose files are
-# symlinks into ..data/ — buildkit's transfer drops all but the first symlinked file
-# from per-file COPYs ("not found"; same trap homelab-mcp's Dockerfile documents).
+# /etc/nut is NOT baked in: the in-cluster registry is unauthenticated and upsd.users carries
+# passwords.
+# COPY . not per-file: the context is a ConfigMap mount of symlinks, and buildkit drops all but the
+# first.
 COPY . /build-context/
 RUN install -m 0755 /build-context/entrypoint.sh /entrypoint.sh \
     && install -m 0755 /build-context/upssched-cmd /usr/local/bin/upssched-cmd \

@@ -7,13 +7,13 @@ everything else is here once.
 
 Three tables use it:
 
-- `tests/k8s/_property_table.py` selects from the rendered k8s manifests. Its `check`
+- `tests/k8s/rendered_properties/_property_table.py` selects from the rendered k8s manifests. Its `check`
   ends in `verdict` below.
 - `Census` below selects from the tracked tree: `git ls-files` or `role_dirs()`. Its rows live
   in `tests/repo/test_census_rows_*.py`, one file per domain, because
   `TEST_CAP` in `_ratchet.py` caps any one module.
 - `tests/_runbook_rule.py` selects the units of one Markdown section of an operator-only
-  runbook. Its rows live in `tests/repo/test_runbook_rules.py`.
+  runbook. Its rows live in `tests/repo/census_rows/test_runbook_rules.py`.
 
 What a row buys over a file:
 
@@ -29,7 +29,7 @@ What a row buys over a file:
 - **An exemption carries its reason, and a stale one fails.** `allow` maps a key to why it is
   exempt. A key that no longer matches, or no longer offends, is reported for removal.
 
-Run: uv run pytest tests/repo/test_row_table.py
+Run: uv run pytest tests/repo/census_rows/test_row_table.py
 """
 
 import ast
@@ -105,12 +105,8 @@ class Subject:
         return self._text
 
 
-# The repo-relative paths a row censuses, or the subjects themselves when a subject is not one
-# file (a family of sibling modules, say).
 Files = Callable[[], Iterable[str | Subject]]
 
-# One entry per hit, [] when the subject holds. An entry is what the report prints after the
-# path: a line number, a quoted line, a call name.
 Offence = Callable[[Subject], list[str]]
 
 
@@ -148,9 +144,7 @@ class Census:
     min_matches: int = 1
     must_find: frozenset[str] = frozenset()
     allow: Mapping[str, str] = field(default_factory=lambda: MappingProxyType({}))
-    # How many matches a file holds, for a row whose subject is a match inside the file (a
-    # ship line in a tasks file). None counts every selected file once. A file holding no
-    # match is not a member, so `must_find` names files that still hold one.
+    # None counts every selected file once; a file holding no match is not a member.
     count: Callable[[Subject], int] | None = None
 
 
@@ -234,13 +228,10 @@ class Sharing:
     offences: dict[str, Offence] = field(default_factory=dict)
     selectors: list[Files] = field(default_factory=list)
     census: frozenset[str] | None = None
-    # A subject's hits per shared row, keyed on its path and a digest of its text: two
-    # fixtures can share a path, and the key need not hold every census module's text alive.
+    # Keyed on path and a digest of text: two fixtures can share a path.
     hits: dict[tuple[str, bytes], dict[str, tuple[str, ...] | Exception]] = field(
         default_factory=dict
     )
-    # The trees `parse` hands out instead of reparsing. A module is here while its hits are
-    # being found, or from when another module's import reads it until its own hits are found.
     held: dict[str, ast.Module | None] = field(default_factory=dict)
 
     def share(self, rows: Iterable[Census]) -> tuple[Census, ...]:
@@ -273,8 +264,8 @@ class Sharing:
                 for other in missing:
                     try:
                         hits[other] = tuple(self.offences[other](subject))
-                    # A red subject for a textual row need not parse; only that row's own
-                    # verdict may fail on what its offence raised.
+                    # A red subject for a textual row need not parse; only that row's own verdict
+                    # may fail.
                     except Exception as error:
                         hits[other] = error
             finally:

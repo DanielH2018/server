@@ -116,7 +116,7 @@ Three paths reach GitHub from a host, and each already has one owner.
 | Path | Owner | Who uses it |
 |---|---|---|
 | A read from a session's shell | `ghread`, the one GitHub shim, shipped by the dotfiles repo | every session, with no permission prompt |
-| A `gh` call from a repo Python tool | `scripts/lib/gh.py` | `findings.py`, fan-out, `land_lib`, the probes. The `git-and-gh-go-through-lib` census row in `tests/repo/test_census_rows_python.py` refuses a bare `["gh", …]` elsewhere. |
+| A `gh` call from a repo Python tool | `scripts/lib/gh.py` | `findings.py`, fan-out, `land_lib`, the probes. The `git-and-gh-go-through-lib` census row in `tests/repo/census_rows/test_census_rows_python.py` refuses a bare `["gh", …]` elsewhere. |
 | A REST read with no `gh` | `hosts/lib/github_rest.py:github_get` | `await_ci.py`, checkout-sync, the builder, `renovate-notify`. `forge.py`'s `GitHub` client sends through its own transport and records through `github_rest.count_github_call`. |
 
 **The design adds no shim.** The operator ruled on 2026-11-14 that GitHub gets one shim, and

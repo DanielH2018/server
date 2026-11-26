@@ -26,17 +26,14 @@ spec:
         - name: cloudflare-ddns
           image: {{ cloudflare_ddns_k8s_image }}
           imagePullPolicy: IfNotPresent
-          # uid pinned with the assertion: `runAsNonRoot` alone does not pin one, and the
-          # kubelet refuses a container whose image names its user instead of numbering it.
-          # `/bin/ddns` runs as uid 1000.
+          # `runAsNonRoot` alone does not pin a uid, and the kubelet refuses an image that names its
+          # user.
 {{ hardened_security_context(read_only=true, non_root=true, run_as_user=1000) }}
           env:
             - name: CLOUDFLARE_API_TOKEN_FILE
               value: /etc/ddns-secrets/cf_dns_token
-            # terraria and valheim are live; minecraft is
-            # archived, and its record stays out — publishing an A record for a game
-            # server that does not exist points the unproxied home IP at nothing and
-            # needlessly exposes the raw IP. Re-add a domain here when its server comes back.
+            # minecraft is archived and its record stays out: an A record for a nonexistent server
+            # exposes the raw home IP.
             - name: DOMAINS
               value: "terraria.{{ domain }},valheim.{{ domain }}"
             - name: PROXIED
@@ -45,7 +42,7 @@ spec:
               value: none
           volumeMounts:
             # /etc, not /run/secrets: on a distro-based image /run/secrets shadows the
-            # ServiceAccount token mount, so the convention guard bans it.
+            # ServiceAccount token mount.
             - name: cloudflare-ddns-token
               mountPath: /etc/ddns-secrets
               readOnly: true

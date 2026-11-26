@@ -64,8 +64,7 @@ def test_an_accepted_key_passes_and_is_sent_as_a_head():
     sent = []
     assert precheck.main([], ENV, _opener(200, sent)) == 0
     (request,) = sent
-    # A GET would make LAPI add a `k8straefik@<ip>` row and stamp its `last_pull`, which
-    # bouncer_prune.py would read as the edge pulling.
+    # HEAD: a GET stamps the bouncer's last_pull, which bouncer_prune.py reads as the edge pulling.
     assert request.get_method() == "HEAD"
     assert request.full_url == "http://crowdsec:8080/v1/decisions?ip=127.0.0.1"
     assert request.get_header("X-api-key") == "k3y"

@@ -61,8 +61,7 @@ spec:
         - protocol: TCP
           port: {{ port }}
 {% else %}
-    # OFF. One empty rule admits everything. `ingress: []` would be the exact opposite and deny
-    # everything, which is the easiest thing in this file to get backwards.
+    # OFF: one empty rule admits everything; `ingress: []` would deny everything instead.
     - {}
 {% endif %}
 {%- endmacro %}

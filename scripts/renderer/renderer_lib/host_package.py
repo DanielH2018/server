@@ -14,12 +14,10 @@ import yaml
 from renderer.renderer_lib.host_manifest import DROPIN, UNIT_DIR
 from renderer.renderer_lib.host_tools import Pin, tool_path
 
-# The builder exports the version (H3, *Package rules*). Kept out of the render, so a render
-# changes only when the package's content does, and nfpm expands it at build time.
+# Kept out of the render so a render changes only when content does; nfpm expands it at build time.
 VERSION_FIELD = "${HOMELAB_VERSION}"
 
-# Each maintainer script a spec may list, and the nfpm `scripts:` key that installs it. `preinst`
-# refuses a hostname mismatch, so only a host package may list it.
+# `preinst` refuses a hostname mismatch, so only a host package may list it.
 MAINTAINER_SCRIPTS = {
     "preinst": "preinstall",
     "postinst": "postinstall",

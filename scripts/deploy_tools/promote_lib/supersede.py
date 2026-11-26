@@ -21,7 +21,7 @@ THE CONDITIONS. `verify_promotion.wait_settled` reads the first two and asks
 A condition that fails returns `decide` to the wait, which promotes T once P settles.
 docs/archive/deploy/d7-superseding-promotions.md has the design and the cases.
 
-Run: imported only. `uv run pytest scripts/deploy_tools/tests/test_promote_supersede.py`
+Run: imported only. `uv run pytest scripts/deploy_tools/tests/promote/test_promote_supersede.py`
 """
 
 from collections.abc import Callable

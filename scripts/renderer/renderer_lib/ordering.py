@@ -48,18 +48,12 @@ from renderer.renderer_lib.namespace import HOMELAB_NAMESPACE
 # The suffix of a tag's deferred apply: its directory under `cluster/` and its Kustomization.
 # A deploy tag may not end in it (`bundle.reserved_tags`).
 DEFERRED_SUFFIX = "-deferred"
-# The suffixes of D5's per-tag kinds: a role's snapshot Job and its verify or post-apply
-# mutation Jobs, each in its own directory and Kustomization (C3, D5.1a1).
 SNAPSHOT_SUFFIX = "-snapshot"
 VERIFY_SUFFIX = "-verify"
-# A role's pre-pull Job, which pulls the tag's images onto its node before `<tag>` applies
-# (`prepull.py`).
 PREPULL_SUFFIX = "-prepull"
-# A role's own pre-apply check Jobs, such as pihole's sibling guard,
-# which `<tag>` waits on.
 PRECHECK_SUFFIX = "-precheck"
-# Every per-tag kind's suffix, in the order its document follows `<tag>`'s in
-# `flux/<tag>.yaml`. The publish census expects exactly this order.
+# The order each kind's document follows `<tag>`'s in `flux/<tag>.yaml`; the publish census expects
+# exactly it.
 TAG_KIND_SUFFIXES = (
     DEFERRED_SUFFIX,
     SNAPSHOT_SUFFIX,
@@ -67,24 +61,18 @@ TAG_KIND_SUFFIXES = (
     PRECHECK_SUFFIX,
     VERIFY_SUFFIX,
 )
-# How far a `<tag>-verify` or `<tag>-precheck` timeout sits above its Jobs' longest `activeDeadlineSeconds`, so a
-# hung Job fails on its own deadline before Flux reports a bare timeout.
+# So a hung Job fails on its own deadline before Flux reports a bare timeout.
 VERIFY_DEADLINE_MARGIN_S = 60
-# A role's verify and post-apply mutation Jobs, with whatever they need beside them, are its
-# `templates/verify/*.yaml.j2`. They render into `cluster/<tag>-verify/` (D5.1a1, D5.1a3).
-# The manifests role derives its file lists from the top-level `templates/*.yaml.j2` alone, so
-# Ansible never renders or applies them.
+# Verify templates live in `templates/verify/`; the manifests role derives its file lists from
+# top-level `templates/*.yaml.j2` alone, so Ansible never renders them.
 VERIFY_TEMPLATES_DIR = "verify"
-# A role's pre-apply check Jobs, with whatever they need beside them, are its
-# `templates/precheck/*.yaml.j2`. They render into `cluster/<tag>-precheck/`, which `<tag>`
-# depends on, so a check that fails holds the role at its previous revision. Ansible
-# never renders them, as it never renders `templates/verify/`.
+# Precheck Jobs render into `cluster/<tag>-precheck/`, which `<tag>` depends on, so a failing check
+# holds the role at its previous revision; Ansible never renders them.
 PRECHECK_TEMPLATES_DIR = "precheck"
 
 
-# Lists, comma-separated and sorted, the edges a Kustomization's `dependsOn` leaves out because
-# they name a Kustomization of a tag whose role sets `flux_suspend: true` (D5.1b). Each comes
-# back in the first render after the resume.
+# Comma-separated, sorted edges a `dependsOn` leaves out because the tag's role sets
+# `flux_suspend: true`; each returns on the first render after resume.
 SUSPENDED_DEPS = "homelab/suspended-deps"
 
 
@@ -292,9 +280,8 @@ def kustomization_edges(
             if name in directories
             for ns in _namespaces(directories[name])
         }:
-            # Every bundle renders the shared kind, so the edge always names a Kustomization
-            # that exists. The `-snapshot`, `-prepull` and `-precheck` copies below inherit it,
-            # and the tag's other kinds wait on `<tag>`.
+            # Every bundle renders the shared kind, so the edge always names an existing
+            # Kustomization.
             kept.add(HOMELAB_NAMESPACE)
         edges[tag] = Edges(frozenset(kept))
     for tag in deferring:
@@ -306,8 +293,8 @@ def kustomization_edges(
         } - {tag}
         edges[name] = Edges(frozenset({tag} | existing(name, wanted)))
     for tag in tags:
-        # Each predecessor copies `<tag>`'s edges before `<tag>` gains any, so neither depends
-        # on itself or on the other.
+        # Each predecessor copies `<tag>`'s edges before `<tag>` gains any, so neither depends on
+        # itself or the other.
         before = [
             tag + suffix
             for suffix in (SNAPSHOT_SUFFIX, PREPULL_SUFFIX, PRECHECK_SUFFIX)
@@ -330,8 +317,7 @@ def kustomization_edges(
             edges[name] = Edges(edges[name].kept | existing(name, wanted))
         edges[tag] = Edges(edges[tag].kept | set(before))
         if tag + VERIFY_SUFFIX in directories:
-            # The other tags' last Kustomizations, read from `directories`: a tag outside
-            # the render is kept by its own name, as a tag's edge onto it is.
+            # A tag outside the render is kept by its own name, as a tag's edge onto it is.
             name = tag + VERIFY_SUFFIX
             wanted = set(ordering.verify_after.get(tag, ())) - {tag}
             after = {

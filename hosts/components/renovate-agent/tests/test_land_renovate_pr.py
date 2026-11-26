@@ -58,6 +58,11 @@ def test_a_renovate_pr_touching_no_denied_role_passes_every_check():
     assert lander.refusals(GOOD, DENIED) == []
 
 
+def test_a_vars_file_a_component_keeps_is_not_a_variables_file():
+    files = [{"path": "hosts/components/builder/vars.yml"}]
+    assert lander.refusals({**GOOD, "files": files}, DENIED) == []
+
+
 @pytest.mark.parametrize(
     "change, names",
     [
@@ -76,7 +81,11 @@ def test_a_renovate_pr_touching_no_denied_role_passes_every_check():
         ),
         ({"files": [{"path": "k8s/roles/authelia/defaults/main.yml"}]}, "authelia"),
         ({"files": []}, "cap"),
-        ({"files": [{"path": "inventory/group_vars/all.yml"}]}, "inventory"),
+        ({"files": [{"path": "inventory/group_vars/all.yml"}]}, "variables file"),
+        ({"files": [{"path": "estate/vars.yml"}]}, "variables file"),
+        ({"files": [{"path": "k8s/vars.yml"}]}, "variables file"),
+        ({"files": [{"path": "hosts/vars.yml"}]}, "variables file"),
+        ({"files": [{"path": "hosts/daniel-box/vars.yml"}]}, "variables file"),
         ({"headRefOid": "c" * 39}, "head SHA"),
         ({"files": [{"path": f"f{i}"} for i in range(lander.FILE_CAP)]}, "cap"),
     ],

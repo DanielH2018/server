@@ -80,9 +80,7 @@ def _render_all(tags: dict[str, RenderedTag]):
 
 
 _CACHE: tuple | None = None
-# Filled by _render_all as a side effect, because the render is the expensive part and a
-# second pass over the tree would double it. Only reachable through rendered_texts(), which
-# forces the render first.
+# Filled by `_render_all` as a side effect; reachable only through `rendered_texts()`.
 _TEXTS: list[tuple[str, str, str]] = []
 # Filled with _CACHE, from the same shared render. Only reachable through rendered_tags().
 _TAGS: dict[str, RenderedTag] = {}
@@ -265,9 +263,7 @@ def render_pod_env(role: str, overrides: dict | None = None) -> dict[str, str]:
     return {**data["stringData"], **plain}
 
 
-# `_render_all` skips `Dockerfile*` because its output feeds a YAML parse. A build pin is still
-# a rendered value — code-server's Dockerfile names its node URL and every extension URL
-# through a role default — so the build files get their own accessor and their own cache.
+# `_render_all` skips `Dockerfile*` because its output feeds a YAML parse.
 def traefik_static_config(overrides: dict | None = None) -> dict:
     """Traefik's static config itself, parsed, not the ConfigMap that wraps it.
 
@@ -283,10 +279,6 @@ def traefik_static_config(overrides: dict | None = None) -> dict:
 
 BUILD_TEMPLATE_GLOB = "Dockerfile*.j2"
 
-# The roles whose build the accessor must reach, so a renamed or moved template fails as a
-# missing member rather than as a guard over an empty set. k8s/image-builder renders each of
-# these through `lookup('template', image_builder_dockerfile)` from the CALLER's role context,
-# which is the context `_render_build_files` lays out.
 BUILD_ROLES = frozenset(
     {
         "code-server",
@@ -379,9 +371,7 @@ def rendered_k8s_text(role: str, template: str) -> str:
     return "\n".join(texts)
 
 
-# `k8s/image-builder` is a CALLER_RENDERED_ROLES member, so `rendered_docs()` never reaches its
-# build Job: the image, context and tag arrive on the calling role's `include_role` task. These
-# stand in for that task, so a guard over every pod the cluster runs can still parse this one.
+# These stand in for the calling role's `include_role` task, which supplies the image.
 IMAGE_BUILDER_CALLER_VARS = {
     "image_builder_name": "example-image",
     "image_builder_context_dir": "/tmp/example-context",

@@ -13,8 +13,8 @@ while the WAN tile stayed green, so the outage would be reported by nothing at a
 
 import re
 
-from lib import yaml_fast
-from _helpers import ALL_VARS, K8S_ROLES
+from _helpers import K8S_ROLES
+from lib.estate import shared_vars
 
 CONFIG_IO = K8S_ROLES / "monitor-bridge/files/bridge/config_io.py"
 
@@ -32,14 +32,14 @@ def _bridge_default_urls() -> list[str]:
 
 
 def test_the_host_cron_endpoint_list_equals_the_bridge_default():
-    declared = yaml_fast.safe_load(ALL_VARS.read_text())["wan_probe_urls"]
+    declared = shared_vars()["wan_probe_urls"]
     assert declared == _bridge_default_urls()
 
 
 def test_the_list_names_two_independent_providers():
     # One provider's own outage must not silence a caller reading the other, so a single-entry list
     # is a defect.
-    declared = yaml_fast.safe_load(ALL_VARS.read_text())["wan_probe_urls"]
+    declared = shared_vars()["wan_probe_urls"]
     hosts = {re.sub(r"^https?://([^/]+).*$", r"\1", u) for u in declared}
     assert len(hosts) >= 2, hosts
     # By hostname, never an anycast IP: an IP-only probe stays green through a DNS-only WAN outage.

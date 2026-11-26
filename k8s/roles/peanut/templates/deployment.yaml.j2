@@ -20,20 +20,14 @@ spec:
         app: peanut
         netpol-baseline: enforced
     spec:
-      # No runAsUser pinned, mirroring littlelink: the image's own non-root `node` user is
-      # what serves this page, and pinning a UID here would be an unrelated behaviour change.
-      # fsGroup is set instead — it's added as a supplementary group to the container process
-      # regardless of which UID the image actually runs as, which is what makes the
-      # /app/config emptyDir group-writable without knowing that UID.
+      # No runAsUser: the image's own non-root user serves the page. fsGroup, a supplementary group,
+      # makes the /app/config emptyDir group-writable without knowing that UID.
 {{ pod_shell('homelab-best-effort', fs_group=1000) }}
-      # PeaNUT WRITES /config (it persists UI settings beside settings.yml). A read-only
-      # subPath mount there EROFS'd the app, so the Secret seeds a writable emptyDir
-      # instead, same copy-not-mount shape as the app-config scratch below.
+      # PeaNUT writes /config, so a read-only subPath mount fails with EROFS; seed a writable
+      # emptyDir.
       initContainers:
         - name: seed-config
-          # alpine, not the app image: peanut's distroless-ish image has no cp
-          # (StartError "executable file not found" at first deploy). Same init image
-          # zigbee2mqtt and home-assistant use.
+          # alpine, not the app image: peanut's image has no cp (StartError at start).
           image: {{ peanut_k8s_init_image }}
           imagePullPolicy: IfNotPresent
           command: ["cp", "/config-seed/settings.yml", "/config/settings.yml"]
@@ -70,9 +64,7 @@ spec:
             # Writable /config seeded with settings.yml by the init container above.
             - name: peanut-config
               mountPath: /config
-            # auth.yaml is regenerated from WEB_USERNAME/WEB_PASSWORD at every boot (absent
-            # from the image, not part of the settings mount above), so /app/config has to be
-            # writable scratch.
+            # auth.yaml is regenerated at every boot, so /app/config must be writable scratch.
             - name: peanut-app-config
               mountPath: /app/config
           readinessProbe:

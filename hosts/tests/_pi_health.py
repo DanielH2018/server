@@ -17,7 +17,9 @@ The scripts are the `pi-heartbeats` host component's (H3.8b), and `COMPONENT_DEF
 
 import re
 
-from _helpers import HOST_VARS, REPO, load_yaml
+from _helpers import REPO, load_yaml
+from lib.estate import host_vars
+from lib.inventory_lists import PI_HOST
 from _shell_render import render_shell_script
 from lib.proc_testing import fake_bin, path_with, write_exec
 from lib.proc_testing import run as launch
@@ -99,14 +101,14 @@ SD_COUNTER = "/sys/fs/ext4/mmcblk0p2/errors_count"
 GZ_STATE_VAR = "optimize_pi_gz_integrity_state_file"
 
 
-PI_HOST_VARS = load_yaml(HOST_VARS / "daniel-pi.yml")
+PI_HOST_VARS = host_vars(PI_HOST)
 
 
 def render(name, tmp_path, jinja_vars=None):
     """The real template, rendered through `_shell_render`, with its absolute paths repointed
     at temp files.
 
-    `compose_services` is the Pi's own (host_vars/daniel-pi.yml) rather than a group default, so
+    `compose_services` is the Pi's own (hosts/daniel-pi/vars.yml) rather than a group default, so
     the accessor's inventory context does not carry it -- it goes in as an override. Everything
     else the templates read (domain, the ingress VIP, the gz-integrity defaults) comes from
     that same context, the one `validate/render_lib/shell.py` lints

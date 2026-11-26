@@ -12,7 +12,7 @@ import re
 
 from docs.fragment_readers import hosts_listing_component
 from lib import yaml_fast
-from lib.repo_paths import ALL_VARS, HOST_VARS
+from lib.estate import host_vars, shared_vars
 from renderer.renderer_lib import host as host_mode
 
 SOURCE_DIR = "/etc/apt/sources.list.d/"
@@ -87,12 +87,12 @@ def test_each_real_host_ships_exactly_the_sources_it_uses_with_their_pinned_keys
 
 
 def test_the_use_table_agrees_with_the_inventory():
-    group = yaml_fast.safe_load(ALL_VARS.read_text())
+    group = shared_vars()
     flags = {}
     for host in HOSTS:
         merged = {
             **group,
-            **yaml_fast.safe_load((HOST_VARS / f"{host}.yml").read_text()),
+            **host_vars(host),
         }
         flags[host] = merged
     assert set(hosts_listing_component("pi-docker")) <= USES["docker"]

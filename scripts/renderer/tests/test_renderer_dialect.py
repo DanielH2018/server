@@ -18,7 +18,9 @@ from _dialect_tree import TREE_LITERAL, write_tree
 from lib import yaml_fast
 from lib.k8s_roles import role_dirs
 from lib.render_guard import SHARED_TPL
-from lib.repo_paths import ALL_VARS, HOST_VARS, K8S_ROLES, REPO
+from lib.estate import Estate
+from lib.inventory_lists import host_vars_file
+from lib.repo_paths import K8S_ROLES, REPO
 from renderer.renderer_lib.cluster import INCLUDE_KEYS, RenderError, render_tag
 from renderer.renderer_lib.dialect import (
     FILTERS,
@@ -150,12 +152,21 @@ def _jinja_values(value: object) -> list[str]:
     return []
 
 
-def _variable_files() -> list[Path]:
-    return [
-        *sorted(K8S_ROLES.glob("*/defaults/*.yml")),
-        ALL_VARS,
-        *sorted(HOST_VARS.glob("*.yml")),
-    ]
+def _variable_layers() -> dict[str, dict]:
+    """Each variable file's parsed values, keyed by its path: role defaults, then the inventory."""
+    estate = Estate()
+    inventory = estate.inventory
+    return {
+        **{
+            str(path): yaml_fast.safe_load(path.read_text())
+            for path in sorted(K8S_ROLES.glob("*/defaults/*.yml"))
+        },
+        str(inventory.all_vars): estate.group_vars,
+        **{
+            str(host_vars_file(host, inventory.host_vars)): estate.own_vars(host)
+            for host in estate.hosts()
+        },
+    }
 
 
 def test_every_template_stays_on_the_list():
@@ -170,13 +181,13 @@ def test_every_template_stays_on_the_list():
 
 
 def test_every_variable_value_stays_on_the_list():
-    files = _variable_files()
-    assert len(files) >= 50
-    assert K8S_ROLES / "netpol-baseline" / "defaults" / "main.yml" in files
+    layers = _variable_layers()
+    assert len(layers) >= 50
+    assert str(K8S_ROLES / "netpol-baseline" / "defaults" / "main.yml") in layers
     offenders = {
-        str(path): off
-        for path in files
-        for value in _jinja_values(yaml_fast.safe_load(path.read_text()))
+        path: off
+        for path, values in layers.items()
+        for value in _jinja_values(values)
         if (off := off_the_list(value))
     }
     assert offenders == {}

@@ -213,9 +213,7 @@ load();
 </body></html>
 """
 
-# Served at /api/star.js and loaded by the tag artifact_server.py adds to each HTML artifact
-# it serves. It draws nothing until GET /api/star answers, so a copy saved from the browser
-# and opened anywhere else shows no button.
+# Draws nothing until GET /api/star answers, so a copy opened elsewhere shows no button.
 STAR_JS = r"""(() => {
   const me = document.currentScript;
   if (!me) return;
@@ -270,7 +268,5 @@ button:focus-visible{outline:2px solid #f9e2af;outline-offset:2px}
 })();
 """
 
-# The Artifacts tile's mdi icon and colour in homepage's services.yaml.j2. Served at
-# /favicon.ico, the path a browser requests for an artifact page that declares no icon.
 FAVICON_SVG = r"""<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path fill="#38bdf8" d="M4 4V22H20V24H4C2.9 24 2 23.1 2 22V4H4M15 7H20.5L15 1.5V7M8 0H16L22 6V18C22 19.11 21.11 20 20 20H8C6.89 20 6 19.1 6 18V2C6 .89 6.89 0 8 0M17 16V14H8V16H17M20 12V10H8V12H20Z"/></svg>
 """

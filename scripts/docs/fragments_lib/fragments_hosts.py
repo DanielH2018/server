@@ -16,7 +16,7 @@ from pathlib import Path as _Path
 
 from lib import yaml_fast
 from lib.estate import Estate
-from lib.repo_paths import ALL_VARS, K8S_ROLES, REPO
+from lib.repo_paths import K8S_ROLES, REPO
 
 PI_TUNING = REPO / "hosts" / "components" / "pi-tuning"
 VALHEIM_ROLE = K8S_ROLES / "valheim"
@@ -54,8 +54,9 @@ def render_cni0_gateways(gateways: list[str]) -> str:
 
 
 def _cluster_addresses() -> tuple[str, list[str]]:
-    gateways = [str(g) for g in Estate().group_vars["k3s_cni0_gateways"]]
-    return render_cni0_gateways(gateways), [_rel(ALL_VARS)]
+    estate = Estate()
+    gateways = [str(g) for g in estate.group_vars["k3s_cni0_gateways"]]
+    return render_cni0_gateways(gateways), [_rel(estate.inventory.all_vars)]
 
 
 # --- loadbalancer-services -----------------------------------------------------------------

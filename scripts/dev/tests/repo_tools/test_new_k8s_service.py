@@ -16,19 +16,19 @@ import pytest
 
 from docs import gen_role_glance
 from lib import yaml_fast
+from lib.estate import host_vars, shared_vars
 from lib.guard_jinja_env import template_env
 from lib.k8s_roles import (
     SHARED_MANIFEST_DEFAULTS,
     resolved_manifest_files,
 )
 from lib.inventory_lists import K8S_HOST
-from lib.render_guard import StubUndefined, host_layer
-from lib.repo_paths import HOST_VARS
+from lib.render_guard import StubUndefined
 from lib.guard_jinja_env import register_ansible_filters
 from lib.k8s_context import resolve_vars
 from lib.k8s_yaml import make_lookup
-from lib.render_guard import BASE_CONTEXT, load_yaml, render_or_error
-from lib.repo_paths import ALL_VARS, K8S_ROLES
+from lib.render_guard import BASE_CONTEXT, render_or_error
+from lib.repo_paths import K8S_ROLES
 
 from dev import new_k8s_service as scaffold
 
@@ -62,8 +62,8 @@ def _render(tmp_path, text: str, name: str, port: int, defaults=None) -> list[di
     """
     base = {
         **BASE_CONTEXT,
-        **load_yaml(ALL_VARS),
-        **host_layer(HOST_VARS, K8S_HOST),
+        **shared_vars(),
+        **host_vars(K8S_HOST),
         "role_path": str(K8S_ROLES / name),
     }
     ctx = resolve_vars(base, base)

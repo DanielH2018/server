@@ -92,9 +92,8 @@ def lock_is_live(
     return claude_worktree.lock_is_live(tree, fanout_lock.REASON, state, now, foreign)
 
 
-# The lock reason a sub-coordinator writes, before its project's title
-# (`.claude/skills/coordinate/SKILL.md`). It names no pid, so `session_is_alive` reads it as
-# live for as long as the lock stands, which is what keeps the weekly sweep off the tree.
+# Names no pid, so `session_is_alive` reads it as live while the lock stands, keeping the weekly
+# sweep off the tree.
 COORDINATOR_LOCK = "coordinator: project "
 
 

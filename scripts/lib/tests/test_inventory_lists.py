@@ -3,29 +3,29 @@
 Run: uv run pytest scripts/lib/tests/test_inventory_lists.py
 """
 
-import re
 import sys
-from pathlib import Path
 
 import pytest
 
 from lib.inventory_lists import (
     K8S_HOST,
     PI_HOST,
-    PI_HOST_VARS,
     host_names,
+    host_vars_file,
     pi_entries_in,
 )
 from docs.fragment_readers import hosts_listing_component
-from lib import yaml_fast
 from lib.proc_testing import run
-from lib.repo_paths import ALL_VARS, HOST_VARS, SCRIPTS
+from lib.estate import REPO_INVENTORY, Estate, Inventory, host_vars, shared_vars
+from lib.repo_paths import SCRIPTS
 
 
 def test_host_names_lists_the_sorted_host_vars_stems_and_skips_a_template(tmp_path):
-    for name in ("daniel-server.yml", "daniel-box.yml", "_example.yml"):
-        (tmp_path / name).write_text("x: 1\n")
+    for name in ("daniel-server", "daniel-box", "_example"):
+        host_vars_file(name, tmp_path).parent.mkdir()
+        host_vars_file(name, tmp_path).write_text("x: 1\n")
     (tmp_path / "notes.txt").write_text("not a host\n")
+    (tmp_path / "no-vars").mkdir()
     assert host_names(tmp_path) == ("daniel-box", "daniel-server")
 
 
@@ -39,27 +39,30 @@ def test_role_host_constants_name_the_host_the_inventory_arms():
     assert hosts_listing_component("pi-docker") == [PI_HOST]
 
 
-def hosts_declaring_k8s(host_vars: Path = HOST_VARS) -> tuple[str, ...]:
+def hosts_declaring_k8s(inventory: Inventory = REPO_INVENTORY) -> tuple[str, ...]:
     """The inventory hosts whose host_vars carry a top-level ``containers_list`` key."""
-    k8s = re.compile(r"^containers_list:", re.MULTILINE)
+    estate = Estate(inventory)
     return tuple(
-        name
-        for name in host_names(host_vars)
-        if (host_vars / f"{name}.yml").is_file()
-        and k8s.search((host_vars / f"{name}.yml").read_text())
+        name for name in estate.hosts() if "containers_list" in estate.own_vars(name)
     )
 
 
 def test_k8s_host_is_the_primary_node_and_no_host_vars_declares_a_containers_list():
-    group = yaml_fast.safe_load(ALL_VARS.read_text())
+    group = shared_vars()
     assert group["k8s_primary_node"] == K8S_HOST
     assert hosts_declaring_k8s() == ()
 
 
 def test_a_host_vars_file_declaring_a_containers_list_breaks_the_pin(tmp_path):
-    (tmp_path / "daniel-box.yml").write_text("containers_list:\n  - name: a\n")
-    (tmp_path / "daniel-pi.yml").write_text("containers_list:\n  - name: b\n")
-    assert hosts_declaring_k8s(tmp_path) == ("daniel-box", "daniel-pi")
+    for name, item in (("daniel-box", "a"), ("daniel-pi", "b")):
+        host_vars_file(name, tmp_path).parent.mkdir()
+        host_vars_file(name, tmp_path).write_text(
+            f"containers_list:\n  - name: {item}\n"
+        )
+    assert hosts_declaring_k8s(Inventory(host_vars=tmp_path)) == (
+        "daniel-box",
+        "daniel-pi",
+    )
 
 
 def test_pi_entries_in_reads_compose_services_alone():
@@ -78,9 +81,7 @@ def test_pi_entries_in_raises_when_compose_services_is_missing():
 
 def test_the_live_pi_host_vars_list_the_pis_services():
     """Named members: the helper finds alloy and docker-proxy in the real inventory."""
-    names = {
-        e["name"] for e in pi_entries_in(yaml_fast.safe_load(PI_HOST_VARS.read_text()))
-    }
+    names = {e["name"] for e in pi_entries_in(host_vars(PI_HOST))}
     assert {"alloy", "docker-proxy"} <= names
 
 

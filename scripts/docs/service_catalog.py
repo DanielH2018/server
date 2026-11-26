@@ -2,7 +2,7 @@
 """Generate a single HTML page answering "what runs in this homelab".
 
 THE PROBLEM. ~60 services are declared across two files
-(k8s/services.yml and inventory/host_vars/daniel-pi.yml), and the only way to
+(k8s/services.yml and hosts/daniel-pi/vars.yml), and the only way to
 answer "what runs here, on which host, behind which auth, backed up how" is to read
 through 62 Ansible roles by hand. Every fact already lives in the repo — nothing
 assembles them into one place, so the answer drifts out of date the moment someone
@@ -63,32 +63,30 @@ from docs.catalog_lib.catalog_facts import auth_tier, k8s_route
 from docs.catalog_lib.catalog_model import K3S_DEFAULTS, K8S_ROLES, ServiceRow
 from docs.catalog_lib.catalog_render import render_html, render_markdown
 from lib.cli_help import ArgumentParser
-from lib.estate import Estate, Inventory
+from lib.estate import REPO_INVENTORY, Estate, Inventory
 from lib.inventory_lists import K8S_HOST
-from lib.repo_paths import ALL_VARS, K8S_SERVICES
+from lib.repo_paths import K8S_SERVICES
 
 
 # Assembly
 
 
 def build_rows(
-    services: Path = K8S_SERVICES,
+    inventory: Inventory = REPO_INVENTORY,
     k8s_roles: Path = K8S_ROLES,
     k3s_defaults: Path = K3S_DEFAULTS,
-    all_vars: Path = ALL_VARS,
 ) -> list[ServiceRow]:
     """Build one `ServiceRow` per k8s service, each on the k8s host.
 
     Args:
-        services: The k8s service list.
+        inventory: The inventory: its group variables and k8s service list.
         k8s_roles: Root directory of the k8s roles.
         k3s_defaults: Path to the k3s role's `defaults/main.yml`, for the Longhorn tier lists.
-        all_vars: Path to `group_vars/all.yml`.
 
     Returns:
         One `ServiceRow` per service, in `services` order.
     """
-    estate = Estate(Inventory(all_vars=all_vars, services=services))
+    estate = Estate(inventory)
     tiers = load_longhorn_tier_lists(
         k3s_defaults, estate.group_vars, list(estate.k8s_entries().values())
     )
@@ -102,7 +100,7 @@ def build_rows(
             ServiceRow(
                 name=entry["name"],
                 host=K8S_HOST,
-                route=k8s_route(entry, k8s_roles, all_vars),
+                route=k8s_route(entry, k8s_roles, inventory),
                 auth_tier=auth_tier(entry),
                 backup_tier=backup_tier(
                     entry,
@@ -153,12 +151,11 @@ def main(argv: list[str] | None = None) -> int:
         default=K3S_DEFAULTS,
         help="override k3s defaults/main.yml",
     )
-    parser.add_argument(
-        "--all-vars", type=Path, default=ALL_VARS, help="override group_vars/all.yml"
-    )
     args = parser.parse_args(argv)
 
-    rows = build_rows(args.services, args.k8s_roles, args.k3s_defaults, args.all_vars)
+    rows = build_rows(
+        Inventory(services=args.services), args.k8s_roles, args.k3s_defaults
+    )
 
     if args.format == "markdown":
         from lib.docs_provenance import finish_generator

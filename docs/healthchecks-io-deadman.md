@@ -243,7 +243,7 @@ these steps, and no new secret, because one project ping key covers every check.
 1. **Create the check by hand** in the Healthchecks.io console with the slug and the period and
    grace from the table above. Never let the ping URL auto-provision it: a typo'd slug becomes a
    second, unwatched check that reads green forever because something pings it.
-   `tests/services/test_healthchecks_pings.py` fails the build if a call site adds the
+   `tests/services/monitor_bridge/test_healthchecks_pings.py` fails the build if a call site adds the
    auto-provisioning parameter.
 2. **Match the schedule type to the job.** A cron-driven job takes the console's **Cron** type
    with the same expression and timezone, so the two cannot drift. An interval job takes Simple.
@@ -252,7 +252,7 @@ these steps, and no new secret, because one project ping key covers every check.
    collects two stores one after the other. Each phase is bounded by a 20-minute Job deadline,
    120 s for its pod to terminate, 120 s for an unfinished Job's delete, 180 s for the rollout
    back up and its warm budget (30 minutes, then 15). The worst case is about 6000 s, and
-   `tests/services/test_registry_gc_watchers_cover_the_worst_run.py` derives it. `etcd-snapshot-offbox` allows an hour for a late cron fire: the token comparison itself takes
+   `tests/services/registry_gc/test_registry_gc_watchers_cover_the_worst_run.py` derives it. `etcd-snapshot-offbox` allows an hour for a late cron fire: the token comparison itself takes
    under a second.
 4. **Add the slug to the table, the fragment's cron variable and
    `monitor_bridge_healthchecks_expected` in the same PR**, as *The console drifts* below says.
@@ -303,7 +303,7 @@ check's message names the slug and field. A clean read is cached for a day, and 
 re-read every five minutes, so the alert clears one cycle after the console is fixed.
 
 That expectation list is a literal in monitor-bridge's defaults.
-`tests/services/test_monitor_bridge_healthchecks_expected.py` holds it to the cron
+`tests/services/monitor_bridge/test_monitor_bridge_healthchecks_expected.py` holds it to the cron
 variables in the fragment above and to the period-and-grace table on this page. To change a
 cron or a grace, change the variable, this table and the list in the same PR.
 

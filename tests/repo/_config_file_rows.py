@@ -13,7 +13,7 @@ import yaml
 from _helpers import REPO, image_tag
 from _row_table import Census, Subject
 from lib import yaml_fast
-from services._jellyfin_plugins import padded, version_tuple
+from services.jellyfin._jellyfin_plugins import padded, version_tuple
 
 
 class _Edited(Subject):
@@ -325,7 +325,7 @@ CONFIG_FILE_ROWS = (
             "The targetAbi census globs `jellyfin_k8s_<plugin>_target_abi`, so a renamed var "
             "shrinks the set and every ABI row passes over fewer plugins. The five installed "
             "plugins are named here. ani-sync has no var: its ABI leads the release asset's "
-            "filename, which `tests/services/test_anisync_pin_matches_server.py` owns, and the "
+            "filename, which `tests/services/jellyfin/test_anisync_pin_matches_server.py` owns, and the "
             "census reads it from the URL so the `max` is over every plugin. SSO-Auth is gone "
             "(#1674)."
         ),

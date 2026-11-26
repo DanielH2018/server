@@ -12,7 +12,7 @@ the records months later.
 
 import pytest
 from lib import yaml_fast
-from _helpers import ALL_VARS, HOST_VARS
+from lib.estate import host_vars, shared_vars
 from _host_packages import HOSTS, shipped_text
 from lib.repo_paths import REPO
 
@@ -36,14 +36,8 @@ def filter_text(host: str) -> str:
 
 
 def has_rsyslog(host: str) -> bool:
-    flag = yaml_fast.safe_load((HOST_VARS / f"{host}.yml").read_text()).get(
-        "has_rsyslog"
-    )
-    return (
-        yaml_fast.safe_load(ALL_VARS.read_text())["has_rsyslog"]
-        if flag is None
-        else flag
-    )
+    flag = host_vars(host).get("has_rsyslog")
+    return shared_vars()["has_rsyslog"] if flag is None else flag
 
 
 def setting(content: str, key: str) -> str | None:
@@ -119,7 +113,7 @@ def test_the_filter_component_lists_exactly_on_hosts_with_rsyslog():
     assert lists_the_filter("daniel-box")
     assert not lists_the_filter("daniel-pi")
     assert filter_listing_errors(HOSTS, lists_the_filter, has_rsyslog) == []
-    assert yaml_fast.safe_load(ALL_VARS.read_text()).get("has_rsyslog") is True, (
+    assert shared_vars().get("has_rsyslog") is True, (
         "has_rsyslog has no true default in group_vars/all.yml, so a new host would list no "
         "filter while its rsyslog runs"
     )

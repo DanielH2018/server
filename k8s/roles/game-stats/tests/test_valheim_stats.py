@@ -4,10 +4,8 @@ import sys
 
 import valheim_stats as stats
 
-# Real shape of a line as it reaches Loki: the image wraps every console line in its own
-# supervisord prefix. Terraria's image does not, which is why its parser can anchor at ^
-# and this one cannot. Every parse test runs through here so a regression to anchoring
-# fails loudly rather than passing on synthetic bare lines.
+# Real shape of a line as it reaches Loki: the image wraps each in a supervisord prefix, so this
+# parser cannot anchor at ^ as terraria's does.
 PREFIX = "Aug 13 16:53:42 supervisord: valheim-server "
 
 

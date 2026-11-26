@@ -10,28 +10,21 @@ import re
 
 from _row_table import REPO, Census, Subject, tracked
 
-SUITE = "tests/repo/test_census_rows_suite.py"
+SUITE = "tests/repo/census_rows/test_census_rows_suite.py"
 
-# A module that reads tracked content: a walk a Census selector stands in for, or one file
-# read by its path, which a selector naming that file stands in for.
 READS_THE_TREE = re.compile(
     r"\.r?glob\(|\bls-files\b|\btracked\(|\bos\.walk\(|\brole_dirs\("
     r"|\.read_text\(|\.read_bytes\(|\bopen\(|\bsafe_load\(|\bload_\w+\(|\b_load\("
     r"|^from test_\w+ import",
     re.MULTILINE,
 )
-# A module that runs code rather than reading text: a subprocess other than `git ls-files`,
-# a render, a scratch tree or a patched callable. A row holds none of these.
 RUNS_CODE = re.compile(
     r"\bsubprocess\b|\brun\(\[(?!\"git\", \"ls-files\")|\brender\w*\("
     r"|\btmp_path(?:_factory)?\b|\bmonkeypatch\b|\burlopen\("
 )
-# A helper function that renders. Its `subprocess` stays out of this: `git_out` shells out
-# to `git ls-files`, which a row may do.
+# `git_out` shells out to `git ls-files`, which a row may do.
 RENDERS = re.compile(r"\brender\w*\(")
 BUILDS_A_ROW = re.compile(r"\b(?:Census|RunbookRule|Property)\(")
-# Imported modules every call into renders: the renderer package, and the property table
-# whose `check` runs a row over its rendered source.
 RENDERING_MODULES = re.compile(r"renderer(?:\.|$)|_property_table$")
 
 
@@ -213,91 +206,91 @@ SINGLE_PREDICATE_CHECK_IS_A_ROW = Census(
     must_find=frozenset(
         {
             SUITE,
-            "tests/repo/test_runbook_rules.py",
-            "tests/k8s/test_rendered_properties.py",
+            "tests/repo/census_rows/test_runbook_rules.py",
+            "tests/k8s/rendered_properties/test_rendered_properties.py",
         }
     ),
     allow={
-        "tests/repo/test_ci_lint_group.py": (
+        "tests/repo/ci_workflows/test_ci_lint_group.py": (
             "a join of pyproject.toml's lint group and default groups against every "
             "workflow that installs the project"
         ),
-        "tests/repo/test_claude_md_paragraphs_have_one_home.py": (
+        "tests/repo/docs/test_claude_md_paragraphs_have_one_home.py": (
             "a join of each long CLAUDE.md paragraph against every other operator doc"
         ),
-        "tests/repo/test_doc_values_hook.py": (
+        "tests/repo/ci_workflows/test_doc_values_hook.py": (
             "a join of the prek hook's `files` pattern against the paths the doc_values "
             "rows name and the paths the docs-refresh cron stages"
         ),
-        "tests/repo/test_failure_class_detectors.py": (
+        "tests/repo/docs/test_failure_class_detectors.py": (
             "a join of docs/failure-classes.md against the detector tests it cites"
         ),
-        "tests/repo/test_host_package_case_inputs_census.py": (
+        "tests/repo/ci_workflows/test_host_package_case_inputs_census.py": (
             "a join of the render step's CASE_INPUTS against the modules the cases "
             "script imports and the tracked tree"
         ),
-        "tests/repo/test_kind_node_image_follows_k3s.py": (
+        "tests/repo/ci_workflows/test_kind_node_image_follows_k3s.py": (
             "a join of CI's kind node image against the k3s version in the "
             "system-upgrade role's defaults"
         ),
-        "tests/repo/test_renovate_canary_is_scheduled_not_per_merge.py": (
+        "tests/repo/ci_workflows/test_renovate_canary_is_scheduled_not_per_merge.py": (
             "a join of ci.yml and renovate-config-canary.yml, which run the one "
             "retrying validator script"
         ),
-        "tests/repo/test_vale_matches_the_ci_pin.py": (
+        "tests/repo/ci_workflows/test_vale_matches_the_ci_pin.py": (
             "a join of the Vale version and sha256 CI installs against the "
             "homelab-tools package pin"
         ),
-        "tests/services/test_ha_trusted_proxies_cover_cloudflare.py": (
+        "tests/services/network/test_ha_trusted_proxies_cover_cloudflare.py": (
             "a join of Home Assistant's trusted_proxies against the pod CIDR and the "
             "Cloudflare ranges in the group vars"
         ),
-        "tests/services/test_scrape_target_flap_rule.py": (
+        "tests/services/alert_rules/test_scrape_target_flap_rule.py": (
             "a join of the flap rules against the promtool cases that exercise them"
         ),
-        "tests/services/test_rule_thresholds_owned_by_rules_files.py": (
+        "tests/services/alertmanager/test_rule_thresholds_owned_by_rules_files.py": (
             "a join of each pinned threshold against its rule's span in two "
             "directories, and of the rules files against the routing table"
         ),
-        "tests/services/test_host_check_rule_literals.py": (
+        "tests/services/alert_rules/test_host_check_rule_literals.py": (
             "a join of the rule file against the inventory, which #9019 rewrites"
         ),
-        "tests/services/test_claude_cgroup_consumers_agree_with_the_writer.py": (
+        "tests/services/alert_rules/test_claude_cgroup_consumers_agree_with_the_writer.py": (
             "a join of the writer script's metrics against the alert rules and the "
             "Grafana board that read them"
         ),
-        "tests/repo/test_every_ci_job_is_gated.py": (
+        "tests/repo/ci_workflows/test_every_ci_job_is_gated.py": (
             "a join of ci.yml's jobs and the gate step's reads against the ruleset "
             "contexts in the github-checks defaults"
         ),
-        "tests/repo/test_pytest_shards_partition_the_suite.py": (
+        "tests/repo/ci_workflows/test_pytest_shards_partition_the_suite.py": (
             "a join of ci.yml's pytest matrix against pytest_shard.py's assignment of "
             "the tracked suite and its runner-seconds table"
         ),
-        "tests/repo/test_release_fetches_use_pinned_tool.py": (
+        "tests/repo/ci_workflows/test_release_fetches_use_pinned_tool.py": (
             "a join of every workflow's release fetches against the pinned-tool action "
             "and the tools it fetches"
         ),
-        "tests/repo/test_static_ratchet_hook.py": (
+        "tests/repo/ci_workflows/test_static_ratchet_hook.py": (
             "a join of the prek hooks' entries and `files` gates against the modules "
             "they name, their import closure and ci.yml's prek steps"
         ),
-        "tests/repo/test_testpaths_covers_every_test_file.py": (
+        "tests/repo/suite/test_testpaths_covers_every_test_file.py": (
             "a join of pyproject.toml's testpaths against every tracked test file"
         ),
-        "tests/repo/test_ty_config_covers_the_repo.py": (
+        "tests/repo/ci_workflows/test_ty_config_covers_the_repo.py": (
             "a join of ty's include and extra-paths against pytest's pythonpath and "
             "testpaths and every tracked Python file"
         ),
-        "tests/services/test_alert_runbook_urls.py": (
+        "tests/services/alert_rules/test_alert_runbook_urls.py": (
             "a join of the alert rules against the docs pages and headings they link, "
             "the inventory hosts, the group vars' domain and the promtool cases"
         ),
-        "tests/services/test_storage_rule_literals.py": (
+        "tests/services/alert_rules/test_storage_rule_literals.py": (
             "a join of storage.yaml against the Longhorn robustness allow-list, the "
             "roles' snapshot caps and transients, and the host checks' disk floor"
         ),
-        "tests/services/test_pi_peer_backup_schedule_clears_the_longhorn_slots.py": (
+        "tests/services/pi_peer_backup/test_pi_peer_backup_schedule_clears_the_longhorn_slots.py": (
             "a join of pi-peer-backup's schedule against two other roles' Longhorn "
             "slots and the group vars' time zone"
         ),
@@ -327,15 +320,15 @@ SINGLE_PREDICATE_CHECK_IS_A_ROW = Census(
             "a join of renovate.json's per-package rules against the expected-deps table, "
             "the role tree and the auto-deploy denylist"
         ),
-        "tests/k8s/test_cluster_base_mirrors_the_k3s_identity.py": (
+        "tests/k8s/flux/test_cluster_base_mirrors_the_k3s_identity.py": (
             "a join of the read-only identity's keys across setup/k3s, cluster-base and "
             "the k3s-server component"
         ),
-        "tests/k8s/test_netpol_probe_targets.py": (
+        "tests/k8s/edge/test_netpol_probe_targets.py": (
             "a join of netpol-baseline's probe targets against the game servers and the "
             "k8s service list"
         ),
-        "tests/k8s/test_uncovered_roles_justifications_resolve.py": (
+        "tests/k8s/workloads/test_uncovered_roles_justifications_resolve.py": (
             "a join of the security-context test's exemption block against the role "
             "templates and the tracked test modules"
         ),

@@ -7,7 +7,7 @@
 # `GET /api/info/version` returns 401 — the v6 JSON API exists but is authenticated, and
 # nothing there speaks the exposition format. Re-check before replacing this with a native
 # scrape; an upstream that grew `/metrics` would make the whole role redundant.
-pihole_exporter_k8s_image: ekofr/pihole-exporter:v1.3.1@sha256:4233c06fcd2d62c37b9345228bc9f798b3a66d052b4955ec6a0e5b8825e20827
+pihole_exporter_k8s_image: ekofr/pihole-exporter:v1.4.0@sha256:bd849cd5e0f7f89bf38943d7988c5facfd603d9813c4c089fcff8ed121f718bb
 
 # Renovate stance: whether an image bump here may automerge. `promote` deploys what merges.
 # TRUE where the `pihole` role it reads from is denylisted. The two have opposite blast radii:
@@ -16,11 +16,8 @@ pihole_exporter_k8s_image: ekofr/pihole-exporter:v1.3.1@sha256:4233c06fcd2d62c37
 k8s_autodeploy: true
 k8s_autodeploy_reason: "read-only poller of Pi-hole's admin API with a readinessProbe; holds no DNS path, so a bad image bump costs dashboards rather than name resolution (unlike the denylisted `pihole` role)"
 
-# BOTH instances, and that is the point of the role rather than a detail. DNS is load-balanced
-# across two independent FTLs, each with its own pihole-FTL.db, so a single-instance scrape
-# reports roughly HALF the house's query volume — see the comment on the `pihole` Service in
-# k8s/roles/pihole/templates/service.yaml.j2, which pins the admin UI to instance 1 for a
-# related reason. The exporter labels every series with `hostname`, so the dashboards sum.
+# Scrape BOTH instances: DNS is balanced across two FTLs, each with its own DB, so one reports half.
+# The exporter labels every series with `hostname`, so dashboards sum.
 pihole_exporter_k8s_targets:
   - "pihole.{{ k8s_namespace }}.svc.cluster.local"
   - "pihole-2-web.{{ k8s_namespace }}.svc.cluster.local"
@@ -32,10 +29,7 @@ pihole_exporter_k8s_mem_request: 16Mi
 
 manifests_rollout: pihole-exporter
 
-# The pod reads PIHOLE_PASSWORD from the pihole role's `pihole-env` Secret. The renderer
-# hashes each listed key's `.source` digest into `checksum/restart`, so a rotation of
-# pihole_password rolls this pod under Flux, and `secret_rotation.py consumers` lists
-# this role for that key.
+# Declares the pihole-env key so a pihole_password rotation rolls this pod.
 manifests_outside_secrets:
   - name: pihole-env
     keys: [pihole_password]

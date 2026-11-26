@@ -9,14 +9,15 @@ Run: uv run pytest hosts/lib/tests/test_claude_agent_browser.py
 """
 
 import json
-import shutil
 import subprocess
 
 import yaml
 
 from lib.estate import Inventory
+from lib.inventory_lists import host_vars_file
 from lib.proc_testing import write_exec
-from lib.repo_paths import HOST_VARS, REPO
+from lib.render_guard import copy_host_files
+from lib.repo_paths import REPO
 from renderer.renderer_lib import host as host_mode
 
 SCRIPT = "/usr/lib/homelab/claude-agent-browser"
@@ -32,9 +33,8 @@ NODE_STUB = STUB + '[ "$1" = -p ] && echo "{version}"\nexit 0\n'
 
 
 def render_script(tmp_path, home, homelab_ui: bool) -> str:
-    host_vars = tmp_path / "host_vars"
-    shutil.copytree(HOST_VARS, host_vars)
-    path = host_vars / "daniel-box.yml"
+    host_vars = copy_host_files(tmp_path / "hosts")
+    path = host_vars_file("daniel-box", host_vars)
     overrides = {
         "claude_code_agent_user_home": str(home),
         "claude_code_agent_homelab_ui_enabled": homelab_ui,

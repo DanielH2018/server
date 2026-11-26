@@ -85,9 +85,9 @@ from docs.catalog_lib.catalog_backup import (
 from docs.catalog_lib.catalog_facts import auth_tier, k8s_route
 from docs.catalog_lib.catalog_model import K3S_DEFAULTS, K8S_ROLES
 from lib.cli_help import ArgumentParser
-from lib.estate import Estate, role_defaults
+from lib.estate import REPO_INVENTORY, Estate, Inventory, role_defaults
 from lib.k8s_roles import role_dirs
-from lib.render_guard import ALL_VARS, entry_tags
+from lib.render_guard import entry_tags
 from lib.repo_paths import REPO
 from renderer.renderer_lib.task_inputs import image_builder_sites
 
@@ -197,7 +197,7 @@ def glance_lines(
     *,
     group_vars: dict[str, Any],
     k8s_roles: Path = K8S_ROLES,
-    all_vars: Path = ALL_VARS,
+    inventory: Inventory = REPO_INVENTORY,
     k3s_defaults: Path = K3S_DEFAULTS,
     claim_classes: dict[str, str | None] | None = None,
     tiers: LonghornTiers | None = None,
@@ -225,7 +225,7 @@ def glance_lines(
         )
         lines.append(f"- **{label}:** {pins}")
 
-    route = k8s_route(entry, k8s_roles, all_vars)
+    route = k8s_route(entry, k8s_roles, inventory)
     if route.startswith("no route"):
         lines.append("- **Route:** none (no `templates/ingressroute.yaml.j2`)")
     else:
@@ -342,7 +342,6 @@ def stale_k8s_docs(
     """
     estate = estate or Estate()
     group_vars = estate.group_vars
-    all_vars = estate.inventory.all_vars
     claim_classes = claim_index(k8s_roles)
     entries = estate.k8s_entries()
     tiers = load_longhorn_tier_lists(k3s_defaults, group_vars, list(entries.values()))
@@ -357,7 +356,7 @@ def stale_k8s_docs(
                 role_dir,
                 group_vars=group_vars,
                 k8s_roles=k8s_roles,
-                all_vars=all_vars,
+                inventory=estate.inventory,
                 k3s_defaults=k3s_defaults,
                 claim_classes=claim_classes,
                 tiers=tiers,

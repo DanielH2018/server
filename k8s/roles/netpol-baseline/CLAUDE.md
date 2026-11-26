@@ -5,7 +5,7 @@ Renders the baseline NetworkPolicy for both `homelab`
 (`k8s/roles/netpol-baseline/templates/networkpolicy-observability.yaml.j2`), plus a
 per-workload override under `templates/networkpolicy-*.yaml.j2` for a service that needs a
 tighter or looser allow-list than the baseline
-(`tests/k8s/test_netpol_baseline_labels.py::test_every_exempt_workload_is_selected_by_its_own_policy`). Deploys no workload of its own.
+(`tests/k8s/edge/test_netpol_baseline_labels.py::test_every_exempt_workload_is_selected_by_its_own_policy`). Deploys no workload of its own.
 
 ## At a glance
 <!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates or containers_list entry, or the Longhorn tier lists in k8s/roles/longhorn-reconcile/defaults/main.yml. -->
@@ -55,7 +55,7 @@ tighter or looser allow-list than the baseline
   Job's `gate` initContainer lists the `netpol-baseline-exempt` pods in each
   namespace-scoped baseline's namespace. It runs after the apply, so drift fails the Job and
   the revision's soak acts on it.
-  `tests/k8s/test_netpol_baseline_labels.py` pins the set against templates.
+  `tests/k8s/edge/test_netpol_baseline_labels.py` pins the set against templates.
 - **`netpol_baseline_node_cidrs` are `/32` host addresses on purpose** — a `/16` here would
   silently cancel the whole policy.
 - **Flux orders the role last.** `K8S_APPLIES_LAST` in `scripts/renderer/template_filters/toposort.py`
@@ -97,7 +97,7 @@ needs, decides which one.
   shape the callers model below cannot express: an ipBlock, a from-less open port, UDP, a
   second port, a cross-namespace peer or a non-`app:` peer (#3701). The
   `bespoke-netpol-says-why-it-is-not-a-callers-fence`
-  row of `tests/repo/test_census_rows_roles.py` fails on one that does not.
+  row of `tests/repo/census_rows/test_census_rows_roles.py` fails on one that does not.
 - **As data on the `containers_list` entry**, when the fence is one port and a list of caller
   pods: `netpol_from: [apps]`, rendered through the `networkpolicy` macro in
   `k8s/templates/networkpolicy.yml.j2`. `templates/networkpolicy-callers.yaml.j2` renders
@@ -111,7 +111,7 @@ needs, decides which one.
   `netpol_callers` filter in `scripts/renderer/template_filters/homepage_tiles.py`, never `netpol_from`
   alone, so the key reaches role-owned fences too.
   A `netpol_fences` item its role renders sets `role_owned: true`, and the loop skips that too.
-  `tests/k8s/test_netpol_from.py` fails if a policy name renders from two roles.
+  `tests/k8s/edge/test_netpol_from.py` fails if a policy name renders from two roles.
 - **In the workload's own role**, when the workload's deploy depends on the policy:
   - A workload in `netpol_baseline_exempt_workloads` keeps its complete fence beside it:
     headlamp, n8n, registry, prowlarr's flaresolverr and karakeep's chrome. Exempt, it is

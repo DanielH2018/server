@@ -37,10 +37,8 @@ CONTEXT_TPL = ROLE / "templates" / "context-configmap.yaml.j2"
 BUILD_JOB_TPL = "build-job.yaml.j2"
 
 
-# `sha-` + 12 hex. Both halves matter: the prefix is what registry-gc.sh's prune keys on to tell a
-# content tag from `latest` or `buildcache`, and the length is what keeps the tag a legal Docker
-# reference. A tag that stopped matching this would be pruned as an ordinary tag, or rejected by
-# the registry outright.
+# The `sha-` prefix is what registry-gc.sh's prune keys on; the 12-hex length keeps the tag a legal
+# Docker reference.
 TAG_RE = re.compile(r"^sha-[0-9a-f]{12}$")
 
 
@@ -138,13 +136,6 @@ def test_a_renamed_context_destination_changes_the_tag(dockerfile, tmp_path):
 def test_a_caller_with_no_context_at_all_still_gets_a_tag(dockerfile):
     """n8n and nut pass a Dockerfile and nothing else — the empty-lookup path."""
     assert TAG_RE.match(_tag(dockerfile, {}, {}))
-
-
-# --- what the hash reads, and what it deliberately ignores -------------------------------------
-#
-# The tag hashes the `data` of context-configmap.yaml.j2's own render, so no second list of
-# inputs can fall out of step with the build context. The render's prose and metadata must NOT
-# move the tag, and the two tests below say so.
 
 
 def test_rewording_a_comment_in_that_template_does_not_move_the_tag(

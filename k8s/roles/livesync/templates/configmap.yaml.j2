@@ -6,8 +6,4 @@ metadata:
   namespace: {{ k8s_namespace }}
 data:
   local.ini: |
-{#
-  Rendered from config/local.ini.j2 below. The smoosh ratios in particular are tuned to bound
-  .couch bloat.
-#}
 {{ lookup('template', role_file('templates/config/local.ini.j2')) | indent(4, true) }}

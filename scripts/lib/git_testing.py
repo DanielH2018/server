@@ -16,7 +16,7 @@ the null device so this host's global SSH commit signing does not reach a scratc
 `lib.git.git` is the production runner and takes no `env` argument on purpose; its own
 docstring sends a caller that commits to `subprocess` directly. That is what this module does,
 and it is why the `git-and-gh-go-through-lib` row of
-`tests/repo/test_census_rows_python.py` scopes its rule to production modules under
+`tests/repo/census_rows/test_census_rows_python.py` scopes its rule to production modules under
 `scripts/`, outside `lib/` and every `tests/` directory.
 
 Import it from any test, at any depth — `pyproject.toml` puts `scripts/` on `pythonpath`::
@@ -41,8 +41,7 @@ __all__ = [
     "scrubbed_env",
 ]
 
-# The identity every scratch commit is authored with. A fixed value rather than the host's, so
-# a test asserting on an author line reads the same on CI and on a workstation.
+# Fixed identity so author-line assertions read the same on CI and a workstation.
 AUTHOR_NAME = "t"
 AUTHOR_EMAIL = "t@example.invalid"
 

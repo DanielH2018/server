@@ -68,8 +68,8 @@ spec:
                 secretKeyRef:
                   name: slskd-soulseek
                   key: password
-            # Authelia gates the UI and the NetworkPolicy admits only traefik; Soularr reaches
-            # the API over localhost.
+            # Authelia gates the UI and the NetworkPolicy admits only traefik; Soularr uses
+            # localhost.
             - name: SLSKD_NO_AUTH
               value: "true"
             - name: SLSKD_NO_HTTPS
@@ -122,8 +122,6 @@ spec:
             - name: TZ
               value: "{{ tz }}"
           volumeMounts:
-            # Soularr's config and var dir. Its state (search attempts, failed imports) is
-            # rebuilt from Lidarr's wanted list, so it does not outlive the pod.
             - name: soularr-data
               mountPath: /data
             - name: soularr-config
@@ -161,6 +159,6 @@ spec:
         - name: soularr-config
           secret:
             secretName: slskd-soularr
-            # Root owns a Secret's files and Soularr runs as uid 1000; configparser skips a
-            # file it cannot open, so 0400 leaves Soularr running with an empty config.
+            # 0444, not 0400: Soularr runs as uid 1000 and configparser silently skips an unreadable
+            # file.
             defaultMode: 0444

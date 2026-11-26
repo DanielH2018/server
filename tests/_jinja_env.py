@@ -21,10 +21,8 @@ def jinja_env() -> NativeEnvironment:
     than text. The filters and tests are `lib.guard_jinja_env`'s set, the one the renderer
     registers, so an expression renders against the code a render runs.
     """
-    # The loader is what lets a template under test `{% import %}` a shared macro from
-    # k8s/templates/. Without one, Jinja raises `TypeError: no loader for this environment
-    # specified` at render time — an error naming the environment rather than the macro, which
-    # reads as a broken helper rather than a template that reaches outside itself.
+    # The loader lets a template under test `{% import %}` a shared macro from k8s/templates/;
+    # without one Jinja raises `no loader for this environment specified`.
     env = NativeEnvironment(loader=FileSystemLoader(str(SHARED_TPL)))
     register_ansible_filters(env)
     env.filters["to_json"] = jinja_filters.to_json

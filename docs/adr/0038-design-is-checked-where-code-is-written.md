@@ -75,7 +75,7 @@ This decision does not reach the larger half of the rework: code a migration mad
 left behind because no slice could delete what another slice still called. It also turns no
 class into a gate. Both were set aside, with these options, when the decision was made:
 
-- Run vulture as a ratchet over the list `tests/repo/test_vulture_test_only_names.py` freezes.
+- Run vulture as a ratchet over the list `tests/repo/ratchets/test_vulture_test_only_names.py` freezes.
 - Run the `prune-tests` census at commit time.
 - Count raw-dict signatures outside named parse modules, and ratchet the count down.
 - Select ruff's unused-argument and blind-except rules, which widens the lint policy.

@@ -31,8 +31,6 @@ from pathlib import Path
 from lib.git import git
 from lib.repo_paths import REPO
 
-# A generated page names the hook that protects it, because a reader of the rendered
-# page cannot see prek.toml.
 _DO_NOT_EDIT = (
     '!!! warning "Generated file — do not edit"\n'
     "    This page is rendered from this repository by `{source}`. Hand edits are\n"

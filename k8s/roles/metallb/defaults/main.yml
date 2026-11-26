@@ -20,29 +20,16 @@ metallb_vendored_manifests:
     fetched_url: "https://raw.githubusercontent.com/metallb/metallb/v0.16.2/config/manifests/metallb-native.yaml"
     sha256: "e5f7c268f114c446dc60aaad71b7cabf861f637743e033e354d7d48592807c6d"
 
-# LoadBalancer addresses. Must sit OUTSIDE the router's DHCP scope, or MetalLB will hand
-# out addresses the router also leases.
-#
-# The ingress VIP is carved out into its own autoAssign: false pool (see
-# templates/metallb-pool.yaml.j2) so it can only be claimed by the Service that names it
-# in a metallb.io/loadBalancerIPs annotation. Ingress is the one address that appears in
-# DNS and, eventually, in the router's port-forward — it must not move because some other
-# Service happened to ask for a LoadBalancer first.
-#
-# k3s_metallb_ingress_vip itself lives in group_vars/all.yml, not here: Pi-hole on
-# daniel-server points the *-k8s hostnames at it, so it is consumed on a host that never
-# runs this role. This key is the pool's definition site (H1.3).
+# Must sit OUTSIDE the router's DHCP scope. The ingress VIP is in its own autoAssign: false pool, so
+# only a Service naming it can claim it.
+# `k3s_metallb_ingress_vip` lives in group_vars/all.yml because Pi-hole on daniel-server consumes it
+# on a host that never runs this role.
 k3s_metallb_pool: 10.0.0.241-10.0.0.250
 
-# Memory REQUESTS (no memory limit) for the controller and the speaker, applied by
-# files/patches/controller.yaml and files/patches/speaker.yaml; each patch also
-# sets a CPU request and a CPU limit. Upstream ships both containers with no `resources`, which
-# makes their pods BestEffort: the kubelet evicts those first under node memory pressure, and an
-# evicted speaker drops every VIP the node announces. A request alone moves the pod to Burstable
-# without adding an OOM-kill path, which would drop the load balancer (operator ruling).
-# Each request is the 30-day peak working set (77Mi controller, 80Mi speaker) rounded up to a
-# power of two. A kustomize patch cannot read a variable, so
-# tests/k8s/test_metallb_vendored_manifest.py holds each patch's memory request equal to its key.
+# Request only: BestEffort pods are evicted first, and an evicted speaker drops every VIP its node
+# announces; a memory limit would add an OOM-kill path (operator ruling).
+# A kustomize patch cannot read a variable, so tests/k8s/edge/test_metallb_vendored_manifest.py holds
+# each patch equal to its key.
 k3s_metallb_controller_memory_request: 128Mi
 k3s_metallb_speaker_memory_request: 128Mi
 
@@ -54,14 +41,10 @@ k3s_metallb_speaker_memory_request: 128Mi
 # *Plumbing tags are never pruned*.
 flux_prune: false
 
-# Forward-only (the H1 plan's *Forward-only tags and the promote rule*). MetalLB's CRDs carry a
-# conversion webhook, so a promote that fails on a revision changing this tag holds without
-# resetting `prod`: a reset would re-apply an older vendored file over upgraded CRDs.
-# scripts/deploy_tools/promote_lib/forward_only.py reads the flag from a top-level line.
+# MetalLB's CRDs carry a conversion webhook, so a failed promote on this tag holds without resetting
+# `prod`: a reset would apply an older vendored file over upgraded CRDs.
 flux_forward_only: true
 
-# Auto-deploy stance. Flux applies the tag, so this gates no apply; the reason records why a bad
-# merge here is not a routine bump.
 k8s_autodeploy: false
 k8s_autodeploy_reason: "platform — MetalLB announces every LoadBalancer VIP; a bad apply or a CRD downgrade takes the edge and DNS offline together, and host probes stay green through that outage"
 

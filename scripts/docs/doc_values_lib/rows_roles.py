@@ -334,7 +334,7 @@ VALUES = rows(
                 match(r'name: DRY_RUN\n +value: "(\w+)"', phrase({"false": "live"})),
             ),
         ],
-        "inventory/host_vars/daniel-box.yml": [
+        "hosts/daniel-box/vars.yml": [
             (
                 _role("autofix-bridge", "CLAUDE.md"),
                 r"run `(\w+)` by host_vars",

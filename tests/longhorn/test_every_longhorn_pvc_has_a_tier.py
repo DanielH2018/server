@@ -28,20 +28,12 @@ from lib.repo_paths import LONGHORN_RECONCILE_ROLE
 
 _LONGHORN_CLASS = "longhorn"
 
-# Three hand-maintained lists of `namespace/pvcName` decide where every `longhorn`-class
-# PVC's backups go. See test_longhorn_storageclass.py's module-level comment for what each
-# means; this module only checks that every such PVC is in one of them.
 _ROUTING_LISTS = (
     "k3s_longhorn_r2_volumes",
     "k3s_longhorn_weekly_volumes",
     "k3s_longhorn_nobackup_volumes",
 )
 
-# A named floor, not just a count: proves the collector still recognises PVCs declared
-# through `k8s_claims` and through a role's own template, both read rendered, rather than
-# passing vacuously because a glob or a role-name check stopped matching. Pick real, stable
-# members — these have not moved tiers since the lists existed. traefik-acme is the member
-# whose `k8s_claims` is an expression rather than a literal list.
 _KNOWN_LONGHORN_PVCS = frozenset(
     {
         "homelab/jellyfin-config",  # k8s_claims, weekly tier

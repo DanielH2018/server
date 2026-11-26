@@ -80,7 +80,7 @@ LISTED = (
     "scripts/validate/tests/test_render_shell.py",
     "hosts/lib/tests/test_k3s_restart_window.py",
     "scripts/renderer/tests/test_renderer_task_inputs.py",
-    "scripts/deploy_tools/tests/test_land_imports.py",
+    "scripts/deploy_tools/tests/land/test_land_imports.py",
 )
 
 

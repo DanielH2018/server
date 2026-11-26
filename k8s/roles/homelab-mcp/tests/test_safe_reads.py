@@ -249,7 +249,7 @@ def test_path_is_denied_blocks_secrets(rel):
     [
         "deploy.yml",
         "roles/containers/traefik/templates/config.yml.j2",
-        "inventory/host_vars/daniel-server.yml",
+        "hosts/daniel-server/vars.yml",
         "README.md",
     ],
 )
@@ -291,8 +291,8 @@ def test_resolve_within_jail_rejects_symlink_escape(tmp_path):
 
 
 def test_resolve_within_jail_rejects_symlink_to_internal_secret(tmp_path):
-    # A benignly-named symlink whose target is a denied file INSIDE the jail must
-    # not slip past the denylist, which only sees the pre-resolution name.
+    # A benignly-named symlink to a denied file inside the jail must not slip past the
+    # pre-resolution denylist.
     (tmp_path / "vars").mkdir()
     secret = tmp_path / "vars" / "secrets.yml"
     secret.write_text("SOPS ciphertext")
@@ -312,7 +312,7 @@ def test_resolve_within_jail_allows_benign_symlink(tmp_path):
 
 def test_allowed_hosts_and_origins():
     hosts, origins = allowed_hosts_and_origins("mcp.local.example.com")
-    # Exact match, not `in`: see tests/repo/test_census_rows_python.py (row `no-host-shaped-membership-literal`)
+    # Exact match, not `in`: see tests/repo/census_rows/test_census_rows_python.py (row `no-host-shaped-membership-literal`)
     assert any(h == "mcp.local.example.com" for h in hosts)
     assert origins == ["https://mcp.local.example.com"]
     assert allowed_hosts_and_origins("") == ([], [])
@@ -338,16 +338,14 @@ def test_docker_base_passes_through_when_configured():
 
 
 def test_tls_context_states_the_protocol_floor():
-    # The floor is stated rather than inherited, so a platform whose default drops below 1.2
-    # cannot weaken this client silently. See ADR-0016.
+    # The TLS floor is stated, not inherited (ADR-0016).
     import ssl
 
     assert tls_context().minimum_version == ssl.TLSVersion.TLSv1_2
 
 
-# cert_expiry hands its host/port to socket.create_connection; this predicate is what keeps a
-# bearer holder from using the pod as a TCP-connect oracle. Each shape has a clean and a
-# flagged half so the guard cannot stop matching unnoticed.
+# cert_expiry's host/port reach socket.create_connection; this predicate stops a bearer holder using
+# the pod as a TCP-connect oracle.
 
 
 @pytest.mark.parametrize(

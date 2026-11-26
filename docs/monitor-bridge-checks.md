@@ -367,7 +367,7 @@ checks each gate suppresses.
   `SPEEDTEST_CONSECUTIVE` because an app restart under a deploy is a real transient, and
   `speedtest` is also `startup_grace`. This is the same split as `check_ha_heartbeat`.
   Reaching the app needs `monitor-bridge` in speedtest's `netpol_from` list in
-  `inventory/host_vars/daniel-box.yml`, because the baseline admits `traefik`,
+  `hosts/daniel-box/vars.yml`, because the baseline admits `traefik`,
   `prometheus` and two cni0 /32s, none of which is this pod.
   **The verdict stays on the REST API although Prometheus scrapes the same app.** #3105 asked for
   the switch, and the answer is marked `# DECIDED:` at the fetch in `checks/host_edge.py`. Three
@@ -460,7 +460,7 @@ checks each gate suppresses.
   streak n/N" `msg`, and the second straight failure pages. Empty `DISCORD_WEBHOOK_URL` disables
   the check (stays up). The check verifies that the webhook is DELIVERABLE (it catches a rotated or
   revoked URL). It does not assert that a route sends to the webhook:
-  `tests/services/test_alertmanager_routing.py` walks the routing tree. Pure `discord_webhook_ok()`, `email_backstop()`'s throttle and the
+  `tests/services/alertmanager/test_alertmanager_routing.py` walks the routing tree. Pure `discord_webhook_ok()`, `email_backstop()`'s throttle and the
   streak wrapper are unit-tested.)
 
 ## Retired and moved checks
@@ -490,7 +490,7 @@ Disk Autoprune retired with the Docker daemon and has no successor.
 Scrape Targets, Cluster Scrape Targets and Log Shipper Dropped Entries (M6 batch A3) retired
 into the `scrape-targets` and `log-pipeline` rule groups in observability, and their tiles,
 rows and env keys are gone. The numbers those groups carry are pinned in
-`tests/services/test_scrape_target_rule_jobs.py`, and the `DECIDED:` marker for the
+`tests/services/alert_rules/test_scrape_target_rule_jobs.py`, and the `DECIDED:` marker for the
 3000-entry threshold sits at `LogShipperDroppingEntries` in
 `k8s/roles/observability/files/rules/log-pipeline.yaml`.
 TLS Cert Expiry, Traefik 5xx, Traefik Latency, Traefik 404 Flood and Traefik 421 (M6 batch A4)
@@ -510,7 +510,7 @@ Read-Only and etcd DB Size (M6 batch A5) retired into the `storage` rule group i
 observability, and their tiles, rows and env keys are gone. The thresholds a literal test once
 pinned carry `DECIDED:` markers on their rules in `storage.yaml`, the 3 GiB free-bytes floor
 among them.
-`tests/services/test_storage_rule_literals.py` holds `PVCBelowFreeFloor` to the transient
+`tests/services/alert_rules/test_storage_rule_literals.py` holds `PVCBelowFreeFloor` to the transient
 valheim declares, `LonghornSnapshotNearCap` to the jellyfin snapshot cap, and
 `LonghornVolumeDegraded` to `longhorn_robustness.SAFE_ROBUSTNESS`.
 `hosts/tests/test_etcd_quota_and_its_monitor_agree.py` holds `EtcdDBNearQuota`'s
@@ -522,7 +522,7 @@ Root Disk, Memory, Host Temperature and UPS Battery Health (M6 batch A1) retired
 are gone. The thresholds and floors a literal test once pinned carry `DECIDED:` markers on
 their rules in `hosts.yaml`, as do the 1h temperature hold, the sanity-bounded hwmon limits, the Ryzen
 maximum junction temperature, the nut-only UPS source and the retired-uid note.
-`tests/services/test_host_check_rule_literals.py` holds the `ClaudeCgroupNotReporting` host
+`tests/services/alert_rules/test_host_check_rule_literals.py` holds the `ClaudeCgroupNotReporting` host
 and cgroup pairs to the inventory, and
 `test_claude_cgroup_consumers_agree_with_the_writer.py` holds the rules' `claude_cgroup_*`
 selectors to the series the writer emits. The reasoning behind each rule (the `up == 1` start of
@@ -550,8 +550,8 @@ port and no reachability coverage: Kuma HTTP-monitored wg-easy and `ScrapeTarget
 `alloy`, but nothing said which port went quiet, and the 2026-08-08 sweep across four monitors for
 that answer missed dozzle. The Pi limits carry `DECIDED:` markers in `hosts.yaml`, the port
 set is pinned in
-`tests/services/test_pi_publishing_containers.py`, and `PiPortDead`'s hold and recreate
-hint in `tests/services/test_extra_probe_targets.py`. A fourth node-exporter host needs only
+`tests/services/scraping/test_pi_publishing_containers.py`, and `PiPortDead`'s hold and recreate
+hint in `tests/services/scraping/test_extra_probe_targets.py`. A fourth node-exporter host needs only
 its `observability_expected_hosts` entry. `scripts/dev/gen_host_rules.py` renders its per-host
 copies, and it raises the floors of `HostCoverageShortfall` and
 `HostTemperatureCoverageShortfall` to the host table's counts, so no host can go dark behind the
@@ -641,7 +641,7 @@ The `K8sExtendedResourceMissing` rule in `k8s-workloads.yaml` writes the sanitis
 its comment carries this trap. Before trusting a metric-backed check, run its exact query against live
 Prometheus and confirm it returns rows. The unit tests mock the payload, so they prove the verdict
 logic and nothing about the selector. Guarded by
-`tests/services/test_dri_resource_name_agrees.py`.
+`tests/services/media/test_dri_resource_name_agrees.py`.
 
 ### The k8s log streams have no `app` label
 `kubectl` selects pods with `-l app=home-assistant`, so a LogQL selector written from that habit
@@ -659,7 +659,7 @@ over a window containing a KNOWN event, which is the only check that separates "
 from "nothing matched." A green first cycle is not evidence. `LOKI_STREAM_LABELS`, which
 `tests/_loki_streams.py` derives, and `test_loki_selectors_use_real_stream_labels` in
 `test_check_loki.py` pin the vocabulary for all three Loki selectors. The Loki ruler's rules
-are held to the same vocabulary by `tests/services/test_loki_stream_labels.py`.
+are held to the same vocabulary by `tests/services/scraping/test_loki_stream_labels.py`.
 
 ### The runtime stamps the log lines; `bridge.common.log` does not
 `bridge.common.log` prints the bare message (`DOWN b2_reachable ...`) and the container runtime

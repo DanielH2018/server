@@ -1,0 +1,435 @@
+#!/usr/bin/env python3
+"""Tests for the footgun PreToolUse guard.
+
+Each rule is an accept/reject pair: the command it must refuse, and the near-miss it must let
+through. A guard that fires on everything and one that fires on nothing are indistinguishable
+from the passing side alone.
+
+Run: uv run pytest .claude/hooks
+"""
+
+import importlib.util
+import io
+import json
+import os
+import sys
+
+import pytest
+
+_HOOK = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
+    "block-footguns.py",
+)
+_REPO = os.path.dirname(os.path.dirname(os.path.dirname(_HOOK)))
+sys.path.insert(0, os.path.dirname(_HOOK))
+_spec = importlib.util.spec_from_file_location("block_footguns", _HOOK)
+assert _spec and _spec.loader, "spec_from_file_location found no loader"
+_mod = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(_mod)
+
+from _hook_common import Unsplittable  # noqa: E402
+
+
+# --- 3. kubectl rollout restart ------------------------------------------------------------------
+
+
+def test_rollout_restart_is_denied():
+    assert "read-only ServiceAccount" in _mod.problem(
+        "kubectl rollout restart deployment/sonarr -n homelab"
+    )
+
+
+def test_rollout_status_is_clean():
+    """`rollout status` is a read and works fine as the read-only SA."""
+    assert _mod.problem("kubectl rollout status deployment/sonarr -n homelab") is None
+
+
+def test_kubectl_get_is_clean():
+    assert _mod.problem("kubectl get pods -n homelab") is None
+
+
+# --- 4. remote git with no cd ---------------------------------------------------------------------
+
+
+def test_remote_git_without_cd_is_denied():
+    assert "$HOME" in _mod.problem("ssh daniel-server 'git status'")
+
+
+def test_remote_git_with_cd_is_clean():
+    assert (
+        _mod.problem("ssh daniel-server 'cd /home/ubuntu/server; git status'") is None
+    )
+
+
+def test_remote_git_with_dash_C_is_clean():
+    assert _mod.problem("ssh daniel-server 'git -C /home/ubuntu/server status'") is None
+
+
+def test_the_ssh_hosts_match_the_inventory_host_vars():
+    # Compared against a direct host_vars listing, so a broken import (which the hook swallows into
+    # no hosts) goes red.
+    hosts = os.path.join(_REPO, "hosts")
+    expected = {
+        name
+        for name in os.listdir(hosts)
+        if os.path.isfile(os.path.join(hosts, name, "vars.yml"))
+        and not name.startswith("_")
+    }
+    assert "daniel-server" in expected
+    assert set(_mod._ssh_hosts()) == expected
+
+
+def test_remote_git_to_a_retired_host_is_clean():
+    assert _mod.problem("ssh daniel-stage 'git status'") is None
+
+
+def test_a_remote_non_git_command_is_clean():
+    assert _mod.problem("ssh daniel-pi 'docker ps'") is None
+
+
+def test_a_local_git_command_is_clean():
+    assert _mod.problem("git status") is None
+
+
+# --- the decision it emits -------------------------------------------------------------------
+
+
+def _run(monkeypatch, capsys, command):
+    payload = {
+        "session_id": "s",
+        "tool_name": "Bash",
+        "tool_input": {"command": command},
+    }
+    monkeypatch.setattr(_mod.sys, "stdin", io.StringIO(json.dumps(payload)))
+    assert _mod.main() == 0
+    out = capsys.readouterr().out.strip()
+    return json.loads(out) if out else None
+
+
+def test_main_denies_with_the_fix(monkeypatch, capsys):
+    decision = _run(monkeypatch, capsys, "kubectl rollout restart deploy/x")
+    assert decision["hookSpecificOutput"]["permissionDecision"] == "deny"
+    assert (
+        "checksum/restart" in decision["hookSpecificOutput"]["permissionDecisionReason"]
+    )
+
+
+def test_main_is_silent_on_an_ordinary_command(monkeypatch, capsys):
+    assert _run(monkeypatch, capsys, "ls -la") is None
+
+
+def test_malformed_payload_is_ignored(monkeypatch, capsys):
+    monkeypatch.setattr(_mod.sys, "stdin", io.StringIO("{nope"))
+    assert _mod.main() == 0
+    assert capsys.readouterr().out == ""
+
+
+# --- a command the splitter cannot read --------------------------------------------------------
+
+
+def test_an_unreadable_command_naming_a_rule_binary_asks():
+    """The package's contract: a non-ok parse is a refusal, never "nothing here"."""
+    decision, reason = _mod.decide("kubectl rollout restart 'oops")
+    assert decision == "ask"
+    assert "unbalanced-quote" in reason
+
+
+def test_an_unreadable_command_naming_no_rule_binary_is_left_alone():
+    """The near miss: text that could not reach a rule however it was split costs no prompt."""
+    assert _mod.decide("echo 'oops") == (None, None)
+
+
+def test_could_fire_matches_a_binary_as_a_word():
+    assert _mod.could_fire("cd x && kubectl rollout restart deploy/x")
+    assert _mod.could_fire("ssh daniel-pi 'git status'")
+    # A word merely containing one, or a path component, is not a command.
+    assert not _mod.could_fire("highlight run watch")
+    assert not _mod.could_fire("cat /var/lib/git/README")
+    assert not _mod.could_fire("ls -la")
+
+
+def test_the_gate_is_exactly_as_wide_as_the_rules_on_an_absolute_path():
+    """Every rule compares the stage's first word to the bare binary, so `/usr/bin/kubectl
+    rollout restart` denies nothing — and the gate must not ask about a form the rules cannot judge."""
+    assert _mod.problem("/usr/bin/kubectl rollout restart deploy/x") is None
+    assert not _mod.could_fire("/usr/bin/kubectl rollout restart deploy/x")
+
+
+def test_every_rule_binary_reaches_a_rule():
+    """The gate is a hand-written list beside `_RULES`; this is what keeps a rule added with a
+    new binary from being an `ask` the gate never opens. Each name here must be the command
+    word of something `problem` denies."""
+    denied_by = {
+        "kubectl": "kubectl rollout restart deploy/x",
+        "ssh": "ssh daniel-pi 'git status'",
+        "gh": "gh issue create --title x",
+        "ab": "ab -n 100 https://sonarr.daniel-hunter.com/",
+        "flux": "flux tag artifact oci://ghcr.io/o/a:sha-1 --tag prod",
+        "crane": "crane tag ghcr.io/o/a:sha-1 prod",
+        "oras": "oras tag ghcr.io/o/a:sha-1 prod",
+    }
+    assert set(denied_by) <= _mod._RULE_BINARIES
+    for name, command in denied_by.items():
+        assert _mod.problem(command), f"{name!r} is in the gate but denies nothing"
+
+
+def _missing_segmenter(command):
+    """The half-deployed host's splitter: hook code present, `claude_guard` not yet applied."""
+    raise Unsplittable("segmenter-missing", "not deployed")
+
+
+def test_a_missing_segmenter_asks_for_a_rule_shaped_command():
+    """A silent fail-open here would retire every rule on exactly the host `_claude_guard`'s
+    DECIDED marker was written about, so it is an `ask` that names the fix."""
+    decision, reason = _mod.decide(
+        "kubectl rollout restart deploy/x", split=_missing_segmenter
+    )
+    assert decision == "ask"
+    assert "chezmoi apply" in reason
+
+
+def test_a_missing_segmenter_leaves_an_unrelated_command_alone():
+    assert _mod.decide("ls -la", split=_missing_segmenter) == (None, None)
+
+
+def test_a_later_pipeline_stage_is_still_judged():
+    assert (
+        _mod.problem("kubectl get pods && kubectl rollout restart deploy/x") is not None
+    )
+
+
+def test_a_semicolon_joined_later_stage_is_still_judged():
+    """`;` joined the same way as `&&` above must still be caught.
+
+    A command such as `git stash && prek run ... | tail -5; git stash pop` must be
+    refused, though `shlex.split` glues the `;` onto `-5`.
+    """
+    assert (
+        _mod.problem("kubectl get pods; kubectl rollout restart deploy/x") is not None
+    )
+
+
+# --- 5. a load generator aimed at the public hostname ------------------------------------------
+
+
+def test_a_burst_against_the_public_name_is_denied():
+    assert (
+        _mod.problem("ab -n 120 -c 12 https://n8n.daniel-hunter.com/webhook/burst")
+        is not None
+    )
+
+
+def test_the_fix_names_the_local_hostname():
+    """Assert on the whole rewritten URL, not a substring of it.
+
+    A substring test would pass on a rewrite that mangled the path, and CodeQL flags the shape
+    as incomplete URL sanitization (py/incomplete-url-substring-sanitization) — correctly, as
+    the bypass test below shows.
+    """
+    found = _mod.problem("hey -n 120 https://n8n.daniel-hunter.com/webhook/burst")
+    assert found.endswith("https://n8n.local.daniel-hunter.com/webhook/burst")
+
+
+def test_a_local_segment_in_the_path_does_not_exempt_a_public_host():
+    """The bypass in this rule's first draft.
+
+    It tested `".local." not in word` against the WHOLE argument, so a `.local.` anywhere in the
+    path read as a LAN target and the burst went through to the public name. Matching on the
+    parsed hostname by suffix is what closes it.
+    """
+    assert (
+        _mod.problem("ab -n 120 https://n8n.daniel-hunter.com/x/.local./y") is not None
+    )
+
+
+def test_a_public_host_as_a_query_value_does_not_trip_a_local_target():
+    """The mirror: the host decides, so the public name inside a LAN URL's query is not a hit."""
+    assert (
+        _mod.problem(
+            "ab -n 10 https://n8n.local.daniel-hunter.com/?next=n8n.daniel-hunter.com"
+        )
+        is None
+    )
+
+
+def test_a_bare_host_argument_is_matched():
+    """Not every load generator takes a URL; `siege n8n.daniel-hunter.com` is the bare form."""
+    assert _mod.problem("siege -c 20 n8n.daniel-hunter.com") is not None
+
+
+def test_a_lookalike_domain_is_not_matched():
+    """Suffix matching, so a domain merely ENDING in the same letters must not be caught."""
+    assert _mod.problem("ab -n 100 https://notdaniel-hunter.com/") is None
+
+
+def test_every_named_burst_tool_is_matched():
+    """One rule, ten binaries — a typo in the set would silently exempt that tool."""
+    for tool in _mod._BURST_TOOLS:
+        assert _mod.problem(f"{tool} https://n8n.daniel-hunter.com/") is not None, tool
+
+
+def test_a_burst_against_the_local_name_is_clean():
+    """The prescribed target. The rule exists to send you here, so it must not fire on it."""
+    assert (
+        _mod.problem("ab -n 120 -c 12 https://n8n.local.daniel-hunter.com/webhook")
+        is None
+    )
+
+
+def test_a_plain_curl_to_the_public_name_is_clean():
+    """One request is ordinary. Only a tool built to make many is the signature."""
+    assert _mod.problem("curl -sS https://n8n.daniel-hunter.com/healthz") is None
+
+
+def test_a_burst_against_an_unrelated_host_is_clean():
+    assert _mod.problem("ab -n 100 https://example.com/") is None
+
+
+# --- the shared keyword stripper ---------------------------------------------------------------
+
+
+def test_leading_keywords_are_stripped_but_later_ones_are_not():
+    from _hook_common import strip_shell_keywords
+
+    stage = ["until", "!", "pgrep", "-f", "x;", "do", "sleep", "15;", "done"]
+    assert strip_shell_keywords(stage) == [
+        "pgrep",
+        "-f",
+        "x;",
+        "do",
+        "sleep",
+        "15;",
+        "done",
+    ]
+
+
+def test_stripping_a_stage_that_is_all_keywords_is_empty_not_an_error():
+    from _hook_common import strip_shell_keywords
+
+    assert strip_shell_keywords(["until", "!"]) == []
+
+
+# --- 8. gh issue create by hand ------------------------------------------------------------------
+
+
+def test_a_hand_gh_issue_create_is_denied():
+    assert "findings.py open" in _mod.problem("gh issue create --title x --body y")
+
+
+def test_a_gh_issue_create_with_a_global_flag_is_denied():
+    """`gh --repo o/r issue create` is the same command; `invokes` skips the global flag."""
+    assert _mod.problem("gh --repo DanielH2018/server issue create --title x")
+
+
+def test_a_gh_issue_create_later_in_a_pipeline_is_denied():
+    assert _mod.problem("git fetch && gh issue create --title x")
+
+
+def test_a_gh_issue_create_aimed_at_another_repo_names_findings_open_repo():
+    """The wrapper files into another repo too, so the reason names that door."""
+    for command in (
+        "gh issue create -R DanielH2018/dotfiles --title x",
+        "gh issue create --repo DanielH2018/dotfiles --title x",
+        "gh issue create --repo=DanielH2018/dotfiles --title x",
+        "gh issue create -RDanielH2018/dotfiles --title x",
+    ):
+        assert "findings.py open --repo DanielH2018/dotfiles" in _mod.problem(command)
+
+
+def test_a_gh_issue_create_with_no_repo_names_no_repo_flag():
+    reason = _mod.problem("gh issue create --title x --body y")
+    assert "findings.py open --title" in reason and "--repo" not in reason
+
+
+def test_findings_py_open_is_clean():
+    """The sanctioned path: `findings.py open` is not `gh issue create` on the command line."""
+    assert (
+        _mod.problem(
+            "uv run python scripts/dev/findings.py open --title 'x' --body 'y' --file a.py"
+        )
+        is None
+    )
+
+
+def test_other_gh_issue_subcommands_are_clean():
+    assert _mod.problem("gh issue list --label claude --json number") is None
+    assert _mod.problem("gh issue comment 2119 --body 'Worked by x'") is None
+
+
+def test_the_words_as_a_search_argument_are_clean():
+    """Argv match, not substring: the subcommand run must be adjacent after `gh`."""
+    assert _mod.problem("gh issue list --search 'gh issue create'") is None
+
+
+def test_a_negated_rollout_restart_is_denied():
+    assert _mod.problem("! kubectl rollout restart deploy/sonarr")
+
+
+def test_a_negated_remote_git_is_denied():
+    assert _mod.problem("! ssh daniel-server 'git log --oneline -1'")
+
+
+def test_a_keyword_prefix_does_not_invent_a_denial():
+    """The accept half, and the load-bearing one.
+
+    Stripping keywords widens what every rule sees, so the risk it introduces is a false
+    deny — not a false allow. These are the near-misses each rule must still pass once the
+    prefix is gone.
+    """
+    assert _mod.problem("time git status") is None
+    assert _mod.problem("! kubectl get pods") is None
+
+
+def test_a_keyword_in_argument_position_is_not_stripped():
+    """`strip_shell_keywords` only strips from the front, so an argument named `time` or
+    `command` stays an argument. Stripping one mid-stage would shift every later position."""
+    assert _mod.problem("grep -rn time .") is None
+    assert _mod.problem("kubectl get pods command") is None
+
+
+# --- 6. gh workflow run ci.yml aimed at master ---------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        "gh workflow run ci.yml",
+        "gh workflow run CI",
+        "gh workflow run ci.yaml",
+        "gh workflow run ci.yml --ref master",
+        "gh workflow run ci.yml --ref=master",
+        "gh workflow run ci.yml -r master",
+        "gh workflow run ci.yml -r=refs/heads/master",
+        "gh --repo DanielH2018/server workflow run ci.yml",
+        "gh workflow run ci.yml --ref",
+    ],
+)
+def test_a_ci_dispatch_aimed_at_master_is_denied(command):
+    """FLAGGED half, one entry per form gh accepts — including the flag with no value, which
+    resolves to the default branch exactly as the bare form does."""
+    assert "pins the SHA to fail" in (_mod.problem(command) or "")
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        "gh workflow run ci.yml --ref worktree-fanout-2402",
+        "gh workflow run ci.yml --ref=my-branch",
+        "gh workflow run ci.yml -r my-branch",
+        "gh workflow run docs-refresh.yml",
+        "gh workflow list",
+        "gh run list --workflow ci.yml",
+        "gh run view --log-failed",
+        "grep -rn 'gh workflow run ci.yml' docs",
+    ],
+)
+def test_a_branch_dispatch_and_the_near_misses_stay_clean(command):
+    """CLEAN half: dispatching a branch is the sanctioned form, a branch SHA is not one
+    checkout-sync walks, and nothing that merely NAMES the command may be denied."""
+    assert _mod.problem(command) is None
+
+
+def test_the_gate_opens_for_a_ci_dispatch():
+    """`gh` is in `_RULE_BINARIES` for the issue-create rule; this pins that the
+    rule is reachable, so a later narrowing of the gate cannot disarm it silently."""
+    assert _mod.could_fire("gh workflow run ci.yml")

@@ -28,8 +28,7 @@ NO_DISPATCH_ARM = (
     "&& github.ref || github.sha }}"
 )
 
-# The census names its members. A step rename would otherwise drop the step out of the check
-# without failing anything, and `all()` over an empty set passes.
+# A step rename would drop the step out of the check without failing anything.
 SWEEP_STEPS = frozenset(
     {
         FULL_SWEEP,
@@ -64,23 +63,20 @@ KNOWN_JOBS = frozenset(
         "prove",
     }
 )
-# `prove` proves a push's tree or a labelled PR's head, and its absence is what makes every
-# other job run.
+# `prove` proves a push's tree or a labelled PR's head, and its absence is what makes every other
+# job run.
 PUSH_ONLY_JOBS = frozenset({"prove"})
 
-# The proof arm of a dependent job's condition. `prove` is skipped on a dispatch, so its output
-# is empty and the comparison is true there; the evaluator reads the arm that way.
+# `prove` is skipped on a dispatch, so its output is empty and the comparison is true there.
 _PROOF_ARM = "needs.prove.outputs.proven != 'true'"
-# A dispatch is not cancelled and `prove` is skipped, so the inner arm is true and so is the
-# whole. It is replaced whole, because `truthy` splits on `||` and does not read parentheses.
+# Replaced whole because `truthy` splits on `||` and does not read parentheses.
 _CANCEL_ARM = (
     "(needs.prove.result == 'cancelled' || needs.prove.result == 'failure'"
     " || (!cancelled() && needs.prove.outputs.proven != 'true'))"
 )
 # A dispatch carries no pull request, so the draft field is unset and the comparison is true.
 _DRAFT_ARM = "github.event.pull_request.draft != true"
-# The build runs on a dispatch, so this arm holds unless the build itself failed, and that
-# failure already reds the sweep.
+# The build runs on a dispatch, so this arm holds unless the build failed.
 _BUILD_ARM = "needs.host_packages_build.result == 'success'"
 # The build's `run-cases` output is true on a dispatch.
 _RUN_CASES_ARM = "needs.host_packages_build.outputs.run-cases == 'true'"

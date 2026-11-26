@@ -246,7 +246,7 @@ def memory_flags(request, limit, p95):
 def under_requested(request, p95):
     """Whether a memory `request` is under `UNDER_REQUEST` of its `p95`. Pure.
 
-    The census in `tests/k8s/_memory_property_rows.py` fails a container at a
+    The census in `tests/k8s/rendered_properties/_memory_property_rows.py` fails a container at a
     `CENSUS_PRIORITY_CLASSES` class on it.
     """
     return p95 is not None and request < UNDER_REQUEST * p95

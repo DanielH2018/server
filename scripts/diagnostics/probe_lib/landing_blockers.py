@@ -193,7 +193,7 @@ def deploy_ui_url(host_vars: Path | None = None) -> str:
     The address is the IP, not the hostname. The unit binds `DEPLOY_UI_BIND={{ server_ip }}`
     only, and on daniel-box itself `/etc/hosts` resolves `daniel-box` to 127.0.1.1, where
     nothing listens. The IP is read rather than typed because host_vars is its one source
-    (`tests/repo/test_lan_facts_have_one_source.py`).
+    (`tests/repo/docs/test_lan_facts_have_one_source.py`).
 
     Args:
         host_vars: the host_vars file to read; the GitOps host's when omitted.

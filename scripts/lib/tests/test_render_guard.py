@@ -22,7 +22,9 @@ from lib.render_guard import (
     k8s_services_at,
     service_tags_at_or_none,
 )
-from lib.repo_paths import ALL_VARS, INVENTORY, K8S_ROLES, SECRETS
+from lib.estate import shared_vars
+from lib.inventory_lists import host_vars_file
+from lib.repo_paths import K8S_ROLES, SECRETS
 from lib import yaml_fast
 from lib.container_entry import ContainerEntryError
 from lib.git_testing import commit, init_repo
@@ -103,7 +105,8 @@ def test_the_service_list_is_in_k8s_services_and_no_host_vars_file():
 
 
 def test_host_layer_is_the_hosts_own_file_and_empty_for_a_host_without_one(tmp_path):
-    (tmp_path / "daniel-box.yml").write_text("server_ip: 2.2.2.2\n")
+    host_vars_file("daniel-box", tmp_path).parent.mkdir()
+    host_vars_file("daniel-box", tmp_path).write_text("server_ip: 2.2.2.2\n")
     assert host_layer(tmp_path, "daniel-box") == {"server_ip": "2.2.2.2"}
     assert host_layer(tmp_path, "absent") == {}
 
@@ -161,17 +164,17 @@ def test_load_yaml_hands_each_caller_its_own_copy(tmp_path):
 
 
 def test_host_files_skips_the_example_template(tmp_path):
-    (tmp_path / "_example.yml").write_text("server_ip: 1.1.1.1\n")
-    (tmp_path / "daniel-box.yml").write_text("server_ip: 2.2.2.2\n")
-    assert [p.name for p in host_files(tmp_path)] == ["daniel-box.yml"]
+    for name, ip in (("_example", "1.1.1.1"), ("daniel-box", "2.2.2.2")):
+        host_vars_file(name, tmp_path).parent.mkdir()
+        host_vars_file(name, tmp_path).write_text(f"server_ip: {ip}\n")
+    assert [p.parent.name for p in host_files(tmp_path)] == ["daniel-box"]
 
 
 def test_anchors_resolve_to_the_real_tree():
     """A wrong ``parents[N]`` reads as an empty inventory, not an error."""
     assert (REPO / "pyproject.toml").is_file()
     assert (SECRETS / "secret_rotation.yml").is_file()
-    assert (INVENTORY / "host_vars" / "daniel-box.yml").is_file()
-    assert (HOST_VARS / "daniel-box.yml").is_file()
+    assert host_vars_file("daniel-box", HOST_VARS).is_file()
     assert (K8S_ROLES).is_dir()
 
 
@@ -216,4 +219,4 @@ def test_load_yaml_raises_the_one_parse_failure_for_an_impossible_date(tmp_path)
 
 
 def test_no_base_stub_shadows_a_group_vars_value():
-    assert BASE_CONTEXT.keys() & load_yaml(ALL_VARS).keys() == set()
+    assert BASE_CONTEXT.keys() & shared_vars().keys() == set()

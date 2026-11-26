@@ -1,0 +1,330 @@
+"""land.sh run as a user that hands its landings to a lander unit (`land_lib/handoff.py`).
+
+The fake `systemctl` stands in for the unit: its `start` writes the verdict file the way the
+unit's land.sh would, and its `show` answers the exit code the unit recorded. A verdict file
+the fake did not write during the start stands for an earlier landing's.
+
+Run: uv run pytest scripts/deploy_tools/tests/land_merge/test_land_handoff.py
+"""
+
+import io
+import re
+import subprocess
+from pathlib import Path
+
+import pytest
+
+from deploy_tools import land
+from deploy_tools.land_lib import handoff
+from deploy_tools.land_lib.options import HANDOFF_ENV, PRIMARY_ENV
+from deploy_tools.land_lib.outcome import VERDICTS
+from deploy_tools.land_lib.tools import Tools
+from lib.exit_codes import LAND_BAD_ARGS, LAND_GAVE_UP
+
+UNIT = "homelab-claude-land"
+PR = "3633"
+INSTANCE = f"{UNIT}@{PR}.service"
+LANDED = "VERDICT: settled (PR #3633, tags: none)"
+
+
+class FakeSystemctl:
+    """`systemctl start` writes `line` (None writes nothing); `show` answers `status`."""
+
+    def __init__(self, verdict: Path, line=None, status=None, stderr="", raises=None):
+        self.verdict = verdict
+        self.line = line
+        self.status = status or {"Result": "success", "ExecMainStatus": "0"}
+        self.stderr = stderr
+        self.raises = raises
+        self.calls: list[tuple[str, ...]] = []
+
+    def __call__(self, *args: str, timeout: float) -> subprocess.CompletedProcess[str]:
+        self.calls.append(args)
+        if args[0] == "start":
+            if self.raises:
+                raise self.raises
+            if self.line is not None:
+                self.verdict.parent.mkdir(parents=True, exist_ok=True)
+                self.verdict.write_text(self.line + "\n")
+            return subprocess.CompletedProcess(
+                args, 1 if self.stderr else 0, "", self.stderr
+            )
+        shown = "\n".join(f"{key}={value}" for key, value in self.status.items())
+        return subprocess.CompletedProcess(args, 0, shown + "\n", "")
+
+
+class FakeFollower:
+    """`journalctl -f` on the unit: `lines` is what the journal holds; records each start."""
+
+    def __init__(self, lines=()):
+        self.lines = list(lines)
+        self.followed: list[tuple[str, float]] = []
+
+    def __call__(self, unit: str, since: float):
+        self.followed.append((unit, since))
+        self.stdout = io.StringIO("".join(f"{line}\n" for line in self.lines))
+        return self
+
+    def terminate(self):
+        pass
+
+    def wait(self, timeout=None):
+        return 0
+
+
+def _tools(**seams) -> Tools:
+    """`Tools` for a test that runs `land.main`, its journal follower always stubbed.
+
+    The default follower is a real `journalctl -f`, and whether the leak guard's shim records
+    it depends on whether the follower is stopped before it execs, so a test that forgot the
+    stub failed only on a slow runner.
+    """
+    seams.setdefault("follow_journal", FakeFollower())
+    return Tools(**seams)
+
+
+def _hand_off(tmp_path, follow=None, **fake):
+    systemctl = FakeSystemctl(tmp_path / UNIT / f"{PR}.verdict", **fake)
+    rc, _line = handoff.land_through_unit(
+        PR,
+        UNIT,
+        systemctl,
+        state_root=tmp_path,
+        follow=follow,
+        wall_clock=lambda: 1000.0,
+    )
+    return rc, systemctl
+
+
+def test_a_landing_the_unit_settles_is_reported_as_this_landings(tmp_path, capsys):
+    rc, systemctl = _hand_off(tmp_path, line=LANDED)
+    assert rc == 0
+    assert systemctl.calls[0] == ("start", INSTANCE)
+    assert LANDED in capsys.readouterr().out
+
+
+def test_the_exit_code_is_the_one_the_unit_recorded(tmp_path):
+    """A VERDICT line does not carry the code: 75 (gave up, re-run) reads like any verdict."""
+    rc, _ = _hand_off(
+        tmp_path,
+        line="VERDICT: tick-timeout (PR #3633)",
+        status={"Result": "exit-code", "ExecMainStatus": "75"},
+    )
+    assert rc == LAND_GAVE_UP
+
+
+def test_a_landing_that_stopped_without_a_verdict_reports_why(tmp_path, capsys):
+    line = (
+        "STOPPED: rc=1 PR #3633 — refused by the landing policy: its branch is outside"
+    )
+    rc, _ = _hand_off(
+        tmp_path, line=line, status={"Result": "exit-code", "ExecMainStatus": "1"}
+    )
+    assert rc == 1
+    assert "refused by the landing policy" in capsys.readouterr().out
+
+
+def test_an_earlier_landings_verdict_is_never_reported_as_this_ones(tmp_path, capsys):
+    old = tmp_path / UNIT / f"{PR}.verdict"
+    old.parent.mkdir()
+    old.write_text(LANDED + "\n")
+    rc, _ = _hand_off(
+        tmp_path,
+        stderr="Job for homelab-claude-land@3633.service failed.",
+        status={"Result": "exit-code", "ExecMainStatus": "1"},
+    )
+    out = capsys.readouterr().out
+    assert rc == 1
+    assert LANDED not in out
+    assert (
+        "ended without a verdict (Job for homelab-claude-land@3633.service failed.)"
+        in out
+    )
+
+
+@pytest.mark.parametrize(
+    ("fake", "reason"),
+    [
+        (
+            {
+                "stderr": "Failed to start homelab-claude-land@3633.service: Access denied"
+            },
+            "Access denied",
+        ),
+        (
+            {
+                "line": "PENDING",
+                "status": {"Result": "timeout", "ExecMainStatus": "15"},
+            },
+            "Result=timeout",
+        ),
+    ],
+    ids=["start refused", "unit killed mid-landing"],
+)
+def test_a_unit_that_ends_without_a_verdict_names_its_journal(
+    tmp_path, capsys, fake, reason
+):
+    rc, _ = _hand_off(tmp_path, **fake)
+    out = capsys.readouterr().out
+    assert rc == 1
+    assert reason in out and f"journalctl -u {INSTANCE}" in out
+
+
+def test_a_code_land_sh_never_exits_with_is_reported_as_1(tmp_path):
+    rc, _ = _hand_off(
+        tmp_path, line=LANDED, status={"Result": "signal", "ExecMainStatus": "143"}
+    )
+    assert rc == 1
+
+
+def test_a_start_that_outlasts_the_wait_asks_for_a_re_run(tmp_path):
+    rc, _ = _hand_off(tmp_path, raises=subprocess.TimeoutExpired("systemctl", 1))
+    assert rc == LAND_GAVE_UP
+
+
+@pytest.mark.parametrize(
+    "flags",
+    [["--tags", "sonarr"], ["--since", "abc123"], ["--subject", "Other"]],
+    ids=["tags", "since", "subject"],
+)
+def test_a_flag_the_unit_cannot_honour_is_refused_before_anything_starts(
+    monkeypatch, tmp_path, capsys, flags
+):
+    monkeypatch.setenv(HANDOFF_ENV, UNIT)
+    systemctl = FakeSystemctl(tmp_path / "unused")
+    rc = land.main(
+        ["--pr", PR, "--arm-merge", *flags], tools=_tools(systemctl=systemctl)
+    )
+    assert rc == LAND_BAD_ARGS
+    assert flags[0] in capsys.readouterr().err
+    assert not systemctl.calls
+
+
+def test_a_pr_that_is_not_a_number_is_refused(monkeypatch, tmp_path):
+    monkeypatch.setenv(HANDOFF_ENV, UNIT)
+    systemctl = FakeSystemctl(tmp_path / "unused")
+    assert land.main(["--pr", "0"], tools=_tools(systemctl=systemctl)) == LAND_BAD_ARGS
+    assert not systemctl.calls
+
+
+def test_land_sh_hands_off_rather_than_landing(monkeypatch, tmp_path, capsys):
+    """The pipeline's first boundary is `gh`; a handoff must start the unit and call nothing else."""
+    monkeypatch.setenv(HANDOFF_ENV, UNIT)
+    monkeypatch.setenv(PRIMARY_ENV, str(tmp_path))
+    systemctl = FakeSystemctl(tmp_path / "unused", stderr="Access denied")
+
+    def no_gh(*args, **kwargs):
+        raise AssertionError(f"the handoff called gh: {args}")
+
+    follow = FakeFollower(["== 1/6  resolving PR #3633"])
+    tools = _tools(systemctl=systemctl, gh_json=no_gh, gh=no_gh, follow_journal=follow)
+    assert land.main(["--pr", PR, "--arm-merge", "--await-merge"], tools=tools) == 1
+    assert systemctl.calls[0] == ("start", INSTANCE)
+    assert "== 1/6  resolving PR #3633" in capsys.readouterr().out
+
+
+def test_the_units_phase_lines_reach_the_log_before_the_verdict(tmp_path, capsys):
+    """The unit's journal is where its phases go; without the relay the log shows none."""
+    follow = FakeFollower(["== 3/6  waiting for master CI", "== 4/6  GitOps tick"])
+    _hand_off(tmp_path, follow=follow, line=LANDED)
+    out = capsys.readouterr().out
+    assert follow.followed == [(INSTANCE, 999.0)]
+    assert out.index("== 3/6") < out.index("== 4/6") < out.index(LANDED)
+
+
+def test_only_phase_lines_are_relayed(tmp_path, capsys):
+    """A relayed VERDICT or land: line would displace the one the handoff prints."""
+    follow = FakeFollower(
+        [
+            "== 1/6  resolving PR #3633",
+            "VERDICT: blocked (PR #3633)",
+            "land: refused",
+            "noise",
+        ]
+    )
+    _hand_off(tmp_path, follow=follow, line=LANDED)
+    captured = capsys.readouterr()
+    assert _printed_verdicts(captured.out) == ["settled"]
+    assert "land: refused" not in captured.out + captured.err
+    assert "noise" not in captured.out
+
+
+@pytest.mark.parametrize(
+    "fake",
+    [{"line": LANDED}, {"raises": subprocess.TimeoutExpired("systemctl", 1)}],
+    ids=["settled", "timed-out"],
+)
+def test_the_follower_is_stopped_however_the_start_ends(tmp_path, fake):
+    """A follower left running outlives the landing's `os._exit` and keeps writing the log."""
+    started: list[subprocess.Popen[str]] = []
+
+    def follow(unit: str, since: float) -> subprocess.Popen[str]:
+        started.append(
+            subprocess.Popen(["sleep", "60"], stdout=subprocess.PIPE, text=True)
+        )
+        return started[0]
+
+    try:
+        _hand_off(tmp_path, follow=follow, **fake)
+        assert started and started[0].poll() is not None
+    finally:
+        for process in started:
+            process.kill()
+            process.wait()
+
+
+def test_a_handed_off_landing_is_recorded_in_this_users_verdict_log(
+    monkeypatch, tmp_path, capsys
+):
+    """The unit records in the operator's file, which the handing-off user cannot read."""
+    from deploy_tools.land_lib import verdict_log
+
+    monkeypatch.setenv(HANDOFF_ENV, UNIT)
+    systemctl = FakeSystemctl(tmp_path / "unused", stderr="Access denied")
+    assert land.main(["--pr", PR], tools=_tools(systemctl=systemctl)) == 1
+    printed = capsys.readouterr().out.splitlines()[-1]
+    assert printed.startswith("VERDICT: refused (PR #3633")
+    assert [(e["pr"], e["rc"], e["line"]) for e in verdict_log.latest()] == [
+        (PR, 1, printed)
+    ]
+
+
+_VERDICT_LINE = re.compile(r"^VERDICT: (\S+) \(", re.MULTILINE)
+
+
+def _printed_verdicts(out: str) -> list[str]:
+    return _VERDICT_LINE.findall(out)
+
+
+def test_a_start_that_outlasts_the_wait_prints_a_verdict_line(tmp_path, capsys):
+    """An exit-75 outcome must name a verdict, or the board reads it as lock contention."""
+    rc, _ = _hand_off(tmp_path, raises=subprocess.TimeoutExpired("systemctl", 1))
+    assert rc == LAND_GAVE_UP
+    printed = _printed_verdicts(capsys.readouterr().out)
+    assert len(printed) == 1 and printed[0] in VERDICTS, printed
+
+
+def test_a_unit_that_ends_without_a_verdict_still_prints_one(tmp_path, capsys):
+    rc, _ = _hand_off(
+        tmp_path,
+        stderr="Failed to start homelab-claude-land@3633.service: Access denied",
+    )
+    assert rc == 1
+    printed = _printed_verdicts(capsys.readouterr().out)
+    assert len(printed) == 1 and printed[0] in VERDICTS, printed
+
+
+def test_a_stopped_line_from_the_unit_still_prints_a_verdict(tmp_path, capsys):
+    line = "STOPPED: rc=1 PR #3633 — the landing raised before it reached a verdict"
+    rc, _ = _hand_off(
+        tmp_path, line=line, status={"Result": "exit-code", "ExecMainStatus": "1"}
+    )
+    assert rc == 1
+    printed = _printed_verdicts(capsys.readouterr().out)
+    assert len(printed) == 1 and printed[0] in VERDICTS, printed
+
+
+def test_a_start_that_outlasts_the_wait_is_a_handoff_timeout(tmp_path, capsys):
+    """Its own verdict, not one naming a cause the handoff cannot know (#4451)."""
+    _hand_off(tmp_path, raises=subprocess.TimeoutExpired("systemctl", 1))
+    assert _printed_verdicts(capsys.readouterr().out) == ["handoff-timeout"]

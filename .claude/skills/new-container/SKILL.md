@@ -35,7 +35,7 @@ Gather from the user (or infer from context):
 Then make these changes. `hosts/components/pi-compose/services/docker-proxy/` is the worked
 example of a plain service, and `alloy/` of one with a config file.
 
-**`inventory/host_vars/daniel-pi.yml` → `compose_services`**
+**`hosts/daniel-pi/vars.yml` → `compose_services`**
 - Add `name`, `use_authelia: false`, `networks`, and `port` or `udp_port` if it publishes one.
   The template reads them as `container_item`.
 - Never add the service to `containers_list`. That key stays empty, and

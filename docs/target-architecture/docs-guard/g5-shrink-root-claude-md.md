@@ -196,7 +196,7 @@ section says. The sweep command in *Verification* prints 125 such lines outside 
 - `test_setup_cron_roles_have_a_contract.py` (deleted, #8027) cites the *Where to Look*
   cron row in an assertion message.
 - `docs/break-glass.md` cites *Project Overview* for "Ansible runs from daniel-box".
-- `tests/k8s/test_uncovered_roles_justifications_resolve.py`,
+- `tests/k8s/workloads/test_uncovered_roles_justifications_resolve.py`,
   `scripts/diagnostics/tests/probe_landing/test_probe_registry.py` and `scripts/validate/asset_pins.py`
   cite the non-vacuity rule in *Python & Tests*.
 - `scripts/secrets_mgmt/consumers.py` cites *Common Commands*.
@@ -260,7 +260,7 @@ citation is checked. G5 therefore moves only prose that cites nothing.
   body lists it as deliberately dropped, with the reason.
 - The four non-path atoms in *Baseline* stay in their sections.
 - The citations that would otherwise travel with a moved paragraph, and so stay in the root:
-    - `inventory/host_vars/daniel-pi.yml`, from the `roles/containers/` paragraph;
+    - `hosts/daniel-pi/vars.yml`, from the `roles/containers/` paragraph;
     - `secrets/.sops.yaml`, `ansible/bootstrap.yml` and `secrets/secret_rotation.yml`, from
       the secrets mechanics;
     - `scripts/dev/new_k8s_service.py`, `k8s/templates/`, `ansible/deploy.yml` and
@@ -300,7 +300,7 @@ in the tree.
       caveat. `docs/reference/services.md` owns the count.
 - **Directory Structure**: 15 → 13.
     - Stays: the tree, and one line naming `roles/containers/` as the Pi's roles, with
-      `inventory/host_vars/daniel-pi.yml` as the source of truth.
+      `hosts/daniel-pi/vars.yml` as the source of truth.
     - Moves: the `roles/containers/` paragraph, to `.claude/rules/docker.md`.
 - **Where to Look**: 23 → 22.
     - Stays: one pointer per row, each with its citations.
@@ -412,7 +412,7 @@ into two destinations.
  scripts/dev/findings.py (help text, if missing)   + claim and close semantics
  scripts/dev/fanout_lib/review/held_hooks.py       + rules matching a held phase's range
  scripts/dev/fanout_lib/review/review.py           ~ appends them beside project_claude_md
- tests/repo/test_claude_md_paragraphs_have_one_home.py   ~ MIN_GRADED_PARAGRAPHS
+ tests/repo/docs/test_claude_md_paragraphs_have_one_home.py   ~ MIN_GRADED_PARAGRAPHS
  docs/, .claude/, scripts/, tests/   ~ pointers whose content moved
 ```
 

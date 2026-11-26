@@ -8,9 +8,9 @@ import pytest
 import yaml
 
 from lib.guard_jinja_env import template_env
-from lib.estate import Inventory
-from lib.render_guard import StrictChainableUndefined, host_files, host_layer, load_yaml
-from lib.repo_paths import ALL_VARS, HOST_VARS, K8S_ROLES, K8S_SERVICES
+from lib.estate import Estate, Inventory
+from lib.render_guard import StrictChainableUndefined, load_yaml
+from lib.repo_paths import K8S_ROLES, K8S_SERVICES
 from renderer import shadow_diff
 from renderer.renderer_lib.context import sorted_services, template_context
 from renderer.template_filters.toposort import build_k8s_dep_map, toposort_containers
@@ -48,7 +48,7 @@ def test_sorted_services_sorts_a_reordered_list():
 
 
 def test_the_pi_client_ip_is_the_pis_own_server_ip(ctx):
-    pi_ip = load_yaml(HOST_VARS / "daniel-pi.yml")["server_ip"]
+    pi_ip = Estate().own_vars("daniel-pi")["server_ip"]
     assert _render(ctx, "{{ k8s_pi_client_ip }}") == pi_ip
     # A bare `server_ip` would be some host's address, just the wrong one.
     assert "server_ip" not in ctx
@@ -78,12 +78,13 @@ def test_a_name_only_a_play_or_one_hosts_layer_holds_is_flagged(ctx, name):
 
 def _inventory(tmp_path, **edits):
     """Each host's layer and all.yml (`group`) as the renderer reads them, `edits` applied."""
+    real = Estate()
     host_vars = tmp_path / "host_vars"
     host_vars.mkdir()
-    for path in host_files(HOST_VARS):
-        layer = host_layer(HOST_VARS, path.stem)
-        edit = edits.get(path.stem.replace("-", "_"))
-        (host_vars / path.name).write_text(
+    for host in real.hosts():
+        layer = real.own_vars(host)
+        edit = edits.get(host.replace("-", "_"))
+        (host_vars / f"{host}.yml").write_text(
             yaml.safe_dump(edit(layer) if edit else layer)
         )
     services = tmp_path / "services.yml"
@@ -93,7 +94,7 @@ def _inventory(tmp_path, **edits):
         yaml.safe_dump({"containers_list": edit(entries) if edit else entries})
     )
     all_vars = tmp_path / "all.yml"
-    group, edit = load_yaml(ALL_VARS), edits.get("group")
+    group, edit = real.group_vars, edits.get("group")
     all_vars.write_text(yaml.safe_dump(edit(group) if edit else group))
     return Inventory(all_vars=all_vars, host_vars=host_vars, services=services)
 

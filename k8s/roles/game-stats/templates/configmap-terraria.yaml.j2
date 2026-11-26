@@ -1,13 +1,8 @@
 ---
-# terraria-stats' code: its entry script and the stats_lib.py skeleton it imports, carried
-# verbatim. The pod mounts this at /app, and a directly-invoked script gets only its own
-# directory on `sys.path`, so `import stats_lib` resolves only because both keys sit here.
-#
-# lookup('file'), not a template: the scripts are Jinja-hostile, since their Prometheus
-# exposition strings carry {…} braces. The lookup's text is not templated again.
-#
-# Rendered here, inside the manifests, so a script edit changes the render. The renderer's
-# `checksum/restart` hashes this ConfigMap because the pod names it in `volumes`.
+# A directly-invoked script gets only its own directory on `sys.path`, so `import stats_lib`
+# resolves only because both keys sit here.
+# lookup('file'), not a template: the scripts' exposition strings carry {…} braces, which Jinja
+# would eat.
 apiVersion: v1
 kind: ConfigMap
 metadata:

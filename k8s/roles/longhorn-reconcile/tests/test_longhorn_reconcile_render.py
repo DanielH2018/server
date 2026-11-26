@@ -92,8 +92,6 @@ def test_the_cronjob_runs_hourly_and_never_overlaps_itself():
 def test_the_role_grants_nothing_on_deployments():
     # fact: k8s/roles/longhorn-reconcile/CLAUDE.md#Traps
     # fact: k8s/roles/longhorn-reconcile/CLAUDE.md#longhorn-reconcile — the hourly job that holds each volume in its backup tier
-    # A grant the script no longer needs is a write path to the CSI Deployments that
-    # longhorn-manager undoes on its next tick.
     rules = [
         r for d in _docs("rbac.yaml.j2") if d["kind"] == "Role" for r in d["rules"]
     ]

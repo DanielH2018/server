@@ -28,7 +28,7 @@ REPORT = """============================== slowest durations ===================
 21.40s call     scripts/heavy/tests/test_new_module.py::test_the_long_one
 4.10s setup    scripts/heavy/tests/test_new_module.py::test_the_long_one
 0.90s call     scripts/heavy/tests/test_new_module.py::test_the_short_one
-17.31s call     tests/k8s/test_secret_consumer_census.py::test_every_consumer
+17.31s call     tests/k8s/workloads/test_secret_consumer_census.py::test_every_consumer
 0.01s call     scripts/dev/tests/repo_tools/test_run_as_cron.py::test_a_shell_builtin_still_runs
 
 (58 durations < 0.005s hidden.  Use -vv to show these durations.)
@@ -36,7 +36,7 @@ REPORT = """============================== slowest durations ===================
 
 NEW_MODULE = "scripts/heavy/tests/test_new_module.py"
 RECORDED = {
-    "tests/k8s/test_secret_consumer_census.py": 17.31,
+    "tests/k8s/workloads/test_secret_consumer_census.py": 17.31,
     "scripts/dev/tests/repo_tools/test_run_as_cron.py": 0.05,
 }
 
@@ -44,7 +44,7 @@ RECORDED = {
 def test_the_parser_sums_every_phase_of_a_file():
     totals = shard_weight_gate.parse_durations(REPORT)
     assert totals[NEW_MODULE] == 26.4
-    assert totals["tests/k8s/test_secret_consumer_census.py"] == 17.31
+    assert totals["tests/k8s/workloads/test_secret_consumer_census.py"] == 17.31
     assert len(totals) == 3
 
 
@@ -70,7 +70,7 @@ def test_a_light_unweighted_module_is_clean():
     of them is cheap. Only the cost decides."""
     weights = {
         NEW_MODULE: 26.4,
-        "tests/k8s/test_secret_consumer_census.py": 17.31,
+        "tests/k8s/workloads/test_secret_consumer_census.py": 17.31,
     }
     assert shard_weight_gate.durations_complaints(REPORT, weights) == []
 
@@ -85,7 +85,7 @@ def test_the_threshold_decides():
 def test_a_recorded_weight_far_above_what_it_measured_is_flagged():
     """A stale entry: the census module recorded at 17.31s, measuring 0.09s here, which the three
     missing-from-the-table arms cannot see."""
-    stale = "17.31s call     tests/k8s/test_secret_consumer_census.py"
+    stale = "17.31s call     tests/k8s/workloads/test_secret_consumer_census.py"
     report = REPORT.replace(stale, "0.09s call     " + stale.split()[-1])
     problems = shard_weight_gate.durations_complaints(
         report, RECORDED | {NEW_MODULE: 26.4}
@@ -98,7 +98,7 @@ def test_a_recorded_weight_inside_the_runner_noise_is_clean():
     """The accept half, at the bound that decides it. A leg's hardware runs a shard 0.67x to
     1.22x its table, so 17.31s recorded against 14.00s measured is that spread, not a stale
     entry."""
-    stale = "17.31s call     tests/k8s/test_secret_consumer_census.py"
+    stale = "17.31s call     tests/k8s/workloads/test_secret_consumer_census.py"
     report = REPORT.replace(stale, "14.00s call     " + stale.split()[-1])
     assert (
         shard_weight_gate.durations_complaints(report, RECORDED | {NEW_MODULE: 26.4})
@@ -116,7 +116,7 @@ def test_the_floor_keeps_a_cheap_entry_out_of_it():
 def test_both_arms_report_together():
     """One report can carry a heavy unweighted module AND a stale entry, and a gate that
     short-circuited on the first would hide the second until the next run."""
-    stale = "17.31s call     tests/k8s/test_secret_consumer_census.py"
+    stale = "17.31s call     tests/k8s/workloads/test_secret_consumer_census.py"
     report = REPORT.replace(stale, "0.09s call     " + stale.split()[-1])
     problems = shard_weight_gate.durations_complaints(report, RECORDED)
     assert len(problems) == 2

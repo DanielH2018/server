@@ -28,11 +28,12 @@ from _helpers import load_defaults, K8S_ROLES
 from _k8s_render import rendered_docs
 from lib import yaml_fast
 from lib.guard_jinja_env import make_env, register_ansible_filters
-from lib.repo_paths import ALL_VARS, K3S_SERVER
+from lib.estate import shared_vars
+from lib.repo_paths import K3S_SERVER
 from renderer.renderer_lib import host as host_mode
 
 HEADLAMP = K8S_ROLES / "headlamp"
-DOMAIN = yaml_fast.safe_load(ALL_VARS.read_text())["domain"]
+DOMAIN = shared_vars()["domain"]
 
 # Named rather than counted: a count of 2 passes while one host has been swapped for something else;
 # BOTH must be trusted.

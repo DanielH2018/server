@@ -10,7 +10,7 @@ TRACKED = {
     "scripts/deploy.sh",
     "hosts/components/k3s-server/defaults/main.yml",
     "scripts/deploy_tools/land_lib/land_tags.py",
-    "scripts/deploy_tools/tests/test_land_tags.py",
+    "scripts/deploy_tools/tests/land_deploy/test_land_tags.py",
     "scripts/x/dup.py",
     "scripts/y/dup.py",
 }

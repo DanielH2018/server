@@ -105,7 +105,7 @@ The pod runs `python3 /app/artifact_server.py` against the whole ConfigMap mount
 and `templates/configmap.yaml.j2` builds one key per entry in `artifacts_modules`
 (`defaults/main.yml`). **Adding a file to `files/` without adding its name there ships nothing**
 — the pod dies at import with `ModuleNotFoundError`.
-`tests/services/test_artifacts_configmap.py` compares the list against `files/` in
+`tests/services/apps/test_artifacts_configmap.py` compares the list against `files/` in
 both directions.
 
 **Edit the list, not the template.** A comment in that template has crash-looped the pod twice.
@@ -115,7 +115,7 @@ The template's own header records both cases, and is the thing to read before ed
 `k8s/roles/artifacts/defaults/main.yml:artifacts_retired_services` exists so an artifact
 *about* a retired service stays findable by name — a document reviewing the kopia retirement is
 only searchable if `kopia` is still a recognised term
-(`tests/services/test_artifacts_configmap.py::test_the_service_list_is_json_and_holds_the_platform_names`).
+(`tests/services/apps/test_artifacts_configmap.py::test_the_service_list_is_json_and_holds_the_platform_names`).
 **Retiring a service should ADD its name there**, not drop it from
 `artifacts_platform_services`. That is the opposite of the usual cleanup instinct, which is why
 it is called out here.

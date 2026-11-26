@@ -5,7 +5,7 @@
   capabilities they add back.
 
   A container-level securityContext is a DIFFERENT object from a pod-level one, and only the
-  container-level one governs capabilities — see tests/k8s/test_container_security_context.py
+  container-level one governs capabilities — see tests/k8s/workloads/test_container_security_context.py
   for why that distinction matters. This macro emits the
   container-level block only; a pod-level `securityContext` (fsGroup, supplementalGroups,
   sysctls) stays written out at its call site.
@@ -16,7 +16,7 @@
   same body, fixed at 14 spaces. Each macro emits at one depth, so neither takes an indent
   argument. Calling the 10-space one at CronJob depth puts a second pod-level `securityContext:`
   in the pod spec and leaves the container with none, which
-  tests/k8s/test_container_security_context.py's
+  tests/k8s/workloads/test_container_security_context.py's
   test_every_container_drops_all_capabilities reports, because it reads the rendered CronJob
   containers.
 
@@ -29,9 +29,9 @@
   containers in crowdsec-agent.yml.j2 (rendered into authelia's and traefik's pods) are the
   `runAsUser: 0` sites in this family and stay written out in full.
   The root-security-context-is-written-out-in-full row of
-  tests/repo/test_census_rows_roles.py refuses a macro call
+  tests/repo/census_rows/test_census_rows_roles.py refuses a macro call
   that passes `run_as_user=0`, and
-  tests/k8s/test_root_needs_dac_capability.py's
+  tests/k8s/workloads/test_root_needs_dac_capability.py's
   test_every_documented_root_site_still_renders_a_clean_root_block holds that all six root
   blocks still render. That census reads the RENDER of every role
   template, so a root block built through this macro is scanned like any other and the

@@ -3,7 +3,7 @@
 It reads the pytest-only modules outside `scripts/`: `test_*.py`, `conftest.py`, and every
 module under a `tests/` directory, fixture modules included. `_bootstrap_eval.is_pytest_only`
 is that predicate. Under `scripts/`, every module imports dotted from the one root, and the
-`no-sys-path-change-under-scripts` row of `tests/repo/test_census_rows_layout.py` refuses any
+`no-sys-path-change-under-scripts` row of `tests/repo/census_rows/test_census_rows_layout.py` refuses any
 insert there.
 
 pytest puts a test module's OWN directory on `sys.path` and nothing else, plus the `pythonpath`
@@ -88,7 +88,7 @@ def _tracked_python() -> list[Path]:
 
     `git ls-files` rather than `REPO.rglob` — a root-anchored rglob walks other sessions'
     `.claude/worktrees/<name>/` checkouts and judges this commit against their older copies
-    (ENFORCED by `tests/repo/test_tracked_python_hazards.py`). This checkout is itself
+    (ENFORCED by `tests/repo/ratchets/test_tracked_python_hazards.py`). This checkout is itself
     one of those worktrees, so the hazard is not hypothetical here.
     """
     return [REPO / rel for rel in _tracked_files() if rel.endswith(".py")]
@@ -126,7 +126,7 @@ def repo_module_dirs() -> dict[str, set[Path]]:
 def collect_test_modules() -> list[Path]:
     """Every pytest-only module under `testpaths` outside `scripts/`: what pytest collects, plus
     the fixture modules those collect from. Under `scripts/`, the
-    `no-sys-path-change-under-scripts` row of `tests/repo/test_census_rows_layout.py` refuses
+    `no-sys-path-change-under-scripts` row of `tests/repo/census_rows/test_census_rows_layout.py` refuses
     every insert, test modules included."""
     found: set[Path] = set()
     scripts = REPO / "scripts"
@@ -148,6 +148,16 @@ def _imported_names(tree: ast.Module):
         elif isinstance(node, ast.Import):
             for alias in node.names:
                 yield alias.name.split(".")[0], scope, node.lineno
+
+
+def _conftest_dirs(file: Path) -> list[Path]:
+    """Each directory above `file` that holds a `conftest.py`.
+
+    pytest's `prepend` import mode puts a conftest's own directory on `sys.path` when it loads
+    it, and it loads every conftest above a collected module first. A grouped test reaches its
+    suite's shared helpers that way.
+    """
+    return [d.resolve() for d in file.parents if (d / "conftest.py").is_file()]
 
 
 def find_test_bootstrap_gaps(
@@ -181,6 +191,8 @@ def find_test_bootstrap_gaps(
                 continue  # pyproject's pythonpath covers it for every collected module
             if role_dir is not None and _provides(role_dir, top):
                 continue  # k8s/conftest.py inserts the role's own files/
+            if any(_provides(d, top) for d in _conftest_dirs(file)):
+                continue  # pytest prepends the directory of each conftest.py it loads
             providers = {d for d in repo_dirs.get(top, set()) if _provides(d, top)}
             if not providers:
                 continue  # third-party: the environment provides it, not the tree
@@ -288,7 +300,7 @@ def test_the_census_contains_the_modules_this_guard_exists_for():
     census = {p.relative_to(REPO).as_posix() for p in collect_test_modules()}
     required = frozenset(
         {
-            ".claude/hooks/tests/test_fanout_stop.py",
+            ".claude/hooks/tests/hook_contract/test_fanout_stop.py",
             "hosts/tests/test_claude_lander.py",
             "tests/conftest.py",
             "tests/_k8s_render.py",
@@ -453,3 +465,25 @@ def test_role_files_dir_names_no_directory_outside_a_role_s_tests(tmp_path):
     stray = _write(roles / "own" / "files" / "test_y.py", "")
     assert role_files_dir(stray, roles) is None
     assert role_files_dir(tmp_path / "scripts" / "tests" / "test_z.py", roles) is None
+
+
+def test_a_helper_beside_a_suite_conftest_is_clean(tmp_path):
+    """A grouped test imports its suite's shared helper, which the suite's conftest reaches."""
+    _write(tmp_path / "pkg" / "tests" / "conftest.py", "")
+    _write(tmp_path / "pkg" / "tests" / "_fakes.py", "VALUE = 1\n")
+    module = _write(
+        tmp_path / "pkg" / "tests" / "group" / "test_x.py", "from _fakes import VALUE\n"
+    )
+    repo_dirs = {"_fakes": {(tmp_path / "pkg" / "tests").resolve()}}
+    missing, _ = find_test_bootstrap_gaps([module], [], repo_dirs, {})
+    assert missing == []
+
+
+def test_a_helper_above_a_suite_with_no_conftest_is_flagged(tmp_path):
+    _write(tmp_path / "pkg" / "tests" / "_fakes.py", "VALUE = 1\n")
+    module = _write(
+        tmp_path / "pkg" / "tests" / "group" / "test_x.py", "from _fakes import VALUE\n"
+    )
+    repo_dirs = {"_fakes": {(tmp_path / "pkg" / "tests").resolve()}}
+    missing, _ = find_test_bootstrap_gaps([module], [], repo_dirs, {})
+    assert [top for _, _, top, _ in missing] == ["_fakes"]

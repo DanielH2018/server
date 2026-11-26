@@ -11,7 +11,7 @@ name: prune-artifacts
 # A red run reaches the operator through one GitHub issue, which `scripts/dev/scheduled_report.py`
 # opens on a red run on master and closes on the next green one.
 #
-# The `prune-*` rows of tests/repo/test_census_rows_workflows.py hold this file's guard,
+# The `prune-*` rows of tests/repo/census_rows/test_census_rows_workflows.py hold this file's guard,
 # permissions and concurrency group, and hold its cosign pin and RETRY_FUNCTIONS equal to
 # promote.yml's.
 

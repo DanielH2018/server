@@ -34,16 +34,10 @@ from lib.script_imports import is_test_file
 
 __all__ = ["ENTRY_POINTS", "EXEMPTIONS", "Finding", "check"]
 
-# A module that waits on a network or a lock at import is a defect the --help census already
-# reports; this bound only stops one from hanging the suite.
 TIMEOUT_S = 120
 
 
-# Function-local imports that fail and are never reached in production. Keyed by (file,
-# enclosing function, imported module), not by line, so an edit above the import leaves the
-# entry valid. An entry whose import has left that function is reported as `stale-exemption`,
-# and one whose import no longer fails as `unused-exemption`, so the list cannot outlive what
-# it excuses.
+# Keyed by (file, function, module), not line; stale and unused entries are reported.
 EXEMPTIONS: dict[tuple[str, str, str], str] = {}
 
 
@@ -127,9 +121,6 @@ def _local_imports(tree: ast.Module) -> list[tuple[str, str, ast.stmt]]:
     return found
 
 
-# The child process: load the module by dotted name with only the root on the path, then run
-# each function's imports against a restored snapshot. Results go to a file, because the
-# module's top level may print.
 _RUNNER = r"""
 import importlib, json, sys, traceback
 

@@ -45,9 +45,7 @@ def primary_checkout_of(repo: Path) -> Path:
     return repo
 
 
-# The checkout every landing, deploy and fan-out runs its commands in, even when the script that
-# asks lives in a worktree under it. It is /home/ubuntu/server for the operator and the clone
-# under its own home for the `claude` user.
+# The checkout commands run in even when the script lives in a worktree under it.
 PRIMARY_CHECKOUT = primary_checkout_of(REPO)
 SCRIPTS = REPO / "scripts"
 DOCS = REPO / "docs"
@@ -55,12 +53,10 @@ DOCS = REPO / "docs"
 K8S = REPO / "k8s"
 K8S_ROLES = K8S / "roles"
 JOB_FILES = SCRIPTS / "renderer" / "job_files"
-# `longhorn_robustness.py`'s one copy lives in monitor-bridge's `files/` without shipping in its
-# pod; the runbook gates import it from here.
+# The one copy of longhorn_robustness.py lives here without shipping in the pod; runbook gates
+# import it.
 MONITOR_BRIDGE_FILES = K8S_ROLES / "monitor-bridge" / "files"
-# `host_lib.py` and `ci_verdict.py`, the modules the host packages ship beside a host script (H7.2e
-# moved them out of `setup/common/files/`). A tool under `scripts/` that imports `host_lib` or
-# `ci_verdict` puts this on `sys.path` first.
+# A tool under scripts/ importing host_lib or ci_verdict puts this on sys.path first.
 HOST_LIB_FILES = REPO / "hosts" / "lib"
 # The GitHub spend ledger, `gh_quota.py`, which `lib.gh` records each call into.
 GH_QUOTA_FILES = REPO / "hosts" / "components" / "gh-quota" / "files"
@@ -72,27 +68,21 @@ SECRETS = REPO / "secrets"
 # Each cluster key's ciphertext digest, which `checksum/restart` and the verify Jobs' roll hash.
 CLUSTER_VARS_SOURCE = SECRETS / "cluster-vars.source"
 ALL_VARS = INVENTORY / "group_vars" / "all.yml"
-HOST_VARS = INVENTORY / "host_vars"
+# Each host's own values, `hosts/<host>/vars.yml` (ADR-0042); `render_guard.host_file` names one.
+HOST_VARS = REPO / "hosts"
 # The k3s service list, every template's `services` (render_guard.k8s_services).
 K8S_SERVICES = REPO / "k8s" / "services.yml"
-# The k3s server component's defaults hold the node keys both k3s components render: the join
-# ports, the read-only ServiceAccount, the address pin. The Longhorn backup schedule and arm flags
-# are `LONGHORN_BACKUP_ROLE`'s.
+# Node keys both k3s components render; the Longhorn backup schedule and arm flags are
+# LONGHORN_BACKUP_ROLE's.
 K3S_SERVER = REPO / "hosts" / "components" / "k3s-server"
-# The three Longhorn tier lists, `k3s_longhorn_{r2,weekly,nobackup}_volumes`, live in this
-# role's defaults since H1.7a. Python readers resolve them through `lib.service_tiers`.
+# Python readers resolve the three Longhorn tier lists through `lib.service_tiers`.
 LONGHORN_RECONCILE_ROLE = K8S_ROLES / "longhorn-reconcile"
-# The Longhorn arm flags, backup schedules, retain counts and targets' prefixes live in this role's
-# defaults since H1.7b.
 LONGHORN_BACKUP_ROLE = K8S_ROLES / "longhorn-backup"
 K3S_DEFAULTS = K3S_SERVER / "defaults" / "main.yml"
-# The k3s pin (`k3s_version`, `k3s_install_script_url`, `k3s_install_script_sha256`) lives in the
-# Flux-owned `system-upgrade` role's defaults since H6.1b, so a pin change routes to that tag.
-# `K3S_DEFAULTS` keeps every other key, which did not move.
+# The k3s pin keys live in system-upgrade's defaults; K3S_DEFAULTS keeps every other key.
 SYSTEM_UPGRADE_DEFAULTS = K8S_ROLES / "system-upgrade" / "defaults" / "main.yml"
-# The component holding the host checks since H7.35: their schedules and thresholds are in its
-# `defaults/main.yml`, and its `files/` holds `longhorn_backup_health.py`. `longhorn_lib/`, which
-# that reader imports, lives in `scripts/lib/` since H7.2e.
+# The host checks' schedules and thresholds are in its defaults/main.yml; files/ holds
+# longhorn_backup_health.py.
 K3S_HOST_CHECKS = REPO / "hosts" / "components" / "k3s-host-checks"
 K3S_HOST_CHECKS_DEFAULTS = K3S_HOST_CHECKS / "defaults" / "main.yml"
 K3S_HOST_DNS = REPO / "hosts" / "components" / "k3s-host-dns"
@@ -100,9 +90,8 @@ K3S_FILES = K3S_HOST_CHECKS / "files"
 # The suite's shared guard modules (`_ratchet.py`, `_helpers.py`), for a script that reuses one.
 TESTS = REPO / "tests"
 
-# The bare module names a script outside the roles imports from each role directory, by the
-# directory constant. `lib/stdlib_only.py`'s walk refuses an import from a role directory, or
-# of a basename two of them share, that this map does not list.
+# A script outside the roles importing from a role directory must be listed here, or
+# stdlib_only.py's walk refuses it.
 ROLE_MODULES = {
     MONITOR_BRIDGE_FILES: ["longhorn_robustness"],
 }

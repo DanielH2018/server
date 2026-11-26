@@ -17,10 +17,8 @@ contract, so it is re-tested here rather than trusted.
 
 from __future__ import annotations
 
-# The one benign, recurring ERROR is the documented post-boot race — an @Scheduled cleanup fires
-# before sonarr/radarr/jellyfin finish loading, gets a FeignException 503, and self-heals next
-# cycle. The line it logs is generic and identical to a real failure, with the exception type on a
-# separate line, so it CANNOT be discriminated by content. It is discriminated by TIME instead.
+# The recurring benign ERROR is the post-boot race (503 from sonarr/radarr/jellyfin, self-heals).
+# Its line is identical to a real failure, so it is discriminated by TIME, not content.
 ERROR_MATCH = "Unexpected error occurred in scheduled task"
 
 

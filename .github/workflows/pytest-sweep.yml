@@ -14,7 +14,7 @@ name: pytest-sweep
 # verdict. No job below carries the name of ci.yml's gate, because `ci_verdict` in
 # `hosts/lib/ci_verdict.py` takes the worst check-run per required name on a commit, and a
 # red sweep under that name would hold every landing behind a SHA whose own run was green.
-# ENFORCED by the pytest-sweep-* rows of tests/repo/test_census_rows_workflows.py.
+# ENFORCED by the pytest-sweep-* rows of tests/repo/census_rows/test_census_rows_workflows.py.
 #
 # The run reaches the operator through one GitHub issue, which `scripts/dev/scheduled_report.py`
 # opens on a red sweep and closes on the next green one.

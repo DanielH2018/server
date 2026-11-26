@@ -27,7 +27,7 @@ from _workflow_rows import (
 )
 
 PYTEST_JOB = "pytest"
-RATCHET = "tests/repo/test_module_length_ratchet.py"
+RATCHET = "tests/repo/ratchets/test_module_length_ratchet.py"
 TEST_STEP = "Run the test suite"
 RESTORE = "actions/cache/restore"
 SAVE = "actions/cache/save"

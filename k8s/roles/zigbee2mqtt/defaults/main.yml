@@ -14,8 +14,6 @@ k8s_autodeploy_reason: "state coupled outside the volume — the SLZB-06M coordi
 # applies. Declared regardless of k8s_autodeploy.
 k8s_autodeploy_snapshot_pvcs: [zigbee2mqtt-data]
 
-# The config-install initContainer needs alpine (`install`). Same init image peanut and
-# home-assistant use.
 zigbee2mqtt_k8s_init_image: alpine:3.24@sha256:f59abe656b692d901e184be3445e084786602108599d2a51d229c0f5a48c71bf
 
 zigbee2mqtt_k8s_cpu_limit: "500m"
@@ -23,8 +21,7 @@ zigbee2mqtt_k8s_mem_limit: 256Mi
 zigbee2mqtt_k8s_cpu_request: "50m"
 zigbee2mqtt_k8s_mem_request: 144Mi
 
-# In-cluster the broker is one Service hop away; the shared config template defaults to the
-# LAN VIP.
+# In-cluster the broker is the Service `mosquitto`; the shared config defaults to the LAN VIP.
 zigbee2mqtt_k8s_mqtt_broker: mosquitto
 
 # 63 M: database.db, devices.yaml, coordinator_backup.json — the device pairings.

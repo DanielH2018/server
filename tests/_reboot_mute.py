@@ -5,12 +5,12 @@ does, from the `weekly_reboot_*` values in group_vars/all.yml alone. Both count 
 week from Sunday 00:00, and both take the same template-variable overrides.
 """
 
+from lib.estate import shared_vars
 from lib import yaml_fast
 from _k8s_render import render_role_template
 
-from lib.repo_paths import ALL_VARS
 
-GROUP_VARS = yaml_fast.safe_load(ALL_VARS.read_text())
+GROUP_VARS = shared_vars()
 MINUTES_PER_DAY = 24 * 60
 MINUTES_PER_WEEK = 7 * MINUTES_PER_DAY
 WEEKDAYS = [

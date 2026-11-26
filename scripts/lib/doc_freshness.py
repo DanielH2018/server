@@ -19,7 +19,7 @@ without a `:line` or `::node` suffix, that resolves to a tracked file: doc-relat
 repo-relative second, and as the unique suffix of some tracked path third, which is what
 makes `deploy_logic.py` resolve when there is one such file and stay unresolved when a
 tests/ copy makes it ambiguous. This is deliberately wider than the citation guard in
-`tests/repo/test_documented_paths_exist.py`, which counts only line-numbered
+`tests/repo/docs/test_documented_paths_exist.py`, which counts only line-numbered
 citations because a bare path there is a claim it cannot always check. Here an unresolved
 path costs nothing: it is simply not a source.
 
@@ -38,11 +38,8 @@ from pathlib import Path
 
 from lib.git import git_stdout
 
-# A code span, and within it a path-like word: a letter-led extension, an optional `:12`,
-# `:12-40` or `::test_name` suffix, which is dropped. Words rather than whole spans, because
-# the docs name a file inside a command as often as on its own -- `./scripts/deploy_tools/land.sh
-# --pr 1` names land.sh. The extension must start with a letter so that
-# `10.0.0.240:51820` does not parse as a file.
+# Path-like words, not whole spans: docs name files inside commands. The extension starts with a
+# letter so `10.0.0.240:51820` is not a file.
 SPAN = re.compile(r"`([^`\n]+)`")
 PATH_WORD = re.compile(
     r"(?:\./)?([\w.][\w./-]*\.[a-z][a-z0-9]*)(?::\d+(?:-\d+)?|::[\w\[\]:.-]+)?"
@@ -74,8 +71,8 @@ def named_paths(text: str) -> list[str]:
     return found
 
 
-# Not hand-written, or not live: the generated trees (their own stamp), the archive (frozen
-# by design), the ADR form, and the fragments a page splices in.
+# Not hand-written or not live: generated trees, the frozen archive, the ADR form and spliced
+# fragments.
 SKIPPED_PREFIXES = ("docs/archive/", "docs/assets/", "docs/reference/")
 SKIPPED_PAGES = ("docs/adr/template.md",)
 GENERATED_MARKER = "generated_from:"
@@ -172,8 +169,7 @@ def is_hand_written(page: str, text: str) -> bool:
         return False
     if page.startswith(SKIPPED_PREFIXES) or page in SKIPPED_PAGES:
         return False
-    # Only a marker in the frontmatter counts: a page ABOUT the generators mentions the
-    # string in prose, and the edit hook scopes its own check to the generated trees.
+    # Only a frontmatter marker counts: a page ABOUT the generators mentions the string in prose.
     if not text.startswith("---\n"):
         return True
     frontmatter = text.split("---", 2)[1]

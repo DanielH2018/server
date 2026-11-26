@@ -150,8 +150,7 @@ _ROOT_SECURITY_CONTEXT_IS_WRITTEN_OUT = Census(
         Subject("a.j2", "{{ hardened_security_context(run_as_user=1000) }}"),
         Subject("a.j2", "{{ hardened_security_context(run_as_user=65534) }}"),
     ),
-    # Macro call sites, not files: the rule expects no offender, so a renamed macro or a
-    # moved glob would otherwise read as a clean tree.
+    # Macro call sites, not files: a renamed macro or moved glob would read as a clean tree.
     count=lambda s: len(_MACRO_CALL.findall(s.text)),
     min_matches=50,
     must_find=frozenset(
@@ -303,8 +302,6 @@ _WORKLOAD_SHELL_USES_THE_MACROS = Census(
         {
             "k8s/roles/authelia/templates/deployment.yaml.j2",
             "k8s/roles/traefik/templates/deployment.yaml.j2",
-            # pihole renders both its Deployments from one macro body, and the row reads
-            # `kind:` out of the template text, so the file it scans is the macro.
             "k8s/roles/pihole/templates/pihole-deployment.yaml.j2",
             "k8s/roles/observability/templates/prometheus.yaml.j2",
             "k8s/roles/node-exporter/templates/daemonset.yaml.j2",

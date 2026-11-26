@@ -1,24 +1,14 @@
 ---
-# The media server. jellyfin has no hardlink seam to share: it only READS the library. Its
-# risk is the GPU — it is the first workload to request the `devic.es/dri` extended resource
-# the device plugin advertises, so a wrong answer here is a wrong answer about the whole media
-# plane on this host.
-# 12.4 because jellyfin-ani-sync 4.7.0.0 and Intro Skipper 12.0.8.0 target that ABI (see the
-# plugin pins below). 12.0 migrated the database one way: going back to 10.11 needs the
-# jellyfin-config snapshot taken before the 12 revision, not an image revert alone.
-# NOT the opencl-intel DOCKER_MODS variant.
+# 12.4 because ani-sync 4.7.0.0 and Intro Skipper 12.0.8.0 target that ABI. 12.0 migrated the
+# database one way:
+# reverting to 10.11 needs the pre-12 jellyfin-config snapshot. Not the opencl-intel DOCKER_MODS
+# variant.
 jellyfin_k8s_image: lscr.io/linuxserver/jellyfin:12.4ubu2604-ls60@sha256:b10044530553b2506f06279bf0b5223f9534f434f87a277da4b8fa8ac386cb58
 
-# The budget of the jellyfin-prepull Kustomization, whose Job pulls this role's images onto the
-# media node before the jellyfin Kustomization applies
-# (scripts/renderer/renderer_lib/prepull.py). The Deployment is `Recreate`, so without it the old
-# pod stops before the new pod's pull starts, and jellyfin is down for the whole pull. The
-# pinned amd64 image is 344.23 MB compressed, and GHCR, which serves lscr.io, serves this
-# homelab at 0.145-0.53 MB/s; the python-alpine plugin init image adds about 20 MB. 2700s
-# covers the full re-pull down to 0.135 MB/s. The Job has no deadline, so a
-# pull slower still costs that revision its verdict, the Job keeps pulling, and Flux applies
-# jellyfin on a later retry. Only Flux reads it: the renderer adds the Kustomization for a
-# published tag alone, so an Ansible deploy ignores it.
+# Budget of the jellyfin-prepull Job: Recreate would otherwise leave jellyfin down for the whole
+# image pull.
+# 2700s covers a re-pull down to 0.135 MB/s; a slower pull costs that revision its verdict. Only
+# Flux reads it.
 flux_prepull_timeout: 2700s
 
 # Renovate stance: whether an image bump here may automerge. `promote` deploys what merges.
@@ -35,32 +25,24 @@ flux_prepull_timeout: 2700s
 # old image.
 k8s_autodeploy: true
 k8s_autodeploy_reason: "migrating state — Recreate + RWO config PVC, protected by the jellyfin-snapshot Job before each revision and an operator revert to it after a failed one; also the only GPU (devic.es/dri) workload in the fleet. WEIGHED: jellyfin also mounts media-data (shared RWX, not reverted); a revert rewinds the library cache and watch history, self-healing on a rescan"
-# The claim snapshotted before each revision applies. Under Flux the renderer turns this
-# list into the jellyfin-snapshot Kustomization, whose Job snapshots it before jellyfin applies.
-# The snapshot is the recovery point this role's auto-deploy depends on.
+# Snapshotted before each revision applies (the jellyfin-snapshot Kustomization); the recovery point
+# this role's auto-deploy depends on.
 k8s_autodeploy_snapshot_pvcs: [jellyfin-config]
-# Claims this role MOUNTS but does not revert — the WEIGHED clause in the reason above, stated
-# where a test can read it. media-data is rendered by k8s/media-volume, so no guard that reads
-# what this role creates can see the coupling.
+# Claims this role MOUNTS but does not revert; media-data is rendered by k8s/media-volume, so no
+# guard reading what this role creates sees the coupling.
 k8s_autodeploy_unreverted_claims: [media-data]
 
 # data/ holds the library database, artwork and trickplay. longhorn, not
 # longhorn-nobackup: re-scanning a library rebuilds the metadata but loses watch state, user
 # accounts and API keys.
 jellyfin_k8s_claim: jellyfin-config
-# `longhorn` — backed up. Excluding it (`longhorn-nobackup`) leaves a single frozen restore
-# point, and nothing Longhorn or B2 expose shows whether steady-state incrementals drive B2's
-# TRANSACTION cap. B2 Reachable is the readout. docs/archive/b2-transaction-cap-monitoring-gaps.md.
+# `longhorn`, backed up: excluding it leaves one frozen restore point, and nothing shows whether
+# incrementals drive B2's TRANSACTION cap (B2 Reachable is the readout).
 jellyfin_k8s_storage_class: longhorn
-# 8Gi: Jellyfin's own startup capacity check (StorageHelper.TestDataDirectorySize) requires
-# 2GiB free in data/. Cache and transcode scratch live on an emptyDir (the `jellyfin-cache`
-# volume), so this is durable-data growth only. 8Gi (8589934592 bytes) is a multiple of 16MiB
-# and of every smaller block-size candidate, so a Longhorn expansion is real regardless of
-# which size Longhorn checks against.
+# 8Gi: Jellyfin's startup check needs 2GiB free in data/; 8Gi is a multiple of 16MiB, so a Longhorn
+# expansion is real.
 jellyfin_k8s_size: 8Gi
 
-# The claim the renderer emits for this role. The jellyfin Kustomization applies it after the
-# jellyfin-snapshot Job.
 k8s_claims:
   - name: "{{ jellyfin_k8s_claim }}"
     storage_class: "{{ jellyfin_k8s_storage_class }}"
@@ -93,23 +75,13 @@ jellyfin_k8s_snapshot_max_size: "{{ (jellyfin_k8s_size[:-2] | int) * 2 * 1024 * 
 # READ-ONLY, and mounted TWICE — see the deployment template. Not a tidy-up target.
 jellyfin_k8s_media_claim: media-data
 
-# ── the GPU ─────────────────────────────────────────────────────────────────────────────────
-# The extended resource the device plugin advertises. Requesting it is what gets the render
-# node into the container's cgroup device allowlist; `hostPath` alone does not, and fails with
-# an EPERM (not EACCES) on open(). The GID below is the other half — the plugin gets the
-# container past the cgroup, group membership gets it past the file mode.
+# Requesting devic.es/dri puts the render node in the cgroup device allowlist; `hostPath` alone
+# fails with EPERM on open(). The GID below gets past the file mode.
 jellyfin_k8s_dri_resource: devic.es/dri
 
-# ── the LAN address ────────────────────────────────────────────────────────────────────────
-# Direct-by-IP clients reach 8096 through a MetalLB LoadBalancer, PINNED rather than pool-assigned: `homelab-pool` has autoAssign, so an
-# unpinned Service takes whatever is free and can move on recreate — and this address is typed
-# into TV and phone clients by hand. A moving one is worse than a chosen one.
-#
-# The two UDP discovery ports (1900 SSDP, 7359 auto-discovery) are deliberately NOT here. Both
-# are multicast/broadcast and MetalLB in L2 mode does not carry multicast to pods; nobody uses
-# DLNA, which keeps this pod off `hostNetwork`.
-# jellyfin_k8s_lan_ip lives in group_vars/all.yml (cross-role: observability's prometheus.yaml.j2
-# reads it, and role defaults are invisible across roles).
+# VIP PINNED, not pool-assigned: `homelab-pool` autoAssigns, and clients have it typed in by hand.
+# UDP discovery ports (1900, 7359) are NOT exposed: MetalLB L2 carries no multicast. lan_ip is in
+# group_vars/all.yml.
 
 # What the server advertises to clients as its own address — the LAN VIP above.
 jellyfin_k8s_published_url: "http://{{ jellyfin_k8s_lan_ip }}:8096"
@@ -126,135 +98,65 @@ jellyfin_k8s_published_url: "http://{{ jellyfin_k8s_lan_ip }}:8096"
 # 12.4. Raise this and the image together, never the plugin alone. The Renovate PR for
 # this pin is deliberately manual (renovate.json names it): Renovate can bump the version but
 # not the image, the asset filename (it leads with the targetAbi) or the MD5.
-# tests/services/test_anisync_pin_matches_server.py refuses the mismatch.
+# tests/services/jellyfin/test_anisync_pin_matches_server.py refuses the mismatch.
 jellyfin_k8s_anisync_version: "4.7.0.0"
 # URL and checksum both come from the plugin's published manifest.json.
 jellyfin_k8s_anisync_url: "https://github.com/vosmiic/jellyfin-ani-sync/releases/download/v4.7/12.4.0.-.ani-sync_4.7.0.0.zip"
 jellyfin_k8s_anisync_md5: "9b1b6705e9fe2465a1eb858432cd96bd"
-# ── Intro Skipper (skip-intro / skip-credits media segments) ────────────────────────────────
-# Detects intro and credit sequences by audio fingerprint and publishes them through Jellyfin's
-# Media Segments API. Every client that speaks that API then draws the skip button itself —
-# upstream's README states plainly that "as of Jellyfin 10.10, Intro Skipper does NOT modify
-# the UI", so there is no index.html injection here and `/usr/share/jellyfin/web` is never
-# written. That is what lets this install stay a plain file drop into the config volume.
-#
-# The release line is per JELLYFIN major, not per plugin version: upstream tags are
-# `10.11/v1.10.11.24` and `12.0/v12.0.8.0`, two lines maintained in parallel, and every
-# Jellyfin 12 build ships on the `12.0/` line. Within that line the targetAbi still climbs
-# (12.0.5.0 declares 12.1, 12.0.8.0 declares 12.4), so read it from the manifest on every bump:
-# a build declaring a newer ABI than the image is rejected silently, as the ani-sync note above
-# describes.
+# Skip markers use the Media Segments API; nothing writes into /usr/share/jellyfin/web.
+# The release line is per JELLYFIN major; read targetAbi from the manifest on every bump (a newer
+# ABI is rejected silently).
 jellyfin_k8s_introskipper_version: "12.0.8.0"
-# The zip carries ONLY IntroSkipper.dll — no meta.json, unlike the ani-sync release. The init
-# container writes one from the fields below, so Jellyfin reads the plugin's real GUID and name
-# instead of falling back to a manifest it derives from the directory name (that fallback sets
-# the id to an MD5 of the folder and AutoUpdate to false).
+# The zip carries ONLY the DLL; the init container writes meta.json so Jellyfin gets the real GUID.
 jellyfin_k8s_introskipper_target_abi: "12.4.0.0"
 jellyfin_k8s_introskipper_guid: "c83d86bb-a1e0-4c35-a113-e2101cf4ee6b"
-# URL and targetAbi come from the plugin's published manifest
-# (github.com/intro-skipper/manifest, 12/manifest.json). The checksum does NOT: upstream
-# publishes an MD5 there, and this pins the sha256 GitHub itself reports for the asset
-# (`gh release view --repo intro-skipper/intro-skipper 12.0/v12.0.8.0 --json assets`), the
-# same stronger digest headlamp_k8s_plugins uses.
+# URL and targetAbi come from the published manifest; the checksum is the sha256 GitHub reports for
+# the asset, not the manifest's MD5.
 jellyfin_k8s_introskipper_url: "https://github.com/intro-skipper/intro-skipper/releases/download/12.0/v12.0.8.0/intro-skipper-v12.0.8.0.zip"
 jellyfin_k8s_introskipper_sha256: "a898f2e451a5421e02d09efb9c11d7fe3226ea122605260a3c57811ce01963ff"
 
-# ── Webhook (playback / library events out to HTTP endpoints) ───────────────────────────────
-# Jellyfin's own first-party plugin (owner `jellyfin` in the official manifest), installed so
-# playback and library events can drive Home Assistant. The repo installs the plugin; the
-# destination is configured in the dashboard and stored on the config PVC, as ani-sync's
-# OAuth token is.
-#
-# One Webhook major per Jellyfin line: 21.0.0.0 declares 10.11.8.0 and 22.0.0.0 declares
-# 12.0.0.0. Jellyfin's loader rejects a plugin built for a NEWER server silently — the same trap
-# the two pins above record — so a future major is the wrong one until the image reaches its ABI.
-#
-# Distributed from repo.jellyfin.org rather than a GitHub release, so there is no `gh release`
-# asset digest to prefer: this pins the MD5 the official manifest.json publishes.
-# The zip DOES carry its own meta.json — so unlike Intro Skipper, nothing here writes one.
+# One Webhook major per Jellyfin line (21 -> 10.11.8, 22 -> 12.0.0); a plugin for a NEWER server is
+# rejected silently.
+# Pins the MD5 from the official manifest (no GitHub asset digest); the zip carries its own
+# meta.json.
 jellyfin_k8s_webhook_version: "22.0.0.0"
 jellyfin_k8s_webhook_target_abi: "12.0.0.0"
 jellyfin_k8s_webhook_url: "https://repo.jellyfin.org/files/plugin/webhook/webhook_22.0.0.0.zip"
 jellyfin_k8s_webhook_md5: "1bb9033caa69ff54ef56cfa8669b5ac5"
 
-# ── Merge Versions (collapses duplicate quality versions into one library entry) ─────────────
-# It merges the several files a movie can have — 1080p and
-# 2160p, or a remux beside a web-dl — into a single library entry whose versions the client
-# offers in a picker, instead of listing the same film three times. Third-party
-# (`danieladov/jellyfin-plugin-mergeversions`), and NOT in the official
-# repo.jellyfin.org manifest, so the targetAbi and the digest come from the plugin's own
-# published manifest and release asset rather than from Jellyfin's.
-#
-# Upstream tags the release line by JELLYFIN version, the way Intro Skipper does — `10.11.0.1`
-# and `12.0.1` are the two live lines, and 12.0.1 declares targetAbi 12.0. Take the line
-# jellyfin_k8s_image runs. The 12 line's tags have three parts, so this pin is the tag as
-# written, not the four-part version the manifest lists (12.0.1.0).
+# Third-party, not in the official manifest: targetAbi and digest come from its own manifest and
+# release asset.
+# Take the tag line jellyfin_k8s_image runs; the 12 line has three-part tags, so pin as written
+# (12.0.1).
 jellyfin_k8s_mergeversions_version: "12.0.1"
-# targetAbi and guid come from the plugin's published manifest
-# (danieladov/JellyfinPluginManifest, master manifest.json, which writes the ABI as `12.0`). The
-# CHECKSUM does not: that manifest publishes an MD5, and this pins the sha256 GitHub itself
-# reports for the asset, the stronger digest Intro Skipper's pin already uses.
+# targetAbi and guid come from danieladov/JellyfinPluginManifest; the checksum is the sha256 GitHub
+# reports, not the manifest's MD5.
 jellyfin_k8s_mergeversions_target_abi: "12.0.0.0"
 jellyfin_k8s_mergeversions_guid: "f21bbed8-3a97-4d8b-88b2-48aaa65427cb"
 jellyfin_k8s_mergeversions_url: "https://github.com/danieladov/jellyfin-plugin-mergeversions/releases/download/12.0.1/Jellyfin.Plugin.MergeVersions.zip"
 jellyfin_k8s_mergeversions_sha256: "57c6ccb6a3926e47d2492b00fc2ee5c41b1871275dc85be281fb4e923041ec89"
-# The zip carries ONLY Jellyfin.Plugin.MergeVersions.dll — no meta.json, so this install is
-# Intro Skipper's shape and not Webhook's: the init container writes the manifest from the guid,
-# name and targetAbi above. Without it Jellyfin's LoadManifest invents one from the directory
-# name, setting the id to an MD5 of the folder and AutoUpdate to false.
+# The zip carries ONLY the DLL, so the init container writes the manifest from the guid, name and
+# targetAbi above.
 
 
-# ── Media Cleaner (rule-based deletion of watched media) ─────────────────────────────────────
-# The plugin with the largest blast radius: it DELETES MEDIA FILES on a schedule, by rule. It
-# is pinned with a version, checksum, recorded targetAbi and a test like the four beside it,
-# because a plugin that deletes is a different risk class from an unpinned dashboard install,
-# and an image bump must not drop it silently.
-#
-# WHAT IS STILL NOT IN GIT, and cannot be: which libraries it may delete from, and every rule
-# that decides what goes. That is plugin configuration under
-# /config/data/plugins/configurations/, the same shape as bazarr's provider list — the repo owns
-# that the plugin is installed and at which version, never what it is pointed at. Read the rules
-# from the dashboard's Troubleshooting tab, which renders a DRY-RUN report of what a real run
-# would delete, before changing anything there.
-#
-# From v3.4.0 on, the release also ships a MediaCleaner-12.0.zip. The deployment template sets
-# `autoUpdate: false` in every plugin's meta.json, which stops Jellyfin's own `Update Plugins`
-# scheduled task fetching an unpinned build.
-#
-# THE VERSION ENCODES THE SERVER ABI IN ITS FOURTH SEGMENT, which no sibling pin here does.
-# Upstream ships ONE release tag (`v3.2.0`) carrying three per-ABI assets —
-# MediaCleaner-10.10.7.zip, MediaCleaner-10.11.0.zip, MediaCleaner-10.11.9.zip — and publishes
-# each as its own manifest version: `3.2.0.101007`, `3.2.0.101100`, `3.2.0.101109`. The fourth
-# segment is `<major><minor:02d><patch:02d>` of the targetAbi, so 10.11.9 becomes 101109. Picking
-# the wrong asset is therefore a SILENT choice: all three are the same plugin release and only
-# the embedded ABI differs, and Jellyfin rejects one built for a newer server without logging a
-# failure. tests/services/test_mediacleaner_install.py re-derives that encoding from the
-# targetAbi rather than trusting the three values to have been copied consistently.
+# It DELETES MEDIA FILES by rule: pinned (version, checksum, targetAbi, test); libraries and rules
+# are NOT in git.
+# The version's fourth segment encodes the ABI (10.11.9 -> 101109); test_mediacleaner_install.py
+# re-derives it.
 jellyfin_k8s_mediacleaner_version: "3.8.0.120000"
 # The newest ABI variant the 12.4 image satisfies. v3.8.0 ships no variant newer than 12.0.
 jellyfin_k8s_mediacleaner_target_abi: "12.0.0.0"
 jellyfin_k8s_mediacleaner_url: "https://github.com/shemanaev/jellyfin-plugin-media-cleaner/releases/download/v3.8.0/MediaCleaner-12.0.zip"
-# sha256, the digest GitHub reports for the asset itself. The plugin's published manifest
-# (shemanaev/jellyfin-plugin-repo, master manifest.json) carries an MD5, 96e0bf0be520bbaee35c7596018f923c,
-# for the same bytes. The zip's own meta.json declares version 3.8.0.120000 and targetAbi
-# 12.0.0.0, matching the two pins above.
+# sha256 is the digest GitHub reports; the plugin's published manifest carries an MD5 for the same
+# bytes.
 jellyfin_k8s_mediacleaner_sha256: "5df3f76aec1c02568c91c9f78d0dbbe3615c3d7317d41ed918f3125c7361f654"
-# The zip carries its own meta.json beside MediaCleaner.dll and MediaCleaner.Core.dll, so this
-# install is WEBHOOK's shape, not Intro Skipper's: nothing here writes a manifest, and no guid
-# is needed as an input. For the record, the manifest declares
-# 607fee77-97eb-41fe-bf22-26844d99ffb0 — that is the id the plugin's configuration directory is
-# already bound to, which is why a dashboard-installed copy and this one are the same plugin to
-# Jellyfin rather than two.
+# The zip carries its own meta.json (Webhook's shape); id 607fee77-97eb-41fe-bf22-26844d99ffb0 binds
+# the configuration directory.
 
-# ── No SSO-Auth plugin ──────────────────────────────────────────────────────────────────────
-# The deployment template's `sweep-unlisted-plugins` init container removes the plugin
-# directory from the PVC, as it does for every plugin not installed here. Upstream
-# 9p4/jellyfin-plugin-sso publishes no Jellyfin 12 build — its newest release, 4.0.0.4, still
-# declares targetAbi 10.11.0.0 — so it could not run on the 12 image line in any case.
-#
-# This role runs `use_authelia: false` and jellyfin.<domain> is a PUBLIC route, so the route
-# falls back to Jellyfin's own local accounts: no OIDC, no 2FA. `use_authelia: true` would
-# protect the route but breaks native clients.
+# No SSO-Auth plugin: upstream has no Jellyfin 12 build (newest 4.0.0.4 declares ABI 10.11.0.0);
+# the sweep removes it.
+# `use_authelia: false` on a PUBLIC route means local accounts only (no OIDC, no 2FA); true breaks
+# native clients.
 
 # The image every plugin container runs on — the five installers and the allowlist sweep
 # alike. Python, not the alpine:3.24 the sibling init
@@ -268,8 +170,6 @@ jellyfin_k8s_plugin_init_image: python:3.15-alpine@sha256:0f9552bb28711333da1691
 jellyfin_k8s_cpu_limit: "4"
 jellyfin_k8s_mem_limit: 4096Mi
 jellyfin_k8s_cpu_request: "250m"
-# 2Gi against working-set peaks of 1.85GiB and 2.8GiB. The request is the kubelet's eviction
-# datum — it ranks pods that exceed their request ahead of those that don't — so a request
-# well under the working set puts jellyfin in the worst bucket. Stays under the 4096Mi limit,
-# so QoS remains Burstable.
+# The request is the kubelet's eviction datum: one well under the working set (peaks 1.85-2.8GiB)
+# puts jellyfin in the worst bucket. Stays under the 4096Mi limit, so QoS remains Burstable.
 jellyfin_k8s_mem_request: 2Gi

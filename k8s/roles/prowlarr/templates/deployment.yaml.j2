@@ -11,12 +11,11 @@ metadata:
   name: prowlarr
   namespace: {{ k8s_namespace }}
 spec:
-  # The config PVC is ReadWriteOnce on single-replica Longhorn, so a rolling update deadlocks:
-  # the new pod waits for a volume the old pod has not released.
+  # ReadWriteOnce config PVC: a rolling update deadlocks, the new pod waiting on the old one's
+  # volume.
 {{ spec_shell('Recreate') }}
   replicas: 1
-  # The same budget as the drain's rollout wait. See prowlarr_k8s_rollout_timeout in
-  # defaults/main.yml.
+  # Same budget as the drain's rollout wait (prowlarr_k8s_rollout_timeout).
   progressDeadlineSeconds: {{ prowlarr_k8s_rollout_timeout[:-1] | int }}
   selector:
     matchLabels:
@@ -28,11 +27,7 @@ spec:
         netpol-baseline: enforced
     spec:
       # No fsGroup: the LSIO image chowns /config itself on startup.
-      #
-      # NO MEDIA MOUNT AT ALL. prowlarr is an indexer proxy — it moves search results between the
-      # \*arrs and trackers and never touches a file on disk. Mounting the media volume "for
-      # consistency" would hand the fleet's most externally-connected service write access to the
-      # library for nothing.
+      # No media mount: prowlarr never reads library files, so it gets no write access to them.
 {{ pod_shell('homelab-standard') }}
 {{ node_affinity_preference('daniel-server') }}
       containers:
@@ -41,14 +36,11 @@ spec:
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: {{ container_item.port }}
-          # The s6 privilege-drop set. No NET_BIND_SERVICE: prowlarr listens on
-          # {{ container_item.port }} (>1024), which needs no
-          # privilege. Interpolated rather than written out so the comment cannot drift from the port.
+          # The s6 privilege-drop set; no NET_BIND_SERVICE because prowlarr's port is above 1024.
 {{ hardened_security_context(add=['CHOWN', 'SETUID', 'SETGID', 'FOWNER', 'DAC_OVERRIDE']) }}
           env:
 {{ lsio_env() }}
-            # Prowlarr:Log, reached through the unprefixed environment-variable provider.
-            # Upstream defaults are debug / 50 files; see k8s/roles/sonarr/defaults/main.yml.
+            # Prowlarr:Log via the unprefixed env provider; upstream defaults are debug / 50 files.
             - name: PROWLARR__LOG__LEVEL
               value: "{{ prowlarr_k8s_log_level }}"
             - name: PROWLARR__LOG__ROTATE

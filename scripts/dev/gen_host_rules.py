@@ -44,10 +44,10 @@ from pathlib import Path
 
 import yaml
 
-from lib import yaml_fast
+from lib import estate, yaml_fast
 from lib.cli_help import ArgumentParser
 from lib.inventory_lists import host_names
-from lib.repo_paths import HOST_VARS, K8S_ROLES, REPO
+from lib.repo_paths import K8S_ROLES, REPO
 
 SELF = "scripts/dev/gen_host_rules.py"
 ROLE = K8S_ROLES / "observability"
@@ -86,9 +86,7 @@ def untabled_hosts(table: dict[str, dict], inventory: Iterable[str]) -> list[str
     ]
 
 
-def host_facts(
-    hosts: dict[str, dict], repo: Path = REPO, host_vars: Path = HOST_VARS
-) -> dict[str, dict]:
+def host_facts(hosts: dict[str, dict], repo: Path = REPO) -> dict[str, dict]:
     """Each host's selector facts: its table entry, package components and host_vars."""
     facts = {}
     for host, entry in hosts.items():
@@ -96,7 +94,7 @@ def host_facts(
         facts[host] = {
             **entry,
             "components": set(package.get("components") or []),
-            "host_vars": _load(host_vars / f"{host}.yml"),
+            "host_vars": estate.host_vars(host),
         }
     return facts
 

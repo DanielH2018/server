@@ -22,8 +22,6 @@ import re
 from collections.abc import Callable
 from pathlib import Path
 
-# `fanout_lib.target.Target.unit_prefix` plus `fanout_lib.launch.unit_name`'s batch id: issue
-# numbers joined by hyphens. A repo-name segment starts with a letter, so it never reads as one.
 REASON = re.compile(r"fanout(?:-[A-Za-z][\w.]*)*(?:-\d+)+")
 
 

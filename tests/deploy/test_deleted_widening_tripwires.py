@@ -27,8 +27,7 @@ DELETED_IN = "fb9e4017f"
 # gives a tag the content tags of its own role's builds only, so the consumer's manifest does
 # not move, nothing rolls, and the landing reports green.
 
-# Manifest kinds that run a workload. A role rendering one of these deploys what it builds in
-# the same role, so a single tag covers build and roll.
+# A role rendering one of these deploys what it builds in the same role.
 _WORKLOAD_KINDS = ("deployment", "daemonset", "statefulset", "cronjob", "job")
 
 BUILDER = "image-builder"

@@ -64,9 +64,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlparse
 
-# Flat siblings in the same directory, mounted together at /app from one ConfigMap, so a
-# plain import resolves both under `python3 /app/artifact_server.py` and under the tests'
-# path insert. Neither module imports back.
+# Flat sibling modules, so a plain import resolves under both the server and the tests.
 from _gui_html import FAVICON_SVG, GUI_HTML, STAR_JS
 from artifact_meta import (
     apply_metadata,
@@ -145,8 +143,7 @@ class StarStore:
     def __init__(self, path: Path, writable: bool = True) -> None:
         self.path = path
         self.writable = writable
-        # ThreadingHTTPServer handles requests concurrently, and two stars landing in the same
-        # read-modify-write would lose one of them.
+        # Requests run concurrently; two stars in one read-modify-write would lose one.
         self._lock = threading.Lock()
 
     def signature(self) -> tuple[int, int] | None:
@@ -200,8 +197,7 @@ class StarStore:
             try:
                 with os.fdopen(fd, "w", encoding="utf-8") as f:
                     f.write("".join(f"{k}\n" for k in sorted(keys)))
-                # mkstemp creates 0600. The agent user's prune on daniel-box reads this file
-                # as another uid, and it lists file names, not secrets.
+                # mkstemp creates 0600; the agent user's prune reads this file as another uid.
                 os.chmod(tmp, 0o644)
                 os.replace(tmp, self.path)
             except BaseException:
@@ -259,8 +255,6 @@ def build_index(
         if suffix in PARSEABLE:
             apply_metadata(entry, body, suffix == ".md", known)
         entry.setdefault("origin", derive_origin(path.name))
-        # An .md alongside an .html of the same stem is the same document — the skill writes
-        # both. Flagged so the GUI can fold the Markdown copy away by default.
         entry["companion_html"] = (
             suffix == ".md" and (path.parent / (path.stem + ".html")).exists()
         )
@@ -270,8 +264,6 @@ def build_index(
         "generated": datetime.now(timezone.utc).isoformat(),
         "count": len(entries),
         "hosts": sorted({e["host"] for e in entries}),
-        # Facet values come from what the corpus actually holds, not a fixed vocabulary, so a
-        # category nothing uses never appears as a dead dropdown entry.
         "categories": sorted({e["category"] for e in entries if e.get("category")}),
         "statuses": sorted({e["status"] for e in entries if e.get("status")}),
         "origins": sorted({e["origin"] for e in entries}),
@@ -294,8 +286,7 @@ class IndexCache:
             (host, str(path), st.st_mtime_ns, st.st_size)
             for host, path, st in scan(self.root)
         )
-        # A star changes no artifact, so without the list's own stat a toggle would never
-        # reach the cached index.
+        # A star changes no artifact, so the list's own stat must invalidate the cached index.
         return files, self.stars.signature() if self.stars else None
 
     def get(self) -> dict:
@@ -360,11 +351,8 @@ class Handler(BaseHTTPRequestHandler):
     cache: IndexCache  # assigned in main() before the server starts
     stars: StarStore | None = None
 
-    # `format` shadows the builtin, and is the parameter name BaseHTTPRequestHandler.log_message
-    # declares — renaming it makes this an incompatible override.
+    # `format` is the parameter name log_message declares; renaming breaks the override.
     def log_message(self, format: str, *args: object) -> None:
-        # One line per request on stdout, so `kubectl logs` reads like every other workload
-        # here rather than BaseHTTPRequestHandler's stderr format.
         print(f"{self.address_string()} {format % args}", flush=True)
 
     def _send(
@@ -373,8 +361,6 @@ class Handler(BaseHTTPRequestHandler):
         self.send_response(status)
         self.send_header("Content-Type", ctype)
         self.send_header("Content-Length", str(len(body)))
-        # These artifacts are internal reviews and audits behind Authelia; keep them out of
-        # search engines even if the route is ever widened.
         self.send_header("X-Robots-Tag", "noindex, nofollow")
         self.send_header("X-Content-Type-Options", "nosniff")
         for key, value in (extra or {}).items():
@@ -427,9 +413,8 @@ class Handler(BaseHTTPRequestHandler):
         if stars is None or not stars.writable:
             self._send(403, b"starring is not enabled on this server\n", text)
             return
-        # The JSON content type is the CSRF defence. Another origin can POST a form or
-        # text/plain without asking, but a JSON body needs a CORS preflight, which this
-        # server never answers, so the browser never sends the request.
+        # The JSON content type is the CSRF defence: a JSON body needs a CORS preflight, which this
+        # server never answers.
         ctype = self.headers.get("Content-Type", "").split(";")[0].strip().lower()
         if ctype != "application/json":
             self._send(415, b"send application/json\n", text)
@@ -494,8 +479,7 @@ class Handler(BaseHTTPRequestHandler):
 
     def _serve_artifact(self, rest: str) -> None:
         host, _, rel = rest.partition("/")
-        # posixpath.normpath collapses `.`/`..` before safe_path resolves; both run, because
-        # normpath alone does not stop a symlink and resolve() alone does not stop `%2e%2e`.
+        # Both run: normpath alone does not stop a symlink, resolve() alone does not stop `%2e%2e`.
         rel = posixpath.normpath(rel).lstrip("/")
         target = safe_path(self.cache.root, host, rel)
         if target is None:

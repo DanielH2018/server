@@ -1,0 +1,127 @@
+"""await_ci waits out a rate-limit 403 rather than reading it as pending.
+
+Run: uv run pytest scripts/deploy_tools/tests/release/test_await_ci_rate_limit.py
+"""
+
+import email.message
+import io
+import urllib.error
+
+from deploy_tools import await_ci
+from lib import gh_rate_limit
+import pytest
+from ci_verdict import CheckRun
+
+INTERVAL_S = 20
+RESET = 4_000_000_000
+
+
+@pytest.fixture
+def rate_limited():
+    """GitHub's 403 for a spent core quota, closed after the test."""
+    headers = email.message.Message()
+    headers["X-RateLimit-Limit"] = "5000"
+    headers["X-RateLimit-Remaining"] = "0"
+    # A reset far past any clock: the wait is capped, never shortened to one poll.
+    headers["X-RateLimit-Reset"] = str(RESET)
+    headers["X-RateLimit-Resource"] = "core"
+    body = b'{"message": "API rate limit exceeded for user ID 41801780."}'
+    error = urllib.error.HTTPError(
+        "https://api.github.com/x",
+        403,
+        "rate limit exceeded",
+        headers,
+        io.BytesIO(body),
+    )
+    yield error
+    error.close()
+
+
+def _wait_through(rate_limited, read_quota) -> list[float]:
+    """The seconds `wait` slept on a read GitHub refused once, then answered green."""
+    green = [
+        CheckRun(name, "completed", "success") for name in await_ci.required_contexts()
+    ]
+    answers = iter([rate_limited])
+
+    def fetch(_sha):
+        answer = next(answers, green)
+        if isinstance(answer, Exception):
+            raise answer
+        return answer
+
+    now = [0.0]
+    slept = []
+
+    def sleep(seconds):
+        slept.append(seconds)
+        now[0] += seconds
+
+    code, _msg = await_ci.wait(
+        "abc",
+        7200,
+        INTERVAL_S,
+        sleep=sleep,
+        clock=lambda: now[0],
+        fetch=fetch,
+        fetch_suites=lambda _s: [],
+        read_quota=read_quota,
+    )
+    assert code == 0
+    return slept
+
+
+def test_a_rate_limit_403_waits_for_the_reset_rather_than_polling_as_pending(
+    rate_limited,
+):
+    slept = _wait_through(rate_limited, lambda _name: {"remaining": 0, "reset": RESET})
+    assert sum(slept) > INTERVAL_S
+
+
+def test_a_rate_limit_wait_ends_once_the_quota_has_calls_again(rate_limited):
+    reads = iter([{"remaining": 0, "reset": RESET}])
+
+    def read_quota(name):
+        assert name == "core"
+        return next(reads, {"remaining": 5000, "reset": RESET})
+
+    slept = _wait_through(rate_limited, read_quota)
+    assert sum(slept) == 2 * gh_rate_limit.RECHECK_S
+
+
+def test_a_rate_limit_403_is_not_read_as_a_pending_verdict(rate_limited):
+    """The descendant walk reads each commit through `verdict_for`'s own catch."""
+
+    def fetch(_sha):
+        raise rate_limited
+
+    try:
+        got = await_ci.verdict_for("abc", fetch, await_ci.required_contexts())
+    except Exception:
+        return
+    assert got != "pending"
+
+
+def test_verdict_for_raises_the_rate_limit_that_wait_sleeps_on(rate_limited):
+    def fetch(_sha):
+        raise rate_limited
+
+    with pytest.raises(await_ci.RateLimitedError):
+        await_ci.verdict_for("abc", fetch, await_ci.required_contexts())
+
+
+def test_a_zero_budget_raises_the_rate_limit_for_its_caller_to_sleep(rate_limited):
+    def fetch(_sha):
+        raise rate_limited
+
+    with pytest.raises(await_ci.RateLimitedError):
+        await_ci.wait("abc", 0, INTERVAL_S, fetch=fetch, fetch_suites=fetch)
+
+
+def test_the_cli_reads_a_zero_budget_rate_limit_as_no_verdict(capsys):
+    def wait(*_args, **_kwargs):
+        raise await_ci.RateLimitedError(900)
+
+    rc = await_ci.main(["abcdef123456", "--timeout", "0"], wait=wait, token=lambda: "t")
+    assert rc == 75
+    assert "the quota frees in 900s" in capsys.readouterr().out

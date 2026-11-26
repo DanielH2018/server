@@ -7,7 +7,7 @@ stays invisible until the rejected command is run by hand.
 
 The publish sequence itself -- branch, push, reset master, `gh pr create`, `gh pr merge
 --auto` -- lives in scripts/deploy_tools/publish_pr.py, which the two crons call, and is
-EXECUTED by scripts/deploy_tools/tests/test_publish_pr.py. What stays here is text
+EXECUTED by scripts/deploy_tools/tests/release/test_publish_pr.py. What stays here is text
 assertions over the templates, the weaker kind of guard, kept because the regression they
 cover is someone reinstating an inline direct write, and that is a literal line of shell.
 """

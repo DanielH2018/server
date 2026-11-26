@@ -21,8 +21,7 @@ spec:
         app: littlelink
         netpol-baseline: enforced
     spec:
-      # No securityContext.runAsUser on purpose: the image's own default user is what serves
-      # this page, and pinning a UID here would be an unrelated behaviour change.
+      # No runAsUser on purpose: the image's own default user serves this page.
 {{ pod_shell('homelab-best-effort') }}
 {{ node_affinity_preference('daniel-server') }}
       containers:

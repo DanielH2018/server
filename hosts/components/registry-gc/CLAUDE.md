@@ -24,5 +24,5 @@
   before changing a keep count.
 
 ENFORCED: hosts/components/registry-gc/tests/test_registry_gc_component.py (the units, the links
-and the legacy entries), tests/services/test_registry_gc_ghcr_mirror.py and
+and the legacy entries), tests/services/registry_gc/test_registry_gc_ghcr_mirror.py and
 test_registry_gc_dockerhub_mirror.py (the script's behaviour against stubs).

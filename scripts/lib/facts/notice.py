@@ -50,8 +50,6 @@ from .citations import (
 )
 from .lint import bodies_at
 
-# (doc path, blob id) -> that blob split into sections. Keyed by path too, because a section
-# key starts with its doc's path and two docs can hold the same bytes.
 _SECTIONS: dict[tuple[str, str], list[Section]] = {}
 
 
@@ -204,8 +202,6 @@ class Notice:
     prose_edited: bool
 
 
-# What ``atom_content`` raises for a file it cannot parse. ``ast.parse`` raises the first two,
-# and ``yaml_fast.safe_load`` raises a ``yaml.YAMLError`` subclass.
 _UNPARSABLE = (SyntaxError, ValueError, yaml.YAMLError)
 
 
@@ -407,8 +403,8 @@ def resolve_base(repo: Path, ref: str, head: str = "HEAD") -> str | None:
 
 FORMATS = ("text", "markdown", "github", "json", "reread")
 
-# Content-form rows come before path rows, so a rename's path rows cannot push a content row
-# past the annotation cap. Within one form, kinds come in this order.
+# Content-form rows come before path rows so a rename cannot push a content row past the annotation
+# cap.
 _KIND_ORDER = ("moved", "gone", "ambiguous", "unparsable")
 
 # GitHub keeps at most 10 notice annotations per step, and the summary takes one of them.

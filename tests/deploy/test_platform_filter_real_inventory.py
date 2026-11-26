@@ -9,16 +9,14 @@ Run: uv run pytest tests/deploy/test_platform_filter_real_inventory.py
 
 import functools
 
+from lib.estate import host_vars
 from lib import yaml_fast
 
 from renderer.renderer_lib import host as host_mode
-from _helpers import HOST_VARS
 
 
-# The Pi's package runs `compose_services` as one Compose project (H5) through
-# homelab-compose.service. Each pair is (upstream, downstream): autoheal restarts containers
-# through docker-proxy-lifecycle, and alloy discovers logs through docker-proxy. Both ends must
-# be packaged, and the downstream carries `depends_on` on the service it reaches.
+# Each pair is (upstream, downstream): both ends must be packaged, and the downstream carries
+# `depends_on` on the service it reaches.
 PI_ORDERING = [("docker-proxy", "autoheal"), ("docker-proxy", "alloy")]
 # What a packaged downstream's `depends_on` must name.
 PI_DEPENDS_ON = {"autoheal": "docker-proxy-lifecycle", "alloy": "docker-proxy"}
@@ -46,7 +44,7 @@ def _order_violations(packaged, edges, depends_on=None):
 
 
 def _pi_services():
-    pi = yaml_fast.safe_load((HOST_VARS / "daniel-pi.yml").read_text())
+    pi = host_vars("daniel-pi")
     return [c["name"] for c in pi["compose_services"] or []]
 
 

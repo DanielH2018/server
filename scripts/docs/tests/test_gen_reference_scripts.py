@@ -397,7 +397,7 @@ def test_no_two_scripts_share_a_basename():
     undecidable for exactly the colliding names this test forbids. So uniqueness is the
     invariant, and this is where it is enforced. Sibling, different invariant, keep apart:
     the `no-two-import-roots-share-a-module-basename` row of
-    `tests/repo/test_census_rows_python.py` forbids one NAME at two
+    `tests/repo/census_rows/test_census_rows_python.py` forbids one NAME at two
     import roots (`pythonpath`, role `files/`, test-inserted `scripts/<dir>`) — sys.path
     shadowing, so every root but top level only.
     """

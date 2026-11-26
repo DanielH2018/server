@@ -121,8 +121,6 @@ def docker_available() -> None:
     pytest.skip("no Docker daemon here; CI runs the image leg")
 
 
-# Builds a data directory under /drill as initdb leaves it, applies $MUTATE as root, then runs
-# the lifted program the way the probe pod does.
 _IN_IMAGE = """
 set -e
 mkdir -p /drill/pgdata /scratch

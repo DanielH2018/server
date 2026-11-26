@@ -5,13 +5,8 @@ color: slate
 headerStyle: clean
 showStats: false
 target: _blank
-# Group order here IS display order, and a group services.yaml declares but this block omits
-# renders below the laid-out ones at one column wide. A layout entry naming a group services.yaml
-# does not declare is dead too, because layout entries match a group by name.
-#
-# The split is by WIDGET, not by topic. A widgeted tile is several lines tall and a link-only
-# tile is one line, so mixing them in one group leaves ragged holes. Services and Calendar hold
-# the widgeted tiles; Admin and Tools hold the link-only ones, four to a row.
+# A group declared in services.yaml but omitted here renders below the laid-out ones, one column
+# wide.
 layout:
   Top Row:
     style: row
@@ -28,50 +23,27 @@ layout:
     Services:
       style: row
       columns: 3
-    # FIVE columns for a group whose first tile is a calendar, because the personal links sit
-    # under it. `columns` is uniform across a group, so the calendar would be a fifth of the
-    # width — `#my-calendar { grid-column: 1 / -1 }` in custom.css.j2 spans it back across all
-    # five, and the links then fill the row beneath.
-    #
-    # `style: row` rather than `column` is load-bearing: `column` renders the list as
-    # `flex flex-col`, where grid-template-columns does nothing at all.
+    # FIVE columns because the links sit under the calendar (`#my-calendar { grid-column: 1 / -1 }`
+    # in custom.css.j2).
+    # `style: row` is load-bearing: `column` renders flex-col, where grid-template-columns does
+    # nothing.
     Calendar:
       style: row
       columns: 5
-    # DO NOT PUT `Bookmarks:` HERE. A BOOKMARK GROUP CANNOT LIVE INSIDE `Top Row` AT ALL, nested
-    # under `Calendar:` or as a sibling of Services and Calendar, and homepage says nothing when
-    # it refuses. The group falls out of Top Row and renders LAST at full width, which is exactly
-    # what an unlaid-out group does. Nothing logs it and the repo checks stay green: only
-    # reading the rendered page shows it. A bookmark group is only ever laid out as a TOP-LEVEL
-    # entry.
-    #
-    # So the calendar column cannot hold the bookmarks. To put something under the calendar, it
-    # has to be a SERVICE tile in services.yaml.j2's `Calendar` group, not a bookmark.
-  # No `Media:` entry: that group does not exist, and a layout key naming no group is silently
-  # dead. One link-only group: four tiles at four columns is one full row.
+    # Do not put `Bookmarks:` here: a bookmark group cannot live inside `Top Row`; use a SERVICE
+    # tile in `Calendar`.
   Admin & Tools:
     style: row
     columns: 4
-  # No `Bookmarks:` entry, and no bookmark group to lay out — the five personal links are
-  # SERVICE tiles in the `Calendar` group, which is the only way to get them into that column.
-  # See the note in `Top Row` above.
-# Type-to-filter over every tile and bookmark on the page. This is what keeps the link-only
-# Admin and Tools groups usable as they grow — the keyboard reaches a service whether or not
-# its tile is in view. searchDescriptions widens the match to the `description:` line, so
-# "download" finds qBittorrent through its "Download management" text.
+  # No `Bookmarks:` entry: the personal links are SERVICE tiles in the `Calendar` group.
+  # quicklaunch: searchDescriptions also matches the `description:` line.
 quicklaunch:
   searchDescriptions: true
   hideInternetSearch: false
   hideVisitURL: false
 providers:
   openweathermap: {{ weather_api_key }}
-  # The longhorn INFO WIDGET reads its URL from here, not from its own entry in widgets.yaml.
-  # Homepage splits that widget across the two files — `providers.longhorn` holds the connection,
-  # widgets.yaml holds only the display options — and a `url:` written beside those options is
-  # ignored, leaving the pod logging `<longhorn> Missing Longhorn URL` every refresh behind a
-  # 1/1 Deployment.
-  #
-  # longhorn-frontend, not longhorn-backend, and the reasoning is in widgets.yaml.j2 beside the
-  # display options.
+  # The longhorn widget reads its URL from here: a `url:` in widgets.yaml is ignored
+  # (`Missing Longhorn URL`).
   longhorn:
     url: http://longhorn-frontend.longhorn-system.svc.cluster.local

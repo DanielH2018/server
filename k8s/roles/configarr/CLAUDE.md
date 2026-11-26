@@ -66,7 +66,7 @@ x265 re-encode instead, which made Jellyfin buffer and seek slowly.
   `k8s/roles/configarr/defaults/main.yml:DECIDED: the two gates run unordered`
   (#5617).
 - **The pod holds no Secret.** The reader's code ships in the `configarr-health` ConfigMap,
-  beside `host_lib.py`. No secret goes in the ConfigMap (`tests/k8s/test_no_secret_in_a_moved_jobs_configmap.py`).
+  beside `host_lib.py`. No secret goes in the ConfigMap (`tests/k8s/flux/test_no_secret_in_a_moved_jobs_configmap.py`).
 - **The reader also exports its verdict** (M6 B6b). It patches `homelab/check-verdict`,
   `homelab/check-last-run` and `homelab/check-message` onto the `configarr-health-verdict`
   ConfigMap, which the role renders with no annotations so the reader is their only writer.

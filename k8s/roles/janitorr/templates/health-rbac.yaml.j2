@@ -10,7 +10,7 @@
   because a reader that kubectl refuses pages the tile DOWN. It adds no access: `list` already
   returns every pod in the namespace in full.
 
-  tests/k8s/test_rbac_against_script.py runs the reader's main with a recording
+  tests/k8s/rbac/test_rbac_against_script.py runs the reader's main with a recording
   runner and holds this Role to the calls it records.
 #}
 ---
@@ -35,10 +35,8 @@ rules:
   - apiGroups: [""]
     resources: [pods/log]
     verbs: [get]
-  # The verdict export (files/janitorr_health.py:export_verdict): a merge patch of the
-  # annotations on the one ConfigMap this role renders for it. `get` as well as `patch`, because
-  # `kubectl patch` GETs the object before it sends the PATCH, and the grant names the
-  # object so it reaches no other.
+  # `get` as well as `patch`: `kubectl patch` GETs the object first; the grant names the one
+  # ConfigMap.
   - apiGroups: [""]
     resources: [configmaps]
     verbs: [get, patch]

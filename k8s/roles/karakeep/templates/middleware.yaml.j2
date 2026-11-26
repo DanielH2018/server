@@ -2,15 +2,8 @@
 apiVersion: traefik.io/v1alpha1
 kind: Middleware
 metadata:
-  # The CSP for karakeep. Duplicated per role rather than shared because Traefik's
-  # allowCrossNamespace stays off and a Middleware must live beside the IngressRoute
-  # referencing it — the same trade the telemetry stack makes for rate-limit and authelia.
-  #
-  # karakeep's own inline scripts need
-  # 'unsafe-inline'/'unsafe-eval', so this does not stop inline-script injection — it stops
-  # EXTERNAL script loading, plugin objects, <base> hijacking, cross-origin exfil via
-  # fetch/websocket/form-post, and clickjacking. img-src allows https: so cached-page and
-  # favicon art still render.
+  # Per-role because Traefik's allowCrossNamespace is off. Needs unsafe-inline/eval, so it blocks
+  # external loads, not inline injection.
   name: csp-karakeep
   namespace: {{ k8s_namespace }}
 spec:

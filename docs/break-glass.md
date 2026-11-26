@@ -480,7 +480,7 @@ daniel-box's packages stages the Pi as the canary, so its gate stays open until 
     ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub
     ```
 
-    Write down the fingerprint the last line prints, because step 6 compares it. The address must equal `server_ip` in `inventory/host_vars/daniel-pi.yml`. No package
+    Write down the fingerprint the last line prints, because step 6 compares it. The address must equal `server_ip` in `hosts/daniel-pi/vars.yml`. No package
     pins the address, so correct the router's DHCP reservation if it differs.
 4. To create the age key and run the one-time host steps, run the script through `sh`, because
     the boot partition is FAT. It prints the new public key.
@@ -579,7 +579,7 @@ daniel-box's packages stages the Pi as the canary, so its gate stays open until 
     `dailyaidecheck.timer`.
 9. To re-pin the host key, write the key fields of
     `ssh daniel-pi cat /etc/ssh/ssh_host_ed25519_key.pub` to
-    `ssh_host_ed25519_key` in `inventory/host_vars/daniel-pi.yml`, with the fingerprint in the
+    `ssh_host_ed25519_key` in `hosts/daniel-pi/vars.yml`, with the fingerprint in the
     comment above it. That value is the repo's one copy of the key. Merge it through a PR.
     `promote` applies the new `pi-peer-backup-ssh` Secret, and the next host package update on daniel-box and
     daniel-server ships the new `/etc/ssh/ssh_known_hosts`. Each other account that has the

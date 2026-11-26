@@ -43,7 +43,7 @@
 # Reconcile therefore never restarts k3s, and homelab-k3s-restart does it once per changed hash of
 # the files the component marks `manual:k3s.service`. The component is forward-only.
 #
-# The restart window is `k3s_restart_window` in inventory/host_vars/daniel-box.yml, which
+# The restart window is `k3s_restart_window` in hosts/daniel-box/vars.yml, which
 # sits above the component's defaults. A package-level `defaults:` map reaches only the package's
 # own files, never a component's.
 description: daniel-box's homelab host package

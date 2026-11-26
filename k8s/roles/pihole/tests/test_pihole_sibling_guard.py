@@ -5,7 +5,7 @@ answers each EndpointSlice list from a queue per Service, so a test can script p
 back mid-wait. The render tests render a copy of the role, so an edit reaches the guard as the
 renderer emits it. The guard runs before `pihole`, from `templates/precheck/`, whose ordering
 test_pihole_precheck.py checks (#5719). Its RBAC is tested against the script's calls in
-tests/k8s/test_rbac_against_rest_script.py.
+tests/k8s/rbac/test_rbac_against_rest_script.py.
 
 Run: uv run pytest k8s/roles/pihole/tests/test_pihole_sibling_guard.py
 """

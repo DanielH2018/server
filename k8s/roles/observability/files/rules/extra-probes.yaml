@@ -62,7 +62,7 @@ groups:
             for 2 minutes. Read probe_http_status_code for this instance when the module is an
             http one, then the workload's own log.
       # 10m tolerates a container that a deploy recreates (two 300s bridge cycles).
-      # tests/services/test_extra_probe_targets.py pins the number.
+      # tests/services/scraping/test_extra_probe_targets.py pins the number.
       - alert: PiPortDead
         expr: probe_success{job="blackbox-pi-ports"} == 0
         for: 10m

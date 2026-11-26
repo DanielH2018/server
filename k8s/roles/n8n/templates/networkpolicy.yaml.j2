@@ -1,19 +1,7 @@
 ---
-# k3s runs kube-router's netpol controller (it is on unless the server sets
-# disable-network-policy, and k3s_server_config in hosts/components/k3s-server/component.yml does
-# not set it), so this is enforced rather than decorative. The deploy still verifies both
-# directions instead of trusting that.
-#
-# WHAT IT IS FOR. n8n's task-runner broker binds 0.0.0.0:5679 because n8n has no per-interface
-# bind option, and a client that can reach it AND holds N8N_RUNNERS_AUTH_TOKEN can register a
-# runner — which is arbitrary code execution. Without this policy the broker is reachable by
-# every workload in {{ k8s_namespace }}, including karakeep's headless Chrome, which renders
-# attacker-supplied pages. This policy narrows that to the runners pod, and nothing else.
-#
-# The token is still a gate, not a replacement for one.
-#
-# The file fences 5678 as well: the same policy, two ports, two peer
-# sets. The n8n-verify Job (templates/verify/job.yaml.j2) proves both fences on every apply.
+# The broker binds 0.0.0.0:5679, and a client holding N8N_RUNNERS_AUTH_TOKEN can register a runner
+# (arbitrary code); this narrows it to the runners pod.
+# The same policy also fences 5678.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -26,15 +14,8 @@ spec:
   policyTypes:
     - Ingress
   ingress:
-    # 5678: traefik, where the Authelia two_factor middleware, the CrowdSec bouncer and the
-    # rate-limit run, and monitor-bridge, the one in-cluster API caller (check_n8n dials
-    # `n8n:5678` with X-N8N-API-KEY — monitor-bridge's render_secrets).
-    # A rule with no `from:` would admit every pod: under the namespace-scope baseline that makes
-    # n8n the ONLY web workload whose port any pod could reach, and n8n is the one that executes
-    # workflow code and holds encrypted credentials.
-    # Kubelet probes need no rule: they reach the pod IP directly and kube-router does not
-    # subject that path to ingress enforcement (the headlamp and registry policies run on
-    # probes under the same shape). No scrape job targets n8n, so prometheus is not admitted.
+    # 5678: traefik and monitor-bridge only. A rule with no `from:` would admit every pod; probes
+    # need no rule.
     - from:
         - podSelector:
             matchLabels:
