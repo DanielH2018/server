@@ -64,30 +64,24 @@ NODE_BIN="/home/{{ sys_user }}/.local/share/fnm/aliases/default/bin"
 ENGINE="/home/{{ sys_user }}/.local/share/chezmoi/evals/run-evals.mjs"
 PR_BRANCH_PREFIX="evals-history/"
 
-# State this cron keeps ACROSS runs. It lives outside $REPO, which it never writes, and outside
-# $TREE, which the next run's prepare_tree cleans. The component's tmpfiles.d line creates this
-# subdirectory owned by the cron user.
+# Kept across runs: outside $REPO, which it never writes, and outside $TREE, which prepare_tree
+# cleans.
 STAMP_DIR="/var/lib/homelab/eval-run.d"
-# Outside $REPO, so the primary checkout never lists it, and outside .claude/worktrees/, which
-# the worktree pruner sweeps.
+# Outside $REPO so the primary checkout never lists it, and outside .claude/worktrees/, which the
+# pruner sweeps.
 TREE="$STAMP_DIR/tree"
-# One log per failing run, pruned to the newest FAILURE_LOGS_KEPT, so a later failure cannot
-# overwrite a traceback. The `failure-` prefix keeps the prune off the files, the tree and
-# the sweeps/ directory beside it.
+# The `failure-` prefix keeps the prune off the other files, the tree and sweeps/.
 FAILURE_LOG="$STAMP_DIR/failure-$(date -u '+%Y%m%dT%H%M%SZ').log"
 FAILURE_LOGS_KEPT=5
 UNPUBLISHED_HISTORY="$STAMP_DIR/unpublished-history.json"
 # One directory per sweep, named by its UTC start, holding each agent's --json report and the
-# sweep's console log. Weekly runs, so 8 is about two months of per-run evidence.
+# console log.
 SWEEP_ARCHIVE="$STAMP_DIR/sweeps"
 SWEEPS_KEPT=8
 
-# The API key arrives as a systemd credential, never from this script's own text: a grep or diff
-# over an installed script prints whatever secret was rendered into it, and the renderer
-# withholds every secret from a host package. `LoadCredential=` in homelab-eval-sweep.service
-# puts it under $CREDENTIALS_DIRECTORY. Empty FIRST, so an absent or empty credential leaves
-# the empty-key gate below to fire rather than `set -u` to abort, and a key inherited from the
-# caller's environment can never arm a paid sweep.
+# The key is a systemd credential, never in this script's text: a host package carries no secret.
+# Empty FIRST, so an inherited key never arms a paid sweep and a missing one reaches the empty-key
+# gate.
 ANTHROPIC_API_KEY=""
 CRED_DIR="${CREDENTIALS_DIRECTORY:-}"
 [[ -n "$CRED_DIR" && -r "$CRED_DIR/anthropic_api_key" ]] && ANTHROPIC_API_KEY="$(<"$CRED_DIR/anthropic_api_key")"
@@ -98,9 +92,8 @@ LOG=""
 COMBINED=""
 TREND_OUT=""
 
-# DEFAULTS TO down, matching docs-refresh.sh: every exit path that is genuinely fine sets
-# PUSH_STATUS explicitly, so a crash or an unhandled path reports down rather than going
-# silent. The PUSH_ prefix is vestigial: nothing is pushed.
+# Defaults to down, as docs-refresh.sh does: a crash or an unhandled path reports down, not silence.
+# The PUSH_ prefix is vestigial: nothing is pushed.
 PUSH_STATUS=down
 PUSH_MSG="eval-run exited without setting a status"
 # The longest legitimate gap between two textfile writes: the cron is weekly (Sunday 02:00,
@@ -113,8 +106,7 @@ on_exit() {
   rm -rf "${REPORT_DIR:-}"
   rm -f "${LOG:-}" "${COMBINED:-}" "${TREND_OUT:-}"
   logger -t eval-run "status=${PUSH_STATUS} ${PUSH_MSG}"
-  # The textfile verdict, which EvalSweepFailed and EvalSweepNotReporting read. Every exit path
-  # reaches this trap, so every run writes.
+  # Every exit path reaches this trap, so every run writes the textfile.
   write_check_textfile eval-run "$([ "$PUSH_STATUS" = up ] && echo 1 || echo 0)" "$(date +%s)" "$DEADLINE_S" \
     || logger -t eval-run "textfile write failed (status=${PUSH_STATUS})"
 }
@@ -152,9 +144,7 @@ say_failure() {
   alert "$1: $detail"
 }
 
-# The suite-failure alert, a copy of docs-refresh.sh's: its header has why say_failure's `Failed`
-# token and plain tail name no test for pytest output. The two copies are held identical by
-# test_eval_run_failure_path.py, so the behavioural tests in docs-refresh's module cover both.
+# A copy of docs-refresh.sh's suite-failure alert; a test holds the two copies identical.
 suite_summary() {
   awk '
     /^=+ short test summary info =+$/ { in_block = 1; next }
@@ -171,10 +161,8 @@ say_suite_failure() {
   alert "$1: $(printf '%s' "$summary" | head -c 600)"
 }
 
-# on_exit removes the temp log, the cron entry redirects nothing and Loki has no stream for this
-# script, so without this copy the cause of a failure is unrecoverable the moment the run ends.
-# Bounded, and outside $TREE for the same reason as the rest of $STAMP_DIR. Each run writes its own
-# FAILURE_LOG; the prune keeps the newest FAILURE_LOGS_KEPT.
+# on_exit removes the temp log and Loki has no stream here, so a failure's cause would be lost.
+# Bounded, outside $TREE; the prune keeps the newest FAILURE_LOGS_KEPT.
 keep_failure_log() {
   mkdir -p "$STAMP_DIR" 2>/dev/null || return 0
   tail -c 65536 "$1" >"$FAILURE_LOG" 2>/dev/null || return 0
@@ -265,26 +253,21 @@ if [ "$UNLANDED_RC" -ne 0 ]; then
   exit 0
 fi
 
-# The agent set is read from the case directories rather than hardcoded (unlike the loop in
-# evals/README.md), so an added or removed evals/cases/<agent>/ directory changes what this
-# cron grades on its own -- no second edit to keep in sync.
+# Agents come from evals/cases/<agent>/ directories, so adding or removing one needs no second edit.
 REPORT_DIR="$(mktemp -d)"
 LOG="$(mktemp)"
 FAILED_AGENTS=""
 for agent_dir in "$TREE"/evals/cases/*/; do
   agent="$(basename "$agent_dir")"
   if ! "$NODE_BIN/node" "$ENGINE" --agent "$agent" --json "$REPORT_DIR/$agent.json" >>"$LOG" 2>&1; then
-    # A non-zero exit here means a case fell below its threshold, which is the regression
-    # signal this cron exists to capture -- not an infra failure. Keep grading the rest.
+    # A non-zero exit is a case below its threshold, not an infra failure; keep grading the rest.
     FAILED_AGENTS="$FAILED_AGENTS $agent"
   fi
 done
 keep_sweep_output
 
-# Each --json write is one JSON array (one per agent, run-evals.mjs has no multi-agent flag);
-# `jq -s add` slurps the N arrays and concatenates them into the single flat array
-# evals/trend.py expects. Written OUTSIDE $REPORT_DIR (which the glob above scans) so a
-# second run of this merge can never fold its own prior output back in.
+# `jq -s add` concatenates the per-agent JSON arrays into the flat array evals/trend.py expects.
+# Written OUTSIDE $REPORT_DIR (which the glob scans) so a rerun never folds its own output back in.
 COMBINED="$(mktemp)"
 if ! jq -s 'add' "$REPORT_DIR"/*.json > "$COMBINED" 2>>"$LOG"; then
   say_failure "eval-run: could not merge per-agent reports" "$LOG"
@@ -308,20 +291,17 @@ if [ "$UNLANDED_RC" -ne 0 ]; then
   exit 0
 fi
 
-# evals/trend.py flags a regression that lands across a worker-epoch boundary as possibly the
-# worker changing, not the harness (evals/README.md) -- but only if the epoch actually moves.
-# The coding-agent version is the half of that pair this cron can read without an API call;
-# run-evals.mjs's hermetic path pins no model of its own, so that half stays unknown. Recording
-# the real cc- version beats the permanent "unknown" trend.py falls back to, which would leave
-# the epoch-shift annotation dead code forever.
+# The coding-agent version is the half of the worker epoch this cron can read without an API call;
+# recording it beats trend.py's permanent "unknown", which would leave the epoch-shift annotation
+# dead.
 CLAUDE_EPOCH="cc-$(claude --version 2>/dev/null | awk '{print $1}')"
 TREND_OUT="$(mktemp)"
 "$UV" run --frozen python evals/trend.py "$COMBINED" \
   --epoch "${CLAUDE_EVAL_EPOCH:-$CLAUDE_EPOCH}" >"$TREND_OUT" 2>&1
 TREND_RC=$?
 
-# trend.py exits 2 on a sweep with no healthy trial in any case (a rejected key, an engine that
-# cannot start) and writes nothing. That run measured nothing, so it reports down, not up.
+# trend.py exits 2 on a sweep with no healthy trial and writes nothing; that run measured nothing,
+# so it reports down.
 if [ "$TREND_RC" -eq 2 ]; then
   say_failure "eval-run: sweep produced no healthy trial, nothing recorded" "$TREND_OUT"
   exit 1
@@ -342,17 +322,17 @@ if git diff --cached --quiet; then
   exit 1
 fi
 
-# Past the check above, trend.py definitely wrote — its only exit codes after a write are 0
-# (clean) and 1 (a case regressed), so TREND_RC means exactly that, not "did it crash".
+# Past the check above trend.py wrote, and its only exit codes then are 0 (clean) and 1 (a case
+# regressed).
 if [ "$TREND_RC" -ne 0 ]; then
   REGRESSED=1
 else
   REGRESSED=0
 fi
 
-# The suite, run explicitly and BEFORE the commit, because no prek hook runs it, and this cron
-# must not publish a sweep the suite rejects. `timeout` so a hung suite fails the run here
-# rather than at the unit's TimeoutStartSec, which would skip the alert and the sweep's copy.
+# Before the commit, because no prek hook runs the suite and this cron must not publish a sweep it
+# rejects.
+# `timeout` so a hung suite fails here, not at TimeoutStartSec, which would skip the alert.
 timeout 900 "$UV" run --frozen python -m pytest >"$LOG" 2>&1
 SUITE_RC=$?
 if [ "$SUITE_RC" -ne 0 ]; then
@@ -362,9 +342,8 @@ if [ "$SUITE_RC" -ne 0 ]; then
   exit 1
 fi
 
-# NOT `if ! git commit`: inside that branch `$?` is the status of the negation, which is always
-# 0, so the exit code has to be captured from the plain command first. It is reported because
-# git's own code separates a rejected hook (1) from a signing or ref failure.
+# NOT `if ! git commit`: inside that branch `$?` is the negation's status, which is always 0.
+# Git's own code separates a rejected hook (1) from a signing or ref failure.
 git commit -m "evals: record weekly hermetic eval sweep" >"$LOG" 2>&1
 COMMIT_RC=$?
 if [ "$COMMIT_RC" -ne 0 ]; then
@@ -374,20 +353,16 @@ if [ "$COMMIT_RC" -ne 0 ]; then
   exit 1
 fi
 
-# Branch, push, reset, PR, landing: scripts/deploy_tools/publish_pr.py, shared with
-# docs-refresh. It runs from $TREE, so the commit, the reset and the landing's working directory
-# are all the tree's. Exit 1 means the commit is still local in $TREE, which the next
-# prepare_tree discards, so that arm keeps the sweep. Exit 2 means the branch is on origin
-# without a PR, and the next run's unlanded guard names it.
+# Runs from $TREE, so the commit, the reset and the landing's working directory are all the tree's.
+# Exit 1: the commit is local, so that arm keeps the sweep; exit 2: the branch is on origin with no
+# PR.
 PR_BODY="Weekly hermetic homelab-agent eval sweep, rolled into evals/history.json by evals/trend.py. $(tr '\n' ' ' < "$TREND_OUT" | tail -c 800)"
 PUB_MSG="$("$UV" run --frozen python scripts/deploy_tools/publish_pr.py publish \
   --prefix "$PR_BRANCH_PREFIX" --title "evals: record weekly hermetic eval sweep" \
   --body "$PR_BODY" 2>&1)"
 PUB_RC=$?
-# The publisher prints one line, but 2>&1 also captures uv's own resolver chatter after a lock
-# bump, and logger takes one. Same flatten-and-cap as say_failure, safe as a
-# pipeline because PUB_RC above already holds the status this branches on. Not bash's
-# `${PUB_MSG: -400}`: a negative offset larger than the string returns the EMPTY string.
+# 2>&1 also captures uv's resolver chatter, and logger takes one line: flatten and cap.
+# Not bash's `${PUB_MSG: -400}`: a negative offset larger than the string returns the EMPTY string.
 PUB_MSG="$(printf '%s' "$PUB_MSG" | tr '\n' ' ' | tail -c 400)"
 if [ "$PUB_RC" -eq 1 ]; then
   keep_unpublished_history

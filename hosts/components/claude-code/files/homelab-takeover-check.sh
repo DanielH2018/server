@@ -121,10 +121,8 @@ full="$STATE/$label"
 [ ! -L "$full" ] || refuse "state path for $label is a symlink"
 install -d -m 0700 "$full" || exit 3
 
-# Root reads the user's files once, into a tree only root can reach.
-# A tree is refused if it holds anything but regular files and directories, so a symlink in the
-# render cannot make root read a file outside it. The copy feeds the census, which loads plain
-# manifests with -f. Kustomize never runs on it as root: the build below runs as the user.
+# Anything but regular files and directories is refused: a symlink cannot make root read outside.
+# Kustomize never runs on the copy as root; the build below runs as the user.
 tree_is_plain() {
   [ -z "$(find -P "$1" ! -type f ! -type d -print -quit)" ]
 }
@@ -179,9 +177,8 @@ for tag in "${tag_list[@]}"; do
     continue
   fi
 
-  # The kustomize build runs as the user, so a remote base or any other fetch it makes is the
-  # user's own. Root writes the output into a directory only root can reach, then diffs that
-  # one plain file; nothing the user controls is a kustomization root builds.
+  # The build runs as the user, so any fetch is the user's own; root diffs one plain output file
+  # only.
   built="$full/$tag.built"
   rm -rf -- "$built"
   mkdir -- "$built"
@@ -194,10 +191,9 @@ for tag in "${tag_list[@]}"; do
     continue
   fi
 
-  # A tag's Kustomization is the document of its flux file whose metadata.name is the tag. A
-  # `<tag>-snapshot`, `-verify` or `-deferred` directory has no flux file of its own: its
-  # Kustomization is a later document of `flux/<base>.yaml`. With no document of that
-  # name, `own` stays empty and the tag takes the kubectl stand-in below.
+  # A `-snapshot`, `-verify` or `-deferred` tag has no flux file: its Kustomization is a later
+  # document of flux/<base>.yaml. With no document of that name, `own` stays empty and the kubectl
+  # stand-in applies.
   fluxname=$tag
   if [ ! -e "$render/flux/$fluxname.yaml" ] && [ ! -L "$render/flux/$fluxname.yaml" ]; then
     case "$tag" in
@@ -247,16 +243,16 @@ for tag in "${tag_list[@]}"; do
       echo "error: see $full/$tag.err"
     else
       grep -E '^\+\+\+ ' "$full/$tag.diff" | sed -E 's#^\+\+\+ ([^ \t]*/)?([^ \t/]*).*#object: \2#'
-      # Keep YAML key lines only, cut at the colon. A block scalar's text lines carry no key,
-      # so a ConfigMap's embedded script never reaches the output.
+      # Key lines only: a block scalar's text carries no key, so a ConfigMap's embedded script never
+      # prints.
       grep -E '^[+-]' "$full/$tag.diff" | grep -v -E '^(\+\+\+|---)( |$)' \
         | grep -E '^[+-][[:space:]]*(- )?[A-Za-z0-9_./"-]+:([[:space:]]|$)' \
         | sed -E 's/^([+-][[:space:]]*(- )?[A-Za-z0-9_./"-]+:).*/\1/' | sort | uniq -c
     fi
   fi
 
-  # The census reads the copy, so what root sends to the API server is what the user's own
-  # census compares against.
+  # The census reads the copy, so what root sends to the API server is what the user's census
+  # compares.
   for f in "$work"/*.yaml; do
     [ -f "$f" ] || continue
     grep -q -E '^kind: (Cluster)?Role(Binding)?$' "$f" || continue
@@ -266,8 +262,8 @@ for tag in "${tag_list[@]}"; do
       continue
     fi
     echo "=== $tag: RBAC takeover census over $name"
-    # Readable by the user, because the census runs as the user. RBAC objects only: a file with
-    # a Secret was skipped above.
+    # Readable by the user, because the census runs as the user; RBAC objects only (a Secret file
+    # was skipped above).
     census=$(mktemp -d -p "$STATE" .census.XXXXXX)
     chmod 0711 "$census"
     "${KUBECTL[@]}" get -f "$f" -o json --show-managed-fields \

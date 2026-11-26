@@ -17,12 +17,10 @@
     + (container_healthcheck_retries | int)
     * ((seconds(container_healthcheck_interval) | int) + (seconds(container_healthcheck_timeout) | int))
     + 120 -%}
-# Shipped by homelab-daniel-pi. Only homelab-reconcile starts or restarts it. It has no ExecStop=, so stopping it never stops a container. component.yml carries
-# the contract.
+# Only homelab-reconcile starts it. No ExecStop=, so stopping it never stops a container.
 [Unit]
 Description=Bring up the Pi's homelab Compose project
-# Wants= and After=, never Requires=: systemd propagates an explicit stop or restart of a required
-# unit, so a restart of docker.service would start a compose run outside reconcile.
+# Wants=, not Requires=: a docker.service restart would start a compose run outside reconcile.
 Wants=docker.service homelab-secrets.service
 After=docker.service homelab-secrets.service
 
@@ -39,9 +37,6 @@ Environment=HOMELAB_COMPOSE_WAIT_TIMEOUT={{ wait }}
 Environment=HOMELAB_COMPOSE_INPUTS_SHA256={{ compose_inputs_sha256 }}
 TimeoutStartSec={{ wait + 660 }}
 ExecStartPre=/usr/bin/systemd-tmpfiles --create /usr/lib/tmpfiles.d/homelab-compose.conf
-# The project declares each shared network `external: true`, so Compose never recreates one the
-# live Pi already holds, and each line below creates it on a host that lacks it. The list
-# is every external network the rendered compose files name (`compose_external_networks`).
 {% for network in compose_external_networks %}
 ExecStartPre=/bin/sh -c 'docker network inspect {{ network }} >/dev/null 2>&1 || docker network create {{ network }}'
 {% endfor %}

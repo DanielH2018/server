@@ -28,9 +28,7 @@ source "${HOMELAB_LIB_DIR:-/usr/lib/homelab}/homelab-check-lib.sh" || {
   exit 1
 }
 
-# The longest legitimate gap between two textfile writes: three 5-minute timer runs. Move it
-# with homelab-kubelet-shutdown-lock.timer. hosts/tests/test_kubelet_shutdown_lock_check.py pins
-# the rules' literals to it.
+# Three 5-minute timer runs; move it with homelab-kubelet-shutdown-lock.timer.
 DEADLINE_S=900
 
 if ! LOCKS=$(systemd-inhibit --list --no-legend --no-pager 2>&1); then

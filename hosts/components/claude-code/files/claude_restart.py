@@ -48,8 +48,8 @@ from weekly_window import in_weekly_window
 CONFIG = "/etc/claude-restart/config.json"
 TAG = "claude-restart"
 NAME = re.compile(r"^[a-z0-9][a-z0-9-]{0,62}$")
-# kustomize-controller takes over the fields of every manager whose name starts with `kubectl`
-# and removes the ones its render does not declare, which would roll the pod a second time.
+# kustomize-controller takes over the fields of every manager whose name starts with `kubectl`, and
+# removes those its render does not declare, which would roll the pod a second time.
 FIELD_MANAGER = "claude-restart"
 READ_TIMEOUT_S = 30
 FLUX_NAMESPACE = "flux-system"

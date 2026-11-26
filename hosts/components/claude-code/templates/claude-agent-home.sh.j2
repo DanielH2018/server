@@ -37,8 +37,8 @@ printf '%s namespaces="git" %s\n' "{{ claude_code_agent_git_email }}" "$(as_agen
 as_agent chmod 0644 "$home/.config/git/allowed_signers"
 {% if inventory_hostname == claude_agent_ssh_key_host %}
 
-# The key host's half of the peer login. Each peer carries the public half as
-# claude_agent_peer_public_key, so a new key is a component edit too.
+# A new peer key is a component edit too: each peer carries the public half as
+# claude_agent_peer_public_key.
 peer_key={{ claude_agent_ssh_key_path }}
 case "$peer_key" in
   "$home"/.ssh/*) ;;
@@ -48,17 +48,13 @@ keypair "$peer_key" "$agent peers ({{ inventory_hostname }})"
 {% endif %}
 {% if claude_code_agent_memory_seed %}
 
-# The flag root keeps outside the agent's home, so the agent cannot clear it. While the host runs
-# as the operator, the agent's store is idle and falls behind the operator's, so each run sets it.
+# Kept outside the agent's home so the agent cannot clear it; each run as the operator sets it.
 stale="{{ claude_code_agent_memory_seed_stale }}"
 {% if claude_code_user == claude_code_agent_user %}
 
-# The operator's memory store becomes the agent's when the agent has no MEMORY.md, or when the host
-# last ran as the operator and the stores differ, so a flip back never makes a stale store the
-# claude-memory-sync source. The copy replaces the store: an entry only the agent holds is
-# removed. Once the host runs as the agent, a later run leaves what the agent wrote alone. Each
-# note loses the operator's checkout prefix, matched as a literal, so a repo link resolves from any
-# clone. A failed copy removes the index again and keeps the flag, so the next run retries.
+# Copied when the agent has no MEMORY.md, or the host last ran as the operator and the stores
+# differ.
+# The copy replaces the store; a failed copy keeps the flag so the next run retries.
 agent_memory="{{ claude_code_agent_memory_dir }}"
 operator_memory="{{ claude_code_operator_memory_dir }}"
 strip='{{ claude_code_agent_memory_seed_strip }}'

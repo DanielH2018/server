@@ -95,26 +95,22 @@ SEED="{{ hypervisor_etcd_drill_vm_seed }}"
 GUEST_IP="{{ hypervisor_etcd_drill_vm_ip }}"
 GUEST_USER="{{ sys_user }}"
 GUEST_HOSTKEY_PUB="{{ hypervisor_etcd_drill_vm_hostkey }}.pub"
-# The guest's only authorised key is this host's own (etcd-drill-user-data.j2), same as the
-# staging guest. Root reads it here; nothing else on the host uses it as root.
+# The guest's only authorised key is this host's own (etcd-drill-user-data.j2); root reads it here.
 IDENTITY="/home/{{ sys_user }}/.ssh/id_ed25519"
 BOOT_TIMEOUT="{{ hypervisor_etcd_drill_vm_boot_timeout }}"
 S3_ENV="{{ hypervisor_etcd_drill_s3_env }}"
-# K3S_TOKEN lives here (hosts/bootstrap-host.sh). k3s writes the same
-# value to server/token and server/node-token when no --agent-token is set, so this IS the token
-# a rebuilt server would need; a mismatch fails the restore stage loudly rather than passing.
+# K3S_TOKEN lives here; with no --agent-token k3s writes the same value to server/token and
+# node-token.
+# A mismatch fails the restore stage loudly.
 AGENT_ENV=/etc/systemd/system/k3s-agent.service.env
 DRILL_SCRIPT="{{ hypervisor_etcd_drill_script_path }}"
 GUEST_RUN_SCRIPT="{{ hypervisor_etcd_drill_guest_script_path }}"
 # The rehearsal mode's two files: the host-side helper and the guest-side script.
 SUC_HELPER="{{ hypervisor_suc_rehearsal_helper_path }}"
 SUC_GUEST_SCRIPT="{{ hypervisor_suc_rehearsal_guest_script_path }}"
-# How long the Plan may take to reach the verdict (a server upgrade, about ten minutes, plus the
-# pulls), and how often the verdict is read. Polled in short ssh calls, never one held session.
+# Polled in short ssh calls, never one held session.
 RH_DEADLINE="{{ hypervisor_suc_rehearsal_deadline }}"
 RH_POLL=15
-# The bootstrap drill's guest-side script, how long one detached bootstrap step may run (step 7's
-# AIDE baseline dominates), and how long the started k3s may take to pass the check.
 BD_GUEST_SCRIPT="{{ hypervisor_bootstrap_drill_guest_script_path }}"
 BD_STEP_DEADLINE="{{ hypervisor_bootstrap_drill_step_deadline }}"
 BD_READY_DEADLINE="{{ hypervisor_bootstrap_drill_ready_deadline }}"
@@ -124,25 +120,18 @@ STAMP_DIR="{{ hypervisor_etcd_drill_stamp_dir }}"
 LOG_ROOT="{{ hypervisor_etcd_drill_log_dir }}"
 LOG_RETENTION_DAYS="{{ hypervisor_etcd_drill_log_retention_days }}"
 LOCK="{{ hypervisor_etcd_drill_lock }}"
-# Whole-run ceiling. The drill's own stages are bounded (600 s restore, 180 s ready) and the
-# boot at BOOT_TIMEOUT; this catches a hung ssh or a download that never finishes.
+# Whole-run ceiling for a hung ssh or a download that never finishes.
 RUN_TIMEOUT=1800
-# The egress-fence leg's own bounds. It sits OUTSIDE RUN_TIMEOUT (that deadline starts once the
-# drill is launched), so without one of its own a wedged dial would hang the monthly run. A
-# dropped packet burns the whole per-target timeout, so the deadline is sized for every target
-# timing out at once with ssh setup on top.
+# The fence leg sits outside RUN_TIMEOUT, so it needs its own deadline: a dropped packet burns the
+# whole per-target timeout, so size it for every target timing out plus ssh setup.
 FENCE_PROBE_TIMEOUT="{{ hypervisor_etcd_drill_fence_probe_timeout }}"
 FENCE_DEADLINE="{{ hypervisor_etcd_drill_fence_deadline }}"
 FENCE_LONGHORN_URL="{{ hypervisor_etcd_drill_fence_longhorn_url }}"
-# What the run reports about the fence. "not-checked" until the leg runs, so a failure BEFORE it
-# does not claim a verdict it never took.
+# 'not-checked' until the leg runs, so an earlier failure claims no verdict it never took.
 FENCE_VERDICT=not-checked
 TAG=etcd-restore-drill-vm
-# The run writes two textfile verdicts: the drill's own under the script's name and the egress
-# fence's under its own, because the syslog tag is shared and a check file takes one verdict.
-# DEADLINE_S is the longest legitimate gap between two writes, which is the monthly cadence plus
-# slack (etcd_drill_full_deadline_s). hosts/tests/test_b4_rule_literals.py pins the rules'
-# literals to this value.
+# Two verdicts (drill, egress fence): the syslog tag is shared and a check file takes one verdict.
+# DEADLINE_S is the monthly cadence plus slack (etcd_drill_full_deadline_s).
 CHECK_DRILL=etcd-restore-drill-vm
 CHECK_FENCE=etcd-restore-drill-egress-fence
 DEADLINE_S={{ etcd_drill_full_deadline_s }}
@@ -174,8 +163,7 @@ write_verdict() {
     || logger -t "$TAG" "textfile write to ${TEXTFILE_DIR} failed (${check} status=${status})"
 }
 
-# Every exit path reports through here, and the syslog line is unconditional — it is the only
-# record of the message, and Loki keeps it (`probe.py loki-query` reads it).
+# The syslog line is unconditional: it is the only record of the message, and Loki keeps it.
 report() {
   local status="$1" msg="$2"
   logger -t "$TAG" "status=${status} run=${RUN_ID} ${msg}"
@@ -183,16 +171,9 @@ report() {
   write_verdict "$CHECK_DRILL" "$status"
 }
 
-# The fence leg's own report, to its own check. The drill's verdict answers "did the restore
-# pass", and it cannot also answer "was the fence measured": a run that passes with a range
-# unmeasured is `up` on that verdict by construction. This one is `up` only when every fenced
-# range was dialled and refused.
-#
-# Called from inside fence_check, BEFORE the two fatal paths call `fail` — a leak exits the run,
-# and a report made afterwards would never happen. A run that dies before the leg ever executes
-# writes nothing here on purpose: the verdict's deadline then expires and
-# EtcdRestoreDrillEgressFenceNotReporting fires by itself, which is the honest reading of a fence
-# nobody measured this month.
+# Own check: up only when every fenced range was dialled and refused. Called BEFORE the fatal paths
+# call `fail`.
+# A run dying before the leg writes nothing on purpose: the deadline expires and NotReporting fires.
 report_fence() {
   local status="$1" msg="$2"
   logger -t "$TAG" "fence=${status} run=${RUN_ID} ${msg}"
@@ -200,8 +181,7 @@ report_fence() {
   write_verdict "$CHECK_FENCE" "$status"
 }
 
-# A fence verdict that also ends the run: report it to the fence check first, then take the
-# orchestrator's normal failure path, which reports the same text to the drill's check and exits.
+# Report to the fence check first, then take the normal failure path.
 fence_fail() {
   report_fence down "$1"
   fail "$1"
@@ -211,9 +191,8 @@ guest_running() {
   "${VIRSH[@]}" domstate "$NAME" 2>/dev/null | grep -q running
 }
 
-# Idempotent, and called from the EXIT trap as well as inline: a guest that is already gone and a
-# disk that is already deleted are both fine. Ordering matters — destroy before deleting the
-# disk, or qemu keeps the deleted inode open until it exits and the space is not returned.
+# Idempotent, also called from the EXIT trap. Destroy before deleting the disk, or qemu keeps the
+# deleted inode open and the space is not returned.
 teardown() {
   if guest_running; then
     log "destroying guest $NAME"
@@ -222,8 +201,7 @@ teardown() {
   [[ -e "$DISK" ]] && { rm -f "$DISK"; log "deleted $DISK"; }
   [[ -n "$WORK" && -d "$WORK" ]] && rm -rf "$WORK"
   [[ -n "$KNOWN_HOSTS" && -f "$KNOWN_HOSTS" ]] && rm -f "$KNOWN_HOSTS"
-  # Evidence stays readable by the deploy user however the run ended — the failing runs are the
-  # ones that get read. Runs here because teardown is what the EXIT trap calls.
+  # Evidence stays readable by the deploy user however the run ended; the EXIT trap calls teardown.
   if [[ -d "${LOG_DIR:-}" ]]; then
     chgrp "{{ sys_user }}" "$LOG_DIR"/* 2>/dev/null || true
     chmod 640 "$LOG_DIR"/* 2>/dev/null || true
@@ -242,9 +220,8 @@ prune_old_evidence() {
     -exec rm -rf {} + 2>/dev/null || true
 }
 
-# One argv for every ssh to the guest, so the timed drill call below can hand it to `timeout`
-# — which execs a program and cannot run a shell function. KNOWN_HOSTS is set before the first
-# use.
+# One argv for every ssh to the guest: `timeout` execs a program and cannot run a shell function.
+# KNOWN_HOSTS is set before first use.
 ssh_argv() {
   printf '%s\n' ssh -i "$IDENTITY" -o IdentitiesOnly=yes \
       -o UserKnownHostsFile="$KNOWN_HOSTS" -o StrictHostKeyChecking=yes \
@@ -295,51 +272,39 @@ ssh_guest() {
 
 fence_curl() { printf 'curl -sk --max-time %s -o /dev/null %s' "$FENCE_PROBE_TIMEOUT" "$1"; }
 
-# One `label|what the guest runs|what THIS host runs as the control leg` row per target; an
-# empty third field means the address is pinned in the inventory and cannot go stale without a
-# commit, so a second dial would prove nothing. Read ONCE per run — `ip neigh` is live, and a
-# table built twice could name two different pod IPs.
+# One `label|guest command|control command on THIS host` row per target; an empty third field means
+# the address is pinned. Read ONCE per run: `ip neigh` is live and could name two pod IPs.
 fence_targets() {
   # The control, and the only row that is not a production address.
   printf '%s|%s|\n' INTERNET "$(fence_curl https://1.1.1.1)"
-  # lan_subnet: the cluster edge, the API server, and daniel-pi's wg-easy admin UI — which is
-  # unauthenticated, and whose only protection is the LAN-only premise this guest sits outside.
+  # lan_subnet: cluster edge, API server and daniel-pi's wg-easy UI, which is unauthenticated.
   printf '%s|%s|\n' PRODVIP "$(fence_curl http://{{ k3s_metallb_ingress_vip }})"
   printf '%s|%s|\n' K3SAPI "$(fence_curl https://{{ hosts['daniel-box'].server_ip }}:6443/version)"
   printf '%s|%s|\n' WGEASY "$(fence_curl http://{{ hosts['daniel-pi'].server_ip }}:51821)"
   # k3s_service_cidr. Longhorn's frontend Service is the one found exposed, answering
   # unauthenticated with a mutating `diskUpdate` action in its payload.
   printf '%s|%s|%s\n' LONGHORNSVC "$(fence_curl "$FENCE_LONGHORN_URL")" "$(fence_curl "$FENCE_LONGHORN_URL")"
-  # k3s_pod_cidr. Discovered rather than pinned, because a pod IP is ephemeral: whichever pod on
-  # this host's CNI bridge the neighbour table currently holds. Read from `ip neigh` and not
-  # kubectl, because daniel-server is an agent node with no kubeconfig — kubectl here dials
-  # localhost:8080 and is refused. ICMP rather than HTTP: the neighbour is whichever pod happens
-  # to be up and its listening port is unknown, while the nwfilter rule carries no protocol, so a
-  # ping proves the same rule an HTTP dial would.
-  #
-  # STALE, DELAY and PROBE count alongside REACHABLE: an idle entry ages out of REACHABLE while
-  # its address stays good, and the ping re-resolves it. Taking REACHABLE alone would fall to the
-  # no-neighbour row below on a quiet bridge, leaving the pod CIDR unmeasured most months.
+  # k3s_pod_cidr: a neighbour on cni0 from `ip neigh` (no kubeconfig on this agent node), dialled by
+  # ICMP.
+  # STALE, DELAY and PROBE count with REACHABLE: idle entries age out and would leave the CIDR
+  # unmeasured.
   local pod_ip
-  # Matched as a FIELD, not with a `$` anchor: `ip neigh` pads every line with a trailing space,
-  # so an anchored state matches nothing and every run falls to the no-neighbour row.
+  # Match a FIELD, not `$`: `ip neigh` pads lines with a trailing space, so an anchored state never
+  # matches.
   pod_ip="$(ip -4 neigh show dev cni0 2>/dev/null |
     awk '{for (i = 2; i <= NF; i++) if ($i ~ /^(REACHABLE|STALE|DELAY|PROBE)$/) {print $1; exit}}')"
   if [[ -n "$pod_ip" ]]; then
     printf '%s|%s|%s\n' PODNET "ping -c1 -W3 $pod_ip" "ping -c1 -W3 $pod_ip"
   else
-    # Emitted rather than skipped. A row that is simply absent leaves no evidence line and no
-    # label, so the run reports a clean `hold` with the pod CIDR never dialled. The sentinel makes
-    # it an `unproven` target instead.
+    # Emit the row rather than skip it: an absent row reads as a clean `hold` with the pod CIDR
+    # never dialled.
     printf '%s|%s|\n' PODNET "SKIP: no usable neighbour on cni0 to dial"
   fi
   return 0
 }
 
-# Every dial in ONE ssh session, reading the table on stdin and printing `LABEL rc` per target.
-# Not one session per target: six sessions are six chances to hang. `na` is printed when the
-# dial needs a tool the guest does not have — a missing tool must never read as `refused`, which
-# is the same bug shape as an inert fence.
+# One ssh session for every dial: six sessions are six chances to hang. `na` marks a missing guest
+# tool, which must never read as `refused`.
 fence_dial_guest() {
   local -a argv script
   mapfile -t argv < <(ssh_argv)
@@ -358,8 +323,7 @@ fence_dial_guest() {
   printf '%s\n' "${script[@]}" | timeout "$FENCE_DEADLINE" "${argv[@]}" bash -s
 }
 
-# Reads the table, dials it, writes the evidence file, and sets FENCE_VERDICT. Fatal on a leak
-# or a lost control target, both through `fail` — so the EXIT trap still destroys the guest.
+# Fatal on a leak or lost control target, through `fail` so the EXIT trap still destroys the guest.
 fence_check() {
   local fence_log="$LOG_DIR/egress-fence.log" table
   table="$(fence_targets)"
@@ -405,8 +369,8 @@ fence_check() {
 not answer from the guest, so every production target refused below did so only because nothing \
 can leave at all. That is a broken fence, not a working one; nothing was staged into the guest. \
 See $fence_log"
-  # Emptiness tested with -z rather than the array-length form, here and below: a literal
-  # dollar-brace-hash in a .j2 opens a Jinja comment, and the template then never renders.
+  # Test emptiness with -z, not the array-length form: a literal dollar-brace-hash in a .j2 opens a
+  # Jinja comment.
   [[ -z "${leaked[*]}" ]] || fence_fail "egress fence BROKEN: ${leaked[*]} answered from inside guest \
 $NAME, which is about to be handed the cluster token and the R2 write credentials. Nothing was \
 staged. Traffic arrives at production SNATed as daniel-server, so source-IP controls do not see \
@@ -431,9 +395,8 @@ with the internet control target reachable. See $fence_log"
   fi
 }
 
-# The guest, from a fresh disk to "answers on the pinned key and the fence has been measured".
-# The drill and the rehearsal share it, so both reach the same point before a credential or a
-# bundle is handed over.
+# Drill and rehearsal share it, so both reach the same point before a credential or bundle is handed
+# over.
 boot_guest() {
   log "creating $DISK from $BASE_IMAGE"
   qemu-img convert -O qcow2 "$BASE_IMAGE" "$DISK" || fail "qemu-img convert failed"
@@ -442,8 +405,7 @@ boot_guest() {
   log "starting transient guest $NAME"
   "${VIRSH[@]}" create "$XML" >/dev/null || fail "virsh create $XML failed"
 
-  # The pinned host key: one line, this address, the public half etcd-drill-prepare generated. Anything else
-  # answering at GUEST_IP is refused, which is the whole point of pinning.
+  # Anything else answering at GUEST_IP is refused: that is the point of pinning.
   KNOWN_HOSTS="$(mktemp)"
   printf '%s %s\n' "$GUEST_IP" "$(cut -d' ' -f1,2 < "$GUEST_HOSTKEY_PUB")" > "$KNOWN_HOSTS"
 
@@ -456,13 +418,12 @@ boot_guest() {
   done
   log "guest is up"
 
-  # Before the token and the R2 credentials go in, not after: this is the last point at which a
-  # guest that can reach production has not yet been handed anything to reach it with.
+  # Before the token and R2 credentials go in: the last point where the guest holds nothing to reach
+  # production with.
   fence_check
 }
 
-# One bounded ssh call per guest-side step. `timeout` execs a program and cannot run ssh_guest,
-# so it takes the argv ssh_guest takes.
+# `timeout` execs a program and cannot run ssh_guest, so it takes the argv ssh_guest takes.
 rh() {
   local -a argv
   mapfile -t argv < <(ssh_argv)
@@ -482,9 +443,7 @@ rh_step() {
   fail "$why"
 }
 
-# Applies the system-upgrade Plan to a one-node guest through Flux and judges the outcome. It
-# returns 0 when the Plan behaved as --expect says, and ends the run through `fail` otherwise. The guest
-# gets no token and no R2 credential, so nothing here reads $S3_ENV or $AGENT_ENV.
+# The guest gets no token and no R2 credential, so nothing here reads $S3_ENV or $AGENT_ENV.
 rehearse_suc() {
   case "$RH_EXPECT" in upgrade | red) ;; *) fail "--expect must be upgrade or red" ;; esac
   [[ -d "$RH_REPO" && -d "$RH_RENDERED" ]] || fail "--repo and --rendered must name directories"
@@ -493,13 +452,13 @@ rehearse_suc() {
     [[ -r "$f" ]] || fail "$f missing — run initial_setup --tags hypervisor"
   done
   command -v qemu-img >/dev/null || fail "qemu-img not on PATH"
-  # The helper needs PyYAML, so it runs in the repo's own environment. That environment exists
-  # once `uv run` has run in the checkout, which rendering the bundle does.
+  # The helper needs PyYAML, so it runs in the repo's environment, which rendering the bundle
+  # creates.
   RH_PY="$RH_REPO/.venv/bin/python"
   [[ -x "$RH_PY" ]] || fail "$RH_PY is missing: run uv run python --version in $RH_REPO first"
 
-  # A previous run that died between create and destroy leaves a guest and a disk. Teardown also
-  # removes $WORK, so it runs before $WORK is made.
+  # Teardown also removes $WORK, so it runs before $WORK is made; a dead earlier run leaves a guest
+  # and disk.
   teardown
   WORK="$(mktemp -d)"
   chmod 700 "$WORK"
@@ -556,8 +515,8 @@ rehearse_suc() {
   fail "SUC rehearsal FAILED (expect $RH_EXPECT, Plan $RH_PLAN, guest k3s $from): ${verdict:-no verdict in ${RH_DEADLINE}s}"
 }
 
-# The units the guest keeps unmasked. coredns-host.service is the fourth beside the three *The
-# proofs* names: step 6 refuses to stop systemd-resolved until it answers on 127.0.0.1.
+# coredns-host.service is the fourth unit: step 6 refuses to stop systemd-resolved until it answers
+# on 127.0.0.1.
 BD_UNMASKED=(k3s.service homelab-reconcile.service homelab-secrets.service coredns-host.service)
 
 bd() {
@@ -577,8 +536,7 @@ bd_masks() {
     | grep -vxF "${BD_UNMASKED[@]/#/-e}" | sort -u
 }
 
-# bd_run STEP [ARGS]: start STEP detached in the guest and poll its exit code over fresh ssh
-# sessions. Its output goes to the evidence on every path, and a failure ends the run.
+# Output goes to the evidence on every path; a failure ends the run.
 bd_run() {
   local step="$1" rc="" deadline
   bd detached "$@" >/dev/null || { bd_evidence; fail "could not start $step in the guest"; }
@@ -601,8 +559,7 @@ bd_run() {
   fail "$step exited $rc in the guest: $(tail -n 1 "$LOG_DIR/$step.out")"
 }
 
-# Runs bootstrap-host.sh in a guest playing daniel-box and judges it. The guest gets no token and
-# no R2 credential, so nothing here reads $S3_ENV or $AGENT_ENV.
+# The guest gets no token and no R2 credential, so nothing here reads $S3_ENV or $AGENT_ENV.
 rehearse_bootstrap() {
   [[ -z "$RH_RENDERED$RH_EXPECT$RH_VERSION" ]] \
     || fail "--rendered, --expect and --guest-version belong to --rehearse-suc"
@@ -620,8 +577,7 @@ rehearse_bootstrap() {
   teardown
   WORK="$(mktemp -d)"
   chmod 700 "$WORK"
-  # The guest's clone is checked out at the same commit, so the masks name the units it installs.
-  # homelab-updater ships the timer daniel-box's package enables.
+  # The guest's clone is at the same commit, so the masks name the units it installs.
   (cd "$RH_REPO" \
     && "$RH_PY" scripts/renderer/homelab_render.py host --host daniel-box --out "$WORK/render" \
     && "$RH_PY" scripts/renderer/homelab_render.py package --name homelab-updater --out "$WORK/render") \
@@ -665,8 +621,7 @@ rehearse_bootstrap() {
 }
 
 main() {
-  # The flag is the timer's switch. The rehearsal is run by hand and uses no R2 credential, so a
-  # disarmed drill does not block it.
+  # The flag is the timer's switch; the by-hand rehearsal uses no R2 credential, so it ignores it.
   if [[ "$ARMED" != "1" && "$REHEARSE" != 1 ]]; then
     logger -t "$TAG" "disarmed (hypervisor_etcd_drill_armed=false); nothing run"
     exit 0
@@ -675,11 +630,10 @@ main() {
   exec 9>"$LOCK"
   flock -n 9 || fail "another run holds $LOCK"
 
-  # Group-readable by the deploy user: the evidence carries no credential by construction (the
-  # token and the R2 env never leave the guest), and a run is diagnosed from a non-root shell.
+  # Group-readable by the deploy user: the evidence carries no credential, since the token and R2
+  # env never leave the guest.
   install -d -m 750 -g "{{ sys_user }}" "$LOG_DIR"
-  # From here on the orchestrator's own lines go into the run's evidence dir, so they are pruned
-  # with it. The journal then holds only what escapes before this point.
+  # From here the orchestrator's own lines go into the run's evidence dir and are pruned with it.
   exec >>"$LOG_DIR/orchestrator.log" 2>&1
   prune_old_evidence
 
@@ -692,8 +646,8 @@ main() {
     exit $?
   fi
 
-  # Preflight: everything the guest will be handed must exist HERE first, so a missing piece
-  # fails before a guest is built rather than half-way through a run.
+  # Everything the guest will be handed must exist HERE first, so a gap fails before a guest is
+  # built.
   [[ -r "$XML" ]]              || fail "guest definition $XML missing — run initial_setup --tags hypervisor"
   [[ -r "$BASE_IMAGE" ]]       || fail "base image $BASE_IMAGE missing"
   [[ -r "$SEED" ]]             || fail "seed ISO $SEED missing"
@@ -715,10 +669,8 @@ main() {
 
   boot_guest
 
-  # Stage everything the drill reads, at the paths it reads them, as one tar. Root-owned here
-  # so the modes and owners land as-is on the far side. The token is read from the agent env
-  # file and written to disk only inside this 0700 staging dir, which is deleted the moment the
-  # tar has been sent.
+  # Stage everything the drill reads as one root-owned tar. The token is written only inside this
+  # 0700 dir, deleted once the tar is sent.
   WORK="$(mktemp -d)"
   chmod 700 "$WORK"
   local K3S_TOKEN=""
@@ -736,10 +688,8 @@ main() {
   tar -C "$WORK/root" -cf - . | ssh_guest sudo tar -C / --warning=no-timestamp -xpf - || fail "staging into the guest failed"
   rm -rf "$WORK"; WORK=""
 
-  # The drill runs DETACHED in the guest and this side polls for its exit file. One ssh session
-  # held open for the whole run can hang while the guest still answers a fresh ssh. A detached
-  # run cannot take the orchestrator down with it, its exit code survives in a file, and
-  # drill.out is pulled whatever happened.
+  # Detached: a held ssh session can hang while the guest still answers a fresh one.
+  # The exit code survives in a file, and drill.out is pulled whatever happened.
   log "starting the drill in the guest (log: $LOG_DIR/drill.out)"
   ssh_guest sudo /usr/local/bin/etcd-drill-guest-run --detached \
     || fail "could not start the drill in the guest"
@@ -760,8 +710,8 @@ main() {
   done
   [[ "$rc" =~ ^[0-9]+$ ]] || rc=1
 
-  # Evidence out BEFORE teardown, on every path: the diagnosis and the thing that explains it
-  # must not be removed by the same exit path (the drill script's own rule, kept here).
+  # Evidence out BEFORE teardown on every path: the diagnosis and its explanation must not go
+  # together.
   ssh_guest sudo cat /var/tmp/etcd-drill.out >"$LOG_DIR/drill.out" 2>/dev/null || true
   local f
   for f in restore.log server.log; do

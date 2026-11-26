@@ -9,10 +9,6 @@ SyslogLevel=notice
 Type=oneshot
 User={{ sys_user }}
 ExecStart=/usr/lib/homelab/worktree-sweep
-# The journal replaces the cron's `2>&1 | logger -t worktree-sweep`: Promtail ships it to Loki
-# and `journalctl -t worktree-sweep` reads it.
 SyslogIdentifier=worktree-sweep
-# The Healthchecks.io key. systemd hands the copy to User=, so the script reads it unprivileged.
-# Import, not Load: Load fails the unit with 243/CREDENTIALS on a missing file, and a missing ping
-# key must skip only the ping, not the sweep.
+# Import, not Load: a missing ping key must skip only the ping, not the sweep.
 ImportCredential=healthchecks_ping_key

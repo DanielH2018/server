@@ -14,8 +14,8 @@ Accept=yes
 SocketUser=root
 SocketGroup={{ claude_code_rootq_socket_group }}
 SocketMode=0660
-# Without this, a stopped socket leaves its file behind, and a connect to it is refused
-# instead of finding no file.
+# Without it a stopped socket leaves its file behind, and a connect is refused instead of finding no
+# file.
 RemoveOnStop=yes
 MaxConnections=8
 

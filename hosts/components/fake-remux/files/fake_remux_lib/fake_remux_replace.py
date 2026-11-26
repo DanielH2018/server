@@ -431,10 +431,7 @@ def reconcile_once(cfg, sonarr=None):
     before_states = {ep: rec["state"] for ep, rec in ledger.items()}
     sonarr = sonarr or _make_sonarr(cfg)
 
-    # 0) idempotency guard: adopt any 'detected' entry already downloading in Sonarr (a prior tick
-    # grabbed it but its ledger write was lost — a crash, or a concurrent scan clobbering the file)
-    # so the grab loop below doesn't issue a duplicate grab. Persist immediately so the adoption
-    # itself survives a crash later in this tick.
+    # Adopt a 'detected' entry already downloading in Sonarr, so a lost ledger write never re-grabs.
     if mode == "live":
         pre_queue = _queue_by_episode(sonarr.queue())
         ledger, adopted = frl_replace.adopt_in_flight(
@@ -475,8 +472,8 @@ def reconcile_once(cfg, sonarr=None):
                         },
                         lastAction=int(time.time()),
                     )
-                    # persist the grab NOW: a real download just started, so if a later search in
-                    # this same tick raises, the next tick must not re-grab it.
+                    # Persist the grab now: if a later search in this tick raises, the next tick
+                    # must not re-grab.
                     _save_json(cfg["LEDGER_FILE"], ledger)
                     break
 

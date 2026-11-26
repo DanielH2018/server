@@ -242,18 +242,16 @@ def advance(ledger, queue_by_episode, files_by_ep, probes, policy, now):
         if state == State.GRABBED:
             item = queue_by_episode.get(epk)
             if item is None:  # not in the download client's queue
-                # A just-grabbed download takes ~30-60s to register in Sonarr's queue; within the grab
-                # grace stay grabbed rather than falsely calling it lost — otherwise advance (which runs
-                # the same tick as the grab) would re-grab it every tick and never converge. Past the
-                # grace it really is gone.
+                # Within the grab grace stay grabbed: a new download takes ~30-60s to reach Sonarr's
+                # queue.
                 if now - rec.get("lastAction", now) < float(
                     policy.get("grab_grace_s", 300)
                 ):
                     continue
                 cur = files_by_ep.get(epk)
                 if cur is not None and cur != rec["fakeFileId"]:
-                    # gone from the queue because Sonarr already imported it (e.g. a higher-tier grab
-                    # it auto-upgrades) — the episode has a NEW file: success, not a lost grab.
+                    # Gone from the queue because Sonarr already imported it: the episode has a new
+                    # file, so success.
                     out = move(out, ep, State.REPLACED, lastAction=now)
                     continue
                 attempts = rec.get("attempts", 0) + 1
@@ -299,8 +297,6 @@ def advance(ledger, queue_by_episode, files_by_ep, probes, policy, now):
                         out,
                         ep,
                         State.HELD,
-                        # the reconciler ffprobes on the HOST (jellyfin can't see /data/torrents), so
-                        # this is a host ffprobe failure or an unresolvable download path, not jellyfin
                         reason="probe unavailable (host ffprobe failed / download path missing)",
                         lastAction=now,
                     )

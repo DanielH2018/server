@@ -7,8 +7,7 @@
 Description=Loki read-route witness
 After=network-online.target
 Wants=network-online.target
-# No OnFailure= alert unit, deliberately. A down verdict is a unit failure by this contract, and
-# the *-alert.service units page Discord on a unit that BROKE. The textfile carries the verdict.
+# No OnFailure= alert, deliberately: a down verdict is a unit failure and the textfile carries it.
 
 [Service]
 SyslogLevel=notice
@@ -18,8 +17,6 @@ ExecStart=/usr/lib/homelab/loki-read-route-health
 # Only Restart=always and Restart=on-success are refused for Type=oneshot (systemd 255).
 Restart=on-failure
 RestartSec=15min
-# The restart loop lives in memory, so a reboot ends it. This marker survives the reboot and
-# gates homelab-loki-route-witness-boot.service, which reruns the check once at boot while the
-# last verdict was not up. `+` runs it as root whatever User= is, and `$$` hands the
-# variable to the shell rather than to systemd's own substitution.
+# This marker survives a reboot, unlike the in-memory restart loop, and gates the -boot service.
+# `+` runs as root; `$$` hands the variable to the shell.
 ExecStopPost=+/bin/sh -c 'if [ "$$SERVICE_RESULT" = success ]; then rm -f /var/lib/homelab/check/loki-route-witness.down; else mkdir -p /var/lib/homelab/check && touch /var/lib/homelab/check/loki-route-witness.down; fi'

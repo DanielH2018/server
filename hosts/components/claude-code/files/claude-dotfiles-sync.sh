@@ -51,10 +51,8 @@ before=$(git -C "$repo" rev-parse --short HEAD)
 git -C "$repo" pull --ff-only --quiet
 after=$(git -C "$repo" rev-parse --short HEAD)
 
-# Re-render chezmoi.toml from the pulled template and the seed's answers, every run. A render
-# from a template that predates the agent prompt drops the `agent` answer, and rendering from
-# the last config would then lose it for good. The seed claude-agent-setup writes always
-# carries it.
+# Re-rendered every run from the template and seed: rendering from the last config would lose the
+# `agent` answer once a template predates the agent prompt; the seed always carries it.
 install -m 0600 "$seed" "$config"
 "$chezmoi" init --no-tty
 

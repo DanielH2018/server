@@ -1,8 +1,8 @@
 [Unit]
 Description=Restart the background Claude sessions a shutdown killed, for {{ claude_code_bg_resume_user }}
 Documentation=file://{{ claude_code_bg_resume_dir }}/bg_session_resume.py
-# A respawned session connects to claude.ai at once, and DNS is not up at the first moment of
-# network-online.target on this host. The script also waits for the API name to resolve.
+# A respawned session connects to claude.ai at once, and DNS is not up at the start of
+# network-online.target here.
 After=network-online.target
 Wants=network-online.target
 
@@ -23,18 +23,15 @@ WorkingDirectory={{ claude_code_bg_resume_home }}
 RemainAfterExit=yes
 KillMode=process
 
-# The supervisor this unit starts hosts every background session dispatched afterwards, until
-# it idles out, so it sits under the same fleet bound as claude-rc.service. claude-rc.service.j2
-# has why user.slice is the only slice that can parent both Claude planes.
+# The supervisor hosts every later background session, so it sits under claude-rc.service's fleet
+# bound.
 Slice={{ claude_code_fleet_slice }}
 MemoryHigh={{ claude_code_rc_memory_high }}
 MemorySwapMax={{ claude_code_rc_memory_swap_max }}
 OOMScoreAdjust={{ claude_code_fleet_oom_score_adjust }}
 
-# A session's worker takes these from the supervisor. A session dispatched later from a
-# terminal gets that terminal's PATH instead, so these matter for the respawned sessions most.
-# PATH carries /usr/local/bin for kubectl and uv, the claude-rc.service trap, and fnm's default
-# Node, which the operator's MCP servers run on.
+# A session's worker takes these from the supervisor; PATH carries /usr/local/bin for kubectl and uv
+# (the claude-rc.service trap) and fnm's default Node, which the operator's MCP servers run on.
 Environment=HOME={{ claude_code_bg_resume_home }}
 Environment=PATH={{ claude_code_bg_resume_home }}/.local/share/fnm/aliases/default/bin:{{ claude_code_bg_resume_home }}/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/snap/bin
 Environment=KUBECONFIG={{ claude_code_bg_resume_home }}/.kube/config
@@ -44,8 +41,6 @@ Environment=PYTEST_XDIST_AUTO_NUM_WORKERS={{ claude_code_rc_pytest_workers }}
 Environment=CLAUDE_CODE_DISABLE_BG_SHELL_PRESSURE_REAP=1
 {% endif %}
 Environment=PYTHONDONTWRITEBYTECODE=1
-# A respawned session reports session_kind="bg-resume", a value from
-# scripts/dev/fanout_lib/telemetry.py:SessionKind.
 Environment=OTEL_RESOURCE_ATTRIBUTES=session.kind=bg-resume
 
 # The DNS wait is up to 5 minutes and each respawn up to 3.

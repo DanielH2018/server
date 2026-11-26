@@ -14,8 +14,8 @@
 	gpgsign = true
 [tag]
 	gpgsign = true
-# Pushes and fetches over HTTPS take the account's token from gh. The empty entry clears any
-# helper a system config sets, so no other credential is offered first.
+# The empty helper entry clears any helper a system config sets, so no other credential is offered
+# first.
 [credential "https://github.com"]
 	helper =
 	helper = !/usr/bin/gh auth git-credential

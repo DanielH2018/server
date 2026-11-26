@@ -40,24 +40,17 @@ source /usr/lib/homelab/homelab-check-lib.sh || {
   exit 1
 }
 
-# Skip the first run after a boot, same reasoning as its */10 sibling longhorn-backup-health:
-# this feeds the daniel-box-disk-health dead-man, which sends `/fail` on a failed run and so
-# pages immediately regardless of its configured grace.
-#
-# The skipped run writes no textfile and pushes nothing, so the previous file stays as it was.
-# DEADLINE_S below already covers one skipped slot.
+# Skip the first run after boot: the dead-man's `/fail` pages at once whatever its grace.
+# The skipped run writes nothing; DEADLINE_S covers one skipped slot.
 if boot_grace_active {{ k3s_health_cron_boot_grace_s }} disk-health; then
   exit 0
 fi
 
 MAX_PCT={{ k3s_disk_max_pct }}
-# The longest legitimate gap between two textfile writes: two cron periods plus 300s. One period
-# is the normal gap, the second is the slot the boot grace skips, and the 300s covers cron start
-# jitter, the 1m `node` scrape and the 1m rule evaluation. Rendered from the cron's own minute,
-# read as `*/N`. Any other shape has no single period, so the render fails rather than publish
-# a deadline shorter than the real gap: `mandatory` on a name nothing defines is how a template
-# raises with a message. hosts/tests/test_disk_health_deadline.py holds the value under
-# the Healthchecks.io dead-man's timeout plus grace, and proves the refusal.
+# Two cron periods (one is the slot boot grace skips) plus 300s for jitter, scrape and rule
+# evaluation.
+# The cron minute must be `*/N`; any other shape fails the render rather than publish a short
+# deadline.
 {% set _every_n = k3s_disk_health_cron_minute | string | regex_replace('^[*]/([0-9]+)$', '\\1') %}
 {% if _every_n.isdigit() and '*/' ~ _every_n == k3s_disk_health_cron_minute | string %}
 DEADLINE_S={{ 2 * 60 * (_every_n | int) + 300 }}
@@ -83,14 +76,10 @@ SUCCESS=0
 # Taken at the verdict, so a slow push or ping below cannot age it.
 VERDICT_TS=$(date +%s)
 
-# Unconditional, before the textfile write and the ping, so a DOWN verdict always leaves a
-# durable record in syslog, which Loki keeps.
 logger -t disk-health "status=${STATUS} ${MSG}"
 
-# The textfile, before the ping: the file must not wait on the network. Atomic, in
-# claude-cgroup-metrics.sh's pattern. mktemp's random suffix
-# never ends in .prom, so node_exporter skips the half-written file, and `mv` replaces the old
-# one in a single step. A failed write logs and the run goes on to its ping.
+# mktemp's suffix never ends in .prom, so node_exporter skips a half-written file;
+# `mv` replaces the old one in one step. A failed write logs and the ping still runs.
 write_textfile() {
   TMP=$(mktemp "$TEXTFILE_DIR/disk-health.prom.XXXXXX" 2>/dev/null) || return 1
   trap 'rm -f "$TMP"' EXIT
@@ -115,18 +104,15 @@ write_textfile() {
 }
 write_textfile || logger -t disk-health "textfile write to ${TEXTFILE_DIR} failed (status=${STATUS})"
 
-# Off-premises dead-man's switch — see longhorn-backup-health.sh.j2 for the full rationale.
-# Short version: Prometheus runs on the cluster this watches, so an outage silences both the
-# textfile's scrape and the rule. hc-ping.com alerts on the silence instead. Skipped when no key is configured.
-# A credential rather than inlined: this script is 0755, which would make an inlined key
-# readable by every local account.
+# Off-site dead-man's switch: Prometheus runs on the cluster this watches. Skipped with no key.
+# A credential, not inlined: this script is 0755.
 HC_PING_KEY=""
 if [[ -r "${CREDENTIALS_DIRECTORY:-/nonexistent}/healthchecks_ping_key" ]]; then
   HC_PING_KEY="$(<"$CREDENTIALS_DIRECTORY/healthchecks_ping_key")"
 fi
 if [[ -n "$HC_PING_KEY" ]]; then
-  # Bare slug, never auto-provisioned — a typo would silently create an unwatched check that
-  # reads green forever.
+  # Bare slug, never auto-provisioned: a typo would create an unwatched check that reads green
+  # forever.
   HC_URL="https://hc-ping.com/${HC_PING_KEY}/daniel-box-disk-health"
   [[ "$STATUS" == "up" ]] || HC_URL="${HC_URL}/fail"
   # No `-S`, stderr discarded — see longhorn-backup-health.sh.j2.

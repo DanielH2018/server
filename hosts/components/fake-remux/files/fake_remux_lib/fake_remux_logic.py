@@ -21,10 +21,7 @@ from typing import NamedTuple
 from fake_remux_lib.fake_remux_ledger import State
 
 
-# Consumer re-encoder identifiers that appear in a video stream's ENCODER tag. A remux (stream copy)
-# preserves the disc's original tag (usually none), never one of these. Matched case-insensitively as
-# substrings. `lavc` (libavcodec) covers any generic ffmpeg encode; `x264`/`x265` the CLI encoders;
-# the `*_qsv`/`*_nvenc`/`*_amf`/`*_vaapi` set the hardware encoders.
+# Encoder-tag markers of consumer re-encodes; a remux keeps the disc's tag, never one of these.
 DEFAULT_RE_ENCODER_MARKERS = (
     "x264",
     "x265",
@@ -118,8 +115,8 @@ def parse_encoder_tag(ffprobe_stream_json):
 
     if not ffprobe_stream_json:
         return None
-    # Single-exception except only: repo ruff targets 3.14 and would rewrite a tuple `except (A, B)`
-    # into PEP 758 `except A, B`, which older tooling reading this file may not parse.
+    # Keep a single-exception `except`: ruff targets 3.14 and rewrites a tuple into PEP 758
+    # `except A, B`, which older tooling may not parse.
     try:
         data = json.loads(ffprobe_stream_json)
     except ValueError:

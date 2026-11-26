@@ -32,10 +32,7 @@ source "${HOMELAB_LIB_DIR:-/usr/lib/homelab}/homelab-check-lib.sh" || {
   exit 1
 }
 
-# The longest legitimate gap between two textfile writes: every job runs weekly, 604800s, and
-# the extra 2h is slack for a run that takes far longer than the last, as rkhunter-check.sh
-# keeps. Move it with the crons. hosts/tests/test_host_maintenance.py pins the rules'
-# literals to it.
+# Weekly jobs (604800s) plus 2h slack for a run longer than the last; move it with the crons.
 DEADLINE_S=612000
 
 case "$JOB" in
@@ -45,16 +42,16 @@ case "$JOB" in
     SUCCESS=$((RC == 0))
     ;;
   dpkg-purge)
-    # `rc` rows are packages removed with their config left behind. pipefail makes a failed
-    # purge visible: xargs exits 123 when a dpkg it ran failed.
+    # `rc` rows: removed packages with config left; pipefail surfaces xargs exit 123 (a dpkg
+    # failed).
     dpkg -l | awk '/^rc/{print $2}' | xargs -r dpkg --purge 2>&1
     RC=$?
     SUCCESS=$((RC == 0))
     ;;
   firmware-update)
-    # `refresh --force` because a plain refresh exits non-zero once the metadata is younger than
-    # its refresh interval, which is the normal weekly case. Its failure is not the verdict:
-    # `update` runs against the metadata already on disk either way.
+    # `refresh --force`: a plain refresh exits non-zero when metadata is fresh, the normal weekly
+    # case.
+    # Its failure is not the verdict; `update` uses the metadata on disk.
     fwupdmgr refresh --force >/dev/null 2>&1
     # `--no-reboot-check` because the weekly restart 30 minutes later commits the update.
     fwupdmgr update -y --no-reboot-check 2>&1

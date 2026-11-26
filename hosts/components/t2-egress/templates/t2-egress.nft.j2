@@ -1,8 +1,8 @@
 #!/usr/sbin/nft -f
 {% set uids = [901, 907] -%}
 {% set proxy_host, proxy_port = t2_egress_proxy.split(':') -%}
-{# claude-code's claude_code_otlp_host_ip and claude_code_otlp_port, which this component cannot
-   read; hosts/lib/tests/test_t2_egress_component.py holds them equal. #}
+{# Equal to claude-code's claude_code_otlp_host_ip and claude_code_otlp_port, which this component
+   cannot read; a test pins them. #}
 {% set otlp_host, otlp_port = '127.0.0.1', 4317 -%}
 # Shipped by daniel-box's package (the t2-egress component). The T2 session users' egress fence:
 # each may reach squid on {{ t2_egress_proxy }} and the Claude Code telemetry collector on
@@ -46,9 +46,7 @@ add rule inet t2_egress output meta skuid {{ uid }} meta l4proto tcp counter rej
 add rule inet t2_egress output meta skuid {{ uid }} counter reject with icmpx admin-prohibited comment "t2-fence {{ uid }} other"
 {% endfor %}
 {% else %}
-#
-# t2_egress_enabled is false: the table goes. The `add` makes the `delete` succeed whether or not
-# the table exists.
+# The `add` makes the `delete` succeed whether or not the table exists.
 
 add table inet t2_egress
 delete table inet t2_egress

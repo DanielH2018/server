@@ -1,7 +1,5 @@
 {% import 'templates/claude-triage-pins.j2' as pins with context -%}
-# Shipped by the claude-code host component. claude_triage_run.py starts an instance named
-# <episode>:<state> when a run finishes, through polkit (50-claude-triage.rules). The runner and
-# the rule name the unit, so its name is fixed.
+# The runner and polkit's 50-claude-triage.rules name this unit, so its name is fixed.
 [Unit]
 Description=Report that triage episode %i finished
 After=homelab-secrets.service

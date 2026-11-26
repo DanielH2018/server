@@ -34,9 +34,7 @@ if [[ -z "${WIRED_LINK:-}" || -z "${WIRED_GATEWAY:-}" ]]; then
   exit 64
 fi
 
-# The longest legitimate gap between two textfile writes: three 1-minute timer runs. Move it
-# with homelab-wired-gateway.timer. hosts/tests/test_wired_gateway_check.py pins the rules'
-# literals to it.
+# Three 1-minute timer runs; move it with homelab-wired-gateway.timer.
 DEADLINE_S=180
 
 if PINGED=$(ping -n -q -c 3 -i 0.5 -W 2 -I "$WIRED_LINK" "$WIRED_GATEWAY" 2>&1); then

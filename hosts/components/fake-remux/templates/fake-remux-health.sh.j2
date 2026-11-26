@@ -28,10 +28,7 @@ source /usr/lib/homelab/homelab-check-lib.sh || {
   exit 1
 }
 
-# The longest legitimate gap between two textfile writes: two cron periods plus 300s, the rule
-# M3 fixed (docs/archive/monitoring/m3-textfile-timer.md, "The deadline for
-# disk-health"). It renders from fake_remux_health_cron_minute, which must be `*/N`, and
-# hosts/tests/test_b4_rule_literals.py pins the rules' literals to this value.
+# Deadline: two cron periods plus 300s; fake_remux_health_cron_minute must be `*/N`.
 {% set _every_n = fake_remux_health_cron_minute | string | regex_replace('^[*]/([0-9]+)$', '\\1') %}
 {% if _every_n.isdigit() and '*/' ~ _every_n == fake_remux_health_cron_minute | string %}
 DEADLINE_S={{ 2 * 60 * (_every_n | int) + 300 }}
@@ -40,27 +37,19 @@ DEADLINE_S={{ 2 * 60 * (_every_n | int) + 300 }}
 {% endif %}
 TEXTFILE_DIR=${TEXTFILE_DIR:-/var/lib/node-exporter-textfile}
 
-# Order is load-bearing: state_push.py prints one line per triple, in argument order, and the
-# LABELS and CHECKS below are consumed in that same order.
+# state_push.py prints one line per triple in argument order; LABELS and CHECKS must match it.
 mapfile -t LINES < <(/usr/bin/uv run --no-project --no-python-downloads --python {{ host_python_version }} {{ fake_remux_opt_dir }}/state_push.py \
   "fake-remux scan" "{{ fake_remux_state_dir }}/state.json" "{{ fake_remux_scan_max_age_hours }}" \
   "fake-remux replace" "{{ fake_remux_state_dir }}/replace_state.json" "{{ fake_remux_replace_max_age_hours }}" \
   "mkv attachment repair" "{{ fake_remux_state_dir }}/mkv_attachment_state.json" "{{ fake_remux_mkv_attachment_max_age_hours }}")
 
 LABELS=("fake-remux scan" "fake-remux replace" "mkv attachment repair")
-# One textfile per state file, named for what it checks. The syslog tag is shared, so it cannot
-# name them (M3 names a check file after its producer's tag, which assumes one verdict per tag).
+# The syslog tag is shared, so each state file gets its own textfile named for what it checks.
 CHECKS=(fake-remux-scan fake-remux-replace mkv-attachment-repair)
 
-# Indexed off LABELS rather than a literal `0 1`, which is what this loop said while it served two
-# state files. A third triple added above a literal index list renders a state_push line nobody
-# reads and writes nothing — the verdict then goes stale with no explanation, which is the
-# failure this whole script exists to report.
 for i in "${!LABELS[@]}"; do
   LINE="${LINES[$i]:-}"
   if [[ -z "$LINE" ]]; then
-    # A missing line means the reader itself broke. Report that rather than writing nothing,
-    # which would leave the verdict to go stale with no explanation.
     STATUS=down
     MSG="${LABELS[$i]} reader produced no output"
   else

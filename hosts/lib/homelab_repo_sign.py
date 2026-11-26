@@ -204,9 +204,8 @@ class Signer:
                     self.publish(fingerprint)
                     host_log("re-signed the published tree", stream=sys.stderr)
             except BaseException:
-                # A package copied into the pool but never indexed would otherwise be indexed
-                # by the next re-sign, a held one included. publish() empties the list once
-                # the swap makes the new index live.
+                # A package copied into the pool but never indexed would be indexed by the next
+                # re-sign, a held one included.
                 for path in self.new_in_pool:
                     path.unlink(missing_ok=True)
                 raise
@@ -215,8 +214,8 @@ class Signer:
         except Failure as exc:
             return self._failed({"reason": exc.reason}, str(exc))
         except (OSError, subprocess.SubprocessError) as exc:
-            # A filesystem or tool error. Left uncaught it would exit 1 on every run, and every
-            # successful builder run starts the signer, so OnFailure= would page every 2 minutes.
+            # A filesystem or tool error left uncaught would exit 1 every run, and OnFailure= would
+            # page every 2 minutes.
             return self._failed({"reason": "io"}, f"{type(exc).__name__}: {exc}")
         self.state.pop("failure", None)
         return 0
@@ -264,8 +263,8 @@ class Signer:
             where = f"the set is in {self.refuse()}"
         except OSError as err:
             where = f"the set stays in staged/, because copying it failed: {err}"
-        # Keyed by the set's chosen SHA, so a set the signer could not move pages once, and
-        # the next refused set, at another commit, pages again.
+        # Keyed by the set's chosen SHA, so a set the signer could not move pages once and the next
+        # refused set pages again.
         return self._failed(
             {"reason": "refused", "chosen": chosen.strip()},
             f"refused staged/, nothing published: {exc}; {where}",
@@ -312,8 +311,8 @@ class Signer:
         chosen = None
         debs: list[tuple[Path, dict[str, str]]] = []
         for name in names:
-            # Every entry is read without following a symlink: a staged link to the signer's
-            # own GnuPG home would otherwise be copied into a pool anyone can fetch.
+            # Read without following a symlink: a staged link to the signer's GnuPG home would be
+            # copied into a public pool.
             data = read_no_follow(name, self.staged_dir())
             if name == "chosen":
                 chosen = data.decode(errors="replace").strip()
@@ -335,14 +334,14 @@ class Signer:
             package, version = fields["Package"], fields["Version"]
             if not _PACKAGE.fullmatch(package):
                 raise Refusal(f"{package} is not a homelab-* package")
-            # The builder's own format, in full: the version reaches a pool file name and a
-            # metric label, so a `/` or a `"` in it must never get that far.
+            # The version reaches a pool file name and a metric label, so a `/` or `"` must never
+            # get that far.
             if not re.fullmatch(rf"0\.[0-9]+\+g{chosen}", version):
                 raise Refusal(f"{package} {version!r} is not 0.<count>+g{chosen}")
             if fields["Architecture"] not in ("all", *ARCHITECTURES):
                 raise Refusal(f"{package} is built for {fields['Architecture']}")
-            # One build per package and architecture: `homelab-tools` stages an amd64 and an
-            # arm64 build, and the pool name below carries the architecture.
+            # One build per package and architecture: homelab-tools stages amd64 and arm64, and the
+            # pool name carries it.
             key = (package, fields["Architecture"])
             if key in seen:
                 raise Refusal(f"{package} is staged twice for {key[1]}")
@@ -441,8 +440,7 @@ class Signer:
         except BaseException:
             shutil.rmtree(snapshot, ignore_errors=True)
             raise
-        # The live index now lists this run's pool files, so a later failure must not
-        # remove them.
+        # The live index lists this run's pool files now, so a later failure must not remove them.
         self.new_in_pool.clear()
         self.state["signed_by"] = fingerprint
         for old in self.snapshots.iterdir():
@@ -451,9 +449,8 @@ class Signer:
         self.write_prom(suite)
 
     def write_indexes(self, suite: Path) -> None:
-        # 3. The indexes, then the Release over them. apt-ftparchive dates the Release itself
-        # and sets Valid-Until to that same moment plus ValidTime, so the two are exactly
-        # VALID_SECONDS apart.
+        # apt-ftparchive dates the Release and sets Valid-Until to that moment plus ValidTime, so
+        # they are VALID_SECONDS apart.
         for arch in ARCHITECTURES:
             binary = suite / COMPONENT / f"binary-{arch}"
             binary.mkdir(parents=True)
@@ -480,8 +477,8 @@ class Signer:
         (suite / "Release").write_bytes(release)
 
     def sign(self, suite: Path, fingerprint: str) -> None:
-        # 4. The `!` makes gpg sign with that exact key, never a subkey or another key in the
-        # home, which holds two while a replacement key is being rolled in.
+        # The `!` makes gpg sign with that exact key, never a subkey or the second key in the home
+        # during a roll.
         base = [
             self.gpg,
             "--homedir",

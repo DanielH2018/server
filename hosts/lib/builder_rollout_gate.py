@@ -190,8 +190,8 @@ class RolloutGate:
             self.descends(gate["sha"], s.labels.get("sha", "")) for s in applied
         ):
             return True
-        # Prometheus answered, so say what it holds: without this line a gate held by a
-        # canary that reports an older SHA, or none, looks like a gate held by nothing.
+        # Say what Prometheus holds: otherwise a gate held by a canary reporting an older SHA, or
+        # none, looks held by nothing.
         shas = ",".join(s.labels.get("sha", "") for s in applied) or "none"
         oks = ",".join(f"{s.value:g}" for s in reconcile) or "none"
         log(

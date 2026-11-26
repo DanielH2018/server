@@ -60,9 +60,7 @@ done
 
 export PATH=/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin # cron ships a bare PATH
 export LC_ALL=C # one `sort` order for the live and declared lists, whatever the host's locale
-# What scripts/lib/gh.py sets for every Python caller, and this cron calls `gh` directly. A `gh`
-# that prompts hangs an unattended run forever, and the update notifier writes to stderr on the
-# first call of the day — which a caller reading stderr as an error message then reports as one.
+# A prompting `gh` hangs an unattended run, and the update notifier's stderr reads as an error.
 export GH_PROMPT_DISABLED=1 GH_NO_UPDATE_NOTIFIER=1
 
 # shellcheck source=/dev/null
@@ -76,42 +74,26 @@ source /usr/lib/homelab/homelab-check-lib.sh || {
 # tests/services/alert_rules/test_gitops_check_rule_literals.py pins the rules' literals to it.
 DEADLINE_S=90000
 
-# Records the verdict: the journal line comes first, on every run, so `journalctl -t
-# github-ruleset-drift` reads the outcome of every run, a passing one included. The textfile
-# write follows. A failed write logs and the run goes on to its exit.
 push() { # up|down msg
   logger -t github-ruleset-drift "status=$1 $2"
   write_check_textfile github-ruleset-drift "$([[ "$1" == up ]] && echo 1 || echo 0)" "$(date +%s)" "$DEADLINE_S" \
     || logger -t github-ruleset-drift "textfile write failed (status=$1)"
 }
 
-# push_reachout MSG — report a failure whose cause was reaching api.github.com.
-#
-# Only the fetch arms use it. A link that is gone is the WAN tile's page, not this one's. A 200
-# carrying the wrong shape keeps `push down`: GitHub answered, so the link is fine and the body
-# is the fault.
-#
-# The exit 1 at each call site stays: `homelab-github-ruleset-drift.timer` restarts
-# on-failure, so a skipped run retries rather than waiting out the day — which is what should
-# happen while the link is down.
+# Fetch arms only: a dead link is the WAN tile's page; a wrong-shaped 200 keeps `push down`.
+# Keep each call site's exit 1: the timer restarts on-failure, so a skipped run retries.
 push_reachout() { # msg
   REACHOUT_STATUS=down
   REACHOUT_NOTE=""
-  # The guard keeps a host whose library copy predates reachout_verdict from aborting on an
-  # unbound variable under `set -u` with NO verdict recorded, which NotReporting pages only after
-  # its 25h deadline.
+  # Guard: an older library without reachout_verdict would abort under `set -u` with no verdict.
   if command -v reachout_verdict >/dev/null 2>&1; then
     reachout_verdict github-ruleset-drift {{ wan_probe_urls | join(' ') }}
   fi
   push "$REACHOUT_STATUS" "${REACHOUT_NOTE}$1"
 }
 
-# check_bypass ID BODY EXPECTED — push down and exit 1 unless ruleset ID's bypass list is exactly
-# EXPECTED: one `<actor_type>:<actor_id>:<bypass_mode>` per line, sorted.
-#
-# It branches on the TYPE of `.bypass_actors`, not on its contents. null is a caller that cannot
-# see the list (anonymous, or a token without admin), while `[]` is a list emptied in the UI.
-# `.bypass_actors[]?` would read both as nothing.
+# Branch on the TYPE of `.bypass_actors`: null means the caller cannot see the list, `[]` an emptied
+# list; `.bypass_actors[]?` would read both as nothing.
 check_bypass() {
   local id=$1 body=$2 expected=$3 kind live added removed
   kind=$(printf '%s' "$body" | jq -r '.bypass_actors | type')
@@ -131,12 +113,8 @@ check_bypass() {
 
 RULESET_URL="https://api.github.com/repos/{{ github_repo }}/rulesets/{{ github_ruleset_id }}"
 
-# The expected set, baked in at template time from defaults/main.yml. Quoted heredoc so nothing
-# in a context name is shell-expanded — they contain spaces, parentheses and `+`.
-# The blank-line filter is not belt-and-braces: whether the `{% raw %}{% for %}{% endraw %}` above
-# leaves an empty line per iteration depends on Jinja's trim_blocks, which Ansible sets and a bare
-# Environment does not. Filtering makes the comparison identical either way, so the rendered file
-# cannot differ from the one a test renders.
+# Quoted heredoc: context names contain spaces, parentheses and `+`. The blank-line filter makes the
+# render match a bare Jinja Environment, which lacks Ansible's trim_blocks.
 EXPECTED=$(
   sed '/^[[:space:]]*$/d' <<'CONTEXTS' | sort
 {% for ctx in github_expected_ruleset_contexts %}
@@ -160,23 +138,16 @@ EXPECTED_FENCE_BYPASS=$(
 ACTORS
 )
 
-# This cron runs as root; the gh login belongs to the deploy user, so the lookup drops to that
-# user. `-H` matters: gh finds its login under $HOME, and a plain runuser/sudo keeps root's.
-# Every failure — no sudo, no gh, logged out — leaves TOKEN empty and the fetch anonymous.
+# `-H` makes gh read the deploy user's $HOME, not root's. Any failure leaves TOKEN empty
+# (anonymous).
 TOKEN=$(sudo -n -u "{{ sys_user }}" -H gh auth token 2>/dev/null || true)
 AUTH_CONFIG=""
 if [ -n "$TOKEN" ]; then
   AUTH_CONFIG=$(printf 'header = "Authorization: Bearer %s"\n' "$TOKEN")
 fi
 
-# On the free plan GitHub does not enforce rulesets on a private repo. Each ruleset still reads
-# `enforcement: active`, so every arm below would pass while no merge is gated. An anonymous
-# read of a private repo answers 404, which would surface as a failed ruleset fetch and hide the
-# cause. So this read comes first and names visibility in both shapes: `.visibility` to a
-# token, a 404 `Not Found` to no token.
-#
-# No `-f` on this one fetch: the 404 body is the evidence, and `-f` would discard it. curl still
-# exits non-zero on a transport failure, which is the reachout case.
+# A private free-plan repo's rulesets read active but enforce nothing, and an anonymous read 404s.
+# So this read comes first, without `-f`: the 404 body is the evidence.
 REPO_URL="https://api.github.com/repos/{{ github_repo }}"
 if ! REPO_BODY=$(curl -s --max-time 20 -K <(printf '%s\n' "$AUTH_CONFIG") \
   -H "Accept: application/vnd.github+json" "$REPO_URL"); then
@@ -198,22 +169,18 @@ if [ -z "$VISIBILITY" ]; then
   exit 1
 fi
 
-# Process substitution, not a pipe. Under `set -o pipefail` a `printf | curl -K -` pipeline
-# reports printf's EPIPE when curl exits before reading stdin — which the test harness's curl
-# stub does, so the drift tests failed intermittently with "failed to fetch" under xdist load
-# `<(...)` keeps the token off argv and out of the pipeline's exit status.
+# Process substitution, not a pipe: under pipefail `printf | curl -K -` reports printf's EPIPE when
+# curl exits early. `<(...)` also keeps the token off argv.
 if ! BODY=$(curl -sf --max-time 20 -K <(printf '%s\n' "$AUTH_CONFIG") \
   -H "Accept: application/vnd.github+json" "$RULESET_URL"); then
-  # Unreachable is NOT "no drift". A check whose source is down must say it could not look,
-  # or it is a deadman reporting a pass.
+  # An unreachable source must say it could not look; it is not 'no drift'.
   push_reachout "failed to fetch ruleset {{ github_ruleset_id }} — branch protection UNVERIFIED"
   exit 1
 fi
 
 ENFORCEMENT=$(printf '%s' "$BODY" | jq -r '.enforcement // empty')
 if [ -z "$ENFORCEMENT" ]; then
-  # A 200 carrying something that is not a ruleset — an error object, an HTML interstitial, a
-  # truncated body. Reported as a bad fetch, never as "the contexts are gone".
+  # A 200 that is not a ruleset (error object, HTML, truncated) is a bad fetch, not 'contexts gone'.
   push down "ruleset {{ github_ruleset_id }} response had no .enforcement — bad fetch, UNVERIFIED"
   exit 1
 fi
@@ -223,9 +190,7 @@ LIVE=$(printf '%s' "$BODY" \
   | sed '/^[[:space:]]*$/d' | sort)
 LIVE_COUNT=$(printf '%s\n' "$LIVE" | grep -c .)
 
-# A parsed-but-empty context list is the same shape as "someone removed every required check".
-# Those need different responses, and only one of them is an emergency — but both are wrong, so
-# both are reported. The count is stated so the message distinguishes them by eye.
+# An empty context list reads like 'every check removed'; the stated count tells them apart.
 if [ "$LIVE_COUNT" -eq 0 ]; then
   push down "ruleset {{ github_ruleset_id }} requires NO status checks (enforcement=${ENFORCEMENT}) — every merge gate is open, or the response shape changed"
   exit 1
@@ -237,19 +202,15 @@ if [ "$ENFORCEMENT" != "active" ]; then
 fi
 
 if [ "$LIVE" != "$EXPECTED" ]; then
-  # Drift: name the direction. "removed" = we expect it and GitHub no longer requires it, the
-  # dangerous way round — that check stops gating merges. "added" = required upstream but not
-  # declared here, which usually means someone added a check and this list needs updating.
+  # removed: expected, no longer required (stops gating merges). added: required, not declared here.
   REMOVED=$(comm -13 <(printf '%s\n' "$LIVE") <(printf '%s\n' "$EXPECTED") | tr '\n' ' ')
   ADDED=$(comm -23 <(printf '%s\n' "$LIVE") <(printf '%s\n' "$EXPECTED") | tr '\n' ' ')
   push down "ruleset {{ github_ruleset_id }} DRIFTED — no-longer-required:[${REMOVED}] newly-required:[${ADDED}] — reconcile github_expected_ruleset_contexts in hosts/components/github-checks/defaults/main.yml"
   exit 1
 fi
 
-# Each required context must be pinned to the GitHub Actions app. GitHub matches an unpinned
-# context by name alone, so any token with write access satisfies it with a commit status of that
-# name. GitHub omits `integration_id` for an unpinned context, and `// "none"` names that.
-# An anonymous read returns the pins, so this arm runs ahead of the admin-only bypass checks.
+# GitHub matches an unpinned context by name alone and omits its `integration_id`. An anonymous read
+# returns the pins, so this runs ahead of the admin-only bypass checks.
 UNPINNED=$(printf '%s' "$BODY" \
   | jq -r --argjson app {{ github_actions_app_id }} \
     '.rules[]?.parameters?.required_status_checks[]? | select(.integration_id != $app) | "\(.context)=\(.integration_id // "none")"' \
@@ -259,10 +220,8 @@ if [ -n "$UNPINNED" ]; then
   exit 1
 fi
 
-# The same ruleset requires every change to master to arrive as a PR, with no approving review.
-# The PR requirement is what stops a token pushing to master directly, since the fence does
-# not cover master. A required review would also hold every land.sh merge, which no session
-# is asked to wait on.
+# The PR rule stops a token pushing to master directly, since the fence does not cover master.
+# A required review would hold every land.sh merge.
 PR_RULE=$(printf '%s' "$BODY" \
   | jq -c 'first(.rules[]? | select(.type == "pull_request") | .parameters) // empty')
 if [ -z "$PR_RULE" ]; then
@@ -301,11 +260,9 @@ if ! printf '%s' "$BRANCH_BODY" | jq -r '.conditions.ref_name.exclude[]? // empt
   exit 1
 fi
 
-# "agent branch fence" restricts creating, updating and deleting every branch outside the
-# declared exclusions, and the agent's account is no bypass actor. Without it, the agent could
-# push onto a branch an operator session opened, and the next landing of that branch, pinned to
-# whatever head GitHub reports, would carry its commit to master. An added exclusion is a branch the agent
-# can push to, so the list is compared exactly rather than for one member.
+# Without the fence the agent could push onto an operator's branch and its landing would carry the
+# commit to master. Compare the exclusions exactly: each added one is a branch the agent can push
+# to.
 FENCE_RULESET_URL="https://api.github.com/repos/{{ github_repo }}/rulesets/{{ github_fence_ruleset_id }}"
 if ! FENCE_BODY=$(curl -sf --max-time 20 -K <(printf '%s\n' "$AUTH_CONFIG") \
   -H "Accept: application/vnd.github+json" "$FENCE_RULESET_URL"); then
@@ -354,13 +311,10 @@ if [ -n "$UNRESTRICTED" ]; then
   exit 1
 fi
 
-# Each update restriction lets only its bypass actors update its refs: master here, `main` and
-# every tag in the
-# dotfiles repo. Each is compared exactly, because an added rule changes what it refuses as much
-# as a dropped one, and a narrowed target protects nothing while reading active.
+# Compare each exactly: an added rule changes what it refuses as much as a dropped one, and a
+# narrowed target protects nothing while reading active.
 declare -A RESTRICTION_BODY
-# check_public REPO — push down and exit 1 unless REPO reads public, as the first arm does for
-# github_repo: a ruleset on a private free-plan repo reads active and enforces nothing.
+# Fail unless REPO is public: a private free-plan repo's ruleset reads active and enforces nothing.
 check_public() {
   local repo=$1 body visibility
   if ! body=$(curl -s --max-time 20 -K <(printf '%s\n' "$AUTH_CONFIG") \
@@ -411,8 +365,7 @@ check_public "{{ repo }}"
 check_restriction "{{ rs.repo }}" {{ rs.id }} {{ rs.target }} "$(printf '%s\n' {% for ref in rs.include | sort %}'{{ ref }}' {% endfor %}| sort)" "$(printf '%s\n' {{ rs.rules | sort | join(' ') }} | sort)"
 {% endfor %}
 
-# Last, because only these need an admin token: an anonymous run has judged every other property
-# above before it stops here.
+# Last: only these need an admin token, so an anonymous run judges everything else first.
 check_bypass {{ github_ruleset_id }} "$BODY" "$EXPECTED_CI_BYPASS"
 check_bypass {{ github_fence_ruleset_id }} "$FENCE_BODY" "$EXPECTED_FENCE_BYPASS"
 {% for rs in github_update_restriction_rulesets %}
