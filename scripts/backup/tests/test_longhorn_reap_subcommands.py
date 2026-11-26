@@ -72,8 +72,6 @@ def test_backups_subcommand_accepts_every_old_flag(flags, tmp_path):
     proc, calls = _run(
         REAP_ENTRY, ["backups", *flags], {"volumes": []}, tmp_path, admin_readable=True
     )
-    assert proc.returncode != 2, proc.stderr
-    assert "unknown argument" not in proc.stderr, proc.stderr
     # Parsing succeeded only if the run went on to read the cluster.
     assert any(arg == "volumes.longhorn.io" for c in calls for arg in c), proc.stderr
 
@@ -86,8 +84,6 @@ def test_snapshots_subcommand_accepts_apply(tmp_path):
         tmp_path,
         admin_readable=True,
     )
-    assert proc.returncode != 2, proc.stderr
-    assert "unknown argument" not in proc.stderr, proc.stderr
     assert any(arg == "recurringjobs.longhorn.io" for c in calls for arg in c), (
         proc.stderr
     )

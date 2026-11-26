@@ -52,7 +52,7 @@ import urllib.request
 from lib import host_modules  # noqa: F401
 import host_lib
 from renderer.template_filters.longhorn_manager import ready_manager_ip
-from lib.cli_help import answer_help
+from lib.cli_help import ArgumentParser, answer_help
 from lib.exit_codes import USAGE_ERROR
 from backup.longhorn_reap_lib import logic
 from lib.k8s_objects import LonghornVolume
@@ -158,11 +158,13 @@ def main(argv: list[str], now: float | None = None) -> int:
     environment carries can move it.
     """
     answer_help(__doc__, argv)
-    apply = "--apply" in argv
-    unknown = [a for a in argv if a != "--apply"]
-    if unknown:
-        print("unknown argument: %s (expected --apply)" % unknown[0], file=sys.stderr)
-        return USAGE_ERROR
+    parser = ArgumentParser(
+        prog="longhorn_reap.py snapshots",
+        allow_abbrev=False,
+        example="longhorn_reap.py snapshots --apply",
+    )
+    parser.add_argument("--apply", action="store_true")
+    apply = parser.parse_args(argv).apply
 
     refusal = logic.readonly_kubeconfig_refusal(apply, READONLY_KUBECONFIG, "--apply")
     if refusal:

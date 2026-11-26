@@ -251,6 +251,7 @@ def test_every_modes_dry_run_prints_the_per_block_cost(tmp_path, args):
         ["--seed-floor", "3"],
         ["--mode"],
         ["--mode", "seeds", "--seed-floor", "0"],
+        ["--mode", "seeds", "--claim", "--apply"],
     ],
     ids=[
         "unknown-mode",
@@ -260,6 +261,7 @@ def test_every_modes_dry_run_prints_the_per_block_cost(tmp_path, args):
         "seed-floor-outside-the-seeds-mode",
         "mode-without-a-value",
         "seed-floor-below-one",
+        "claim-does-not-take-the-next-flag-as-its-value",
     ],
 )
 def test_a_flag_that_belongs_to_another_mode_is_rejected(tmp_path, args):
