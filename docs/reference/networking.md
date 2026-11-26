@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/networking.py
-generated_at: 2026-11-25 18:17 UTC
-generated_sha: 9a60147e9
+generated_at: 2026-11-26 18:17 UTC
+generated_sha: 57382e988
 ---
 
 !!! warning "Generated file — do not edit"
@@ -61,7 +61,7 @@ generated_sha: 9a60147e9
 | tdarr | daniel-box | <span class="fqdn" data-host="tdarr">tdarr.&lt;domain&gt;</span> · <span class="fqdn" data-host="tdarr.local">tdarr.local.&lt;domain&gt;</span> | LAN + public | `rate-limit`, `authelia` |
 | texbrain | daniel-box | <span class="fqdn" data-host="texbrain">texbrain.&lt;domain&gt;</span> · <span class="fqdn" data-host="texbrain.local">texbrain.local.&lt;domain&gt;</span> | LAN + public | `rate-limit`, `authelia` |
 | traefik | daniel-box | <span class="fqdn" data-host="traefik.local">traefik.local.&lt;domain&gt;</span> (LAN only) | LAN only | `rate-limit` |
-| vaultwarden | daniel-box | <span class="fqdn" data-host="vaultwarden.local">vaultwarden.local.&lt;domain&gt;</span> (LAN only) | LAN only | `rate-limit` |
+| vaultwarden | daniel-box | <span class="fqdn" data-host="vaultwarden.local">vaultwarden.local.&lt;domain&gt;</span> (LAN only) | LAN only | `rate-limit`, `vaultwarden-lan-only` |
 | wg-easy | daniel-box | <span class="fqdn" data-host="wg-easy">wg-easy.&lt;domain&gt;</span> · <span class="fqdn" data-host="wg-easy.local">wg-easy.local.&lt;domain&gt;</span> | LAN + public | `rate-limit`, `authelia` |
 | zigbee2mqtt | daniel-box | <span class="fqdn" data-host="zigbee2mqtt">zigbee2mqtt.&lt;domain&gt;</span> · <span class="fqdn" data-host="zigbee2mqtt.local">zigbee2mqtt.local.&lt;domain&gt;</span> | LAN + public | `rate-limit`, `authelia` |
 
