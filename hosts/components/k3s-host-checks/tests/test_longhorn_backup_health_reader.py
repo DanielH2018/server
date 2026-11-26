@@ -90,9 +90,8 @@ def test_reader_pins_the_journal_transport(tmp_path, logger_calls):
         reader_argv(), capture_output=True, text=True, env=env, timeout=30
     )
     assert proc.returncode == 0, proc.stderr
-    # The rank-1 kubectl failures win the push slot, so the B2 verdict is in the FULL message
-    # the reader logs rather than on stdout. That is where to read it, and its presence there is
-    # what proves the journal read reached a verdict rather than being dropped.
+    # Rank-1 kubectl failures win the push slot, so the B2 verdict is read from the reader's full
+    # logged message.
     assert "b2-deletions reported UNPRICED" in logger_calls.read_text()
     assert "b2-budget reported OVER BUDGET" in logger_calls.read_text()
 
@@ -301,14 +300,6 @@ def test_reader_argv_hands_now_to_main(tmp_path):
     assert proc.returncode == 0, proc.stderr
     assert proc.stdout.splitlines()[-1].startswith("down\t"), proc.stdout
     assert "960h old (limit 30h)" in proc.stdout, proc.stdout
-
-
-# ── fetch failures: the deadman must go DOWN with a reason, never quietly UP ────
-#
-# test_reader_green_path_pins_the_transport above is the clean half of every pair below. Each
-# test turns exactly one fetch red and asserts the verdict flips and names that fetch. The
-# reader's syslog line carries the full unranked problem list; stdout carries only the top one
-# plus a count, so the fetch name is asserted against `logger_calls`.
 
 
 @pytest.mark.parametrize(

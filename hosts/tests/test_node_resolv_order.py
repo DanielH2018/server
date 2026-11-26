@@ -36,15 +36,8 @@ from renderer.renderer_lib import host as host_mode
 
 _TEMPLATE = "resolv.conf.j2"
 
-# Every host that resolves DIRECTLY from the shared template, read from the file its host
-# package ships. daniel-pi's `pi-resolver` component owns the template, which `k3s-host-dns` borrows through `component: pi-resolver`
-# All are checked: the template is shared, so a correct file plus one bad caller is
-# still a host resolving through Cloudflare.
-#
-# daniel-box is not here by design: its resolv.conf names one entry, 127.0.0.1, and the ordered
-# preference lives in its host forwarder's Corefile, checked at the bottom of this file.
-# LOOSENING THE SOLE-ENTRY RULE TO ADMIT IT would delete the check that catches a missing
-# fallback on the host that still needs one.
+# The template is shared: a correct file plus one bad caller still resolves through Cloudflare.
+# daniel-box is absent by design: its resolv.conf is 127.0.0.1; order is in its Corefile.
 _PACKAGED_HOSTS = ("daniel-pi",)
 
 
@@ -94,9 +87,8 @@ def order_problems(nameservers: list[str], options: str, vip: str) -> list[str]:
 def test_the_shipped_resolv_conf_keeps_pihole_first() -> None:
     vip = _vip()
     for host in _PACKAGED_HOSTS:
-        # The RENDERED file the package installs, so a template that stopped interpolating the
-        # list renders no nameserver lines, which `order_problems` reports rather than passing
-        # over.
+        # The RENDERED file: a template that stopped interpolating the list renders no nameserver
+        # lines, which `order_problems` reports.
         rendered = host_mode.render_host(host).files["/etc/resolv.conf"][0].decode()
         problems = order_problems(
             nameserver_lines(rendered), options_line(rendered), vip
@@ -140,11 +132,8 @@ def test_rotate_is_flagged() -> None:
     assert problems == ["`rotate` is set, which destroys the first-server preference"]
 
 
-# ── daniel-box: the first hop is the Corefile ───────────────────────────────────────────
-# Same invariant, different file. CoreDNS's forward plugin defaults to `random`, so without
-# `policy sequential` an ordered-looking list is a coin flip. Each way to break it is silent:
-# invert the list and Cloudflare answers everything; drop the public entries and a Pi-hole
-# outage takes the node's DNS with it; set `max_fails 0` and CoreDNS stops health checking.
+# CoreDNS's forward plugin defaults to `random`, so without `policy sequential` an ordered list is a
+# coin flip. Silent breaks: an inverted list, dropped public entries, `max_fails 0`.
 
 _COREFILE = "host-corefile.j2"
 _FORWARD = re.compile(r"^\s*forward\s+\.\s+(.+?)\s*\{\s*$", re.M)

@@ -443,8 +443,6 @@ def test_the_poller_answers_help(capsys) -> None:
 def test_a_failed_prometheus_read_is_logged_with_its_url_at_warning(
     capsys, monkeypatch
 ) -> None:
-    # read_all falls back to the next URL, so a silent None hid a dead loopback Prometheus
-    # behind an answering ClusterIP.
     def refuse(url, timeout):
         raise OSError("connection refused")
 

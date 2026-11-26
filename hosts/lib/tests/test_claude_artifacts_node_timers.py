@@ -26,8 +26,6 @@ OBSERVABILITY = K8S_ROLES / "observability"
 UNITS = "/usr/lib/systemd/system"
 TMPFILES = "/usr/lib/tmpfiles.d/homelab-artifacts.conf"
 
-# claude_code key -> (k8s role, how that role spells the same value). A callable reads a value
-# the k8s role composes from two keys.
 TWINS = {
     "claude_code_artifacts_node": (ARTIFACTS, "artifacts_k8s_node"),
     "claude_code_artifacts_peer_sources": (ARTIFACTS, "artifacts_peer_sources"),
@@ -40,8 +38,6 @@ TWINS = {
     "claude_code_otlp_host_ip": (OBSERVABILITY, "observability_otlp_host_ip"),
     "claude_code_otlp_port": (OBSERVABILITY, "observability_otlp_port"),
 }
-# Each timer, the script its service runs, the syslog tag Loki keeps its lines under, and the
-# minute default it fires on.
 TIMERS = {
     "homelab-sync-artifacts": (
         "/usr/lib/homelab/sync-artifacts",

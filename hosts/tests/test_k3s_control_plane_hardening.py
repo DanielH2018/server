@@ -136,9 +136,8 @@ def _named_resources(rule: dict) -> set[str]:
     }
 
 
-# The identities whose Secret reads the policy may drop ahead of the Metadata rule. Both
-# entries are machine identities the policy already drops wholesale further down; widening
-# this set is how the finding comes back, so it is pinned here rather than derived.
+# Both are machine identities the policy already drops wholesale below; widening this set brings the
+# finding back, so it is pinned.
 SECRET_READ_DROP_USERS = {"system:apiserver", "system:kube-proxy"}
 SECRET_READ_DROP_GROUPS = {"system:nodes"}
 READ_VERBS = {"get", "list", "watch"}
@@ -301,13 +300,12 @@ def test_alloy_tails_the_audit_log():
     name appearing anywhere, such as a comment or a different directive, would satisfy a name
     check, and the rendered path is what Alloy and the kubelet actually get.
     """
-    # Resolved, not raw: `k3s_audit_log_path` is itself a template over `k3s_audit_log_dir`,
-    # so group_vars holds `{{ k3s_audit_log_dir }}/audit.log` and only the render context
-    # expands it.
+    # Resolved, not raw: `k3s_audit_log_path` is a template over `k3s_audit_log_dir`, which only the
+    # render context expands.
     resolved = role_context(K3S_SERVER)
     path, directory = resolved["k3s_audit_log_path"], resolved["k3s_audit_log_dir"]
-    # The Alloy config sits in a nested `templates/config/` directory, which the whole-tree
-    # render does not glob; `render_role_template` addresses it by its loader-relative name.
+    # The Alloy config sits in a nested `templates/config/` directory the whole-tree render does not
+    # glob.
     config = render_role_template("loki-homelab", "config/config.alloy.j2")
     assert path in config, (
         f"the Alloy config must declare a file source for {path} (k3s_audit_log_path). "
@@ -360,8 +358,8 @@ def test_psa_does_not_enforce():
 def test_both_namespaces_carry_the_psa_labels():
     """Labels on one namespace and not the other leave the two namespaces enforcing different policy."""
     obs = rendered_k8s_text("observability", "00-namespace.yaml.j2")
-    # The rendered labels, not the variable's name: a Namespace that mentions k8s_psa_labels in
-    # a comment and labels nothing would pass a name check.
+    # The rendered labels, not the variable's name: a comment mentioning k8s_psa_labels would pass a
+    # name check.
     missing = sorted(
         f"{key}: {value}"
         for key, value in _all_vars()["k8s_psa_labels"].items()
@@ -371,7 +369,6 @@ def test_both_namespaces_carry_the_psa_labels():
         "The observability Namespace must render every k8s_psa_labels entry, or the two "
         f"namespaces diverge and only one of them reports violations. Missing: {missing}"
     )
-    # The workload Namespace's only writer is the shared kind homelab-namespace (D5 step 30).
     workload = homelab_namespace_files("600s")[
         f"cluster/{HOMELAB_NAMESPACE}/namespace.yaml"
     ]

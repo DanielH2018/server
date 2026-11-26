@@ -26,9 +26,8 @@ from lib.proc_testing import run, write_exec
 ROLE = CLAUDE_CODE
 SCRIPT = ROLE / "files" / "claude-dotfiles-sync.sh"
 
-# Answers the subcommands the script uses. `managed` lists ~/.claude and ~/.config/gh, whose
-# modes the role sets and the first pass must leave out, and three directories it must keep,
-# one of them ~/.config, the parent of ~/.config/gh.
+# `managed` lists ~/.claude and ~/.config/gh, whose modes the role sets and the first pass must
+# leave out.
 CHEZMOI_STUB = """\
 log="$STUB_CALLS"
 case "$1" in

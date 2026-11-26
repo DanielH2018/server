@@ -309,8 +309,7 @@ def test_a_half_installed_package_is_reinstalled(host, status, reinstalled):
     [(["--clear-hold", "--install-newest"], False), (["--clear-hold"], True)],
 )
 def test_install_newest_removes_the_hold_before_its_fetch(host, args, held):
-    # The operator asked for the hold to go, so a failed fetch leaves the next timer run free
-    # to install. --clear-hold alone fetches nothing and keeps a hold reconcile does not clear.
+    # --clear-hold alone fetches nothing and keeps a hold reconcile does not clear.
     _held_on_a_failed_restart(host)
     host.hold.write_text("stale\n")
     host.state["update_exit"] = 100

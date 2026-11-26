@@ -13,9 +13,8 @@ users:
 defaults:
   builder_repo_port: 8791
   builder_github_repo: DanielH2018/server
-  # k8s/roles/observability/defaults/main.yml:observability_prometheus_cluster_ip, and a test holds
-  # the two equal. No loopback entry: nothing serves Prometheus on daniel-box's loopback, so one
-  # logged a refused connection on every run and said nothing.
+  # The pinned ClusterIP; no loopback entry, since nothing serves Prometheus on daniel-box's
+  # loopback.
   builder_prom_urls:
     - http://10.43.39.218:9090
 depends:
@@ -55,9 +54,7 @@ ufw:
   rules:
     - {id: apt-repo-daniel-server, spec: "allow from {{ hosts['daniel-server'].server_ip }} to any port {{ builder_repo_port }} proto tcp"}
     - {id: apt-repo-daniel-pi, spec: "allow from {{ hosts['daniel-pi'].server_ip }} to any port {{ builder_repo_port }} proto tcp"}
-  # The rules' comment 'homelab apt repository' goes in its own key, because a spec holds no
-  # quote. The arm relabels the live rule in place, so a rule that a declaration shares is never
-  # deleted.
+  # The rules' comment goes in its own key because a spec holds no quote.
   legacy:
     - {spec: "allow from {{ hosts['daniel-server'].server_ip }} to any port {{ builder_repo_port }} proto tcp", comment: homelab apt repository, replaced_by: apt-repo-daniel-server}
     - {spec: "allow from {{ hosts['daniel-pi'].server_ip }} to any port {{ builder_repo_port }} proto tcp", comment: homelab apt repository, replaced_by: apt-repo-daniel-pi}

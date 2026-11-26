@@ -65,8 +65,8 @@ class Origin:
 
     def _env_git(self, *args: str) -> None:
         stamp = f"@{self.clock} +0000"
-        # Identity through the environment, never `git config`: under a hook, git honours
-        # GIT_DIR over cwd, and a config write would land in the real repository.
+        # Identity through the environment, never `git config`: under a hook git honours GIT_DIR
+        # over cwd, and a config write would land in the real repository.
         env = {
             **os.environ,
             "GIT_AUTHOR_NAME": "t",
@@ -316,8 +316,6 @@ def test_the_walk_stops_at_the_last_built_commit_and_at_the_bound(lab):
 
 
 def test_a_no_green_walk_logs_the_bound_beside_the_unbuilt_count(lab, capsys):
-    # One pending commit over the last build once logged "in the 1 newest", which read as a
-    # walk bound of 1.
     origin, _, _, github = lab
     first = origin.commit("a")
     github.runs[first] = GREEN
@@ -357,7 +355,6 @@ def test_a_tip_that_does_not_descend_from_the_last_built_is_refused(lab):
     built = origin.commit("b")
     github.runs[built] = GREEN
     builder(lab).main()
-    # A rewritten master: the tip's chain no longer holds the last built commit.
     git(origin.path, "reset", "--quiet", "--hard", "HEAD~1")
     tip = origin.commit("rewritten")
     github.runs[tip] = GREEN
@@ -425,8 +422,6 @@ class FixedRender(FixtureBuilder):
 
 def test_an_unconsumed_staged_set_is_replaced_at_the_new_commit(lab):
     # fact: hosts/components/builder/CLAUDE.md#Autonomous-role contract (the builder and the signer publish host packages with no human in the loop)
-    # The second commit leaves the render unchanged, so only the unconsumed set rule
-    # rebuilds the package; without it the old set would sit under a moved `chosen`.
     origin, state, _, github = lab
     first = origin.commit("a")
     github.runs[first] = GREEN
@@ -507,9 +502,8 @@ def test_an_unexpected_os_error_reads_build_and_pages_once(lab):
 
 
 def test_each_staged_deb_is_created_in_staged_not_renamed_into_it(lab):
-    # The test user has one group, so the setgid group itself cannot be asserted. A file
-    # created in staged/ takes that group, and a renamed one keeps the builder's, so the
-    # check is that each staged .deb is a new inode rather than the one nfpm wrote.
+    # Each staged .deb must be a new inode, not the one nfpm wrote: a renamed file keeps the
+    # builder's group.
     origin, state, _, github = lab
     tip = origin.commit("a")
     github.runs[tip] = GREEN

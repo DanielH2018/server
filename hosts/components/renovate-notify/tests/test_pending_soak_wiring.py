@@ -28,8 +28,6 @@ DASHBOARD = {
 }
 
 
-# The digest-clock key `main()` writes beside the branch key for the fixture's one item: the
-# dwell is keyed on the update, so the state file carries both clocks.
 _PROMTAIL_DIGEST_KEY = pl.content_key(
     "renovate/promtail", "Update grafana/promtail Docker tag to v3.6.11"
 )
@@ -172,10 +170,8 @@ def test_read_pending_seen_round_trips_what_write_wrote(tmp_path):
     assert rn.read_pending_seen(path) == {"renovate/x": 12.5}
 
 
-# --- Dwell-state loss ---------------------------------------------------------
-# `pending_state_lost` is the only thing telling a wiped clock apart from the intended first-run
-# bootstrap, and both halves are load-bearing: firing on a legitimately empty map pages every
-# quiet day, and not firing on a lost one leaves the arm inert for up to 14 days in silence.
+# pending_state_lost alone tells a wiped clock from first-run bootstrap; both halves are
+# load-bearing.
 
 
 def test_a_lost_clock_is_flagged_on_a_host_that_has_run_before(tmp_path):

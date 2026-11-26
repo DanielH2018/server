@@ -30,8 +30,7 @@ files:
   - {src: units/homelab-etcd-restore-drill.service.j2, dst: /usr/lib/systemd/system/homelab-etcd-restore-drill.service}
   - {src: units/homelab-etcd-restore-drill.timer.j2, dst: /usr/lib/systemd/system/homelab-etcd-restore-drill.timer}
 outputs:
-  # The R2 credentials the orchestrator copies into the guest for a run. The bucket also holds every
-  # Longhorn backup, so the file stays root's alone, and it lives on tmpfs between runs.
+  # The R2 bucket also holds every Longhorn backup, so the file is root-only (tmpfs between runs).
   - src: templates/etcd-drill-s3.env.j2
     path: /etc/homelab/etcd-drill-s3.env
     destination: etcd-drill/s3.env

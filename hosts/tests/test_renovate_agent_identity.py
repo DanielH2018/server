@@ -115,8 +115,8 @@ def test_the_session_runs_as_its_own_user_in_its_own_clone() -> None:
     )
     assert f"\nCLAUDE_BIN={TOOLS_DIR}/.local/bin/claude\n" in config
     assert CLONE not in unit + config
-    # Without the package block-footguns asks on every `gh` command, and an unattended `ask` is
-    # a denial.
+    # Without the package block-footguns asks on every `gh` command, and an unattended `ask` is a
+    # denial.
     guard = re.search(
         r'"CLAUDE_GUARD_HOME", "~(/[^"]+)"', (HOOKS / "_claude_guard.py").read_text()
     )
@@ -418,8 +418,6 @@ def test_land_sh_ends_its_landing_before_the_lander_script_kills_it() -> None:
     assert 0 < int(deadlines[-1]) + int(graces[-1]) <= int(timeout)
 
 
-# What the unit spends before land.sh starts its clock: `uv run` startup, the denylist read and
-# `gh pr view`, plus the script writing its verdict after land.sh returns.
 SCRIPT_OVERHEAD_S = 60
 
 

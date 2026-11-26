@@ -58,8 +58,7 @@
 # `pi-ssh-name` gives every user `ssh daniel-pi`: the /etc/hosts line and the Pi's pinned host
 # key, as on daniel-box.
 description: daniel-server's homelab host package
-# The claude-code component's agent user. Its uid differs per host, so the users entry and the
-# agent's login-slice cap sit here; `component: claude-code` reaches only these files.
+# The agent's uid differs per host, so its users entry and login-slice cap sit here.
 component: claude-code
 users:
   # The homelab band 900-949 sits below the uids Ubuntu hands out from 999 down.
@@ -72,8 +71,8 @@ credentials:
 maintainer_scripts: [preinst, postinst, prerm]
 enable:
   homelab-updater.timer: timers.target
-# pyproject.toml forces PyYAML's C extension, so a repo venv on an interpreter PyYAML ships no
-# wheel for builds it from source against these headers.
+# pyproject.toml forces PyYAML's C extension, so an interpreter PyYAML ships no wheel for builds it
+# from source.
 depends:
   - libyaml-dev
 files:

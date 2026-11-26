@@ -1,41 +1,27 @@
 ---
-# Remote Control host (claude-rc.service). See CLAUDE.md in this role for what the
-# service is and why it exists.
-#
-# Every var here carries the component's `claude_code_` prefix, so the Remote Control ones read
-# `claude_code_rc_*`.
 
-# The service hands anything holding the claude.ai account a session on the k3s
-# control-plane node, and it depends on a prerequisite Ansible cannot check: whether a
-# phone-spawned worktree clears the workspace-trust dialog, which nobody can answer remotely.
-# Setting this to false stops AND disables the host and its restart timer; that is the rollback.
+# False stops AND disables the host and its restart timer; that is the rollback.
+# Whether a phone-spawned worktree clears the workspace-trust dialog is a prerequisite Ansible
+# cannot check.
 claude_code_rc_enabled: true
 
-# The packaged names of the Remote Control host and the cgroup metrics service, which the
-# restart timer and the metrics timer start.
 claude_code_rc_unit: homelab-claude-rc.service
 claude_code_cgroup_metrics_unit: homelab-claude-cgroup-metrics.service
 
-# The failure pages, the units the package ships for OnFailure=. claude-rc.service pages
-# through its own alert unit; the syncs, the memory store copy, the server-batch lander and the
-# pipeline timeline page through the shared instanced alert.
+# claude-rc.service pages through its own alert unit; the other units use the shared instanced
+# alert.
 claude_code_rc_alert_unit: homelab-claude-rc-alert.service
 claude_code_sync_alert_unit: homelab-alert@%n.service
 
-# The account claude-rc.service runs as. Only a non-operator user gets the unit's hardening
-# lines, which read claude_code_user_uid (that account's uid) to expose the account's user bus.
-# It has deliberately no default, because a guessed uid would bind another account's runtime
-# directory; without it, the render fails.
+# Deliberately no default: a guessed uid would bind another account's runtime directory.
 claude_code_user: "{{ sys_user }}"
 
-# That account's home. The agent user's lives outside /home (claude_code_agent_user_home), so
-# the unit's ProtectHome=tmpfs can hide every human home without hiding it.
+# The agent's home is outside /home, so ProtectHome=tmpfs can hide human homes without hiding it.
 claude_code_user_home: >-
   {{ claude_code_agent_user_home if claude_code_user == claude_code_agent_user
   else '/home/' ~ claude_code_user }}
 
-# The directory the host runs in. Sessions spawned on demand get their own worktree
-# underneath it; the pre-created session stays here.
+# On-demand sessions get their own worktree under it; the pre-created session stays here.
 claude_code_rc_workdir: "{{ claude_code_user_home }}/server"
 
 # DECIDED: worktree, not same-dir. Concurrent sessions sharing one checkout is the exact
@@ -59,17 +45,8 @@ claude_code_rc_permission_mode: auto
 # throttles when it is exceeded anyway.
 claude_code_rc_capacity: 10
 
-# Workers a single `-n auto` pytest run may use on this host, via PYTEST_XDIST_AUTO_NUM_WORKERS
-# in the unit. daniel-box has 16 cores, so uncapped `auto` means 16 per run and nothing bounds
-# how many runs the sessions launch at once.
-#
-# The worst case is workers x capacity: 4 x 10 is 40 workers at 20-150 MB RSS, about 4 GB
-# against the 8 GB MemoryHigh, with the 10 `claude` processes taking most of the rest. Raise it
-# on measurement, and re-check the product, not the factor.
-#
-# A sibling entry in the operator's ~/.claude/settings.json `env` block carries the same value
-# for Claude sessions this unit does not spawn. Raise both together, or the cap depends on how
-# the session started.
+# Caps `-n auto` pytest workers per run; the worst case is workers x capacity (4 x 10 = 40).
+# settings.json `env` carries the same value for other sessions; raise both together.
 claude_code_rc_pytest_workers: 4
 
 # DECIDED: one crash page per 6 hours, not one per exit. claude-rc.service runs Restart=always
@@ -80,20 +57,11 @@ claude_code_rc_pytest_workers: 4
 # 0 restores a page per exit.
 claude_code_rc_alert_quiet_minutes: 360
 
-# The Claude fleet occupies TWO cgroups on this box: claude-rc.service's own, and
-# the user-<uid>.slice of each login uid for a session started from an interactive shell. They are
-# siblings under different parents, so a cap on each reads as one bound and is two: neither
-# sees the other's usage and the real throttle point is the SUM, such as 16G of anon plus 4G
-# of swap on a 28 GiB box that also runs k3s, Longhorn and the rest of the homelab plane. The
-# vars below make the sum the number, applied to the one slice that is a parent of both
-# planes.
+# The fleet sits in two sibling cgroups that cannot see each other, so the limit is their SUM.
+# The vars below cap the sum on the one slice that parents both.
 
-# The slice both planes live under. user.slice is the only slice that can hold both:
-# user-<uid>.slice cannot be reparented (systemd.slice(5): its name fixes it under user.slice),
-# so user.slice is the tightest legal common ancestor. It is safe to place a unit in
-# (StopWhenUnneeded=no), where user-<uid>.slice has StopWhenUnneeded=yes with Linger=no, so a
-# service placed THERE would stop with the slice at the last logout. This role's CLAUDE.md
-# answers "can user-<uid>.slice be reparented".
+# user.slice is the tightest legal common ancestor: user-<uid>.slice cannot be reparented.
+# A service placed in user-<uid>.slice would stop with it at the last logout (StopWhenUnneeded=yes).
 claude_code_fleet_slice: user.slice
 
 # DECIDED: 20G on the shared parent, with the per-plane caps below at 14G as sub-bounds.
@@ -125,16 +93,11 @@ claude_code_fleet_slice: user.slice
 # intended.
 claude_code_fleet_memory_high: 20G
 
-# The fleet's swap ceiling. 2G is a quarter of this host's 8 GiB /swap.img, so the homelab
-# plane keeps three quarters. Same not-zero reasoning as the per-plane cap below.
+# 2G is a quarter of the 8 GiB /swap.img, so the homelab plane keeps three quarters; not zero.
 claude_code_fleet_swap_max: 2G
 
-# The fleet's CPU weight, against its root-cgroup siblings system.slice (where k3s runs, at
-# k3s_system_slice_cpu_weight in hosts/components/k3s-server) and kubepods.slice (625 on
-# daniel-box, which kubelet sets). Range 1-10000. A weight only divides CPU under contention, so
-# an idle box still gives the fleet every core. At systemd's default of 100 the fleet's test runs
-# starve etcd until kube-controller-manager loses its lease and k3s exits. 20 ranks the fleet
-# below both siblings. No CPUQuota: a cap would idle cores the homelab plane is not using.
+# Range 1-10000. At the default 100, fleet test runs starve etcd until k3s exits.
+# 20 ranks the fleet below system.slice and kubepods.slice. No CPUQuota: a cap would idle cores.
 claude_code_fleet_cpu_weight: 20
 
 # DECIDED: 1000, the kernel's maximum, on every fleet process: claude-rc.service, the
@@ -147,102 +110,59 @@ claude_code_fleet_cpu_weight: 20
 # was ruled out on 2026-11-22 (docs/claude-code-rc-caps.md).
 claude_code_fleet_oom_score_adjust: 1000
 
-# One plane's share of the fleet bound above, applied to claude-rc.service's own cgroup AND
-# to user-<uid>.slice's drop-in. Each must be <= the fleet bound: a sub-bound above its
-# parent's is a number that can never be reached. ENFORCED by
-# hosts/tests/test_claude_fleet_slice_cap.py.
-#
-# Every fan-out agent on this host runs in the login plane, so this is the cap the fan-out
-# dispatcher runs out of first, and raising the fleet cap alone adds no fan-out width.
-# Deliberately more than half of 20G: a plane doing real work while the other is idle should be
-# able to use most of the fleet's budget, and the parent is what stops the two together. See
-# the unit template on why this is MemoryHigh and not MemoryMax.
+# Must be <= the fleet bound. Deliberately over half of 20G: the parent bounds the two planes
+# together.
+# Fan-out agents run in the login plane, so raising the fleet cap alone adds no fan-out width.
 claude_code_rc_memory_high: 14G
 
-# One plane's swap ceiling, written to memory.swap.max. Without it a plane swaps without
-# limit: one cgroup can hold all 8 GiB of this box's swap, stall in reclaim, and starve every
-# other cgroup, k3s included. MemoryHigh cannot prevent that. It throttles rather than caps,
-# and swap is exactly where a throttled cgroup's anon pages go.
-#
-# 2G here equals claude_code_fleet_swap_max, so one plane may take the fleet's whole swap
-# share while the two together still cannot exceed it. Raise them together.
-#
-# NOT 0. Zero swap does not contain a cgroup, it relocates the same growth into RAM:
-# nothing reclaims anon without swap, MemoryMax is deliberately infinity, so the terminal
-# state becomes the GLOBAL OOM killer choosing a victim by badness anywhere on the box —
-# a k3s process included. See the unit template on why a kill is the response this host
-# cannot absorb.
+# Without it one cgroup can take all 8 GiB of swap and starve k3s; MemoryHigh only throttles.
+# NOT 0: no swap moves the growth into RAM, ending in the global OOM killer, k3s included.
 claude_code_rc_memory_swap_max: 2G
 
-# Whether to set CLAUDE_CODE_DISABLE_BG_SHELL_PRESSURE_REAP on the host, turning off Claude
-# Code's kill of backgrounded Bash tasks under a Node memoryPressure event. On by default;
-# the unit template carries the reasoning. Set this false to hand the reaper back — the
-# reaper is upstream's protection against a runaway background shell, and turning it off
-# leaves MemoryHigh and claude_code_rc_capacity as the only bounds.
+# Turns off Claude Code's kill of backgrounded Bash tasks under a Node memoryPressure event.
+# With it on, MemoryHigh and claude_code_rc_capacity are the only bounds on a runaway background
+# shell.
 claude_code_rc_disable_bg_shell_pressure_reap: true
 
-# How often to restart the host so it picks up a Claude Code auto-update. The binary
-# updates itself in the background, but a long-lived process keeps running the version it
-# started with. systemd OnCalendar syntax.
+# A long-lived process keeps running the version it started with, so the restart picks up
+# auto-updates.
 claude_code_rc_restart_schedule: weekly
 
-# claude-bg-resume.service respawns, once at boot, the background sessions (`claude agents`,
-# `claude --bg`) the shutdown killed, so their Remote Control links come back without anyone
-# opening agent view first. This role's CLAUDE.md has what it does and does not restore.
+# Respawns the shutdown-killed background sessions once at boot; CLAUDE.md says what it restores.
 
-# Whose background sessions to resume. The operator dispatches them; claude-rc.service's
-# sessions are a different feature and come back through that unit's own Restart=always.
+# The operator dispatches these; claude-rc.service's sessions come back through its own
+# Restart=always.
 claude_code_bg_resume_user: "{{ sys_user }}"
 claude_code_bg_resume_home: "/home/{{ claude_code_bg_resume_user }}"
 claude_code_bg_resume_dir: /usr/local/lib/claude-bg-resume
 
-# claude-rc.service's MemoryHigh, MemorySwapMax and PYTEST_XDIST_AUTO_NUM_WORKERS bound only
-# that unit's own cgroup. A session started with `claude agents` (or a bare `claude`) from
-# an interactive SSH shell lands in user.slice/user-<uid>.slice/session-<n>.scope instead,
-# which none of the three touch, so such a scope can grow without bound while
-# claude-rc.service stays small. The caps are rendered for every uid in claude_code_login_uids
-# plus the agent user's.
+# claude-rc.service's caps bound only its own cgroup, not a session from an interactive SSH shell in
+# user-<uid>.slice; these caps render for claude_code_login_uids plus the agent user's.
 
-# The numeric uid of the account this role manages, whose login-session slice (user-<uid>.slice)
-# gets the same caps as claude-rc.service's own cgroup. Override per-host if a different uid
-# owns the account. claude-rc.service running as {{ sys_user }} reads it too, for the
-# XDG_RUNTIME_DIR and DBUS_SESSION_BUS_ADDRESS its sessions get. It never reads
-# claude_code_user_uid there, which names the agent's uid on a host whose rollback sets
-# claude_code_user back to sys_user.
+# The uid whose user-<uid>.slice gets the caps; claude-rc.service running as sys_user reads it too,
+# for XDG_RUNTIME_DIR and DBUS_SESSION_BUS_ADDRESS, never claude_code_user_uid (the agent's uid).
 claude_code_login_uid: 1000
 
-# Every uid whose login-session slice gets the caps. The agent's uid is not in it: each host's
-# package.yml ships the agent's user-<uid>.slice.d cap with the uid it declares, because
-# interactive sessions start as the agent through `claude-agents` and land in the agent's own
-# user-<uid>.slice. Dropping 1000 from this list drops the operator's drop-in from the next
-# package version; drop it only once no session still runs as {{ sys_user }}
-# (docs/claude-agent-user.md, slice 6).
+# The agent's uid is not in it: each host's package.yml ships the agent's user-<uid>.slice.d cap
+# itself.
+# Drop 1000 only once no session still runs as sys_user.
 claude_code_login_uids: "{{ [claude_code_login_uid] }}"
 
-# Every uid that must run no Claude Code at all. claude-cgroup-metrics.sh writes
-# claude_uid_processes{uid} for each, an explicit 0 included. No alert rule reads the series, so
-# a count above 0 never pages. Empty here, so daniel-server, where sessions still run as
-# {{ sys_user }}, writes no series. daniel-box lists the operator's uid once its sessions move
-# to the agent (slice 6).
+# Writes claude_uid_processes{uid} for each uid, 0 included; no alert rule reads the series.
 claude_code_watch_uids: []
 
-# Whether the one-way, overwriting copy of this host's memory store to
-# claude_code_memory_sync_target runs: sessions on each host read that host's own ~/.claude
-# store, and nothing else keeps the two in step. True only in daniel-box's host_vars. False
-# stops and disables the timer and removes its units.
+# Sessions read their own host's ~/.claude store, so this one-way overwriting copy keeps them in
+# step.
+# True only in daniel-box's host_vars; false stops and disables the timer and removes its units.
 claude_code_memory_sync_enabled: false
 
 # The ssh destination the store is copied to, as this host's user resolves it.
 claude_code_memory_sync_target: daniel-server
 
-# The store's directory on THIS host, the source of the copy. Claude Code keys a project's
-# store by its working directory with every `/` turned into `-`, so it derives from the
-# checkout. It follows claude_code_user (slice 4 of docs/claude-agent-user.md).
+# Claude Code keys a project's store by its working directory with `/` turned into `-`.
 claude_code_memory_sync_dir: "{{ claude_code_user_home }}/.claude/projects/{{ claude_code_rc_workdir | replace('/', '-') }}/memory"
 
-# The operator's checkout and its memory store. Sessions on claude_code_memory_sync_target run
-# as {{ sys_user }} in that checkout, so they read this store whichever user this host's
-# sessions run as.
+# Target sessions run as sys_user in that checkout, so they read this store.
 claude_code_operator_checkout: "/home/{{ sys_user }}/server"
 claude_code_operator_memory_dir: >-
   /home/{{ sys_user }}/.claude/projects/{{
@@ -253,8 +173,6 @@ claude_code_operator_memory_dir: >-
 # does not exist on claude_code_memory_sync_target, where sessions read the operator's store.
 claude_code_memory_sync_target_dir: "{{ claude_code_operator_memory_dir }}"
 
-# How often the copy runs, as a systemd time span. A memory written here reaches the other
-# host's next session within this interval.
 claude_code_memory_sync_interval: 15min
 
 # A dedicated Unix user for the operator's Claude sessions. Each host's package.yml declares it
@@ -280,154 +198,85 @@ claude_code_agent_user: claude
 claude_code_agent_user_home: /var/lib/claude
 claude_code_agent_user_clone_dir: "{{ claude_code_agent_user_home }}/server"
 claude_code_agent_user_repo: DanielH2018/server
-# How often claude-clone-sync.timer fast-forwards that clone when it is a clean master. A merge
-# that touches only the hook shim's or the homelab-ui launcher's code applies no role, so this
-# interval bounds how long the agent runs the old copy. Each apply of this role also
-# runs the sync. Installed while claude_code_agent_user_enabled is true; false removes the units.
+# A merge touching only the hook shim's or homelab-ui launcher's code applies no role, so this
+# bounds how long the agent runs the old copy.
 claude_code_agent_clone_sync_interval: 15min
 
-# Whether the agent user reads the system journal, through the systemd-journal group. Without
-# it, `journalctl` shows the agent only its own units. docs/claude-agent-user.md, slice 4, has
-# the ruling. False removes the group again.
+# Without the systemd-journal group, `journalctl` shows the agent only its own units.
 claude_code_agent_journal_access: true
-# Whether the operator reads the agent's artifacts and memory store. claude-memory-sync runs as
-# sys_user, and the artifact browser and the operator's own sessions read both once the phone
-# host runs as the agent (slice 4). claude-agent-setup applies it; false closes the agent's
-# ~/.claude to its own user again and removes the ACLs.
+# False closes the agent's ~/.claude to its own user again and removes the ACLs.
 claude_code_agent_operator_read: true
 # The agent's own memory store: Claude Code keys it by the project directory, the agent's clone.
 claude_code_agent_memory_dir: >-
   {{ claude_code_agent_user_home }}/.claude/projects/{{
   claude_code_agent_user_clone_dir | replace('/', '-') }}/memory
-# Whether claude-agent-home copies the operator's memory store into the agent's. With
-# claude_code_user set to the agent, the copy runs while the agent's MEMORY.md does not exist, and
-# on the first run after the host ran as the operator if the stores differ. Once the host
-# runs as the agent, a later run never overwrites what the agent wrote. False skips it and removes
-# nothing already copied.
+# Copies while the agent's MEMORY.md is absent, and after an operator run if the stores differ.
+# Once the host runs as the agent, a later run never overwrites what the agent wrote.
 claude_code_agent_memory_seed: true
-# The flag each run as the operator sets, outside the agent's home so the agent cannot clear it.
-# It tells the next run as the agent that the agent's store fell behind the operator's.
+# Set by each run as the operator, outside the agent's home so the agent cannot clear it.
 claude_code_agent_memory_seed_stale: /var/lib/homelab/claude-agent-memory-stale
-# The prefix the copy strips from the copied .md files, so `/home/ubuntu/server/docs/x.md`
-# becomes the repo-relative `docs/x.md`, which resolves in any clone on any host.
+# Stripped from copied .md paths so `/home/ubuntu/server/docs/x.md` becomes the repo-relative
+# `docs/x.md`.
 claude_code_agent_memory_seed_strip: "{{ claude_code_operator_checkout }}/"
 
-# Whether the agent user gets a subset of the operator's user-level Claude config: the user
-# CLAUDE.md, rules/, output-styles/ and skills/, and the operator's `outputStyle`. It gets no
-# hooks. The subset is copied from the deployed /home/{{ sys_user }}/.claude rather than from
-# chezmoi's source (docs/claude-agent-user.md, slice 4). The component ships no copy of the
-# subset (component.yml's header): this flag gates only the operator import line in
-# templates/agent-user-claude-md.j2.
+# The agent gets no hooks. The subset is copied from the deployed ~/.claude, not chezmoi's source;
+# this flag gates only the operator import line in templates/agent-user-claude-md.j2.
 claude_code_agent_operator_config: true
 claude_code_agent_operator_config_src: /home/{{ sys_user }}/.claude
 
-# Whether the agent user takes the operator's dotfiles through chezmoi, with the dotfiles
-# repo's `agent` flag on, in place of the subset above. claude-agent-setup clones the source,
-# and claude-dotfiles-sync.sh applies it: the agent then runs the operator's guard hooks,
-# agents, commands and CLIs. It needs homelab-tools' chezmoi and a dotfiles source with the
-# flag; a source without it is refused, and the agent keeps what it had. False drops the sync
-# from the next package version.
+# The agent takes the operator's dotfiles through chezmoi (`agent` flag), not the subset above.
+# A dotfiles source without the flag is refused and the agent keeps what it had.
 claude_code_agent_dotfiles: true
 claude_code_agent_dotfiles_repo: https://github.com/DanielH2018/dotfiles.git
 # The dotfiles' `profile` answer: `server`, as the operator's own config on these hosts holds.
 claude_code_agent_dotfiles_profile: server
-# How often homelab-claude-dotfiles-sync.timer pulls the source and applies it. A dotfiles merge
-# ships no host package version here, so this bounds how long the agent runs the old hooks.
+# A dotfiles merge ships no host package version, so this bounds how long the agent runs the old
+# hooks.
 claude_code_agent_dotfiles_sync_interval: 15min
 
-# The agent user's GitHub machine account. homelab-secrets renders its gh
-# login under /run, and claude-agent-setup links ~/.config/gh/hosts.yml to it. It is a
-# write collaborator and a bypass actor on no ruleset. "agent branch fence" lets it create,
-# update and delete only refs/heads/worktree-claude+**, the branch EnterWorktree gives a
-# `claude/<slug>` worktree. It cannot update master at all: its PRs merge
-# through homelab-claude-land@, as the operator.
-# Its token is claude_code_agent_gh_token in SOPS: a classic token with only public_repo,
-# because GitHub offers no fine-grained token to a collaborator on another personal account's
-# repo. Without the `workflow` scope, GitHub refuses its pushes that edit .github/workflows/.
+# No ruleset bypass; the agent branch fence limits it to refs/heads/worktree-claude+**.
+# Classic public_repo token; no `workflow` scope, so pushes editing .github/workflows/ are refused.
 claude_code_agent_github_login: claudemachineacct1
-# The worktree-name prefix the agent's own CLAUDE.md (templates/agent-user-claude-md.j2) tells
-# its sessions to use. EnterWorktree turns `claude/<slug>` into the branch
-# `worktree-claude+<slug>`, the one shape the fence above lets this account push. The repo
-# CLAUDE.md cannot carry it, because the operator's sessions read that file too. The
-# agent's login profile also exports it as CLAUDE_WORKTREE_PREFIX, which
-# scripts/dev/fanout_lib/target.py:branch_name reads to name fan-out batch branches.
+# EnterWorktree turns `claude/<slug>` into `worktree-claude+<slug>`, the one shape the fence allows.
+# The repo CLAUDE.md cannot carry it because the operator's sessions read that file too.
 claude_code_agent_worktree_prefix: claude
 claude_code_agent_github_id: 356237609
-# The account's noreply address. GitHub attributes a commit to the account by it, and marks the
-# commit Verified when the signing key below is on the account as a Signing Key.
+# GitHub attributes commits by this address; Verified needs the signing key on the account.
 claude_code_agent_git_email: >-
   {{ claude_code_agent_github_id }}+{{ claude_code_agent_github_login }}@users.noreply.github.com
-# Generated on the host as the agent, so the private half never leaves its home. The operator
-# adds the `.pub` beside it to the account as a Signing Key, never an Authentication Key: the
-# agent pushes over HTTPS with the token, so the key can sign and cannot push.
+# Generated as the agent, so the private half never leaves its home. Add the `.pub` as a Signing
+# Key, never an Authentication Key: the agent pushes over HTTPS, so the key signs and cannot push.
 claude_code_agent_signing_key: "{{ claude_code_agent_user_home }}/.ssh/git_signing_ed25519"
 
-# The agent's login for the homelab-ui MCP server, an output of daniel-box's package.yml that
-# claude-agent-setup links into the agent's home. The username is
-# the Authelia account the authelia role creates (`authelia_k8s_agent_user`), mirrored here
-# because the two roles cannot read each other's defaults; a test holds the two equal. The
-# password is `authelia_agent_password` in SOPS, which the apply decrypts as {{ sys_user }}.
-# The file also carries `domain`, because ui_login.py refuses a login file that lacks it. The
-# operator, who has no such file, reads the domain from group_vars/all.yml. The domain is not a
-# secret, so the file widens nothing. scripts/diagnostics/probe_lib/core.py:AGENT_CREDENTIALS_PATH reads this path.
+# The username mirrors authelia_k8s_agent_user (a test holds them equal). The file also carries
+# `domain`, because ui_login.py refuses a login file without it; the domain is not a secret.
 claude_code_homelab_ui_username: claude-agent
 claude_code_homelab_ui_credentials: "{{ claude_code_agent_user_home }}/.config/homelab-ui/credentials.json"
 
-# Whether the agent user can launch the homelab-ui MCP server itself (the claude-code component):
-# its own Node, @playwright/mcp and Chromium, plus a user-scope `homelab-ui` registration in its
-# ~/.claude.json pointing at its clone's scripts/diagnostics/ui_mcp.sh. claude-clone-sync
-# fast-forwards that clone on each apply and every claude_code_agent_clone_sync_interval, so the
-# launcher follows master. The operator's
-# toolchain sits under the 0750 /home/{{ sys_user }}, which this user cannot read, and the
-# operator's registration is user-scope in the operator's own ~/.claude.json. Not the repo's
-# .mcp.json: a project-scope server waits for a per-user approval a phone session cannot give,
-# and it would start a second Chromium in every operator session.
-#
-# True only in daniel-box's host_vars, and installed only while claude_code_agent_user_enabled
-# is also true. False removes the registration, the Node trees and the browser
-# cache. Chromium's shared libraries come from the host: the operator's own Chromium already
-# runs there, so this installs no apt packages.
+# User-scope registration, not .mcp.json: project scope waits for an approval a phone session cannot
+# give, and would start a second Chromium in every operator session.
 claude_code_agent_homelab_ui_enabled: false
-# The pinned Node, its sha256 and @playwright/mcp sit in hosts/components/claude-code/component.yml,
-# whose homelab-claude-agent-browser.service installs them as the agent.
-# Node unpacks to node-v<version>-linux-x64 under this directory, and `current` links to it, so
-# the registration's NODE_BIN survives a Node bump. npm's global prefix is that Node tree, so
-# playwright-mcp lands in the same bin directory.
+# `current` links to the unpacked Node, so the registration's NODE_BIN survives a Node bump;
+# npm's global prefix is that tree, so playwright-mcp lands in the same bin directory.
 claude_code_agent_node_dir: "{{ claude_code_agent_user_home }}/.local/share/node"
 claude_code_agent_node_bin: "{{ claude_code_agent_node_dir }}/current/bin"
 
 # Whether the agent being rendered is the primary one, which alone gets the lander.
 claude_code_agent_is_primary: true
 
-# homelab-claude-land@<n>.service lands PR <n> as {{ sys_user }} by running land.sh with the
-# landing policy switched on (scripts/deploy_tools/land_lib/policy.py). The agent user may start
-# that unit and do nothing else with it (templates/50-claude-land.rules.j2). It reads the
-# outcome back from /var/lib/homelab-claude-land/<n>.verdict. The claude-code host component
-# ships it.
-#
-# True only in daniel-box's host_vars, and installed only while claude_code_agent_user_enabled
-# is also true. False on either removes the rule, the unit and the approval list; a landing
-# already running finishes.
+# Lands PR <n> as sys_user; the agent user may start the unit and nothing else.
+# False removes the rule, the unit and the approval list; a landing already running finishes.
 claude_code_lander_enabled: false
-# The unit's name and the checkout, branch prefix, author, agent user and approver it lands
-# under are literals in templates/claude-land-pins.j2, not variables here. A template's own
-# assignment outranks the inventory in Ansible and in the host package renderer alike, and the
-# claude-code component renders the lander, so a block var would pin nothing there.
-# The approval list (the paths an agent PR cannot land without the pinned approver) is literal
-# in templates/claude-land-approval-paths.j2, not a variable here, so the inventory cannot
-# override it. That template has the floor and the reason for each entry.
+# Pins are literals in templates/claude-land-pins.j2: a template's own assignment outranks
+# inventory.
+# The approval list is literal in claude-land-approval-paths.j2, so inventory cannot override it.
 
-# claude-triage@<episode>.service runs one capped, diagnose-only headless session as the agent
-# user over <state_dir>/inbox/<episode>.json, then writes a record, an HTML report in the
-# agent's artifacts tree, and a Discord page. docs/claude-agent-user.md, "Alert-triggered
-# triage", has the design and the operator's rulings.
-#
-# Installed only while claude_code_agent_user_enabled is also true, and only with
-# claude_code_triage_claude_oauth_token in secrets.yml. False on either removes the rule, the
-# units, the code and the config; the state directory and its records stay.
+# One capped, diagnose-only headless session per episode; writes a record, an HTML report, a Discord
+# page.
+# False removes the rule, units, code and config; the state directory and its records stay.
 claude_code_triage_enabled: false
-# Pinned again in templates/claude-triage-pins.j2, which wins over any inventory override; the
-# values here are what the validator renders with. Literals, for the reason the lander's are.
+# Pinned again in templates/claude-triage-pins.j2, which wins over inventory; these are the
+# validator's values.
 claude_code_triage_state_dir: /var/lib/claude-triage-ctl/state
 claude_code_triage_model: opus
 # The budget to diagnose, in USD.
@@ -435,17 +284,14 @@ claude_code_triage_budget_usd: 10
 claude_code_triage_max_turns: 60
 # The script's wall clock. The unit's TimeoutStartSec sits 10 minutes above it.
 claude_code_triage_run_timeout_s: 1800
-# At most six runs a day. The runner enforces it, because
-# polkit lets the agent start a run directly, not only through the poller.
+# The runner enforces the cap because polkit lets the agent start a run directly, not only via the
+# poller.
 claude_code_triage_daily_cap: 6
-# claude-triage-poll.timer: `off` reads nothing, `shadow` logs each run it would start to
-# <state_dir>/shadow.jsonl, `armed` starts it. Shipped `shadow` so a week of would-be episodes
-# can be read before the first unattended run.
+# `off` reads nothing, `shadow` logs would-be runs to <state_dir>/shadow.jsonl, `armed` starts them.
 claude_code_triage_poll_mode: shadow
-# The alerts whose fall opens an episode, each mapped to its profile; templates/claude-triage-pins.j2
-# says how a key is read. A fall the table does not route is logged as skipped and opens no run.
-# The seed is the down class, all `warning` but the two `*Critical` probe twins: a severity floor
-# at `critical` opens nothing for a down service.
+# A fall the table does not route is logged as skipped and opens no run.
+# The seed is the down class (`warning`, bar the `*Critical` twins): a `critical` floor misses down
+# services.
 claude_code_triage_poll_routes:
   ExtraProbeFailed: triage
   ExtraProbeFailedCritical: triage
@@ -455,8 +301,8 @@ claude_code_triage_poll_routes:
   K8sContainerCrashLooping: triage
   ScrapeTargetDown: triage
 claude_code_triage_poll_interval: 2min
-# Loopback first, then observability_prometheus_cluster_ip: Prometheus publishes loopback only
-# on the node it runs on. test_claude_triage.py holds the second equal to the k8s key.
+# Loopback first, as Prometheus publishes loopback only on its node; the ClusterIP matches the k8s
+# key.
 claude_code_triage_prom_urls:
   - http://127.0.0.1:9090
   - http://10.43.39.218:9090
@@ -465,47 +311,32 @@ claude_code_triage_poll_streak: 2
 # More keys than this falling in one poll make one storm episode instead of one per key.
 claude_code_triage_poll_storm_size: 3
 
-# homelab-claude-restart@<name>.service restarts one Deployment on the allowlist pinned in
-# templates/claude-triage-pins.j2, as root. docs/claude-agent-user.md, "The restart allowlist",
-# has the design. True only in daniel-box's host_vars, which holds the k3s admin kubeconfig.
-# False removes the unit, the script and the config, and keeps /var/lib/claude-restart.
+# Restarts one allowlisted Deployment as root; true only in daniel-box's host_vars (k3s admin
+# kubeconfig).
+# False removes the unit, script and config, and keeps /var/lib/claude-restart.
 claude_code_restart_enabled: false
 
-# A daniel-server fan-out batch stops at its PR. This timer runs
-# `fanout.py land-server` on daniel-box, which lands the PRs whose review record and PR both
-# pass scripts/dev/fanout_lib/autoland.py:problems. True only in daniel-box's host_vars. False
-# stops the timer and removes its units, and every server batch stops at its PR again.
+# Runs `fanout.py land-server` on daniel-box; false stops the timer, and server batches stop at
+# their PR.
 claude_code_fanout_server_lander_enabled: false
 claude_code_fanout_server_lander_interval: 10min
-# land.sh's policy for these landings (LAND_REQUIRE_*). autoland.py holds the same two values,
-# and hosts/tests/test_claude_fanout_server_lander.py holds them equal.
+# land.sh's policy (LAND_REQUIRE_*); autoland.py holds the same two values, and a test holds them
+# equal.
 claude_code_fanout_server_lander_branch_prefix: worktree-fanout-
 claude_code_fanout_server_lander_author: DanielH2018
 
-# `scripts/dev/pipeline_timeline.py` joins each merged PR's stamps, and two of its inputs are in
-# daniel-box's journal, which rotates after about ten days. This timer runs it daily so the
-# journal halves are copied into ~/.local/state/pipeline-timeline/ first. True only in
-# daniel-box's host_vars. False stops the timer and removes its units; the snapshots stay.
+# Two inputs sit in the journal, which rotates after ~10 days; a daily run copies them out first.
 claude_code_pipeline_timeline_enabled: false
 # Must be <N>min: timer-textfile.j2 derives the NotReporting deadline from it.
 claude_code_pipeline_timeline_interval: 1440min
-# How far back each run joins. A later snapshot's rows supersede an earlier one's, so
-# N days survives N-1 missed runs.
+# A later snapshot's rows supersede an earlier one's, so N days survives N-1 missed runs.
 claude_code_pipeline_timeline_days: 3
 # The host whose review records the run copies with a read-only rsync.
 claude_code_pipeline_timeline_server_host: daniel-server
 
-# fanout-alert@<unit>:<state>.service pages Discord when a fan-out batch's unit stops on any
-# state but `done`. The batch's ExecStopPost= starts it
-# (scripts/dev/fanout_lib/notify.py), and templates/50-claude-fanout-alert.rules.j2 lets the
-# operator and each agent user start it for the states that page and nothing else. The server
-# lander starts the `no-coordinator` state for a coordinator project whose session is gone
-# while a batch waits on it (scripts/dev/fanout_lib/coordinators.py).
+# Pages Discord when a batch unit stops on any state but `done`; polkit allows only paging states.
 
-# claude-stop-alert@<cause>.service pages Discord when a Claude Code session ends on an API
-# error. The session's StopFailure hook starts it, and
-# templates/50-claude-stop-alert.rules.j2 lets the operator and each agent user start it for a
-# cause in [a-z0-9_]+ and nothing else.
+# Pages Discord when a session ends on an API error; polkit allows only a cause in [a-z0-9_]+.
 
 # The peer sync (hosts/components/claude-code/templates/sync-artifacts.sh.j2) and the OTLP-door
 # heartbeat (claude-otel-health.sh.j2) ship only on this node, in its host package.
@@ -519,50 +350,38 @@ claude_code_pipeline_timeline_server_host: daniel-server
 # door the heartbeat probes. Twin of artifacts_k8s_node. No other host's package ships either.
 claude_code_artifacts_node: "{{ k8s_primary_node }}"
 
-# A `*/N` minute, read as the timer's period. Every 5 minutes: an artifact written on
-# daniel-server is browsable within one interval. It cannot be instant: daniel-server holds no
-# key to daniel-box, so the sync only runs in the pull direction, on a timer. A session on
-# daniel-box mounts its own tree and never waits.
+# A `*/N` minute, read as the timer's period.
+# daniel-server holds no key to daniel-box, so the sync only pulls, on a timer; it cannot be
+# instant.
 claude_code_artifacts_sync_minute: "*/5"
 
-# Consecutive failed runs before sync-artifacts.sh writes its once-per-outage line to stderr,
-# which the unit sends to the journal under the same tag. 12 runs at the interval above is an
-# hour of a peer being unreachable. Below it each failure writes only its per-run journal line
-# (`journalctl -t sync-artifacts`), because daniel-server being off is the ordinary case.
+# Failed runs before the once-per-outage line to stderr; 12 runs at the interval is an hour.
+# Below it each failure writes only its journal line, because daniel-server being off is ordinary.
 claude_code_artifacts_sync_alert_after_failures: 12
 
-# Hosts whose artifacts are PULLED onto the artifacts node, because it is the only side that can
-# open the connection: the `daniel-box` name does not resolve from daniel-server, and the pod
-# holds no ssh key. The same connection carries the star list the other way, to `stars_path`,
-# which is where that host's prune-artifacts.sh reads it (the dotfiles default).
-# Twin of artifacts_peer_sources: the artifacts pod mounts one peer directory per entry.
+# Pulled by the artifacts node, the only side that can open the connection.
+# The same connection carries the star list back to `stars_path`. Twin of artifacts_peer_sources.
 claude_code_artifacts_peer_sources:
   - name: daniel-server
     ssh_target: daniel-server
     path: /home/ubuntu/.claude/artifacts
     stars_path: /home/ubuntu/.claude/artifact-stars.txt
-# The artifacts node's own tree, which the package's tmpfiles.d file creates. Twin of
-# artifacts_host_dir.
+# The artifacts node's own tree. Twin of artifacts_host_dir.
 claude_code_artifacts_host_dir: /home/ubuntu/.claude/artifacts
 # Where the sync writes each peer's copy, one subdirectory per host. Twin of artifacts_peer_dir.
 claude_code_artifacts_peer_dir: /home/ubuntu/.claude/artifacts-peer
-# The star list the artifacts GUI writes, which the sync pushes to each peer. Twin of
-# artifacts_stars_file.
+# Twin of artifacts_stars_file.
 claude_code_artifacts_stars_file: /var/lib/artifact-stars/stars.txt
 
-# */10, matching the Longhorn backup heartbeat. The script renders its textfile deadline from this
-# period, so a dead timer trips OtlpDoorNotReporting. A `*/N` minute.
+# A `*/N` minute; the script derives its textfile deadline from it, so a dead timer trips
+# OtlpDoorNotReporting.
 claude_code_telemetry_health_minute: "*/10"
-# The OTLP door the heartbeat opens a connection to. Twins of observability_otlp_host_ip and
-# observability_otlp_port, which bind the collector's hostPort.
+# Twins of observability_otlp_host_ip and observability_otlp_port.
 claude_code_otlp_host_ip: 127.0.0.1
 claude_code_otlp_port: 4317
 
-# A root-owned wrapper that runs the flip PRs' pre-merge dry runs, granted to the users below
-# through one NOPASSWD sudoers line. True only in daniel-box.yml, the node that holds the
-# cluster-admin kubeconfig. False removes the grant and the wrapper, and leaves the state
-# directory. The flux CLI it runs is homelab-tools' /usr/lib/homelab/bin/flux. CLAUDE.md, "The
-# takeover check", has the grant and its limits.
+# True only where the cluster-admin kubeconfig is (daniel-box); false removes the grant and the
+# wrapper.
 claude_code_takeover_check_enabled: false
 # Users the sudoers line names. The operator's own account, which is where sessions run.
 claude_code_takeover_check_users:
@@ -570,35 +389,22 @@ claude_code_takeover_check_users:
 claude_code_takeover_check_wrapper: /usr/local/sbin/homelab-takeover-check
 claude_code_takeover_check_state_dir: /var/lib/homelab-takeover-check
 
-# A root-owned, read-only script that reads root-only host state (nft, ufw, sshd -T, root's
-# crontab, and ls, stat and cat of an allowlisted path set), granted to the users below through
-# one NOPASSWD sudoers line, with an unprivileged shim on PATH. CLAUDE.md, "The root
-# inspector", has the grant and its limits.
-# The operator's account, which is where fan-out batches and the operator's sessions run. Not
-# the agent user: NoNewPrivileges in claude-rc.service stops sudo there (docs/claude-agent-user.md).
+# The operator's account, where fan-out batches and sessions run; not the agent user, whose
+# NoNewPrivileges stops sudo.
 claude_code_rootq_users:
   - "{{ sys_user }}"
 claude_code_rootq_script: /usr/local/sbin/homelab-rootq
 claude_code_rootq_shim: /usr/local/bin/rootq
 
-# The same inspector for the agent user through a socket. `sudo` is no route for
-# the agent: claude-rc.service runs with NoNewPrivileges=yes. homelab-rootq.socket (0660, the
-# group below) starts a root helper per connection, and the helper runs the script above, so
-# the allowlist and the redaction are the same. CLAUDE.md, "The root inspector".
+# `sudo` is no route for the agent (NoNewPrivileges=yes); a root helper per socket connection runs
+# the same script.
 claude_code_rootq_socket_group: homelab-rootq
 claude_code_rootq_socket_path: /run/homelab-rootq.sock
 claude_code_rootq_socket_helper: /usr/local/libexec/homelab-rootq-socket
 claude_code_rootq_socket_client: /usr/local/bin/rootq-socket
 
-# homelab-claude-guardrail-audit.timer runs claude-guardrail-audit.sh.j2 as root. Each run loads
-# an auditd watch on every path below that exists, removes a watch it loaded on a path the list
-# no longer names, and records whether auditd is running with every watch in place. A run, not a
-# rules file in /etc/audit/rules.d: augenrules stops loading at the first watch whose directory
-# is missing, which would take the host-hardening watches down with it, and the agent's memory
-# directory exists only after the agent's first session in its clone.
-#
-# The timer ships on every host this component ships to, so false is the way out: the next run
-# removes every watch under the two keys and reports up.
+# A run, not a rules.d file: augenrules stops at the first watch whose directory is missing, taking
+# the host-hardening watches down. False removes the watches under the two keys on the next run.
 claude_code_guardrail_audit_enabled: true
 # A `*/N` minute, read as the timer's period. A watch lost to an auditd restart is back within it.
 claude_code_guardrail_audit_minute: "*/5"
@@ -620,25 +426,19 @@ claude_code_guardrail_audit_paths:
   - "{{ claude_code_agent_user_home }}/.claude/rules"
   - /var/lib/renovate-agent/.claude/settings.json
   - /var/lib/renovate-agent/.claude/hooks
-# Watched under the key `claude-memory`: the memory stores a session reads at its next start. The
-# audit record names the writing process, so a Bash write shows apart from the Write tool's.
+# Key `claude-memory`: memory stores a session reads at its next start; the audit record names the
+# writing process.
 claude_code_guardrail_audit_memory_dirs:
   - "{{ claude_code_operator_memory_dir }}"
   - "{{ claude_code_agent_memory_dir }}"
 
-# homelab-claude-guardrail-ack.timer runs files/claude_guardrail_ack.py as root. Each run posts
-# to Discord every change to a file under claude_code_guardrail_audit_paths that nothing merged
-# explains: a package file that does not match the md5 inside the .deb an apt source serves
-# for its installed version (so a `dpkg -i` of a branch build posts), or a file under a
-# user's home that does not match what chezmoi renders from the dotfiles repo's main. Memory
-# stores are audited, never posted.
-# False drops the timer and its units from the next package version, and keeps the state.
+# Posts to Discord each change under claude_code_guardrail_audit_paths that nothing merged explains.
+# Memory stores are audited, never posted. False drops the timer and units from the next version,
+# keeping state.
 claude_code_guardrail_ack_enabled: true
 # A `*/N` minute, read as the timer's period.
 claude_code_guardrail_ack_minute: "*/5"
-# The settings.json keys Claude Code writes itself through /config and /model. A change that
-# touches only these stays quiet; a change to any other key posts, so a tool that drops
-# `autoMode` or `permissions` from the file is seen.
+# Keys Claude Code writes itself via /config and /model stay quiet; a change to any other key posts.
 claude_code_guardrail_ack_quiet_settings_keys:
   - model
   - effortLevel
@@ -646,12 +446,8 @@ claude_code_guardrail_ack_quiet_settings_keys:
   - theme
 claude_code_guardrail_ack_dotfiles_repo: https://github.com/DanielH2018/dotfiles.git
 
-# homelab-claude-dotfiles-mirror.timer runs files/claude_dotfiles_mirror.py as root. Each run
-# fetches the dotfiles repo into a root-owned bare mirror and records the newest tag whose
-# signature verifies against templates/claude-dotfiles-allowed-signers.j2 and whose commit
-# descends from the last one recorded. A T2 session's config is rendered only from that record
-# (B2). False drops the timer, its units, the config and the signers file from the next package
-# version, and keeps the mirror and the record.
+# Records the newest signature-verified tag that descends from the last one recorded;
+# a T2 session's config is rendered only from that record. False keeps the mirror and the record.
 claude_code_dotfiles_mirror_enabled: true
 # A `*/N` minute, read as the timer's period.
 claude_code_dotfiles_mirror_minute: "*/15"

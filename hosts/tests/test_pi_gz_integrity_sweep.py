@@ -30,8 +30,8 @@ from _shell_render import render_shell_script
 
 SWEEP = (COMPONENT.parent.name, COMPONENT.name, "pi-gz-integrity.sh.j2")
 
-# The floor the component ships. Read, not restated: a test carrying its own number would keep passing
-# after someone lowered the real one to zero, which is the one edit that makes the check vacuous.
+# Read, not restated: a test carrying its own number would pass after someone lowered the real one
+# to zero.
 FLOOR = COMPONENT_DEFAULTS["optimize_pi_gz_integrity_min_files"]
 
 

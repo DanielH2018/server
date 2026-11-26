@@ -1,24 +1,14 @@
 ---
-# Where this host's upsmon finds upsd. The UPS host reaches it over the pod's loopback hostPort;
-# every other host has to cross nodes, and there is no LAN publish. The path is the ClusterIP,
-# which a node's own host netns can reach through
-# kube-proxy's rules, and which the nut NetworkPolicy already admits: it carries both flannel.1
-# /32s precisely because "a cross-node host->pod packet arrives as the SENDING node's flannel.1
-# address". No policy change is needed for this.
-#
-# The Service pins its clusterIP, and component.yml's `defaults:` carries that address
-# as nut_host_upsd_clusterip.
+# The UPS host uses the pod's loopback hostPort; every other host uses the Service's pinned
+# ClusterIP.
+# The nut NetworkPolicy already admits it: a cross-node host->pod packet arrives as the sending
+# node's flannel.1 address.
 nut_host_upsd_host: "{{ '127.0.0.1' if inventory_hostname == ups_host else nut_host_upsd_clusterip | default('') }}"
 
-# ── Runtime watchdog for the secondary's upsd link ──────────────────────────────
-# Nothing at install time proves the address reaches upsd, and nut-monitor can die later. Both
-# are invisible until the power cut this chain exists for. The k8s "nut (upsd)" probe does not
-# cover it: that probe runs from a POD over Service DNS, while this host's upsmon connects from
-# the host netns to the address in /var/lib/homelab-secrets/etc/nut/upsmon.conf. A green probe
-# there says nothing about this path.
+# Nothing at install time proves the address reaches upsd, and nut-monitor can die later.
+# The k8s 'nut (upsd)' probe runs from a pod over Service DNS, not from this host's netns.
 nut_host_watchdog_armed: true
 
-# One value drives both the timer cadence and the check's DEADLINE_S, so a schedule change
-# cannot leave the deadline derived from the old one. The deadline is 2x the cadence plus
-# 300 s, which is one missed run of slack.
+# One value drives the timer cadence and DEADLINE_S (2x cadence plus 300 s: one missed run of
+# slack).
 nut_host_watchdog_interval_minutes: 10

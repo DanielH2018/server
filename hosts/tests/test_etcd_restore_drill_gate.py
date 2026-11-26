@@ -68,12 +68,11 @@ def test_a_passing_gate_lets_the_drill_stamp(tmp_path):
     [
         # Gate 3's own refusal: the cluster records no restorable ETCDSnapshotFile for the name.
         3,
-        # `EX_UNAVAILABLE` — no kubectl, an unreadable kubeconfig, the wrong cluster, or a
-        # Forbidden read of `etcdsnapshotfiles`. Fail closed: that read is what this call
-        # exercises, so treating "could not look" as a pass reopens the gap.
+        # EX_UNAVAILABLE: no kubectl, unreadable kubeconfig, wrong cluster, or Forbidden read of
+        # `etcdsnapshotfiles`. Fail closed: treating "could not look" as a pass reopens the gap.
         69,
-        # Usage, which is what a rename of the script or of `--gate` would produce. A drill that
-        # passed on it would report a gate that never ran as a gate that passed.
+        # Usage, which a rename of the script or `--gate` produces: passing on it would report a
+        # gate that never ran as passed.
         64,
     ],
 )

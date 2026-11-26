@@ -17,8 +17,8 @@ from lib.proc_testing import fake_bin, run, write_exec
 
 SCRIPT = ("components", "aide-scan", "aide-check.sh.j2")
 
-# The real library, so the scan writes its textfile under TEXTFILE_DIR rather than the host's
-# own directory, which node_exporter scrapes.
+# The real library, so the scan writes its textfile under TEXTFILE_DIR, not the directory
+# node_exporter scrapes.
 REAL_CHECK_LIB = "/usr/lib/homelab/homelab-check-lib.sh"
 CHECK_LIB = (
     REPO / "hosts" / "components" / "check-lib" / "files" / "homelab-check-lib.sh"
@@ -66,7 +66,6 @@ def _report(*entries: str) -> str:
     )
 
 
-# AIDE's 18-character summary column, as the 2026-10-20 daniel-box report printed each kind.
 ADDED, REMOVED = "f+++++++++++++++++", "f-----------------"
 CHANGED_CONTENT = "f =.... mc..H.. . "
 # YlZbpugamcinHAXSEC: a permission change prints `p` in column 5.
@@ -84,10 +83,8 @@ ERROR_REPORT = (
     "command line parameter)\n"
 )
 
-# Records each call as `tag: message`: the message argument when one is given, else every line
-# on stdin, which is how the script hands over the report.
-# systemd's IgnoreSIGPIPE=yes default. An ignored signal stays ignored across exec, and only then
-# does a write to a closed pipe print bash's `write error: Broken pipe` instead of dying silently.
+# systemd's IgnoreSIGPIPE=yes default: an ignored signal stays ignored across exec, so a write to a
+# closed pipe prints bash's `write error: Broken pipe` rather than dying silently.
 IGNORING_SIGPIPE = ("sh", "-c", 'trap "" PIPE; exec "$0" "$@"')
 
 LOGGER_STUB = """\

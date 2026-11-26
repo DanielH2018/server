@@ -29,8 +29,8 @@ from lib.repo_paths import REPO
 
 SCRIPT = rendered_shell_text("components", "docs-refresh", "docs-refresh.sh.j2")
 
-# The functions this module sources. Named rather than globbed: a rename would otherwise leave
-# every test below sourcing an empty string and passing on nothing at all.
+# Named, not globbed: a rename would otherwise leave every test sourcing an empty string and passing
+# on nothing.
 SOURCED = (
     "say_failure",
     "suite_summary",
@@ -54,8 +54,8 @@ def _function(name: str) -> str:
     expression inside the body would come through substituted rather than literal, so `bash`
     never sees it. The assertion below is a sanity check that the render is in fact complete.
     """
-    # One-liner form first: a `{.*?^}` pattern tried first would run past a one-line function's
-    # own closing brace and swallow the next multi-line function whole.
+    # One-liner form first: a `{.*?^}` pattern tried first would swallow the next multi-line
+    # function whole.
     match = re.search(rf"^{name}\(\) \{{[^\n]*\}}$", SCRIPT, re.M) or re.search(
         rf"^{name}\(\) \{{\n.*?^\}}$", SCRIPT, re.M | re.S
     )
@@ -104,8 +104,8 @@ def _tree(tmp_path: Path) -> Path:
     (repo / "docs/reference").mkdir(parents=True)
     (repo / "docs/assets/generated").mkdir(parents=True)
     (repo / "docs/reference/state.md").write_text("committed state\n")
-    # git tracks no empty directory, and `git status --porcelain` collapses a wholly untracked
-    # one to `?? docs/assets/` — which would hide the per-file leftover these tests assert on.
+    # `git status --porcelain` collapses a wholly untracked directory to `?? docs/assets/`, hiding
+    # the per-file leftover asserted on.
     (repo / "docs/assets/generated/topology.svg").write_text("<svg/>\n")
     (repo / "docs/reference/topology.md").write_text("hand-written prose\n")
     stamp = tmp_path / "stamp"
@@ -198,8 +198,7 @@ def test_the_alert_falls_back_to_the_plain_tail_when_no_hook_failed(tmp_path):
     assert "gpg failed to sign the data" in alert, alert
 
 
-# Cron has no tty, so an id wider than 80 columns loses its ` - reason`. A captured-log `ERROR`
-# line precedes the block; the 2026-10-12 18:20 shutdown traceback, which `Failed` matches, follows.
+# Cron has no tty, so an id wider than 80 columns loses its ` - reason`.
 SUITE_LOG = (
     "____________________________ test_bad ____________________________\n"
     "------------------------- Captured log call -------------------------\n"

@@ -31,8 +31,6 @@ COMPOSE_FILE = f"{COMPOSE}/wg-easy/compose.yaml"
 TMPFILES = REPO / "hosts/components/pi-compose/tmpfiles.d/homelab-compose.conf"
 PEER_BACKUP_DEFAULTS = REPO / "k8s/roles/pi-peer-backup/defaults/main.yml"
 PROJECT_DIR = "/home/ubuntu/server/containers/wg-easy"
-# The ports a client and the operator already use, written out so a drifted inventory entry
-# fails here instead of silently moving the endpoint.
 UDP_PORT = 51822
 UI_PORT = 51821
 

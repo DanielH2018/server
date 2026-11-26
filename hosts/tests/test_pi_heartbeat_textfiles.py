@@ -37,8 +37,6 @@ PRODUCERS = {
     "PiWatchdog": "pi-watchdog-health",
     "PiAudit": "pi-audit-health",
 }
-# Every container the recovery heartbeat watches, so a run with all of them up is a clean cycle.
-# The Pi's compose_services, plus the sub-proxy the docker-proxy compose file declares.
 ALL = [c["name"] for c in PI_HOST_VARS["compose_services"]] + ["docker-proxy-lifecycle"]
 
 

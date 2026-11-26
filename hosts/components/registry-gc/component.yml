@@ -19,8 +19,7 @@ files:
   - {src: tmpfiles.d/homelab-registry-gc.conf, dst: /usr/lib/tmpfiles.d/homelab-registry-gc.conf, when: registry_k8s_manage_gc}
   - {src: units/homelab-registry-gc.service, dst: /usr/lib/systemd/system/homelab-registry-gc.service, when: registry_k8s_manage_gc}
   - {src: units/homelab-registry-gc.timer, dst: /usr/lib/systemd/system/homelab-registry-gc.timer, when: registry_k8s_manage_gc}
-# Manual, because reconcile otherwise restarts a changed unit that is active, which would abandon
-# a collection partway through.
+# Manual: reconcile would restart a changed active unit and abandon a collection partway.
 units:
   homelab-registry-gc.service: {policy: manual, when: registry_k8s_manage_gc}
 enable:

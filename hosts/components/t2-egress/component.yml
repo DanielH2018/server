@@ -28,10 +28,8 @@
 # needrestart may restart squid.service on a library upgrade, which drops a session's open
 # connections. Claude Code retries a failed API call; a git or gh call in flight fails once.
 depends:
-  # The OpenSSL build of Ubuntu's squid, which conflicts with the `squid` package: the GnuTLS
-  # build sends no SNI to a TLS peer, so it cannot reach Traefik's routes for the in-cluster
-  # reads. It ships the same squid.service and paths. The updater's first install refuses the
-  # removal this needs, and its retry over every source performs the swap.
+  # The OpenSSL build of squid, which conflicts with `squid`: the GnuTLS build sends no SNI, so it
+  # cannot reach Traefik's routes.
   - squid-openssl
 files:
   - {src: templates/t2-egress.nft.j2, dst: /usr/lib/homelab/t2-egress/t2-egress.nft, activate: "reload:homelab-t2-egress.service"}

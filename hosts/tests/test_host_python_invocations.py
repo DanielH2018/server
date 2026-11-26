@@ -35,9 +35,8 @@ _CONTAINER_CONTEXT = re.compile(
     r"Dockerfile|docker-compose|deployment\.yaml|healthcheck"
 )
 
-# The checkout sync keeps uv's self-healing download on purpose. See the comment above its
-# ExecStart: hard-failing on a missing interpreter blocks every landing, including the one that
-# would ship the fix.
+# The checkout sync keeps uv's self-healing download: hard-failing on a missing interpreter would
+# block every landing, including the fix.
 _DOWNLOADS_EXEMPT = frozenset({"homelab-checkout-sync.service.j2"})
 
 
@@ -89,8 +88,6 @@ def _pinned_uv_lines():
             yield path, n, stripped
 
 
-# Units that run the system interpreter on purpose, each with the reason the syntax floor does
-# not reach it. Keyed by template basename.
 _SYSTEM_INTERPRETER_EXEMPT = {
     "homelab-apt-repo.service.j2": (
         "runs only the stdlib's `http.server`, so no repo code runs under it; the unit "
@@ -242,8 +239,6 @@ def test_hook_wrappers_pin_the_same_version_as_ansible():
     )
 
 
-# A command word: the start of a line that does not continue the one above, or what follows a
-# substitution, a pipe, a list operator, `exec`, a systemd ExecStart= or a cron `job:`.
 _COMMAND_POSITION = (
     r"""(?:^(?<!\\\n)|\$\(|<\(|[;|&]|\bexec\s|ExecStart=[-@+!:]*|\bjob:\s*["']?)\s*"""
 )

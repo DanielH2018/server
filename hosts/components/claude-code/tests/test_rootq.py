@@ -84,8 +84,7 @@ SECRETS = {
     "mysql": "mysql -psentinel db\n",
     "slack": "WEBHOOK_URL: https://hooks.slack.com/services/T0/B0/sentinel\n",
 }
-# One allowlisted file per PATHS entry, and its neighbour: a sibling in a directory a
-# directory-wide allowlist would admit, which the explicit list does not.
+# Each PATHS entry's allowlisted file, and a sibling a directory-wide allowlist would admit.
 LISTED = [
     "/etc/netplan/90-static.yaml",
     "/etc/cron.d/backup",

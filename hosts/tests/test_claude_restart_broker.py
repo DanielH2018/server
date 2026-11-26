@@ -123,8 +123,8 @@ def test_only_the_triage_controller_may_start_the_broker_and_only_start_it() -> 
     assert users == ["claude-triage-ctl"]
     assert 'action.lookup("verb") !== "start"' in rendered
     assert rendered.count("polkit.Result.YES") == 1
-    # The rule's instance shape is the script's NAME, so polkit admits no name the script
-    # would call malformed.
+    # The rule's instance shape is the script's NAME, so polkit admits no name the script would call
+    # malformed.
     script = (CLAUDE_CODE / "files" / "claude_restart.py").read_text()
     (name,) = re.findall(r'^NAME = re\.compile\(r"\^(.+)\$"\)$', script, re.MULTILINE)
     assert rule_pattern().pattern == rf"^homelab-claude-restart@{name}\.service$"

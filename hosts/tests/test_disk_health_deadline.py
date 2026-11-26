@@ -95,8 +95,8 @@ def _strict_render_error(minute: str) -> str | None:
 
 
 def test_the_rendered_deadline_meets_all_three_relations_is_clean():
-    # The minute the render context resolves: the role default with the inventory laid over
-    # it, so a group_vars or host_vars override is what gets checked.
+    # The render context's role default with the inventory laid over it, so a group_vars or
+    # host_vars override is checked.
     minute = template_context(shell_template_path(*TEMPLATE))[MINUTE_VAR]
     assert _violations(minute, _rendered_deadline()) == []
 
@@ -116,8 +116,8 @@ def test_a_minute_with_no_single_period_fails_the_render_is_flagged():
 
 
 def test_a_cadence_the_dead_man_would_beat_is_flagged():
-    # */30 renders 3900s, past the slug's 2100s: Healthchecks.io would page first. Rendering at
-    # the override also proves DEADLINE_S follows the variable rather than a typed number.
+    # */30 renders 3900s, past the slug's 2100s; rendering at the override also proves DEADLINE_S
+    # follows the variable.
     assert _rendered_deadline("*/30") == 3900
     assert _violations("*/30", 3900) == [
         f"DEADLINE_S=3900 exceeds {SLUG}'s timeout + grace ({_hc_budget_s()}s)"

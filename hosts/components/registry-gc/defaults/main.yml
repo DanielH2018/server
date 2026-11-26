@@ -19,14 +19,8 @@ registry_k8s_dockerhub_mirror_keep_revisions: 3
 registry_k8s_image: registry:3.1.2@sha256:82f6ff4a7f982960c8aa51617fea3aabc485df6e55cce80d22deb1de36f1bc3c
 registry_k8s_netpol_probe_image: alpine:3.24@sha256:f59abe656b692d901e184be3445e084786602108599d2a51d229c0f5a48c71bf
 
-# How long registry-gc.sh's warm phase may read manifests and blobs through the mirror after the
-# GC. Not a copy: only this component's script reads it. A cold warm of every ghcr.io image the
-# cluster runs, about 6.1 GB before deduplication, takes about 2 minutes at 49 MB/s. 1800s leaves
-# room for a slow week and bounds how long the run holds the GC lock.
+# Budget for the warm phase after the GC. Bounds how long the run holds the GC lock.
 registry_gc_ghcr_mirror_warm_budget_s: 1800
-# The same bound on the dockerhub-mirror's warm phase, which runs after the ghcr-mirror's. Half
-# the ghcr-mirror's: Docker Hub's anonymous limit refuses a cold warm's manifest reads long before
-# bandwidth runs out. Both watchers allow two hours past the schedule, and
-# tests/services/test_registry_gc_watchers_cover_the_worst_run.py fails when the two
-# phases' worst case outgrows that.
+# Half the ghcr-mirror's: Docker Hub's anonymous limit refuses a cold warm's manifest reads.
+# Both watchers allow two hours past the schedule; a test fails if worst case exceeds it.
 registry_gc_dockerhub_mirror_warm_budget_s: 900

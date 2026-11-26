@@ -12,8 +12,6 @@ from pathlib import Path
 from lib.repo_paths import REPO
 from renderer.renderer_lib import host as host_mode
 
-# The components every checkout timer's package carries beside its own: the secrets unit that
-# fills the credentials, and the push and check libraries its script sources.
 BASE_COMPONENTS = ("secrets-unit", "check-lib")
 
 
@@ -29,8 +27,8 @@ def render_daniel_box(tmp_path: Path, *components: str) -> host_mode.Package:
     (hosts / "daniel-box" / "package.yml").write_text(
         f"description: test package\ncomponents: [{names}]\n"
     )
-    # The renderer carries the ciphertext into the package without reading it, so a placeholder
-    # stands in for daniel-box's SOPS file, which this tree does not hold yet.
+    # A placeholder stands in for daniel-box's SOPS file: the renderer carries ciphertext without
+    # reading it.
     sops = tmp_path / "sops"
     sops.mkdir()
     (sops / "daniel-box.sops.yaml").write_text("placeholder: not a secret\n")

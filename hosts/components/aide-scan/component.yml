@@ -20,8 +20,7 @@ defaults:
   aide_scan_host_lib_dir: /usr/lib/homelab
 depends:
   - aide
-  # aide only Recommends it, and the updater installs with --no-install-recommends. It ships
-  # /etc/aide/aide.conf, the aide.conf.d directory the exclusions land in, and aideinit.
+  # aide only Recommends it, and the updater installs with --no-install-recommends.
   - aide-common
   # The AIDE check reads homelab-secrets' manifest for the secret links it accepts.
   - jq
@@ -29,8 +28,7 @@ files:
   # No dot in the name: aide.conf includes conf.d names matching ^[a-zA-Z0-9_-]+$ only.
   - {src: templates/98_aide_local.conf.j2, dst: /etc/aide/aide.conf.d/98_aide_local}
   - {src: templates/aide-check.sh.j2, dst: /usr/lib/homelab/aide-check, mode: "0755"}
-  # Imports reconcile_lib from its own directory, which the reconcile component ships in every
-  # host package.
+  # Imports reconcile_lib from its own directory, which the reconcile component ships.
   - {src: files/aide_originals.py, dst: /usr/lib/homelab/aide-originals, mode: "0755"}
   - {src: tmpfiles.d/homelab-aide-scan.conf, dst: /usr/lib/tmpfiles.d/homelab-aide-scan.conf}
   - {src: units/homelab-aide-check.service.j2, dst: /usr/lib/systemd/system/homelab-aide-check.service}

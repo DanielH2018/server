@@ -18,8 +18,7 @@ pytestmark = pytest.mark.skipif(
     shutil.which("node") is None, reason="node is not installed"
 )
 
-# Just enough DOM for the script's top level: every element is one inert object, and fetch
-# never resolves, so no poll renders anything.
+# Every element is one inert object and fetch never resolves, so no poll renders anything.
 _HARNESS = """
 const vm = require("vm");
 const el = new Proxy({}, {get: (t, k) => k in t ? t[k] : () => {}, set: (t, k, v) => (t[k] = v, true)});
