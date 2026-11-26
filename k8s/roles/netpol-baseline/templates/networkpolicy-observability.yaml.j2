@@ -5,14 +5,8 @@
    peers, and its header rules out growing it to absorb another shape.
 #}
 ---
-# The observability namespace's own ingress baseline. baseline-ingress lives in
-# {{ k8s_namespace }} and cannot cover this namespace — a NetworkPolicy only ever selects pods in
-# its own metadata.namespace — so observability needs this second policy object, not a wider
-# selector on the existing one.
-#
-# INGRESS ONLY, same as the homelab baseline: an Egress policy selects pods correctly on this
-# cluster and blocks nothing. Writing one would read like a control in the repo and do nothing in
-# the cluster.
+# A NetworkPolicy selects pods only in its own namespace, so observability needs its own baseline.
+# INGRESS ONLY: an Egress policy blocks nothing on this cluster.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -36,18 +30,12 @@ spec:
   policyTypes:
     - Ingress
   ingress:
-{# `| bool`, matching `netpol_baseline_probe_active` in defaults/main.yml. Without it the two disagree for a
-   STRING: `'false'` is truthy to Jinja (this branch renders, fencing applied) and False to
-   that list (the verify Job dials no leg) — enforcement with no probe. #}
+{# Allow-all when the flag is false, the rollback lever. `| bool`: a string 'false' is truthy to
+   Jinja. #}
 {% if netpol_baseline_obs_enforced | bool %}
     - from:
-        # Traefik lives in {{ k8s_namespace }}, so unlike the homelab baseline this needs a
-        # namespaceSelector: a bare podSelector peer here would mean THIS policy's namespace
-        # (observability), where Traefik does not run, and every web route through Traefik to a
-        # fenced observability workload (grafana) would silently break.
-        # namespaceSelector and podSelector are SIBLING KEYS in ONE list item, so they AND
-        # together: the traefik pod in {{ k8s_namespace }}. As two separate list items they
-        # would OR, admitting the entire {{ k8s_namespace }} namespace.
+        # Traefik lives in the homelab namespace, so it needs a namespaceSelector; the two keys AND
+        # in ONE item.
         - namespaceSelector:
             matchLabels:
               kubernetes.io/metadata.name: {{ k8s_namespace }}

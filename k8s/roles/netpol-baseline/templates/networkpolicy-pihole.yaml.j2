@@ -14,27 +14,19 @@ metadata:
   name: pihole
   namespace: {{ k8s_namespace }}
 spec:
-  # `app: pihole` deliberately, NOT the Service's two-label selector. There are two instances --
-  # pihole (instance=pihole) and pihole-2 (instance=pihole-2) -- and the single label covers both.
-  # The `pihole` Service selects only instance=pihole; matching the Service here would fence one
-  # replica of an HA pair and leave the other wide open.
+  # `app: pihole`, not the Service's selector: that covers only instance=pihole and would leave
+  # pihole-2 open.
   podSelector:
     matchLabels:
       app: pihole
   policyTypes:
     - Ingress
   ingress:
-{# Renders allow-all when the flag is false, so `netpol_baseline_enforced` is a real rollback
-   lever. `| bool` for the string trap. Both explained in full in
-   networkpolicy-traefik.yaml.j2. BOTH rules below sit inside this conditional. #}
+{# Allow-all when the flag is false, the rollback lever. `| bool`: a string 'false' is truthy to
+   Jinja. #}
 {% if netpol_baseline_enforced | bool %}
-    # :53 stays open. It is daniel-server's resolv.conf nameserver and serves every LAN client,
-    # whose addresses are not enumerable here. The UI is the attack surface; :53 is what takes
-    # the house down.
-    #
-    # Cluster DNS also lands here: CoreDNS forwards to pihole-dns's ClusterIP, so these queries
-    # arrive from a kube-system pod, not from a node. An open :53 covers that too, and a future
-    # narrowing must not assume pihole's :53 callers are "hosts, not pods".
+    # :53 stays open: it serves every LAN client and cluster DNS (CoreDNS forwards from a
+    # kube-system pod).
     - ports:
         - port: 53
           protocol: UDP

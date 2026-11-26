@@ -8,23 +8,9 @@
    armed prune, so the whole fence keeps one owner.
 #}
 ---
-# The homelab log store, distinct from `loki` in the observability namespace, which
-# networkpolicy-loki.yaml.j2 fences. Both listen on 3100; do not confuse them.
-#
-# Seven callers beyond the baseline, each read from the caller's own template:
-#   airflow-task    — LOKI_URL (airflow/files/dags/homelab_warehouse/backup_spend.py), the
-#                     warehouse's daily Longhorn backup rollup
-#   alloy           — the DaemonSet that ships every pod's logs here (loki-homelab/templates/
-#                     alloy-daemonset.yaml.j2). Both nodes; a pod peer covers both.
-#   homelab-mcp     — LOKI_URL (homelab-mcp/templates/deployment.yaml.j2)
-#   monitor-bridge  — LOKI_URL (monitor-bridge/templates/config/env.yaml.j2)
-#   terraria-stats  — LOKI_URL (terraria-stats/templates/deployment.yaml.j2)
-#   valheim-stats   — LOKI_URL (valheim-stats/templates/deployment.yaml.j2)
-#   grafana         — a datasource in the OBSERVABILITY namespace (observability/templates/
-#                     grafana.yaml.j2). Prometheus scrapes it from there too, but the baseline
-#                     already carries that one.
-#
-# 3100 is the containerPort AND the Service port.
+# Not the observability `loki` (networkpolicy-loki.yaml.j2); both listen on 3100.
+# Callers beyond the baseline: airflow-task, alloy (both nodes), homelab-mcp, monitor-bridge,
+# terraria-stats, valheim-stats, and grafana from the observability namespace.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -37,9 +23,8 @@ spec:
   policyTypes:
     - Ingress
   ingress:
-{# Renders allow-all when the flag is false, so `netpol_baseline_enforced` is a real rollback
-   lever. `| bool` for the string trap. Both explained in full in
-   networkpolicy-traefik.yaml.j2. #}
+{# Allow-all when the flag is false, the rollback lever. `| bool`: a string 'false' is truthy to
+   Jinja. #}
 {% if netpol_baseline_enforced | bool %}
     - from:
         - podSelector:
@@ -60,9 +45,8 @@ spec:
         - podSelector:
             matchLabels:
               app: valheim-stats
-        # grafana lives in another namespace. namespaceSelector and podSelector are SIBLING KEYS
-        # in ONE list item, so they AND together: the grafana pod in observability. Split into
-        # two list items they would OR, admitting that entire namespace.
+        # namespaceSelector and podSelector are siblings in ONE item, so they AND; as two items they
+        # would OR.
         - namespaceSelector:
             matchLabels:
               kubernetes.io/metadata.name: {{ k8s_observability_namespace }}

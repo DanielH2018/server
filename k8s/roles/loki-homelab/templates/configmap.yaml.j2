@@ -7,10 +7,6 @@ metadata:
 data:
   loki.yaml: |
     auth_enabled: false
-    # See the same block in k8s/roles/observability/templates/loki.yaml.j2: the usage reporter
-    # defaults to on, Pi-hole blocks stats.grafana.org, and each 4h cycle spends its full
-    # 5-retry budget on a name that never resolves. The Alloy shipper has the same reporter
-    # and turns it off with --disable-reporting in alloy-daemonset.yaml.j2.
     analytics:
       reporting_enabled: false
     server:
@@ -46,24 +42,19 @@ data:
         - selector: '{job="k8s-audit"}'
           priority: 1
           period: 168h
-      # A shipper re-reading from scratch after a lost positions file blows the default ingest
-      # limit.
       max_global_streams_per_user: 5000
       ingestion_rate_mb: 50
       per_stream_rate_limit: 50MB
       reject_old_samples: false
     compactor:
       working_directory: /loki/compactor
-      # Without retention_enabled the retention_period above is inert and the volume grows
-      # without bound; delete_request_store is required by Loki 3.x with it on.
+      # Without retention_enabled the retention_period is inert; Loki 3.x requires
+      # delete_request_store with it.
       retention_enabled: true
       retention_delete_delay: 2h
       delete_request_store: filesystem
-    # The ruler reads its rule files from the loki-homelab-rules ConfigMap, which
-    # deployment.yaml.j2 mounts at /etc/loki-rules/fake: `fake` is the tenant Loki uses when
-    # auth_enabled is false. rule_path is the ruler's own scratch, so it sits on the claim.
-    # The group interval, not evaluation_interval, sets the query load: files/rules/ sets it
-    # per group.
+    # `fake` is the tenant Loki uses when auth_enabled is false. The per-group interval in
+    # files/rules/ sets query load.
     ruler:
       storage:
         type: local
@@ -72,8 +63,5 @@ data:
       rule_path: /loki/rules-scratch
       alertmanager_url: http://alertmanager.{{ k8s_observability_namespace }}.svc:9093
       enable_api: true
-{# The cluster shipper's config, River not YAML, so it lives in templates/config/ where
-   scripts/validate/render_lib/k8s.py does not parse it as a manifest, and lands here as a
-   block scalar. Every label it emits is a contract; see the file's header. #}
   config.alloy: |
 {{ lookup('template', role_file('templates/config/config.alloy.j2')) | indent(4, true) }}

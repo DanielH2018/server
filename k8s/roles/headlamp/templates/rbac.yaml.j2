@@ -48,8 +48,6 @@ subjects:
   - kind: ServiceAccount
     name: headlamp
     namespace: {{ k8s_namespace }}
-  # The OIDC identity, bound ALONGSIDE the SA — see the header for why, and for why it grants
-  # nobody anything yet.
   - kind: Group
     name: {{ headlamp_k8s_oidc_group }}
     apiGroup: rbac.authorization.k8s.io
@@ -80,8 +78,8 @@ rules:
   - apiGroups: [networking.k8s.io]
     resources: [ingressclasses]
     verbs: [get, list, watch]
-  # RBAC objects are readable so the "who can do what" views work — and so this SA's own
-  # ceiling is inspectable from the UI it backs. Reading a binding grants nothing.
+  # Readable so the "who can do what" views work and the SA's own ceiling is inspectable; reading a
+  # binding grants nothing.
   - apiGroups: [rbac.authorization.k8s.io]
     resources: [clusterroles, clusterrolebindings, roles, rolebindings]
     verbs: [get, list, watch]
@@ -107,8 +105,6 @@ subjects:
   - kind: ServiceAccount
     name: headlamp
     namespace: {{ k8s_namespace }}
-  # The OIDC identity, bound ALONGSIDE the SA — see the header for why, and for why it grants
-  # nobody anything yet.
   - kind: Group
     name: {{ headlamp_k8s_oidc_group }}
     apiGroup: rbac.authorization.k8s.io
