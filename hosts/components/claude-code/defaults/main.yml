@@ -45,7 +45,8 @@ claude_code_rc_permission_mode: auto
 # throttles when it is exceeded anyway.
 claude_code_rc_capacity: 10
 
-# Caps `-n auto` pytest workers per run; the worst case is workers x capacity (4 x 10 = 40).
+# Caps pytest workers per run, `-n auto` or an explicit `-n`; the worst case is workers x
+# capacity (4 x 10 = 40).
 # settings.json `env` carries the same value for other sessions; raise both together.
 claude_code_rc_pytest_workers: 4
 

@@ -5,12 +5,14 @@ Run: uv run pytest tests/repo/suite/test_xdist_width.py
 
 import json
 import os
+import sys
 from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
 
 import xdist_width
+from lib.proc_testing import run
 
 # A literal, not `xdist_width.WEIGHTS_TABLE`, so these tests fail on behaviour rather than a missing
 # name.
@@ -121,3 +123,27 @@ def test_a_whole_suite_run_from_testpaths_is_left_to_xdist(tmp_path):
         ["suite/tests"], pytest.Config.ArgsSource.TESTPATHS, tmp_path, tmp_path
     )
     assert xdist_width.pytest_xdist_auto_num_workers(config) is None
+
+
+@pytest.mark.parametrize(
+    ("given", "started"),
+    [("3", "created: 2/2 workers"), ("1", "created: 1/1 worker\n")],
+)
+def test_an_explicit_n_above_the_session_ceiling_starts_only_the_ceiling(
+    tmp_path, given, started
+):
+    """`pytest -n 8` under a ceiling of 4 ran 8 workers beside k3s on daniel-box."""
+    (tmp_path / "pytest.ini").write_text("[pytest]\n")
+    (tmp_path / "test_one.py").write_text("def test_one():\n    pass\n")
+    done = run(
+        [sys.executable, "-m", "pytest", "-n", given, "-p", "xdist_width"]
+        + ["-p", "no:cacheprovider", "-c", str(tmp_path / "pytest.ini"), str(tmp_path)],
+        cwd=tmp_path,
+        env={
+            **os.environ,
+            "PYTEST_XDIST_AUTO_NUM_WORKERS": "2",
+            "PYTHONPATH": str(Path(xdist_width.__file__).parent),
+        },
+    )
+    assert done.returncode == 0, done.stdout + done.stderr
+    assert started in done.stdout, done.stdout

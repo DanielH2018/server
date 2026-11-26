@@ -1,0 +1,13 @@
+# Shipped by the claude-code host component — do not edit by hand.
+#
+# Caps pytest-xdist's fan-out for every ssh session on the host, `ssh host cmd` included. The
+# desktop app starts its remote server through such a command, so its sessions read this line.
+# pam_env on Ubuntu reads only /etc/environment and pam_env.conf, so the environment.d file
+# this component also ships never reaches an ssh session.
+#
+# sshd keeps the first SetEnv directive it reads and ignores the rest. The `20-` prefix sorts
+# this file before cloud-init's 50- drop-in and the 90- Match block.
+#
+# Same value as claude_code_rc_pytest_workers. A running session keeps the value it started
+# with; the next ssh connection reads the new one.
+SetEnv PYTEST_XDIST_AUTO_NUM_WORKERS={{ claude_code_rc_pytest_workers }}
