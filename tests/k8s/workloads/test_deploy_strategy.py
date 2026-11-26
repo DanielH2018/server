@@ -54,6 +54,10 @@ _RECREATE = {
     ("vaultwarden", "vaultwarden"): "sqlite DB on an RWO Longhorn volume",
     ("navidrome", "navidrome"): "sqlite index on an RWO Longhorn volume",
     ("speedtest", "speedtest"): "sqlite results DB",
+    (
+        "tft-assistant",
+        "tft-assistant",
+    ): "sqlite match store on an RWO Longhorn volume; two crawlers would share one API key's rate limit",
     ("n8n", "n8n"): "sqlite DB under /home/node/.n8n",
     (
         "home-assistant",
