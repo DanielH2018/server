@@ -36,7 +36,7 @@ from pathlib import Path
 from typing import NoReturn
 
 
-from deploy_tools.land_lib import live_limit, pin_gate, turn
+from deploy_tools.land_lib import live_limit, pin_gate, promotion, turn
 from deploy_tools.land_lib.landing import Landing
 from deploy_tools.land_lib.outcome import Verdict, say
 from deploy_tools.land_lib.serial_lock import SERIAL_NAME, record_holder
@@ -56,6 +56,8 @@ SLOT_NAMES = tuple(f"homelab-land-slot-{n}.lock" for n in range(COUNT))
 # on a soak for longer would otherwise hold the turn for two merge budgets.
 DRAIN_S = 2400
 _SERIAL_LIVE = f"landing of a PR that changes {live_limit.SERIAL_WHAT} is live"
+# The kinds of PR that change a k8s role, which a hold and the no-promotion window bar.
+_RENDERS = (live_limit.K8S, live_limit.SERIAL)
 
 Release = Callable[[], None]
 Locker = Callable[[Sequence[str], int], Release | None]
@@ -225,13 +227,15 @@ def _bar(ln: Landing, kind: str, lock: Locker) -> Bar | None:
         The bar, or None when nothing bars the PR. Inside the no-promotion window no landing
         reaches its verdict, so no bar clears there.
     """
-    if kind:
+    if kind in _RENDERS:
         hold = live_limit.fail_open(
             lambda: pin_gate.hold_problem(ln.tools.flux.pins.hold())
         )
         if hold:
             return Bar(f"{hold}, and this PR changes a k8s role", Clears.NEVER)
-    in_window = bool(kind and live_limit.fail_open(ln.tools.in_reboot_window))
+    in_window = bool(
+        kind in _RENDERS and live_limit.fail_open(ln.tools.in_reboot_window)
+    )
     if kind == live_limit.SERIAL:
         if _keep_serial(ln, lock):
             return Bar(
@@ -243,7 +247,7 @@ def _bar(ln: Landing, kind: str, lock: Locker) -> Bar | None:
                 "its merge",
                 _unless(in_window, Clears.VERDICTS),
             )
-    elif _held_by_another(lock, [SERIAL_NAME]):
+    elif kind != live_limit.QUIET and _held_by_another(lock, [SERIAL_NAME]):
         return Bar(f"a {_SERIAL_LIVE}", _unless(in_window, Clears.SERIAL_ENDS))
     if in_window and _held_by_another(lock, SLOT_NAMES):
         return Bar(
@@ -317,9 +321,17 @@ def _bar_after_waits(ln: Landing, head: str, in_turn_waits: bool) -> Bar | None:
 
 
 def _kind(ln: Landing, head: str) -> str:
-    """`live_limit.kind` of the PR's files at `head`; "" when they cannot be read."""
+    """The kind of the PR's files at `head`; "" when they cannot be read.
+
+    `live_limit.QUIET` for a PR that moves no bundle (`promotion.moves_the_bundle`), else
+    `live_limit.kind`.
+    """
     paths = live_limit.fail_open(lambda: ln.changed_paths(head))
-    return live_limit.kind(paths) if paths else ""
+    if not paths:
+        return ""
+    if not promotion.moves_the_bundle(paths):
+        return live_limit.QUIET
+    return live_limit.kind(paths)
 
 
 def _lock_of(ln: Landing) -> Locker:
@@ -333,7 +345,7 @@ def bar_member(member: Landing, head: str) -> str:
     reboot's no-promotion window a k8s PR joins no batch: it waits out the window alone.
     """
     kind = _kind(member, head)
-    if kind and live_limit.fail_open(member.tools.in_reboot_window):
+    if kind in _RENDERS and live_limit.fail_open(member.tools.in_reboot_window):
         return "it changes a k8s role inside the weekly reboot's no-promotion window"
     bar = _bar(member, kind, _lock_of(member))
     return bar.why if bar else ""
@@ -368,9 +380,10 @@ def refuse_before_merge(ln: Landing, head: str) -> None:
     takes the turn. The rules, for a PR of `live_limit.kind`:
 
     - a k8s or serial PR waits while `DEPLOY_HOLD` holds;
-    - every PR waits while another landing holds the serial lock. Outside the no-promotion
-      window it waits in line, with the landing turn given back, for that landing to end,
-      and refuses only once its merge budgets run out;
+    - every PR but a `live_limit.QUIET` one waits while another landing holds the serial
+      lock. Outside the no-promotion window it waits in line, with the landing turn given
+      back, for that landing to end, and refuses only once its merge budgets run out. A
+      quiet PR waits on no promotion, so the serial landing's cannot fail it;
     - a serial PR waits while another landing holds a slot, and keeps the serial lock until
       its process ends, a fresh grading included, so every other PR waits for it. While it
       holds the landing turn (`ln.give_back_turn`), it waits up to `DRAIN_S` for those

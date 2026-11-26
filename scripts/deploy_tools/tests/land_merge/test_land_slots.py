@@ -119,6 +119,8 @@ _K8S = ["k8s/roles/sonarr/defaults/main.yml"]
 _SERIAL = ["k8s/roles/longhorn/defaults/main.yml"]
 _SERVICES = ["k8s/services.yml"]
 _DOCS = ["docs/landing.md"]
+# A path outside documents and tests that changes no k8s role.
+_SCRIPT = ["scripts/lib/git.py"]
 # The record of `Landing.changed_paths` reading the PR's file list.
 _FILES = "gh:files,headRefOid"
 
@@ -147,7 +149,7 @@ def _land(ln) -> None:
         (_K8S, {"deploy_hold": "abc123"}, "holds 'abc123', and this PR changes a k8s"),
         (_SERVICES, {"deploy_hold": "abc123"}, "holds 'abc123', and this PR changes"),
         (_SERIAL, {"serial": [False]}, f"another {slots._SERIAL_LIVE}"),
-        (_DOCS, {"serial": [False]}, f"a {slots._SERIAL_LIVE}, after "),
+        (_SCRIPT, {"serial": [False]}, f"a {slots._SERIAL_LIVE}, after "),
         (_K8S, {"in_window": True, "slot": [False]}, "no-promotion window"),
     ],
     ids=[
@@ -185,7 +187,7 @@ def test_a_serial_pr_in_the_turn_merges_once_the_landings_past_their_merge_finis
 
 @pytest.mark.parametrize(
     ("paths", "draft"),
-    [(_DOCS, False), (_DOCS, True), (_SERIAL, False)],
+    [(_SCRIPT, False), (_SCRIPT, True), (_SERIAL, False)],
     ids=["a-ready-head", "a-draft", "a-serial-pr"],
 )
 def test_a_landing_beside_a_live_serial_landing_waits_in_line_without_the_turn(
@@ -204,7 +206,7 @@ def test_a_landing_waits_for_the_serial_landing_past_drain_s_while_its_budgets_l
     landing,
 ):
     # fact: CLAUDE.md#When to wait
-    ln, calls = _merging(landing, _DOCS, serial=[False] * 100 + [True])
+    ln, calls = _merging(landing, _SCRIPT, serial=[False] * 100 + [True])
     _land(ln)
     assert _names(calls).count("sleep") * ln.opts.merge_poll > slots.DRAIN_S
     assert "merge" in call_order(calls)
@@ -242,8 +244,16 @@ def test_a_serial_pr_the_drain_cannot_clear_is_refused_without_waiting(
         (_DOCS, False, {"deploy_hold": "abc123"}),
         (_K8S, False, {"in_window": True}),
         (_SERIAL, True, {}),
+        (_DOCS, False, {"serial": [False]}),
+        (["scripts/lib/tests/test_git.py"], True, {"serial": [False]}),
     ],
-    ids=["docs-under-a-hold", "window-with-no-slot-held", "a-serial-draft-alone"],
+    ids=[
+        "docs-under-a-hold",
+        "window-with-no-slot-held",
+        "a-serial-draft-alone",
+        "docs-beside-a-serial-landing",
+        "tests-beside-a-serial-landing",
+    ],
 )
 def test_a_pr_no_rule_bars_merges(landing, paths, draft, fakes):
     ln, calls = _merging(landing, paths, draft, **fakes)

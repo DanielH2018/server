@@ -226,7 +226,12 @@ is waited out first, as the bullets below say. A refused landing exits 75 with
   four times each under the rule without the wait, each time after up to 82 minutes in line.
   Inside the no-promotion window, under `DEPLOY_HOLD`, and in a landing that went on without
   the turn, a serial PR is still refused at once.
-- Every PR waits in line while another landing holds the serial lock, instead of refusing.
+- A PR of documents and tests alone passes a live serial landing without waiting
+  (`live_limit.QUIET`). It moves no bundle, so it waits on no promotion
+  (`promotion.moves_the_bundle`), and a promotion the serial landing fails cannot reach
+  it. On 2026-11-26, 2 of the 15 landings that waited behind a serial landing were such PRs,
+  and the waits behind serial landings that day totalled 6.3 hours.
+- Every other PR waits in line while another landing holds the serial lock, instead of refusing.
   It gives the landing turn back for the wait, because the serial landing may need the turn
   again before its merge, and its log prints `waiting in line for the serial landing to
   end`. It asks for the turn again once the lock is free, and reads the rules once more in
