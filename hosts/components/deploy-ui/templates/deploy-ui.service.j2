@@ -18,11 +18,9 @@ Environment=DEPLOY_UI_GAMES_FILE={{ deploy_ui_dir }}/games.json
 Environment=DEPLOY_UI_NAMESPACE={{ k8s_namespace }}
 Environment=DEPLOY_UI_LOKI=https://loki-homelab.local.{{ domain }}
 Environment=KUBECONFIG=/home/{{ sys_user }}/.kube/config
-# The homelab-games token (ADR-0033). ImportCredential= starts the unit without it, so the panel
-# still reads while the host has not synced the credential; only its writes refuse.
+# A missing token still starts the unit: reads work, only writes refuse.
 ImportCredential=games_panel_token
 # --no-python-downloads makes the interpreter pin enforcement rather than a request.
-# ENFORCED: hosts/tests/test_host_python_invocations.py.
 ExecStart=/usr/bin/uv run --no-project --no-python-downloads --python {{ host_python_version }} {{ deploy_ui_dir }}/deploy_ui.py
 Restart=on-failure
 RestartSec=5

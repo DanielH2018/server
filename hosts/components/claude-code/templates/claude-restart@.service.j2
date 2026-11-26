@@ -1,25 +1,22 @@
 {% import 'templates/claude-triage-pins.j2' as pins with context -%}
-# Shipped by the claude-code host component while claude_code_restart_enabled.
-# The instance is the only input: a key of the allowlist in /etc/claude-restart/config.json.
 [Unit]
 Description=Restart the allowlisted Deployment %i
 After=homelab-secrets.service network-online.target
 Wants=homelab-secrets.service network-online.target
-# A restart that failed pages here. A refusal exits 0 and pages nothing, so asking for a refused
-# name cannot page Discord.
+# A refusal exits 0 and pages nothing, so asking for a refused name cannot page Discord.
 OnFailure=homelab-alert@%n.service
 
 [Service]
 Type=oneshot
-# Root, because the restart is a write to the cluster and only root reads the k3s admin
-# kubeconfig. The script builds its kubectl arguments from the allowlist entry, never from %i.
+# Root, because only root reads the k3s admin kubeconfig.
+# The script builds its kubectl arguments from the allowlist entry, never from %i.
 Environment=KUBECONFIG=/etc/rancher/k3s/k3s.yaml
 Environment=HOME={{ pins.restart_state_dir }}
 Environment=PATH=/usr/local/bin:/usr/bin:/bin
 Environment=PYTHONDONTWRITEBYTECODE=1
 LoadCredential=discord_webhook:/run/credstore/discord_alert_webhook
-# The verdict file is what a caller reads back, so the directory is world-readable and only
-# this unit writes it.
+# The caller reads the verdict file back, so the directory is world-readable and only this unit
+# writes it.
 StateDirectory=claude-restart
 StateDirectoryMode=0755
 Environment=UV_CACHE_DIR={{ pins.restart_state_dir }}/uv-cache

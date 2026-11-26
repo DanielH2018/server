@@ -35,8 +35,7 @@ as_agent() {
     PATH="$home/.local/bin:/usr/local/bin:/usr/bin:/bin" "$@"
 }
 
-# The groups: the worktree holder scan's socket, the root inspector's socket, the journal and
-# the ssh login. `usermod -G` sets the whole list, so a group dropped here is left.
+# `usermod -G` sets the whole list, so a group dropped here is left.
 groups=({{ claude_code_worktree_holders_group }} {{ claude_code_rootq_socket_group }}{{ ' systemd-journal' if claude_code_agent_journal_access else '' }}{{ ' ssh-users' if claude_agent_ssh_login_enabled else '' }})
 for group in "${groups[@]}"; do
   getent group "$group" > /dev/null || groupadd --system "$group"
@@ -49,8 +48,8 @@ loginctl enable-linger "$agent" "$operator"
 
 fail() { echo "claude-agent-setup: $*" >&2; exit 1; }
 
-# pin DIR leaves a handle on DIR in $pinned. Opening "DIR/." fails on a file or a fifo, where a
-# plain open of a fifo would block. The handle's resolved path equals DIR only when no link lies on it.
+# Opening "DIR/." fails on a file or fifo, where a plain fifo open would block.
+# The handle's resolved path equals DIR only when no link lies on it.
 pinned_fd=
 pinned=
 unpin() {
@@ -65,8 +64,7 @@ pin() {
   [ "$(readlink "$pinned")" = "$1" ] || fail "$1 is not a plain directory: a link lies on its path"
 }
 
-# dir MODE PATH: PATH is the agent's directory, in the operator's group. A missing one is created
-# only inside its pinned parent.
+# A missing directory is created only inside its pinned parent.
 dir() {
   pin "${2%/*}"
   [ -d "$pinned/${2##*/}" ] || mkdir "$pinned/${2##*/}"
@@ -76,9 +74,8 @@ dir() {
   unpin
 }
 
-# place OWNER GROUP MODE SRC DEST writes DEST inside its pinned parent. install -T replaces a link
-# at DEST and refuses a directory there, so it never writes through either. A DEST that already
-# matches is left alone, so its times stay what the AIDE baseline recorded.
+# install -T replaces a link at DEST and refuses a directory, so it never writes through either.
+# A DEST that already matches is left alone, so its times stay what the AIDE baseline recorded.
 place() {
   pin "${5%/*}"
   if [ -L "$pinned/${5##*/}" ] || [ ! -f "$pinned/${5##*/}" ] \
@@ -97,8 +94,7 @@ drop() {
   unpin
 }
 
-# point TARGET LINK makes LINK a link to TARGET inside its pinned parent. A link or a file at LINK
-# is replaced, and a directory there fails the run.
+# A link or file at LINK is replaced; a directory there fails the run.
 point() {
   pin "${2%/*}"
   ln -sfnT "$1" "$pinned/${2##*/}"
@@ -110,8 +106,8 @@ dir 0755 "$home/.local"
 dir 0755 "$home/.local/bin"
 dir 0750 "$home/.ssh"
 {% if claude_agent_ssh_login_enabled %}
-# The key host's agent logs in with exactly the packaged key. authorized_keys is root-owned in a
-# .ssh the agent owns. A blank key ships no file, and an existing one stays.
+# authorized_keys is root-owned in a .ssh the agent owns; a blank key ships no file, and an existing
+# one stays.
 if [ -e "$templates/authorized_keys" ]; then
   if [ "$(wc -l < "$templates/authorized_keys")" -ne 1 ] || ! grep -Eq '^restrict ssh-ed25519 ' "$templates/authorized_keys"; then
     echo "claude-agent-setup: $templates/authorized_keys is not one restricted ssh-ed25519 line" >&2
@@ -132,8 +128,7 @@ dir {{ '0710' if claude_code_agent_operator_read else '0700' }} "$home/.claude"
 dir {{ '0710' if claude_code_agent_operator_read else '0700' }} "$home/.claude/projects"
 dir {{ '0710' if claude_code_agent_operator_read else '0700' }} "$(dirname "{{ claude_code_agent_memory_dir }}")"
 dir 0700 "$home/.kube"
-# The operator reads what the agent writes to its artifacts and memory directories: setgid on
-# the operator's group, and a default ACL that gives each new file the group's read.
+# Setgid on the operator's group, plus a default ACL giving each new file the group's read.
 for shared in "$home/.claude/artifacts" "{{ claude_code_agent_memory_dir }}"; do
   dir {{ '2750' if claude_code_agent_operator_read else '0700' }} "$shared"
   pin "$shared"
@@ -146,8 +141,8 @@ for shared in "$home/.claude/artifacts" "{{ claude_code_agent_memory_dir }}"; do
 done
 
 {% if claude_code_agent_homelab_ui_enabled %}
-# homelab-secrets renders the agent's homelab-ui login under /run, outside the agent's home
-# (daniel-box's package.yml names the same destination). The agent reads it through this link.
+# homelab-secrets renders the login under /run, outside the agent's home; the agent reads it through
+# this link.
 ui_login=/run/homelab-secrets/claude-agent/homelab-ui-credentials.json
 dir {{ '0710' if claude_code_agent_operator_read else '0700' }} "$home/.config/homelab-ui"
 point "$ui_login" "$home/.config/homelab-ui/credentials.json"

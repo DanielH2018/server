@@ -9,11 +9,8 @@ Type=oneshot
 # The peers authorize this user's ssh key, and the artifacts tree is this user's.
 User={{ sys_user }}
 SyslogLevel=notice
-# The `+` runs this one command as root. It creates the artifacts directories
-# (tmpfiles.d/homelab-artifacts.conf.j2).
 ExecStartPre=+/usr/bin/systemd-tmpfiles --create /usr/lib/tmpfiles.d/homelab-artifacts.conf
-# Holds the ssh control socket the pull and the push share. A socket there is a live shell on the
-# peer, so only this user may enter it; systemd removes it when the run ends.
+# A control socket is a live shell on the peer, so only this user may enter its directory.
 RuntimeDirectory=homelab-sync-artifacts
 RuntimeDirectoryMode=0700
 ExecStart=/usr/lib/homelab/sync-artifacts

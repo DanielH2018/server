@@ -42,8 +42,7 @@ import sys
 import time
 
 SCRIPT = "/usr/local/sbin/homelab-rootq"
-# `rootq.TIER1`, `rootq.COMMANDS` and `cat`, each with its argument count. A test holds this
-# equal to the script's own verb set.
+# A test holds this equal to the script's own verb set.
 ARITY = {
     "stat": 1,
     "sha256": 1,
@@ -80,8 +79,8 @@ def read_request(conn: socket.socket, timeout_s: float = READ_TIMEOUT_S) -> byte
     while b"\n" not in data:
         if len(data) > REQUEST_MAX:
             raise Refused(f"the request is over {REQUEST_MAX} bytes")
-        # One deadline for the whole line, so a caller sending a byte at a time cannot hold
-        # the instance for REQUEST_MAX timeouts.
+        # One deadline for the whole line, so a caller sending a byte at a time cannot hold the
+        # instance.
         left = deadline - time.monotonic()
         if left <= 0:
             raise Refused(f"no request line within {timeout_s}s")

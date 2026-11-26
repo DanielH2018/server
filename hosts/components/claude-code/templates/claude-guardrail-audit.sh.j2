@@ -61,9 +61,8 @@ claude-memory {{ path }}
 WATCHES
 )
 
-# loaded_paths KEY RULES — each path RULES (auditctl -l output) watches under KEY. auditctl
-# prints a file watch as `-w PATH ... -k KEY` and a directory watch as `-F dir=PATH ... -F
-# key=KEY`; both forms are read, and a trailing slash is dropped.
+# auditctl prints a file watch as `-w PATH ... -k KEY` and a directory watch as
+# `-F dir=PATH ... -F key=KEY`; both forms are read, and a trailing slash is dropped.
 loaded_paths() {
   printf '%s\n' "$2" | awk -v key="$1" '
     {

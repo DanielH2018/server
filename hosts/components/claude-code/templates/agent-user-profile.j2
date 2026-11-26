@@ -8,17 +8,13 @@ PATH="$HOME/.local/bin:$PATH"
 # unit sets the same two.
 export RUN_HOOK_PROJECT_DIR={{ claude_code_agent_user_clone_dir }}
 export RUN_HOOK_UV={{ claude_code_agent_user_home }}/.local/bin/uv
-# scripts/dev/fanout_lib/target.py:branch_name names a fan-out batch's branch
-# `worktree-<prefix>+fanout-<batch>` from this, the one shape the agent branch fence lets this
-# user push. A script that names branches itself never reads the agent's CLAUDE.md.
+# target.py:branch_name builds fan-out branch names from this, the one shape the fence allows.
+# A script that names branches itself never reads the agent's CLAUDE.md.
 export CLAUDE_WORKTREE_PREFIX={{ claude_code_agent_worktree_prefix }}
-# An ssh login inherits sshd's oom_score_adj of 0, below every pod's. Raising it needs no
-# privilege, and the processes this shell starts inherit it (claude_code_fleet_oom_score_adjust).
+# An ssh login inherits sshd's oom_score_adj of 0, below every pod's; raising it needs no privilege.
 echo {{ claude_code_fleet_oom_score_adjust }} > /proc/self/oom_score_adj 2>/dev/null
 {% if claude_code_lander_enabled and claude_code_agent_is_primary %}
 {% import 'templates/claude-land-pins.j2' as pins with context %}
-# land.sh hands each landing this user starts to {{ pins.unit }}@<n>.service, which lands it as
-# {{ sys_user }} under the landing policy (scripts/deploy_tools/land_lib/handoff.py). This user
-# has no sudo, so a landing of its own would fail at the deploy.
+# This user has no sudo, so a landing of its own would fail at the deploy; land.sh hands off.
 export LAND_HANDOFF_UNIT={{ pins.unit }}
 {% endif %}

@@ -72,8 +72,7 @@ def spawn_logged(argv: list[str], cwd: Path, log_dir: Path, action: str) -> Path
             start_new_session=True,
         )
     log.with_suffix(".pid").write_text(str(proc.pid))
-    # Reap in a background thread: proc goes out of scope on return, and an un-waited
-    # detached child leaves a zombie plus a "still running" ResourceWarning at GC time.
+    # Reap in a thread: an un-waited detached child leaves a zombie and a ResourceWarning at GC.
     threading.Thread(target=proc.wait, daemon=True).start()
     return log
 

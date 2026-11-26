@@ -17,19 +17,15 @@ users:
 ssh_pwauth: false
 disable_root: true
 
-# The pinned host key, generated once on the hypervisor by etcd-drill-prepare. A fresh disk would
-# otherwise mint a new host key every run and the orchestrator would have to accept any key —
-# which, with the staging guest on the same bridge, is an address anyone there could answer for
-# while the cluster token is in flight. ed25519 only, so no other key type can be offered.
+# The pinned host key from etcd-drill-prepare; a per-run key would mean accepting any key.
+# ed25519 only, so no other key type can be offered.
 ssh_genkeytypes: [ed25519]
 ssh_keys:
   ed25519_private: |
     {{ hypervisor_etcd_drill_vm_hostkey_private }}
   ed25519_public: "{{ hypervisor_etcd_drill_vm_hostkey_public }}"
 
-# Nothing installed on first boot. The k3s binary, the token and the R2 env file are copied in by
-# the orchestrator over ssh for the run, so the image stays the reviewed cloud image and nothing
-# a drill needs comes from the internet at boot.
+# Nothing installed at boot: the orchestrator copies the k3s binary, token and R2 env in over ssh.
 package_update: false
 package_upgrade: false
 

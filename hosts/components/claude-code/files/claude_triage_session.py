@@ -23,8 +23,6 @@ import signal
 import subprocess
 import sys
 
-# The script runs from /opt/claude-triage, where component.yml's `lib: host_lib.py` entry
-# ships host_lib.py beside it.
 from claude_config_lock import hold_settings
 from host_lib import atomic_write, export_transcript, parse_env_file
 
@@ -54,15 +52,13 @@ SCHEMA = {
         },
         "proposed_fix": {"type": "string"},
         "follow_up": {"type": "string"},
-        # A key of the restart allowlist. The runner checks it and starts the broker; the
-        # session has no start right of its own.
+        # The runner checks it and starts the broker; the session has no start right of its own.
         "restart": {"type": "string"},
     },
     "required": ["summary", "root_cause", "confidence", "evidence", "proposed_fix"],
 }
 
-# Diagnose-only. The agent user cannot reach root or write the cluster anyway; these keep a
-# diagnosis from editing the clone or starting a landing it was not asked for.
+# Diagnose-only: keeps a diagnosis from editing the clone or starting an unrequested landing.
 DENIED_TOOLS = (
     "Edit",
     "Write",
@@ -92,8 +88,8 @@ def build_argv(cfg: dict[str, str], settings: str) -> list[str]:
         cfg.get("MODEL", "opus"),
         "--permission-mode",
         "auto",
-        # Nobody answers a prompt here, so anything that would ask is denied at once rather
-        # than holding the run until its wall clock.
+        # Nobody answers a prompt, so anything that would ask is denied at once instead of holding
+        # the run.
         "--permission-prompts",
         "none",
         "--output-format",
@@ -141,8 +137,8 @@ def main(argv: list[str], config_path: str = CONFIG) -> int:
     exchange = cfg["EXCHANGE_DIR"]
     with open(os.path.join(exchange, IN_DIR, PROMPT_NAME), encoding="utf-8") as f:
         prompt = f.read()
-    # systemd sends the wall clock's SIGINT to the whole unit. A handler, not SIG_IGN, which
-    # claude would inherit: claude still stops, and this script lives on to copy the transcript.
+    # A handler, not SIG_IGN (which claude would inherit): claude still stops and this script copies
+    # the transcript.
     signal.signal(signal.SIGINT, lambda signum, frame: None)
     p = subprocess.run(
         build_argv(cfg, settings),

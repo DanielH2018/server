@@ -15,8 +15,8 @@ ROOT = Path(os.environ.get("HOMELAB_ROOT", "/"))
 T = TypeVar("T")
 
 
-# sd-daemon(3) priorities. Without one, journald files a line at the unit's default priority,
-# so `journalctl -p err` finds no failure.
+# Without a priority journald files a line at the unit's default, so `journalctl -p err` finds no
+# failure.
 ERR = 3
 WARNING = 4
 

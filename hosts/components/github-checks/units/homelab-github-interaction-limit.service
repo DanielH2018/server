@@ -7,8 +7,7 @@
 Description=GitHub interaction-limit re-arm (textfile verdict)
 After=network-online.target
 Wants=network-online.target
-# No OnFailure= alert, deliberately. A down verdict is a unit failure by this contract, and the
-# alert units page on a unit that broke. The rule already pages the verdict.
+# No OnFailure= alert, deliberately: a down verdict is a unit failure and the rule already pages it.
 
 [Service]
 SyslogLevel=notice
@@ -19,6 +18,6 @@ SyslogIdentifier=github-interaction-limit
 # Only Restart=always and Restart=on-success are refused for Type=oneshot (systemd 255).
 Restart=on-failure
 RestartSec=30min
-# The restart loop lives in memory, so a reboot ends it. This marker survives the reboot and gates
-# homelab-github-interaction-limit-boot.service. `$$` hands the variable to the shell.
+# This marker survives a reboot, unlike the in-memory restart loop, and gates the -boot service.
+# `$$` hands the variable to the shell.
 ExecStopPost=+/bin/sh -c 'if [ "$$SERVICE_RESULT" = success ]; then rm -f /var/lib/homelab/check/github-interaction-limit.down; else mkdir -p /var/lib/homelab/check && touch /var/lib/homelab/check/github-interaction-limit.down; fi'

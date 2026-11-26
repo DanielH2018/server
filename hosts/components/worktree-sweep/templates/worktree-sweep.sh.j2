@@ -61,11 +61,8 @@ else
 fi
 [ -n "$out" ] && printf '%s\n' "$out"
 {% if inventory_hostname == ops_cron_host %}
-# A removed worktree's claims read as stale from then on, but only `reap` releases them. Only
-# ops_cron_host reaps. `findings.py reap` judges a claim against this checkout's worktrees and
-# this host's fan-out manifests alone. The fan-out orchestrator runs on ops_cron_host, so a
-# reap on any other host reads its claims as stale and releases them. A reap that fails is
-# named in the journal and leaves the sweep's own exit code alone.
+# Only ops_cron_host reaps: `findings.py reap` judges claims against this host's worktrees and
+# fan-out manifests alone, so a reap elsewhere reads live claims as stale.
 case "$out" in
   *"PRUNE-RESULT: removed="[1-9]*)
     uv run --quiet python scripts/dev/findings.py reap || echo "claims not reaped: reap exited $?"

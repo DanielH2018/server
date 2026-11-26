@@ -12,8 +12,6 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 
 
-# The page size and page cap for a check-runs listing, which `read_check_pages` below walks
-# by.
 _CHECK_PAGE_SIZE, _CHECK_PAGES_MAX = 100, 20
 
 

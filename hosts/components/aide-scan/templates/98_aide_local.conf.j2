@@ -10,19 +10,11 @@
 # Container application data — media, downloads, app databases (high-churn)
 !/home/{{ sys_user }}/server/containers/data/
 
-# k3s workload data, the cluster nodes' counterpart of the Docker paths above. Each changes on
-# every write, pull or pod start, so AIDE would hash it weekly and report it every week. The k3s
-# binaries (/var/lib/rancher/k3s/data), its certificates and staged manifests (the rest of
-# /var/lib/rancher/k3s/server) and /etc/rancher stay checked. Absent on daniel-pi; a rule for a
-# missing path matches nothing.
-# Longhorn replica images: every volume's block data
+# k3s workload data churns constantly; k3s binaries, certificates and /etc/rancher stay checked.
 !/var/lib/longhorn/
 # containerd image layers and container snapshots
 !/var/lib/rancher/k3s/agent/containerd/
-# The same container filesystems again, mounted: containerd mounts every running container's
-# root filesystem as an overlay under its runtime state directory, so the snapshot exclusion
-# above does not keep AIDE out of them, and a scan can run for a day or more hashing files
-# inside them. The Pi's Docker containerd keeps its runtime state under /run/containerd.
+# Mounted container root filesystems sit under runtime state, so the snapshot exclusion misses them.
 !/run/k3s/
 !/run/containerd/
 # Network namespace handles, one per pod: nsfs mounts, not files
@@ -31,8 +23,7 @@
 !/var/lib/rancher/k3s/server/db/
 # Pod volumes: emptyDirs and projected Secrets and ConfigMaps
 !/var/lib/kubelet/pods/
-# CSI volume mounts (the Longhorn driver stages every attached volume's filesystem here, so this
-# is live application data) and kubelet's own state files, rewritten on every pod change.
+# CSI mounts hold live application data; kubelet state files rewrite on every pod change.
 !/var/lib/kubelet/plugins/
 !/var/lib/kubelet/[a-z_]+_state$
 # Container logs
@@ -46,35 +37,25 @@
 # below matches both roots.
 !/(home|var/lib)/[^/]+/server/\.claude/worktrees/
 
-# Per-user caches and session state: package-manager download caches (uv, prek, npm) and
-# per-session review scratch, all rewritten by ordinary use. ~/.local/share stays checked,
-# because the uv-managed Pythons, uv tools and node versions there are executables.
+# ~/.local/share stays checked: the uv-managed Pythons, uv tools and node versions there are
+# executables.
 !/(home|var/lib)/[^/]+/\.cache/
 !/(home|var/lib)/[^/]+/\.kube/cache/
 !/(home|var/lib)/[^/]+/\.npm/
 !/(home|var/lib)/[^/]+/\.local/state/
-# The builder's UV_CACHE_DIR: 1131 of daniel-box's changed entries on 2026-11-16.
 !/var/lib/homelab-builder/uv-cache/
 
-# The media library, under fake_remux_host_data_root. Every file there gets AIDE's Full rule
-# (about ten digests), which makes a baseline on a host with a library take far longer than on
-# one without. Video files carry nothing an integrity check protects, and the *arr stack
-# replaces them routinely.
+# The Full rule on a media library makes baselines far slower; video files carry nothing to protect.
 !/srv/media/
 # Swap files: rewritten by the kernel continuously, 8 GB each on the cluster nodes.
 !/swap\.img$
 !/swapfile$
 
-# vfat has no stored inode numbers. The kernel invents one each time it loads a file's inode,
-# so the number changes across a mount and also within one, once the inode leaves the cache.
-# Every vfat path therefore gets Full-i, the rule the aide package's 31_aide_grub-efi gives
-# Debian's EFI/debian.
-# The EFI loaders Ubuntu installs paged with their mtimes intact, because the inode changed.
-# EFI/BOOT/BOOTX64.EFI, the one file 31_aide_grub-efi covers, did not page.
+# vfat inode numbers are invented at each inode load, so every vfat path gets Full-i, the rule
+# 31_aide_grub-efi gives Debian's EFI/debian.
 /boot/efi/EFI/(ubuntu|BOOT)$ d Full-i
 /boot/efi/EFI/(ubuntu|BOOT)/[^/]+$ f Full-i
-# The Pi's firmware partition: its files paged on an inode change alone, three hours after a
-# baseline taken on the same boot.
+# Its files page on an inode change alone.
 /boot/firmware(/|$) Full-i
 
 # Virtual/pseudo filesystems — not real files, cause inflated read counts

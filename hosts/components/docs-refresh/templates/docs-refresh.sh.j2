@@ -71,28 +71,24 @@ done
 
 REPO="/home/{{ sys_user }}/server"
 UV="/home/{{ sys_user }}/.local/bin/uv"
-# Outside $REPO, so the primary checkout never lists it, and outside .claude/worktrees/, which
-# the worktree pruner sweeps. The directory is tmpfiles.d/homelab-docs-site.conf.j2's.
+# Outside $REPO so the primary checkout never lists it, and outside .claude/worktrees/, which the
+# pruner sweeps.
 TREE="/var/lib/homelab/docs-refresh.d/tree"
-# A copy of k8s/roles/docs' docs_host_site_dir, which the renderer does not load.
-# hosts/lib/tests/test_docs_refresh_component.py holds it equal to that role's default.
+# A copy of docs_host_site_dir from k8s/roles/docs, which the renderer does not load; a test holds
+# them equal.
 SITE_DIR="/home/{{ sys_user }}/docs-site"
 PR_BRANCH_PREFIX="docs-refresh/"
 
-# The failure logs, kept OUTSIDE $TREE because the next run's prepare_tree cleans it.
-# /var/lib/homelab is the setup plane's state directory (root-owned, 0755);
-# tmpfiles.d/homelab-docs-site.conf.j2 creates this subdirectory owned by the service user.
+# Kept OUTSIDE $TREE because the next run's prepare_tree cleans it.
 STAMP_DIR="/var/lib/homelab/docs-refresh.d"
-# ONE LOG PER FAILING RUN, named by the run's start time, so a later failure cannot overwrite an
-# earlier traceback. keep_failure_log prunes to the newest FAILURE_LOGS_KEPT. The `failure-`
-# prefix is what the prune globs on, so it never matches the stamp beside it.
+# One log per failing run, named by start time, so a later failure cannot overwrite an earlier
+# traceback.
+# The `failure-` prefix is what the prune globs on, so it never matches the stamp beside it.
 FAILURE_LOG="$STAMP_DIR/failure-$(date -u '+%Y%m%dT%H%M%SZ').log"
 FAILURE_LOGS_KEPT=5
 
-# DEFAULTS TO down. Every exit path that is genuinely fine says so explicitly; anything else --
-# a crash, a `set -u` abort, or a path added later that forgets to -- reports down. Failing
-# closed is the whole point: this exists because a real failure read green for hours. The PUSH_
-# prefix on these two names is vestigial: nothing is pushed.
+# Defaults to down: a crash, a `set -u` abort or a path that forgets to set it reports down.
+# The PUSH_ prefix is vestigial: nothing is pushed.
 PUSH_STATUS=down
 PUSH_MSG="docs-refresh exited without setting a status"
 # The longest legitimate gap between two textfile writes. The cron runs at 06:17 and 18:17, so
@@ -106,15 +102,13 @@ GENERATORS_OK=1
 # What degraded the run, for the terminal PUSH_MSG. Each `GENERATORS_OK=0` sets it.
 DEGRADED_MSG=""
 
-# ONE trap does both jobs: a second `trap ... EXIT` REPLACES the first, so a separate cleanup
-# trap would silently disable whichever lost. LOG is unset on the early exits, hence "${LOG:-}".
+# One trap does both jobs: a second `trap ... EXIT` replaces the first.
+# LOG is unset on the early exits, hence "${LOG:-}".
 on_exit() {
   rm -f "${LOG:-}"
-  # `status=` prefix: that token marks a host check's verdict in
-  # syslog and Loki, and the message lives only in this line.
+  # `status=` marks a host check's verdict in syslog and Loki; the message lives only in this line.
   logger -t docs-refresh "status=${PUSH_STATUS} ${PUSH_MSG}"
-  # The textfile verdict, which DocsRefreshFailed and DocsRefreshNotReporting read. Every exit
-  # path reaches this trap, so every run writes.
+  # Every exit path reaches this trap, so every run writes the textfile.
   write_check_textfile docs-refresh "$([ "$PUSH_STATUS" = up ] && echo 1 || echo 0)" "$(date +%s)" "$DEADLINE_S" \
     || logger -t docs-refresh "textfile write failed (status=${PUSH_STATUS})"
 }
@@ -130,15 +124,12 @@ source /usr/lib/homelab/homelab-check-lib.sh || {
   exit 1
 }
 
-# Records the message as well as logging it, so every call site feeds the trap's status line
-# without needing its own.
+# Records the message as well as logging it, so every call site feeds the trap's status line.
 alert() { logger -t docs-refresh "$1"; PUSH_MSG="$1"; }
 
-# build_docs.py's exit code says WHICH half failed (its main() docstring), and the two need
-# opposite responses: a generator failure publishes stale pages behind a fresh site, a site-build
-# failure leaves the docs pod serving the previous build. 2 wins over 3 when both halves fail.
-# 64 is a usage error, which this script's fixed arguments only reach after a flag is renamed.
-# 1 is a crash.
+# The exit code says which half failed, and the responses differ: a generator failure publishes
+# stale pages, a site-build failure leaves the previous build. 2 wins over 3; 64 is a renamed flag;
+# 1 a crash.
 build_docs_failure() {
   case "$1" in
     2) echo "one or more generators failed (exit 2); the published set is incomplete" ;;
@@ -148,32 +139,17 @@ build_docs_failure() {
   esac
 }
 
-# reachout_down MSG -- report a failure whose cause was reaching origin (github.com).
-#
-# Sets PUSH_STATUS from the link rather than to a flat `down`: a link that is gone is the WAN
-# check's page. An HTTP-level refusal -- a 403, the 60/hour `gh` quota -- keeps `down`, because
-# that is the source answering. The trap above does the reporting, so this only has to decide.
-#
-# Named at the two call sites that actually reach out rather than applied to every failure in the
-# trap: a generator crash or a commit failure has nothing to do with the link, and suppressing
-# those during an outage would hide a fault this cron is the only reporter of.
-# reachout_verdict is homelab-check-lib.sh's, which the run aborts without (above).
+# A gone link is the WAN check's page; an HTTP-level refusal (a 403, the `gh` quota) keeps `down`.
+# Only the two call sites that reach out use it, so a generator or commit failure is never
+# suppressed.
 reachout_down() { # msg
   reachout_verdict docs-refresh {{ wan_probe_urls | join(' ') }}
   PUSH_STATUS="$REACHOUT_STATUS"
   alert "${REACHOUT_NOTE}$1"
 }
 
-# logger takes one line, so flatten and cap -- the first few hundred characters of a git or gh
-# failure carry the reason, and the full text stays in the file until the run ends.
-#
-# FILTER BEFORE THE TAIL. prek runs every hook and keeps going past a failure, printing Passed and
-# Skipped lines after it, and mkdocs-strict is the last hook -- so a plain tail of the whole run
-# always ends `...Passed` and names no hook at all.
-#
-# THE FALLBACK IS LOAD-BEARING. `git commit` also fails for reasons whose output carries none of
-# these tokens (a signing failure, "nothing to commit"), and this script runs without `set -e`, so
-# a non-matching grep would otherwise produce an EMPTY alert -- worse than the uninformative one.
+# Filter before the tail: prek keeps running after a failure, so a plain tail ends `...Passed`.
+# The fallback is load-bearing: a failure matching no token would give an EMPTY alert.
 say_failure() {
   local detail
   detail="$(grep -E -A2 'Failed|^- hook id:|files were modified by this hook' "$2" 2>/dev/null \
@@ -182,16 +158,9 @@ say_failure() {
   alert "$1: $detail"
 }
 
-# suite_summary LOG -- pytest's own verdict: the count line, then each FAILED/ERROR node id.
-#
-# NOT say_failure. Its `Failed` token matches pytest output too, and the plain tail is wherever
-# the run stopped printing, such as a shutdown traceback printed AFTER the summary that names no
-# test. So this reads only the `short test summary info` block, wherever it sits in the file:
-# a captured-log line can also start `ERROR` at column 0, outside the block.
-#
-# The count goes first because the cap below keeps the head of an over-long message. The ` - reason`
-# suffix is dropped to fit more ids; a node id wider than pytest's 80 columns arrives with no
-# suffix at all. Prints nothing when the block is missing: a `timeout` kill or an INTERNALERROR.
+# Reads only the `short test summary info` block: the plain tail may be a traceback naming no test.
+# Count first, since the cap keeps the head; prints nothing when the block is missing (a `timeout`
+# kill).
 suite_summary() {
   awk '
     /^=+ short test summary info =+$/ { in_block = 1; next }
@@ -201,10 +170,7 @@ suite_summary() {
   ' "$1" 2>/dev/null
 }
 
-# say_suite_failure PREFIX LOG -- alert with suite_summary, else the plain tail of LOG.
-#
-# Capped at 600 so the prefix and the count survive logger's line limit; the
-# count line still says how many failures a cut list dropped.
+# Capped at 600 so the prefix and count survive logger's line limit.
 say_suite_failure() {
   local summary
   summary="$(suite_summary "$2")"
@@ -212,10 +178,8 @@ say_suite_failure() {
   alert "$1: $(printf '%s' "$summary" | head -c 600)"
 }
 
-# on_exit removes the temp log, the cron's logger pipe never sees output that went to $LOG, and
-# Loki has no stream for this script, so without this copy the cause of a failure is
-# unrecoverable the moment the run ends. Bounded, and outside $REPO for the same reason as the
-# stamp. Each run writes its own FAILURE_LOG; the prune keeps the newest FAILURE_LOGS_KEPT.
+# on_exit removes $LOG and Loki has no stream here, so without this copy a failure's cause is lost.
+# Bounded, outside $REPO; the prune keeps the newest FAILURE_LOGS_KEPT.
 keep_failure_log() {
   mkdir -p "$STAMP_DIR" 2>/dev/null || return 0
   tail -c 65536 "$1" >"$FAILURE_LOG" 2>/dev/null || return 0
@@ -224,21 +188,14 @@ keep_failure_log() {
     | head -n "-$FAILURE_LOGS_KEPT" | xargs -r -d '\n' rm -f --
 }
 
-# The kept log names the failure but not the file it happened to. `prek` diffs the tree around
-# every hook, so it knows which path a hook rewrote; this script keeps only the hook's stdout.
-#
-# These two reads name it. `git diff --stat` carries the answer: the pages are staged before the
-# hooks run, so a file a hook rewrites afterwards shows up as worktree-against-index.
-#
-# Appended to the kept log, never written to $LOG: say_failure greps $LOG and keeps the last 400
-# characters, so writing there would push the failing hook's name out of the status line.
+# Appended to the kept log, never $LOG: say_failure keeps the last 400 characters of $LOG, so
+# writing there would push the failing hook's name out of the status line.
 keep_tree_evidence() {
   mkdir -p "$STAMP_DIR" 2>/dev/null || return 0
   {
     printf '\n--- tree at the failure ---\n'
     printf '# git status --porcelain -uall\n'
-    # -uall, because a hook that CREATES a file rather than rewriting one is the case this has to
-    # name: plain porcelain collapses a wholly untracked directory to `?? docs/assets/`.
+    # -uall: plain porcelain collapses a wholly untracked directory to `?? docs/assets/`.
     git status --porcelain -uall 2>&1 | head -c 8192
     printf '# git diff --stat (unstaged: what a hook rewrote after git add)\n'
     git diff --stat 2>&1 | head -c 8192
@@ -248,8 +205,7 @@ keep_tree_evidence() {
 {% from 'cron-worktree.j2' import prepare_tree_function with context %}
 {{ prepare_tree_function('docs-refresh') }}
 
-# Every porcelain line but a fully staged one, flattened and capped for the alert: an untracked
-# file, or a tracked one modified and left unstaged.
+# Everything but a fully staged line: an untracked file, or a tracked one left unstaged.
 stray_writes() { git status --porcelain | grep -v '^[AMDR]  ' | head -c 300 | tr '\n' ' '; }
 
 cd "$REPO" || { alert "docs-refresh: $REPO missing"; exit 1; }
@@ -257,26 +213,15 @@ BASE="$(git rev-parse HEAD)" || { alert "docs-refresh: $REPO has no HEAD"; exit 
 prepare_tree "$BASE" || { alert "docs-refresh: could not prepare $TREE at $BASE"; exit 1; }
 cd "$TREE" || { alert "docs-refresh: $TREE missing"; exit 1; }
 
-# Unlanded work from a previous run means its diff is still pending. Regenerating now would
-# produce the same diff again and publish a duplicate, so build the site (the useful half,
-# and it does not need the PR) and stop. If CI is stuck the PRs would otherwise accumulate
-# one per run, twice a day, with nobody looking.
-#
-# GATED ON ORIGIN, not on the open-PR list:
-# `gh pr create` runs AFTER the push inside the publisher, so a create failure -- a `gh`
-# timeout against the 60/hour quota is enough -- leaves docs-refresh/<stamp> on origin with no
-# PR and no local trace at all. An open-PR check reads that state as "nothing open" and
-# publishes a second orphan branch, twice a day, which is the accumulation this guard exists
-# to prevent. Merged branches are deleted on this repo, so a surviving head means unlanded work.
+# Gated on origin: a failed `gh pr create` leaves docs-refresh/<stamp> pushed with no PR, which an
+# open-PR check misses. Merged branches are deleted, so a surviving head is unlanded work.
 UNLANDED="$("$UV" run --frozen python scripts/deploy_tools/publish_pr.py unlanded \
   --prefix "$PR_BRANCH_PREFIX" 2>&1)"
 UNLANDED_RC=$?
 if [ "$UNLANDED_RC" -ne 0 ]; then
-  # 2 is a PR waiting on CI: benign, it clears itself, and the docs are only a run behind.
-  # 1 (origin unreadable), 3 (a branch with no PR) and 4 (a PR with a failed check, or one
-# that conflicts with master so CI never runs) all need a human, so they report down.
-  # 1 is also the code a WAN outage produces, so it goes through reachout_down -- a branch with
-  # no PR (3) is local state and stays a flat down.
+  # 2 (waiting on CI) is benign; 1 (origin unreadable), 3 (no PR) and 4 (failed check or conflict)
+  # are down.
+  # 1 is also a WAN outage's code, so it goes through reachout_down; 3 is local state, a flat down.
   if [ "$UNLANDED_RC" -eq 2 ]; then
     alert "docs-refresh: $UNLANDED; rebuilt site only, no regeneration"
     PUSH_STATUS=up
@@ -291,40 +236,20 @@ if [ "$UNLANDED_RC" -ne 0 ]; then
   exit 0
 fi
 
-# --frozen: install from the committed uv.lock, never rewrite it on the host. A lock
-# rewrite here would show up as an unrelated dirty file on the next run.
+# --frozen: a lock rewrite on the host would show as an unrelated dirty file on the next run.
 "$UV" run --frozen python scripts/docs/build_docs.py --site-dir "$SITE_DIR"
 BUILD_DOCS_RC=$?
 if [ "$BUILD_DOCS_RC" -ne 0 ]; then
   DEGRADED_MSG="$(build_docs_failure "$BUILD_DOCS_RC")"
   alert "docs-refresh: $DEGRADED_MSG"
-  # Deliberately NOT an exit, whichever half failed. On a generator failure build_docs skipped
-  # that generator and kept the rest; on a site-build failure every page regenerated. Either
-  # way the pages that did regenerate are worth committing.
-  # It IS a down, though: a page silently generated from a failing generator is the class of
-  # fault this whole script exists to keep out of the published docs.
+  # Not an exit, whichever half failed: the pages that did regenerate are worth committing.
+  # It is still a down: a page from a failing generator is what this script keeps out of the docs.
   GENERATORS_OK=0
 fi
 
-# REFRESH THE RUNNER-SECONDS TABLE THE CI SHARDS ARE PACKED ON, from CI's own logs. Nothing
-# else writes it: CI's measured check (`pytest_shard.py --check-durations`) only annotates, and
-# a module the table lacks is packed at its directory's median. --refresh-runner 3 downloads
-# every pytest leg's log from the three newest runs that tested a green master tree, through
-# the deploy user's `gh`, the same CLI the publish step uses. A push to master skips its legs
-# when a pull-request run already tested its tree, and that run is then the one read. It adds modules the table lacks, drops deleted ones,
-# and rewrites a present row only past the DRIFT_RATIO band, so most runs leave it
-# byte-identical and publish nothing.
-#
-# IT RUNS BEFORE THE `git diff --cached --quiet` GATE BELOW. That is what lets a weights-only
-# change reach a PR: most runs regenerate no page at all, and a table written after the gate
-# would be left unstaged and never published.
-#
-# A WAN outage does not reach this step: the unlanded check above reads origin first and exits.
-# A FAILURE DEGRADES THE RUN, IT DOES NOT ABORT IT (GENERATORS_OK, not an early exit). A `gh`
-# error or fewer than three measured runs writes nothing, the pages are still worth publishing,
-# and the run reports DOWN with the reason named. `timeout` bounds the step so a wedged call
-# fails this run rather than hanging it, which would leave DocsRefreshNotReporting as the only
-# sign.
+# Refreshes the CI shard-packing table from CI's own logs; nothing else writes it.
+# Runs before the `git diff --cached --quiet` gate so a weights-only change publishes; failure
+# degrades the run (GENERATORS_OK).
 RUNNER_MSG="$(timeout 300 "$UV" run --frozen python scripts/dev/pytest_shard.py \
   --refresh-runner 3 2>&1)"
 RUNNER_RC=$?
@@ -338,21 +263,9 @@ else
   printf '%s\n' "$RUNNER_MSG"
 fi
 
-# REFRESH WHAT EACH TEST MODULE DEPENDS ON. A pull request's CI run executes only the test
-# modules its diff can affect, and scripts/dev/affected_tests.json is the table that decides it.
-# A module with no current row runs on every pull request, so this step is what makes the
-# selection narrow, and nothing else writes the table.
-#
-# `record --slices 12` traces each module that has no current row, then one twelfth of the
-# rest, so every row is recorded again within six days. It runs each module alone under
-# strace, which the component's `depends` installs. `--budget 540` starts no module after nine
-# minutes and leaves the rest their rows, so a backlog of new modules spreads over several runs.
-# The `timeout` is that budget plus the longest one module may run
-# (scripts/dev/affected_lib/record.py:MODULE_TIMEOUT_SECONDS).
-#
-# The table holds nothing that moves with the clock, so a run that records unchanged rows
-# writes the same bytes and publishes nothing. Same degrade-not-abort handling as the step
-# above. A refused module is named on stdout, which reaches the journal.
+# Refreshes affected_tests.json: a module with no row runs on every PR, and nothing else writes it.
+# `--budget 540` starts no module after nine minutes; `timeout` is the budget plus one module's
+# maximum.
 AFFECTED_MSG="$(timeout 900 "$UV" run --frozen python scripts/dev/affected_tests.py \
   record --slices 12 --budget 540 --jobs 6 2>&1)"
 AFFECTED_RC=$?
@@ -365,19 +278,12 @@ else
   printf '%s\n' "$AFFECTED_MSG"
 fi
 
-# The two generated trees, plus the tables the steps above write. Nothing else: a
-# generator that wrote outside this list would otherwise be committed silently by a cron, which
-# is exactly the class of change that must go through a PR.
-#
-# THE TABLES ARE SANCTIONED EXTRA PATHS, not generated trees. They are derived output like
-# the pages are — the `pytest_shard.py` and `affected_tests.py` steps above reproduce them — and
-# staging them is what publishes them.
+# Only the generated trees and the tables above: a write outside this list must go through a PR.
 git add docs/reference docs/assets/generated scripts/dev/pytest_shard_runner_weights.json \
   scripts/dev/affected_tests.json
 
-# A STEP THAT WROTE OUTSIDE THOSE PATHS DEGRADES THE RUN. The commit leaves that write out and
-# the next prepare_tree discards it, so without this its output would never publish and nothing
-# would say so.
+# A write outside those paths is left out of the commit and discarded next run, so it degrades the
+# run.
 STRAY="$(stray_writes)"
 if [ -n "$STRAY" ]; then
   DEGRADED_MSG="a step wrote outside the staged paths: $STRAY"
@@ -386,16 +292,9 @@ if [ -n "$STRAY" ]; then
 fi
 
 if git diff --cached --quiet; then
-  # The common outcome: the inputs are repo files and they only move when a PR merges, so most
-  # runs have nothing to publish. Up, with the reason named -- "nothing to do" must never read
-  # the same as "everything is fine", which is what the sibling host crons say too.
-  #
-  # GATED ON GENERATORS_OK, and this is the branch that matters: a failing generator typically
-  # writes nothing, so the staged diff is quiet and control arrives HERE rather than at the
-  # terminal gate below. Reporting up unconditionally laundered both the status and the reason,
-  # because `exit 0` skips that gate entirely. Leave PUSH_MSG alone on
-  # the down arm -- it still holds the failure `alert()` set, and overwriting it with "no change"
-  # would fix the status while re-laundering the reason.
+  # Up with the reason named, so "nothing to do" never reads like "everything is fine".
+  # Gated on GENERATORS_OK (a failing generator leaves a quiet diff); leave PUSH_MSG alone on the
+  # down arm.
   if [ "$GENERATORS_OK" -eq 1 ]; then
     PUSH_STATUS=up
     PUSH_MSG="no change"
@@ -419,11 +318,10 @@ fi
 # the same signal would REPLACE that one.
 LOG="$(mktemp)"
 
-# The suite, run explicitly and BEFORE the commit, because no prek hook runs it, and this cron
-# must not publish generated pages the suite rejects.
-#
-# AFTER `git add`, because pytest_shard's census reads `git ls-files` and several guards read
-# the regenerated pages off disk. `timeout` for the reason the runner refresh has one.
+# After `git add`: the shard census reads `git ls-files` and guards read the regenerated pages off
+# disk.
+# Before the commit, because no prek hook runs the suite and this cron must not publish pages it
+# rejects.
 timeout 900 "$UV" run --frozen python -m pytest >"$LOG" 2>&1
 SUITE_RC=$?
 if [ "$SUITE_RC" -ne 0 ]; then
@@ -433,10 +331,8 @@ if [ "$SUITE_RC" -ne 0 ]; then
   exit 1
 fi
 
-# NOT `if ! git commit`: inside that branch `$?` is the status of the negation, which is always 0,
-# so the exit code has to be captured from the plain command first. It is reported because git's
-# own code separates a rejected hook (1) from a signing or ref failure, which a guess at "hook
-# rejection?" would miss.
+# NOT `if ! git commit`: inside that branch `$?` is the negation's status, which is always 0.
+# Git's own code separates a rejected hook (1) from a signing or ref failure.
 git commit -m "docs: refresh generated reference pages and test shard weights" >"$LOG" 2>&1
 COMMIT_RC=$?
 if [ "$COMMIT_RC" -ne 0 ]; then
@@ -446,37 +342,29 @@ if [ "$COMMIT_RC" -ne 0 ]; then
   exit 1
 fi
 
-# Branch, push, reset, PR, landing: scripts/deploy_tools/publish_pr.py, shared with eval-run.
-# Its header carries the ordering and the HEAD~1 reasoning. It runs from $TREE, so the commit,
-# the reset and the landing's working directory are all the tree's. It prints one line to alert
-# with, and its exit code says where the commit is: 1 while it is still local in the tree, 2
-# once the branch is on origin without a PR.
+# Runs from $TREE, so the commit, the reset and the landing's working directory are all the tree's.
+# Exit 1: the commit is still local in the tree; exit 2: the branch is on origin without a PR.
 PUB_MSG="$("$UV" run --frozen python scripts/deploy_tools/publish_pr.py publish \
   --prefix "$PR_BRANCH_PREFIX" --title "docs: refresh generated reference pages and test shard weights" \
   --body "Derived output only, from the twice-daily docs-refresh cron: the pages under docs/reference/, the infra map, the pytest shard-weights table and the test-dependency table. The first two are reproducible by scripts/docs/build_docs.py and the tables by scripts/dev/pytest_shard.py and scripts/dev/affected_tests.py. Opened as a PR because a repository ruleset rejects direct writes to master." \
   2>&1)"
 PUB_RC=$?
-# The publisher prints one line, but 2>&1 also captures uv's own resolver chatter after a lock
-# bump, and logger takes one. Same flatten-and-cap as say_failure, and safe to run
-# a pipeline here because PUB_RC above already holds the status this branches on. Bash's own
-# `${PUB_MSG: -400}` is NOT the shorter way to write it: a negative offset larger than the
-# string returns the EMPTY string, so it would silently drop every message under 400 characters.
+# 2>&1 also captures uv's resolver chatter, and logger takes one line: flatten and cap.
+# Not bash's `${PUB_MSG: -400}`: a negative offset larger than the string returns the EMPTY string.
 PUB_MSG="$(printf '%s' "$PUB_MSG" | tr '\n' ' ' | tail -c 400)"
-# Exit 1 and exit 2 are both reported the same way here, deliberately. Either way the next
-# prepare_tree discards whatever the tree holds, and the unlanded arm above is what catches an
-# orphaned branch on the next run.
+# Exit 1 and exit 2 are reported the same way, deliberately: the next prepare_tree discards the
+# tree, and the unlanded arm above catches an orphaned branch on the next run.
 if [ "$PUB_RC" -ne 0 ]; then
-  # The publisher pushes a branch and opens a PR, both over the network, so this is the second
-  # arm a WAN outage reaches. PUSH_STATUS is already `down` from its default; reachout_down
-  # lowers it to a skip only when neither provider answers.
+  # The publisher pushes and opens a PR over the network, so a WAN outage reaches this arm too;
+  # reachout_down lowers PUSH_STATUS from its default `down` to a skip only when neither provider
+  # answers.
   reachout_down "docs-refresh: $PUB_MSG"
   exit 1
 fi
 
 logger -t docs-refresh "regenerated, committed, $PUB_MSG"
 # The publish succeeded either way; GENERATORS_OK decides whether it published a COMPLETE set.
-# Reporting up here regardless would let a failing generator ride out on a successful PR, which
-# is the same "the run worked, the content did not" split the FAILURE REPORT exists for.
+# Reporting up regardless would let a failing generator ride out on a successful PR.
 if [ "$GENERATORS_OK" -eq 1 ]; then
   PUSH_STATUS=up
   PUSH_MSG="regenerated, committed, $PUB_MSG"

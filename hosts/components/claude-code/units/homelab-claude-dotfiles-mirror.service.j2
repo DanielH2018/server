@@ -10,10 +10,9 @@ Type=oneshot
 # Root, so that only root writes the mirror and the verified record a T2 render reads.
 Environment=PYTHONDONTWRITEBYTECODE=1
 TimeoutStartSec=15min
-# Root has no pinned interpreter of its own, so the unit keeps one in its state directory, as the
-# builder does. ExecStartPre= installs it, which downloads, and does nothing once it is present.
-# Only ExecStart= sets UV_PYTHON_DOWNLOADS=never. Mode 0755: the render user B2 adds reads the
-# mirror and the record, and writes neither.
+# Root has no pinned interpreter, so the unit keeps one in its state directory, as the builder does.
+# 0755: the render user reads the mirror and record, writes neither. Only ExecStart= forbids
+# downloads.
 StateDirectory=homelab-claude-dotfiles-mirror
 StateDirectoryMode=0755
 Environment=UV_CACHE_DIR=/var/lib/homelab-claude-dotfiles-mirror/uv-cache

@@ -51,8 +51,6 @@ from deploy_ui_lib import deploy_ui_writes as writes
 from deploy_ui_lib.deploy_ui_reads import Unavailable
 from host_lib import logfmt
 
-# The tree lock's path is not named here: the unit passes `server_git_tree_lock` in as
-# DEPLOY_UI_TREE_LOCK, so the one definition stays in group_vars.
 PAGE = Path(__file__).with_name("deploy_ui.html")
 
 
@@ -83,16 +81,16 @@ class Config:
         e = os.environ.get
         games_file, creds = e("DEPLOY_UI_GAMES_FILE"), e("CREDENTIALS_DIRECTORY")
         return cls(
-            # The unit always sets DEPLOY_UI_REPO; the default is the operator's checkout,
-            # because this file ships to the host and has no repo to derive one from.
+            # Default is the operator's checkout: this file ships to the host and has no repo to
+            # derive one from.
             repo=Path(e("DEPLOY_UI_REPO", "/home/ubuntu/server")),
             log_dir=Path(
                 e("DEPLOY_UI_LOGS", str(Path.home() / ".local/state/deploy-ui"))
             ),
             bind=e("DEPLOY_UI_BIND", "127.0.0.1"),
             port=int(e("DEPLOY_UI_PORT", "8790")),
-            # No default: a guessed path would leave the panel reading `free` over a file
-            # nobody locks.
+            # No default: a guessed path would leave the panel reading `free` over a file nobody
+            # locks.
             tree_lock=Path(os.environ["DEPLOY_UI_TREE_LOCK"]),
             cli_log_dir=Path(
                 e("DEPLOY_UI_CLI_LOGS", f"/tmp/homelab-landings-{getpass.getuser()}")
@@ -362,8 +360,8 @@ class App:
             pid = int(body.get("pid", 0))
         except TypeError, ValueError:
             return 400, "pid must be an integer"
-        # Only a landing is cancellable from the page. SIGTERM to a deploy mid-play leaves
-        # whatever applied before it live, which is not a cancel.
+        # SIGTERM to a deploy mid-play leaves whatever applied before it live, which is not a
+        # cancel.
         listed = {r["pid"] for r in self.inflight()["runs"] if r["kind"] == "land"}
         refusal = writes.guard_cancel(pid, listed)
         if refusal:
@@ -404,8 +402,8 @@ class App:
         except Unavailable as exc:
             return 200, json.dumps({"unavailable": str(exc)})
         except Exception as exc:
-            # A parser meeting output it did not expect (a gh field gone, a JSON shape
-            # change) must reach the page as red text, not as a traceback and an empty panel.
+            # A parser meeting unexpected output must reach the page as red text, not a traceback
+            # and an empty panel.
             return 200, json.dumps({"unavailable": f"{type(exc).__name__}: {exc}"})
 
     def post(self, path: str, headers, raw: str) -> tuple[int, str]:
@@ -454,8 +452,8 @@ def request_line(
     and `user` is Authelia's `Remote-User`, `-` for a caller that came around it.
     `event` is the line's first word; the usage count matches only `request`.
     """
-    # `user` is narrowed before logfmt sees it: logfmt quotes a newline but does not escape
-    # it, so a hostile `Remote-User` would still split the journal line and forge a second one.
+    # logfmt does not escape a newline, so a hostile `Remote-User` could forge a second journal
+    # line.
     who = re.sub(r"[^\w.@-]", "_", user) or "-"
     url = urllib.parse.urlsplit(path).path or "-"
     fields = {"method": method, "path": url, "status": int(status), "user": who}
@@ -482,8 +480,7 @@ def make_handler(app: App) -> type[BaseHTTPRequestHandler]:
                 self.end_headers()
                 self.wfile.write(data)
             except BrokenPipeError, ConnectionResetError:
-                # A client that closed mid-response is not a server error; uncaught, it
-                # logs a traceback that HostLogErrors counts.
+                # Not a server error: uncaught, it logs a traceback that HostLogErrors counts.
                 self.close_connection = True
                 self._log(status, "client-disconnected")
 
@@ -520,8 +517,8 @@ def make_handler(app: App) -> type[BaseHTTPRequestHandler]:
                 self._log(status, "request")
 
         def _log(self, status: int, event: str) -> None:
-            # A request line that failed to parse leaves `command`, `path` and `headers`
-            # unset, and send_error still logs it, so each is read with a default.
+            # A request line that failed to parse leaves `command`, `path` and `headers` unset, and
+            # send_error still logs it.
             headers = getattr(self, "headers", None)
             print(
                 request_line(

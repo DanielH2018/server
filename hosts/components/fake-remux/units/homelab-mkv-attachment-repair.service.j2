@@ -3,8 +3,7 @@
 Description=Rename mkv font attachments that jellyfin-ffmpeg refuses
 After=network-online.target homelab-secrets.service
 Wants=network-online.target homelab-secrets.service
-# A missing or dangling config otherwise reads as `disabled` and exits 0. A failed start leaves
-# the state file to age, and fake-remux-health reports that.
+# A missing or dangling config otherwise reads as `disabled` and exits 0.
 AssertPathExists=/etc/autofix-fake-remux/config.env
 
 [Service]

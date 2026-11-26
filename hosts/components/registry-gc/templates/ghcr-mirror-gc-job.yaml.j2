@@ -12,19 +12,16 @@ data:
 {% set prune_script %}{% include 'files/ghcr-mirror-prune.sh' %}{% endset %}
 {{ prune_script | indent(4, true) }}
 ---
-# Prune and collect the ghcr-mirror store. A registry in proxy mode refuses manifest
-# DELETE, so the prune edits the store offline. registry-gc.sh scales only deploy/ghcr-mirror to
-# zero around this Job, never the push store, so the push store's `spec.replicas` keeps one
-# writer. dockerhub-mirror-gc-job.yaml.j2 is the same Job for the dockerhub-mirror's store.
+# A registry in proxy mode refuses manifest DELETE, so the prune edits the store offline. Scale only
+# this mirror, never the push store, so its spec.replicas keeps one writer.
 apiVersion: batch/v1
 kind: Job
 metadata:
   name: registry-gc-ghcr-mirror
   namespace: {{ k8s_namespace }}
 spec:
-  # One attempt. A retry would restart the prune and GC against a store the previous attempt
-  # was partway through mutating, and the script's scale-back-up runs on a timer it can't
-  # extend, so a silent retry could still be deleting blobs after the mirror is serving again.
+  # One attempt: a retry would prune and GC a store the previous attempt was partway through
+  # mutating.
   backoffLimit: 0
   activeDeadlineSeconds: {{ registry_k8s_gc_deadline_s }}
   ttlSecondsAfterFinished: {{ registry_k8s_gc_ttl_s }}
@@ -71,10 +68,8 @@ spec:
         - name: gc
           image: {{ registry_k8s_image }}
           command: ["/bin/registry"]
-          # Plain garbage-collect, WITHOUT --delete-untagged. The proxy stores a digest-pinned
-          # pull as a revision with no tag, so that flag would delete nearly every cached image.
-          # The prune above has already unlinked what should go; this sweeps the blobs only those
-          # revisions referenced.
+          # Plain garbage-collect, no --delete-untagged: the proxy stores a digest-pinned pull as an
+          # untagged revision, so that flag would delete nearly every cached image.
           args:
             - "garbage-collect"
             - "/etc/distribution/config.yml"
@@ -95,9 +90,8 @@ spec:
         - name: ghcr-mirror-prune-script
           configMap:
             name: registry-gc-ghcr-mirror-prune
-        # registry-gc.sh deletes this ConfigMap and writes it afresh on each run. Optional, so a
-        # run whose keep set could not be read starts the prune with no file, which prunes
-        # nothing, rather than with last week's set.
+        # Optional, so a run whose keep set could not be read prunes nothing rather than using last
+        # week's.
         - name: ghcr-mirror-keep
           configMap:
             name: registry-gc-ghcr-mirror-keep
