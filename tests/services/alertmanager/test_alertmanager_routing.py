@@ -60,7 +60,7 @@ CRITICAL_RECEIVERS = ["discord", "email"]
 ROUTED = [
     (
         "bridge-exporter.yaml",
-        25,
+        24,
         {
             "WANUnreachable",
             "DiscordDeliveryFailing",
@@ -75,7 +75,7 @@ ROUTED = [
     ),
     ("container-checks.yaml", 4, set()),
     ("edge.yaml", 7, {"CertExpiringSoon"}),
-    ("extra-probes.yaml", 5, {"ExtraProbeFailedCritical"}),
+    ("extra-probes.yaml", 6, {"ExtraProbeFailedCritical"}),
     ("flux.yaml", 5, {"FluxControllerDown"}),
     ("gitops-checks.yaml", 4, set()),
     (
