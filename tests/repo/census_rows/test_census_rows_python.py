@@ -23,6 +23,7 @@ from _future_annotations_row import NO_FUTURE_ANNOTATIONS
 from _helpers import REPO
 from _pass_through_row import NO_PASS_THROUGH_FUNCTIONS
 from _printed_json_row import PRINTED_JSON_IS_COMPACT
+from _rfc3339_replace_row import NO_Z_REPLACEMENT
 from _rendered_documents_row import RENDERED_OBJECTS_ARE_PARSED
 from _row_table import (
     Census,
@@ -461,6 +462,7 @@ ROWS = (
         },
     ),
     NO_PASS_THROUGH_FUNCTIONS,
+    NO_Z_REPLACEMENT,
 )
 _IDS = [row.name for row in ROWS]
 

@@ -66,9 +66,9 @@ def emit(line: str) -> None:
 
 def uptime_seconds(started_at: str, now: float) -> float:
     """Seconds from an RFC 3339 timestamp to `now`. Kubernetes always emits UTC with a Z."""
-    started = datetime.strptime(started_at, "%Y-%m-%dT%H:%M:%SZ").replace(
-        tzinfo=timezone.utc
-    )
+    started = datetime.fromisoformat(started_at)
+    if started.tzinfo is None:
+        raise ValueError(f"timestamp {started_at!r} has no UTC offset")
     return now - started.timestamp()
 
 

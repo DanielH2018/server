@@ -237,13 +237,13 @@ def test_k8s_health_unparseable_restart_timestamp_does_not_fail_open():
     """An unreadable finishedAt must count as RECENT, not as 'long ago'.
 
     Treating unknown as old is the one direction a gate must never fail. Reachable whenever
-    kubectl's timestamp format shifts — fractional seconds, for instance, parse as None.
+    kubectl's timestamp format shifts — a stamp with no UTC offset, for instance, parses as None.
     """
     assert health_rollout.seconds_since("not-a-timestamp", NOW) is None
     assert health_rollout.seconds_since(None, NOW) is None
 
     text, code = health_rollout.format_k8s_health(
-        _deploy(), pods(("app", 1, "2026-08-16T11:59:30.123456Z")), "freshrss", NOW
+        _deploy(), pods(("app", 1, "2026-08-16T11:59:30")), "freshrss", NOW
     )
     assert code == 1
     assert "unreadable time" in text
@@ -493,3 +493,8 @@ def test_role_health_verdict_rides_the_first_line():
         NOW,
     )
     assert "FAILED" in text.splitlines()[0]
+
+
+def test_seconds_since_rejects_a_stamp_with_no_offset():
+    assert health_rollout.seconds_since("2026-08-16", NOW) is None
+    assert health_rollout.seconds_since("2026-08-16T11:59:30", NOW) is None
