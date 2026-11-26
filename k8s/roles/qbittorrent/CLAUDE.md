@@ -109,6 +109,16 @@ stack unpacks them, so a RAR release cannot be imported anyway
 (`k8s/roles/qbittorrent/tests/test_apply_prefs.py::test_excluded_file_names_skip_fakes_and_keep_real_releases`). The comment above the keys in
 `apply_prefs.py` has the observed fake shapes.
 
+**`DESIRED` keeps a dead swarm from holding a download slot, which takes two keys.** qBittorrent
+downloads at most `max_active_downloads` torrents at once. With `dont_count_slow_torrents` set, a
+torrent below the `slow_torrent_*` rates for the inactive timer stops counting against that cap.
+`max_active_torrents` is libtorrent's `active_limit`, and that cap counts slow torrents too. So it
+sits well above `max_active_downloads`, and a queued torrent can start beside the dead ones
+(`k8s/roles/qbittorrent/tests/test_apply_prefs.py::test_a_dead_swarm_does_not_hold_a_download_slot`).
+With both caps at 10, 10 music torrents with no peers held every slot while 95 waited behind them.
+The slow-rate thresholds and the timer stay live state on the PVC. A dead torrent still never
+completes: removing it with blocklist in Lidarr is what gets a different release searched.
+
 **Flux applies `DESIRED` on every revision that rolls the pod.** The `prefs.yaml.j2` Job in
 `qbittorrent-verify` (below) runs the apply once the `qbittorrent` Kustomization reads Ready, so a
 changed value in `DESIRED` goes live on the next roll without a human

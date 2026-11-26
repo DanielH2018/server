@@ -1,7 +1,7 @@
 import json
 
 import pytest
-from hypothesis import given, settings
+from hypothesis import given
 from hypothesis import strategies as st
 
 from safe_reads import (
@@ -418,8 +418,6 @@ def test_redact_log_secrets_covers_the_cast_refresh_token():
     assert out == "cast failed: {'refresh_token': '<redacted>'}"
 
 
-FIXED = settings(derandomize=True, database=None, deadline=None, max_examples=300)
-
 JSON = st.recursive(
     st.none() | st.booleans() | st.integers() | st.text(),
     lambda inner: (
@@ -430,7 +428,6 @@ JSON = st.recursive(
 )
 
 
-@FIXED
 @given(
     token=st.text(min_size=1),
     sent=st.text(),
@@ -454,7 +451,6 @@ ROW = st.fixed_dictionaries(
 
 
 @pytest.mark.parametrize("parse", [parse_metric, parse_loki])
-@FIXED
 @given(row=ROW)
 def test_a_malformed_upstream_row_raises_value_error_or_parses(parse, row):
     try:

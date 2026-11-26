@@ -63,6 +63,9 @@ DESIRED: dict[str, bool | int | str] = {
     "checking_memory_use": 128,
     "preallocate_all": True,
     "enable_piece_extent_affinity": True,
+    "dont_count_slow_torrents": True,
+    "max_active_downloads": 10,
+    "max_active_torrents": 50,
     "excluded_file_names_enabled": True,
     "excluded_file_names": "\n".join(
         (

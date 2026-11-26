@@ -498,3 +498,9 @@ def test_a_failed_prometheus_read_under_health_exits_75(tmp_path):
             _FLUX_TAG, served="prod", tools=_kubectl(), roles_dir=tmp_path, prom=prom
         )
     assert exc.value.code == PROBE_UNREADABLE
+
+
+def test_epoch_rejects_a_stamp_with_no_offset():
+    assert health_alerts.epoch("2026-08-16") is None
+    assert health_alerts.epoch("2026-08-16T11:59:30") is None
+    assert health_alerts.epoch("2026-08-16T11:59:30Z") is not None

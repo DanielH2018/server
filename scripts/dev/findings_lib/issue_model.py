@@ -343,7 +343,7 @@ def claim_of(comments: tuple[Comment, ...]) -> Claim | None:
 def _aware(stamp: str) -> datetime | None:
     """``stamp`` as a timezone-aware datetime, or None when it is empty, unparseable or naive."""
     try:
-        when = datetime.fromisoformat(stamp.replace("Z", "+00:00"))
+        when = datetime.fromisoformat(stamp)
     except ValueError:
         return None
     return when if when.tzinfo is not None else None

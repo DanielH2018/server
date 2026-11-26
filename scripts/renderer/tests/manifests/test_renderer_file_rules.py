@@ -113,7 +113,10 @@ def test_a_declared_secret_that_reuses_a_rendered_file_name_is_flagged(stubs):
     ("entry", "reason"),
     [
         ({"name": "a", "string_data": {"F": "not_a_sops_key"}}, "not SOPS keys"),
-        ({"name": "a", "string_data": {"F": "k"}, "type": "tls"}, "unknown keys"),
+        (
+            {"name": "a", "string_data": {"F": "k"}, "type": "tls"},
+            r"unknown keys \['type'\]",
+        ),
         ({"name": "a", "string_data": {}}, "non-empty `string_data`"),
         ({"string_data": {"F": "k"}}, "needs a `name`"),
     ],

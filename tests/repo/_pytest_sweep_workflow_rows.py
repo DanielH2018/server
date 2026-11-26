@@ -58,6 +58,8 @@ def _sweep_run_problems(wf: Workflow) -> list[str]:
         found.append("the sweep hands pytest a selection or a shard")
     elif "pytest-randomly" not in runs(suite):
         found.append("the sweep does not run the suite in random order")
+    if suite is not None and "--hypothesis-profile=sweep" not in runs(suite):
+        found.append("the sweep replays the ci profile's fixed Hypothesis inputs")
     if not any(
         str(s.get("uses", "")).endswith("/pytest-tools")
         for s in steps(jobs(wf).get("sweep", {}))
@@ -173,6 +175,11 @@ def _run_in_fixed_order(job: dict) -> None:
     suite["run"] = suite["run"].replace("--with pytest-randomly ", "")
 
 
+def _run_on_the_ci_profile(job: dict) -> None:
+    suite = next(s for s in steps(job) if s.get("name") == RUN_STEP)
+    suite["run"] = suite["run"].replace(" --hypothesis-profile=sweep", "")
+
+
 def _run_a_selection(job: dict) -> None:
     for step in steps(job):
         if step.get("name") == RUN_STEP:
@@ -245,7 +252,10 @@ PYTEST_SWEEP_ROWS = (
                 "ci.yml's pytest legs run a pull request's selection, so `pytest-sweep.yml` is "
                 "the run that finds a module the selection table left out. It runs on a "
                 "schedule, never per commit where ci.yml's selection already runs, with no "
-                "selection or shard handed to pytest, and with the tools ci.yml's legs install, in random order."
+                "selection or shard handed to pytest, and with the tools ci.yml's legs install, in random order. "
+                "It runs Hypothesis under the `sweep` profile, because the default `ci` "
+                "profile draws the same inputs every run and finds nothing new once a property "
+                "has passed (`tests/hypothesis_profiles.py`)."
             ),
             offence=judge(_sweep_run_problems),
             red=mutants(
@@ -257,6 +267,7 @@ PYTEST_SWEEP_ROWS = (
                 ),
                 a_sweep_that_runs_a_selection=sweep_job(_run_a_selection),
                 a_sweep_in_fixed_order=sweep_job(_run_in_fixed_order),
+                a_sweep_on_the_ci_profile=sweep_job(_run_on_the_ci_profile),
                 a_sweep_without_the_suite_step=_rename_sweep_step(RUN_STEP, "Run"),
                 a_sweep_without_the_tools=sweep_job(_drop_the_tools),
             ),
