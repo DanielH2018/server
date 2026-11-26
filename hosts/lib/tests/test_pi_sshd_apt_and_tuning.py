@@ -99,7 +99,9 @@ def test_the_sshd_settings_sit_in_the_first_drop_in_and_the_match_block_in_the_l
     assert settings["MaxAuthTries"] == "3"
     assert settings["AllowGroups"] == "ssh-users"
     assert settings["AllowTcpForwarding"] == "no"
-    assert len(settings) == 17
+    assert "sha1" not in settings["MACs"]
+    assert settings["AuthorizedKeysFile"] == ".ssh/authorized_keys"
+    assert len(settings) == 19
     user = render_context(None, "daniel-pi", inventory=REPO_INVENTORY)["sys_user"]
     match = _text(package, f"{SSHD_D}/90-homelab-match.conf")
     assert f"Match User {user}\n" in match
