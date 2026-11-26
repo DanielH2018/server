@@ -21,8 +21,8 @@ the same version is no bump, and neither the decrease nor the alone check applie
 
 The key set anywhere else under `k8s/` or in a vars file is refused: a vars file, play vars, `include_role`
 vars and `set_fact` override a role default, so a pin there would move the deployed version
-while the role file stays put. That scan matches the key at any indent, as YAML `key:` or as
-INI `key=`, in every YAML file under `k8s/` and `estate/`, in `hosts/vars.yml` and in each
+while the role file stays put. That scan matches the key at any indent, as YAML `key:` or flow
+`{key: v}`, in every YAML file under `k8s/` and `estate/`, in `hosts/vars.yml` and in each
 `hosts/<host>/vars.yml`. A `-e` passed at run time is outside its reach.
 
 There is no bypass. The plan is docs/archive/host/h1-cluster-config-to-flux.md,
@@ -223,23 +223,18 @@ def files_setting(key: str, sha: str, repo: Path = REPO) -> list[str]:
     return [line.split(":", 1)[1] for line in hits.stdout.splitlines()]
 
 
-# A quote opens at line start or after whitespace or `{[,:=`; a quote inside a bare word, as in
+# A quote opens at line start or after whitespace or `{[,:`; a quote inside a bare word, as in
 # `x's`, opens none.
-QUOTE_OPENERS = " \t{[,:="
+QUOTE_OPENERS = " \t{[,:"
 
 
 def code_part(line: str) -> str:
     """`line` with its comment cut off, so a key quoted in the comment is not read.
 
-    A comment starts at an unquoted `#` that opens the line or follows whitespace (YAML, and
-    INI), or at a `;` that opens the line (INI).
-
-    A `#` or `;` inside a value, as in `{note: "see #1", ...}`, `note="a #b"` or
-    `ansible_user=x;y`, starts none, so an assignment after it still counts. An unclosed quote
-    keeps the rest of the line, which errs toward reading an assignment.
+    A comment starts at an unquoted `#` that opens the line or follows whitespace. A `#` inside
+    a value, as in `{note: "see #1", ...}`, starts none, so an assignment after it still counts.
+    An unclosed quote keeps the rest of the line, which errs toward reading an assignment.
     """
-    if line.lstrip().startswith(";"):
-        return ""
     quote, escaped = "", False
     for i, char in enumerate(line):
         if quote:
@@ -260,14 +255,11 @@ def code_part(line: str) -> str:
 
 
 def assigns(key: str, line: str) -> bool:
-    """Whether `line` assigns `key` at any indent: YAML `key:`, a flow `{key: v}`, INI `key=v`.
+    """Whether `line` assigns `key` at any indent: YAML `key:` or a flow `{key: v}`.
 
-    `==` is no assignment, so a `when: <key> == 'v1.2.3'` comparison is not one, and neither
-    is a key quoted in the line's comment.
+    A key quoted in the line's comment is no assignment.
     """
-    return bool(
-        re.search(rf"""(^|[\s{{,"'-]){key}["']?\s*(:|=(?!=))""", code_part(line))
-    )
+    return bool(re.search(rf"""(^|[\s{{,"'-]){key}["']?\s*:""", code_part(line)))
 
 
 def files_assigning(key: str, sha: str, repo: Path = REPO) -> list[str]:

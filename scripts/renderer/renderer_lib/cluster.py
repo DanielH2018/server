@@ -70,6 +70,7 @@ from renderer.renderer_lib.environment import (
     render_file,
     renderer_env,
 )
+from renderer.renderer_lib.key_models import key_errors, keys_model
 from renderer.renderer_lib.ordering import (
     DEFERRED_SUFFIX,
     PRECHECK_SUFFIX,
@@ -444,7 +445,7 @@ def render_tag(
     )
 
 
-_SECRET_ENTRY_KEYS = frozenset({"name", "namespace", "string_data"})
+_SecretEntry = keys_model("SecretEntry", ("name", "namespace", "string_data"))
 
 
 def secret_entries(tag: str, value: object, secrets: Mapping) -> list[dict]:
@@ -474,7 +475,7 @@ def secret_entries(tag: str, value: object, secrets: Mapping) -> list[dict]:
         where = f"{tag}: render_secrets[{i}]"
         if not isinstance(entry, dict):
             raise RenderError(f"{where} must be a mapping")
-        unknown = sorted(set(entry) - _SECRET_ENTRY_KEYS)
+        unknown = key_errors(_SecretEntry, entry).unknown
         if unknown:
             raise RenderError(f"{where} has unknown keys {unknown}")
         if not isinstance(entry.get("name"), str) or not entry["name"]:
