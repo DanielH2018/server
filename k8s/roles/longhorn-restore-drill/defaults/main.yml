@@ -65,7 +65,6 @@ k3s_longhorn_restore_drill_min_bytes: 1
 # Drop a name once its volume holds data; the ceiling below also withdraws the waiver.
 k3s_longhorn_restore_drill_empty_ok_pvcs:
   - n8n-files
-  - vaultwarden-data
 # The waiver applies only while the source volume's actualSize stays under this, else an empty
 # restore of a filled volume stamps success.
 # 60 MiB sits ~11 MB above the 51 MB bare-ext4 band; raising it widens what a `files=0` restore is

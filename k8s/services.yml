@@ -524,14 +524,13 @@ containers_list:
     homepage_widget: true
     no_backup_claims: [slskd-config]  # settings and transfer history; downloads live on media-data
   - name: vaultwarden
-    weekly_backup_claims: {vaultwarden-data: 1}  # Mon
+    # Credentials edited this week cannot be re-derived (ADR 0007).
+    r2_backup_claims: [vaultwarden-data]
     hostname: "vaultwarden"
     port: 8080
-    # Bitwarden clients cannot follow Authelia's 302; the LAN-only route gates instead.
+    # Bitwarden clients cannot follow Authelia's 302; the role's source allowlist gates instead.
     use_authelia: false
     public_route: false
-    # Held at zero replicas, so a probe would read 503. Drop with vaultwarden_k8s_replicas.
-    probe: false
   - name: airflow
     # Holds daily history that its sources discard within a week.
     r2_backup_claims: [airflow-postgres-data]

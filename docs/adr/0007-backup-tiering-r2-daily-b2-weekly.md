@@ -30,6 +30,11 @@ recorder keeps seven. A week-old restore would therefore lose days that no backf
 re-derive, which is the trade *Decision* accepts for the B2 set. A `containers_list` entry
 declares such a volume in `r2_backup_claims`, and *Decision* names it.
 
+Amended on 2026-11-26. The operator moved the password vault, `vaultwarden-data`, from a
+weekly B2 shard to the daily R2 tier. A week of edits to stored credentials is too much to
+lose. The R2 tier carries no object lock (ADR 0041), so the operator keeps an offline encrypted
+export of the vault as the copy that survives a deletion of the bucket.
+
 ## Context
 
 Backblaze B2 charges per API transaction, and the account has caps. The homelab hit them
@@ -56,8 +61,9 @@ Two backup targets, split by what the data is worth and what it costs.
 Four volumes go to Cloudflare R2 daily: the TLS material, the SSO store and the two
 home-automation stores. R2 exists so that these survive a B2 account-level failure — a cap,
 a billing problem or a lockout. Since 2026-11-20 the Airflow warehouse joins them, because a
-week-old restore of it loses history its sources no longer hold. The five are the whole
-daily tier.
+week-old restore of it loses history its sources no longer hold. Since 2026-11-26 the
+password vault joins them, because nothing re-derives a credential edited that week. The six
+are the whole daily tier.
 
 Every other backed-up volume goes to B2 weekly, sharded across the seven weekdays by list
 index modulo the day of week, roughly three volumes a day, so no single cap-day carries a

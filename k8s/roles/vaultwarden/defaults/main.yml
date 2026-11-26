@@ -8,9 +8,23 @@ vaultwarden_k8s_image: vaultwarden/server:1.37.5@sha256:4fe17f415f90087377d37c75
 k8s_autodeploy: false
 k8s_autodeploy_reason: "password store with schema migrations on upgrade; an unattended bump could migrate the vault database with nobody watching"
 
-# DECIDED: held at 0 until the operator cuts over (2026-11-18). Raising it also means dropping
-# `probe: false` from the containers_list entry.
-vaultwarden_k8s_replicas: 0
+vaultwarden_k8s_replicas: 1
+
+# A bool. True for exactly one landing while the operator registers the single account; the
+# same PR narrows vaultwarden_k8s_allowed_sources to the registering device's /32.
+vaultwarden_k8s_signups_allowed: false
+
+# The only sources the IngressRoute admits, matched on the remote address. Traefik's Service is
+# externalTrafficPolicy: Local, so that is the real client.
+# DECIDED: never a pod or service CIDR. It would admit every pod in the cluster; WireGuard peers
+# arrive as wg-easy's pod IP, so they wait for a stable wg-easy source rather than widening this.
+vaultwarden_k8s_allowed_sources:
+  - "{{ lan_subnet }}"
+
+# The only sources Vaultwarden takes X-Real-IP from, which keys its login rate limit: Traefik's
+# node's pod subnet (Traefik is pinned to k8s_primary_node). A host process or admitted pod on
+# that node could still set the header; one on daniel-server cannot.
+vaultwarden_k8s_trusted_proxies: 10.42.0.0/24
 
 vaultwarden_k8s_cpu_limit: "500m"
 vaultwarden_k8s_mem_limit: 256Mi

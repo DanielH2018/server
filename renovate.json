@@ -1216,6 +1216,19 @@
       "rebaseWhen": "conflicted"
     },
     {
+      "description": "willfarrell/autoheal:latest is rebuilt almost daily although its source last changed 2025-09-09 (#10153), and each digest bump costs a CI run, a package build and a Pi container recreation. This rule moves its PR to the first day of the month and keeps automerge, because a rebuild may carry base-image fixes. It must sit after the Pi digest rule.",
+      "matchManagers": [
+        "custom.regex"
+      ],
+      "matchFileNames": [
+        "hosts/components/pi-compose/services/autoheal/compose.yaml.j2"
+      ],
+      "schedule": [
+        "before 6am on the first day of the month"
+      ],
+      "updateNotScheduled": false
+    },
+    {
       "description": "The Pi's wg-easy pin never automerges. wg-easy is the remote-access path into the LAN, so a bad image can cut the tunnel the operator would use to fix it, and a v15 bump is a migration. Scoped by file, not package name, so the cluster's wg-easy keeps its own rules (#4011).",
       "matchManagers": [
         "custom.regex"

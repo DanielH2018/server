@@ -2,11 +2,14 @@
 
 ablate.py checks Budget before every engine call. Before a run starts it also plays the
 whole plan through a Budget at prices taken from past engine reports (#4308), so a plan
-whose baseline, -doc and first section arm cannot all finish is refused before it spends.
+whose two fixed arms, and first section arm if it has sections, cannot all finish is
+refused before it spends.
 """
 
 import json
 import shlex
+import sys
+from collections.abc import Callable
 from pathlib import Path
 
 # Each ablation run stays under $10.
@@ -105,6 +108,14 @@ def complete_arms(per_run: list[float], k: int, n_arms: int, cap: float) -> int:
     return n_arms
 
 
+FIXED_ARMS = 2
+
+
+def min_arms(sections: list[str]) -> int:
+    """The arms a plan must finish to measure anything: both fixed arms and one section."""
+    return FIXED_ARMS + min(1, len(sections))
+
+
 def fitting_selection(
     case_ids: list[str],
     per_run: dict[str, float],
@@ -112,13 +123,15 @@ def fitting_selection(
     sections: list[str],
     cap: float,
 ) -> tuple[list[str], list[str]]:
-    """The largest selection whose baseline, -doc and first section arm all finish.
+    """The largest selection whose two fixed arms, and its first section arm, all finish.
 
-    Cases are taken cheapest first while those three arms still fit, then sections in the
-    given order while their arms still fit. k stays fixed, because the case thresholds
-    assume it. Both lists are empty when not even one case fits. The cases come back in
-    `case_ids` order, the order the runner plays them in.
+    Every plan opens with two fixed arms: baseline and -doc, or baseline and -skill. Cases
+    are taken cheapest first while those, plus the first section arm when `sections` is not
+    empty, still fit; then sections in the given order while their arms still fit. k stays
+    fixed, because the case thresholds assume it. Both lists are empty when not even one
+    case fits. The cases come back in `case_ids` order, the order the runner plays them in.
     """
+    needed = min_arms(sections)
 
     def in_run_order(chosen: set[str]) -> list[float]:
         # Whether an arm's last run launches depends on what the runs before it spent, so
@@ -127,14 +140,58 @@ def fitting_selection(
 
     picked: set[str] = set()
     for cid in sorted(case_ids, key=lambda c: (per_run[c], c)):
-        if complete_arms(in_run_order(picked | {cid}), k, 3, cap) < 3:
+        if complete_arms(in_run_order(picked | {cid}), k, needed, cap) < needed:
             break
         picked.add(cid)
     if not picked:
         return [], []
-    arms = complete_arms(in_run_order(picked), k, 2 + len(sections), cap)
+    arms = complete_arms(in_run_order(picked), k, FIXED_ARMS + len(sections), cap)
     picked_ids = [c for c in case_ids if c in picked]
-    return picked_ids, sections[: arms - 2]
+    return picked_ids, sections[: arms - FIXED_ARMS]
+
+
+def plan_fits(
+    case_ids: list[str],
+    k: int,
+    n_arms: int,
+    sections: list[str],
+    cap: float,
+    reports: list[Path],
+    rerun_flags: Callable[[list[str], list[str]], str],
+) -> bool:
+    """Print what a plan costs, and whether it finishes the arms a measurement needs.
+
+    Each case is priced at its costliest past run in `reports`, else UNPRICED_RUN_USD. A
+    plan that cannot finish both fixed arms, and one section arm when `sections` is not
+    empty, is refused on stderr with `rerun_flags(cases, sections)` for the largest
+    selection that fits.
+    """
+    priced = run_costs(report_entries(reports))
+    per_run = {c: priced.get(c, UNPRICED_RUN_USD) for c in case_ids}
+    arm_usd = k * sum(per_run.values())
+    finished = complete_arms(list(per_run.values()), k, n_arms, cap)
+    needed = min_arms(sections)
+    print(
+        f"estimate: {sum(c in priced for c in per_run)} of {len(case_ids)} case(s) priced "
+        f"from past reports, the rest at ${UNPRICED_RUN_USD:.2f} a run; ${arm_usd:.2f} an "
+        f"arm; {finished} of {n_arms} arm(s) expected to finish"
+    )
+    if finished >= needed:
+        return True
+    print(
+        f"refusing: the {needed} arms a measurement needs cost ${needed * arm_usd:.2f}, "
+        f"and the cap leaves ${cap - WORST_RUN_USD:.2f} once a run's "
+        f"${WORST_RUN_USD:.2f} worst case is held back",
+        file=sys.stderr,
+    )
+    fit_cases, fit_sections = fitting_selection(case_ids, per_run, k, sections, cap)
+    print(
+        f"largest selection that fits: {rerun_flags(fit_cases, fit_sections)}"
+        if fit_cases
+        else f"no selection fits: one case's {needed} arms exceed the cap",
+        file=sys.stderr,
+    )
+    return False
 
 
 def selection_flags(
