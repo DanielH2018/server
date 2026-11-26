@@ -25,15 +25,10 @@ EXTENSIONS_DIR=/config/extensions
 CODE_SERVER="${CODE_SERVER:-/app/code-server/bin/code-server}"
 VSIX_DIR="${VSIX_DIR:-/opt/vsix}"
 
-# Extensions retired from the image. Dropping one from /opt/vsix does NOT remove it: this
-# script only ever installed, so a retired extension stays on the config volume and keeps
-# running against a toolchain the image no longer ships. The two below belong to TeX Live;
-# LaTeX Workshop in particular would sit there shelling out to a latexmk that is gone.
-#
-# An explicit list, NOT "remove anything not in /opt/vsix": extensions installed by hand
-# through the code-server UI live in the same directory and are not this script's to delete.
-# Removing an id from here once it is gone from every volume is safe — uninstalling an absent
-# extension is a no-op.
+# Retired extensions stay on the config volume (this script only installs) and run against a
+# toolchain the image dropped.
+# An explicit list, NOT "remove anything not in /opt/vsix": UI-installed extensions share the
+# directory.
 RETIRED_EXTS="
     james-yu.latex-workshop
     tomoki1207.pdf
@@ -44,8 +39,7 @@ for ext in $RETIRED_EXTS; do
     "${CODE_SERVER}" --extensions-dir "${EXTENSIONS_DIR}" --uninstall-extension "${ext}" || true
 done
 
-# code-server refuses to reinstall a version it already holds ("Please restart VS Code before
-# reinstalling") and exits non-zero, so an unchanged VSIX is skipped rather than installed.
+# code-server exits non-zero when reinstalling a held version, so an unchanged VSIX is skipped.
 # Each file name is the `<id>@<version>` line --show-versions prints; ids are case-insensitive.
 installed="$("${CODE_SERVER}" --extensions-dir "${EXTENSIONS_DIR}" --list-extensions --show-versions)"
 

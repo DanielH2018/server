@@ -35,10 +35,8 @@ rules:
   - apiGroups: [""]
     resources: [pods/log]
     verbs: [get]
-  # The verdict export (files/janitorr_health.py:export_verdict): a merge patch of the
-  # annotations on the one ConfigMap this role renders for it. `get` as well as `patch`, because
-  # `kubectl patch` GETs the object before it sends the PATCH, and the grant names the
-  # object so it reaches no other.
+  # `get` as well as `patch`: `kubectl patch` GETs the object first; the grant names the one
+  # ConfigMap.
   - apiGroups: [""]
     resources: [configmaps]
     verbs: [get, patch]

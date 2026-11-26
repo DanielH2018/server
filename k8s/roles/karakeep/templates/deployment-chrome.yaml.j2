@@ -20,13 +20,9 @@ spec:
     metadata:
       labels:
         app: karakeep-chrome
-        # EXEMPT, not enforced. The baseline's ingress rule carries no `ports:` key, so labelling
-        # this pod admits traefik, prometheus and both node bridges on EVERY port — including
-        # 9222, where Chrome serves unauthenticated DevTools (remote browser control) and must
-        # bind 0.0.0.0 because karakeep dials it cross-pod. That is strictly wider than the
-        # policy in this role's networkpolicy-chrome.yaml.j2, which admits app=karakeep alone.
-        # Same reasoning as flaresolverr and n8n: a headless browser rendering attacker-supplied
-        # pages is exactly the workload not to widen.
+        # Exempt from the baseline, which would admit every port and expose unauthenticated DevTools
+        # on 9222.
+        # networkpolicy-chrome.yaml.j2 admits app=karakeep alone.
         netpol-baseline-exempt: "true"
     spec:
 {{ pod_shell('homelab-standard') }}
@@ -35,57 +31,20 @@ spec:
         - name: chrome
           image: {{ karakeep_k8s_chrome_image }}
           imagePullPolicy: IfNotPresent
-          # These are APPENDED to what the image's own entrypoint already passes, not a full
-          # command line. /headless-shell/run.sh runs headless-shell on 127.0.0.1:9223 with
-          # --no-sandbox, --use-gl=angle, --use-angle=swiftshader and
-          # --remote-debugging-address=0.0.0.0, then socat-forwards 9222 -> 9223.
-          #
-          # So three flags are absent deliberately, and one of them is load-bearing to omit: a
-          # trailing --remote-debugging-port=9222 wins over the entrypoint's 9223, which would
-          # put headless-shell and socat on the same port. --no-sandbox and
-          # --remote-debugging-address would merely be duplicates.
-          #
-          # karakeep's upstream compose list also passes
-          # --disable-blink-features=AutomationControlled and --window-size=1440,900; both are
-          # adoptable, but the window size changes the dimensions of every newly captured
-          # screenshot, so taking them is a rendering change and belongs in its own commit.
+          # Appended to the entrypoint's flags: a trailing --remote-debugging-port=9222 would
+          # collide with socat on 9222, because the entrypoint puts headless-shell on 9223.
           args:
             - --disable-gpu
             - --disable-dev-shm-usage
             - --hide-scrollbars
           ports:
             - containerPort: 9222
-          # 65534, not 1000: karakeep-chrome's Dockerfile ends `USER 65534:65534`. The uid here
-          # must MATCH the image's own — asserting it is what makes it an API-server guarantee rather than an
-          # image default a future tag bump could drop silently, and runAsNonRoot alone would
-          # not do it, because the kubelet only rejects a numeric root uid.
-          # Safe for THIS container specifically because it mounts only the kubelet-created
-          # 0777 emptyDirs at /tmp and /var/cache/fontconfig below and binds 9222, an
-          # unprivileged port; chromium's profile goes to a temp dir under /tmp, and no
-          # root-owned path in the image is written, so there is no volume here for uid 65534
-          # to need chowned.
-          #
-          # Do not copy it to the sibling
-          # karakeep deployments without checking each one: karakeep's own /data seed tree and
-          # time-tagger's /root/.cache/uv are root-owned, so the same three lines would break
-          # them. The entrypoint runs chromium with --no-sandbox, so it
-          # needs no SYS_ADMIN or sandbox caps.
-          #
-          # read_only follows from the same fact. The image is chromedp/headless-shell plus
-          # `USER 65534:65534` (upstream docker/chrome/Dockerfile — it adds nothing else), and
-          # its /headless-shell/run.sh passes no --user-data-dir, so headless chromium picks a
-          # temp profile dir under /tmp. Running unprivileged over a root-owned image tree is
-          # already the evidence that nothing outside a world-writable path is written; the
-          # two paths readOnlyRootFilesystem takes away are /tmp and /var/cache/fontconfig,
-          # which the two emptyDirs below give back. The sibling karakeep container does NOT
-          # get this — see the DECIDED comment in deployment.yaml.j2.
+          # uid 65534 must match the image's USER, so the API server guarantees it. Do not copy it
+          # to the sibling deployments: their root-owned /data and /root/.cache/uv would break.
 {{ hardened_security_context(read_only=true, non_root=true, run_as_user=65534) }}
           volumeMounts:
-            # Chromium's profile, its crash dumps, and — because of --disable-dev-shm-usage
-            # above — the shared-memory files it would otherwise put in /dev/shm. Default
-            # medium, not Memory: those files can be large per tab, and a memory-backed
-            # emptyDir charges them against the 2048Mi limit, where the container's writable
-            # layer they replace was node disk.
+            # Default medium, not Memory: --disable-dev-shm-usage files are large per tab and would
+            # count against the limit.
             - name: chrome-tmp
               mountPath: /tmp
             # DECIDED: an emptyDir alone, no env var.
@@ -117,8 +76,5 @@ spec:
       volumes:
         - name: chrome-tmp
           emptyDir: {}
-        # Default medium for the same reason as chrome-tmp, though the stake is smaller: a
-        # rendered fontconfig cache is a few hundred KiB, and node disk is the right place
-        # for it rather than the 2048Mi limit.
         - name: chrome-fontconfig-cache
           emptyDir: {}

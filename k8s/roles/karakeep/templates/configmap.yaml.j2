@@ -6,16 +6,7 @@ metadata:
   namespace: {{ k8s_namespace }}
 data:
   karakeep-time-tagger.py: |
-{#
-  Vendored rather than downloaded at deploy time. A ConfigMap
-  has to be rendered from something that exists when the manifest renders, and CI renders every
-  template on a machine that has never run a deploy — a lookup on a downloaded path can only
-  ever fail there, which would mean this manifest is the one nothing validates.
-
-  Vendoring trades that for a copy that could drift from its upstream pin, so
-  the `karakeep-time-tagger-script-matches-its-pinned-sha256` row of tests/repo/_config_rows.py
-  holds this file's sha256 to the pinned checksum.
-#}
+{# Vendored because CI renders on a machine that never deployed; a test pins the sha256. #}
 {{ lookup('file', role_file('files/karakeep-time-tagger.py')) | indent(4, true) }}
 ---
 apiVersion: v1

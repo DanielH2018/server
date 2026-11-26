@@ -32,13 +32,10 @@
 {% set head %}
 # A flaky check fails rather than passing on a retry.
 backoffLimit: 0
-# Below the 600s `manifests_rollout_timeout_default` every `<tag>-verify` Kustomization takes.
-# The control's 60s of connect retries, then one 5s connect.
 activeDeadlineSeconds: 180
 {% endset %}
 {% set label_note %}
-# A peer of prowlarr's fence, for the control, and not of flaresolverr's, which is what
-# the isolation leg needs. It must never be `prowlarr`.
+# Never `prowlarr`: the control needs a peer of prowlarr's fence but not of flaresolverr's.
 {% endset %}
 {% set env %}
 - name: CONTROL_URL

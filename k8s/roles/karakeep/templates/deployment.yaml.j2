@@ -9,8 +9,7 @@ metadata:
   name: karakeep
   namespace: {{ k8s_namespace }}
 spec:
-  # The PVC is ReadWriteOnce and Longhorn runs one replica, so a rolling update would deadlock:
-  # the new pod waits for a volume the old pod still holds.
+  # RWO PVC with one replica: a rolling update would deadlock on the volume.
 {{ spec_shell('Recreate') }}
   # The same budget as the drain's wait. See karakeep_k8s_rollout_timeout in defaults/main.yml.
   progressDeadlineSeconds: {{ karakeep_k8s_rollout_timeout[:-1] | int }}
@@ -26,18 +25,8 @@ spec:
     spec:
 {{ pod_shell('homelab-standard') }}
       initContainers:
-        # A start gate on karakeep-chrome and karakeep-meilisearch being READY, which k8s has
-        # no `depends_on` equivalent for. Milder than the time-tagger's version of this —
-        # karakeep starts either way — but the gate is on readiness rather than start order,
-        # because meili's index must be ready or the app logs search errors on a cold start
-        # until it catches up.
-        #
-        # Connecting to the Services rather than the pods is what makes this a gate on
-        # readiness: a Service has no endpoints until its probe passes.
+        # Gates on readiness, not start order: a Service has no endpoints until its probe passes.
         - name: wait-for-deps
-          # The time-tagger's in-cluster-built image, reused because it is the only image this
-          # role has with a python3 and no s6 init. `Always` because it is built here — see the
-          # `built-images-pull-always` row of tests/k8s/_workload_property_rows.py.
           image: {{ karakeep_k8s_tagger_image }}
           imagePullPolicy: Always
           command:
@@ -52,12 +41,6 @@ spec:
                           break
                       except OSError:
                           time.sleep(5)
-          # read_only: the whole program is the `python3 -c` above. It imports two stdlib
-          # modules whose bytecode is already in the image and writes nothing, so it needs no
-          # writable path at all — no emptyDir goes with this.
-          #
-          # uid 1000: this container installs nothing and only imports stdlib, so it needs no
-          # root. The tagger's image is built by k8s/image-builder so it can run non-root.
 {{ hardened_security_context(read_only=true, non_root=true, run_as_user=1000, run_as_group=1000) }}
 {{ container_resources(cpu_limit='250m', mem_limit='128Mi', cpu_request='10m', mem_request='16Mi') }}
 {{ node_affinity_preference('daniel-server') }}
@@ -103,8 +86,7 @@ spec:
               value: "{{ tz }}"
             - name: DATA_DIR
               value: /data
-            # Upstream defaults to debug, and its request logger writes two info lines per
-            # request. NO_COLOR is truthy on any non-empty string, "false" included.
+            # NO_COLOR is truthy on any non-empty string, "false" included.
             - name: LOG_LEVEL
               value: warn
             - name: NO_COLOR
@@ -114,26 +96,17 @@ spec:
               value: http://karakeep-meilisearch:7700
             - name: BROWSER_WEB_URL
               value: http://karakeep-chrome:9222
-            # NextAuth builds sign-in redirects and callback URLs from this, so it has to be the
-            # hostname a browser actually arrives on. Getting it wrong does not fail at startup — the
-            # pod goes ready and login breaks, bouncing users to a host that will not resolve
-            # for them. Same treatment as speedtest's APP_URL.
+            # Must be the hostname browsers arrive on; a wrong value breaks login without failing
+            # startup.
             - name: NEXTAUTH_URL
               value: "https://{{ container_item.hostname | default(container_item.name) }}.{{ domain }}"
-            # better-auth refuses a sign-in whose origin is not listed here, on top of NEXTAUTH_URL.
-            # Upstream defaults this to `*`, which trusts whatever address the request arrived on
-            # (packages/shared/config.ts). Listing the public name and the `.local.` LAN name, the
-            # two this role routes (ingressroute.yaml.j2), keeps a sign-in on either working and
-            # refuses any other origin. A browser that reaches the app by a LAN IP is signed out
-            # of that address; add its origin here if one is ever needed.
+            # Upstream defaults to `*`; list only the two routed origins, and any other is refused.
             - name: AUTH_TRUSTED_ORIGINS
               value: "https://{{ container_item.hostname | default(container_item.name) }}.{{ domain }},https://{{ container_item.hostname | default(container_item.name) }}.local.{{ domain }}"
-            # These two are what make the public /api/trpc/ bypass safe, because that prefix also
-            # reaches the app's public procedures: users.create (signup) and apiKeys.exchange
-            # (email and password in, API key out). Both names are the ones the app reads
-            # (packages/shared/config.ts upstream); DISABLE_NEW_USERS_REGISTRATION is ignored by
-            # the app and leaves signup open on the internet. RATE_LIMITING_ENABLED defaults to false upstream, and
-            # without it apiKeys.exchange's own 10-per-15-minutes limit never runs.
+            # These make the public /api/trpc/ bypass safe: DISABLE_NEW_USERS_REGISTRATION is
+            # ignored by the app.
+            # RATE_LIMITING_ENABLED defaults to false, so apiKeys.exchange's limit never runs
+            # without it.
             - name: DISABLE_SIGNUPS
               value: "true"
             - name: RATE_LIMITING_ENABLED
@@ -146,14 +119,8 @@ spec:
               value: gemini-2.5-flash-lite
             - name: INFERENCE_TAGS_ENABLED
               value: "true"
-            # Upstream defaults this to 1 (packages/shared/config.ts). That fits local inference,
-            # where a second worker just contends for the same GPU — but OPENAI_BASE_URL above
-            # points at Gemini, so a tagging job is a network round-trip and one worker serializes
-            # the whole backlog behind latency rather than compute. The container has 2 CPU and
-            # 2048Mi and sits near-idle.
-            # The bounded downside: the tagging queue runs numRetries 3 with keepFailedJobs false,
-            # so three workers make Gemini free-tier 429s likelier and an exhausted job is dropped
-            # silently. The failure is a bookmark that never gets auto-tagged, not a lost bookmark.
+            # Tagging is network-bound, so 3 workers; more risk Gemini 429s and silently dropped
+            # jobs.
             - name: INFERENCE_NUM_WORKERS
               value: "3"
             - name: MEILI_MASTER_KEY
@@ -178,8 +145,6 @@ spec:
               mountPath: /app/apps/web/.next/cache
             - name: karakeep-run
               mountPath: /run
-          # `/` answers 307 (measured against the running container), and k8s counts 2xx-3xx as
-          # success, so httpGet is safe here — unlike livesync, whose endpoints answer 401.
           readinessProbe:
             httpGet:
               path: /
@@ -197,18 +162,13 @@ spec:
         - name: karakeep-data
           persistentVolumeClaim:
             claimName: {{ karakeep_k8s_claim }}
-        # 256 MiB of in-memory scratch for Next.js's image-optimisation cache: the image dir
-        # is node-owned but the container runs as root with no DAC_OVERRIDE, so thumbnail
-        # writes EACCESed and every request re-optimised. The pages count against the
-        # container's memory limit.
+        # Memory emptyDir: root lacks DAC_OVERRIDE on the node-owned image dir; counts against the
+        # memory limit.
         - name: karakeep-next-cache
           emptyDir:
             medium: Memory
             sizeLimit: 256Mi
-        # s6's runtime tree: the compiled service database, its control FIFOs and
-        # uncaught-logs, which s6-log rotates. Memory, because s6 expects a tmpfs at /run.
-        # 64Mi bounds it far above what that tree holds, and the pages count against the
-        # container's memory limit.
+        # Memory because s6 expects a tmpfs at /run; counts against the memory limit.
         - name: karakeep-run
           emptyDir:
             medium: Memory
