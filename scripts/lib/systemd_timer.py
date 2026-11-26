@@ -18,8 +18,9 @@ import re
 
 DAY_S = 86400
 
-_SPAN = re.compile(r"(\d+)\s*(h|hr|min|m|s|sec)?")
-_UNITS = {"h": 3600, "hr": 3600, "min": 60, "m": 60, "s": 1, "sec": 1, None: 1}
+_UNITS = {"h": 3600, "hr": 3600, "min": 60, "m": 60, "s": 1, "sec": 1}
+# Longest first: an alternation takes its first match, so `h` ahead of `hr` strands the `r`.
+_SPAN = re.compile(rf"(\d+)\s*({'|'.join(sorted(_UNITS, key=len, reverse=True))})?")
 # Triggers that fire once after boot. They add no gap once the host is up.
 _BOOT_ONLY = frozenset({"OnBootSec", "OnStartupSec"})
 TRIGGERS = frozenset(
@@ -43,33 +44,46 @@ def span_s(value: str) -> int:
     parts = _SPAN.findall(value)
     if not parts or _SPAN.sub("", value).strip():
         raise ValueError(f"{value!r} is not a span this module reads")
-    return sum(int(n) * _UNITS[unit or None] for n, unit in parts)
+    return sum(int(n) * _UNITS[unit or "s"] for n, unit in parts)
 
 
 def _field(text: str, top: int) -> list[int]:
-    """The values one OnCalendar time field matches: `*`, `a`, `a..b`, each with `/step`."""
+    """The values one OnCalendar time field matches: `*`, or `a` or `a..b` with `/step`.
+
+    The bounds are the ones `systemd-analyze calendar` enforces.
+
+    Raises:
+        ValueError: A value past `top`, a reversed range, a zero or empty step, a step on
+            `*`, or a single value whose first step already passes `top`.
+    """
     values = set()
     for part in text.split(","):
-        body, _, step = part.partition("/")
+        body, slash, step_text = part.partition("/")
+        step = int(step_text) if slash else 1
         if body == "*":
             low, high = 0, top
+            valid = not slash
         elif ".." in body:
             low, high = (int(n) for n in body.split(".."))
+            valid = low <= high <= top
         else:
             low = int(body)
-            high = top if step else low
-        values.update(range(low, high + 1, int(step) if step else 1))
+            high = top if slash else low
+            valid = low <= top and (not slash or low + step <= top)
+        if not valid or step < 1:
+            raise ValueError(f"{part!r} is out of bounds for a field of 0..{top}")
+        values.update(range(low, high + 1, step))
     return sorted(values)
 
 
 def calendar_fires(expression: str) -> list[int]:
     """The seconds after midnight at which a daily `OnCalendar=` expression fires.
 
-    Reads `*-*-* H:M[:S]` and `H:M[:S]` alone, each field a comma list of `*`, `a` or `a..b`,
-    each with an optional `/step`.
+    Reads `*-*-* H:M[:S]` and `H:M[:S]` alone, each field a comma list of `*`, `a` or `a..b`.
+    `a` and `a..b` take an optional `/step`.
 
     Raises:
-        ValueError: The expression is not one this module reads.
+        ValueError: The expression is not one this module reads, or a field is out of bounds.
     """
     words = expression.split()
     if len(words) == 2 and words[0] == "*-*-*":
