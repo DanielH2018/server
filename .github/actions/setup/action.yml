@@ -52,9 +52,8 @@ inputs:
 runs:
   using: composite
   steps:
-    # apt reads every pocket through mirror+file:/etc/apt/apt-mirrors.txt and tries each listed
-    # host in turn. All of them are ubuntu.com names, so one DNS outage fails them all. A runner
-    # that refuses sudo, such as a pod under `restricted`, keeps its list and gets a notice.
+    # All apt mirrors are ubuntu.com names, so one DNS outage fails them all; a runner that refuses
+    # sudo keeps its list.
     - name: Add a non-ubuntu.com apt mirror as the last fallback
       shell: bash
       env:
@@ -74,39 +73,26 @@ runs:
       if: inputs.uv == 'true'
       uses: astral-sh/setup-uv@v10.4.0  # zizmor: ignore[unpinned-uses]
       with:
-        # Most prek hooks shell out to `uv run`, which resolves the `dev` and `lint` groups
-        # before the first one executes, so without a cache every run repays the download. The
-        # action keys it on uv.lock.
+        # The action keys the uv cache on uv.lock.
         enable-cache: true
-        # The cache saves only on a miss, so a UV_NO_DEV or UV_NO_GROUP=lint job sharing the
-        # full key would leave every lint job a partial entry to re-download around.
+        # The cache saves only on a miss, so jobs sharing the full key would leave lint jobs a
+        # partial entry.
         cache-suffix: ${{ env.UV_NO_DEV == '1' && 'runtime' || env.UV_NO_GROUP == 'lint' && 'test' || 'dev' }}
 
-    # pyproject.toml forces PyYAML's libyaml extension, so a source build (an interpreter
-    # PyYAML ships no wheel for) needs these headers or fails.
+    # pyproject.toml forces PyYAML's libyaml extension, so a source build needs these headers.
     - name: Install libyaml headers
       if: inputs.uv == 'true'
       shell: bash
       run: dpkg -s libyaml-dev >/dev/null 2>&1 || { sudo apt-get update -q && sudo apt-get install -y -q --no-install-recommends libyaml-dev; }
 
-    # Whichever job finishes first writes the cache entry, so every job syncs the whole
-    # profile here, even one that never runs `uv`. UV_NO_DEV and UV_NO_GROUP still narrow it.
-    # `--compile-bytecode` prints the cold compile line shard_weight_gate.py:leg_speed reads.
+    # Whichever job finishes first writes the cache entry, so every job syncs the whole profile.
     - name: Sync the uv environment
       if: inputs.uv == 'true'
       shell: bash
       run: uv sync --frozen --compile-bytecode
 
-    # Cold, prek builds one isolated environment per remote hook repo, which is every CI run
-    # without this cache. Only the environment dirs are cached: `~/.cache/prek/cache` is prek's
-    # own pip/uv download cache, redundant once the envs are restored and large enough to eat
-    # the saving in transfer time.
-    #
-    # restore-keys is safe because prek's env dirs are content-addressed
-    # (hooks/<language>-<hash>): a stale entry from an older prek.toml is ignored, so a partial
-    # hit lets the unchanged hooks skip their rebuild when one rev bumps. The second restore-key
-    # reaches the `hooks` job's `prek-` entry, so a job with its own prefix gets a warm start on
-    # a branch with no entry of its own; for the `hooks` job it repeats the first.
+    # Only the env dirs are cached: prek's own download cache is redundant once the envs are
+    # restored. restore-keys is safe because env dirs are content-addressed.
     - name: Cache prek hook environments
       if: inputs.prek-cache-key != ''
       uses: actions/cache@v6.1.0  # zizmor: ignore[unpinned-uses]

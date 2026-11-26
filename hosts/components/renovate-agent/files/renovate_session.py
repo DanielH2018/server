@@ -75,8 +75,8 @@ def main(config_path: str = CONFIG) -> int:
     out = os.path.join(exchange, OUT_DIR)
     argv = session_argv(cfg, os.path.join(exchange, REQUESTS_DIR), settings)
     log("starting session")
-    # systemd sends the wall clock's SIGINT to the whole unit. A handler, not SIG_IGN, which
-    # claude would inherit: claude still stops, and this script lives on to copy the transcript.
+    # A handler, not SIG_IGN, which claude would inherit: claude still stops, and this script lives
+    # on to copy the transcript.
     signal.signal(signal.SIGINT, lambda signum, frame: None)
     p = subprocess.run(
         argv,

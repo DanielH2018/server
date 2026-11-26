@@ -1,37 +1,7 @@
 name: Flux deletion drill
 
-# Proves on a throwaway kind cluster what kustomize-controller does when a tag leaves the
-# bundle, and that break-glass promotion verifies a key-signed bundle (target slice D6,
-# docs/archive/deploy/d6-delete-old-path.md). The bundles come from the
-# renderer's own writers (scripts/renderer/deletion_drill.py), so a green drill shows that the
-# form the renderer writes is one that Flux honours.
-#
-# Seven cases run in every drill, each printing one `case=<name> verdict=<pass|fail>` line:
-#   revision-1       all three fixture tags reach Ready, so every fixture claim bound under
-#                    kind's WaitForFirstConsumer class
-#   as-rendered      prune-drill leaves the bundle. Under Orphan its Deployment stays, and
-#                    under the default policy it goes. Its claim and Namespace stay either way.
-#   red-half         prune-drill-red had its claim marker stripped, so its claim must be lost.
-#                    A drill that cannot see a lost claim fails.
-#   inventory-prune  prune-drill-keep drops both claims: keep-marked survives, and
-#                    keep-unmarked, whose marker was stripped, is lost
-#   break-glass      a bundle signed with a throwaway key reaches Ready through the flux
-#                    role's break-glass source form
-#   break-glass-red  a bundle signed with a second key the cluster does not hold is refused
-#   fresh-cluster    on a second cluster where neither the node nor a pod resolves an outside
-#                    name, the controllers and the
-#                    registry run from image archives, the registry role's render serves the
-#                    key-signed bundle, and the bundle reaches Ready
-#                    (scripts/deploy_tools/fresh_cluster_drill.py)
-#
-# The job holds no secret and no age key, never pushes to GHCR and reaches no homelab host.
-# The private keys are generated here and discarded with the runner; the kit's private half
-# never reaches CI. The merge gate requires this check (`github_expected_ruleset_contexts` in
-# hosts/components/github-checks/defaults/main.yml). It triggers on every pull request and
-# skips its steps when no in-scope path changed, so the required context never sticks at
-# "Expected". On a draft the job skips at job level, which takes no runner and reads as a
-# pass; GitHub refuses to merge a draft, and `ready_for_review` starts the run that counts
-# (docs/ci-throughput.md, *When a job may skip at job level*).
+# The merge gate requires this check, and it triggers on every pull request so the required context
+# never sticks at "Expected"; steps skip when no in-scope path changed.
 
 on:
   pull_request:
@@ -56,8 +26,8 @@ jobs:
       UV_NO_GROUP: lint
       REGISTRY: kind-registry:5000
       PUSH: 127.0.0.1:5001
-      # The flux CLI this job's flux steps fetch, equal to flux_version in k8s/roles/flux and to
-      # the amd64 flux pin in hosts/packages/homelab-tools/package.yml. Env, so the cache key reads it.
+      # Equal to flux_version in k8s/roles/flux and the amd64 pin in homelab-tools/package.yml; env
+      # so the cache key reads it.
       # renovate: datasource=github-release-attachments depName=fluxcd/flux2
       FLUX_VERSION: v2.9.6
       FLUX_SHA256: b4d22673e9246cbd628881f1a9ef3b090085dced291e42d804555cee8e8d42c5
@@ -77,10 +47,6 @@ jobs:
           fetch-depth: 0  # the merge-base diff below needs history
           persist-credentials: false
 
-      # A dispatch always runs the drill. A pull request runs it when the diff touches the
-      # renderer, the fixture tree, the flux role's defaults or sync objects, the registry role,
-      # the PriorityClasses, the break-glass page, the pinned-tool action or this file, and
-      # prints `skipped` otherwise.
       - name: Check whether this PR touches the drill's inputs
         id: scope
         if: github.event_name == 'pull_request'
@@ -121,8 +87,8 @@ jobs:
           version: ${{ env.FLUX_VERSION }}
           sha256: ${{ env.FLUX_SHA256 }}
 
-      # The release promote.yml signs with, under the same pin as promote.yml's, so this drill's
-      # run on a PR that moves the COSIGN_* pin proves the pin before promote reads it.
+      # Same pin as promote.yml's, so a PR that moves the COSIGN_* pin proves it here before promote
+      # reads it.
       - name: Fetch the pinned cosign and check its sha256
         uses: $/.github/actions/pinned-tool
         if: github.event_name == 'workflow_dispatch' || steps.scope.outputs.changed == 'true'
@@ -131,8 +97,6 @@ jobs:
           version: ${{ env.COSIGN_VERSION }}
           sha256: ${{ env.COSIGN_SHA256 }}
 
-      # kind and its node image come from the pins ci.yml's sops_manifest_type_proof job reads,
-      # so this file holds no copy that could drift.
       - name: Read the kind pin
         id: kind
         if: github.event_name == 'workflow_dispatch' || steps.scope.outputs.changed == 'true'
@@ -152,8 +116,8 @@ jobs:
           version: ${{ steps.kind.outputs.version }}
           sha256: ${{ steps.kind.outputs.sha256 }}
 
-      # The registry sits on kind's docker network, so source-controller reaches it by
-      # container name and the runner pushes through the published port.
+      # The registry sits on kind's docker network, so source-controller reaches it by container
+      # name.
       - name: Create the kind cluster, the registry and the pinned Flux controllers
         if: github.event_name == 'workflow_dispatch' || steps.scope.outputs.changed == 'true'
         run: |
@@ -182,8 +146,6 @@ jobs:
           uv run python scripts/renderer/deletion_drill.py build --registry "$REGISTRY" \
             --bg-pubkey "$RUNNER_TEMP/keys/green/cosign.pub" \
             --bg-red-pubkey "$RUNNER_TEMP/keys/red/cosign.pub" --out "$RUNNER_TEMP/drill"
-          # `judge <case> [args]` retries a case until it passes or the budget ends, and prints
-          # the verdict lines either way. JUDGE_SCRIPT names another module's `check`.
           cat > "$RUNNER_TEMP/judge.sh" <<'JUDGE'
           judge() {
             local budget=${BUDGET:-60} out script=${JUDGE_SCRIPT:-scripts/renderer/deletion_drill.py}
@@ -204,8 +166,6 @@ jobs:
           }
           JUDGE
 
-      # Revision 1: the bundle with all three tags, and the root in the shape the flux role
-      # renders it. The wait shows every tag Ready, which needs each claim Bound.
       - name: Revision 1 - push the bundle, apply the source and the root, wait for all three tags
         if: github.event_name == 'workflow_dispatch' || steps.scope.outputs.changed == 'true'
         run: |
@@ -229,8 +189,6 @@ jobs:
           echo "revision 1 served: $REVISION"
           BUDGET=20 judge revision-1
 
-      # Revision 2: prune-drill and prune-drill-red leave the bundle, and prune-drill-keep
-      # drops both claims. The drill deletes nothing by hand.
       - name: Revision 2 - push the bundle without two tags and judge the three deletion cases
         if: github.event_name == 'workflow_dispatch' || steps.scope.outputs.changed == 'true'
         run: |
@@ -268,9 +226,8 @@ jobs:
           BUDGET=40 judge inventory-prune || rc=1
           exit "$rc"
 
-      # source-controller verifies a key-signed artifact from a plain-HTTP registry, through
-      # `insecure: true`. The OCIRepository and its Secret come from the flux role's own
-      # templates with the break-glass lever on.
+      # source-controller verifies a key-signed artifact from a plain-HTTP registry through
+      # `insecure: true`.
       - name: Break-glass - a bundle signed with the key the cluster holds
         if: github.event_name == 'workflow_dispatch' || steps.scope.outputs.changed == 'true'
         env:
@@ -290,10 +247,8 @@ jobs:
           BUDGET=60 judge break-glass
           kubectl -n flux-system get ocirepository homelab -o jsonpath='{range .status.conditions[*]}{.type}={.status}: {.message}{"\n"}{end}'
 
-      # The red half runs only after the green half passed, so a transport failure on both
-      # cannot read as a refusal. It pushes to its own repository path, because cosign v3
-      # stores a signature as a referrer of the digest and equal content would inherit the
-      # green signature.
+      # The red half runs only after the green half passed, so a transport failure on both cannot
+      # read as a refusal.
       - name: Break-glass - a bundle signed with a key the cluster does not hold
         if: github.event_name == 'workflow_dispatch' || steps.scope.outputs.changed == 'true'
         env:
@@ -312,9 +267,8 @@ jobs:
           BUDGET=40 judge break-glass-red
           kubectl -n flux-system get ocirepository homelab -o jsonpath='{range .status.conditions[*]}{.type}={.status}: {.message}{"\n"}{end}'
 
-      # The fresh-cluster case needs a second cluster, so the first one goes. crane
-      # writes each pinned image's whole index as an OCI layout, which keeps the digest the
-      # manifests name whichever image store the runner's Docker uses.
+      # crane writes each image's whole index as an OCI layout, which keeps the digest whichever
+      # image store Docker uses.
       - name: Fresh cluster - delete the drill cluster and archive the kit's images
         if: github.event_name == 'workflow_dispatch' || steps.scope.outputs.changed == 'true'
         run: |
@@ -335,11 +289,8 @@ jobs:
               --layout "$f/kit/${tar%.tar}" --ref "$ref" --out "$f/kit/$tar"
           done < "$f/kit.txt"
 
-      # The node's resolver points at a port nothing serves, so no name resolves on the node,
-      # ghcr.io and Docker Hub among them. CoreDNS forwards to a dead port too, so pods,
-      # source-controller among them, resolve only cluster names. kind's own images are in its
-      # node image. Each archive must then serve its digest reference through CRI, as the
-      # kubelet looks it up.
+      # The node's resolver points at a port nothing serves and CoreDNS forwards to a dead port, so
+      # no outside name resolves; each archive must serve its digest reference through CRI.
       - name: Fresh cluster - create a cluster that resolves no outside name, and load the kit
         if: github.event_name == 'workflow_dispatch' || steps.scope.outputs.changed == 'true'
         run: |
@@ -380,9 +331,8 @@ jobs:
             fi
           done < "$f/kit.txt"
 
-      # The Namespace and the PriorityClasses go first, as on a rebuild. The registry is the
-      # role's own render less its node pin. Its push store's claim binds to the runbook's
-      # hostPath PV, whose directory the runbook creates on the node first.
+      # The registry's push store claim binds to the runbook's hostPath PV, whose directory the
+      # runbook creates on the node first.
       - name: Fresh cluster - install the controllers and the registry from the archives
         if: github.event_name == 'workflow_dispatch' || steps.scope.outputs.changed == 'true'
         run: |
@@ -413,9 +363,8 @@ jobs:
           kubectl -n homelab logs pod/dns-probe
           echo "pods resolve the registry's Service and neither ghcr.io nor rekor.sigstore.dev"
 
-      # The runner pushes through a port-forward, because the registry's hostPort is on the
-      # node's loopback. source-controller fetches at the role's own address,
-      # flux_break_glass_url, through the Service.
+      # The runner pushes through a port-forward because the registry's hostPort is on the node's
+      # loopback.
       - name: Fresh cluster - push and sign through the in-cluster registry, then judge it
         if: github.event_name == 'workflow_dispatch' || steps.scope.outputs.changed == 'true'
         env:

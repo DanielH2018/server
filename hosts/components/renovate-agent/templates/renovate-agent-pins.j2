@@ -6,25 +6,16 @@ defaults, so a component default would pin nothing. This file is on the lander's
 Each value is a literal. hosts/tests/repo_crons/test_renovate_agent_unit.py holds the caps equal to the
 component's defaults/main.yml, which the docs fragments read.
 -#}
-{#- Who runs what: the controller runs the runner, holds the write token
-and the state, and alone may start the session and lander units; the session user runs claude.
-Both polkit rules key on these, so a host_vars edit cannot hand the session a start right. -#}
+{#- Both polkit rules key on these, so a host_vars edit cannot hand the session a start right. -#}
 {%- set user = "renovate-agent" -%}
 {%- set ctl_user = "renovate-agent-ctl" -%}
-{#- The controller's home: its interpreter, its run lock and the run record. A path the session
-could write here would hand the session code the controller runs with the write token. -#}
+{#- A path the session could write here would hand it code the controller runs with the write token. -#}
 {%- set ctl_home = "/var/lib/renovate-agent-ctl" -%}
-{#- Where the session's requests and output pass to the controller. The controller owns it and
-the session may write only its requests/ and out/ children. -#}
+{#- The session may write only the requests/ and out/ children. -#}
 {%- set exchange_dir = "/var/lib/renovate-agent-exchange" -%}
-{#- What the controller owns and the session reads through its group, read-only: the session's
-toolchain (uv, Python, claude, the guard package and hooks) and the clone at origin/master it
-works in. Outside the session's home, so the session cannot replace either between runs. -#}
+{#- Outside the session's home, so the session cannot replace either between runs. -#}
 {%- set tools_dir = "/var/lib/renovate-agent-tools" -%}
 {%- set clone_dir = "/var/lib/renovate-agent-clone" -%}
-{#- The root-owned Claude Code settings the session passes with --settings: the guard hooks and
-the deny floor, which claude-code's homelab-claude-config-render publishes from the verified
-dotfiles tag and this component's overlay. -#}
 {%- set settings_file = "/var/lib/homelab-claude-config/current/renovate.json" -%}
 {%- set max_prs = 3 -%}
 {%- set model = "opus" -%}
@@ -32,8 +23,7 @@ dotfiles tag and this component's overlay. -#}
 {%- set budget_usd = 25 -%}
 {#- The whole run: the session, then the landings it nominated, one after another. -#}
 {%- set run_timeout_s = 67260 -%}
-{#- The session alone, which only triages and writes requests. An assumption, not a measurement
-of a session that does no landing. It and one whole landing fit inside run_timeout_s. -#}
+{#- An assumption, not a measurement: it and one whole landing fit inside run_timeout_s. -#}
 {%- set session_timeout_s = 2700 -%}
 {#- The session's bounds. Its home, /tmp, /var/tmp and /dev/shm are
 tmpfs mounts that end with the unit. Their pages count against memory_max, so the sizes sum well
