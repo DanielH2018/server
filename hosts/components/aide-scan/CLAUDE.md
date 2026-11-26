@@ -23,7 +23,11 @@ It reads the filesystem, reports, and advances its own baseline.
   file holding only its managed lines
   (`hosts/lib/tests/reconcile/test_reconcile_lines_arm.py::test_a_missing_package_owned_conffile_is_refused_and_not_created`).
 - **Mode (explicit and reversible):** the timer's enable link arms it. Dropping the component from a
-  host package stops the timer on the install that drops it. A DOWN on an unexplained change
+  host package stops the timer on the install that drops it. The component also ships
+  `/etc/rkhunter.d/homelab-aide-owns-accounts.conf`, which turns off rkhunter's
+  `passwd_changes` and `group_changes` tests, because this check judges account changes. The
+  file is a plain package file, not a conffile, so dropping the component removes it and
+  rkhunter's account tests come back on that host. A DOWN on an unexplained change
   stays DOWN until an operator reviews it and runs `/usr/lib/homelab/aide-check --accept`.
 - **Authoritative sources:** AIDE's own exit code and report, dpkg's file lists and digests, and
   the kept package copies, each checked against dpkg's digest on every run while its version is installed. An edit replayed
