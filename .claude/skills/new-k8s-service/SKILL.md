@@ -126,6 +126,10 @@ the sources it reads.
 
 ## 2. The inventory entry — ordering is automatic, position is not
 
+An entry carries only the keys `scripts/lib/container_entry.py:ENTRY_MODELS` names, each
+with its type. A key the model lacks fails the render with the key's name, so a new entry key
+gets a line in that model in the same change.
+
 The scaffolder appends the entry to `containers_list` in
 `k8s/services.yml`, at the end
 of the list but ahead of netpol-baseline. **The entry is born owned by Flux**, because Flux
