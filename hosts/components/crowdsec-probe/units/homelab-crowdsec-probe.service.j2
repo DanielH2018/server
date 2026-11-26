@@ -9,9 +9,8 @@ SyslogLevel=notice
 User={{ sys_user }}
 # jellyfin's hostname matches a real router from any client address (the script's header).
 ExecStart=/usr/lib/homelab/crowdsec-edge-probe jellyfin.local.{{ domain }} {{ k3s_metallb_ingress_vip }}
-# /var/log/pi-health is the pi-heartbeats component's directory, owned by User=. systemd
-# re-owns it to the starting unit's user when the owners differ, so this unit and the three
-# heartbeat services must name the same User= (test_crowdsec_probe_component.py holds that).
+# systemd re-owns /var/log/pi-health to the starting unit's user when owners differ, so this unit
+# and the three heartbeat services must name the same User=.
 LogsDirectory=pi-health
 NoNewPrivileges=yes
 ProtectSystem=strict

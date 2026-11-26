@@ -45,10 +45,8 @@ die() { echo "etcd-drill-guest-run: $*" >&2; exit 1; }
 
 [[ "$(id -u)" == "0" ]] || die "must run as root"
 
-# --detached: start the real run in the background, owning none of the caller's descriptors, and
-# return at once. The orchestrator polls $RC over fresh ssh sessions instead of holding one open
-# for the whole run — a held session can hang after the drill has died, and a hung session is
-# exactly what the orchestrator cannot diagnose.
+# --detached: run in the background owning none of the caller's descriptors, and return at once.
+# The orchestrator polls $RC over fresh ssh; a held session can hang after the drill died.
 if [[ "${1:-}" == "--detached" ]]; then
   rm -f "$RC" "$OUT"
   nohup sh -c "$0 >$OUT 2>&1; echo \$? >$RC" >/dev/null 2>&1 </dev/null &
@@ -64,8 +62,7 @@ echo "== k3s binary: $(k3s --version 2>/dev/null | head -1)"
 . "$S3_ENV"
 : "${AWS_ACCESS_KEY_ID:?}" "${AWS_SECRET_ACCESS_KEY:?}" "${ETCD_S3_BUCKET:?}" "${ETCD_S3_ENDPOINT:?}"
 
-# Credentials go in through a config file on stdin, never argv. Region `auto` is what R2 signs
-# against.
+# Credentials via a config on stdin, never argv. R2 signs against region `auto`.
 r2_get() {
   printf 'user = "%s:%s"\n' "$AWS_ACCESS_KEY_ID" "$AWS_SECRET_ACCESS_KEY" |
     curl -fsS --max-time 300 -K - --aws-sigv4 "aws:amz:auto:s3" "$@"
@@ -86,6 +83,5 @@ r2_get -o "$DOWNLOAD_DIR/$snapshot" "https://${ETCD_S3_ENDPOINT}/${ETCD_S3_BUCKE
 echo "== downloaded $(stat -c %s "$DOWNLOAD_DIR/$snapshot") bytes"
 
 echo "== full drill against the downloaded file"
-# --keep so the scratch dir's restore.log and server.log are still there for the orchestrator
-# to pull out as evidence. The whole guest is destroyed afterwards, so nothing is retained here.
+# --keep leaves restore.log and server.log for the orchestrator to pull as evidence.
 "$DRILL" --local-snapshot "$DOWNLOAD_DIR/$snapshot" --keep

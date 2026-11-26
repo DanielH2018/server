@@ -3,15 +3,14 @@
 Description=Unattended triage of monitor episode %i, as the triage controller
 After=network-online.target
 Wants=network-online.target
-# A run that crashes, or that systemd kills, pages here. A run that finishes pages through
-# claude-triage-report-alert@<episode>:<state>.service instead, which the script starts itself.
+# A run that finishes pages through claude-triage-report-alert@<episode>:<state>.service, which the
+# script starts itself.
 OnFailure=homelab-alert@%n.service
 
 [Service]
 Type=oneshot
-# The controller: it owns the records, the reports and the run lock, and alone
-# may start the session unit. It runs no session text. The session runs as {{ pins.session_user }},
-# whose group lets this unit read the result the session leaves in the exchange.
+# The controller runs no session text; the session's group lets this unit read the result left in
+# the exchange.
 User={{ pins.ctl_user }}
 SupplementaryGroups={{ pins.session_user }}
 Environment=HOME={{ pins.ctl_home }}
@@ -20,11 +19,9 @@ Environment=PYTHONDONTWRITEBYTECODE=1
 Environment=UV_CACHE_DIR={{ pins.ctl_home }}/uv-cache
 Environment=UV_PYTHON_INSTALL_DIR={{ pins.ctl_home }}/python
 SyslogLevel=notice
-# The session runs in homelab-claude-triage-session.service, which this runner starts and waits
-# for, and which holds the Claude credential. Its TimeoutStartSec, run_timeout_s
-# ({{ pins.run_timeout_s }}s), trips first. A restart the result asks for then runs inside this
-# unit's clock too, bounded by the broker's own TimeoutStartSec ({{ pins.restart_timeout_s }}s),
-# so this script still writes the record, the report and the page.
+# The session's TimeoutStartSec, run_timeout_s ({{ pins.run_timeout_s }}s), trips first.
+# A requested restart then runs inside this clock, bounded by the broker's
+# {{ pins.restart_timeout_s }}s.
 TimeoutStartSec={{ pins.run_timeout_s + pins.restart_timeout_s + 900 }}
 NoNewPrivileges=yes
 # DECIDED: UMask=0027, as claude-rc.service.j2 sets it. homelab-claude-triage.conf gives the
@@ -35,8 +32,7 @@ UMask=0027
 ProtectHome=yes
 ProtectProc=invisible
 PrivateTmp=yes
-# One run at a time. A busy lock exits 75, which is not a failure: the episode stays in the
-# inbox for the next start, and nothing pages.
+# A busy lock exits 75, not a failure: the episode stays in the inbox and nothing pages.
 SuccessExitStatus=75
 # The directories, the session's toolchain and its clone, before the lock inside them is taken.
 ExecStartPre=+/usr/bin/env -i PATH=/usr/bin:/bin:/usr/sbin:/sbin /usr/lib/homelab/claude-triage-setup

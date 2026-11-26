@@ -40,10 +40,8 @@ source /usr/lib/homelab/homelab-check-lib.sh || {
   exit 1
 }
 
-# A boot that lands on the slot reports the route down while k3s is still starting. Exit 1
-# without a verdict instead: the timer's Restart=on-failure reruns this in RestartSec, which is
-# what carries the real verdict. The lib's log line still names the dead-man grace, which also
-# covers the gap.
+# A boot on the slot reports the route down while k3s starts: exit 1 without a verdict so
+# Restart=on-failure reruns it.
 if boot_grace_active {{ loki_route_witness_boot_grace_s }} loki-read-route-health; then
   exit 1
 fi
@@ -54,32 +52,25 @@ fi
 DEADLINE_S=7200
 
 REPO_DIR=/home/{{ sys_user }}/server
-# The uv component's path: a rebuilt host has no per-user uv until the dotfiles step. --frozen: never
-# rewrite uv.lock on this host — a rewrite would dirty the tree and park
-# `homelab-checkout-sync`.
+# Absolute uv path: a rebuilt host has no per-user uv.
+# --frozen: a uv.lock rewrite would dirty the tree and park `homelab-checkout-sync`.
 UV=/usr/bin/uv
 BODY="$(cd "$REPO_DIR" && "$UV" run --quiet --frozen python scripts/diagnostics/probe.py loki-labels 2>&1)"
 RC=$?
 
-# `--no-project`, so the reader runs on the pinned interpreter without resolving whatever project
-# the working directory sits in — a broken lockfile in the checkout above must not read as a broken
-# route. Same shape as the Longhorn backup-health reader in the k3s role.
+# `--no-project`: a broken lockfile in the checkout must not read as a broken route.
 if MSG="$(printf '%s' "$BODY" | /usr/bin/uv run --no-project --no-python-downloads --python {{ host_python_version }} /usr/lib/homelab/loki_route_health.py "$RC")"; then
   STATUS=up
 else
   STATUS=down
 fi
 
-# Unconditional: the textfile keeps only the current verdict, so this line is the durable record
-# of the verdict's message, and Loki keeps it. NOTICE rather
-# than INFO — journald caps MaxLevelStore=notice here.
+# Unconditional: the textfile keeps only the current verdict, so this line is the durable record.
+# NOTICE, not INFO: journald caps MaxLevelStore=notice.
 logger -p daemon.notice -t loki-read-route-health "status=${STATUS} ${MSG}"
 
-# The textfile verdict, which LokiReadRouteFailed and LokiReadRouteNotReporting read. A failed
-# write logs and the run goes on to its exit code.
 write_check_textfile loki-read-route-health "$([[ "$STATUS" == up ]] && echo 1 || echo 0)" "$(date +%s)" "$DEADLINE_S" \
   || logger -t loki-read-route-health "textfile write failed (status=${STATUS})"
 
-# The exit code is the timer's contract: 1 after
-# a down verdict so Restart=on-failure reruns the check until the route answers, 0 after up.
+# Exit 1 after a down verdict so Restart=on-failure reruns the check until the route answers.
 [[ "$STATUS" == up ]] || exit 1

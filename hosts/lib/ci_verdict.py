@@ -19,11 +19,8 @@ from enum import StrEnum
 # passes on purpose: ci.yml's renovate-config job runs unconditionally but gates its real work on a
 # per-PR step condition, so it legitimately reports a non-`success` completion.
 _CI_PASS_CONCLUSIONS = frozenset({"success", "skipped", "neutral"})
-# Deliberately NOT failures — these mean "no verdict for this SHA", not "this SHA is bad".
-# ci.yml groups master pushes by SHA and cancels in progress only on a pull_request, so a later
-# master push never cancels an earlier run. A commit still reads `cancelled` when a person cancels
-# its run, when a job passes its `timeout-minutes`, or on a PR head a force-push superseded, and a
-# push GitHub never ran CI for has no conclusion at all (`None`). None of these says the SHA is bad.
+# NOT failures: no verdict for this SHA. A commit reads cancelled when a person cancels, a job times
+# out or a force-push supersedes it; a push GitHub never ran CI for has None.
 _CI_NO_VERDICT_CONCLUSIONS = frozenset(
     {"cancelled", "stale", "skipped_by_concurrency", None}
 )
@@ -49,8 +46,7 @@ _CI_NO_VERDICT_CONCLUSIONS = frozenset(
 CI_GATE_NAME = "prek (lint + validate + tests + secrets)"
 # The check-run name of the `prove` job, whose `proven` output the gate reads.
 CI_PROVE_JOB = "prove the pushed tree was tested"
-# The check-run name of every other job in the gate's `needs`. GitHub names a matrix leg's
-# check-run after the leg, so each leg is listed.
+# GitHub names a matrix leg's check-run after the leg, so each leg is listed.
 CI_GATE_NEEDS_JOBS = frozenset(
     {
         "hooks (lint + validate + secrets + docs)",
@@ -71,15 +67,9 @@ CI_GATE_NEEDS_JOBS = frozenset(
         "host_tools_arm64",
     }
 )
-# The check-run name of the job that builds the host packages and says whether the jobs below
-# have anything to run.
 CI_BUILD_JOB = "build the host packages (render, nfpm, lint)"
-# The gate needs that read the build's artifacts. Each may skip at job level when the build
-# succeeded and had no work for it, and the gate's script passes that skip from the build's
-# outputs. A check-run does not carry a job output, so `jobs_verdict` leans on the workflow:
-# beside a build that succeeded, such a job skips only when the build had no work for it. A run
-# cancelled in the instant between the build's last step and these jobs' `if:` would read the
-# same, and the gate job's own conclusion then decides once it exists.
+# Beside a succeeded build, such a job skips only when the build had no work for it (a check-run
+# carries no job output).
 CI_BUILD_READER_JOBS = frozenset(
     {
         "host_packages (26.04, 3.14)",
@@ -98,10 +88,8 @@ def _leg_number(leg: str) -> int:
     return int(leg.removeprefix("pytest (shard ").removesuffix(")"))
 
 
-# GitHub gives a matrix job that skipped at job level ONE check-run, named after the job and not
-# after its legs: the `name:` template with its expressions unexpanded, or the job id when it has
-# no `name:`. A run can report `host_packages` and the bootstrap template below as skipped, and
-# no leg of either. Each name stands for every leg it maps to.
+# A matrix job skipped at job level gets ONE check-run named after the job (its unexpanded `name:`
+# or id), not its legs. Each name stands for every leg it maps to.
 CI_PYTEST_LEGS = _legs("pytest (shard ")
 CI_SKIPPED_MATRIX_JOBS = {
     "pytest (shard ${{ matrix.shard }})": CI_PYTEST_LEGS,
@@ -514,8 +502,8 @@ def jobs_verdict(check_runs: list[CheckRun]) -> CIVerdict:
             skipped += 1
     if not skipped:
         return CIVerdict.PASS
-    # The proven path skips EVERY dependent. A lone skip beside a success is not a state the
-    # workflow produces, so it is not read as proof.
+    # The proven path skips EVERY dependent: a lone skip beside a success is not a state the
+    # workflow produces.
     if prove == {RunState.PASS} and skipped == len(CI_GATE_NEEDS_JOBS):
         return CIVerdict.PASS
     return CIVerdict.PENDING
@@ -608,8 +596,8 @@ def ci_verdict(
     for run in check_runs:
         if run.name not in required:
             continue
-        # The gate skips only on a draft PR, and a draft run tested nothing. Its gate is
-        # left out, so a head whose only gate is a draft's reads as the jobs decide: pending.
+        # The gate skips only on a draft PR, which tested nothing; its gate is left out so the jobs
+        # decide: pending.
         if run.name == CI_GATE_NAME and run.conclusion == "skipped":
             continue
         if run.name == CI_GATE_NAME and run.suite_id in cancelled:

@@ -52,23 +52,19 @@ import struct
 import sys
 from pathlib import Path
 
-# The errors a process that exited mid-scan raises. Matched by errno rather than by exception
-# class: the repo's formatter rewrites a parenthesised `except (A, B):` into the 3.14-only
+# Matched by errno, not exception class: the formatter rewrites `except (A, B):` into the 3.14-only
 # bare form, and this file runs on the distro interpreter.
 _GONE = (errno.ENOENT, errno.ESRCH)
 
-# Each user the socket's group admits, mapped to the worktree root that user's scan reports
-# under. Root-owned and rendered by initial_setup; lib.worktrees.holder_root reads it too.
+# Root-owned and rendered by initial_setup; lib.worktrees.holder_root reads it too.
 ROOTS = Path("/etc/worktree-holders.json")
 
-# The answer's framing. lib.worktrees.read_answer and fanout_lib.clean.live_process_scan's
-# awk read the same three words.
+# lib.worktrees.read_answer and fanout_lib.clean.live_process_scan's awk read the same three words.
 OK = "ok"
 END = "end"
 REFUSED = "refused"
 
-# `lib/exit_codes.py:USAGE_ERROR`, which this host-shipped script cannot import. Each
-# misuse `main` refuses is an invocation the socket unit never makes.
+# `lib/exit_codes.py:USAGE_ERROR`, which this host-shipped script cannot import.
 USAGE_ERROR = 64
 
 
@@ -107,8 +103,8 @@ def scan(root: Path, proc: Path = Path("/proc")) -> list[tuple[int, str, str]]:
                 continue
             # Gone, or a zombie, which has no cwd. Its environ answers the same way.
             cwd = ""
-        # A cwd whose directory was deleted reads back as "<path> (deleted)", which never
-        # resolves under an existing root.
+        # A deleted cwd reads back as "<path> (deleted)", which never resolves under an existing
+        # root.
         if cwd and _inside(cwd, root):
             found.append((pid, "cwd", cwd))
             continue
@@ -121,8 +117,7 @@ def scan(root: Path, proc: Path = Path("/proc")) -> list[tuple[int, str, str]]:
         for var in environ:
             if var.startswith(b"CLAUDE_PROJECT_DIR="):
                 held = os.fsdecode(var.partition(b"=")[2])
-                # A NUL cannot occur in an environ entry, and a path that holds one cannot
-                # resolve, so `held` always reaches `_inside` intact.
+                # A NUL cannot occur in an environ entry, and a path that holds one cannot resolve.
                 if held and _inside(held, root):
                     found.append((pid, "CLAUDE_PROJECT_DIR", held))
                 break

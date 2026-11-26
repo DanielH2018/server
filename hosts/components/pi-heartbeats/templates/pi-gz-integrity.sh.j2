@@ -47,11 +47,8 @@ trap 'rm -rf "$work"' EXIT
 verdict=up
 detail=
 
-# Per root, not just in total: a root that exists but holds no rotated log is the case the
-# combined floor below cannot see. /var/hdd.log survives as a plain directory when log2ram stops
-# syncing to it, and /var/log's own 72 files would then clear a floor of 40 on their own while the
-# SD-side tree — the one that carries the signal — went unswept. One extra `find` per root is
-# the price of catching it.
+# Per root: /var/hdd.log can survive as an empty directory when log2ram stops syncing, and the
+# combined floor cannot see it.
 missing=
 empty=
 for root in ${ROOTS[@]+"${ROOTS[@]}"}; do
@@ -63,8 +60,7 @@ for root in ${ROOTS[@]+"${ROOTS[@]}"}; do
 done
 
 if [ -z "${ROOTS[*]:-}" ] || [ -n "$missing" ]; then
-  # A missing root is not "nothing to check". /var/hdd.log absent means log2ram is not mounted,
-  # and a glob over an absent tree reports success — the vacuity this check has to refuse.
+  # A missing root is not "nothing to check": absent /var/hdd.log means log2ram is not mounted.
   verdict=down
   detail="log tree(s) missing: ${missing:-<no roots configured>} — log2ram may not be mounted, so nothing was checked"
 elif [ -n "$empty" ]; then
@@ -76,8 +72,6 @@ else
   count=$(tr -dc '\0' <"$work/files" | wc -c)
   unreadable=$(find "${ROOTS[@]}" -xdev -type f -name '*.gz' ! -readable 2>/dev/null | wc -l)
 
-  # One `gzip -t` over the whole list. It names each failing file on stderr as
-  # `gzip: <path>: <reason>`, so the file names come out of the same process that tests them.
   xargs -0 -r gzip -t <"$work/files" 2>&1 >/dev/null |
     sed -n 's/^gzip: \([^:]*\):.*/\1/p' >"$work/bad"
   bad_count=$(wc -l <"$work/bad")
@@ -90,13 +84,12 @@ else
       detail="${detail} (+$((bad_count - 3)) more)"
     fi
   elif [ "$count" -lt "$FLOOR" ]; then
-    # The non-vacuity half. Zero files, or a count that collapsed, means the sweep stopped
-    # looking at rotated logs — not that every rotated log is healthy.
+    # Zero or a collapsed count means the sweep stopped seeing rotated logs, not that they are
+    # healthy.
     verdict=down
     detail="only ${count} rotated .gz found under ${ROOTS[*]} (floor ${FLOOR}) — logrotate stopped compressing, or the sweep is pointed at the wrong tree"
   elif [ "$unreadable" -gt 0 ]; then
-    # The same reasoning one step in: `-readable` keeps find quiet, which would let a file the
-    # sweep cannot open drift the count toward the floor instead of being reported.
+    # -readable keeps find quiet, so an unopenable file would drift the count down unreported.
     verdict=down
     detail="${unreadable} rotated .gz are unreadable by $(id -un) — the sweep cannot test them, so ${count} checked is an undercount"
   else
@@ -104,14 +97,11 @@ else
   fi
 fi
 
-# Two lines, verdict then detail, written through a temp file: pi-sd-health reads this every
-# 5 minutes, and a half-written verdict would read there as an empty status (a down) for that run.
+# Written via a temp file: a half-written verdict would read as an empty status (down).
 mkdir -p "${STATE%/*}" 2>/dev/null || true
 if ! { printf '%s\n%s\n' "$verdict" "$detail" >"$work/state" && mv -f "$work/state" "$STATE"; }; then
   echo "cannot write ${STATE} — the heartbeat will report a missing verdict" >&2
   exit 1
 fi
 
-# The service logs both streams under the tag pi-gz-integrity, so this line is the journal
-# record of the sweep. The ALERT is the heartbeat's PiSdHealthFailed, not this line.
 printf 'status=%s %s\n' "$verdict" "$detail"

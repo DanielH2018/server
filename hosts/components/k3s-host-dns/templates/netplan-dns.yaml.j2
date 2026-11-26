@@ -20,9 +20,9 @@ network:
         use-dns: false
       dhcp6-overrides:
         use-dns: false
-      # The IPv6 resolvers arrive by router advertisement, not by DHCPv6, so the override
-      # above never reaches them: it alone leaves 4 nameservers and kubelet keeps warning. This
-      # maps to networkd's [IPv6AcceptRA] UseDNS=false and is what actually drops them.
+      # IPv6 resolvers arrive by router advertisement, not DHCPv6, so the override above never
+      # reaches them;
+      # this maps to networkd's UseDNS=false.
       ra-overrides:
         use-dns: false
 {% endfor %}

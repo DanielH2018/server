@@ -25,8 +25,8 @@ clone=${1:?usage: claude-clone-sync.sh <clone-dir>}
 export LC_ALL=C
 cd "$clone"
 
-# The apply and the timer run this same script; the second to start skips rather than racing
-# the first for git's ref locks.
+# The apply and the timer run this script; the second to start skips rather than race for git's ref
+# locks.
 exec 9>"$(git rev-parse --git-dir)/claude-clone-sync.lock"
 if ! flock -n 9; then
   echo "skipped: another claude-clone-sync run holds the lock"
@@ -53,8 +53,8 @@ if [[ $before == "$after" ]]; then
 fi
 echo "advanced ${before:0:12}..${after:0:12}"
 
-# The hook shim runs every guard with `uv run --no-sync`, so a pull that moves the lock and
-# leaves the venv behind leaves guards that cannot import, and each falls back to `ask`.
+# The hook shim runs guards with `uv run --no-sync`: a stale venv leaves guards that cannot import,
+# and each falls back to `ask`.
 if ! git diff --quiet "$before" "$after" -- uv.lock pyproject.toml; then
   "$HOME/.local/bin/uv" sync --frozen --compile-bytecode
 fi

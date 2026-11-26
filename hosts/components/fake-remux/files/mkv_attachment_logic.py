@@ -13,9 +13,7 @@ script owns the probe and the rewrite and this module owns every decision they m
 import pathlib
 import re
 
-# The exact character class ffmpeg's safe_filename() accepts. A leading '.' is excluded here on
-# purpose — ffmpeg allows it, but a dotfile attachment name is a needless trap for the shell
-# pipelines that later handle a dumped font.
+# ffmpeg's safe_filename() class, but a leading '.' is excluded: dotfiles trip shell pipelines.
 SAFE = re.compile(r"^[A-Za-z0-9_-][A-Za-z0-9_.-]*$")
 
 

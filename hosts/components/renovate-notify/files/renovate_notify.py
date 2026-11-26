@@ -69,8 +69,7 @@ from host_lib import atomic_write, discord_post, log, parse_env_file
 
 CONFIG = "/etc/renovate-notify/config.env"
 USER_AGENT = "renovate-notify"
-# The token `main` looks up once per run; None reads anonymously. A module binding rather than
-# an argument because every fetch below, build_pr and dead_paths included, goes through `get`.
+# A module binding, not an argument: every fetch below goes through `get`. None reads anonymously.
 _token: str | None = None
 DASHBOARD_STALE_MSG = (
     "Renovate looks DOWN — its Dependency Dashboard is stale or missing. The Renovate "
@@ -328,15 +327,11 @@ def main() -> int:
     # Fold it into the fingerprint so it notifies on transition, not every daily tick.
     issues = renovate_issues(repo)
     stale = dashboard_stale(find_dashboard(issues))
-    # Repository Problems (per-package lookup failures, config warnings) get no PR and
-    # don't touch dashboard staleness — a package can silently stop updating forever
-    # otherwise. Problem strings go straight into the
-    # fingerprint so a NEW problem re-pages even while an old one is still unresolved.
+    # Repository Problems get no PR and do not touch dashboard staleness. Problem strings enter the
+    # fingerprint so a NEW problem re-pages.
     problems = find_dashboard_problems(issues)
-    # Updates that soaked past their minimumReleaseAge and never got a PR. Neither
-    # of the two checks above can see this one: the dashboard keeps updating (not stale) and a
-    # held update is not a lookup failure (no Repository Problem) — the item just sits in
-    # "Pending Status Checks" indefinitely.
+    # Updates past minimumReleaseAge with no PR: the dashboard keeps updating and no Repository
+    # Problem is raised, so the checks above miss them.
     body = dashboard_body(issues)
     unparseable = body is not None and (
         dashboard_headers_unrecognized(body) or pending_section_unreadable(body)
@@ -345,17 +340,14 @@ def main() -> int:
     now = time.time()
     seen_file = os.path.join(state_dir, "pending_seen.json")
     run_file = os.path.join(state_dir, "last_run")
-    # A lost dwell file restarts every clock at zero, which reads exactly like the intended
-    # first-run bootstrap and leaves the arm above able to find nothing for up to 14 days
-    # Report the reset instead of completing healthy through that window.
+    # A lost dwell file restarts every clock at zero, like first-run bootstrap; report the reset
+    # instead of healthy.
     pending_reset = pending_state_lost(seen_file, run_file)
     seen = update_pending_seen(read_pending_seen(seen_file), pending, now)
     stuck_pending = stale_pending(seen, pending, now)
-    # A tag re-pushed faster than its own soak + grace resets the dwell above forever, so the
-    # branch clock is the floor under it.
+    # A tag re-pushed faster than its soak + grace resets the dwell forever; the branch clock is the
+    # floor.
     churning = churning_pending(seen, pending, now)
-    # An autoclosed PR is no longer open, so the digest drops it, and its update sits on the
-    # dashboard as an ordinary awaiting row.
     now_dt = datetime.fromtimestamp(now, timezone.utc)
     autoclosed = find_autoclosed(
         autoclosed_candidates(repo, now_dt),
@@ -371,10 +363,8 @@ def main() -> int:
         + ("|pending:" + pending_fingerprint(stuck_pending) if stuck_pending else "")
         + ("|pending-churn:" + churn_fingerprint(churning) if churning else "")
         + ("|autoclosed:" + autoclosed_fingerprint(autoclosed) if autoclosed else "")
-        # Keyed on the date the clocks become usable, so the same loss pages once. The run
-        # after this one rewrites the file, the component drops, and the fingerprint moves
-        # again — so expect one follow-up digest (or CLEARED_MSG) the next day. That is the
-        # cost of folding this arm into the same dedupe as the other three, not a bug.
+        # Keyed on the date the clocks become usable, so one loss pages once; expect one follow-up
+        # digest next day.
         + ("|pending-reset:" + pending_reset_fingerprint(now) if pending_reset else "")
     )
     prev_fp = read_state(state_file)
@@ -426,9 +416,8 @@ def main() -> int:
                 write_state(state_file, cur_fp)
 
     if not dry:
-        # The dwell clock, written every run regardless of what was posted — see
-        # write_pending_seen for why it must not ride the delivery gate. A run that found no
-        # dashboard parsed no items, and rewriting from them would restart every clock.
+        # Written every run regardless of delivery; a run with no dashboard parsed no items and
+        # would restart every clock.
         if body is not None:
             write_pending_seen(seen_file, seen)
         # Liveness marker for monitor-bridge — only on a clean completion (a fetch

@@ -6,8 +6,8 @@ OnFailure={{ claude_code_sync_alert_unit }}
 Type=oneshot
 # This host's journald stores notice and above (MaxLevelStore=notice), so stdout logs at notice.
 SyslogLevel=notice
-# As the user that owns the store: the copy authenticates with that user's ssh key, and the
-# files on the far side must stay owned by the same account.
+# The copy authenticates with the owner's ssh key, and far-side files must stay owned by the same
+# account.
 User={{ sys_user }}
 # DECIDED: one-way and overwriting (operator, issue #3123). This host is the only writer that
 # counts. --delete is what makes the far store MATCH rather than keep entries this host
@@ -24,9 +24,7 @@ ExecStart=/usr/bin/rsync -a --delete --mkpath --itemize-changes --chmod=a-w \
   -e "ssh -o BatchMode=yes -o ConnectTimeout=20" \
   {{ claude_code_memory_sync_dir }}/ \
   {{ claude_code_memory_sync_target }}:{{ claude_code_memory_sync_target_dir }}/
-# The textfile that tells a timer which stopped firing from one that runs clean.
-# timer-textfile.j2 has the shape and the deadline rule.
-# A run the ExecCondition skips writes nothing either, so an empty store reads as a timer that
-# stopped: the source is daniel-box's own store, and an empty one is not a healthy state.
+# A run the ExecCondition skips writes nothing, so an empty store reads as a stopped timer: an empty
+# store is not healthy.
 {% from 'templates/timer-textfile.j2' import timer_textfile with context %}
 {{ timer_textfile('claude-memory-sync', claude_code_memory_sync_interval) }}

@@ -16,9 +16,8 @@ Accept=yes
 SocketUser=root
 SocketGroup={{ worktree_holders_group }}
 SocketMode=0660
-# Without this, a stopped socket leaves its file behind. A connect to it is then refused,
-# which the callers read as a failed scan and refuse every removal; an absent file makes them
-# fall back to the unprivileged scan with a warning instead.
+# A stale socket file makes callers refuse every removal; an absent one falls back to the
+# unprivileged scan.
 RemoveOnStop=yes
 MaxConnections=16
 

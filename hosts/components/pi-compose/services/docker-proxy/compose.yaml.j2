@@ -41,8 +41,7 @@ services:
     read_only: true
     tmpfs:
       - /run
-    # LSIO socket-proxy is haproxy on a high port — already read_only + tmpfs.
-    # Empty add; if haproxy can't drop to its user, add [SETUID, SETGID]. Verify on deploy.
+    # If haproxy cannot drop to its user, add [SETUID, SETGID].
     cap_drop:
       - ALL
     security_opt:
@@ -50,8 +49,7 @@ services:
     restart: unless-stopped
     healthcheck:
       test: ["CMD-SHELL", "wget -qO /dev/null http://localhost:2375/version || exit 1"]
-      # Host-tunable cadence: 10s is fine on the server, but each probe forks runc twice —
-      # real CPU/PID churn on the Pi (see container_healthcheck_interval in its host_vars).
+      # Host-tunable cadence: each probe forks runc twice, real CPU/PID churn on the Pi.
       interval: {{ container_healthcheck_interval | default('10s') }}
       timeout: {{ container_healthcheck_timeout | default('5s') }}
       retries: {{ container_healthcheck_retries | default(3) }}
@@ -59,7 +57,6 @@ services:
     labels:
       # Disable watchtower update
       - "com.centurylinklabs.watchtower.enable=false"
-    # Resource caps for blast-radius containment (M1); tune from cAdvisor/Grafana.
     deploy:
       resources:
         limits:
@@ -69,16 +66,9 @@ services:
           cpus: '0.05'
           memory: 16M
 
-  # Write-capable proxy for lifecycle automation only — Autoheal, and nothing else. It lives
-  # solely on the private `lifecycle` network autoheal joins, so write access to the Docker API
-  # is NOT exposed to the proxy/monitoring/apps networks.
-  #
-  # IMAGES, NETWORKS, ALLOW_START, ALLOW_STOP and EVENTS stay off: Autoheal issues
-  # POST /containers/{id}/restart and nothing else, which ALLOW_RESTARTS gates on its own, and it
-  # POLLS on AUTOHEAL_INTERVAL=30 and never opens /events. Autoheal is the only container on the
-  # `lifecycle` network, so there is no second consumer to break.
-  #
-  # POST=1 STAYS: a restart is a POST, so this proxy remains write-capable by design.
+  # Write-capable proxy for Autoheal alone, on the private `lifecycle` network. Autoheal only POSTs
+  # restarts (ALLOW_RESTARTS) and polls, so the other verbs stay off. POST=1 stays: a restart is a
+  # POST.
   docker-proxy-lifecycle:
     image: lscr.io/linuxserver/socket-proxy:latest@sha256:6beb1743581ec3b2ed1a2bafd617e8c7a1d7ae2fe835293e333327618fc2b925
     container_name: docker-proxy-lifecycle
@@ -89,11 +79,10 @@ services:
       - PING=1
       - POST=1           # Allow write methods (POST/PUT/DELETE) — Autoheal's restart is a POST
       - ALLOW_RESTARTS=1 # Autoheal: restart unhealthy containers
-      # EXEC=0 blocks the exec *run* path (/exec/{id}/start -> 403, verified). Note: create-exec
-      # (/containers/{id}/exec) still slips through via CONTAINERS+POST, but with /exec/start
-      # blocked it can't execute. Accepted: this proxy is already create-capable (POST=1, needed
-      # by Autoheal's restart) and isolated to the lifecycle net, where Autoheal is the only
-      # member.
+      # EXEC=0 blocks /exec/{id}/start; create-exec still slips through via CONTAINERS+POST but
+      # cannot execute.
+      # Accepted: the proxy is already create-capable and Autoheal is the only member of the
+      # lifecycle net.
       - EXEC=0
     networks:
       - lifecycle
@@ -106,8 +95,7 @@ services:
     read_only: true
     tmpfs:
       - /run
-    # LSIO socket-proxy is haproxy on a high port — already read_only + tmpfs.
-    # Empty add; if haproxy can't drop to its user, add [SETUID, SETGID]. Verify on deploy.
+    # If haproxy cannot drop to its user, add [SETUID, SETGID].
     cap_drop:
       - ALL
     security_opt:
@@ -121,7 +109,6 @@ services:
       start_period: 10s
     labels:
       - "com.centurylinklabs.watchtower.enable=false"
-    # Resource caps for blast-radius containment (M1); tune from cAdvisor/Grafana.
     deploy:
       resources:
         limits:

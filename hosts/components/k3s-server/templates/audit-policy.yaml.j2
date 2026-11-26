@@ -1,53 +1,18 @@
 ---
-# kube-apiserver audit policy — shipped by the homelab-daniel-box package (k3s-server component).
-#
-# The apiserver reads this ONCE, at startup. A change here does not take effect until k3s
-# restarts, which is why homelab-k3s-restart restarts it inside the window.
-#
-# LEVELS, and why this one. `Metadata` records who did what to which object, without request
-# or response bodies. That answers the question this log exists for — "which session deleted
-# that" — at a fraction of the volume of `Request`/`RequestResponse`, which would write every
-# manifest this cluster applies into a file on the control-plane disk.
-#
-# Secrets are the deliberate exception, and in both directions. Secret WRITES reach the
-# `Metadata` catch-all at the bottom, like every other write. Secret READS have their own
-# `Metadata` rule ahead of the blanket read drop, because --secrets-encryption defends the
-# etcd snapshot and does nothing against an API-level read. That rule is the only record
-# that anyone read a credential, including a read RBAC refused. The control plane's own
-# machine identities are dropped just ahead of it, so kubelet and apiserver Secret reads
-# stay out of the file. That rule's volume is measured at its comment below.
-#
-# VOLUME. The file ships to loki-homelab as `{job="k8s-audit"}`, and without the drops below it
-# is about 60 percent of that Loki's ingest (53 MB an hour). To find the top producers, count by
-# `user.username`, `verb`, `objectRef.resource` and `objectRef.subresource` with a `| json`
-# stage over `bytes_over_time`. Each `level: None` rule under "controller status and churn"
-# names its share of that hour.
-#
-# No level here ever records a Secret body. Logging bodies would write every credential in
-# the cluster to a plaintext file on disk, which is the exact exposure --secrets-encryption
-# is armed to close. An audit log that leaks what encryption protects is worse than none.
+# The apiserver reads this once, at startup: a change waits for the k3s restart.
+# No level logs a Secret body: that would write every credential in plaintext to disk.
 apiVersion: audit.k8s.io/v1
 kind: Policy
 
-# Requests that never reach a rule are not logged at all, so the omissions below are real
-# filtering, not cosmetic ordering.
 omitStages:
   # RequestReceived doubles the entry count and carries nothing the later stage lacks.
   - RequestReceived
 
 rules:
-  # ── dropped first: high-volume, low-value ─────────────────────────────────────────────
-  # Ordering matters — the FIRST matching rule wins, so every `level: None` rule has to
-  # precede the catch-all at the bottom or the catch-all logs everything anyway.
+  # The FIRST matching rule wins, so every `level: None` rule must precede the catch-all.
 
-  # Secret reads by the control plane's own machine identities. The apiserver and kube-proxy
-  # are dropped unconditionally at the `system:kube-proxy` rule below, but the Secret-read
-  # rule that follows this one sits above that drop and would start logging them. The
-  # `system:nodes` rule below is scoped to leases, so it never dropped a kubelet Secret read
-  # at all — every kubelet mounting a Secret would land in the file without this.
-  #
-  # Both rules name the read verbs. A kubelet Secret WRITE is refused by the Node authorizer,
-  # so an attempt is anomalous and must keep reaching the catch-all at the bottom.
+  # Control-plane identities' Secret reads, which the Secret-read rule below would otherwise log.
+  # Read verbs only: a kubelet Secret WRITE is anomalous and must reach the catch-all.
   - level: None
     users: ["system:kube-proxy", "system:apiserver"]
     verbs: ["get", "list", "watch"]
@@ -61,18 +26,10 @@ rules:
       - group: ""
         resources: ["secrets"]
 
-  # Secret reads by everyone else — the one access --secrets-encryption cannot defend. It
-  # encrypts what etcd stores, so an API-level read returns the value regardless, and this
-  # rule is the only thing that records the read happened. It has to precede the blanket
-  # read drop below, which would otherwise swallow it, and it deliberately precedes the
-  # readonly ServiceAccount's own drop, because that SA's refused Secret reads are exactly
-  # the signal wanted. `Metadata` names the reader, the Secret and the time, never the value.
-  #
-  # Kept despite its volume, about 15 percent of the stream. kustomize-controller
-  # reads `homelab-cluster-vars` once per substituting Kustomization per reconcile (3,300 an
-  # hour), and notification-controller reads `flux-github-status` per commit-status post (930 an
-  # hour). Both are SOPS-delivered credentials, so a drop for them would hide a read of the
-  # cluster's substitution values by a compromised controller token.
+  # Secret reads: --secrets-encryption does not defend an API-level read, so this is the only
+  # record.
+  # It must precede the read drop and the readonly SA's drop; Metadata names the reader, never the
+  # value.
 {# DECIDED: every reader's Secret watch logs both ResponseStarted and ResponseComplete, with no
    identity exempt. A watch logs ResponseComplete only when it closes, so ResponseStarted is the
    only timely record that a token began streaming Secret changes. The ~160 entries an hour it
@@ -83,29 +40,19 @@ rules:
       - group: ""
         resources: ["secrets"]
 
-  # Pod logs, for the same reason and with the same placement constraint as Secret reads above:
-  # reading a pod's log is a `get` on pods/log, so the blanket read drop below swallowed it and
-  # nothing recorded it. The kept pod-subresource rule further down does NOT cover this — exec,
-  # attach and portforward are connect/create verbs and so never meet the read drop, while this
-  # one does. Logs are part of the same auto-approved reach into a container that rule exists to
-  # record, and for several of these workloads they carry request detail, tokens in error traces,
-  # and Authelia/CrowdSec specifics. Metadata names the reader, the pod and the time, never a line.
+  # pods/log is a `get`, so the read drop below would swallow it; the exec rule does not cover it.
+  # Logs carry tokens in error traces; Metadata names the reader, never a line.
   - level: Metadata
     verbs: ["get", "list", "watch"]
     resources:
       - group: ""
         resources: ["pods/log"]
 
-  # Reads. This cluster's controllers watch continuously, and a `get`/`list`/`watch` cannot
-  # change state, so logging them buys nothing and would dominate the file.
   - level: None
     verbs: ["get", "list", "watch"]
 
-  # The readonly ServiceAccount Claude sessions authenticate as. It holds `get list watch`
-  # and nothing else (k3s_server_readonly_sa_name), so every request it makes except a Secret read
-  # is already covered by the read rule above; this is belt-and-braces against the SA ever
-  # being widened by accident, which would otherwise flood the log rather than surface. Keep
-  # it below the Secret-read rule: this SA's Secret attempts must stay logged, refused or not.
+  # Belt-and-braces if the SA is ever widened. Keep it below the Secret-read rule: its refused
+  # Secret attempts must stay logged.
   - level: None
     users: ["system:serviceaccount:{{ k3s_server_readonly_sa_namespace }}:{{ k3s_server_readonly_sa_name }}"]
     verbs: ["get", "list", "watch"]
@@ -119,8 +66,6 @@ rules:
       - group: "coordination.k8s.io"
         resources: ["leases"]
 
-  # Leader-election churn from Longhorn, MetalLB and the k3s controllers. Same shape as the
-  # node leases: constant writes that say nothing about operator or agent activity.
   - level: None
     resources:
       - group: "coordination.k8s.io"
@@ -137,13 +82,8 @@ rules:
       - /openapi/*
       - /api*
 
-  # ── dropped: controller status and churn ──────────────────────────────────────────────
-  # Each rule names the controller's own identity, so the same write by a person or any other
-  # ServiceAccount still reaches the catch-all.
-
-  # kustomize-controller writing each Kustomization's status: about 100 patches per
-  # Kustomization per hour, 38 percent of the stream. A status write cannot change what Flux
-  # applies, and the Kustomization's own status already records every reconcile.
+  # A status write cannot change what Flux applies; the Kustomization status records every
+  # reconcile.
   - level: None
     users: ["system:serviceaccount:flux-system:kustomize-controller"]
     verbs: ["patch", "update"]
@@ -151,8 +91,7 @@ rules:
       - group: "kustomize.toolkit.fluxcd.io"
         resources: ["kustomizations/status"]
 
-  # Longhorn's manager writing its own CRs' status as replicas and engines change state: about
-  # 9 percent of the stream. Spec writes and deletes by the same account stay logged.
+  # Status writes only; spec writes and deletes by the same account stay logged.
   - level: None
     users: ["system:serviceaccount:longhorn-system:longhorn-service-account"]
     verbs: ["patch", "update"]
@@ -160,8 +99,7 @@ rules:
       - group: "longhorn.io"
         resources: ["engines/status", "volumes/status", "instancemanagers/status", "replicas/status", "nodes/status"]
 
-  # metrics-server authorising each kubelet scrape: a SubjectAccessReview is never stored, so
-  # it changes no state. About 2 percent of the stream.
+  # A SubjectAccessReview is never stored, so it changes no state.
   - level: None
     users: ["system:serviceaccount:kube-system:metrics-server"]
     verbs: ["create"]
@@ -169,8 +107,7 @@ rules:
       - group: "authorization.k8s.io"
         resources: ["subjectaccessreviews"]
 
-  # Event writes from any identity: an Event is itself a log record, and Flux alone wrote
-  # about 4 percent of the stream as Events. A delete is kept, since it removes evidence.
+  # An Event is itself a log record. A delete is kept, since it removes evidence.
   - level: None
     verbs: ["create", "patch", "update"]
     resources:
@@ -181,21 +118,14 @@ rules:
 
   # ── kept: everything that changes state, plus pod access ──────────────────────────────
 
-  # Pod subresources are the reason this log exists. `exec`, `attach` and `portforward` are
-  # auto-approved for agent sessions here and several of those pods mount Longhorn PVCs, so
-  # an entry naming the user, the pod and the time is the only record that a session reached
-  # inside a container at all.
+  # exec, attach and portforward are auto-approved for agent sessions: this entry is the only record
+  # of a session reaching inside a container.
   - level: Metadata
     resources:
       - group: ""
         resources: ["pods/exec", "pods/attach", "pods/portforward"]
 
-  # Catch-all: every remaining request, which after the drops above means the writes —
-  # create, update, patch, delete, deletecollection — plus anything a future resource adds.
-  #
-  # kustomize-controller's server-side-apply patches are the largest producer left here, about
-  # 15 percent of the stream (configmaps, deployments, Kustomizations, services,
-  # IngressRoutes). They are kept: Flux is the only write path to the workloads, so these
-  # entries are the record of what each promotion changed. The policy has no selector for
-  # dry-run requests, so the no-op dry-run patches cannot be dropped without the real ones.
+  # Catch-all: the writes after the drops above, plus anything a future resource adds.
+  # kustomize-controller's apply patches are kept as the record of each promotion; the policy cannot
+  # select dry-runs.
   - level: Metadata

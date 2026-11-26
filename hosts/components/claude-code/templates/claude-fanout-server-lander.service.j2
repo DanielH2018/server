@@ -6,9 +6,9 @@ OnFailure={{ claude_code_sync_alert_unit }}
 
 [Service]
 Type=oneshot
-# The operator's user, because land.sh deploys: it decrypts secrets and runs Ansible with
-# become. The batches' PRs are this account's, and the review records are read from this
-# account's state directory on daniel-server over ssh.
+# The operator's user, because land.sh deploys: it decrypts secrets and runs Ansible with become.
+# The batches' PRs are this account's, and review records are read from its state directory on
+# daniel-server.
 User={{ sys_user }}
 # DECIDED: the operator's checkout, not `claude_code_rc_workdir`. On daniel-box that variable is
 # the agent's clone, which `claude` owns with mode 0750 and no group write. As `ubuntu`, git
@@ -21,13 +21,13 @@ Environment=HOME=/home/{{ sys_user }}
 Environment=PATH=/home/{{ sys_user }}/.local/bin:/usr/local/bin:/usr/bin:/bin
 Environment=KUBECONFIG=/home/{{ sys_user }}/.kube/config
 Environment=PYTHONDONTWRITEBYTECODE=1
-# land.sh's own policy, behind the command's checks (scripts/deploy_tools/land_lib/policy.py).
-# Its pin gate refuses while `DEPLOY_HOLD` holds, and with the prefix set it pins the merge to the
-# head it checked, so a push after the checks fails the merge instead of landing unchecked.
+# With the prefix set, land.sh pins the merge to the head it checked, so a later push fails the
+# merge.
+# The pin gate also refuses while `DEPLOY_HOLD` holds.
 Environment=LAND_REQUIRE_BRANCH_PREFIX={{ claude_code_fanout_server_lander_branch_prefix }}
 Environment=LAND_REQUIRE_AUTHOR={{ claude_code_fanout_server_lander_author }}
-# This host's journald stores notice and above (MaxLevelStore=notice), so stdout logs at notice.
-# Without it the one line per candidate PR is dropped.
+# journald here stores notice and above; without SyslogLevel=notice the one line per candidate PR is
+# dropped.
 SyslogLevel=notice
 # DECIDED: KillMode=process. `land.sh --detach` forks each landing out of the caller's tree, but
 # `detach_fork.leave_unit_cgroup` moves it out of a USER-manager service only, and this is a
@@ -37,8 +37,5 @@ KillMode=process
 # Room for two checkouts, each a `git worktree add` and a first `uv run` sync, and two starts.
 TimeoutStartSec=30min
 ExecStart=/usr/bin/uv run --no-python-downloads python scripts/dev/fanout.py land-server --primary {{ claude_code_operator_checkout }}
-# The textfile that tells a timer which stopped firing from one that runs clean.
-# timer-textfile.j2 has the shape and the deadline rule.
-# 1800 is TimeoutStartSec above, the longest a healthy run may take.
 {% from 'templates/timer-textfile.j2' import timer_textfile with context %}
 {{ timer_textfile('claude-fanout-server-lander', claude_code_fanout_server_lander_interval, 1800) }}

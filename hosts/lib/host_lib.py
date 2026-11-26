@@ -35,41 +35,32 @@ import urllib.request
 from collections.abc import Callable, Collection, Mapping
 from dataclasses import dataclass
 
-# Cron inherits neither a useful PATH nor KUBECONFIG. `k3s` and `kubectl` both live in
-# /usr/local/bin, which the cron default omits, so a caller that does not fix this gets an
-# OSError that reads like a missing binary rather than a missing PATH.
+# Cron's default PATH omits /usr/local/bin where k3s and kubectl live; the OSError reads like a
+# missing binary.
 LOCAL_BIN = "/usr/local/bin"
 
-# Distinct from any exit code kubectl itself returns, so a caller can tell "the cluster said no"
-# from "we never reached the cluster".
+# Distinct from any kubectl exit code: "the cluster said no" vs "we never reached the cluster".
 KUBECTL_TIMEOUT_RC = 124
 KUBECTL_UNRUNNABLE_RC = 125
 
-# Discord rejects a message over 2000 characters with HTTP 400. This is the one cap every host
-# poster shares. monitor-bridge's bridge/common.py carries the pod-side twin of this cap
-# and `clamp_discord`, because the two programs ship by different mechanisms and cannot share a
-# module, so edit both together.
+# Discord rejects over 2000 characters with HTTP 400. monitor-bridge's bridge/common.py carries the
+# pod-side twin (`clamp_discord`); the two ship separately, so edit both together.
 DISCORD_MAX = 1900
 DISCORD_TRUNCATED = "\n…(truncated)"
 
-# discord_post's opt-in spool. A daily script spools one message a day, so 50 holds an
-# outage of weeks, and a revoked webhook cannot grow it without
-# bound. A flush posts at most four, so a backlog drains over several calls instead of in one
-# burst; a 429 from a burst only re-queues the message anyway.
+# A flush posts at most four so a backlog drains over several calls; 50 caps what a revoked webhook
+# can grow.
 DISCORD_SPOOL_MAX = 50
 DISCORD_SPOOL_FLUSH_MAX = 4
 
-# sd-daemon(3) priorities for `log`'s `level`. Without one, journald files a line at the unit's
-# `SyslogLevel=` (notice on checkout-sync and the builder), so `journalctl -p err` finds nothing for a failure.
-# ERR marks a failure the run could not work around; WARNING a read or a gate that
-# failed and the run worked around.
+# Without a priority journald files a line at the unit's SyslogLevel= (notice), so
+# `journalctl -p err` finds nothing. ERR: a failure not worked around; WARNING: one worked around.
 ERR = 3
 WARNING = 4
 
 # A logfmt value with any of these, or an empty one forced to quote, is written in quotes.
 _LOGFMT_NEEDS_QUOTES = re.compile(r'[\s"=\\]')
-# One pair as `logfmt` writes it: a bare value runs to the next space, a quoted one to its
-# unescaped closing quote.
+# A bare value runs to the next space, a quoted one to its unescaped closing quote.
 _LOGFMT_PAIR = re.compile(r'(?:^|\s)([\w.-]+)=("(?:[^"\\]|\\.)*"|[^\s"]*)')
 
 
@@ -350,9 +341,8 @@ def clamp_discord(content: str, limit: int = DISCORD_MAX) -> str:
 
 def _discord_send(webhook: str, content: str, user_agent: str, log=None) -> int | None:
     """POST one already-clamped message; the HTTP status, or None when nothing answered."""
-    # The Cloudflare-1010 rationale in discord_post's docstring is duplicated in monitor-bridge's
-    # bridge/net.py `_get_json`, which sets the same header for its Discord webhook GETs. The two
-    # programs ship by different mechanisms and cannot share a module, so edit both together.
+    # The Cloudflare-1010 rationale is duplicated in monitor-bridge's bridge/net.py `_get_json`;
+    # edit both together.
     data = json.dumps({"content": content}).encode()
     req = urllib.request.Request(
         webhook,
@@ -713,9 +703,8 @@ def read_untrusted(directory: str, name: str, limit: int) -> str:
         os.close(dir_fd)
 
 
-# What an unattended session's runner keeps of its transcript. Its home is a tmpfs that ends with
-# the session unit, so the session script copies the transcript into the exchange, and the
-# controller keeps it beside the run record. The cap stops a session filling the controller's disk.
+# The session home is a tmpfs ending with the unit, so the transcript is copied into the exchange;
+# the cap protects the controller's disk.
 TRANSCRIPT_NAME = "transcript.jsonl"
 TRANSCRIPT_MAX = 32 << 20
 

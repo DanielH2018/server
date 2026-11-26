@@ -5,8 +5,6 @@
 # Consumers source it with `|| exit 1`, so a host that misses it fails its check loudly instead of
 # reporting green. docs/archive/monitoring/m6-retire-kuma.md (*B0, B5, B7 and B8*) gives the plan.
 
-# boot_grace_active GRACE_S TAG
-# True (exit 0) when the host booted less than GRACE_S ago, so the caller skips this run.
 # Fails OPEN: an unreadable /proc/uptime returns non-zero, so the caller runs its check.
 boot_grace_active() {
   local grace="$1" tag="$2" up
@@ -17,9 +15,8 @@ boot_grace_active() {
   return 0
 }
 
-# wan_reachable TAG URL...
-# True (exit 0) as soon as one URL answers; false only when EVERY one failed. No URL at all
-# returns true, because a gate that cannot probe must report a fault, not suppress one.
+# No URL at all returns true, because a gate that cannot probe must report a fault, not suppress
+# one.
 wan_reachable() {
   local tag="$1"
   shift
@@ -32,10 +29,8 @@ wan_reachable() {
   return 1
 }
 
-# reachout_verdict TAG WAN_URL...
-# Sets REACHOUT_STATUS to `down` when the WAN answers (the source refused: a real fault) and to
-# `up` when no endpoint answers (the WAN check owns that page). REACHOUT_NOTE is the prefix the
-# caller puts before its own message, empty on the `down` path.
+# REACHOUT_STATUS is `down` when the WAN answers (the source refused: a real fault), `up` when no
+# endpoint answers (the WAN check owns that page); REACHOUT_NOTE is empty on `down`.
 reachout_verdict() {
   local tag="$1"
   shift
@@ -51,15 +46,8 @@ reachout_verdict() {
   fi
 }
 
-# write_check_textfile CHECK SUCCESS VERDICT_TS DEADLINE_S [LINE...]
-# M3's producer metric contract (docs/archive/monitoring/m3-textfile-timer.md): writes
-# $TEXTFILE_DIR/CHECK.prom with the four homelab_check_* series, then each LINE verbatim as a
-# detail series. TEXTFILE_DIR defaults to the real path, so a test needs no root.
-# homelab_check_duration_seconds is CHECK_DURATION_S when the caller sets it, else bash's $SECONDS,
-# which counts from the start of the sourcing script: a cron or timer script's run time up to its
-# verdict, with no change to the caller. Atomic: mktemp's
-# suffix never ends in .prom, chmod 0644 because mktemp makes 0600 and the collector reads as
-# uid 65534, then one mv. Returns non-zero on failure and removes its temp file; the caller logs.
+# Duration is CHECK_DURATION_S when set, else $SECONDS (run time since the sourcing script began).
+# Writes via mktemp then one mv; chmod 0644 because the collector reads as uid 65534.
 write_check_textfile() {
   local check="$1" success="$2" ts="$3" deadline="$4" duration="${CHECK_DURATION_S:-$SECONDS}" dir tmp
   shift 4

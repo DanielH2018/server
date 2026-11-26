@@ -14,12 +14,12 @@ Type=simple
 SyslogLevel=notice
 ExecStart={{ claude_code_rootq_socket_helper }}
 StandardInput=socket
-# Only the helper's own sendall reaches the socket. A traceback on stdout or stderr would
-# otherwise arrive in the answer, where the caller would have to tell it from a refusal.
+# Only the helper's own sendall reaches the socket, so a traceback cannot arrive in the answer and
+# pass for a refusal.
 StandardOutput=journal
 StandardError=journal
-# rootq bounds a command it runs at 30 s and the helper bounds rootq at 45 s, so a hung
-# instance must not hold a connection open past this.
+# rootq bounds a command at 30 s and the helper bounds rootq at 45 s, so a hung instance must not
+# hold a connection open past this.
 RuntimeMaxSec=90
 NoNewPrivileges=yes
 # DECIDED: no PrivateNetwork=, RestrictAddressFamilies= or CapabilityBoundingSet= here, unlike

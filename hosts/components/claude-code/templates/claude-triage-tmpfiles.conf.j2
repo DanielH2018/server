@@ -1,26 +1,19 @@
 {% import 'templates/claude-triage-pins.j2' as pins with context -%}
-# Shipped by the claude-code host component as homelab-claude-triage.conf: triage's directories.
-# The poller and claude-triage-setup run `systemd-tmpfiles --create` on this file before they
-# act, and so does every boot.
-#
-# The controller's home and its report tree, which the artifacts pod mounts read-only. Group
-# sys_user and setgid, so the pod, which runs as the operator, reads every report.
+# Run through `systemd-tmpfiles --create` by the poller and setup before they act, and each boot.
+# Group sys_user and setgid, so the pod, which runs as the operator, reads every report.
 d {{ pins.ctl_home }} 2750 {{ pins.ctl_user }} {{ sys_user }} -
 d {{ pins.report_dir }} 2750 {{ pins.ctl_user }} {{ sys_user }} -
-# The inbox, the records and the lock, written by the controller. Under operator_read the
-# operator's group gets traverse and no listing, so the operator can stat the inbox. It is
-# the units' UMask=0027 that keeps what they write out of the operator's read, not the group.
+# Under operator_read the operator's group can traverse but not list, so it can stat the inbox.
+# The units' UMask=0027, not the group, keeps what they write out of the operator's read.
 d {{ pins.state_dir }} {{ '0710' if claude_code_agent_operator_read else '0750' }} {{ pins.ctl_user }} {{ sys_user if claude_code_agent_operator_read else pins.ctl_user }} -
 d {{ pins.state_dir }}/inbox 0750 {{ pins.ctl_user }} {{ pins.ctl_user }} -
 d {{ pins.state_dir }}/runs 0750 {{ pins.ctl_user }} {{ pins.ctl_user }} -
 d {{ pins.state_dir }}/done 0750 {{ pins.ctl_user }} {{ pins.ctl_user }} -
 # The poller appends to this log, so the units' umask never reaches one created before it.
 f {{ pins.state_dir }}/shadow.jsonl 0640 {{ pins.ctl_user }} {{ pins.ctl_user }} -
-# What the controller shares with the session, through the session user's group. The session may
-# read and traverse each, and write only the out/ the runner recreates in the exchange on each run.
+# The session may read and traverse each, and write only the out/ the runner recreates on each run.
 d {{ pins.exchange_dir }} 2750 {{ pins.ctl_user }} {{ pins.session_user }} -
 d {{ pins.tools_dir }} 2750 {{ pins.ctl_user }} {{ pins.session_user }} -
 d {{ pins.clone_dir }} 2750 {{ pins.ctl_user }} {{ pins.session_user }} -
-# The mountpoint of the session's home. The session unit mounts a tmpfs here for each run, so the
-# directory itself stays root's and empty.
+# The session unit mounts a tmpfs here per run, so the directory itself stays root's and empty.
 d {{ pins.session_home }} 0755 root root -

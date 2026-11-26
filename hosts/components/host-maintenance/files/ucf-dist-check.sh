@@ -34,8 +34,7 @@ source "${HOMELAB_LIB_DIR:-/usr/lib/homelab}/homelab-check-lib.sh" || {
   exit 1
 }
 
-# The longest legitimate gap between two textfile writes: three hourly timer runs. Move it with
-# homelab-ucf-dist.timer. hosts/tests/test_ucf_dist_check.py pins the rules' literals to it.
+# Three hourly timer runs; move it with homelab-ucf-dist.timer.
 DEADLINE_S=10800
 # A copy younger than this is an upgrade still in progress, or one the operator is merging.
 GRACE_S=86400
@@ -64,8 +63,7 @@ SUCCESS=$((COUNT == 0))
 
 ((SUCCESS == 1)) || echo "pending package config copies older than ${GRACE_S}s (${COUNT}): $(tr '\n' ' ' <<<"$OVERDUE")"
 
-# A pending copy is the verdict, not this unit's failure: exiting 1 for it would also fail the
-# unit, and SystemdUnitsFailed would page the same cause twice.
+# A pending copy is the verdict: exiting 1 would make SystemdUnitsFailed page the same cause twice.
 write_check_textfile ucf-dist "$SUCCESS" "$NOW" "$DEADLINE_S" \
   "# HELP homelab_ucf_dist_pending_files *.ucf-dist and *.dpkg-dist copies under /etc older than a day at the check's last run." \
   "# TYPE homelab_ucf_dist_pending_files gauge" \

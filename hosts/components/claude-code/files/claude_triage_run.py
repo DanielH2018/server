@@ -40,8 +40,6 @@ import time
 from collections.abc import Callable
 from dataclasses import asdict, dataclass
 
-# The runner runs from /opt/claude-triage, where component.yml's `lib: host_lib.py` entry
-# ships host_lib.py beside it.
 from claude_triage_session import IN_DIR, OUT_DIR, PROMPT_NAME, RESULT_NAME
 from host_lib import (
     ERR,
@@ -60,21 +58,18 @@ from host_lib import (
 )
 
 CONFIG = "/etc/claude-triage/config.env"
-# The instance name reaches systemd, polkit's regex and a file name, so it is held to one
-# shape here and in 50-claude-triage.rules.j2.
+# One shape here and in 50-claude-triage.rules.j2: the name reaches systemd, polkit's regex, a file.
 EPISODE_ID = re.compile(r"^[a-z0-9][a-z0-9-]{0,62}$")
 # The states the report unit may be started with. 50-claude-triage.rules.j2 admits exactly these.
 STATES = ("diagnosed", "inconclusive", "timeout", "failed", "capped")
 # The unit that runs the session. 50-claude-triage.rules.j2 lets the agent start it.
 SESSION_UNIT = "homelab-claude-triage-session.service"
-# The session's JSON result carries its whole diagnosis; the cap only stops a session filling
-# the runner's memory.
+# The cap only stops a session filling the runner's memory.
 SESSION_OUTPUT_MAX = 1 << 20
 
 # The prefix on every journal line, as `log` writes it.
 TAG = "claude-triage"
-# The restart broker. 50-claude-restart.rules.j2 lets the controller start it, and the instance
-# is an allowlist key.
+# 50-claude-restart.rules.j2 lets the controller start it; the instance is an allowlist key.
 RESTART_UNIT = "homelab-claude-restart@{}.service"
 # An allowlist key fits the instance shape's 63 characters, so a longer name is never listed.
 RESTART_NAME_MAX = 64
@@ -468,8 +463,8 @@ def main(
         "subtype": "timeout" if timed_out else result.get("subtype"),
         "cost_usd": result.get("total_cost_usd"),
         "num_turns": result.get("num_turns"),
-        # A count, never the tools: a guard that cannot start denies every Bash call, and the run
-        # then reads like an ordinary inconclusive one.
+        # A count, never the tools; a guard that cannot start denies every Bash call and looks
+        # inconclusive.
         "denials": len(result.get("permission_denials") or []),
         "transcript_bytes": transcript_bytes,
         "transcript_cut": transcript_bytes == TRANSCRIPT_MAX,
@@ -478,8 +473,7 @@ def main(
         "finished": finished,
         "report": f"{cfg.get('REPORT_BASE_URL', '')}triage-{episode_id}.html",
     }
-    # The mode is explicit because the artifacts tree's default ACL cannot widen a file created
-    # 0600: neither the operator nor the artifacts pod could then read the report.
+    # The mode is explicit: the artifacts tree's default ACL cannot widen a file created 0600.
     write_textfile(
         os.path.join(runs_dir, f"{episode_id}.json"),
         json.dumps(record, indent=2, sort_keys=True) + "\n",

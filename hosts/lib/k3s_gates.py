@@ -48,11 +48,9 @@ from lib.k8s_conditions import (
     parse_conditions,
 )
 
-# ── what the cluster is expected to hold ─────────────────────────────────────────────────────
-# `lib.kubectl.CLUSTER_NODES["prod"]` is the repo's copy; the parity test holds the two equal.
 NODES = ("daniel-box", "daniel-server")
-# `longhorn_robustness.SAFE_ROBUSTNESS`, which this script cannot import. An allow-list: a state
-# nobody has heard of stops the upgrade. `unknown` is what an idle, detached volume reports.
+# An allow-list: an unknown state stops the upgrade. `unknown` is what an idle, detached volume
+# reports.
 SAFE_ROBUSTNESS = frozenset({"healthy", "unknown"})
 # `k3s_upgrade.SETTLED_BACKUP`. A Backup CR with no state yet is in flight, so it is not here.
 SETTLED_BACKUP = frozenset({"Completed", "Error", "Unknown"})
@@ -62,14 +60,13 @@ SERVER_PLAN = "k3s-server"
 AGENT_PLAN = "k3s-agent"
 CONTROL_PLANE_LABEL = "node-role.kubernetes.io/control-plane"
 
-# A server restart is recent when the controller-manager Lease was acquired under 15 minutes
-# ago. A renewTime older than the lease duration plus the slack below is the handover gap.
+# Recent when the Lease was acquired under 15 minutes ago; a renewTime older than the lease duration
+# plus slack is the handover gap.
 RESTART_QUIET_S = 15 * 60
 LEASE_RENEW_SLACK_S = 30
 
-# ── API paths. The Role and ClusterRole grant exactly these reads ────────────────────────────
-# `coredns` and the Lease are read by name: the Role grants `get` on them by `resourceNames`,
-# so a list of either is Forbidden.
+# `coredns` and the Lease are read by name: the Role grants `get` by resourceNames, so a list is
+# Forbidden.
 _LONGHORN = "/apis/longhorn.io/v1beta2/namespaces/longhorn-system"
 VOLUMES_PATH = f"{_LONGHORN}/volumes"
 BACKUPS_PATH = f"{_LONGHORN}/backups"
@@ -320,8 +317,8 @@ def check_server_restart(get: Getter, now: datetime) -> list[str]:
     acquired = _utc(spec.get("acquireTime"), "acquireTime")
     since_renew = (now - renewed).total_seconds()
     if since_renew > duration + LEASE_RENEW_SLACK_S:
-        # Just after a restart the old holder's record keeps its old acquireTime until it
-        # expires, so a stale renewTime is the handover gap.
+        # After a restart the old holder's record keeps its old acquireTime until it expires, so a
+        # stale renewTime is the handover gap.
         return [f"the Lease was last renewed {since_renew:.0f}s ago: a handover gap"]
     age = (now - acquired).total_seconds()
     if age < RESTART_QUIET_S:

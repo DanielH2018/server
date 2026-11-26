@@ -77,30 +77,20 @@ services:
       - /etc/alloy/config.alloy
       # Alloy binds 127.0.0.1 by default; Prometheus scrapes this from the LAN.
       - --server.http.listen-addr=0.0.0.0:12345
-      # The tailing cursor lives here — see the data volume below. NOT the image's own
-      # /var/lib/alloy/data: that parent is 0770 uid 473 in the image, so uid 1000 cannot
-      # traverse it to reach a bind mount inside, and Alloy dies at startup with
-      # `mkdir /var/lib/alloy/data: permission denied`. Root never hits it, which is why the
-      # cluster DaemonSet runs.
+      # Not the image's /var/lib/alloy/data: its parent is 0770 uid 473, so uid 1000 cannot reach a
+      # bind mount inside, and Alloy dies at startup with
+      # `mkdir /var/lib/alloy/data: permission denied`.
       - --storage.path=/data
       # Same reason Loki's own config sets analytics.reporting_enabled false: Pi-hole blocks
       # stats.grafana.org and each report would spend its retry budget on a name that never
       # resolves.
       - --disable-reporting
-      # /debug/pprof and /-/support answer by default in this build (v1.19.2's
-      # internal/alloycli/cmd_run.go: enablePprof true, disableSupportBundle false) and the
-      # port below is published on the LAN. pprof hands any LAN client a profiler that costs
-      # this 456 MB Zero 2 W real CPU, and /-/support returns a bundle carrying the running
-      # config. Neither has a consumer here. See the DECIDED marker on `ports:` for the rest
-      # of the surface and why the port itself stays published.
+      # pprof and /-/support answer by default and the port is on the LAN: pprof costs this Zero 2 W
+      # CPU, /-/support returns the running config. Neither has a consumer.
       - --server.http.enable-pprof=false
       - --server.http.disable-support-bundle
-    # The image's own uid is 473, and the bind-mount source is owned by the deploy user (1000).
-    # Left at the default, Alloy cannot write its positions under
-    # --storage.path. With no positions to resume from, every restart re-reads every
-    # container's log from the beginning and re-ships it. Matches the estate's PUID/PGID.
-    # The flip side is the storage path above: as 1000 this process cannot enter the
-    # image's /var/lib/alloy at all.
+    # The image's uid is 473 and the bind source is owned by 1000: left at default, Alloy cannot
+    # write its positions, so every restart re-reads and re-ships every container's log.
     user: "1000:1000"
     cap_drop:
       - ALL
@@ -115,63 +105,37 @@ services:
 {% endfor %}
     depends_on:
       - docker-proxy
-    # Docker copies the HOST's resolver options into every container's resolv.conf, and this
-    # host's are `timeout:2 attempts:1` (pi-resolver's common_resolver_options) — sized so a dead Pi-hole
-    # costs one 2s wait before 1.1.1.1 answers. Inside a container that same single 2s try
-    # also governs the hop to Docker's embedded DNS at 127.0.0.11, which is dockerd itself,
-    # and dockerd stalls for seconds on this Zero 2 W whenever it is busy with a container or
-    # network operation. Every 60s pass here opens a fresh connection per container, so one
-    # such stall fails six lookups at once — `lookup docker-proxy on 127.0.0.11:53: i/o
-    # timeout`, at level=error, against 0ms for the same lookup at idle. Neither
-    # side is broken: the resolver is idle-fast, and CFS throttling at the 0.30 cap can hold
-    # this process at most 70ms per period, so it cannot manufacture a 2s timeout. Three 3s
-    # tries ride out the stall. `attempts` is rounds over the nameserver list, and the list
-    # here is one entry, so this is three tries against dockerd — the upstream failover the
-    # host's values were tuned for happens inside dockerd's own forwarder, not on this hop.
+    # The host's `timeout:2 attempts:1` also governs dockerd's DNS at 127.0.0.11, which stalls here
+    # for seconds.
+    # That fails `lookup docker-proxy` with i/o timeout; three 3s tries ride out the stall.
     dns_opt:
       - timeout:3
       - attempts:3
     volumes:
-      # The config is a package file (a plain file the renderer installs beside this one) at mode
-      # 0644: it carries no secret.
       - type: bind
         source: /usr/lib/homelab/compose/alloy/config.alloy
         target: /etc/alloy/config.alloy
         read_only: true
         bind: {create_host_path: false}
-      # Positions must survive a restart. Without this the container re-reads every
-      # container's log from the beginning on each recreate, which both duplicates lines in
-      # Loki and spends the Pi's uplink re-sending them.
+      # Positions must survive a restart, or each recreate re-reads every container's log and
+      # re-sends it to Loki.
       - type: bind
         source: ./data
         target: /data
         bind: {create_host_path: false}
-      # The two host health timers' verdict lines (pi_health source). Read-only, and the same
-      # path inside and out so the config's path needs no translation. No group_add: the
-      # timers' services write as uid 1000 and this container already runs as 1000:1000.
+      # Read-only, same path inside and out. No group_add: the timers' services write as uid 1000
+      # and this container runs as 1000:1000.
       - type: bind
         source: /var/log/pi-health
         target: /var/log/pi-health
         read_only: true
         bind: {create_host_path: false}
     environment:
-      # The two values config.alloy reads. The password is a SOPS key that the project's Compose
-      # env file fills; the domain is a plain variable, rendered at build time.
       - ALLOY_PI_HTTP_PASSWORD={{ alloy_pi_http_password }}
       - HOMELAB_DOMAIN={{ domain }}
-      # A soft ceiling on the Go runtime's TOTAL memory (heap, stacks, GC metadata, everything
-      # `go_memstats_sys_bytes` counts), not on the live heap. When the total reaches it the
-      # runtime collects continuously, and the only thing bounding that is the GC CPU limiter
-      # at 50% of GOMAXPROCS: a limit sized from RSS instead of the runtime total runs at 2 GC
-      # cycles per second and 0.28 of a core. The live heap plateaus at ~38 MB (a fresh process
-      # starts at 22 MB), so with GOGC=off below this limit is what starts a collection, and the
-      # distance from the live set plus the runtime's non-heap classes (38 + 8 MB) up to it is
-      # one cycle's worth of allocation: ~50 MB, ~350 s at the measured 145 KB/s. A limit that is
-      # reached only forces the scavenger to hand idle heap pages back to the kernel, which is
-      # cheap; the limit must not sit under the live set plus GC slack. The guard in
-      # hosts/lib/tests/test_pi_compose_alloy.py takes the floor from the measured live heap, not
-      # from `sys_bytes`, which never shrinks, and requires at least half the live heap of slack,
-      # so a "thrifty" edit here cannot shorten the cycle.
+      # A ceiling on TOTAL runtime memory (go_memstats_sys_bytes), not live heap: sized from RSS it
+      # costs 0.28 core.
+      # Keep it above live heap plus GC slack; test_pi_compose_alloy.py guards that floor.
       - GOMEMLIMIT=104MiB
       # GOGC=off: the memory limit above is the only thing that starts a collection. CPU is not
       # cheaper than RAM on this host: a limit tight enough to save ~10 MiB spends 0.28 cores.
@@ -195,9 +159,8 @@ services:
       # swap only (zram holds it at about 4.6:1). Pinning the heap instead (`memswap_limit` equal
       # to the cap) would hold 40-60 MB resident on a host with 10-25 MB free.
       - GOGC=off
-      # One GC-visible processor. Alloy defaults GOMAXPROCS to the 4 cores on this Pi and
-      # spawns a worker set to match, which is pure contention for a job this small on a box
-      # that already showed RCU stalls from fork rate.
+      # One GC-visible processor: Alloy's default of 4 workers is pure contention on a box with RCU
+      # stalls from fork rate.
       - GOMAXPROCS=1
     # NO healthcheck. On this host a healthcheck is only available to an image that ships an
     # HTTP client, and `test:` failing to EXEC is indistinguishable from the service being down,
@@ -226,8 +189,8 @@ services:
     ports:
       - "{{ server_ip }}:12345:12345/tcp"
     labels:
-      # The sha256 of the rendered config.alloy. Compose cannot see the file's content, so the
-      # label is what makes `up -d` recreate the container when the config changes.
+      # Compose cannot see the file's content; the label makes `up -d` recreate the container when
+      # the config changes.
       - "homelab.config-sha256={{ alloy_config_sha256 }}"
     # 128M is the containment cap, 24 MiB over the 104 MiB GOMEMLIMIT above so a spike is
     # collected rather than OOM-killed. Startup under the 0.30 CPU cap takes minutes on this host

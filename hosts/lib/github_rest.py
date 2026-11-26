@@ -19,9 +19,8 @@ from collections.abc import Callable, Mapping
 
 GITHUB_API = "https://api.github.com"
 GITHUB_TIMEOUT_S = 15
-# The gh-quota component installs the ledger here. A component's copy of this module sits in the
-# component's own directory, where a bare `import gh_quota` cannot find it. `GH_QUOTA_MODULE` in
-# the environment points elsewhere, for a test that records into its own ledger.
+# A component's copy of this module sits in its own directory, where a bare `import gh_quota`
+# fails. `GH_QUOTA_MODULE` in the environment points elsewhere, for a test's own ledger.
 GH_QUOTA_MODULE = "/usr/lib/homelab/gh_quota.py"
 
 
