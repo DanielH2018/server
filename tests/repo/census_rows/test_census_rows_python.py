@@ -253,7 +253,7 @@ ROWS = (
         min_matches=200,
         must_find=YAML_FAST_USERS,
         allow={
-            "scripts/lib/tests/test_yaml_fast.py": (
+            "scripts/lib/tests/utils/test_yaml_fast.py": (
                 "asserts the swap's equivalence by comparing the two parsers"
             ),
             "scripts/diagnostics/probe_lib/health_docker.py": (

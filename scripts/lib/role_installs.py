@@ -6,7 +6,7 @@ installed path to its tree source, `stage()` copies the sources to that layout u
 `role_entries()` reads each command a role's or component's files run `--no-project` and
 returns the staged copy it runs. `lib.stdlib_only` walks those entries from the stage.
 
-Run: uv run pytest scripts/lib/tests/test_stdlib_only.py
+Run: uv run pytest scripts/lib/tests/script_census/test_stdlib_only.py
 """
 
 import atexit

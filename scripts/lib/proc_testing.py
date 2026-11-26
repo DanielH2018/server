@@ -43,7 +43,7 @@ test_proc_testing.py` covers this module's own behaviour, and a test that pins t
 environment its subject runs under — a hook fixture holding `PATH` to `/usr/bin:/bin` — keeps
 its raw form. Both cases are named in the guard's exemption set with that reason.
 
-Run: uv run pytest scripts/lib/tests/test_proc_testing.py
+Run: uv run pytest scripts/lib/tests/utils/test_proc_testing.py
 """
 
 import os

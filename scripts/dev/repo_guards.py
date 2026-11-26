@@ -75,8 +75,8 @@ LISTED = (
     # The first set.
     "tests/repo",
     "scripts/docs/tests",
-    "scripts/lib/tests/test_entry_points_answer_help.py",
-    "scripts/lib/tests/test_script_classify_package_imports.py",
+    "scripts/lib/tests/script_census/test_entry_points_answer_help.py",
+    "scripts/lib/tests/script_census/test_script_classify_package_imports.py",
     "scripts/validate/tests/test_render_shell.py",
     "hosts/lib/tests/test_k3s_restart_window.py",
     "scripts/renderer/tests/test_renderer_task_inputs.py",

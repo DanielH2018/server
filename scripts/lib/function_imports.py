@@ -18,7 +18,7 @@ snapshot of `sys.modules` and `sys.path` taken after the module loaded, and the 
 restored afterwards: one subcommand's import must not make another's pass, because a real run
 only ever reaches one.
 
-Run: uv run pytest scripts/lib/tests/test_function_imports.py
+Run: uv run pytest scripts/lib/tests/script_census/test_function_imports.py
 """
 
 import ast

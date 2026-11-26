@@ -3,7 +3,7 @@
 `land.sh` reads a PR's file list through these to derive the tags it gates, and
 `findings_lib/precomputed.py` reads them to say what a brief's cited paths deploy.
 
-Run: uv run pytest scripts/lib/tests/test_role_paths.py
+Run: uv run pytest scripts/lib/tests/k8s/test_role_paths.py
 """
 
 import re

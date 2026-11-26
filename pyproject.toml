@@ -499,7 +499,7 @@ include = [
   "scripts/lib/_claude_worktree.py",
   "scripts/lib/worktrees.py",
   "scripts/lib/worktree_testing.py",
-  "scripts/lib/tests/test_claude_worktree_import.py",
+  "scripts/lib/tests/script_census/test_claude_worktree_import.py",
 ]
 [tool.ty.overrides.rules]
 import-not-found = "ignore"

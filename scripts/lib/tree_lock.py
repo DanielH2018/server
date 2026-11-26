@@ -2,7 +2,7 @@
 
 Every job that mutates or snapshots the primary checkout takes this lock. Host templates read
 `server_git_tree_lock` from `group_vars/all.yml` instead, and
-`scripts/lib/tests/test_tree_lock.py` holds the two equal (#3276).
+`scripts/lib/tests/git_and_gh/test_tree_lock.py` holds the two equal (#3276).
 """
 
 TREE_LOCK = "/var/lock/server-git-tree.lock"

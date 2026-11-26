@@ -6,7 +6,7 @@ never touched. That is worse than no gate: an inert check reports nothing, this 
 pass about the wrong subject.
 
 The identity check itself lives in `lib.kubectl` and is tested there
-(`scripts/lib/tests/test_kubectl.py`). What stays here is the gate's own use of it: the
+(`scripts/lib/tests/k8s/test_kubectl.py`). What stays here is the gate's own use of it: the
 refusal comes first and is one line, and it is a failure rather than a skip when
 `deploy_lib/detach_notify.py` reads it.
 

@@ -285,7 +285,7 @@ def render_markdown(rows: list[dict[str, str]]) -> str:
     parts.append(
         f"\n## Usage\n\n{len(documented)} script(s) document how to invoke themselves. "
         "The rest take `--help`, which every catalogued entry point answers with exit 0 "
-        "(`scripts/lib/tests/test_entry_points_answer_help.py`).\n"
+        "(`scripts/lib/tests/script_census/test_entry_points_answer_help.py`).\n"
     )
     for row in documented:
         parts.append(f"\n### `{row['path']}`\n")

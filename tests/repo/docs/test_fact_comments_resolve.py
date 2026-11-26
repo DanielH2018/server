@@ -5,7 +5,7 @@ side of the pair. A comment whose doc was deleted or whose heading was renamed i
 nothing, so the lint never reads it, and it sends the next reader to a section that is gone.
 
 Only real comments count, read with `tokenize`: a `# fact:` line inside a string literal is a
-fixture, such as the ones in `scripts/lib/tests/test_facts_atoms.py`.
+fixture, such as the ones in `scripts/lib/tests/facts/test_facts_atoms.py`.
 """
 
 import io
