@@ -327,18 +327,6 @@ checks each gate suppresses.
   **`ha_heartbeat` is deliberately not gated on Loki**: a Loki gate would suppress the WHOLE check
   during a Loki outage, which would blind the real heartbeat. The ban arm fails open on a Loki
   error and keeps the heartbeat's own verdict. Pure `ha_ban_verdict()` is unit-tested.)
-- **`airflow_scheduler`** (the Airflow scheduler's own health server, `GET /health` on
-  `airflow-scheduler:8974`, over the `airflow-scheduler` fence, whose one caller is
-  `monitor-bridge`: `down` on a 503. The scheduler launches every warehouse rollup, so a dead
-  one starts no run and fails no `check` task; this row is the only signal. The server answers
-  200 only while the pod's newest scheduler job is RUNNING and sent a heartbeat within
-  `scheduler_health_check_threshold` (30 s by default), and 503 otherwise, including when its
-  database read fails. That status is the verdict, and the bridge keeps no age threshold of its
-  own. A bridge bound above 30 s could never fire while the server answers 200, and a cleanly
-  stopped scheduler leaves a fresh heartbeat on a job no longer RUNNING. A refused connection,
-  as when the pod is gone, surfaces through `_evaluate`, the `check_bazarr` convention. Empty
-  `AIRFLOW_SCHEDULER_URL` disables the check (stays up). The row is `startup_grace`, because the
-  scheduler runs on daniel-server and restarts with the weekly reboot.)
 - **`speedtest`** (speedtest-tracker's `/api/v1/results`, newest row only, Bearer
   `speedtest_api_token` from the mounted credentials Secret. Three arms in this order: status, then
   age, then the download floor. The order is load-bearing, because `download_bits` is null on a

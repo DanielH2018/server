@@ -4,5 +4,5 @@
 | `b2_reachable` | `b2_reachable` gate, which suppresses them | 2 | `b2_storage`, `b2_object_lock` |
 | `wan_reachable` | `wan_reachable` gate, which suppresses them | 7 | `discord`, `r2_usage`, `r2_etcd_lock`, `cloudflare_ips_drift`, `healthchecks_drift`, `domain_registration`, `uptime_robot_monitors` |
 | `prometheus` | the exporter-health probe, which suppresses them while an exporter is down | 1 | `host_packages` |
-| `startup_grace` | their rule's `for: 10m`, which rides out the weekly reboot | 6 | `n8n`, `bazarr`, `prowlarr_indexers`, `scrutiny`, `airflow_scheduler`, `speedtest` |
+| `startup_grace` | their rule's `for: 10m`, which rides out the weekly reboot | 5 | `n8n`, `bazarr`, `prowlarr_indexers`, `scrutiny`, `speedtest` |
 | ungated | nothing | 3 | `arr_queue`, `etcd_restore_drill`, `ha_heartbeat` |
