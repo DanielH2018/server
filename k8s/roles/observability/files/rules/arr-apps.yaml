@@ -7,19 +7,12 @@
 groups:
   - name: arr-apps
     rules:
-      # Prowlarr pushes its indexers to Sonarr, Radarr and Lidarr with each app's API key, which
-      # it stores in its own database. A stale key fails every push with a 401 while RSS still
-      # works, so nothing else turns red. ApplicationLongTermStatusCheck reports an app whose
-      # pushes have failed for 6 hours; the short-term check is not read, because every app
-      # rollout trips it.
-      # `max by (source)` drops `instance`, which moves with each Prowlarr pod, and `message`,
-      # which lists the failing apps and changes as one recovers. Either would resolve the alert
-      # and fire it again under a new label set.
-      # The absent() arms fire when the check above cannot be read: no Prowlarr exportarr target
-      # at all, or a scrape that succeeds and serves no health family. The family's arm is
-      # conjoined with up == 1, so a failed scrape pages once, through ScrapeTargetDown.
-      # When every app fails, Prowlarr's message is "All applications are unavailable ..." with
-      # no list, so the summary names every app instead.
+      # A stale key fails every push with a 401 while RSS still works; only the long-term check is
+      # read, since every rollout trips the short-term one.
+      # `max by (source)` drops `instance` and `message`, either of which would resolve and re-fire
+      # the alert under a new label set.
+      # The absent() arms are conjoined with up == 1, so a failed scrape pages once, through
+      # ScrapeTargetDown.
       - alert: ProwlarrAppSyncFailing
         expr: >-
           max by (source) (prowlarr_system_health_issues{job="exportarr", source="ApplicationLongTermStatusCheck"}) > 0
@@ -43,15 +36,9 @@ groups:
             Prowlarr health. A 401 in Prowlarr's log means a stale key: paste the app's API key
             into Prowlarr's Settings, Apps, then click Sync App Indexers.
 
-      # NotificationStatusCheck reports a Connect notification whose sends fail: a deleted Discord
-      # webhook, or a CustomScript whose file is gone. The app's own onHealthIssue posts go
-      # through those notifications, so a failing one silences every health error the app raises,
-      # Prowlarr's all-indexers-down among them.
-      # One rule per app with exportarr, because the exportarr job discovers its targets and so
-      # cannot hand the alert a `service`. `max` drops `instance` and `message`, which move with
-      # each pod and each failing notification.
-      # The hour rides out a Discord outage: the app retries on a backoff and clears the check on
-      # the next good send, as one 30-minute Radarr episode did.
+      # A failing Connect notification silences every health error the app raises. One rule per app:
+      # the exportarr job discovers its targets, so it cannot hand the alert a `service`.
+      # `max` drops `instance` and `message`. The hour rides out a Discord outage.
       - alert: ArrNotificationsFailing
         expr: max(sonarr_system_health_issues{job="exportarr", source="NotificationStatusCheck"}) > 0
         for: 1h

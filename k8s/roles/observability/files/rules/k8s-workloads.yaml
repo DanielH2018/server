@@ -25,9 +25,8 @@
 groups:
   - name: k8s-workloads
     rules:
-      # The bridge's streak counts any non-empty offender set, so two workloads in successive
-      # cycles add up to one page. A `for:` is per series, so this pages only a workload that
-      # stayed unavailable for the whole hold.
+      # A `for:` is per series, so this pages only a workload unavailable for the whole hold; the
+      # old streak summed two workloads across cycles.
       - alert: K8sDeploymentReplicasUnavailable
         expr: |
           (
@@ -75,8 +74,7 @@ groups:
             "service", "unmapped", "", ""
           )
         for: 10m
-        # A 2-minute good dip resets a bare `for:` and drops the alert, where the bridge's 300s
-        # cycle never saw it. Five minutes mirrors the cycle.
+        # A 2-minute good dip resets a bare `for:`; five minutes mirrors the bridge's cycle.
         keep_firing_for: 5m
         labels:
           severity: warning
@@ -184,8 +182,7 @@ groups:
             {{ $labels.container }} restarted more than 3 times in the last hour, at least once in
             the last 30 minutes. Readiness can pass between restarts, so the replica alerts may
             stay quiet.
-      # The bridge pages this arm on one bad sample, which spans up to 300s. 5m keeps that span
-      # and does not page a DaemonSet rollout, which a 1-minute evaluation would.
+      # 5m does not page a DaemonSet rollout, which a 1-minute evaluation would.
       - alert: K8sDaemonSetUnavailable
         expr: |
           (
@@ -209,11 +206,9 @@ groups:
           description: >-
             {{ $labels.daemonset }} has had {{ $value | printf "%.0f" }} unavailable pods for 5 minutes. The bridge
             paged this on one 300s sample, and the hold keeps that span.
-      # The census floors. Every per-workload rule above is silent over an empty vector, so
-      # these page the input instead. 5 is a sanity floor that mirrors no count. A dead
-      # kube-state-metrics fires this, K8sDaemonSetSeriesMissing, K8sNodeAllocatableMissing and
-      # K8sStateSeriesMissing, all with service="observability", in place of the bridge's
-      # prometheus gate.
+      # Per-workload rules are silent over an empty vector, so these page the input; 5 is a sanity
+      # floor.
+      # A dead kube-state-metrics fires all four with service="observability".
       - alert: K8sDeploymentSeriesMissing
         expr: |
           absent(kube_deployment_status_replicas_unavailable)
@@ -230,9 +225,8 @@ groups:
             The Deployment alerts in k8s-workloads read too little to be trusted. 5 is a fixed sanity
             floor, held 5 minutes where the bridge paged one sample. Check that kube-state-metrics
             is up and collects deployments.
-      # 11 mirrors the estate's DaemonSet count: the ones the roles in containers_list render,
-      # plus longhorn-manager, longhorn-csi-plugin, Longhorn's engine-image DaemonSet and
-      # MetalLB's speaker. The rule-literal test derives that count and fails when it moves.
+      # 11 mirrors the estate's DaemonSet count; the rule-literal test derives it and fails when it
+      # moves.
       - alert: K8sDaemonSetSeriesMissing
         expr: |
           absent(kube_daemonset_status_number_unavailable)
@@ -285,9 +279,8 @@ groups:
           description: >-
             kube-state-metrics is not collecting nodes, so K8sExtendedResourceMissing cannot see the
             GPU resource. The bridge read this as INERT; this rule pages it.
-      # One series per missing input family, tagged with a literal `family` label so the `or`
-      # keeps each one. kube_statefulset_labels is left out: no StatefulSet exists, so its
-      # absent() would fire forever.
+      # A literal `family` label keeps each arm under `or`. kube_statefulset_labels is left out: no
+      # StatefulSet exists, so its absent() would fire forever.
       - alert: K8sStateSeriesMissing
         expr: |
           label_replace(absent(kube_deployment_spec_replicas), "family", "kube_deployment_spec_replicas", "", "")

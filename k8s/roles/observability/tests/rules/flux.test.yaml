@@ -162,8 +162,6 @@ tests:
               service: flux
             exp_annotations: *absent_notification
 
-  # The root Kustomization not Ready. It fires at 15m and not at 14m. The healthy
-  # OCIRepository fires nothing.
   - interval: 1m
     input_series:
       - series: 'gotk_resource_info{job="kube-state-metrics", instance="kube-state-metrics:8080", customresource_group="kustomize.toolkit.fluxcd.io", customresource_kind="Kustomization", customresource_version="v1", exported_namespace="flux-system", name="homelab", ready="False", revision="master@sha1:df49ee19e0fb69c90b2a2dd5db3fc9f4785fc062", source_name="homelab"}'
@@ -190,9 +188,8 @@ tests:
                 conditions.
               runbook_url: https://docs.local.daniel-hunter.com/flux-deploy-plane/#alerts
 
-  # A failing Kustomization whose Ready flips between False and Unknown every minute, as on
-  # each retry. Each flip ends one series and starts another, so without the max by() each
-  # label set would restart the hold and the rule would never fire.
+  # Each Ready flip ends one series and starts another; without the max by() the hold restarts each
+  # time.
   - interval: 1m
     input_series:
       - series: 'gotk_resource_info{job="kube-state-metrics", instance="kube-state-metrics:8080", customresource_group="kustomize.toolkit.fluxcd.io", customresource_kind="Kustomization", customresource_version="v1", exported_namespace="flux-system", name="homelab", ready="False", revision="master@sha1:df49ee19e0fb69c90b2a2dd5db3fc9f4785fc062", source_name="homelab"}'
@@ -214,8 +211,6 @@ tests:
               service: flux
             exp_annotations: *not_ready_kustomization
 
-  # A failed kube-state-metrics scrape at 7m stale-marks the series, and its next sample
-  # arrives at 9m. The hold runs across the gap, so the rule still fires at 15m.
   - interval: 1m
     input_series:
       - series: 'gotk_resource_info{job="kube-state-metrics", instance="kube-state-metrics:8080", customresource_group="kustomize.toolkit.fluxcd.io", customresource_kind="Kustomization", customresource_version="v1", exported_namespace="flux-system", name="homelab", ready="False", revision="master@sha1:df49ee19e0fb69c90b2a2dd5db3fc9f4785fc062", source_name="homelab"}'
@@ -232,8 +227,6 @@ tests:
               service: flux
             exp_annotations: *not_ready_kustomization
 
-  # Recovery: not Ready for 10m, then Ready. The 10m window still holds the False series at
-  # 15m, so only the `unless` on the Ready=True series keeps the rule from firing then.
   - interval: 1m
     input_series:
       - series: 'gotk_resource_info{job="kube-state-metrics", instance="kube-state-metrics:8080", customresource_group="kustomize.toolkit.fluxcd.io", customresource_kind="Kustomization", customresource_version="v1", exported_namespace="flux-system", name="homelab", ready="False", revision="master@sha1:df49ee19e0fb69c90b2a2dd5db3fc9f4785fc062", source_name="homelab"}'
@@ -245,8 +238,6 @@ tests:
         alertname: FluxNotReady
         exp_alerts: []
 
-  # The OCIRepository arm names homelab. Both OCIRepositories read Ready=False for 30m, and only
-  # homelab fires: the drill's verify-drill is meant to read Ready=False.
   - interval: 1m
     input_series:
       - series: 'gotk_resource_info{job="kube-state-metrics", instance="kube-state-metrics:8080", customresource_group="source.toolkit.fluxcd.io", customresource_kind="OCIRepository", customresource_version="v1", exported_namespace="flux-system", name="homelab", ready="False", url="oci://ghcr.io/danielh2018/homelab-manifests"}'
@@ -298,8 +289,6 @@ tests:
                 kube-state-metrics exports no gotk_resource_info for homelab; read its log.
               runbook_url: https://docs.local.daniel-hunter.com/flux-deploy-plane/#alerts
 
-  # The same missing series with kube-state-metrics' scrape failing. ScrapeTargetDown pages
-  # that up == 0, so the absent() arm stays quiet.
   - interval: 1m
     input_series:
       - series: 'up{job="kube-state-metrics", instance="kube-state-metrics:8080"}'
@@ -309,12 +298,8 @@ tests:
         alertname: FluxNotReady
         exp_alerts: []
 
-  # The root Kustomization suspended. It fires at 24h and not at 23h59m, one evaluation short.
-  # A failed kube-state-metrics scrape at 11h55m stale-marks the series for one 5m sample, and
-  # the hold runs across it.
-  # The OCIRepository, suspended beside it by the operator's hand suspend, never fires: the
-  # rule reads Kustomizations only. The input interval stays inside the 5m lookback, so the series never
-  # reads absent between samples.
+  # The input interval stays inside the 5m lookback so the series never reads absent between
+  # samples.
   - interval: 5m
     input_series:
       - series: 'gotk_resource_info{job="kube-state-metrics", instance="kube-state-metrics:8080", customresource_group="kustomize.toolkit.fluxcd.io", customresource_kind="Kustomization", customresource_version="v1", exported_namespace="flux-system", name="homelab", ready="True", suspended="true", revision="master@sha1:df49ee19e0fb69c90b2a2dd5db3fc9f4785fc062", source_name="homelab"}'
@@ -358,8 +343,6 @@ tests:
         alertname: FluxSuspended
         exp_alerts: []
 
-  # Healthy: every controller scraped with its metrics, kube-state-metrics scraped, both
-  # objects Ready and none suspended. No rule fires, FluxNotReady's absent() arm included.
   - interval: 1m
     input_series:
       - series: 'up{job="kube-state-metrics", instance="kube-state-metrics:8080"}'
@@ -400,10 +383,8 @@ tests:
         alertname: FluxWorkersSaturated
         exp_alerts: []
 
-  # Every kustomize-controller worker busy with a non-empty queue, the label sets as the live
-  # scrape gives them. The queue's series carries `name` and `priority`, which
-  # the worker gauges lack, so a join that matched on every label would return nothing here.
-  # It fires at 30m and not at 29m.
+  # The queue series carries `name` and `priority`, which the worker gauges lack: join on fewer
+  # labels.
   - interval: 1m
     input_series:
       - series: *active_workers
@@ -464,8 +445,6 @@ tests:
         alertname: FluxWorkersSaturated
         exp_alerts: []
 
-  # The maximum comes from its gauge, never a literal 4. At a maximum of 5, four busy workers
-  # never fire, and five fire at 30m.
   - interval: 1m
     input_series:
       - series: *active_workers

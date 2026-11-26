@@ -179,8 +179,6 @@ tests:
                 line: `kubectl -n homelab logs
                 deploy/monitor-bridge | grep 'DOWN domain_registration '`.
 
-  # The registration's days left. 60 days fires nothing; 30 fires the warning alone; 10
-  # fires the warning and the page. Neither rule has a `for:`, so each fires at its first sample.
   - interval: 1m
     input_series:
       - series: homelab_domain_registration_expiry_days{job="monitor-bridge",instance="monitor-bridge.homelab.svc:9181"}
@@ -224,8 +222,6 @@ tests:
                 alert plane's own notifications. Renew it at the registrar.
               runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#domainregistrationexpiring
 
-  # Every WAN-family row passes, so nothing fires. One dependent down with the gate up fires
-  # that dependent alone: a dependent's rule does not read the gate.
   - interval: 1m
     input_series:
       - series: homelab_check_success{job="monitor-bridge",instance="monitor-bridge.homelab.svc:9181",check="wan_reachable"}
@@ -270,8 +266,6 @@ tests:
                 deploy/monitor-bridge | grep 'DOWN discord '`.
               runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#discorddeliveryfailing
 
-  # The zero-series case for the WAN family: a missing row is BridgeCheckStale's page, so none
-  # of the five rules fires on an exporter with no `homelab_check_success` series.
   - interval: 1m
     input_series: []
     alert_rule_test:
@@ -393,8 +387,6 @@ tests:
         alertname: MonitorBridgeDown
         exp_alerts: []
 
-  # The missing-row case: three rows are expected and only two export a verdict, with every timestamp fresh. The
-  # count arm fires after the hold.
   - interval: 1m
     input_series:
       - series: homelab_check_rows{job="monitor-bridge",instance="monitor-bridge.homelab.svc:9181"}
@@ -522,8 +514,6 @@ tests:
                 longhorn-backup-tiering before deleting anything.
               runbook_url: https://docs.local.daniel-hunter.com/longhorn-backup-tiering/
 
-  # A 2-minute dip, as the weekly reboot causes, fires neither rule: both gauges read 0 at minutes 2 and 3 and recover at minute 4, 8 minutes short of the
-  # hold.
   - interval: 1m
     input_series:
       - series: homelab_check_success{job="monitor-bridge",instance="monitor-bridge.homelab.svc:9181",check="b2_reachable"}
@@ -544,8 +534,6 @@ tests:
         alertname: B2FreeTierHeadroomLow
         exp_alerts: []
 
-  # An outage one minute short of the hold fires nothing: both gauges read 0 at minutes 2 to 10
-  # (9 samples) and recover at minute 11, so the 10m evaluation sees 8 minutes of pending state.
   - interval: 1m
     input_series:
       - series: homelab_check_success{job="monitor-bridge",instance="monitor-bridge.homelab.svc:9181",check="b2_reachable"}
@@ -563,8 +551,6 @@ tests:
         alertname: B2Unreachable
         exp_alerts: []
 
-  # The dependent down with the gate up fires the dependent alone, 10 minutes after its first 0
-  # sample at minute 3: its rule does not read the gate.
   - interval: 1m
     input_series:
       - series: homelab_check_success{job="monitor-bridge",instance="monitor-bridge.homelab.svc:9181",check="b2_reachable"}
@@ -595,8 +581,6 @@ tests:
                 longhorn-backup-tiering before deleting anything.
               runbook_url: https://docs.local.daniel-hunter.com/longhorn-backup-tiering/
 
-  # The zero-series case for the B2 family: a missing row is BridgeCheckStale's page, so neither
-  # rule fires on an exporter with no `homelab_check_success` series.
   - interval: 1m
     input_series: []
     alert_rule_test:
@@ -607,8 +591,6 @@ tests:
         alertname: B2FreeTierHeadroomLow
         exp_alerts: []
 
-  # THE UNGATED FAMILY (A6-6). The three rows have no gate, so every gauge is 0 from the first
-  # sample and all three rules fire at once, with no `for:` and no `requires` label.
   - interval: 1m
     input_series:
       - series: homelab_check_success{job="monitor-bridge",instance="monitor-bridge.homelab.svc:9181",check="arr_queue"}
@@ -704,8 +686,6 @@ tests:
         alertname: HomeAssistantAutomationsStalled
         exp_alerts: []
 
-  # The zero-series case for the ungated family: a missing row is BridgeCheckStale's page, so
-  # no rule fires on an exporter with no `homelab_check_success` series.
   - interval: 1m
     input_series: []
     alert_rule_test:
@@ -999,8 +979,6 @@ tests:
         alertname: SpeedtestDegraded
         exp_alerts: []
 
-  # The zero-series case for the startup-grace family: a missing row is BridgeCheckStale's page,
-  # so no rule fires on an exporter with no `homelab_check_success` series.
   - interval: 1m
     input_series: []
     alert_rule_test:
@@ -1055,8 +1033,6 @@ tests:
                 logs deploy/monitor-bridge | grep 'DOWN host_packages '`.
               runbook_url: https://docs.local.daniel-hunter.com/host-packages/
 
-  # A 2-minute dip, as the weekly reboot causes, fires nothing:
-  # the gauge reads 0 at minutes 2 and 3 and recovers at minute 4, 8 minutes short of the hold.
   - interval: 1m
     input_series:
       - series: homelab_check_success{job="monitor-bridge",instance="monitor-bridge.homelab.svc:9181",check="host_packages"}
@@ -1098,7 +1074,6 @@ tests:
         alertname: HostPackageBuilderStalled
         exp_alerts: []
 
-  # The Uptime Robot row names the monitors the console no longer runs.
   - interval: 1m
     input_series:
       - series: homelab_check_success{job="monitor-bridge",instance="monitor-bridge.homelab.svc:9181",check="uptime_robot_monitors"}
@@ -1125,8 +1100,6 @@ tests:
                 uptime_robot_monitors '`.
               runbook_url: https://docs.local.daniel-hunter.com/uptime-robot-monitors/
 
-  # THE B2 OBJECT LOCK ROW (ADR-0041). B2ObjectLockOff shares its gate's `for: 10m`, because the
-  # row reads 0 whenever b2_reachable does.
   - interval: 1m
     input_series:
       - series: homelab_check_success{job="monitor-bridge",instance="monitor-bridge.homelab.svc:9181",check="b2_object_lock"}

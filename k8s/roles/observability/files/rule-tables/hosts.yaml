@@ -118,10 +118,8 @@ groups:
             anon memory is past what MemoryLow can protect against. Read `free -h` and the top
             memory cgroups on the host.
           runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#hostmemoryavailablelow
-      # The bridge's Claude Code cgroup arm of check_mem (with_claude_cgroups), arm 1: a watched
-      # memory.events counter rose within CLAUDE_CGROUP_EVENT_WINDOW (10m). `for: 5m`, not
-      # CLAUDE_CGROUP_CONSECUTIVE (2) x 300s, because the 10m window holds one event for only two
-      # bridge cycles, and a `for: 10m` would never complete.
+      # `for: 5m`, not CLAUDE_CGROUP_CONSECUTIVE x 300s: the 10m window holds one event for only two
+      # bridge cycles, so `for: 10m` would never complete.
       - alert: ClaudeCgroupMemoryEvent
         hosts: {component: claude-code}
         expr: |
@@ -139,9 +137,7 @@ groups:
             {{ $labels.origin }}/{{ $labels.cgroup }} had {{ $value | printf "%.0f" }} `{{
             $labels.event }}` memory events in the last 10 minutes. The kernel killed something in
             that cgroup or a hard cap was hit.
-      # Arm 2: the PSI `full` stall rate, as a percent of wall time, over
-      # CLAUDE_CGROUP_STALL_MAX_PCT (10) across CLAUDE_CGROUP_STALL_WINDOW (5m). `for: 10m` is
-      # CLAUDE_CGROUP_CONSECUTIVE (2) x 300s.
+      # `for: 10m` is CLAUDE_CGROUP_CONSECUTIVE (2) x 300s.
       - alert: ClaudeCgroupMemoryStalled
         hosts: {component: claude-code}
         expr: |
@@ -458,8 +454,7 @@ groups:
             The kernel on {{ $labels.origin }} reports its clock unsynchronised or more than 0.5s
             off, which breaks TOTP logins, ACME renewals, etcd and Loki ingestion. Read
             `timedatectl timesync-status` on the host.
-      # The bridge's undervoltage arm of check_host_temp. No `for:`: UNDERVOLTAGE_CONSECUTIVE is 1,
-      # and the firmware latched the bit.
+      # No `for:`: UNDERVOLTAGE_CONSECUTIVE is 1 and the firmware latched the bit.
       - alert: PiUndervoltage
         hosts: [daniel-pi]
         expr: |
@@ -527,8 +522,7 @@ groups:
           description: >-
             The filesystem on {{ $labels.device }} of ${host} is over 90% full.
             A filling SD card is the slow Pi death. Read `df -h` on the host.
-      # The read-only arm over `/|/boot/firmware`, anchored. No `for:`: a read-
-      # only remount does not self-heal.
+      # No `for:`: a read-only remount does not self-heal.
       - alert: PiFilesystemReadOnly
         hosts: [daniel-pi]
         expr: |
@@ -542,10 +536,7 @@ groups:
             {{ $labels.mountpoint }} on ${host} is read-only, which is an SD card remounting
             itself after an I/O error. Every other arm stays green through it. A reboot does not
             come back from it.
-      # The missing-series arms of the pi_pressure check: a renamed series or a blind collector
-      # must surface. The `clock` arm is HostClockUnsynchronised's, and `for: 10m` is
-      # ScrapeTargetDown's floor. The undervoltage arm is check_host_temp's, so it is
-      # PiUndervoltageMissing below.
+      # `for: 10m` is ScrapeTargetDown's floor; the undervoltage arm is PiUndervoltageMissing.
       - alert: PiMetricsMissing
         hosts: [daniel-pi]
         expr: |
@@ -587,10 +578,9 @@ groups:
           description: >-
             ${host} is scraped but its node-exporter publishes no series for the {{ $labels.arm }}
             arm of the Pi checks, so nothing is watching it. Read the exporter on the host.
-      # The empty-vector arm of check_host_temp's undervoltage check: undervoltage_verdict paged
-      # "no undervoltage alarm sensor scraped" while the Pi's own scrape was up, because a renamed
-      # sensor or a blind hwmon collector leaves PiUndervoltage nothing to read. The
-      # `up == 1` start keeps a dead scrape ScrapeTargetDown's, as in the bridge.
+      # A renamed sensor or blind hwmon collector leaves PiUndervoltage nothing to read; the
+      # `up == 1`
+      # start keeps a dead scrape ScrapeTargetDown's.
       - alert: PiUndervoltageMissing
         hosts: [daniel-pi]
         expr: |
@@ -689,9 +679,7 @@ groups:
             NUT reports ups.status RB for 10 minutes: the UPS's own self-test says the battery needs
             replacing. This trips before charge or runtime read low.
           runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#upsreplacebattery
-      # The bridge's partial-absence and all-absent arms of check_ups. While the nut scrape is down
-      # the arms stay silent and ScrapeTargetDown owns the outage, as the bridge deferred to Scrape
-      # Targets.
+      # While the nut scrape is down the arms stay silent and ScrapeTargetDown owns the outage.
       - alert: UPSSensorAbsent
         expr: |
           label_replace(

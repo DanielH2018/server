@@ -3,19 +3,7 @@
 {% from 'service.yml.j2' import service with context %}
 {% from 'workload-shell.yml.j2' import spec_shell, pod_shell with context %}
 ---
-# kube-state-metrics — the ONLY source of workload-readiness metrics in this cluster.
-#
-# Some workloads (registry, karakeep's chrome/meilisearch) expose only a ClusterIP, which
-# daniel-server cannot reach. Others (cloudflare-ddns-direct, cloudflare-ddns-proxied,
-# karakeep-time-tagger, n8n-runners) expose NO Service at all, so there is no port to probe,
-# and none has an IngressRoute.
-#
-# So "is this workload healthy" is not an HTTP property here; it is a Kubernetes API property,
-# and this is what turns it into a metric monitor-bridge can query.
-#
-# NOT metrics-server, which the cluster already runs. That serves the resource-metrics API
-# (`kubectl top`, HPA) and exports no kube_pod_status_ready / kube_deployment_status_* series.
-# The two are complementary, not alternatives.
+# Only source of kube_pod_status_* / kube_deployment_status_* series; metrics-server exports none.
 apiVersion: v1
 kind: ServiceAccount
 metadata:
@@ -23,13 +11,8 @@ metadata:
   namespace: {{ k8s_observability_namespace }}
 automountServiceAccountToken: true
 ---
-# Scoped to the resource types --resources= below actually collects, plus the Flux kinds
-# --custom-resource-state-config reads, rather than the upstream manifest's blanket grant
-# across ~20 API groups. kube-state-metrics reads object SPEC and STATUS cluster-wide, so every
-# resource added here is a resource it can enumerate; a Secret or ConfigMap grant would let it
-# read their contents. Keep this list in step with both arguments — a grant without a matching
-# argument is unused privilege, and an argument without a grant makes the collector log
-# list/watch RBAC errors every resync.
+# Keep in step with --resources and --custom-resource-state-config: an unmatched grant is unused
+# privilege, and an argument without a grant logs RBAC errors every resync.
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
@@ -41,37 +24,23 @@ rules:
   - apiGroups: [apps]
     resources: [deployments, statefulsets, daemonsets]
     verbs: [list, watch]
-  # ReplicaSets, for kube_replicaset_owner alone: it is the hop from a pod's ReplicaSet owner to
-  # its Deployment that the workload-service recording rules (files/rules/workload-service.yaml)
-  # join through. The Prometheus job drops every other kube_replicaset_* family at scrape.
+  # ReplicaSets, for kube_replicaset_owner alone (pod to Deployment hop in workload-service rules).
   - apiGroups: [apps]
     resources: [replicasets]
     verbs: [list, watch]
-  # Nodes, for kube_node_status_allocatable — the only continuous signal that an extended
-  # resource is still advertised. dri-device-plugin can wedge while its pod stays Running and
-  # Ready (it has no probe, and a container without a readinessProbe is Ready the moment it
-  # starts), which the DaemonSet-unavailability arm cannot see. Node objects carry no secret
-  # material; this is spec+status on a cluster-scoped resource the readonly SA already lists.
+  # Nodes, for kube_node_status_allocatable: dri-device-plugin can wedge while its pod stays Ready.
   - apiGroups: [""]
     resources: [nodes]
     verbs: [list, watch]
-  # Services, for kube_service_status_load_balancer_ingress alone: the address MetalLB gave each
-  # LoadBalancer Service, which files/rules/k8s-services.yaml holds to its pinned VIP. A Service
-  # carries no secret material. The Prometheus job drops every other kube_service_* family.
+  # Services, for kube_service_status_load_balancer_ingress alone (the MetalLB VIP check).
   - apiGroups: [""]
     resources: [services]
     verbs: [list, watch]
-  # Jobs, for the start, completion and outcome of the soak, snapshot and verify Jobs a landing
-  # waits on, which files/rules/gate-jobs.yaml records as durations. A Job's spec
-  # names an image and a command, never a secret value. The Prometheus job drops every family
-  # but those four, kube_job_status_active and kube_job_failed (K3sUpgradeJobFailed).
+  # Jobs, for the soak, snapshot and verify Job durations a landing waits on.
   - apiGroups: [batch]
     resources: [jobs]
     verbs: [list, watch]
-  # CronJobs, for kube_cronjob_status_last_successful_time alone: the run clock of the two
-  # health CronJobs, which files/rules/pod-producers.yaml
-  # holds to three periods of their schedule. A CronJob's spec names an image and a command,
-  # never a secret value. The Prometheus job drops every other kube_cronjob_* family.
+  # CronJobs, for kube_cronjob_status_last_successful_time alone (the health CronJobs' run clock).
   - apiGroups: [batch]
     resources: [cronjobs]
     verbs: [list, watch]
@@ -85,10 +54,7 @@ rules:
   - apiGroups: [""]
     resources: [configmaps]
     verbs: [list, watch]
-  # The two Flux kinds in observability_ksm_flux_resource_state (defaults/main.yml), for
-  # gotk_resource_info. The custom-resource-state collector also watches the CRDs themselves, to
-  # start a kind's reflector once its CRD exists, so it needs customresourcedefinitions too. A CRD
-  # is a schema, and the read-only kubectl identity already lists them.
+  # Flux kinds for gotk_resource_info; the collector also watches the CRDs, so it needs those too.
   - apiGroups: [kustomize.toolkit.fluxcd.io]
     resources: [kustomizations]
     verbs: [list, watch]
@@ -138,7 +104,6 @@ spec:
           imagePullPolicy: IfNotPresent
           args:
             # Must match the ClusterRole above, as must --custom-resource-state-config below.
-            # Restricting the set also drops the metric cardinality this stack has no use for.
             - --resources=pods,deployments,replicasets,statefulsets,daemonsets,nodes,services,jobs,cronjobs,configmaps
             # The one ConfigMap annotation exported: the verdict the health CronJobs write. It
             # reaches Prometheus as the annotation_homelab_check_verdict label of
@@ -149,21 +114,17 @@ spec:
             # label_kustomize_toolkit_fluxcd_io_name on kube_<kind>_labels, which the
             # workload-service recording rules read.
             - --metric-labels-allowlist=pods=[app],deployments=[app,homelab/role,kustomize.toolkit.fluxcd.io/name],daemonsets=[homelab/role,kustomize.toolkit.fluxcd.io/name]
-            # gotk_resource_info for the Flux kinds. Inline rather than a ConfigMap, so the config
-            # sits in the pod template and a change to it rolls this Deployment through the apply.
-            # Quoted as one JSON string, because to_json emits `": "`, which a plain YAML scalar
-            # cannot hold. The kinds are added to the collected set whatever --resources says.
+            # Quoted as one JSON string: to_json emits `": "`, which a plain YAML scalar cannot
+            # hold.
             - {{ ('--custom-resource-state-config=' ~ (observability_ksm_flux_resource_state | to_json)) | to_json }}
           ports:
             - name: metrics
               containerPort: 8080
             - name: telemetry
               containerPort: 8081
-          # The two probes deliberately hit DIFFERENT ports, matching upstream: /livez is served
-          # by the main metrics server on 8080 and /readyz by the self-telemetry server on 8081.
-          # Neither path exists on the other port — pointing liveness at 8081 returns 404, which
-          # the kubelet reads as a failed probe and restarts the container ~35s after every
-          # start, producing a CrashLoopBackOff with a completely clean application log.
+          # The probes hit DIFFERENT ports: /livez on 8080, /readyz on 8081. Neither path exists on
+          # the other port, so a swapped liveness probe gets 404 and restarts the container after
+          # every start.
 {{ hardened_security_context(read_only=true) }}
           readinessProbe:
             httpGet:

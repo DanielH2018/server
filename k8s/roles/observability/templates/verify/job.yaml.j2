@@ -30,8 +30,7 @@
 {% set spec_text %}
 # A flaky check fails rather than passing on a retry.
 backoffLimit: 0
-# Below the 600s `manifests_rollout_timeout_default` every `<tag>-verify` Kustomization takes.
-# One API read with a 10s timeout, plus the helper's 60s of connect retries.
+# Below the 600s manifests_rollout_timeout_default every `<tag>-verify` Kustomization takes.
 activeDeadlineSeconds: 120
 template:
   metadata:

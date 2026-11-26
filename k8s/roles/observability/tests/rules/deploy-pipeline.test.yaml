@@ -96,8 +96,6 @@ tests:
         alertname: ProdMovedOutsidePromote
         exp_alerts: []
 
-  # DeployHoldActive fires after 15 minutes at 1, and not at 14. The red case for a shortened
-  # `for:` is the 14m evaluation.
   - interval: 1m
     input_series:
       - series: 'homelab_deploy_hold_active{job="deploy-pipeline", instance="monitor-bridge.homelab.svc:9180"}'
@@ -125,8 +123,6 @@ tests:
                 docs/flux-deploy-plane.md says how to clear each form of hold.
               runbook_url: https://docs.local.daniel-hunter.com/flux-deploy-plane/
 
-  # PromotionStalled fires at 3 hours with the hold and window gauges at 0, and stays silent at
-  # 3 hours with either at 1. The age climbs 60s a minute from 0, so it passes 7200 at 2h.
   - interval: 1m
     input_series:
       - series: 'homelab_deploy_unpromoted_age_seconds{job="deploy-pipeline", instance="monitor-bridge.homelab.svc:9180"}'

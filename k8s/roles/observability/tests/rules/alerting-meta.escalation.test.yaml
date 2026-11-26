@@ -48,8 +48,6 @@ tests:
                 "false".
               runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#warningunresolved
 
-  # SystemdUnitsFailed fires once per unit, so each escalation names its unit in the summary
-  # and filters its Karma link by it, escaped for the query string.
   - interval: 1h
     input_series:
       - series: 'up{job="alertmanager", instance="alertmanager:9093"}'
@@ -101,8 +99,6 @@ tests:
                 "false".
               runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#warningunresolved
 
-  # A unit whose homelab-alert@ hook already paged carries paged_by, and Alertmanager blackholes
-  # its warning. The escalation drops the label, so the blackhole route does not catch it.
   - interval: 1h
     input_series:
       - series: 'up{job="alertmanager", instance="alertmanager:9093"}'
@@ -134,8 +130,6 @@ tests:
                 "false".
               runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#warningunresolved
 
-  # A one-hour absence, as across a Prometheus restart, does not restart the age: 30 hours, a
-  # gap, then 30 more still escalate. A ten-hour absence does.
   - interval: 1h
     input_series:
       - series: 'up{job="alertmanager", instance="alertmanager:9093"}'

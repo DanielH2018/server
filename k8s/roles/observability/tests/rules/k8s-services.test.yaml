@@ -8,8 +8,6 @@ rule_files:
   - ../../files/rules/k8s-services.yaml
 evaluation_interval: 1m
 tests:
-  # The zero-series case: no input at all, so the kube-state-metrics job is missing from the
-  # config. MosquittoLanAddressNotPinned fires through its first arm.
   - interval: 1m
     input_series: []
     alert_rule_test:

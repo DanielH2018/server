@@ -12,13 +12,9 @@
 groups:
   - name: k8s-services
     rules:
-      # MetalLB reads its address request from an annotation and ignores an annotation key it
-      # does not recognise, so a wrong prefix brings the Service up on an auto-assigned address
-      # with every pod healthy. Home Assistant and every LAN publisher dial the pinned VIP.
-      # The second arm is conjoined with up == 1, so a failed kube-state-metrics scrape, which
-      # ScrapeTargetDown pages, does not page here a second time. The first arm
-      # is the family's zero-series alert: with no scrape job at all, nothing can verify the
-      # address.
+      # MetalLB ignores an unrecognised annotation key, so a wrong prefix brings the Service up on
+      # an auto-assigned address with every pod healthy; the LAN dials the pinned VIP.
+      # The second arm is conjoined with up == 1 so ScrapeTargetDown owns a failed scrape.
       - alert: MosquittoLanAddressNotPinned
         expr: >-
           absent(up{job="kube-state-metrics"})
@@ -37,8 +33,7 @@ groups:
             kube-state-metrics is not scraped. Home Assistant and the LAN publishers cannot reach
             the broker. MetalLB does not re-evaluate an existing allocation, so delete the Service
             and redeploy mosquitto.
-      # jellyfin's twin of the rule above. TV and phone clients have the VIP typed in by
-      # hand, so an auto-assigned address breaks them with every pod healthy.
+      # TV and phone clients have the VIP typed in by hand.
       - alert: JellyfinLanAddressNotPinned
         expr: >-
           absent(up{job="kube-state-metrics"})
@@ -57,10 +52,8 @@ groups:
             kube-state-metrics is not scraped. TV and phone clients that dial the VIP cannot reach
             Jellyfin. MetalLB does not re-evaluate an existing allocation, so delete the Service
             and redeploy jellyfin.
-      # pihole's twin of the rules above. LAN clients get the VIP from the router's DHCP
-      # DNS option, so an auto-assigned address leaves every client without a resolver while
-      # both pods stay Ready. CoreDNS forwards to the pinned ClusterIP instead, so the cluster
-      # keeps resolving and nothing else notices.
+      # LAN clients get the VIP from the router's DHCP DNS option; CoreDNS uses the pinned
+      # ClusterIP, so nothing else notices.
       - alert: PiholeLanAddressNotPinned
         expr: >-
           absent(up{job="kube-state-metrics"})
@@ -79,9 +72,8 @@ groups:
             kube-state-metrics is not scraped. LAN clients that took the VIP from DHCP have no DNS
             resolver. MetalLB does not re-evaluate an existing allocation, so delete the Service
             and redeploy pihole.
-      # The same failure on the ingress edge: Cloudflare's origin, the router's port-forward
-      # and the LAN DNS all hardcode the reserved ingress VIP. A Traefik Service that came up on
-      # an auto-assigned address serves nothing those clients dial, behind a Ready pod.
+      # Cloudflare's origin, the router's port-forward and LAN DNS hardcode the reserved ingress
+      # VIP.
       - alert: TraefikIngressAddressNotPinned
         expr: >-
           absent(up{job="kube-state-metrics"})

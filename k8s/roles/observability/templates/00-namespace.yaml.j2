@@ -1,7 +1,6 @@
 ---
-# Named to sort first: the shared manifests role runs `kubectl apply -f <dir>/`, which
-# applies in filename order, and every other object here is namespaced. Relying on
-# "collector" happening to sort before "loki" would break the first time a file is renamed.
+# Named to sort first: `kubectl apply -f <dir>/` applies in filename order and every other object is
+# namespaced.
 apiVersion: v1
 kind: Namespace
 metadata:

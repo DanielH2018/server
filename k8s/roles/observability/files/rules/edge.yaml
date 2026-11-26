@@ -174,11 +174,9 @@ groups:
             {{ $labels.router }} answered 421 at {{ printf "%.2f" $value }} requests per second
             for 10 minutes. A client is wedged on a connection SNICheck pinned wrong. Restart the
             client that calls this router so it redials; a Traefik config change does not help.
-      # This family's zero-series alert. A dropped `traefik-k8s` job, or a Traefik that scrapes
-      # but exports no certificate or entrypoint series, leaves every rule above evaluating to
-      # nothing. The bridge's cert row reads an empty vector as "cert metric unavailable" and
-      # pages. The second arm requires up == 1, so a failed scrape stays the scrape-target
-      # rule's page (M1 convention 5).
+      # A dropped `traefik-k8s` job, or a Traefik exporting no certificate or entrypoint series,
+      # leaves every rule above empty.
+      # The second arm requires up == 1, so a failed scrape stays ScrapeTargetDown's.
       - alert: EdgeMetricsMissing
         expr: >-
           absent(up{job="traefik-k8s"})

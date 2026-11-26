@@ -15,8 +15,6 @@ rule_files:
   - ../../files/rules/pi-checks.yaml
 evaluation_interval: 1m
 tests:
-  # The zero-series case: no input at all, so no verdict has existed for longer than any deadline.
-  # Both NotReporting rules fire through absent_over_time, and no Failed rule has a series to read.
   - interval: 1m
     input_series: []
     alert_rule_test:
@@ -51,8 +49,6 @@ tests:
         alertname: PiRecoveryFailed
         exp_alerts: []
 
-  # Each Failed rule: a verdict of 0 fires it with the host's labels, and a verdict of 1 does not.
-  # The first minutes are the control for the rest.
   - interval: 1m
     input_series:
       - series: 'homelab_check_success{check="pi-sd-health", instance="daniel-pi", job="node-pi", origin="daniel-pi"}'
@@ -90,8 +86,6 @@ tests:
                 /var/log/pi-health/health.log names the container, why it died and any dockerd
                 fault.
 
-  # The file stopped being refreshed: node_exporter keeps serving the timestamp written at 0. The
-  # first arm is quiet when the gap equals the deadline (15m) and fires one minute later.
   - interval: 1m
     input_series:
       - series: 'homelab_check_last_run_timestamp_seconds{check="pi-sd-health", instance="daniel-pi", job="node-pi", origin="daniel-pi"}'
@@ -222,8 +216,6 @@ tests:
         alertname: PiSdHealthNotReporting
         exp_alerts: []
 
-  # PiWatchdogFailed outlasts a stop an apply holds: the unit stops at minute 4, the rule waits out
-  # its 30m `for` and fires, and the verdict returning to 1 at minute 44 quiets it.
   - interval: 1m
     input_series:
       - series: 'homelab_check_success{check="pi-watchdog-health", instance="daniel-pi", job="node-pi", origin="daniel-pi"}'
@@ -260,8 +252,6 @@ tests:
         alertname: PiWatchdogFailed
         exp_alerts: []
 
-  # PiWatchdogNotReporting's three states: a frozen timestamp fires one minute past the deadline, a
-  # fresh one stays quiet, and a dead exporter leaves it to PiHostDown.
   - interval: 1m
     input_series:
       - series: 'homelab_check_last_run_timestamp_seconds{check="pi-watchdog-health", instance="daniel-pi", job="node-pi", origin="daniel-pi"}'
@@ -304,8 +294,6 @@ tests:
         alertname: PiWatchdogNotReporting
         exp_alerts: []
 
-  # The file is gone with the exporter up, so the absent_over_time arm fires with only its matchers'
-  # labels. The exporter-down case above is its control.
   - interval: 1m
     input_series:
       - series: 'homelab_check_last_run_timestamp_seconds{check="pi-watchdog-health", instance="daniel-pi", job="node-pi", origin="daniel-pi"}'
@@ -328,8 +316,6 @@ tests:
                 watched. Read `systemctl status homelab-pi-watchdog-health.timer` on daniel-pi,
                 then /var/lib/node-exporter-textfile/pi-watchdog-health.prom.
 
-  # PiAuditFailed outlasts a silent log: the verdict drops at minute 4, the rule waits out its 30m
-  # `for` and fires, and the verdict returning to 1 at minute 44 quiets it.
   - interval: 1m
     input_series:
       - series: 'homelab_check_success{check="pi-audit-health", instance="daniel-pi", job="node-pi", origin="daniel-pi"}'
@@ -367,8 +353,6 @@ tests:
         alertname: PiAuditFailed
         exp_alerts: []
 
-  # PiAuditNotReporting: a frozen timestamp fires one minute past the deadline, and a dead exporter
-  # leaves it to PiHostDown.
   - interval: 1m
     input_series:
       - series: 'homelab_check_last_run_timestamp_seconds{check="pi-audit-health", instance="daniel-pi", job="node-pi", origin="daniel-pi"}'

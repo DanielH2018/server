@@ -5,8 +5,6 @@ rule_files:
   - ../../files/rules/alerting-meta.yaml
 evaluation_interval: 1m
 tests:
-  # The zero-series case: no input at all, so the scrape job is missing from the config.
-  # AlertmanagerMetricsMissing fires through its first arm.
   - interval: 1m
     input_series: []
     alert_rule_test:
@@ -28,8 +26,6 @@ tests:
                 renamed it. AlertmanagerNotificationsFailing cannot fire until the series is
                 back.
 
-  # The scrape works and the counter is gone. AlertmanagerMetricsMissing fires through its
-  # second arm.
   - interval: 1m
     input_series:
       - series: 'up{job="alertmanager", instance="alertmanager:9093"}'
@@ -53,8 +49,6 @@ tests:
                 renamed it. AlertmanagerNotificationsFailing cannot fire until the series is
                 back.
 
-  # A failed scrape: up reads 0 and the counter series are stale. ScrapeTargetDown pages
-  # this condition, so the rule must stay quiet.
   - interval: 1m
     input_series:
       - series: 'up{job="alertmanager", instance="alertmanager:9093"}'
@@ -98,8 +92,6 @@ tests:
             exp_annotations:
               summary: 'observability: the alert pipeline is alive. This alert always fires.'
 
-  # One failed Discord send. The alert fires per integration, and clears once the failure
-  # leaves the 30-minute window.
   - interval: 1m
     input_series:
       - series: 'alertmanager_notifications_failed_total{job="alertmanager", instance="alertmanager:9093", integration="discord", reason="serverError"}'
@@ -170,8 +162,6 @@ tests:
         alertname: AlertmanagerNotificationsRateLimited
         exp_alerts: []
 
-  # A rollout's burst of Discord rate limits, as on 2026-11-19: 11 failures over two minutes,
-  # then none. Neither rule fires, so the soak passes.
   - interval: 1m
     input_series:
       - series: 'alertmanager_notifications_failed_total{job="alertmanager", instance="alertmanager:9093", integration="discord", reason="rateLimited"}'
@@ -190,8 +180,6 @@ tests:
         alertname: AlertmanagerNotificationsRateLimited
         exp_alerts: []
 
-  # One group fails two flushes in a row, 5 minutes apart, then delivers. The 7m increase
-  # stays above 0 from 6m to 16m, under the 15m `for:`, so nothing pages.
   - interval: 1m
     input_series:
       - series: 'alertmanager_notifications_failed_total{job="alertmanager", instance="alertmanager:9093", integration="discord", reason="rateLimited"}'
@@ -204,8 +192,6 @@ tests:
         alertname: AlertmanagerNotificationsRateLimited
         exp_alerts: []
 
-  # A group stuck behind the limit fails once per 5-minute flush. It pages once the 7m
-  # increase has held above 0 for 15 minutes, and not before.
   - interval: 1m
     input_series:
       - series: 'alertmanager_notifications_failed_total{job="alertmanager", instance="alertmanager:9093", integration="discord", reason="rateLimited"}'
@@ -267,8 +253,6 @@ tests:
                 localhost:9090 has reported a failed reload for 10 minutes, so it still
                 evaluates the last rule set it loaded. Its log names the file it refused.
 
-  # One failed evaluation in one group. The alert fires for that group alone, at once, and
-  # clears once the failure leaves the 10-minute window.
   - interval: 1m
     input_series:
       - series: 'prometheus_rule_evaluation_failures_total{job="prometheus", instance="localhost:9090", rule_group="/etc/prometheus-rules/workload-service.yaml;workload-service"}'

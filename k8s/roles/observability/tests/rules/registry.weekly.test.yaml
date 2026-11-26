@@ -9,8 +9,6 @@ rule_files:
   - ../../files/rules/registry.yaml
 evaluation_interval: 1h
 tests:
-  # The GC wrote at 0 and never again while the exporter stays up. The stale-file arm fires once
-  # the timestamp is more than 612000s (170h) old, so it is quiet at 170h and fires at 171h.
   - interval: 1h
     input_series:
       - series: 'homelab_check_last_run_timestamp_seconds{check="registry-gc", instance="daniel-box", job="node", origin="daniel-box"}'

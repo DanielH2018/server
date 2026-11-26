@@ -13,11 +13,7 @@ data:
 {# Captured so the Deployment below can hash it into checksum/config. #}
 {% set observability_loki_config %}
     auth_enabled: false
-    # Loki's usage reporter defaults to on and POSTs to stats.grafana.org, which Pi-hole
-    # blocks. Every 4h cycle then burns its whole 5-retry budget (an A plus an AAAA lookup
-    # per attempt) against a name that never resolves, so the only product is DNS noise.
-    # The key is analytics.reporting_enabled -- Tempo's is usage_report.reporting_enabled,
-    # and Loki rejects an unknown config field at startup rather than ignoring it.
+    # The key is analytics.reporting_enabled; Loki rejects an unknown config field at startup.
     analytics:
       reporting_enabled: false
     server:
@@ -46,16 +42,14 @@ data:
             period: 24h
     limits_config:
       retention_period: {{ observability_loki_retention }}
-      # Claude Code sends whole prompts and responses as single log lines. The default 256KB
-      # cap silently drops anything larger, which would lose exactly the long turns most worth
-      # keeping — and a dropped line is invisible unless you go looking for it.
+      # Default 256KB cap silently drops larger lines; Claude Code logs whole prompts as single
+      # lines.
       max_line_size: 2MB
       reject_old_samples: false
       allow_structured_metadata: true
     compactor:
       working_directory: /loki/compactor
-      # Without retention_enabled the retention_period above is inert: Loki accepts the
-      # setting and never deletes anything, so the volume grows without bound.
+      # Without retention_enabled, retention_period is inert and the volume grows without bound.
       retention_enabled: true
       delete_request_store: filesystem
     ruler:
@@ -72,8 +66,7 @@ metadata:
   name: loki
   namespace: {{ k8s_observability_namespace }}
 spec:
-  # The PVC is ReadWriteOnce on a single node: a rolling update would leave the new pod
-  # Pending on a volume the old one still holds, and the rollout would wait forever.
+  # ReadWriteOnce PVC on one node: a rolling update would leave the new pod Pending forever.
 {{ spec_shell('Recreate') }}
   replicas: 1
   selector:
@@ -102,8 +95,6 @@ spec:
           ports:
             - name: http
               containerPort: 3100
-              # On the node's loopback so otelq can reach it; see
-              # observability_query_host_ip in defaults/main.yml.
               hostPort: 3100
               hostIP: {{ observability_query_host_ip }}
           volumeMounts:
@@ -140,8 +131,7 @@ metadata:
   name: loki
   namespace: {{ k8s_observability_namespace }}
 spec:
-  # Pinned: host-side query tools carry this address as a constant. See
-  # observability_loki_cluster_ip in defaults/main.yml for why.
+  # Pinned: host-side query tools carry this address as a constant.
   clusterIP: {{ observability_loki_cluster_ip }}
   selector:
     app: loki
