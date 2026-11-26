@@ -17,7 +17,7 @@ from _shimmed_path_row import PREPENDED_PATHS, RESET_PATHS, SHIMMED_PATHS
 from _test_script_bodies_row import TEST_SCRIPT_BODIES
 from _component_contract_row import COMPONENT_TIMERS_CARRY_A_CONTRACT
 from _agent_tools_key_row import AGENTS_LIMIT_TOOLS_WITH_THE_TOOLS_KEY
-from _comment_ticket_refs_row import COMMENTS_CITE_NO_TICKET
+from _comment_provenance_rows import COMMENTS_CARRY_NO_DATE, COMMENTS_CITE_NO_TICKET
 from _etcd_snapshot_flags_row import ETCD_SNAPSHOT_LONG_FLAGS
 from _runbook_k3s_sudo_row import RUNBOOK_K3S_COMMANDS_CARRY_SUDO
 from _group_vars_host_reader_row import HOST_KEYS_IN_GROUP_VARS_HAVE_A_READER
@@ -351,6 +351,7 @@ ROWS += (
     REVIEW_SKILLS_LIST_LEDGERS_FROM_ANY_USERS_STORE,
     READ_ONLY_REVIEW_SKILLS_WRITE_NO_TRACKED_FILE,
     COMMENTS_CITE_NO_TICKET,
+    COMMENTS_CARRY_NO_DATE,
     SHIPPED_FILES_CITE_NO_TARGET_ARCHITECTURE_STUB,
     HOST_KEYS_IN_GROUP_VARS_HAVE_A_READER,
     LIVE_DOCS_NAME_NO_ANSIBLE,
