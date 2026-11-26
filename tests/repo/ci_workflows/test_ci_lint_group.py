@@ -57,6 +57,8 @@ def pyproject_problems(config: dict) -> list[str]:
     defaults = config.get("tool", {}).get("uv", {}).get("default-groups", [])
     if not {"dev", "lint"} <= set(defaults):
         found.append("[tool.uv] default-groups does not name both dev and lint")
+    if "local" in defaults:
+        found.append("[tool.uv] default-groups names local, so CI installs testmon")
     return found
 
 
@@ -132,6 +134,12 @@ def test_a_lint_group_no_uv_run_installs_is_flagged(config):
     broken = copy.deepcopy(config)
     broken["tool"]["uv"]["default-groups"] = ["dev"]
     assert any("default-groups" in p for p in pyproject_problems(broken))
+
+
+def test_the_local_group_in_default_groups_is_flagged(config):
+    broken = copy.deepcopy(config)
+    broken["tool"]["uv"]["default-groups"].append("local")
+    assert any("testmon" in p for p in pyproject_problems(broken))
 
 
 def test_the_split_finds_the_known_jobs():

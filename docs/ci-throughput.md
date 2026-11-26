@@ -133,6 +133,31 @@ dispatch runs every module. A push whose tree a pull-request run tested runs not
   A parent whose run has not finished is skipped the same way. With no green ancestor
   within `MAX_BASE_WALK` commits, or a lookup that fails, the push runs every module.
 
+## pytest-testmon selects local reruns only
+
+To rerun only the tests a local edit can affect, install the `local` dependency group and
+run testmon:
+
+```bash
+TESTMON_DATAFILE=/tmp/testmondata uv run --group local pytest tests --testmon --testmon-forceselect
+```
+
+CI never loads testmon, because `local` is not in `default-groups` and the recorded table
+above stays the CI selector. Never pass `--tmnet`.
+
+- **Why not CI.** Testmon traces Python only. On 2026-11-25 with testmon 2.4.0 it caught 3
+  of 6 failing modules where the recorded table caught 6 of 6, because it misses shell and
+  YAML inputs.
+- **Cost.** On 2026-11-26 with testmon 2.3.1, the first run records and took 403 s against
+  200 s for a plain run of `tests/` (4,986 tests, on a host with other sessions running).
+  An unchanged rerun took 1.4 s. The 2.4.0 measurement was 5 s against 29 s for 2,228
+  tests, with a recording run of 38 s.
+- **The pin.** `pyproject.toml` caps testmon below 2.4.0, which shipped on 2026-11-25.
+- **Why `--testmon-forceselect`.** `addopts` carries `-m 'not ui and not image'`, and a
+  `-m` expression disables testmon's selection unless this flag is set.
+- **Keep the data file outside the checkout.** `TESTMON_DATAFILE` points at a path under
+  `/tmp`, so the recording is not committed and each worktree can keep its own.
+
 ## A nightly sweep runs every module
 
 `.github/workflows/pytest-sweep.yml` runs the whole suite on master's head once a day, on
