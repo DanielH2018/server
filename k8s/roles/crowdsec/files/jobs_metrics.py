@@ -21,8 +21,7 @@ import time
 from collections.abc import Mapping
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-# Periods a job's timestamp may age before it reads stale. One missed run is a slow job and two
-# is a hung one, so the third is the first that is not noise.
+# One missed run is a slow job and two a hung one, so the third is the first that is not noise.
 DEADLINE_PERIODS = 3
 
 SUCCESS = (

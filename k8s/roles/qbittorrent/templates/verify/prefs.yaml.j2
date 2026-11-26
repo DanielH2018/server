@@ -31,9 +31,6 @@
   'flux_job_connect.py': flux_job_connect,
 } %}
 {% set configmap_name = 'qbittorrent-prefs-' + ({'data': data, 'binaryData': {}} | to_json(sort_keys=True, separators=(',', ':')) | hash('sha256'))[:8] %}
-{#- The pod's roll inputs, as `checksum/restart` hashes them; see the note above. The Secret
-    templates are read raw, never rendered, and `cluster-vars.source` holds a digest of each
-    key's ciphertext, so no value enters the hash. -#}
 {% set roll = namespace(
   text=lookup('template', 'deployment.yaml.j2') + lookup('template', 'configmap-netns-reset.yaml.j2'),
   secrets='',
@@ -46,11 +43,8 @@
 {% endfor %}
 {% set roll_digest8 = ((roll.text + roll.secrets) | hash('sha256'))[:8] %}
 {% set spec_text %}
-# No retry. A retry logs in again, and every rejected login counts against qBittorrent's
-# web_ui_max_auth_fail_count of 5. A failed apply waits for the next revision or a hand run.
+# No retry: each rejected login counts toward web_ui_max_auth_fail_count (5).
 backoffLimit: 0
-# Below the 600s `manifests_rollout_timeout_default` every `<tag>-verify` Kustomization takes.
-# The first connect's 60s of retries, then four 15s requests.
 activeDeadlineSeconds: 180
 template:
   metadata:

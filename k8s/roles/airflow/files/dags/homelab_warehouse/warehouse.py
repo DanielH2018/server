@@ -13,11 +13,10 @@ Typical usage example:
 from collections.abc import Callable, Iterable, Sequence
 from datetime import date, datetime, timezone
 
-# The role Grafana reads as. The Postgres init script creates it with no grant on any schema;
-# `ensure_schema`, run as the schema's owner, grants it each one.
+# The init script creates this role with no grants; `ensure_schema` grants it each schema.
 READER_ROLE = "warehouse_reader"
-# Postgres refuses two concurrent GRANTs on one catalog row with "tuple concurrently
-# updated", and catchup runs several loads at once, so every load's DDL takes this lock.
+# Concurrent GRANTs on one catalog row fail ("tuple concurrently updated"), so every load's DDL
+# takes this lock.
 DDL_LOCK_KEY = 74_657_201
 
 # One row per DAG and day whose check passed, which the freshness DAG reads.

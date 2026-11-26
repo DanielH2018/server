@@ -26,8 +26,6 @@ def _row(address: str, plen: int = 0x40, scope: int = 0, flags: int = 0, dev="en
     return f"{raw} 02 {plen:02x} {scope:02x} {flags:02x} {dev:>8}"
 
 
-# The shape seen on daniel-server: a /64 SLAAC address and a /128 DHCPv6 address in one
-# prefix, link-local rows on every veth, and loopback.
 TABLE = "\n".join(
     [
         _row("2601:600:a:b:1c2d:3e4f:5a6b:7c8d"),

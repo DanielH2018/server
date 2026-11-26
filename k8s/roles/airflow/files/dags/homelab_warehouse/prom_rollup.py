@@ -25,8 +25,7 @@ from datetime import date, datetime, timedelta, timezone
 PROM_URL = "http://prometheus.observability.svc.cluster.local:9090"
 STEP_S = 60
 
-# Prometheus' 7GB size cap binds before its 30-day time cap, so the oldest day it still holds
-# is read live from this series rather than assumed.
+# Prometheus' size cap binds before its time cap, so the oldest held day is read from this series.
 OLDEST_SAMPLE_QUERY = "prometheus_tsdb_lowest_timestamp_seconds"
 
 UPS_LOAD_QUERY = "network_ups_tools_ups_load"
@@ -61,8 +60,8 @@ EXPECTED_HOSTS = frozenset({"daniel-box", "daniel-server"})
 MAX_GAP_S = 3600
 TEMP_BOUNDS_C = (5.0, 110.0)
 
-# kube-router admits a new pod's traffic a few seconds after the pod starts (ADR 0009), and a
-# KubernetesExecutor task pod's first call lands inside that window.
+# kube-router admits a new pod's traffic a few seconds after start, so a task pod's first call
+# retries.
 CONNECT_ATTEMPTS = 6
 CONNECT_BACKOFF_S = 5.0
 

@@ -22,17 +22,13 @@ airflow_k8s_postgres_image: postgres:17.11-alpine3.24@sha256:e5d2edd28b1f8d40a0a
 k8s_autodeploy: false
 k8s_autodeploy_reason: "migrating state: an Airflow base bump runs `airflow db migrate` against the metadata database on the airflow-postgres-data claim, and a Postgres major bump cannot start on the old data directory at all, so both land by hand"
 
-# Preferred, not required: daniel-server has the RAM headroom (20% used), and a down
-# daniel-server moves the stack to daniel-box rather than stopping the nightly rollups.
+# Preferred, not required: a down daniel-server moves the stack to daniel-box.
 airflow_k8s_node: daniel-server
 
 # The image's own `airflow` user, and the alpine postgres image's `postgres` user.
 airflow_k8s_uid: 50000
 airflow_k8s_postgres_uid: 70
 
-# Per-component caps. Each request sits above that component's idle working set, measured on
-# 2026-11-19 with the first DAG loaded: api-server 253Mi, scheduler 447Mi, dag-processor
-# 162Mi, Postgres 50Mi, about 0.9 GiB for the stack.
 airflow_k8s_api_cpu_limit: "1"
 airflow_k8s_api_mem_limit: 1Gi
 airflow_k8s_api_cpu_request: "50m"
@@ -55,8 +51,7 @@ airflow_k8s_task_mem_limit: 512Mi
 airflow_k8s_task_cpu_request: "50m"
 airflow_k8s_task_mem_request: 192Mi
 
-# How many task pods may run at once, cluster-wide. A 30-day backfill queues 30 runs; this caps
-# how many task pods it puts on the node together.
+# A 30-day backfill queues 30 runs; this caps how many task pods run on the node together.
 airflow_k8s_parallelism: 4
 
 # Holds both databases: `airflow` (metadata, rebuildable) and `warehouse` (the rollups, the
@@ -70,17 +65,14 @@ k8s_claims:
     storage_class: "{{ airflow_k8s_postgres_storage_class }}"
     size: "{{ airflow_k8s_postgres_size }}"
 
-# The base pull is slim Airflow plus three providers, about 600 MB; GHCR has served this homelab
-# as slowly as 0.145 MB/s (n8n's defaults), which is ~4100s for a cold pull. The api-server,
-# scheduler and dag-processor all run this image, and the scheduler and dag-processor are
-# Recreate, so without the prepull Job a base bump stops both before the pull starts.
+# A cold pull of the ~600 MB base is slow, and the Recreate workloads stop before it starts without
+# the prepull Job.
 flux_prepull_timeout: 4500s
 
 image_builder_builds:
   - image_builder_name: airflow
     image_builder_dockerfile: "{{ role_file('templates/Dockerfile.j2') }}"
     # Raw files, not templates: the DAGs embed PromQL whose {{...}} braces Jinja would eat.
-    # Each key is the flat name the Dockerfile COPYs from the context root.
     image_builder_context_files:
       "{{ role_file('files/dags/prom_daily_rollup.py') }}": prom_daily_rollup.py
       "{{ role_file('files/dags/homelab_warehouse/warehouse.py') }}": warehouse.py
@@ -124,23 +116,15 @@ manifests_extra_rollouts:
 render_secrets:
   - name: airflow
     string_data:
-      # The `airflow` Postgres superuser's, for the metadata database. Only the api-server,
-      # scheduler and dag-processor read it.
       AIRFLOW_POSTGRES_PASSWORD: airflow_postgres_password
       # `warehouse_writer`'s, which owns the warehouse database alone. Task pods write with it.
       WAREHOUSE_WRITER_PASSWORD: airflow_warehouse_writer_password
-      # Read once, by the Postgres init script on an empty data directory. Grafana holds its
-      # own copy (observability's grafana-warehouse-datasource Secret).
+      # Read once, by the Postgres init script on an empty data directory.
       WAREHOUSE_READER_PASSWORD: airflow_warehouse_reader_password
-      # Signs the execution-API tokens the scheduler hands each task pod. Every component must
-      # share one value, or every task fails its first API call with a 403.
+      # Every component must share one value, or every task fails its first API call with a 403.
       AIRFLOW__API_AUTH__JWT_SECRET: airflow_api_jwt_secret
       # A Home Assistant long-lived access token, made in HA's UI under the operator's
       # profile. Task pods read history with it (ha_daily_rollup).
       HA_TOKEN: airflow_ha_token
-      # A fine-grained GitHub token, read-only on this repo's Actions, issues, metadata and
-      # pull requests. Only github_daily_rollup's load task reads it, by its executor_config.
       GITHUB_TOKEN: airflow_github_token
-      # The Healthchecks.io project ping key. Only warehouse_freshness's task reads it, by its
-      # executor_config, to ping the airflow-warehouse-fresh slug.
       HC_PING_KEY: healthchecks_ping_key

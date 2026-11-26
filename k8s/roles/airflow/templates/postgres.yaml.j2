@@ -3,10 +3,7 @@
 {% from 'pod-affinity.yml.j2' import node_affinity_preference with context %}
 {% from 'workload-shell.yml.j2' import spec_shell, pod_shell with context %}
 ---
-# Runs once, on an empty data directory, after the image's entrypoint has created the `airflow`
-# superuser and its database. Task pods write as `warehouse_writer`, which owns the warehouse
-# database and nothing else; Grafana reads as `warehouse_reader`. A password rotation after the
-# first start is an ALTER ROLE by hand: see CLAUDE.md.
+# A password rotation after the first start is an ALTER ROLE by hand: see CLAUDE.md.
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -76,8 +73,7 @@ spec:
               value: airflow
             - name: POSTGRES_DB
               value: airflow
-{# A subdirectory: the claim's root holds ext4's lost+found, and initdb refuses a
-               non-empty directory. #}
+{# A subdirectory: the claim's root holds lost+found, and initdb refuses a non-empty directory. #}
             - name: PGDATA
               value: /var/lib/postgresql/data/pgdata
             - name: POSTGRES_PASSWORD

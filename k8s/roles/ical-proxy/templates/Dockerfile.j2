@@ -14,8 +14,7 @@ WORKDIR /app
 # every rebuild, certifying a flask the container never runs). Kept in lockstep with uv.lock by
 # tests/services/apps/test_ical_proxy_pins_match_uv_lock.py.
 RUN pip install flask==3.1.3 requests==2.34.2
-# Flat path: the k8s image-builder stages context files as ConfigMap keys, which cannot
-# contain '/'.
+# Flat path: image-builder stages context files as ConfigMap keys, which cannot contain '/'.
 COPY app.py .
 # Drop root: the app only reads app.py and binds :5000 (no privileged port, read-only rootfs).
 RUN useradd -u 1000 -m appuser

@@ -49,12 +49,8 @@ from flux_job_connect import Request, open_url, refused
 
 # The socket timeout of each request, in seconds; the probe it replaces used `nc -w 5`.
 TIMEOUT = 5
-# How long the push's first request retries a refused connect, in seconds: the helper's
-# default, while kube-router learns the new pod's address.
 PUSH_RETRY_SECONDS = 60
 
-# The image the push writes. An uncompressed empty tar is a valid OCI layer, and fixed bytes
-# give fixed digests, so the store holds one copy however often the Job runs.
 LAYER = bytes(1024)
 LAYER_TYPE = "application/vnd.oci.image.layer.v1.tar"
 CONFIG_TYPE = "application/vnd.oci.image.config.v1+json"
@@ -381,8 +377,6 @@ def _copy_blob(upstream: Upstream, base: str, repo: str, blob: dict) -> str:
         {"digest": digest}
     )
     with upstream.open(f"blobs/{digest}", timeout=BLOB_TIMEOUT) as source:
-        # The body streams from the upstream response, so the pod never holds a whole layer.
-        # The store refuses a body whose bytes miss `digest`.
         request = Request(
             url,
             data=source,

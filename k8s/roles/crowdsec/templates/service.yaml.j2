@@ -14,8 +14,6 @@ spec:
     - name: appsec
       port: {{ crowdsec_k8s_appsec_port }}
       targetPort: appsec
-    # Scraped by the cluster Prometheus once the B2 re-plumb moves the crowdsec target
-    # over; exposed now so that is a scrape-config change only.
     - name: metrics
       port: {{ services | metrics_port('crowdsec') }}
       targetPort: metrics

@@ -46,15 +46,12 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 
 EDGE_BOUNCER = "k8straefik"
-# The sidecar's initContainer copies the binary into the shared `tools` emptyDir
-# (`templates/deployment.yaml.j2`).
 CSCLI = "/tools/cscli"
-# The plugin pulls every 60s (`updateIntervalSeconds`), and the longest silent gap is 1200s. An
-# hour is three times that, and with an hourly cron a restarted pod's old row is gone within two
-# hours of its last pull.
+# The plugin pulls every 60s and the longest silent gap is 1200s; an hour is three times that, so a
+# restarted pod's old row is gone within two hours.
 WINDOW = timedelta(minutes=60)
-# The survivor must have pulled this much inside the window, so that the seconds between the
-# list and the prune cannot age it out.
+# The survivor must have pulled this much inside the window so the seconds between list and prune
+# cannot age it out.
 MARGIN = timedelta(minutes=10)
 # `logger` truncates a message at 1 KiB, and the first run deletes about 80 rows.
 LISTED = 10

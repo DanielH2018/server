@@ -1,15 +1,8 @@
 {% from 'networkpolicy.yml.j2' import networkpolicy with context %}
 ---
-# The api-server's execution API, which every task pod and the dag-processor call on 8080. The
-# namespace baseline admits only traefik, prometheus and the node bridges, so without this
-# allow every task fails its first heartbeat. Additive to the baseline: traefik still reaches
-# the UI only through Authelia's two_factor middleware.
-#
-# The callers are `netpol_from` on this role's containers_list entry, and `netpol_role_owned:
-# true` there keeps netpol-baseline's callers loop from rendering a second copy.
+# The execution API task pods call; the baseline admits only traefik, prometheus and node bridges.
+# `netpol_role_owned: true` keeps netpol-baseline from rendering a second copy.
 {{ networkpolicy(container_item.name, container_item.port, container_item | netpol_callers) }}
 ---
-# The scheduler's health server, on its `netpol_fences` item's port. Its one caller is
-# monitor-bridge's airflow_scheduler row.
 {% set health = container_item.netpol_fences | selectattr('app', 'equalto', 'airflow-scheduler') | first %}
 {{ networkpolicy(health.app, health.port, health['from']) }}

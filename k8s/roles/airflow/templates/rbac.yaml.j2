@@ -1,6 +1,4 @@
 ---
-# The scheduler's KubernetesExecutor creates, watches and deletes one pod per task, and adopts
-# its own orphans after a restart by patching their labels.
 apiVersion: v1
 kind: ServiceAccount
 metadata:
@@ -79,8 +77,6 @@ metadata:
   namespace: {{ k8s_namespace }}
 automountServiceAccountToken: false
 ---
-# backup_spend_rollup's load task alone runs as this, through its executor_config, to read each
-# Longhorn volume's backup target and claim. Read-only, and on volumes alone.
 apiVersion: v1
 kind: ServiceAccount
 metadata:

@@ -1,25 +1,5 @@
 {% from 'container-resources.yml.j2' import job_container_resources with context %}
 {% from 'security-context.yml.j2' import job_hardened_security_context with context %}
-{#
-  The daily, log-only preference drift check: files/prefs_check.py runs files/apply_prefs.py
-  --dry-run against the WebUI Service and prints one `qbittorrent-prefs-check: <verdict>` line.
-  It never writes to qBittorrent and pushes nothing. It replaced the daniel-box host cron
-  `qbittorrent prefs drift check` at H2.5d
-  (docs/archive/host/h2-shrink-host-plane.md, Steps item 15).
-
-  It calls no Kubernetes API, so it has no ServiceAccount of its own and mounts no token.
-
-  The labels are `app: qbittorrent-prefs-check`, never `app: qbittorrent`. The WebUI Service,
-  the compat `wireguard` Service and the reach checks all select `app=qbittorrent`,
-  so that label here would route WebUI traffic to this pod. qbittorrent's `netpol_from` admits
-  `qbittorrent-prefs-check`, and this role renders that fence itself (netpol_role_owned), so the
-  fence and this CronJob arrive in the same apply.
-
-  Flux runs a copy of this CronJob's jobTemplate once per role revision, in
-  `qbittorrent-verify` (`flux_cronjob_gates` in defaults/main.yml), which starts once the
-  `qbittorrent` Kustomization reads Ready. An extra run reads the same preferences and logs the
-  same verdict, so it is idempotent.
-#}
 ---
 apiVersion: batch/v1
 kind: CronJob

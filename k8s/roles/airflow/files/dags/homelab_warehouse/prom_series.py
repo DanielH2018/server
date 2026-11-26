@@ -84,8 +84,7 @@ ROLLUPS = (
         bounds=(0.0, 100.0),
         expected=NODE_HOSTS,
     ),
-    # amdgpu exposes a busy gauge; i915 exposes only an RC6 idle counter, whose complement is
-    # the busy fraction (k8s/roles/gpu-exporter/CLAUDE.md).
+    # i915 exposes only an RC6 idle counter, whose complement is the busy fraction.
     Rollup(
         "gpu_busy_pct",
         "max by (instance) (homelab_gpu_busy_percent) or max by (instance) "
@@ -105,8 +104,8 @@ ROLLUPS = (
         bounds=(0.0, 86400.0),
         expected=EXPECTED_UPS,
     ),
-    # kubelet reports only claims mounted by a running pod, so a CronJob's claim or a workload
-    # scaled to zero gaps legitimately: no gap check, and a floor on the count, not a key set.
+    # kubelet reports only claims a running pod mounts, so gaps are legitimate: no gap check, count
+    # floor.
     Rollup(
         "volume_used_bytes",
         "max by (namespace, persistentvolumeclaim) (kubelet_volume_stats_used_bytes)",

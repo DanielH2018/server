@@ -1,14 +1,5 @@
 ---
-# Compat alias for the hostname the *arr download-client config holds. NOT a second workload —
-# same selector, same pod as service.yaml; only the name differs.
-#
-# radarr's and sonarr's SQLite databases store `wireguard:8080` as the download client's host,
-# and neither the repo nor configarr templates it — it only exists on their PVCs. Without this
-# alias both *arr instances log `Name does not resolve (wireguard:8080)` and never see the queue.
-#
-# Kept as an alias rather than repointing the *arr config, because that config is live PVC state:
-# restoring either database from an older backup would silently reintroduce `wireguard:8080`.
-# A Service costs nothing and makes the name true.
+# Alias for the `wireguard:8080` host stored in the *arr databases; same pod as service.yaml.
 apiVersion: v1
 kind: Service
 metadata:

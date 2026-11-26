@@ -42,7 +42,7 @@ DDL = (
 STEP_S = 60
 BASELINE_LOOKBACK = "1d"
 BASELINE_SPAN = timedelta(days=1)
-# Traefik served 133,489 requests on 2026-11-19; fewer than this means its counters were lost.
+# Fewer requests than this means Traefik's counters were lost.
 MIN_DAILY_REQUESTS = 1000
 
 _CRD_SUFFIX = re.compile(r"-[0-9a-f]{20}@kubernetescrd$")

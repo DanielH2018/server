@@ -45,13 +45,11 @@ initial_fetch_done = threading.Event()
 
 cached_ics = {"1": "", "2": "", "4": ""}
 
-# The note's deep link inside a DESCRIPTION/LOCATION value. Stop at whitespace or the
-# closing quote of the malformed ALTREP the obsidian-ical-plugin puts in LOCATION.
+# Stop at whitespace or the closing quote of the malformed ALTREP obsidian-ical-plugin puts in
+# LOCATION.
 OBSIDIAN_URI_RE = re.compile(r'obsidian://[^\s"]+')
 
-# Home Page time-block tags (#tod/morning, …). They drive Obsidian's own Tasks queries
-# and are noise in a calendar row. The leading \s* keeps a mid-summary tag from leaving
-# a double space behind.
+# Tags drive Obsidian's Tasks queries and are calendar noise; the leading \s* avoids a double space.
 TOD_TAG_RE = re.compile(r"\s*#tod/\S+")
 
 
@@ -246,8 +244,7 @@ def process_obsidian_ics(raw_ics):
     return re.sub(r"BEGIN:VTODO.*?END:VTODO", rewrite_todo, raw_ics, flags=re.DOTALL)
 
 
-# Ceiling on a fetched ICS feed read into memory. Real calendars are KBs-to-low-MBs; the
-# cap stops a hostile/broken upstream from ballooning the parse past the container's memory limit.
+# The cap stops a hostile or broken upstream ballooning the parse past the container's memory limit.
 MAX_FEED_BYTES = 10 * 1024 * 1024  # 10 MB
 
 
