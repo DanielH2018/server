@@ -13,7 +13,7 @@ import pytest
 from _land_fakes import Fakes
 from _land_turn_fakes import HEAD, MERGED, OPEN, START_VIEW, UPDATED, call_order
 from deploy_tools.land_lib import batch, serial_lock, slots, turn
-from deploy_tools.land_lib.outcome import Outcome
+from deploy_tools.land_lib.outcome import Outcome, Verdict
 from deploy_tools.promote_lib.wait import WaitResult, WaitVerdict
 from lib.proc_testing import fake_bin, path_with
 
@@ -125,12 +125,13 @@ _SCRIPT = ["scripts/lib/git.py"]
 _FILES = "gh:files,headRefOid"
 
 
-def _merging(landing, paths, draft=False, **fakes):
+def _merging(landing, paths, draft=False, views=None, **fakes):
     """A landing of a PR changing `paths`, whose head reads green and merges."""
     views = {
         "state,mergeable,headRefOid": [OPEN, MERGED],
         START_VIEW: {"isDraft": draft, **OPEN},
         "files,headRefOid": {"files": [{"path": p} for p in paths], "headRefOid": HEAD},
+        **(views or {}),
     }
     ln, calls = landing(Fakes(gh_views=views, **fakes))
     ln.direct_merge_subject = "Take turns"
@@ -210,6 +211,42 @@ def test_a_landing_waits_for_the_serial_landing_past_drain_s_while_its_budgets_l
     _land(ln)
     assert _names(calls).count("sleep") * ln.opts.merge_poll > slots.DRAIN_S
     assert "merge" in call_order(calls)
+
+
+_CONFLICTING = {"mergeable": "CONFLICTING"}
+_MERGEABLE = {"mergeable": "MERGEABLE"}
+
+
+def test_a_landing_behind_a_serial_landing_ends_merge_conflict_once_its_pr_conflicts(
+    landing,
+):
+    ln, calls = _merging(
+        landing,
+        _SCRIPT,
+        views={"mergeable": [_MERGEABLE, _CONFLICTING]},
+        serial=[False] * 100 + [True],
+    )
+    with pytest.raises(Outcome) as stop:
+        _land(ln)
+    assert stop.value.verdict == Verdict.MERGE_CONFLICT
+    assert "waited in line for the serial landing" in stop.value.error
+    assert "merge" not in call_order(calls)
+    waited = _names(calls).count("sleep") * ln.opts.merge_poll
+    assert slots.CONFLICT_READ_S < waited < 2 * slots.CONFLICT_READ_S
+
+
+def test_one_conflicting_read_behind_a_serial_landing_waits_on_and_merges(landing):
+    ln, calls = _merging(
+        landing,
+        _SCRIPT,
+        views={"mergeable": [_CONFLICTING, _MERGEABLE]},
+        serial=[False] * 30 + [True],
+    )
+    _land(ln)
+    assert "merge" in call_order(calls)
+    names = [n for n in _names(calls) if n in ("gh:mergeable", "sleep")]
+    first = names.index("gh:mergeable")
+    assert names[first : first + 3] == ["gh:mergeable", "sleep", "gh:mergeable"]
 
 
 def test_a_serial_pr_out_of_the_turn_waits_for_the_serial_landing_to_end(landing):
