@@ -617,16 +617,30 @@ def ha_curl_argv(url, timeout=DEFAULT_TIMEOUT, resolve=None):
     return argv + [url]
 
 
-def config_get(url, config_body, resolve=None):
+def config_get(url, config_body, resolve=None, host=None):
     """Authenticated GET whose auth header is fed via curl `--config -` stdin (never argv).
+
+    `host` runs curl on that host over ssh instead of locally. The header still travels on
+    stdin, so it reaches neither host's argv.
 
     Returns the response body.
 
     Raises:
-        Unreadable: curl exited non-zero.
+        Unreadable: curl or ssh exited non-zero.
     """
+    argv = ha_curl_argv(url, resolve=resolve)
+    if host:
+        argv = [
+            "ssh",
+            "-o",
+            "BatchMode=yes",
+            "-o",
+            "ConnectTimeout=10",
+            host,
+            shlex.join(argv),
+        ]
     out = subprocess.run(
-        ha_curl_argv(url, resolve=resolve),
+        argv,
         input=config_body,
         capture_output=True,
         text=True,

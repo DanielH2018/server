@@ -1,8 +1,4 @@
 {% from 'service.yml.j2' import service with context %}
 ---
-# Scrape targets only. Port `metrics` is the deploy-pipeline exporter's five homelab_deploy_*
-# gauges (files/deploy_pipeline.py), which observability's deploy-pipeline job collects. Port
-# `checks` is the check exporter's per-row verdict gauges (files/verdict_export.py), which the
-# `monitor-bridge` job collects; its number is the entry's `metrics` item. Nothing else
-# reaches either port.
+# Scrape targets only: `metrics` is the deploy-pipeline exporter, `checks` the check exporter.
 {{ service('monitor-bridge', monitor_bridge_deploy_pipeline_port, port_name='metrics', extra_ports=[{'name': 'checks', 'port': services | metrics_port('monitor-bridge')}]) -}}

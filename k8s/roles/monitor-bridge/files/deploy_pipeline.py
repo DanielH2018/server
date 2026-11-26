@@ -63,17 +63,13 @@ MANIFEST_ACCEPT = ", ".join(
     )
 )
 API = "https://api.github.com/repos/" + REPOSITORY
-# `promote` runs on each completed push run of the CI workflow on master, so a green master
-# commit is the head of one of these runs.
 CI_RUNS = (
     API + "/actions/workflows/ci.yml/runs"
     "?branch=master&event=push&status=success&exclude_pull_requests=true&per_page=%d"
 )
-# Each run in the listing is about 13.5 kB of JSON. 20 runs answer in 0.75-1.92s and 50 in
-# 3.2-6.7s, against HTTP_TIMEOUT's 10s. While more than 20
-# green commits wait, `prod`'s own run falls off the page and the gauge reads the oldest listed
-# run's age, which is younger than the real one. PromotionStalled fires at 2 hours, and 20
-# merges in 2 hours has not happened here.
+# 20 runs answer in 0.75-1.92s and 50 in 3.2-6.7s against HTTP_TIMEOUT's 10s. With over 20 green
+# commits waiting `prod`'s run falls off the page and the gauge under-reads;
+# PromotionStalled fires at 2 hours, and 20 merges in 2 hours has not happened.
 RUNS_PER_PAGE = 20
 NO_HOLD = "none"
 # `chained_timeout.VERIFY_CAP_S`, the ceiling of every target's verify timeout, restated for the

@@ -32,9 +32,8 @@ from bridge.parsing import describe_fetch_failure
 
 IPS_URLS = ("https://www.cloudflare.com/ips-v4", "https://www.cloudflare.com/ips-v6")
 
-# Below this many published ranges the fetch is treated as bad rather than as a shrunken list:
-# Cloudflare publishes about 15 IPv4 and 7 IPv6 ranges, and a page that answers 200
-# with a stub body must not read as "Cloudflare dropped its ranges".
+# A page answering 200 with a stub body must not read as "Cloudflare dropped its ranges"; it
+# publishes about 15 IPv4 and 7 IPv6.
 MIN_PLAUSIBLE_RANGES = 10
 
 

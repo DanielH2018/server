@@ -67,67 +67,39 @@ def service_config(
     return ServiceConfig(
         N8N_URL=_env("N8N_URL").rstrip("/"),
         N8N_API_KEY=_env("N8N_API_KEY"),
-        # n8n hides successful executions (EXECUTIONS_DATA_SAVE_ON_SUCCESS=none, kept that way
-        # to bound database.sqlite + its B2 backup churn), so "consecutive" can't be read from
-        # one snapshot — the per-workflow failure streak is accumulated across cycles in
-        # src.state.n8n_streaks (see n8n_update_streaks): it advances once per NEW error (deduped by
-        # execution id) and resets when a workflow's latest error ages past N8N_FAIL_WINDOW
-        # (recovered / went idle).
+        # n8n hides successful executions, so the per-workflow failure streak accumulates across
+        # cycles in src.state.n8n_streaks: it advances once per new error and resets when the latest
+        # error ages past N8N_FAIL_WINDOW.
         N8N_FAIL_WINDOW=_env("N8N_FAIL_WINDOW"),
         N8N_CONSECUTIVE_MAX=_int("N8N_CONSECUTIVE_MAX"),
-        # Systemic catch: if N8N_SYSTEMIC_MAX+ workflows are each failing >=
-        # N8N_SYSTEMIC_STREAK times, something is wrong with n8n itself — page now as ONE alert
-        # instead of waiting for each to reach N8N_CONSECUTIVE_MAX (and instead of a
-        # per-workflow flood).
+        # If N8N_SYSTEMIC_MAX or more workflows each fail N8N_SYSTEMIC_STREAK times, page once for
+        # n8n itself instead of per workflow.
         N8N_SYSTEMIC_STREAK=_int("N8N_SYSTEMIC_STREAK"),
         N8N_SYSTEMIC_MAX=_int("N8N_SYSTEMIC_MAX"),
-        # Sonarr/Radarr queue warnings: when an indexer serves a poisoned fake-episode .exe,
-        # sonarr blocks the import and flags the queue item trackedDownloadStatus "warning"
-        # (message: "Caution: Found executable file with extension: '.exe'"), and nothing else
-        # pages, so the release sits seeding until a manual review. Polled directly (X-Api-Key
-        # header), same "internal REST API, empty key disables" idiom as N8N_API_KEY.
+        # Polled for queue items sonarr flags "warning" (e.g. a poisoned .exe), which nothing else
+        # pages. Empty key disables.
         SONARR_URL=_env("SONARR_URL").rstrip("/"),
         SONARR_API_KEY=_env("SONARR_API_KEY"),
         RADARR_URL=_env("RADARR_URL").rstrip("/"),
         RADARR_API_KEY=_env("RADARR_API_KEY"),
-        # Consecutive cycles an *arr API must stay UNREACHABLE before check_arr_queue pages —
-        # the fetch alone; a queue item needing review still pages on the cycle it is seen.
-        # A rolling radarr refuses connections for as long as its pod takes to come back, and
-        # that is a rollout, not a queue fault. 3 cycles = 15 min at
-        # INTERVAL=300, which outlasts a rollout and still names a genuinely dead *arr inside
-        # the hour. This stands in for arr_queue's STARTUP_GRACE membership: that grace covered
-        # the same transient at 2 cycles and covered the queue verdict too, which this
-        # deliberately does not.
+        # Consecutive cycles an *arr API must stay UNREACHABLE before paging, so a rollout (3 cycles
+        # = 15 min) does not page but a dead *arr is named within the hour.
+        # A queue item needing review still pages on sight.
         ARR_FETCH_CONSECUTIVE=_int("ARR_FETCH_CONSECUTIVE"),
-        # Hours a queue item on Sonarr's own self-clearing title hold is held before it pages
-        # 48 is upstream's OWN window, not a taste: EpisodeTitleSpecification stops
-        # applying the rule once the episode's `airDateUtc` is more than 48h old, so an item
-        # still carrying "Episode has a TBA title and recently aired" past that is stuck rather
-        # than waiting. The hold names no action an operator could take; Custom Format
-        # rejections still page on sight. The
-        # grace is narrow by construction — see verdicts/service.py's queue_warnings for the
-        # four conditions that turn it off.
+        # 48h is upstream's own window: EpisodeTitleSpecification stops applying once `airDateUtc`
+        # is over 48h old, so a later "TBA title" hold is stuck. See
+        # verdicts/service.py:queue_warnings for what turns the grace off.
         ARR_TITLE_HOLD_GRACE_H=_num("ARR_TITLE_HOLD_GRACE_H"),
-        # Bazarr's link to Sonarr and Radarr. Bazarr holds its OWN copies of their API keys, in
-        # its config on the bazarr-config PVC and entered through its UI — so no Ansible
-        # template carries them and no deploy updates them. A rotation that sweeps the
-        # templated consumers misses Bazarr, whose SignalR client then drops into a reconnect
-        # loop that leaks memory to its 1Gi cap and OOM-kills it. The ONLY signal is the "k3s
-        # Container OOM" tile, which clears one hour after the kill and takes the evidence with
-        # it, leaving Bazarr fetching no subtitles, silently.
-        #
-        # NOTE the header spelling: `X-API-KEY`, not the `X-Api-Key` Sonarr and Radarr take.
-        # A request with no key returns 401, so the key is doing work.
+        # Bazarr holds its OWN copies of the *arr API keys on its PVC, so a rotation misses it and
+        # its SignalR client loops into an OOM kill; the only signal is the OOM tile, which clears
+        # an hour later.
+        # Header spelling is `X-API-KEY`, not `X-Api-Key`.
         BAZARR_URL=_env("BAZARR_URL").rstrip("/"),
         BAZARR_API_KEY=_env("BAZARR_API_KEY"),
-        # Prowlarr sustained-indexer watchdog: Prowlarr's in-app health notification is binary —
-        # with warnings on every indexer flap pages, with warnings off only the
-        # all-indexers-down red error fires; there's no duration grace. We poll
-        # /api/v1/indexerstatus and go `down` only when an indexer has been FAILING for >=
-        # PROWLARR_INDEXER_MIN_DOWN_MIN (age from Prowlarr's own initialFailure, so it survives
-        # a monitor-bridge redeploy), suppressing the sub-threshold flaps public trackers throw
-        # that self-clear inside Prowlarr's ~5-15min backoff. Empty key = disabled (stays up),
-        # same idiom as N8N_API_KEY. Already on `media`, so prowlarr:9696 is reachable.
+        # Prowlarr's health notification has no duration grace, so this goes down only when an
+        # indexer has FAILED for PROWLARR_INDEXER_MIN_DOWN_MIN, aged from Prowlarr's own
+        # initialFailure.
+        # Empty key disables.
         PROWLARR_URL=_env("PROWLARR_URL").rstrip("/"),
         PROWLARR_API_KEY=_env("PROWLARR_API_KEY"),
         PROWLARR_INDEXER_MIN_DOWN_MIN=_num("PROWLARR_INDEXER_MIN_DOWN_MIN"),
@@ -148,78 +120,42 @@ def service_config(
         # with the cron; the two are pinned to each other by
         # test_etcd_drill_grace_is_derived_from_the_cron.
         ETCD_DRILL_MAX_AGE_S=_num("ETCD_DRILL_MAX_AGE_DAYS", "8") * 86400,
-        # The host-package builder's two page bounds, in seconds, rendered from the role defaults
-        # `monitor_bridge_builder_max_lag_s` and `monitor_bridge_builder_max_fetch_age_s`. The
-        # lag bound is how long master may sit unbuilt: it exceeds the ~103 s master CI run many
-        # times over, so a normal landing never trips it.
-        # The fetch bound is 15 builder runs (the timer fires every 2 minutes), so one slow
-        # `git fetch` never trips it either.
+        # Seconds, from the role defaults. The lag bound exceeds the master CI run many times over;
+        # the fetch bound is 15 builder runs.
         BUILDER_MAX_LAG_S=_num("BUILDER_MAX_LAG_S"),
         BUILDER_MAX_FETCH_AGE_S=_num("BUILDER_MAX_FETCH_AGE_S"),
-        # HA automation-engine heartbeat: an HA time_pattern automation stamps
-        # input_datetime.ha_heartbeat with now() every minute, so its last_changed is fresh ONLY
-        # while HA's automation scheduler is executing. We poll HA's /api/states over the apps
-        # network (Bearer token) and go down when it's stale — catching a wedged-but-running HA
-        # (HTTP :8123 up, scheduler stuck) that the container healthcheck can't see. Empty
-        # URL/token = disabled (stays up), like N8N_API_KEY/PI_ORIGIN. 300s = 5 missed
-        # 1-min beats; rides out an HA restart/deploy. Seconds (no unit suffix) — kept a plain
-        # float here because parse_duration belongs to the verdict layer, not to config.
+        # An HA automation stamps input_datetime.ha_heartbeat every minute, so a stale value catches
+        # a wedged-but-running HA; 300s = 5 missed beats.
+        # Plain float seconds because parse_duration belongs to the verdict layer. Empty URL/token
+        # disables.
         HA_URL=_env("HA_URL").rstrip("/"),
-        # File-mounted (HA_TOKEN_FILE) so this full-access HA long-lived token stays out of the
-        # pod environment envFrom cannot filter; falls back to the HA_TOKEN env.
+        # File-mounted so the full-access long-lived token stays out of the env that envFrom cannot
+        # filter; falls back to HA_TOKEN.
         HA_TOKEN=_env_file("HA_TOKEN", ""),
         HA_HEARTBEAT_MAX_AGE_S=_num("HA_HEARTBEAT_MAX_AGE"),
         HA_HEARTBEAT_ENTITY="input_datetime.ha_heartbeat",
-        # Consecutive-cycle hysteresis (like CPU_CONSECUTIVE) so a planned HA redeploy — which
-        # takes the API unreachable for ~120s and then leaves the scheduler a beat behind —
-        # doesn't page. 2 straight down cycles (~one full INTERVAL of continuous badness) before
-        # `down`.
+        # 2 down cycles before `down`, so a planned HA redeploy (~120s unreachable) does not page.
         HA_CONSECUTIVE=_int("HA_CONSECUTIVE"),
-        # ip_ban arm of the HA monitor. HA's ban middleware runs on every request and keys on
-        # the peer address, so a burst of unauthenticated /api/ calls can ban an INFRASTRUCTURE
-        # ip rather than an attacker — five bad calls from the node's pod-network
-        # gateway (10.42.0.1) ban it, and kubelet httpGet probes then arriving from that IP get
-        # 403 and crash-loop the pod. The probes exec
-        # curl to 127.0.0.1 instead, which avoids the crash loop but makes a ban SILENT: HA keeps
-        # serving, while whatever shares that source IP stays locked out. This arm is the
-        # visibility half.
-        #
-        # IT WATCHES THE BAN EVENT, NOT THE BAN STATE, and the difference matters when you read
-        # it at 03:00. `Banned IP` is logged once, at ban time. The arm therefore pages for
-        # HA_BAN_WINDOW after a ban is issued and then SELF-CLEARS, while the entry is still
-        # sitting in /config/ip_bans.yaml. A ban that predates the window — or one reloaded from
-        # that file by an HA restart, which logs nothing — is invisible here. So a green
-        # ha_heartbeat does NOT mean "no IP is banned"; it means "no ban was issued in the last
-        # HA_BAN_WINDOW".
-        #
-        # That is the only signal available: HA does not log its ongoing 403s to a banned peer,
-        # and this pod cannot read HA's PVC. The DURABLE artifact is the Discord notification
-        # Alertmanager sends when HomeAssistantAutomationsStalled fires (the rule has no `for:`,
-        # so it fires on the first down cycle) — not the check's verdict, which is transient by
-        # construction. When one fires, check /config/ip_bans.yaml by hand; do not wait for the
-        # check to recover.
+        # ip_ban arm: HA bans by peer address, so five bad calls from the pod-network gateway
+        # 10.42.0.1 ban it and crash-loop httpGet probes; the probes exec curl instead, which makes
+        # a ban SILENT.
+        # IT WATCHES THE BAN EVENT, NOT THE BAN STATE: `Banned IP` is logged once, so it pages for
+        # HA_BAN_WINDOW and self-clears while the entry stays in /config/ip_bans.yaml.
+        # A green check does not mean no IP is banned; the durable record is the Alertmanager
+        # Discord notification. When it fires, check /config/ip_bans.yaml by hand.
         HA_BAN_WINDOW=_env("HA_BAN_WINDOW", "1h"),
-        # `container=`, NOT `app=`. Promtail's k8s stream carries
-        # container/pod/job/machine/namespace/service_name/stream — there is no `app` label, so
-        # `app="home-assistant"` matches no stream and the arm reports "no ip_ban events"
-        # forever: a monitor green because it is blind. Verify the selector against live Loki
-        # over a window containing a KNOWN ban. Same lesson as the kube-state-metrics label trap in this role's
-        # CLAUDE.md — a fail-open arm cannot tell "nothing to report" from "I asked the wrong
-        # question".
+        # `container=`, NOT `app=`: the k8s log stream has no `app` label, so `app=` matches nothing
+        # and the arm reports no events forever.
+        # Verify the selector against live Loki over a window containing a KNOWN ban.
         HA_BAN_SELECTOR='{namespace="homelab",container="home-assistant"} |~ "Banned IP"',
-        # The Airflow scheduler's own health server. It takes no credential, and its threshold is
-        # Airflow's scheduler_health_check_threshold.
         AIRFLOW_SCHEDULER_URL=_env("AIRFLOW_SCHEDULER_URL").rstrip("/"),
-        # The deploy-pipeline exporter (`deploy_pipeline.py`). The token is read-only, Actions
-        # read and Variables read on this repository, so the env-secret carries it rather than a
-        # file mount. Empty disables the family's reads: the listener still serves, with no
-        # series, and DeployPipelineExporterAbsent pages that.
+        # The token is read-only, so the env-secret carries it. Empty disables reads: the listener
+        # still serves with no series, and DeployPipelineExporterAbsent pages.
         DEPLOY_PIPELINE_GITHUB_TOKEN=_env("DEPLOY_PIPELINE_GITHUB_TOKEN"),
         DEPLOY_PIPELINE_PORT=_int("DEPLOY_PIPELINE_PORT"),
         CHECK_EXPORTER_PORT=_int("CHECK_EXPORTER_PORT"),
-        # The weekly reboot's cron fields (weekday 0 = Sunday, in UTC), the minutes from the
-        # cron's fire to the reboot, and the minutes M2's mute stays open after it. The
-        # exporter's homelab_deploy_reboot_window_active derives from them.
+        # Weekday 0 = Sunday, in UTC; the exporter derives homelab_deploy_reboot_window_active from
+        # these.
         WEEKLY_REBOOT_MINUTE=_int("WEEKLY_REBOOT_MINUTE"),
         WEEKLY_REBOOT_HOUR=_int("WEEKLY_REBOOT_HOUR"),
         WEEKLY_REBOOT_WEEKDAY=_int("WEEKLY_REBOOT_WEEKDAY"),

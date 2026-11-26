@@ -115,6 +115,12 @@ def test_the_generated_edges_beside_a_soak_shaped_kustomization_are_clean():
         "last-deferred",
         "last",
     ]
+    assert dependency_cycle({"a": {"b"}, "b": {"c"}, "c": {"a"}, "d": {"a"}}) == [
+        "a",
+        "b",
+        "c",
+        "a",
+    ]
 
 
 def test_the_render_refuses_a_cycle_and_writes_nothing(tmp_path, capsys):

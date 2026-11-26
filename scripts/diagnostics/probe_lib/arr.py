@@ -4,6 +4,7 @@ Split out of probe.py, which had grown to 1349 lines across thirteen subcommands
 """
 
 import json
+import socket
 
 
 # Use `core.<name>` for anything tests monkeypatch: a `from core import` binds a snapshot the patch
@@ -11,8 +12,9 @@ import json
 from diagnostics.probe_lib import core
 from diagnostics.probe_lib.core import config_get, ha_curl_argv
 from diagnostics.probe_lib.health_docker import resolve_service_ip
+from diagnostics.probe_lib.vip_placement import ready_endpoint_nodes
 
-from lib.kubectl import DEFAULT_CLUSTER
+from lib.kubectl import DEFAULT_CLUSTER, kubectl_json
 
 # Not via k8s_endpoint: Sonarr has no Authelia bypass for /api/*, so a Traefik GET 302s to login.
 # Mirrors ARR_PORTS / ARR_API_VERSIONS in arr-notification's seed_arr_notification.py.
@@ -47,18 +49,43 @@ def resolve_arr_ip(app, cluster=DEFAULT_CLUSTER):
     Used instead of k8s_endpoint because sonarr/radarr/prowlarr
     have no Authelia bypass rule for /api/* (see the comment above ARR_PORTS). A ClusterIP is
     stable across pod restarts and redeploys, so this doesn't reintroduce the hand-copied-IP
-    staleness `docker inspect` was resolving around in the first place.
-
-    CAVEAT: this only reaches the app when its pod is scheduled on THIS node (daniel-box).
-    Each app's NetworkPolicy allows ingress only from specific pod selectors, no ipBlock for
-    the host — sonarr/radarr (on daniel-box) answered anyway, but prowlarr (on daniel-server
-    that day) refused the connection although ICMP to its pod IP got through, so this is the
-    NetworkPolicy's enforcement, not routing. Host-originated traffic apparently doesn't pass
-    through the destination node's own NetworkPolicy iptables the same way same-node traffic
-    does. This will flip on the next reschedule; a real fix needs a NetworkPolicy ipBlock for
-    the node (k8s/roles/*/templates/), out of scope here.
+    staleness `docker inspect` was resolving around in the first place. The ClusterIP answers
+    a host process only on the pod's own node: see `curl_host`.
     """
     return resolve_service_ip(app, cluster)
+
+
+def curl_host(app, cluster=DEFAULT_CLUSTER):
+    """The node to run the curl on, or None to run it on this host.
+
+    A host process reaches a pod on its own node from that node's cni0 gateway, which
+    netpol-baseline admits. A request to a pod on the other node crosses the overlay and
+    arrives from the sender's flannel.1 address, which no *arr fence admits
+    (`k3s_flannel_node_ips` in k8s/vars.yml says why). So the curl runs on the node that
+    holds the app's ready endpoint. An app with no ready endpoint runs locally, and curl
+    reports the failure.
+
+    Raises:
+        core.Unreadable: kubectl could not read the app's EndpointSlices.
+    """
+    doc = kubectl_json(
+        cluster,
+        "-n",
+        core.k8s_namespace(),
+        "get",
+        "endpointslices",
+        "-l",
+        f"kubernetes.io/service-name={app}",
+        "-o",
+        "json",
+    )
+    if doc is None:
+        raise core.Unreadable(f"kubectl could not read {app}'s EndpointSlices")
+    nodes = ready_endpoint_nodes(doc.get("items") or [], app)
+    here = socket.gethostname().split(".")[0]
+    if not nodes or here in nodes:
+        return None
+    return min(nodes)
 
 
 # `fields[]` carry live credentials; redact on `privacy` and on the field name, since Discord's
@@ -148,10 +175,13 @@ def run_arr(ns):
             + "   # + X-Api-Key: <redacted> (via --config stdin)"
         )
         return 0
-    url = arr_url(
-        resolve_arr_ip(ns.app, getattr(ns, "cluster", DEFAULT_CLUSTER)), ns.app, ns.path
+    cluster = getattr(ns, "cluster", DEFAULT_CLUSTER)
+    url = arr_url(resolve_arr_ip(ns.app, cluster), ns.app, ns.path)
+    body = config_get(
+        url,
+        arr_curl_config(core.sops_extract(f"{ns.app}_api_key")),
+        host=curl_host(ns.app, cluster),
     )
-    body = config_get(url, arr_curl_config(core.sops_extract(f"{ns.app}_api_key")))
     text, rc = format_arr_response(
         body, as_json=ns.json, show_secrets=getattr(ns, "show_secrets", False)
     )

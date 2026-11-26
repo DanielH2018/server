@@ -29,6 +29,7 @@ runs a whole landing never takes a real slot.
 import contextlib
 import os
 from collections.abc import Callable, Generator, Sequence
+from dataclasses import dataclass
 from enum import Enum
 from functools import partial
 from pathlib import Path
@@ -196,6 +197,14 @@ class Clears(Enum):
     SERIAL_ENDS = "serial-ends"
 
 
+@dataclass(frozen=True)
+class Bar:
+    """A rule that keeps a PR from merging now: the reason, and what clears it."""
+
+    why: str
+    clears: Clears
+
+
 _WAITING = {
     Clears.VERDICTS: (
         "waiting in the landing turn for the landings past their merge to reach their "
@@ -209,48 +218,48 @@ _CLEARED = {
 }
 
 
-def _bar(ln: Landing, kind: str, lock: Locker) -> tuple[str, Clears]:
+def _bar(ln: Landing, kind: str, lock: Locker) -> Bar | None:
     """Why `ln`'s PR, of `kind`, may not merge now, and what clears that.
 
     Returns:
-        The reason, "" when nothing bars the PR, and what clears the bar. Inside the
-        no-promotion window no landing reaches its verdict, so no bar clears there.
+        The bar, or None when nothing bars the PR. Inside the no-promotion window no landing
+        reaches its verdict, so no bar clears there.
     """
     if kind:
         hold = live_limit.fail_open(
             lambda: pin_gate.hold_problem(ln.tools.flux.pins.hold())
         )
         if hold:
-            return f"{hold}, and this PR changes a k8s role", Clears.NEVER
+            return Bar(f"{hold}, and this PR changes a k8s role", Clears.NEVER)
     in_window = bool(kind and live_limit.fail_open(ln.tools.in_reboot_window))
     if kind == live_limit.SERIAL:
         if _keep_serial(ln, lock):
-            return f"another {_SERIAL_LIVE}", _unless(in_window, Clears.SERIAL_ENDS)
+            return Bar(
+                f"another {_SERIAL_LIVE}", _unless(in_window, Clears.SERIAL_ENDS)
+            )
         if _held_by_another(lock, SLOT_NAMES):
-            return (
+            return Bar(
                 f"this PR changes {live_limit.SERIAL_WHAT}, and another landing is past "
                 "its merge",
                 _unless(in_window, Clears.VERDICTS),
             )
     elif _held_by_another(lock, [SERIAL_NAME]):
-        return f"a {_SERIAL_LIVE}", _unless(in_window, Clears.SERIAL_ENDS)
+        return Bar(f"a {_SERIAL_LIVE}", _unless(in_window, Clears.SERIAL_ENDS))
     if in_window and _held_by_another(lock, SLOT_NAMES):
-        return (
+        return Bar(
             "inside the weekly reboot's no-promotion window, another landing is past its "
             "merge, and this PR changes a k8s role",
             Clears.NEVER,
         )
-    return "", Clears.NEVER
+    return None
 
 
 def _unless(in_window: bool, clears: Clears) -> Clears:
     return Clears.NEVER if in_window else clears
 
 
-def _wait_out(
-    ln: Landing, kind: str, lock: Locker, why: str, clears: Clears
-) -> tuple[str, Clears]:
-    """Wait while the bar on `ln`'s PR stays one that `clears` clears.
+def _wait_out(ln: Landing, kind: str, lock: Locker, bar: Bar) -> Bar | None:
+    """Wait while the bar on `ln`'s PR stays one that `bar.clears` clears.
 
     The wait ends when the merge budgets run out. A wait in the turn ends after `DRAIN_S` at
     the latest, because no other landing merges while it lasts. A wait for the serial landing
@@ -259,29 +268,30 @@ def _wait_out(
     merge and its deploy, which is longer than `DRAIN_S` measures.
 
     Returns:
-        The bar the wait ended on: "" once nothing bars the PR, a bar of another kind as
+        The bar the wait ended on: None once nothing bars the PR, a bar of another kind as
         soon as one applies, and `Clears.NEVER` with the reason when time ran out.
     """
     o = ln.opts
     budget = _budget_left(ln)
-    if clears is Clears.VERDICTS:
+    if bar.clears is Clears.VERDICTS:
         budget = min(DRAIN_S, budget)
     waiting = OnChange(say)
     waited = 0
     while waited + o.merge_poll <= budget:
-        waiting(f"{_WAITING[clears]}: {why}")
+        waiting(f"{_WAITING[bar.clears]}: {bar.why}")
         ln.tools.sleep(o.merge_poll)
         waited += o.merge_poll
-        why, now = _bar(ln, kind, lock)
-        if not why:
-            say(f"{_CLEARED[clears]} after {waited}s")
-            return "", Clears.NEVER
-        if now is not clears:
-            return why, now
-    return f"{why}, after {waited}s of {_WAITING[clears]}", Clears.NEVER
+        now = _bar(ln, kind, lock)
+        if now is None:
+            say(f"{_CLEARED[bar.clears]} after {waited}s")
+            return None
+        if now.clears is not bar.clears:
+            return now
+        bar = now
+    return Bar(f"{bar.why}, after {waited}s of {_WAITING[bar.clears]}", Clears.NEVER)
 
 
-def _bar_after_waits(ln: Landing, head: str, in_turn_waits: bool) -> tuple[str, Clears]:
+def _bar_after_waits(ln: Landing, head: str, in_turn_waits: bool) -> Bar | None:
     """The bar on `ln`'s PR at `head` once every wait that can clear it has run.
 
     A live serial landing is waited out with the turn given back, and asked for again before
@@ -289,23 +299,21 @@ def _bar_after_waits(ln: Landing, head: str, in_turn_waits: bool) -> tuple[str, 
     holds the turn waits there for the landings past their merge to reach their verdicts.
 
     Returns:
-        The reason the PR still may not merge, "" when nothing bars it, and what clears it.
+        The bar the PR still has, or None when nothing bars it.
     """
     kind, lock = _kind(ln, head), _lock_of(ln)
-    why, clears = _bar(ln, kind, lock)
-    while why:
-        if clears is Clears.SERIAL_ENDS:
-            why, clears = ln.without_turn(
-                partial(_wait_out, ln, kind, lock, why, clears),
+    bar = _bar(ln, kind, lock)
+    while bar is not None:
+        if bar.clears is Clears.SERIAL_ENDS:
+            bar = ln.without_turn(
+                partial(_wait_out, ln, kind, lock, bar),
                 "to wait in line for the serial landing to end",
-            )
-            if not why:
-                why, clears = _bar(ln, kind, lock)
-        elif clears is Clears.VERDICTS and in_turn_waits and ln.give_back_turn:
-            why, clears = _wait_out(ln, kind, lock, why, clears)
+            ) or _bar(ln, kind, lock)
+        elif bar.clears is Clears.VERDICTS and in_turn_waits and ln.give_back_turn:
+            bar = _wait_out(ln, kind, lock, bar)
         else:
             break
-    return why, clears
+    return bar
 
 
 def _kind(ln: Landing, head: str) -> str:
@@ -327,7 +335,8 @@ def bar_member(member: Landing, head: str) -> str:
     kind = _kind(member, head)
     if kind and live_limit.fail_open(member.tools.in_reboot_window):
         return "it changes a k8s role inside the weekly reboot's no-promotion window"
-    return _bar(member, kind, _lock_of(member))[0]
+    bar = _bar(member, kind, _lock_of(member))
+    return bar.why if bar else ""
 
 
 def _refuse(ln: Landing, why: str) -> NoReturn:
@@ -345,11 +354,11 @@ def refuse_before_run(ln: Landing, head: str) -> None:
     that the landings past their merge clear (`_bar`) lets the run start: the turn keeps
     other merges out during the run, and `refuse_before_merge` waits out the rest.
     """
-    why, clears = _bar_after_waits(ln, head, in_turn_waits=False)
-    if why and clears is not Clears.VERDICTS:
-        _refuse(ln, why)
-    if why:
-        say(f"{why}; starting its run, and it waits in the turn for that to clear")
+    bar = _bar_after_waits(ln, head, in_turn_waits=False)
+    if bar and bar.clears is not Clears.VERDICTS:
+        _refuse(ln, bar.why)
+    if bar:
+        say(f"{bar.why}; starting its run, and it waits in the turn for that to clear")
 
 
 def refuse_before_merge(ln: Landing, head: str) -> None:
@@ -372,6 +381,6 @@ def refuse_before_merge(ln: Landing, head: str) -> None:
 
     Every read fails open: a rule whose read fails bars nothing.
     """
-    why, _ = _bar_after_waits(ln, head, in_turn_waits=True)
-    if why:
-        _refuse(ln, why)
+    bar = _bar_after_waits(ln, head, in_turn_waits=True)
+    if bar:
+        _refuse(ln, bar.why)

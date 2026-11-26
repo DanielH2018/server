@@ -76,11 +76,8 @@ def r2_query_usage(
         "account": json.dumps(cfg.CF_ACCOUNT_ID),
         "bucket": json.dumps(cfg.R2_BUCKET),
         "month_start": json.dumps(month_start.strftime(fmt)),
-        # Storage is a point-in-time series, not a sum: one row per datetime bucket, so take the
-        # most recent and look back far enough that a quiet bucket still has one. `datetime` is
-        # selected as a dimension because the orderBy key has to be one — Cloudflare's own storage
-        # example does exactly this, and dropping it risks a rejected query, which this check
-        # would then report as `down` every cycle.
+        # Storage is a point-in-time series, so take the most recent bucket and look back far
+        # enough; `datetime` is selected as a dimension because orderBy needs one.
         "storage_since": json.dumps(
             (datetime.fromtimestamp(now, timezone.utc) - timedelta(days=2)).strftime(
                 fmt
@@ -95,9 +92,8 @@ def r2_query_usage(
         ),
         "Cloudflare GraphQL response",
     )
-    # Cloudflare answers 200 with a populated `errors` on a bad query or an under-scoped token, so
-    # this is the only place a wrong token surfaces. Left unchecked it would read as a zero-usage
-    # bucket — a monitor green because it is blind, the failure this file keeps re-learning.
+    # Cloudflare answers 200 with a populated `errors` on a bad query or under-scoped token;
+    # unchecked it would read as a zero-usage bucket.
     errors = data.get("errors")
     if errors:
         raise RuntimeError(
@@ -219,8 +215,8 @@ def _r2_etcd_lock_probe(cfg: Config, src: Sources, now: float) -> CheckResult:
         cfg.R2_ETCD_LOCK_DAYS,
     )
     if plan.upload:
-        # Zero bytes: k3s lists every non-empty object under etcd-snapshots/ as a ready
-        # snapshot, which would mask a stale one from backup health's check 12.
+        # Zero bytes: k3s lists every non-empty object under etcd-snapshots/ as a ready snapshot,
+        # which would mask a stale one from check 12.
         _r2_send(cfg, src, "PUT", "/" + plan.upload, now)
     probe_refused = _r2_delete_refused(cfg, src, plan.probe, now)
     expired_refused = [

@@ -8,9 +8,8 @@ metadata:
   name: monitor-bridge
   namespace: {{ k8s_namespace }}
 spec:
-  # One evaluator at a time: the streak/hysteresis state (grace cycles, n8n failure
-  # streaks) is in-process, and two pods pushing the same tokens would interleave
-  # contradictory verdicts.
+  # One evaluator at a time: streak state is in-process, and two pods would interleave contradictory
+  # verdicts.
 {{ spec_shell('Recreate') }}
   replicas: 1
   selector:
@@ -22,12 +21,11 @@ spec:
         app: monitor-bridge
         netpol-baseline: enforced
     spec:
-      # Secret-volume files are root-owned; without fsGroup the 0440 credential files
-      # below are unreadable to this non-root uid and both file-mounted checks silently
-      # self-disable ("no URL/token").
+      # Without fsGroup the root-owned 0440 credential files are unreadable to the non-root uid and
+      # file-mounted checks self-disable.
 {{ pod_shell(services | tier_priority_class('monitor-bridge'), run_as_user=puid, run_as_group=pgid, fs_group=pgid, non_root=true) }}
-      # Pinned to daniel-box, where the etcd drill's stamp hostPath lives, and off daniel-server
-      # so its drain (and eventual cold boot) never takes the alerting brain down with it.
+      # Pinned to daniel-box (etcd drill stamp hostPath), off daniel-server so its drain never takes
+      # alerting down.
       nodeSelector:
         kubernetes.io/hostname: {{ k8s_primary_node }}
       containers:
@@ -41,11 +39,8 @@ spec:
             - name: checks
               containerPort: {{ services | metrics_port('monitor-bridge') }}
 {{ hardened_security_context(read_only=true) }}
-          # The settings, one plain value per entry of config/env.yaml.j2; the credentials come
-          # from the monitor-bridge-env Secret. A quoted number belongs there, never in the Secret: Flux's
-          # typed patch reads a Secret's "300" back as a number and refuses it.
-          # `to_json` writes each value as the double-quoted string the file holds, so a value
-          # that file left unquoted as a number renders as one and the apply refuses it.
+          # A quoted number stays out of the Secret (Flux reads "300" as a number); `to_json` writes
+          # each value double-quoted.
           env:
 {% for name, value in lookup('template', role_file('templates/config/env.yaml.j2')) | from_yaml | dictsort %}
             - name: {{ name }}
@@ -54,9 +49,7 @@ spec:
           envFrom:
             - secretRef:
                 name: monitor-bridge-env
-          # cli.py touches /tmp/heartbeat after every completed cycle; a stale mtime
-          # means the loop HUNG (death alone exits the pod). Same contract as the Docker
-          # healthcheck+autoheal pair — here a failing liveness recreates the pod.
+          # cli.py touches /tmp/heartbeat each cycle; a stale mtime means the loop HUNG.
           livenessProbe:
             exec:
               command:
@@ -78,19 +71,10 @@ spec:
             - name: monitor-bridge-etcd-drill-state
               mountPath: /etcd-drill-state
               readOnly: true
-          # 1 core, not 200m — same burst-shaped poller as autofix-bridge, throttled on
-          # 10.7-16.2% of CFS periods across six pod generations. This is also
-          # the workload whose own `ContainerCPUThrottled` rule documents why the period ratio
-          # alone is a poor signal for exactly these sidecars; its 0.05-core floor is the
-          # floor that keeps it from paging about itself, and raising the ceiling here moves
-          # the underlying condition rather than the threshold.
+          # 1 core, not 200m: a burst-shaped poller throttles at the lower limit.
 {{ container_resources(cpu_limit='1', mem_limit='96Mi', cpu_request='20m', mem_request='32Mi') }}
       volumes:
-        # One ConfigMap per module (templates/script-configmap.yaml.j2 has why), projected into
-        # one /app. The keys are flat (a ConfigMap key cannot contain `/`); `items:` puts each
-        # one back at its path, and Kubernetes creates the directories a path names. Derived
-        # from the same list the ConfigMap template reads, so the two cannot disagree about
-        # where a module lives.
+        # Keys are flat (a ConfigMap key cannot contain `/`); `items:` puts each back at its path.
         - name: monitor-bridge-script
           projected:
             sources:
@@ -102,8 +86,7 @@ spec:
                       path: {{ module }}
 {% endfor %}
         - name: monitor-bridge-credentials
-          # Deliberately NOT monitor-bridge-env: that Secret is consumed by envFrom, which
-          # injects every key it holds as an env var. See render_secrets in defaults.
+          # Not monitor-bridge-env: envFrom injects every key of that Secret as an env var.
           secret:
             secretName: monitor-bridge-credentials
             defaultMode: 0440
@@ -124,11 +107,8 @@ spec:
                 path: r2_s3_secret_key
         - name: monitor-bridge-tmp
           emptyDir: {}
-        # The etcd restore drill's stamp dir on daniel-box, the node this pod is pinned to.
-        # `DirectoryOrCreate`, NOT `Directory`: the drill creates this on its first pass,
-        # so a plain Directory makes the pod unschedulable on a host where the drill has not run
-        # yet — the check would then be absent rather than reporting the absence, which is the
-        # state most worth reporting.
+        # `DirectoryOrCreate`, not `Directory`: a plain Directory leaves the pod unschedulable until
+        # the drill has run.
         - name: monitor-bridge-etcd-drill-state
           hostPath:
             path: /var/lib/etcd-restore-drill
