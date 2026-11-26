@@ -39,7 +39,6 @@ from lib.container_entry import ContainerEntry, parse_containers_list
 from lib.inventory_lists import K8S_HOST, host_names, host_vars_file
 from lib.repo_paths import (
     HOST_VARS,
-    INVENTORY,
     K8S_SERVICES,
     REPO,
     SHARED_TPL,
@@ -50,7 +49,6 @@ __all__ = [
     "BUILT_IMAGE_TAG_STUBS",
     "HOST_VARS",
     "HOST_VARS_IN_TREE",
-    "INVENTORY",
     "K8S_HOST",
     "REPO",
     "SERVICES_IN_TREE",

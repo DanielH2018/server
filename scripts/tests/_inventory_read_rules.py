@@ -42,10 +42,8 @@ def _name(func: ast.expr) -> str:
 
 def _vars_file(segments: list) -> bool:
     """Whether `segments` spell a vars file: the shared layers or one under `hosts/`."""
-    return (
-        segments[:1] == ["inventory"]
-        or segments[:2] in (["estate", "vars.yml"], ["k8s", "vars.yml"])
-        or (segments[:1] == ["hosts"] and segments[-1] == "vars.yml")
+    return segments[:2] in (["estate", "vars.yml"], ["k8s", "vars.yml"]) or (
+        segments[:1] == ["hosts"] and segments[-1] == "vars.yml"
     )
 
 

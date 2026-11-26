@@ -21,7 +21,7 @@ This guide defines the security standards for this homelab. The `/security-revie
 
 - **Plaintext values** in any committed `.yml`, `.env`, `.j2`, or script file where a secret is expected
 - **Hardcoded credentials** in `docker-compose.yml.j2` templates (passwords, API keys, tokens)
-- **Unencrypted files** inside `secrets/` or `inventory/` — these must be SOPS-encrypted
+- **Unencrypted files** inside `secrets/` — these must be SOPS-encrypted. A vars file (`estate/vars.yml`, `k8s/vars.yml`, a `hosts/` `vars.yml`) holds no secret value at all
 - **`.env` files** checked into git that contain real values instead of placeholders
 - **Git history** exposure — check if a secret was ever committed even if later removed
 

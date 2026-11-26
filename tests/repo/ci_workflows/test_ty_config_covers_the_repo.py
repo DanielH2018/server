@@ -28,6 +28,9 @@ missing from `extra-paths` (a role's tests reach its module through that directo
 The reverse costs nothing and is allowed: `extra-paths` carries `.claude/hooks` with no
 `pythonpath` twin, and pytest needs no such listing.
 
+Pylance in the editor is a third reader. It takes `[tool.pyright] extraPaths`, which must equal
+ty's `extra-paths` exactly, so an import ty accepts is never flagged in the editor.
+
 Clean/flagged pairs below, per the repo rule that a new check ships with a proof it can go RED.
 """
 
@@ -181,6 +184,31 @@ def test_a_file_outside_every_root_is_flagged():
 
 def test_an_excluded_file_is_not_flagged():
     assert _unchecked(["site/x.py"], ["scripts"], ["site"]) == []
+
+
+def _pyright_drift(extra_paths: list[str], pyright_paths: list[str]) -> list[str]:
+    """Every directory exactly one of ty and Pylance resolves imports from."""
+    ty = {_norm(p) for p in extra_paths}
+    pyright = {_norm(p) for p in pyright_paths}
+    return sorted(ty ^ pyright)
+
+
+def test_pylance_resolves_imports_from_the_same_paths_as_ty():
+    """Pylance in the editor flags a first-party import ty accepts when the lists differ."""
+    cfg = _config()
+    drift = _pyright_drift(_extra_paths(cfg), cfg["tool"]["pyright"]["extraPaths"])
+    assert not drift, (
+        "[tool.pyright] extraPaths and [tool.ty.environment] extra-paths disagree on "
+        f"{drift}. Keep the two lists equal."
+    )
+
+
+def test_matching_pyright_paths_are_clean():
+    assert _pyright_drift(["scripts", "tests"], ["tests/", "./scripts"]) == []
+
+
+def test_a_path_only_one_checker_lists_is_flagged():
+    assert _pyright_drift(["scripts", "hosts/lib"], ["scripts"]) == ["hosts/lib"]
 
 
 def test_a_covered_pythonpath_is_clean():

@@ -40,7 +40,7 @@ Airflow 3 with the KubernetesExecutor, plus one Postgres holding the metadata da
   holds it to the scheduler's.
 - **Three additive fences.** `k8s/roles/airflow/templates/networkpolicy.yaml.j2` admits
   `airflow-task` and `airflow-dag-processor` to 8080, from the entry's `netpol_from`. The same
-  file admits `monitor-bridge` to the scheduler's health server on 8974, from the entry's
+  file admits `blackbox-exporter` to the scheduler's health server on 8974, from the entry's
   `airflow-scheduler` item under `netpol_fences`; that port also sets the containerPort, the
   `airflow-scheduler` Service and the server's own port.
   `k8s/roles/airflow/templates/networkpolicy-postgres.yaml.j2` admits the four Airflow apps
@@ -233,9 +233,10 @@ Airflow 3 with the KubernetesExecutor, plus one Postgres holding the metadata da
   `k8s/roles/airflow/tests/test_freshness.py::test_every_dag_that_records_its_check_is_watched`
   fails until it does. To find what missed a day, read the ping's body in the Healthchecks.io
   console, then the DAG's runs in Airflow.
-- **A dead scheduler pages as `AirflowSchedulerDown`.** monitor-bridge's `airflow_scheduler`
-  row reads the scheduler's own health server every cycle, and goes down on a 503 or when the
-  server does not answer (`k8s/roles/monitor-bridge/files/checks/service.py:check_airflow_scheduler`).
+- **A dead scheduler pages as `AirflowSchedulerDown`.** The `blackbox-extra` job probes the
+  scheduler's own health server, which answers 503 when its heartbeat is stale or its job is not
+  RUNNING, and the probe fails on it or when the server does not answer
+  (`k8s/roles/observability/files/rules/extra-probes.yaml:DECIDED: the airflow probe has its own rule`).
   The rule waits 10 minutes, so the weekly reboot does not page.
 
 ## Editing

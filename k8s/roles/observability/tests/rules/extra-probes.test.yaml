@@ -162,3 +162,33 @@ tests:
                 The node-pi scrape has failed for 2 minutes, so the Pi is off the network or its
                 node_exporter unit is down. Ping the host, then read the unit with `ssh daniel-pi
                 systemctl status node_exporter`.
+
+  # The scheduler probe has its own rule: the generic warning rule skips its `own-rule` tier,
+  # and the page waits 10m.
+  - interval: 1m
+    input_series:
+      - series: 'probe_success{job="blackbox-extra", instance="http://airflow-scheduler.homelab.svc.cluster.local:8974/health", service="airflow", module="http_2xx", page_tier="own-rule"}'
+        values: '0x12'
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: ExtraProbeFailed
+        exp_alerts: []
+      - eval_time: 9m
+        alertname: AirflowSchedulerDown
+        exp_alerts: []
+      - eval_time: 10m
+        alertname: AirflowSchedulerDown
+        exp_alerts:
+          - exp_labels:
+              job: blackbox-extra
+              instance: http://airflow-scheduler.homelab.svc.cluster.local:8974/health
+              service: airflow
+              module: http_2xx
+              page_tier: own-rule
+              severity: warning
+            exp_annotations:
+              summary: 'airflow: the scheduler is not running, so no warehouse rollup starts.'
+              description: >-
+                The scheduler's own health server answers 503, or does not answer at all. Read
+                probe_http_status_code for this instance, then the airflow-scheduler pod's state
+                and log in the homelab namespace.

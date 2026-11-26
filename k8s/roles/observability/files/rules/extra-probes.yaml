@@ -60,6 +60,22 @@ groups:
             blackbox_exporter's {{ $labels.module }} probe of {{ $labels.instance }} has failed
             for 2 minutes. Read probe_http_status_code for this instance when the module is an
             http one, then the workload's own log.
+      # DECIDED: the airflow probe has its own rule, because the generic pair holds 2m and the
+      # scheduler restarts with the weekly reboot.
+      # The scheduler's health server answers 503 for a dead heartbeat. Its `page_tier` is
+      # `own-rule`, so neither rule above reads it. `for: 10m` rides out the weekly reboot.
+      - alert: AirflowSchedulerDown
+        expr: probe_success{job="blackbox-extra", service="airflow"} == 0
+        for: 10m
+        labels:
+          severity: warning
+          service: airflow
+        annotations:
+          summary: 'airflow: the scheduler is not running, so no warehouse rollup starts.'
+          description: >-
+            The scheduler's own health server answers 503, or does not answer at all. Read
+            probe_http_status_code for this instance, then the airflow-scheduler pod's state
+            and log in the homelab namespace.
       # 10m tolerates a container that a deploy recreates (two 300s bridge cycles).
       # tests/services/scraping/test_extra_probe_targets.py pins the number.
       - alert: PiPortDead
