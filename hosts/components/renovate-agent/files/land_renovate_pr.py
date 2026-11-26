@@ -15,7 +15,7 @@ A PR is landed only when all of these hold:
 - It is open.
 - Its branch carries no `k8s_autodeploy-false` slug, and no changed path sits under a k8s role
   the denylist names. The title is never read, because the session can edit it.
-- It changes no shared variables file: nothing under `inventory/` or `estate/`, and no
+- It changes no shared variables file: nothing under `estate/`, and no
   `k8s/vars.yml`, `hosts/vars.yml` or `hosts/<host>/vars.yml`. A pin there, such as
   `crowdsec_k8s_image`, reaches every role that reads it, denylisted ones included, and no path
   check can see which those are. An interactive session lands that class.
@@ -85,10 +85,8 @@ LAND_TIMEOUT_S = 63660
 PR_FIELDS = (
     "number,author,isCrossRepository,baseRefName,state,headRefName,headRefOid,files"
 )
-# ADR-0042's variables files, and the inventory they replace.
-VARS_FILE = re.compile(
-    r"^(?:inventory/|estate/|k8s/vars\.yml$|hosts/(?:[^/]+/)?vars\.yml$)"
-)
+# ADR-0042's variables files.
+VARS_FILE = re.compile(r"^(?:estate/|k8s/vars\.yml$|hosts/(?:[^/]+/)?vars\.yml$)")
 # `lib/exit_codes.py:USAGE_ERROR`, which this host-shipped script cannot import.
 USAGE_ERROR = 64
 REFUSED_EXIT = 3

@@ -308,7 +308,7 @@ def test_a_held_copy_reads_its_own_inventory_ahead_of_the_venvs_checkout(tmp_pat
 
 @pytest.fixture
 def hooks_alone(tmp_path) -> Path:
-    """A copy of the hooks with no `scripts/`, `k8s/` or `inventory/` beside it."""
+    """A copy of the hooks with no `scripts/`, `k8s/` or `estate/` beside it."""
     shutil.copytree(
         REPO / ".claude/hooks",
         tmp_path / ".claude/hooks",

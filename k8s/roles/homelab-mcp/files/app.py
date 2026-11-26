@@ -426,7 +426,7 @@ def claude_code_events(limit: int = 100, hours: float = 24.0) -> list[dict]:
 
 @mcp.tool()
 def read_file(path: str) -> str:
-    """Read a text file under the mounted k8s/, inventory/ and tests/ trees (read-only, jailed).
+    """Read a text file under the mounted k8s/, estate/ and tests/ trees (read-only, jailed).
 
     Rejects paths that escape the tree or name a secret/key file.
     """
@@ -442,7 +442,7 @@ def read_file(path: str) -> str:
 
 @mcp.tool()
 def list_files(directory: str = ".") -> list[dict]:
-    """List entries under the mounted k8s/, inventory/ and tests/ trees (jailed; secrets hidden)."""
+    """List entries under the mounted k8s/, estate/ and tests/ trees (jailed; secrets hidden)."""
     resolved = safe_reads.resolve_within_jail(FILE_ROOT, directory)
     if not resolved.is_dir():
         raise ValueError("not a directory")
