@@ -29,7 +29,7 @@
 # sys user is. LXD is not installed, so its drop-in, like apport's, keeps the socket from starting.
 #
 # Keep the sudoers file valid: a malformed drop-in locks sudo out. `visudo -cf` in
-# hosts/lib/tests/test_pi_host_hardening.py holds it under each visudo the runner has: classic
+# hosts/lib/tests/host_baselines/test_pi_host_hardening.py holds it under each visudo the runner has: classic
 # sudo's and sudo-rs's, which 26.04 selects. Any setting either one refuses stays out of the file.
 #
 # unattended-upgrades is a Depends here. Its origin policy is the `unattended-upgrades` component's.

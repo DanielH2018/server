@@ -8,8 +8,8 @@
 # live Pi holds, which would stop every attached container. The unit's `ExecStartPre=`
 # lines create each external network the rendered compose files name, from the renderer's
 # `compose_external_networks`, so a fresh Pi gets them on first start.
-# hosts/lib/tests/test_pi_docker_component.py holds the created set equal to the project's, and
-# hosts/lib/tests/test_pi_compose_network_measurement.py records what Compose does with an
+# hosts/lib/tests/host_lib/test_pi_docker_component.py holds the created set equal to the project's, and
+# hosts/lib/tests/pi_compose/test_pi_compose_network_measurement.py records what Compose does with an
 # unlabelled network of the same name.
 #
 # The `outputs:` entry below is the Compose env file. Autoheal's webhook and alloy's HTTP password

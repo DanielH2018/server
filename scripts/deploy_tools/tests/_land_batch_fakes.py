@@ -48,6 +48,7 @@ class GitHub:
         prs,
         run,
         conflicts=(),
+        stack_conflicts=(),
         refuse="",
         crash="",
         unmergeable=(),
@@ -87,7 +88,9 @@ class GitHub:
         self.labels_at_ready: dict[str, set[str]] = {}
         self.merged: list[str] = []
         self._run = list(run)
+        # Heads that conflict with master, and heads that conflict only with another PR's head.
         self._conflicts = set(conflicts)
+        self._stack_conflicts = set(stack_conflicts)
         self._refuse = refuse
         self._crash = crash
         self._unmergeable = set(unmergeable)
@@ -145,7 +148,9 @@ class GitHub:
                 raise _refused(422, "Reference does not exist")
             return None
         if (method, path) == ("POST", "merges"):
-            if sent["head"] in self._conflicts:
+            if sent["head"] in self._conflicts or (
+                sent["head"] in self._stack_conflicts and self.stacked[sent["base"]]
+            ):
                 raise _refused(409, "Merge conflict")
             self.stacked[sent["base"]].append(sent["head"])
             self.branches[sent["base"]] = self._commit()

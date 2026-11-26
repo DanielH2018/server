@@ -27,4 +27,4 @@
 
 ENFORCED: hosts/tests/host_checks/test_host_check_textfiles.py (the audit's behaviour
 against stubs), hosts/tests/repo_crons/test_cron_scripts_publish_via_pr.py and
-hosts/lib/tests/test_secret_rotation_component.py (the units and the legacy entries).
+hosts/lib/tests/components/test_secret_rotation_component.py (the units and the legacy entries).

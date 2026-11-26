@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """The container cases for `hosts/bootstrap-host.sh`, against real apt, dpkg and systemd (H7.15a).
 
-`hosts/lib/tests/test_bootstrap_host*.py` runs the script on a fake root with stub commands.
+`hosts/lib/tests/bootstrap/test_bootstrap_host*.py` runs the script on a fake root with stub commands.
 These cases run it as root in the test image, booted with systemd as PID 1 and named after the
 host, so apt resolves the packages' real `Depends`, the real k3s installer writes its unit, and
 systemd loads that unit:
@@ -45,21 +45,21 @@ diagnostics print as they happen, outside the group's block.
 
 The cases read `systemctl show` after the run: the installer leaves the node's k3s unit disabled
 and stopped, because the operator starts it by hand (`docs/host-packages.md`). The install is a
-simulation, so a package's enable link never lands here. `hosts/lib/tests/test_bootstrap_host_k3s.py`
+simulation, so a package's enable link never lands here. `hosts/lib/tests/bootstrap/test_bootstrap_host_k3s.py`
 reads the rendered links instead.
 
 The script runs unmodified, with four stand-ins around it:
 
   * The scratch clone is one commit of the checkout's tree with `hosts/lib/bootstrap_anchor.py`
     replaced by ANCHOR_STUB. The real check reads GitHub, and a pull request's head is on no
-    first-parent chain of master. `hosts/lib/tests/test_bootstrap_anchor.py` holds its decision.
+    first-parent chain of master. `hosts/lib/tests/bootstrap/test_bootstrap_anchor.py` holds its decision.
   * An `apt-get` on PATH ahead of the real one records each call and turns `install` into
     `install --simulate`. A real install of a cluster node's package starts reconcile, whose arms
     a container cannot satisfy, so these cases run no maintainer script.
   * A `dig` on PATH (DIG_SHIM) answers step 6's probe of daniel-box's forwarder. The simulated
     install leaves no coredns-host.service to answer it, and the offline case has no network for
     the forwarder to reach. On a real host the package installs it and reconcile starts it.
-    `hosts/lib/tests/test_bootstrap_host_k3s.py` holds the probe's refusal.
+    `hosts/lib/tests/bootstrap/test_bootstrap_host_k3s.py` holds the probe's refusal.
   * The script runs with SUDO_UID set to the clone's owner, as `sudo` sets it, because git
     refuses a repository that another user owns unless it was reached through sudo.
 

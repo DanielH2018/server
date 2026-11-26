@@ -37,7 +37,7 @@ how that sync behaves.
   runs no task (D5). Each is a `type: Directory` hostPath, and `systemd-tmpfiles-setup.service`
   creates them at boot, before the pod starts. The claude_code role's `claude_code_artifacts_*`
   copies of those keys must equal this role's, which
-  `hosts/lib/tests/test_claude_artifacts_node_timers.py` holds.
+  `hosts/lib/tests/host_baselines/test_claude_artifacts_node_timers.py` holds.
 - **The agent user's tree is a third source.** `artifacts_agent_dir`
   (`/var/lib/claude/.claude/artifacts`) mounts read-only at `/srv/artifacts/daniel-box-claude`, so the index lists it as the host
   `daniel-box-claude` beside the operator's `daniel-box`. An empty value removes the volume and
@@ -62,7 +62,7 @@ rsync each entry in `claude_code_artifacts_peer_sources` onto daniel-box, then p
 list to the peer's `stars_path`. The template is
 `hosts/components/claude-code/templates/sync-artifacts.sh.j2`. This role keeps the twin keys
 the pod reads, `artifacts_peer_sources` and `artifacts_peer_dir`, and
-`hosts/lib/tests/test_claude_artifacts_node_timers.py` holds each pair equal. A change to the
+`hosts/lib/tests/host_baselines/test_claude_artifacts_node_timers.py` holds each pair equal. A change to the
 peer list therefore edits both roles: Flux applies the mounts, and the next daniel-box package
 version carries the sync and its directories.
 

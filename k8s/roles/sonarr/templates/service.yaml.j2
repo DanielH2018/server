@@ -11,7 +11,7 @@ spec:
   # strand the reconciler on a value nothing re-resolves. The pin equals the address the Service
   # already held, so applying it changes nothing live. The package's copy is
   # `fake_remux_sonarr_cluster_ip` in hosts/components/fake-remux/defaults/main.yml, and
-  # hosts/lib/tests/test_h737_box_components.py pins the two together.
+  # hosts/lib/tests/host_baselines/test_h737_box_components.py pins the two together.
   clusterIP: {{ sonarr_k8s_cluster_ip }}
   selector:
     app: sonarr

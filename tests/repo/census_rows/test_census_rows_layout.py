@@ -250,11 +250,6 @@ def _bare_sibling_offence(subject: Subject) -> list[str]:
 # ── Test modules grouped by subject ──────────────────────────────────────────────────
 
 SUITE_CAP = 40
-_TO_GROUP = "the Test suite organization milestone groups it"
-UNGROUPED_SUITES = dict.fromkeys(
-    ("hosts/lib/tests",),
-    _TO_GROUP,
-)
 
 
 class Suite(Subject):
@@ -406,7 +401,6 @@ ROWS = (
         ),
         files=_suites,
         offence=_suite_offence,
-        allow=UNGROUPED_SUITES,
         red=(
             Suite("scripts/x/tests", SUITE_CAP + 1),
             Suite("scripts/x/tests", 1, ["scripts/x/tests/land"]),

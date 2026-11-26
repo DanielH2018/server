@@ -109,6 +109,8 @@ class Member:
     head: str
 
 
+_CONFLICTS_WITH_MASTER = f"it conflicts with {BRANCH}"
+
 # Why a holder stops its batch once its own rate-limit wait could not take the turn back.
 _TURN_LOST = "this landing could not take the landing turn back after a rate-limit wait"
 
@@ -163,7 +165,7 @@ def _unfit(member: Landing, head: str) -> str:
     if view.get("headRefOid") != head:
         return "its head moved after its landing stood in the line"
     if view.get("mergeable") == "CONFLICTING":
-        return f"it conflicts with {BRANCH}"
+        return _CONFLICTS_WITH_MASTER
     where = member.view("baseRefName,isCrossRepository")
     if (
         where.get("isCrossRepository") is not False
@@ -195,6 +197,8 @@ def _admit(ln: Landing, pr: str, head: str) -> Member | None:
         why = exc.error
     if why:
         say(f"leaving PR #{pr} out of the batch: {why}")
+        if why == _CONFLICTS_WITH_MASTER:
+            _answer(ln, Member(member, head), line.CONFLICT)
         return None
     # The merge wait ends, and merges nothing, if the head moves from the one stacked.
     member.pinned_head = member.tested_head = head
@@ -310,13 +314,45 @@ def _stack(
         merged = _merge_into(ln, branch, member.head, member.ln.direct_merge_subject)
         if merged:
             tip = merged
-        else:
-            members.remove(member)
+            continue
+        members.remove(member)
+        if _merges_onto(ln, f"{branch}-{member.ln.opts.pr}", base, member):
             say(
                 f"leaving PR #{member.ln.opts.pr} out of the batch: it does not merge "
                 "onto the PRs stacked before it"
             )
+        else:
+            say(
+                f"leaving PR #{member.ln.opts.pr} out of the batch: {_CONFLICTS_WITH_MASTER}"
+            )
+            _answer(ln, member, line.CONFLICT)
     return tip
+
+
+def _merges_onto(ln: Landing, branch: str, base: str, member: Member) -> bool:
+    """Whether `member`'s head merges onto the master commit `base` by itself.
+
+    Builds `branch` for the one merge and deletes it. A failed call reads as merging, so the
+    member waits on as it did before rather than ending on a guess.
+    """
+    try:
+        _api(ln, "POST", "git/refs", f"ref=refs/heads/{branch}", f"sha={base}")
+        try:
+            _api(
+                ln,
+                "POST",
+                "merges",
+                f"base={branch}",
+                f"head={member.head}",
+                "commit_message=conflict check",
+            )
+        finally:
+            _drop_branch(ln, branch, may_be_gone=True)
+    except subprocess.CalledProcessError as exc:
+        return "HTTP 409" not in (exc.stderr or "")
+    except _GH_FAILED:
+        return True
+    return True
 
 
 def _await_run(ln: Landing, tip: str) -> tuple[int, str]:

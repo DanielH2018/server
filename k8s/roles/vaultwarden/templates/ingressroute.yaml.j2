@@ -1,4 +1,4 @@
-{% from 'ingressroute.yml.j2' import ingressroute, monitoring_route with context %}
+{% from 'ingressroute.yml.j2' import ingressroute with context %}
 ---
 {# `vaultwarden-lan-only` (middleware.yaml.j2) is the vault API's only gate. #}
 {{ ingressroute(
@@ -11,13 +11,38 @@
   )
 }}
 ---
-{# The blackbox ingress probe is a pod, outside the allowlist; /alive answers only a timestamp. #}
-{{ monitoring_route(
-    container_item.name,
-    container_item.hostname | default(container_item.name),
-    container_item.port,
-    '/alive',
-    extra_client_cidrs=[k3s_pod_cidr],
-    include_bridge_ip=false
-  )
-}}
+{#
+  The blackbox ingress probe is a pod, outside the allowlist, and probes the bare host. This
+  router admits pods to exactly `/`, the static web-vault page; monitoring_route() cannot,
+  because it matches a PathPrefix and `/` as a prefix is the whole API.
+#}
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: vaultwarden-probe
+  namespace: {{ k8s_namespace }}
+spec:
+  entryPoints:
+    - https
+  routes:
+    - kind: Rule
+      match: "Host(`{{ container_item.hostname }}.local.{{ domain }}`) && Path(`/`) && ClientIP(`{{ k3s_pod_cidr }}`)"
+      priority: 100
+      middlewares:
+        - name: rate-limit
+      services:
+        - name: {{ container_item.name }}
+          port: {{ container_item.port }}
+  tls:
+{% if k8s_tls_cert_resolver %}
+    certResolver: {{ k8s_tls_cert_resolver }}
+{% endif %}
+    options:
+      name: modern
+{% if k8s_tls_cert_resolver %}
+    domains:
+      - main: "{{ domain }}"
+        sans:
+          - "*.{{ domain }}"
+          - "*.local.{{ domain }}"
+{%- endif %}

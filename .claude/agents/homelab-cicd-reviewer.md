@@ -66,7 +66,7 @@ flagging** (silence ≠ unhandled — most "gaps" already have a guard).
    robustness + failure handling (`DEPLOY_HOLD`
    (`scripts/diagnostics/probe_lib/landing_blockers.py:run_landing`), a suspended Flux tag, a
    checkout-sync `dirty` park
-   (`hosts/lib/tests/test_checkout_sync.py::test_an_untracked_file_is_refused`)), secret-registry
+   (`hosts/lib/tests/host_lib/test_checkout_sync.py::test_an_untracked_file_is_refused`)), secret-registry
    completeness vs the live secret names, template lint, notification reliability.
 3. Report each with the source `file:line` + a concrete fix.
 4. A finding that rests on config you could not read (a regex, a packageRule, a file outside

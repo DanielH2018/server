@@ -15,7 +15,7 @@ visible decision:
 
 - ufw admits `deploy_ui_port` from the pod CIDR and both node IPs only, because flannel
   masquerades pod→LAN traffic to the sending node. The `ufw:` rules in `component.yml` declare
-  them. ENFORCED: `hosts/lib/tests/test_deploy_ui_component.py`.
+  them. ENFORCED: `hosts/lib/tests/host_baselines/test_deploy_ui_component.py`.
 - Authelia `two_factor` gates `deploy.local`: `auth_tier: two_factor` on the `deploy-ui`
   containers_list entry, rendered into the authelia role's access_control rules.
   ENFORCED: `tests/services/authelia/test_authelia_access_tiers.py`.
@@ -240,7 +240,7 @@ journalctl -u deploy-ui --since -30d | grep -cE 'request method=GET path=/ |requ
 ```
 
 journald on daniel-box is capped at 1G (`SystemMaxUse`,
-`hosts/lib/tests/test_pi_sshd_apt_and_tuning.py::test_journald_and_limits_ship_as_drop_ins`), which held entries back to
+`hosts/lib/tests/host_baselines/test_pi_sshd_apt_and_tuning.py::test_journald_and_limits_ship_as_drop_ins`), which held entries back to
 2026-07-31 on 2026-09-30, so a 30-day window fits. `hosts/components/deploy-ui/files/deploy_ui.py:request_line`
 formats the line with host_lib's `logfmt`, so a path holding a space or a quote is quoted
 rather than split (#6202,
@@ -255,11 +255,11 @@ builder publishes the next `homelab-daniel-box`. dpkg only installs the files, s
 file entry in `component.yml` carries `activate: "try-restart:deploy-ui.service"`, and reconcile
 restarts the daemon when one of them changed. A new Python file needs the same action, or the
 daemon keeps running the old code (ENFORCED:
-`hosts/lib/tests/test_deploy_ui_component.py::test_a_changed_python_file_restarts_the_daemon_is_clean`).
+`hosts/lib/tests/host_baselines/test_deploy_ui_component.py::test_a_changed_python_file_restarts_the_daemon_is_clean`).
 The HTML needs no action, because the daemon reads it on each request.
 `host_lib.py` and `ci_verdict.py` are `lib:` entries from `hosts/lib/`. The open-PR table's CI
 column is `hosts/lib/ci_verdict.py:checks_verdict` over each PR's status rollup, or `none` for
 a PR with no check. To verify, run
 `curl -s http://<daniel-box server_ip>:8790/api/inflight` from the box.
 
-Tests: `uv run pytest hosts/components/deploy-ui/tests hosts/lib/tests/test_deploy_ui_component.py`.
+Tests: `uv run pytest hosts/components/deploy-ui/tests hosts/lib/tests/host_baselines/test_deploy_ui_component.py`.

@@ -113,7 +113,7 @@ SD copy was 99 MB: 45 MB of journal and 37 MB of pacct, mostly the uncompressed 
 `pacct.0`. With 2 MiB archives the worst case was about 154 MB. 1 MiB archives bring it to
 about 120 MB, which leaves about 8 MB of headroom, most of it set by the 28 MB/day pacct
 estimate. `test_the_whole_sd_copy_fits_under_the_log2ram_boot_guard` in
-`hosts/lib/tests/test_pi_tuning_component.py` sums the journal, pacct, auditd and sysstat caps
+`hosts/lib/tests/host_baselines/test_pi_tuning_component.py` sums the journal, pacct, auditd and sysstat caps
 and the measured rest of the tree against `SIZE`.
 
 **A smaller archive size needs a one-time vacuum by hand.** journald never resizes an archive
@@ -195,7 +195,7 @@ results:
 | the daemon is killed | `wd_keepalive` runs | `wd_keepalive` runs |
 
 `test_a_restart_leaves_the_watchdog_daemon_running_and_a_stop_or_a_crash_starts_the_keepalive`
-in `hosts/lib/tests/test_pi_watchdog_dropin.py` repeats the table on any host with a systemd
+in `hosts/lib/tests/components/test_pi_watchdog_dropin.py` repeats the table on any host with a systemd
 user manager.
 
 The debloat step purges Open vSwitch, which was installed with no bridges and no netplan
@@ -370,7 +370,7 @@ Ubuntu's default fires the
 update half twice a day at any hour (`6,18:00` plus 12 h of randomness), and on this box each
 firing is a four-minute 60 MB burst: measured 2026-09-18 at 15:05Z, memory PSI `full avg10`
 45%, load 9.9, an RCU stall (#2007). The drop-in clears the packaged schedule with an empty
-`OnCalendar=` first, and `hosts/lib/tests/test_pi_tuning_component.py` requires that line
+`OnCalendar=` first, and `hosts/lib/tests/host_baselines/test_pi_tuning_component.py` requires that line
 and the window. The Pi memory budget review of 2026-09-18 has the host's numbers.
 
 ## node_exporter as a host unit

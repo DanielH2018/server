@@ -866,7 +866,7 @@ Each renders from `hosts/lib/maintainer-scripts/<name>.j2` with the package's co
 `/usr/lib/systemd/system/`. The render writes it to `DIR/<package>/scripts/<name>`, mode 0755,
 outside `root/`, and `nfpm.yaml`'s `scripts:` names it. Only a host package may list
 `preinst`, because it refuses a hostname mismatch. The maintainer-script lint in
-`hosts/lib/tests/test_maintainer_scripts.py` holds each rendered script to the line shapes H3's
+`hosts/lib/tests/host_lib/test_maintainer_scripts.py` holds each rendered script to the line shapes H3's
 *Package rules* allow.
 
 A package spec or a component may also carry `units:`, `enable:` and `legacy:`, which feed

@@ -9,7 +9,7 @@ media_volume_claim: media-data
 # non-deterministic.
 media_volume_storage_class: media-local
 # Mode is inherited from daniel-server's containers/data (0755) and deliberately not enforced;
-# hosts/lib/tests/test_box_k3s_host_half.py holds daniel-box's tmpfiles copy equal.
+# hosts/lib/tests/host_baselines/test_box_k3s_host_half.py holds daniel-box's tmpfiles copy equal.
 media_volume_host_path: /srv/media
 
 # ADVISORY ONLY: no quota backs this directory. The claim requests the same number, because binding

@@ -32,5 +32,5 @@ the diff through a PR that a detached landing merges.
   on generator output. `docs/host-baseline-record.md`'s *The generated-docs refresh cron, in
   detail* has why, the `PUSH_STATUS` default and the `vale` exception.
 
-ENFORCED: hosts/lib/tests/test_docs_refresh_component.py, and the failure-path tests in
+ENFORCED: hosts/lib/tests/components/test_docs_refresh_component.py, and the failure-path tests in
 hosts/tests/test_docs_refresh_*.py, which read the rendered script.

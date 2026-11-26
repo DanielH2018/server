@@ -15,7 +15,7 @@ peer that stays down writes that line once rather than every 5 minutes.
 
 Every run also logs a `status=<up|down>` line under the `sync-artifacts` tag, which the logger
 stub records with the rest of the journal. The script pushes nothing to Kuma (M6 batch B6a's
-Cutover-2); `hosts/lib/tests/test_claude_artifacts_node_timers.py` holds that.
+Cutover-2); `hosts/lib/tests/host_baselines/test_claude_artifacts_node_timers.py` holds that.
 """
 
 import os

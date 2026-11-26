@@ -10,7 +10,7 @@ What's specific to this unit, and what this file guards:
 - It runs weekly, not daily -- a full hermetic sweep costs real API dollars
   (evals/README.md "Auth & fidelity"), so a tighter schedule would be a standing cost, not a
   safety margin.
-- The service's PATH, HOME and credentials are held by hosts/lib/tests/test_eval_sweep_component.py.
+- The service's PATH, HOME and credentials are held by hosts/lib/tests/components/test_eval_sweep_component.py.
 - The script self-gates on an empty anthropic_api_key -- a host without that SOPS secret must
   install disarmed rather than red or silently non-hermetic.
 - The key reaches the script through a systemd credential, never through its own body,

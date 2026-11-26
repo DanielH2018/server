@@ -173,4 +173,4 @@ outside tests calls and each new function that takes or returns a raw dict
 test paths instead of the whole suite.
 
 `.gitignore` denies every root-level file, and one untracked file parks `homelab-checkout-sync`
-(`hosts/lib/tests/test_checkout_sync.py::test_an_untracked_file_is_refused`).
+(`hosts/lib/tests/host_lib/test_checkout_sync.py::test_an_untracked_file_is_refused`).

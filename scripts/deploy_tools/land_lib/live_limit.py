@@ -27,6 +27,8 @@ QUOTA_RESET_FAR_S = 15 * 60
 
 K8S = "k8s"
 SERIAL = "serial"
+# A PR of documents and tests alone: it moves no bundle, so no promotion it shares can fail it.
+QUIET = "quiet"
 # The role holding each forward-only pin is named for it: `k3s_longhorn_version` in `longhorn`.
 SERIAL_ROLES = frozenset(
     {key.removeprefix("k3s_").removesuffix("_version") for key in PINS} | {"flux"}
