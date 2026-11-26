@@ -24,7 +24,7 @@ See repo-root `CLAUDE.md` for shared conventions.
   non-admin would fall through to the `*.<domain>` two_factor wildcard, which has no subject.
   The routes carry no `ClientIP` fence, because blackbox-exporter's ingress probe arrives from a
   pod address and a fence answers it 404.
-  `tests/k8s/test_alertmanager_read_route.py::test_karma_names_authelia_on_both_its_lan_and_public_routes`
+  `tests/k8s/edge/test_alertmanager_read_route.py::test_karma_names_authelia_on_both_its_lan_and_public_routes`
   holds the routes, and
   `tests/services/authelia/test_authelia_access_tiers.py::test_a_user_outside_admins_is_denied_a_silence_ui`
   and `::test_the_public_silence_ui_admits_admins_only_from_any_source` hold the rules.

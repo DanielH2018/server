@@ -53,7 +53,7 @@ the one route `alertmanager.local.<domain>` keeps.
   It admits `/api/v2/alerts` and `/api/v2/silences`, so `probe.py health` can name a silenced
   or inhibited gated alert and `probe.py monitors` can list active silences. It admits the LAN
   and the node addresses only, whatever `k8s_public_route` says.
-  `tests/k8s/test_alertmanager_read_route.py` holds the door to `GET` and the two paths.
+  `tests/k8s/edge/test_alertmanager_read_route.py` holds the door to `GET` and the two paths.
 
 **The `observability-prepull` Kustomization pulls Grafana's image before its `Recreate`**, so the
 dashboards serve through a 482 MB Docker Hub pull (`flux_prepull_timeout` in
@@ -69,7 +69,7 @@ pod templates are `homelab-best-effort` (#1851). Prometheus earns tier 1 because
 monitor-bridge reads it every cycle via `PROMETHEUS_URL`. Alertmanager earns it because it is
 the paging path, which the operator accepted on 2026-10-12 (#4693, the M1 plan's open question
 1). The exporters stay tier 4 — a lost one surfaces loudly as `up == 0`.
-`tests/k8s/test_pod_template_hygiene.py` holds every long-running pod template to one
+`tests/k8s/workloads/test_pod_template_hygiene.py` holds every long-running pod template to one
 of the four classes.
 
 ## One config change, one restart
@@ -312,10 +312,10 @@ from a pod to its Deployment, and the `kube-state-metrics` scrape job drops the 
 duration of each soak, snapshot and verify Job a landing waits on (#5675), and the scrape job
 keeps five `kube_job_*` families of the seventeen. A workload with no label resolves through a literal override
 table in the rule, then to `k3s` in the add-on namespaces, then to `unmapped`.
-`tests/k8s/test_workload_service_overrides.py` derives the table from the render. The
+`tests/k8s/workloads/test_workload_service_overrides.py` derives the table from the render. The
 pod mapping leaves out Job-owned and ownerless pods outside the add-on namespaces. That holds
 only while every rendered Job runs under `restartPolicy: Never`, which the
-`job-restart-policy-is-never` row of `tests/k8s/test_rendered_properties.py` enforces.
+`job-restart-policy-is-never` row of `tests/k8s/rendered_properties/test_rendered_properties.py` enforces.
 
 ## Flux in the metrics plane
 

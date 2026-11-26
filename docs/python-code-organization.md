@@ -329,7 +329,7 @@ A guard reads rendered output where a render carries the claim, and source text 
 erases it.
 
 - **Rendered manifests.** A property of the rendered k8s manifests goes in as a row of
-  `tests/k8s/test_rendered_properties.py`, not as a regex over a template.
+  `tests/k8s/rendered_properties/test_rendered_properties.py`, not as a regex over a template.
 - **Workflows.** A property of a GitHub Actions workflow or action is a row of
   `tests/repo/test_census_rows_workflows.py`, which parses the file rather than matching its
   text, so a reordered key or an `if` split across lines reads the same.

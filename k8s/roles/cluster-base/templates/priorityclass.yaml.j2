@@ -5,7 +5,7 @@
 # manifest and in kubectl's last-applied annotation but absent from the live object. The
 # three-way merge therefore finds a patch to make on every single run, and never converges.
 #
-# ENFORCED by tests/k8s/test_priorityclass_omits_defaulted_fields.py.
+# ENFORCED by tests/k8s/workloads/test_priorityclass_omits_defaulted_fields.py.
 #
 # The homelab's workload tiers, as PriorityClasses. Four bands, all below
 # system-node-critical (2000001000) and system-cluster-critical (2000000000) on purpose:

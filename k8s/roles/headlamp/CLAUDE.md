@@ -19,7 +19,7 @@ See repo-root `CLAUDE.md`.
   `headlamp_k8s_crd_api_groups` (`traefik.io`, `metallb.io`, `longhorn.io`, `helm.cattle.io`,
   `k3s.cattle.io`). The only CRD groups `view` covers on its own are Flux's six, which the
   vendored `flux-view-flux-system` aggregates into it
-  (`tests/k8s/test_aggregated_clusterroles.py` pins them), so they stay off the list.
+  (`tests/k8s/rbac/test_aggregated_clusterroles.py` pins them), so they stay off the list.
   Any other group missing from it degrades silently: the UI loads, that resource list is just
   empty.
 - **The observability-namespace Prometheus proxy grant is deferred** (#3575): the armed apply's
@@ -41,7 +41,7 @@ subjects: the ServiceAccount, and the `headlamp_k8s_oidc_group` Group. They are 
   bound: it is what the dashboard falls back to, and the Prometheus proxy Role is the SA's.
 - **A binding the Group is missing from is an empty resource list**, behind a login that
   succeeded, with nothing logged. `test_headlamp_oidc_group_is_bound_wherever_the_serviceaccount_is`
-  in `tests/k8s/test_k8s_manifests_rbac.py` is the guard; adding a fourth binding for
+  in `tests/k8s/rbac/test_k8s_manifests_rbac.py` is the guard; adding a fourth binding for
   the SA alone is what it exists to catch.
 - **`headlamp_k8s_oidc_group` is two things concatenated** — the API server's groups prefix
   plus the Authelia group — so it is not a free choice. The prefix stops an Authelia group

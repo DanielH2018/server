@@ -53,7 +53,7 @@ loop to auto-tag bookmarks
   `https://<hostname>.<domain>,https://<hostname>.local.<domain>`, built from the same
   variables as `NEXTAUTH_URL`. A browser that reaches the app by a LAN IP or any other name
   is refused, so add that origin to the list if one is ever needed. The row
-  `karakeep-auth-trusted-origins-are-its-own-names` in `tests/k8s/_image_property_rows.py`
+  `karakeep-auth-trusted-origins-are-its-own-names` in `tests/k8s/rendered_properties/_image_property_rows.py`
   fails on a `*`, on a missing variable and on an origin outside the `NEXTAUTH_URL` domain.
 - **The images are pulled before the old pod stops** (#5778). `karakeep` and
   `karakeep-meilisearch` are `Recreate`. On 2026-10-19 a digest bump of the 511 MB app image
@@ -63,7 +63,7 @@ loop to auto-tag bookmarks
   the app, `karakeep-chrome`, meilisearch and the tagger. The Job copies the pods' *preferred*
   affinity for daniel-server, so a pod the scheduler sends elsewhere still pays a cold pull
   inside the 1200s rollout budget. `defaults/main.yml` has the measurements, and
-  The `prepull-*` rows of `tests/k8s/test_rendered_properties.py` hold the render.
+  The `prepull-*` rows of `tests/k8s/rendered_properties/test_rendered_properties.py` hold the render.
 - **The two backend NetworkPolicies ship in THIS role, not in netpol-baseline** (#1620).
   `deployment.yaml.j2`'s `wait-for-deps` initContainer retries `karakeep-chrome:9222` and
   `karakeep-meilisearch:7700` in an unbounded loop, and the baseline admits neither path, so a
@@ -138,11 +138,11 @@ loop to auto-tag bookmarks
   of `/dev/shm`) and `/var/cache/fontconfig`. The fontconfig one fails quietly — chromium still
   starts, logs `Fontconfig error: No writable cache directories`, and rescans the font tree on
   every process start. The `karakeep-chrome-write-paths-are-emptydirs` row of
-  `tests/k8s/_workload_property_rows.py` is the guard; add a path to its
+  `tests/k8s/rendered_properties/_workload_property_rows.py` is the guard; add a path to its
   `CHROME_WRITABLE_PATHS` when a chromium flag makes it write somewhere new.
 - **The app's `/run` is a Memory emptyDir** (#6387). Since 0.34.0 the image ships `/run`
   owned by `node` (karakeep-app/karakeep#3114). s6-overlay's preinit chowns `/run` to the
   container uid when the two differ, and the container runs as root with every capability
   dropped, so the chown fails and the container exits 111 before the app starts. A
   root-owned emptyDir leaves preinit nothing to change. The guard is the
-  `karakeep-run-is-an-emptydir` row of `tests/k8s/_image_property_rows.py`.
+  `karakeep-run-is-an-emptydir` row of `tests/k8s/rendered_properties/_image_property_rows.py`.

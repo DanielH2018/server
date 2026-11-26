@@ -910,7 +910,7 @@
       "automerge": false
     },
     {
-      "description": "Flux, the deploy controller (k8s/roles/flux). A `flux_version` bump is unfinished until files/gotk-components.yaml is regenerated at the new release, which Renovate cannot run, and tests/k8s/test_flux_role.py fails a bump that skipped it. Own group, no automerge, with the `k8s_autodeploy: false` marker (#1963). The rule covers every dep named `fluxcd/flux2` (#4822). ENFORCED by the `flux-` rows of scripts/tests/_renovate_rule_rows.py.",
+      "description": "Flux, the deploy controller (k8s/roles/flux). A `flux_version` bump is unfinished until files/gotk-components.yaml is regenerated at the new release, which Renovate cannot run, and tests/k8s/workloads/test_flux_role.py fails a bump that skipped it. Own group, no automerge, with the `k8s_autodeploy: false` marker (#1963). The rule covers every dep named `fluxcd/flux2` (#4822). ENFORCED by the `flux-` rows of scripts/tests/_renovate_rule_rows.py.",
       "matchDatasources": [
         "github-release-attachments",
         "github-releases"

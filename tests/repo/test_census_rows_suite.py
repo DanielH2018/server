@@ -72,9 +72,9 @@ ROLE_DIRS_CALLERS = frozenset(
     f"tests/{rel}"
     for rel in (
         "_k8s_render.py",
-        "k8s/test_built_images_name_the_content_tag.py",
-        "k8s/test_checksum_annotations_documented.py",
-        "k8s/test_configmap_keys_not_absorbed.py",
+        "k8s/flux/test_built_images_name_the_content_tag.py",
+        "k8s/workloads/test_checksum_annotations_documented.py",
+        "k8s/workloads/test_configmap_keys_not_absorbed.py",
         "deploy/test_cronjob_only_roles_include_the_gate.py",
         "deploy/test_k8s_autodeploy_guard.py",
         "deploy/test_renovate_automerge_follows_the_autodeploy_denylist.py",

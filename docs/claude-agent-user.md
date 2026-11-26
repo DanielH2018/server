@@ -302,7 +302,7 @@ truth, with a reason beside each entry. It holds:
   `k3s-bringup.yml`, which the operator runs by hand. Once Flux applies `cluster-base` on
   merge, this entry holds a change under that directory for the operator. It does not cover a
   binding that another role renders. The `read-only-identity-is-bound-only-to-read-roles` row of
-  `tests/k8s/test_rendered_properties.py` covers those: it fails when any role binds the
+  `tests/k8s/rendered_properties/test_rendered_properties.py` covers those: it fails when any role binds the
   identity, or a `system:serviceaccounts` group that contains it, to a role outside the
   read-only set.
 

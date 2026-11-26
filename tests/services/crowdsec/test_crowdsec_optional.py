@@ -21,7 +21,7 @@ What this suite does NOT prove: that either pod reaches Ready with CrowdSec off.
 here starts a container. That evidence comes from the staging bring-up.
 
 The checks every opt-out flag shares — both branches parse, every mount resolves, the flag
-defaults on — are `tests/k8s/test_staging_opt_out_flags_render.py`'s.
+defaults on — are `tests/k8s/flux/test_staging_opt_out_flags_render.py`'s.
 """
 
 import pytest

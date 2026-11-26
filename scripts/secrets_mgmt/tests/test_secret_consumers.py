@@ -1,6 +1,6 @@
 """Tests for the repair commands scripts/secrets_mgmt/consumers.py prints.
 
-`tests/k8s/test_secret_consumer_census.py` covers `tree_consumers` over the live tree.
+`tests/k8s/workloads/test_secret_consumer_census.py` covers `tree_consumers` over the live tree.
 
 Run: uv run pytest scripts/secrets_mgmt/tests/test_secret_consumers.py
 """

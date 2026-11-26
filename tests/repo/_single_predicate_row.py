@@ -207,7 +207,7 @@ SINGLE_PREDICATE_CHECK_IS_A_ROW = Census(
         {
             SUITE,
             "tests/repo/test_runbook_rules.py",
-            "tests/k8s/test_rendered_properties.py",
+            "tests/k8s/rendered_properties/test_rendered_properties.py",
         }
     ),
     allow={
@@ -320,15 +320,15 @@ SINGLE_PREDICATE_CHECK_IS_A_ROW = Census(
             "a join of renovate.json's per-package rules against the expected-deps table, "
             "the role tree and the auto-deploy denylist"
         ),
-        "tests/k8s/test_cluster_base_mirrors_the_k3s_identity.py": (
+        "tests/k8s/flux/test_cluster_base_mirrors_the_k3s_identity.py": (
             "a join of the read-only identity's keys across setup/k3s, cluster-base and "
             "the k3s-server component"
         ),
-        "tests/k8s/test_netpol_probe_targets.py": (
+        "tests/k8s/edge/test_netpol_probe_targets.py": (
             "a join of netpol-baseline's probe targets against the game servers and the "
             "k8s service list"
         ),
-        "tests/k8s/test_uncovered_roles_justifications_resolve.py": (
+        "tests/k8s/workloads/test_uncovered_roles_justifications_resolve.py": (
             "a join of the security-context test's exemption block against the role "
             "templates and the tracked test modules"
         ),

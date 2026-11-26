@@ -16,7 +16,7 @@ blackbox_exporter_k8s_cpu_request: "50m"
 blackbox_exporter_k8s_mem_request: 64Mi
 
 # The uid the container runs as, pinned rather than left to the image's named user.
-# `tests/k8s/test_container_security_context.py::test_every_asserting_container_pins_a_uid`
+# `tests/k8s/workloads/test_container_security_context.py::test_every_asserting_container_pins_a_uid`
 # requires it: a pod asserting runAsNonRoot with no runAsUser still passes admission after a
 # tag bump moves that named user to a different uid. Read the image's own uid and set it here.
 blackbox_exporter_k8s_uid: 65534

@@ -2,7 +2,7 @@
 """media-volume pins the local PV that tdarr mounts to `k8s_primary_node`.
 
 tdarr's Deployment requires the same node, so its pod and its pre-pull Job land where the PV
-lives. The `tdarr-prepull-lands-on-the-media-node` row of `tests/k8s/test_rendered_properties.py`
+lives. The `tdarr-prepull-lands-on-the-media-node` row of `tests/k8s/rendered_properties/test_rendered_properties.py`
 ties the rendered Job to the PV's node; this test holds that the PV reads the variable rather
 than a literal name.
 

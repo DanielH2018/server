@@ -41,7 +41,7 @@ spec:
           image: {{ karakeep_k8s_tagger_image }}
           # Built in-cluster, so `Always` rather than the `IfNotPresent` an unchanged content tag
           # would otherwise take from the node's cache — see the
-          # `built-images-pull-always` row of tests/k8s/_workload_property_rows.py.
+          # `built-images-pull-always` row of tests/k8s/rendered_properties/_workload_property_rows.py.
           imagePullPolicy: Always
           command:
             - python3

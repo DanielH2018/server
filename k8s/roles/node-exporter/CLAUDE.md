@@ -42,7 +42,7 @@ had while daniel-server's LAN-published 9100 retires.
   wedged collector (a dead NFS mount). Readiness hits `/` (200, no collector work) at the usual 10s, since
   it only proves the listener is up before the Kustomization's `wait` calls the DaemonSet ready.
   The `no-http-probe-on-a-metrics-route` and `node-exporter-keeps-a-metrics-probe` rows of
-  `tests/k8s/test_rendered_properties.py` hold both.
+  `tests/k8s/rendered_properties/test_rendered_properties.py` hold both.
 
 ## The textfile collector directory
 

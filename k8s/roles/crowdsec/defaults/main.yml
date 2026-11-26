@@ -111,7 +111,7 @@ crowdsec_k8s_home_ips_deadline_seconds: 240
 # How long a finished crowdsec-home-ips Job, and so its pod, stays visible. A run the weekly reboot
 # interrupts fails, and without a TTL it reads Failed until two later runs fail.
 # 30 minutes clears it inside the hour after boot
-# (tests/k8s/test_reboot_window_cronjobs_age_out.py); the run's output is in Loki past that.
+# (tests/k8s/flux/test_reboot_window_cronjobs_age_out.py); the run's output is in Loki past that.
 crowdsec_k8s_home_ips_job_ttl_seconds: 1800
 # The CronJob's one-off run per role revision, `crowdsec-home-ips-deploy-gate-<spec digest8>` in
 # `crowdsec-verify`. The run

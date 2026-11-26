@@ -273,7 +273,7 @@ def run(ok: Callable[[str], None], render: Callable | None = None) -> tuple[int,
     failures += schema_failures
 
     # Printed rather than silent: an unschema'd kind is unvalidated. This should read 0; a CRD kind
-    # here means no vendored schema matched it, which tests/k8s/test_rendered_properties.py fails
+    # here means no vendored schema matched it, which tests/k8s/rendered_properties/test_rendered_properties.py fails
     # on.
     if skipped_kinds:
         total = sum(skipped_kinds.values())

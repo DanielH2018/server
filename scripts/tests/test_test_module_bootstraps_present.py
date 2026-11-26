@@ -150,6 +150,16 @@ def _imported_names(tree: ast.Module):
                 yield alias.name.split(".")[0], scope, node.lineno
 
 
+def _conftest_dirs(file: Path) -> list[Path]:
+    """Each directory above `file` that holds a `conftest.py`.
+
+    pytest's `prepend` import mode puts a conftest's own directory on `sys.path` when it loads
+    it, and it loads every conftest above a collected module first. A grouped test reaches its
+    suite's shared helpers that way.
+    """
+    return [d.resolve() for d in file.parents if (d / "conftest.py").is_file()]
+
+
 def find_test_bootstrap_gaps(
     files: list[Path],
     pythonpath_dirs: list[Path],
@@ -181,6 +191,8 @@ def find_test_bootstrap_gaps(
                 continue  # pyproject's pythonpath covers it for every collected module
             if role_dir is not None and _provides(role_dir, top):
                 continue  # k8s/conftest.py inserts the role's own files/
+            if any(_provides(d, top) for d in _conftest_dirs(file)):
+                continue  # pytest prepends the directory of each conftest.py it loads
             providers = {d for d in repo_dirs.get(top, set()) if _provides(d, top)}
             if not providers:
                 continue  # third-party: the environment provides it, not the tree
@@ -453,3 +465,25 @@ def test_role_files_dir_names_no_directory_outside_a_role_s_tests(tmp_path):
     stray = _write(roles / "own" / "files" / "test_y.py", "")
     assert role_files_dir(stray, roles) is None
     assert role_files_dir(tmp_path / "scripts" / "tests" / "test_z.py", roles) is None
+
+
+def test_a_helper_beside_a_suite_conftest_is_clean(tmp_path):
+    """A grouped test imports its suite's shared helper, which the suite's conftest reaches."""
+    _write(tmp_path / "pkg" / "tests" / "conftest.py", "")
+    _write(tmp_path / "pkg" / "tests" / "_fakes.py", "VALUE = 1\n")
+    module = _write(
+        tmp_path / "pkg" / "tests" / "group" / "test_x.py", "from _fakes import VALUE\n"
+    )
+    repo_dirs = {"_fakes": {(tmp_path / "pkg" / "tests").resolve()}}
+    missing, _ = find_test_bootstrap_gaps([module], [], repo_dirs, {})
+    assert missing == []
+
+
+def test_a_helper_above_a_suite_with_no_conftest_is_flagged(tmp_path):
+    _write(tmp_path / "pkg" / "tests" / "_fakes.py", "VALUE = 1\n")
+    module = _write(
+        tmp_path / "pkg" / "tests" / "group" / "test_x.py", "from _fakes import VALUE\n"
+    )
+    repo_dirs = {"_fakes": {(tmp_path / "pkg" / "tests").resolve()}}
+    missing, _ = find_test_bootstrap_gaps([module], [], repo_dirs, {})
+    assert [top for _, _, top, _ in missing] == ["_fakes"]

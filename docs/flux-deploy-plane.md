@@ -29,7 +29,7 @@ recovered by *Recovering Flux by hand*.
 
 Renovate opens a manual PR for a new `fluxcd/flux2` release, because its hosted app can bump
 `flux_version` but cannot run `flux install`. The PR is finished by regenerating the vendored
-file at the new release. Until then, the header test in `tests/k8s/test_flux_role.py`
+file at the new release. Until then, the header test in `tests/k8s/workloads/test_flux_role.py`
 fails, because the file's first line still names the old release. Land the finished PR with
 `land.sh`; `promote` publishes it, and the Kustomization `flux` rolls the controllers. A
 release that breaks the controllers is the first branch of *Recovering Flux by hand*.
@@ -426,7 +426,7 @@ ClusterRole `flux-view-flux-system` carries the label
 `watch` on six Flux API groups to `view`, which that identity binds. No change to
 `k3s_readonly_crd_api_groups` is needed. The operator accepted the aggregation on 2026-10-12.
 
-Two guards in `tests/k8s/test_aggregated_clusterroles.py` keep the grant from
+Two guards in `tests/k8s/rbac/test_aggregated_clusterroles.py` keep the grant from
 widening unseen. Every ClusterRole that aggregates into `view`, `edit` or `admin` must be on
 that module's allowlist with a reason. `flux-view-flux-system` must stay read-only on exactly
 its six groups, so a Flux upgrade that widens it fails CI.
@@ -1350,7 +1350,7 @@ only after its dependencies finish, so the wait sums four terms, with the soak b
 The root `homelab`'s 5-minute `timeout` is the floor of the first two terms. The flux role
 leaves `--requeue-dependency` at its default, and
 `scripts/deploy_tools/tests/promote/test_chained_timeout.py` fails a vendored install or role default
-that sets it. `tests/k8s/test_flux_role.py` holds `chained_timeout.CONCURRENT` equal to
+that sets it. `tests/k8s/workloads/test_flux_role.py` holds `chained_timeout.CONCURRENT` equal to
 the `--concurrent` the role renders, less the soak's worker.
 A `dependsOn` naming a Kustomization the bundle does not hold, or a cycle, fails `verify`
 with no verdict, and `settle` holds it as `<T> unverified`.

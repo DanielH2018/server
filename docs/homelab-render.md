@@ -111,7 +111,7 @@ is escaped. `tests/_k8s_render.py:rendered_docs` reads `render_tag`'s output, wh
 holds no vendored file, so the fleet guards never read them. H1's *Vendored upstream manifests*
 (`docs/archive/host/h1-cluster-config-to-flux.md`) says why that is accepted. The
 one exception is the per-container resources guard in
-`tests/k8s/test_namespace_resource_defaults.py`, which reads each vendored workload with its
+`tests/k8s/workloads/test_namespace_resource_defaults.py`, which reads each vendored workload with its
 patches applied.
 
 A placeholder render with `--role` also writes the publish bundle, `DIR/flux/` and

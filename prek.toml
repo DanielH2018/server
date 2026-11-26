@@ -533,10 +533,10 @@ files = "^(k8s/services\\.yml|\\.github/workflows/promote\\.yml|inventory/.*|k8s
 [[repos.hooks]]
 id = "static-ratchet-tests-checksum"
 name = "Documented checksum annotations exist in the manifests"
-entry = "uv run --frozen pytest -q -n0 -p no:cacheprovider tests/k8s/test_checksum_annotations_documented.py"
+entry = "uv run --frozen pytest -q -n0 -p no:cacheprovider tests/k8s/workloads/test_checksum_annotations_documented.py"
 language = "system"
 pass_filenames = false
-files = "^(hosts/lib/host_lib\\.py|scripts/lib/longhorn_lib/longhorn_backups\\.py|k8s/roles/.*|CLAUDE\\.md|k8s/templates/.*|tests/(_[^/]+|render_share|k8s/test_checksum_annotations_documented)\\.py|scripts/(deploy_tools|lib|renderer|validate)/.*\\.py|scripts/secrets_mgmt/cluster_vars_check\\.py|pyproject\\.toml|uv\\.lock)$"
+files = "^(hosts/lib/host_lib\\.py|scripts/lib/longhorn_lib/longhorn_backups\\.py|k8s/roles/.*|CLAUDE\\.md|k8s/templates/.*|tests/(_[^/]+|render_share|k8s/workloads/test_checksum_annotations_documented)\\.py|scripts/(deploy_tools|lib|renderer|validate)/.*\\.py|scripts/secrets_mgmt/cluster_vars_check\\.py|pyproject\\.toml|uv\\.lock)$"
 
 [[repos.hooks]]
 id = "static-ratchet-tests-shell"

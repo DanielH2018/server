@@ -56,16 +56,16 @@ means writing the role its own `templates/ingressroute.yaml.j2`; the macro heade
 service, so add the template by hand. The role passes no file list: the renderer renders
 every top-level `templates/*.yaml.j2` it finds, so a new template ships by existing. Name a
 Secret's template with `secret` in its basename (`secret.yaml.j2`), which
-`tests/k8s/test_derived_manifest_files.py` requires. A one-off Job's template ends
+`tests/k8s/flux/test_derived_manifest_files.py` requires. A one-off Job's template ends
 `-job.yaml.j2` and stays out of the render's file list.
 
 **Two censuses a new role always joins**, which `prek` does not run and CI does — the
 scaffolder names both when it finishes:
 
-- `BORN_FENCED_ROLES` in `tests/k8s/test_netpol_baseline_labels.py`, with the sentence
+- `BORN_FENCED_ROLES` in `tests/k8s/edge/test_netpol_baseline_labels.py`, with the sentence
   saying why Traefik is the pod's only caller. A service that dials out drops the
   `netpol-baseline: enforced` pod label and gets its own NetworkPolicy instead.
-- `ROLES_WITH_A_DEFAULT_SERVICE` in `tests/k8s/test_shared_manifest_defaults.py`, and
+- `ROLES_WITH_A_DEFAULT_SERVICE` in `tests/k8s/workloads/test_shared_manifest_defaults.py`, and
   `ROLES_WITH_A_DEFAULT_INGRESSROUTE` beside it for a routed role.
 
 The new role moves the Renovate stance docs fragment. The `regen-doc-fragments` prek hook
@@ -76,7 +76,7 @@ Deployment template calls `spec_shell(strategy)` under `spec:` and `pod_shell(pr
 …)` under `spec.template.spec:`, both from `k8s/templates/workload-shell.yml.j2`; a
 DaemonSet calls `pod_shell` only. Both required arguments are decisions, and the file's
 docstring says what each one costs: `strategy` is `Recreate` (a downtime gap every deploy,
-allowlisted with its reason in `tests/k8s/test_deploy_strategy.py`) or
+allowlisted with its reason in `tests/k8s/workloads/test_deploy_strategy.py`) or
 `RollingUpdate`; `priority_class` is one of the tiers in
 `k8s/roles/cluster-base/templates/priorityclass.yaml.j2`. The pod-level `securityContext` goes
 through the macro's `run_as_user`/`fs_group`/`non_root` arguments — a pod that needs sysctls
@@ -89,7 +89,7 @@ from `security-context.yml.j2`, as before. A CronJob's containers sit one level 
 
 **Name every `volumes[].name` for the workload or component that owns it** — `sonarr-config`,
 never `config` — so a mount reads unambiguously in a diff or a `kubectl describe`. ENFORCED by
-`tests/k8s/test_volume_names_descriptive.py`, which also catches the half-finished rename
+`tests/k8s/workloads/test_volume_names_descriptive.py`, which also catches the half-finished rename
 (a `volumeMounts` entry with no matching volume) that no schema check can see.
 
 `templates/` is for **manifests only**: `validate/render_lib/k8s.py` renders every `*.j2` there

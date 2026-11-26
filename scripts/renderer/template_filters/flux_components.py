@@ -23,7 +23,7 @@ A merge patch can neither replace nor rename one item of a list, so the flags an
 rename are code rather than patch data. Each renamed item is written with `name` as its first
 key. `_IndentedDumper` indents every block sequence two columns under its key, the style the
 hand-written templates use. That is a style choice only: the volume-name guard (`volume_blocks`
-in `tests/k8s/test_volume_names_descriptive.py`) reads PyYAML's default form too, so dropping
+in `tests/k8s/workloads/test_volume_names_descriptive.py`) reads PyYAML's default form too, so dropping
 the dumper would change the flux render's whitespace and nothing else.
 """
 

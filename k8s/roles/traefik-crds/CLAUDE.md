@@ -20,7 +20,7 @@ every routed role reaches the CRDs through its edge to `traefik`
   `manifests_files: []`, so the render holds the kustomization and the vendored file alone. No
   render may fetch a URL (D5, C1).
 - **A minor traefik image bump needs a refresh of the copy.**
-  `tests/k8s/test_traefik_crds.py` fails when traefik's image minor differs from
+  `tests/k8s/edge/test_traefik_crds.py` fails when traefik's image minor differs from
   `traefik_crds_k8s_version`'s, and when traefik renders a `traefik.io` kind the copy lacks.
   The refresh command sits above the pin.
 - **Why a tag of its own** (#5666). `scripts/renderer/renderer_lib/cluster.py:attach_vendored`

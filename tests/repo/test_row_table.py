@@ -1,6 +1,6 @@
 """The census harness itself goes red: subject gone, floor, named member, stale allow, offender.
 
-`tests/k8s/test_rendered_properties.py` proves the same verdict through the rendered
+`tests/k8s/rendered_properties/test_rendered_properties.py` proves the same verdict through the rendered
 table; these prove it through `Census`, whose subjects come from the tracked tree.
 
 Run: uv run pytest tests/repo/test_row_table.py

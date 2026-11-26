@@ -37,7 +37,7 @@ The init containers' working-out is `docs/crowdsec-waf-record.md`.
   tag renders `prune: false` (#5666). `k8s/roles/traefik-crds/CLAUDE.md` has why the
   copy cannot sit in this tag: `attach_vendored` refuses a tag that vendors files while its
   render holds a placeholder, and this one holds six. A minor bump of this role's image needs
-  a refresh of that copy, which `tests/k8s/test_traefik_crds.py` enforces.
+  a refresh of that copy, which `tests/k8s/edge/test_traefik_crds.py` enforces.
 
 ## Plugins and the startupProbe
 
@@ -69,7 +69,7 @@ The init containers' working-out is `docs/crowdsec-waf-record.md`.
   from a ConfigMap rather than downloaded, and gated with the bouncer so the startupProbe
   covers it. A name mismatch across `experimental.localPlugins`, the Middleware, the ConfigMap
   items and the manifest's `import` disables every plugin at startup, which `--dry-run` cannot
-  see; `tests/k8s/test_traefik_cloudflare_realip.py` pins the names.
+  see; `tests/k8s/edge/test_traefik_cloudflare_realip.py` pins the names.
 
 ## Client identity and TLS
 
@@ -88,7 +88,7 @@ The init containers' working-out is `docs/crowdsec-waf-record.md`.
   `k8s/templates/origin-pull.yml.j2`. Traefik picks TLS options by SNI, so the
   `ingressroute()` macro renders public and `.local.` hosts as two objects and only the public
   one names the option.
-  `tests/k8s/test_public_routes_require_cloudflare_origin_pull.py` holds two traps:
+  `tests/k8s/edge/test_public_routes_require_cloudflare_origin_pull.py` holds two traps:
   every router on one public host names the SAME option, and the option resolves in the
   ROUTE's namespace.
 - **SNICheck pins the TLS-options name per CONNECTION, so a 421 outlives the misconfiguration
