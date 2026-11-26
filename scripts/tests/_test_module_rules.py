@@ -139,7 +139,7 @@ _BOUNDABLE_LAUNCHES = frozenset({"run", "check_output", "check_call", "call"})
 #
 # It HITS almost nothing else. Two of the three sites in `tests/repo/
 # test_process_waits.py` would need an exemption, because that module's subject IS an
-# unbounded wait. The third, and `scripts/deploy_tools/tests/test_land_detach.py`, already
+# unbounded wait. The third, and `scripts/deploy_tools/tests/land_merge/test_land_detach.py`, already
 # clear on the preceding `kill()`. That leaves a rule whose hit set is mostly its own
 # exemption list.
 #

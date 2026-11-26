@@ -55,7 +55,7 @@ code that posts can write DEPLOY_HOLD. Later runs stop at the hold before they r
 suspended-tag check, so only the run that wrote the hold posts it.
 
 Like `promote.py`, this module reaches the network only through `forge.py`
-(scripts/deploy_tools/tests/test_promote_forge_boundary.py).
+(scripts/deploy_tools/tests/promote/test_promote_forge_boundary.py).
 
 Run: uv run python scripts/deploy_tools/promote.py hold <sha> --hold '<sha> stateful=<names>'
      --bundle-dir <dir> --verdict failed --failed <names>

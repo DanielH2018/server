@@ -6,7 +6,7 @@
 (`read_handoff`, `read_recorded`) and makes no registry call. The rest of the handoff is
 `stateful.py`'s record.
 
-Run: imported only. `uv run pytest scripts/deploy_tools/tests/test_verify_promotion.py`
+Run: imported only. `uv run pytest scripts/deploy_tools/tests/promote/test_verify_promotion.py`
 """
 
 import json

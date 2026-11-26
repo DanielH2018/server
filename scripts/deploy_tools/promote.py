@@ -104,7 +104,7 @@ Exit codes:
       readable kubeconfig.
 
 Every GitHub and GHCR call goes through `forge.py`, and this module starts no subprocess
-(scripts/deploy_tools/tests/test_promote_forge_boundary.py).
+(scripts/deploy_tools/tests/promote/test_promote_forge_boundary.py).
 
 Run: uv run python scripts/deploy_tools/promote.py decide --trigger <sha>
      uv run python scripts/deploy_tools/promote.py land-wait <sha> --services <tag,...>

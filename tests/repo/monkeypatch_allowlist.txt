@@ -29,10 +29,10 @@ k8s/roles/artifacts/tests/test_artifact_server.py 1
 k8s/roles/autofix-bridge/tests/test_autofix.py 12
 scripts/backup/tests/test_longhorn_reap_delete_transport.py 5
 scripts/deploy_tools/tests/conftest.py 1
-scripts/deploy_tools/tests/test_await_ci.py 4
-scripts/deploy_tools/tests/test_land_pipeline.py 3
-scripts/deploy_tools/tests/test_land_tags.py 5
-scripts/deploy_tools/tests/test_land_tools.py 1
+scripts/deploy_tools/tests/land/test_land_pipeline.py 3
+scripts/deploy_tools/tests/land/test_land_tools.py 1
+scripts/deploy_tools/tests/land_deploy/test_land_tags.py 5
+scripts/deploy_tools/tests/release/test_await_ci.py 4
 scripts/diagnostics/tests/probe_alerts/test_probe_alerts.py 4
 scripts/diagnostics/tests/probe_alerts/test_probe_metric_span.py 3
 scripts/diagnostics/tests/probe_cli/test_probe.py 6

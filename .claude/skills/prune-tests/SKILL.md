@@ -83,7 +83,7 @@ Each rule below overrides step 2. Move the candidate off the list and note which
   scripts to the hosts' own Python.
 - **An environment skip.** A skip on a missing binary, on root or on systemd is deliberate.
 - **An order assertion that encodes safety.**
-  `scripts/deploy_tools/tests/test_land_host_wait_wiring.py` asserts that nothing renders
+  `scripts/deploy_tools/tests/land_deploy/test_land_host_wait_wiring.py` asserts that nothing renders
   before the CI verdict.
 - **An identity assertion that prevents a second copy of logic.**
   `k8s/roles/monitor-bridge/tests/test_longhorn_robustness.py` holds one.

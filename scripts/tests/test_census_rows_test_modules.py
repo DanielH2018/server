@@ -81,7 +81,7 @@ ROWS = (
             {
                 "tests/repo/test_ci_empty_pr_merge_fails.py",
                 ".claude/hooks/tests/instructions/test_rules_globs_match_a_tracked_file.py",
-                "scripts/deploy_tools/tests/test_land_tools.py",
+                "scripts/deploy_tools/tests/land/test_land_tools.py",
                 "scripts/lib/tests/test_render_guard.py",
             }
         ),
@@ -159,7 +159,7 @@ ROWS = (
                 ".claude/hooks/tests/conftest.py",
                 "hosts/tests/test_github_ruleset_drift.py",
                 "tests/staging/_fence_probe.py",
-                "scripts/deploy_tools/tests/test_land_detach.py",
+                "scripts/deploy_tools/tests/land_merge/test_land_detach.py",
                 "scripts/validate/tests/test_vale_sync_guard.py",
             }
         ),
@@ -233,7 +233,7 @@ ROWS = (
                 ".claude/hooks/tests/hook_contract/test_hook_scripts_executable.py",
                 "tests/_helpers.py",
                 "tests/repo/test_testpaths_covers_every_test_file.py",
-                "scripts/deploy_tools/tests/test_land_tools.py",
+                "scripts/deploy_tools/tests/land/test_land_tools.py",
                 "scripts/lib/tests/test_git.py",
             }
         ),

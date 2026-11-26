@@ -59,7 +59,7 @@ cause=<cause> merge=<M> revision=<R> widened=<why the set was every name, or emp
 
 Like `promote.py`, it reaches GitHub, GHCR, the cluster and syslog only through `forge.py` and
 `flux_host.py`, and starts no subprocess itself
-(scripts/deploy_tools/tests/test_promote_forge_boundary.py).
+(scripts/deploy_tools/tests/promote/test_promote_forge_boundary.py).
 
 Run: uv run python scripts/deploy_tools/promote.py land-wait <sha> [--services <tag,...>]
 """

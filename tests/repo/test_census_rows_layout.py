@@ -256,7 +256,6 @@ UNGROUPED_SUITES = dict.fromkeys(
         "hosts/lib/tests",
         "hosts/tests",
         "k8s/roles/monitor-bridge/tests",
-        "scripts/deploy_tools/tests",
         "scripts/lib/tests",
         "scripts/renderer/tests",
         "scripts/validate/tests",
@@ -374,7 +373,7 @@ ROWS = (
             {
                 "scripts/deploy_tools/forge.py",
                 "scripts/deploy_tools/runbook_gates_lib/gate_runner.py",
-                "scripts/deploy_tools/tests/test_land_own_checkout.py",
+                "scripts/deploy_tools/tests/land_merge/test_land_own_checkout.py",
                 "scripts/dev/fanout.py",
                 "scripts/lib/host_modules.py",
             }

@@ -29,7 +29,7 @@ THREE CALLERS, ONE FUNCTION. `promote.py land-wait` reads it for C6's wait (D2.3
 them derives the set a second time (docs/archive/deploy/d2-first-leaf.md, *Steps,
 as PRs*, D2.5). It is pure: the callers read the files and the Kustomizations themselves.
 
-Run: imported only. `uv run pytest scripts/deploy_tools/tests/test_changed_set.py`
+Run: imported only. `uv run pytest scripts/deploy_tools/tests/release/test_changed_set.py`
 """
 
 from collections.abc import Iterable, Mapping

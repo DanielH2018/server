@@ -187,7 +187,7 @@ TEST_SCRIPT_BODIES = Census(
     must_find=frozenset(
         {
             "hosts/lib/tests/container/build-image.sh",
-            "scripts/deploy_tools/tests/test_land_detach.py",
+            "scripts/deploy_tools/tests/land_merge/test_land_detach.py",
         }
     ),
     allow={

@@ -1,0 +1,497 @@
+"""`promote.py check-bundle`'s census against fixture bundles the bundle writer builds.
+
+Each fixture carries every shared kind the renderer writes, its `cluster-vars` copy holding
+`DOTENV`, fake ciphertext, rather than the tree's cluster file.
+
+Run: uv run pytest scripts/deploy_tools/tests/release/test_bundle_census.py
+"""
+
+import shutil
+
+import pytest
+
+from deploy_tools import bundle_census
+from deploy_tools import promote
+from lib import yaml_fast
+from lib.exit_codes import FAILED, OK, RENDER_OK
+from lib.repo_paths import K8S_ROLES
+from renderer import homelab_render
+from renderer.renderer_lib.bundle import (
+    DIGESTS,
+    FLUX_INDEX,
+    bundle_files,
+    digests,
+    digests_text,
+    kustomization_text,
+    write_bundle,
+)
+from renderer.renderer_lib.placeholders import render_placeholders
+
+TIMEOUT = "600s"
+DEPLOYMENT = "kind: Deployment\nmetadata:\n  name: {name}\n"
+DOTENV = "peanut_password=ENC[AES256_GCM,data:eA==,iv:aQ==,tag:dA==,type:str]\n"
+
+
+def _bundle(tmp_path, tags, deferring=(), kinds=()):
+    """Write the bundle the renderer builds publishing `tags`, and return its root.
+
+    Each tag in `deferring` also renders `cluster/<tag>-deferred/`, so the renderer writes
+    `<tag>-deferred` as the second document of its file. Each name in `kinds`, such as
+    `<tag>-snapshot`, renders its directory and its document the same way.
+    """
+    directories = {
+        name: {
+            "deployment.yaml": DEPLOYMENT.format(name=name),
+            "kustomization.yaml": kustomization_text(["deployment.yaml"]),
+        }
+        for name in [*tags, *(f"{tag}-deferred" for tag in deferring), *kinds]
+    }
+    files = bundle_files(directories, {}, tags, TIMEOUT, DOTENV)
+    for tag, held in directories.items():
+        files |= {f"cluster/{tag}/{name}": text for name, text in held.items()}
+    out = tmp_path / "out"
+    write_bundle(files, out)
+    return out
+
+
+def test_a_bundle_holding_exactly_the_published_tags_is_clean(tmp_path):
+    out = _bundle(tmp_path, ["bento-pdf"])
+    assert bundle_census.census(out, ["bento-pdf"]) == []
+
+
+def test_a_published_tag_that_renders_no_file_is_flagged(tmp_path):
+    out = _bundle(tmp_path, ["bento-pdf"])
+    found = bundle_census.census(out, ["bento-pdf", "sonarr"])
+    assert (
+        "flux/sonarr.yaml is missing: sonarr is published and renders no file" in found
+    )
+    assert any(line.startswith("cluster/sonarr/ is missing") for line in found)
+
+
+def test_an_extra_file_in_flux_is_flagged(tmp_path):
+    out = _bundle(tmp_path, ["bento-pdf"])
+    (out / "flux" / "stray.yaml").write_text("kind: ConfigMap\n")
+    found = bundle_census.census(out, ["bento-pdf"])
+    assert "flux/stray.yaml is not a published tag's or a shared kind's file" in found
+
+
+def test_a_root_list_that_omits_a_file_is_flagged(tmp_path):
+    out = _bundle(tmp_path, ["bento-pdf", "sonarr"])
+    listed = ["bento-pdf", "cluster-vars", "homelab-namespace", "soak"]
+    (out / FLUX_INDEX).write_text(kustomization_text([f"{n}.yaml" for n in listed]))
+    found = bundle_census.census(out, ["bento-pdf", "sonarr"])
+    assert found == [
+        "flux/kustomization.yaml does not list sonarr.yaml, which flux/ holds"
+    ]
+
+
+def test_a_tag_file_holding_another_kustomization_is_flagged(tmp_path):
+    out = _bundle(tmp_path, ["bento-pdf"])
+    text = (out / "flux" / "bento-pdf.yaml").read_text()
+    (out / "flux" / "bento-pdf.yaml").write_text(
+        text.replace("name: bento-pdf", "name: x")
+    )
+    found = bundle_census.census(out, ["bento-pdf"])
+    assert any("not exactly the Kustomization bento-pdf" in line for line in found)
+
+
+def test_a_renderer_patched_to_drop_cluster_vars_yaml_is_flagged(tmp_path):
+    """The bundle such a renderer writes: no `flux/cluster-vars.yaml`, and a root that
+    agrees with what `flux/` holds, so only the allowlist can catch it."""
+    out = _bundle(tmp_path, ["bento-pdf"])
+    (out / "flux" / "cluster-vars.yaml").unlink()
+    kept = ["bento-pdf.yaml", "homelab-namespace.yaml", "soak.yaml"]
+    (out / FLUX_INDEX).write_text(kustomization_text(kept))
+    assert bundle_census.census(out, ["bento-pdf"]) == [
+        "flux/cluster-vars.yaml is missing: cluster-vars is published and renders no file"
+    ]
+
+
+def test_a_second_document_in_cluster_vars_yaml_is_flagged(tmp_path):
+    out = _bundle(tmp_path, ["bento-pdf"])
+    path = out / "flux" / "cluster-vars.yaml"
+    path.write_text(
+        path.read_text() + "---\n" + (out / "flux" / "bento-pdf.yaml").read_text()
+    )
+    found = bundle_census.census(out, ["bento-pdf"])
+    assert len(found) == 1
+    assert "not exactly the Kustomization cluster-vars" in found[0]
+
+
+def test_a_shared_kind_with_no_directory_is_flagged(tmp_path):
+    out = _bundle(tmp_path, ["bento-pdf"])
+    (out / "cluster" / "cluster-vars" / "kustomization.yaml").unlink()
+    assert bundle_census.census(out, ["bento-pdf"]) == [
+        "cluster/cluster-vars/ is missing: cluster-vars is published and renders no "
+        "directory"
+    ]
+
+
+def test_digests_json_naming_another_set_is_flagged(tmp_path):
+    out = _bundle(tmp_path, ["bento-pdf"])
+    (out / DIGESTS).write_text(digests_text(digests({}, [])))
+    found = bundle_census.census(out, ["bento-pdf"])
+    assert found == [
+        "digests.json names ['_unclassified', 'cluster-vars', 'homelab-namespace', "
+        "'soak'], not ['_unclassified', 'bento-pdf', 'cluster-vars', "
+        "'homelab-namespace', 'soak']"
+    ]
+
+
+def test_a_shared_only_bundle_with_no_published_tag_is_clean(tmp_path):
+    """The bundle `--shared-only` writes when no tag is published."""
+    assert bundle_census.census(_bundle(tmp_path, []), []) == []
+
+
+def test_d1s_empty_root_with_no_published_tag_is_flagged(tmp_path):
+    """The bundle the render step wrote before D3.3a lacks the cluster-vars kind."""
+    out = tmp_path / "out"
+    write_bundle(
+        {FLUX_INDEX: kustomization_text([]), DIGESTS: digests_text(digests({}, []))},
+        out,
+    )
+    assert any(
+        line.startswith("flux/cluster-vars.yaml is missing")
+        for line in bundle_census.census(out, [])
+    )
+
+
+def _services(tmp_path, k8s):
+    """Write a service list with an entry per name in `k8s`."""
+    path = tmp_path / "services.yml"
+    path.write_text(
+        "containers_list:\n" + "".join(f"  - name: {name}\n" for name in k8s)
+    )
+    return path
+
+
+def test_a_k8s_tag_missing_from_the_bundle_is_flagged(tmp_path, capsys):
+    services = _services(tmp_path, ["bento-pdf", "sonarr"])
+    out = _bundle(tmp_path, ["bento-pdf"])
+    code = bundle_census.report(out, bundle_census.published_tags(services))
+    assert code == FAILED
+    assert "flux/sonarr.yaml is missing" in capsys.readouterr().err
+
+
+def test_published_tags_lists_every_k8s_entry_and_the_floor_is_clean(tmp_path, capsys):
+    """No entry carries an `owner` key, and every k8s entry is published (H1.9)."""
+    names = [*bundle_census.PUBLISH_FLOOR, "bento-pdf"]
+    services = _services(tmp_path, names)
+    assert promote.main(["published-tags", "--services", str(services)]) == OK
+    assert capsys.readouterr().out.split() == sorted(names)
+    assert bundle_census.PUBLISH_FLOOR <= set(bundle_census.published_tags())
+
+
+def test_published_tags_fails_a_service_list_without_traefik(tmp_path, capsys):
+    services = _services(tmp_path, ["coredns", "longhorn", "metallb", "bento-pdf"])
+    assert promote.main(["published-tags", "--services", str(services)]) == FAILED
+    printed = capsys.readouterr()
+    assert printed.out == ""
+    assert "publishes no traefik, a member of the publish floor" in printed.err
+
+
+def test_check_bundle_fails_an_empty_service_list_on_the_floor(tmp_path, capsys):
+    services = _services(tmp_path, [])
+    out = _bundle(tmp_path, [])
+    code = promote.main(["check-bundle", str(out), "--services", str(services)])
+    assert code == FAILED
+    err = capsys.readouterr().err
+    assert [
+        tag
+        for tag in sorted(bundle_census.PUBLISH_FLOOR)
+        if f"publishes no {tag}," in err
+    ] == [
+        "coredns",
+        "longhorn",
+        "metallb",
+        "traefik",
+    ]
+
+
+def test_a_deferring_tags_file_holding_its_deferred_document_is_clean(tmp_path):
+    out = _bundle(tmp_path, ["pihole"], deferring=["pihole"])
+    assert bundle_census.census(out, ["pihole"], deferring=["pihole"]) == []
+
+
+def test_a_third_document_in_a_deferring_tags_file_is_flagged(tmp_path):
+    out = _bundle(tmp_path, ["pihole"], deferring=["pihole"])
+    path = out / "flux" / "pihole.yaml"
+    path.write_text(path.read_text() + "---\n" + path.read_text().split("---\n")[0])
+    found = bundle_census.census(out, ["pihole"], deferring=["pihole"])
+    assert len(found) == 1
+    assert (
+        "not exactly the Kustomization pihole then the Kustomization pihole-deferred"
+        in found[0]
+    )
+
+
+def test_a_deferred_document_for_a_tag_that_defers_nothing_is_flagged(tmp_path):
+    """The red half: the renderer bug a census computed from its output would admit."""
+    out = _bundle(tmp_path, ["pihole"], deferring=["pihole"])
+    found = bundle_census.census(out, ["pihole"])
+    assert len(found) == 1
+    assert "not exactly the Kustomization pihole" in found[0]
+
+
+def test_a_deferring_tag_with_no_deferred_directory_is_flagged(tmp_path):
+    out = _bundle(tmp_path, ["pihole"])
+    found = bundle_census.census(out, ["pihole"], deferring=["pihole"])
+    assert (
+        "cluster/pihole-deferred/ is missing: pihole's inputs call for pihole-deferred and "
+        "it renders no such directory"
+    ) in found
+
+
+def test_a_deferred_document_applying_another_directory_is_flagged(tmp_path):
+    out = _bundle(tmp_path, ["pihole"], deferring=["pihole"])
+    path = out / "flux" / "pihole.yaml"
+    path.write_text(
+        path.read_text().replace("path: ./cluster/pihole-deferred", "path: ./cluster/x")
+    )
+    assert bundle_census.census(out, ["pihole"], deferring=["pihole"]) == [
+        "flux/pihole.yaml's pihole-deferred applies './cluster/x', not "
+        "./cluster/pihole-deferred"
+    ]
+
+
+def test_the_deferring_tags_are_the_roles_that_pass_manifests_deferred_files():
+    """Named members: the three deferred applies C3 lists, plus the flux role (D1)."""
+    found, problems = bundle_census.deferring_tags(
+        ["bento-pdf", "flux", "headlamp", "netpol-baseline", "pihole", "texbrain"]
+    )
+    assert (found, problems) == (
+        {"flux", "headlamp", "netpol-baseline", "pihole"},
+        [],
+    )
+
+
+def test_a_deferred_files_value_that_is_not_a_literal_list_is_a_problem(tmp_path):
+    defaults = tmp_path / "x" / "defaults"
+    defaults.mkdir(parents=True)
+    (defaults / "main.yml").write_text('manifests_deferred_files: "{{ files }}"\n')
+    found, problems = bundle_census.deferring_tags(["x"], tmp_path)
+    assert found == frozenset()
+    assert problems == [
+        "could not tell whether x defers files: its manifests_deferred_files is "
+        "'{{ files }}', not a literal list"
+    ]
+
+
+def test_a_snapshot_tags_file_holding_its_snapshot_document_is_clean(tmp_path):
+    out = _bundle(tmp_path, ["speedtest"], kinds=["speedtest-snapshot"])
+    assert bundle_census.census(out, ["speedtest"], snapshotting=["speedtest"]) == []
+
+
+def test_a_snapshot_document_for_a_tag_that_declares_no_claims_is_flagged(tmp_path):
+    """A renderer patched to emit `-snapshot` for a role whose inputs call for none."""
+    out = _bundle(tmp_path, ["bento-pdf"], kinds=["bento-pdf-snapshot"])
+    found = bundle_census.census(out, ["bento-pdf"])
+    assert len(found) == 1
+    assert "not exactly the Kustomization bento-pdf" in found[0]
+
+
+def test_every_kind_in_suffix_order_is_clean(tmp_path):
+    kinds = ["pihole-snapshot", "pihole-prepull", "pihole-verify"]
+    out = _bundle(tmp_path, ["pihole"], deferring=["pihole"], kinds=kinds)
+    assert (
+        bundle_census.census(
+            out,
+            ["pihole"],
+            deferring=["pihole"],
+            snapshotting=["pihole"],
+            verifying=["pihole"],
+            prepulling=["pihole"],
+        )
+        == []
+    )
+
+
+def test_a_verifying_tag_with_no_verify_directory_is_flagged(tmp_path):
+    out = _bundle(tmp_path, ["bento-pdf"])
+    found = bundle_census.census(out, ["bento-pdf"], verifying=["bento-pdf"])
+    assert (
+        "cluster/bento-pdf-verify/ is missing: bento-pdf's inputs call for "
+        "bento-pdf-verify and it renders no such directory"
+    ) in found
+
+
+@pytest.mark.parametrize("tag", ["soak", "homelab-namespace", "x-verify"])
+def test_a_published_tag_taking_a_reserved_name_is_flagged(tmp_path, tag):
+    """A tag named `soak` fails the census itself, not only the renderer's refusal."""
+    out = _bundle(tmp_path, [tag])
+    assert bundle_census.census(out, [tag])[0] == (
+        f"{tag} is published under a name the bundle reserves: the root's, a shared "
+        "kind's, a RESERVED_NAMES member's, or one ending in a per-tag kind's suffix"
+    )
+
+
+def test_the_snapshot_tags_are_the_roles_that_declare_snapshot_claims():
+    """Named members: speedtest declares `speedtest-config`, and bento-pdf declares none."""
+    found, problems = bundle_census.snapshot_tags(["bento-pdf", "speedtest"])
+    assert (found, problems) == ({"speedtest"}, [])
+
+
+def test_snapshot_claims_that_are_not_a_literal_list_are_a_problem(tmp_path):
+    defaults = tmp_path / "x" / "defaults"
+    defaults.mkdir(parents=True)
+    (defaults / "main.yml").write_text('k8s_autodeploy_snapshot_pvcs: "{{ claims }}"\n')
+    found, problems = bundle_census.snapshot_tags(["x"], tmp_path)
+    assert found == frozenset()
+    assert problems == [
+        "x's k8s_autodeploy_snapshot_pvcs is '{{ claims }}', not a literal list"
+    ]
+
+
+VERIFY_TEMPLATE = (
+    "kind: ConfigMap\nmetadata:\n  name: {{ manifests_service }}-verify\n"
+    "  namespace: default\n"
+)
+
+
+def _verifying_role(tmp_path, tag):
+    """A copy of the tree's `tag` role that ships one verify manifest, and the copy's root."""
+    roles = tmp_path / "roles"
+    shutil.copytree(K8S_ROLES / tag, roles / tag)
+    verify = roles / tag / "templates" / "verify"
+    verify.mkdir()
+    (verify / "verify-check.yaml.j2").write_text(VERIFY_TEMPLATE)
+    return roles
+
+
+def test_the_verifying_tags_are_the_roles_that_ship_templates_verify(tmp_path):
+    """Named members: the copy ships `templates/verify/`, the tree's littlelink does not."""
+    roles = _verifying_role(tmp_path, "littlelink")
+    (roles / "bento-pdf" / "templates").mkdir(parents=True)
+    (roles / "bento-pdf" / "templates" / "verify-job.yaml.j2").write_text("")
+    assert bundle_census.verifying_tags(["littlelink", "bento-pdf"], roles) == {
+        "littlelink"
+    }
+    assert bundle_census.verifying_tags(["littlelink"]) == frozenset()
+
+
+def test_a_rendered_verify_directory_passes_check_bundle_only_for_its_role(
+    tmp_path, capsys
+):
+    """The renderer writes `<tag>-verify` from the role's input, and the census reads it.
+
+    The same bundle checked against the tree's littlelink, which ships no verify manifest,
+    fails: a renderer that emitted `-verify` for that role would be refused.
+    """
+    roles = _verifying_role(tmp_path, "littlelink")
+    cluster_file = tmp_path / "cluster-vars.sops.env"
+    cluster_file.write_text(DOTENV)
+    out = tmp_path / "out"
+    code = homelab_render.cluster(
+        out,
+        ["littlelink"],
+        None,
+        cluster_file=cluster_file,
+        render=lambda tags, keys: render_placeholders(tags, keys, roles=roles),
+        vendored=roles,
+    )
+    assert code == RENDER_OK
+    verify = out / "cluster" / "littlelink-verify"
+    assert sorted(p.name for p in verify.iterdir()) == [
+        "kustomization.yaml",
+        "verify-check.yaml",
+    ]
+    assert "name: littlelink-verify" in (verify / "verify-check.yaml").read_text()
+    docs = list(yaml_fast.safe_load_all((out / "flux" / "littlelink.yaml").read_text()))
+    assert [d["metadata"]["name"] for d in docs] == ["littlelink", "littlelink-verify"]
+    assert docs[1]["spec"]["dependsOn"] == [{"name": "littlelink"}]
+
+    assert bundle_census.report(out, ["littlelink"], roles) == OK
+    capsys.readouterr()
+    assert bundle_census.report(out, ["littlelink"]) == FAILED
+    assert "not exactly the Kustomization littlelink" in capsys.readouterr().err
+
+
+CLUSTER_BASE = (
+    "kind: PriorityClass\nmetadata:\n  name: homelab-critical\n---\n"
+    "kind: ServiceAccount\nmetadata:\n  name: homelab-readonly\n---\n"
+    "kind: Secret\nmetadata:\n  name: homelab-readonly-token\n"
+)
+
+
+def _cluster_base(tmp_path, text=CLUSTER_BASE, deferring=()):
+    """The bundle publishing `cluster-base`, its `deployment.yaml` replaced by `text`."""
+    out = _bundle(tmp_path, ["cluster-base"], deferring=deferring)
+    (out / "cluster" / "cluster-base" / "deployment.yaml").write_text(text)
+    return out
+
+
+def test_a_plumbing_tag_rendering_every_named_member_is_clean(tmp_path):
+    assert bundle_census.member_census(_cluster_base(tmp_path), ["cluster-base"]) == []
+
+
+def test_a_plumbing_tag_dropping_a_named_member_is_flagged(tmp_path):
+    text = CLUSTER_BASE.replace("name: homelab-critical", "name: x")
+    assert bundle_census.member_census(
+        _cluster_base(tmp_path, text), ["cluster-base"]
+    ) == [
+        "cluster-base renders no PriorityClass homelab-critical, a named member: a plumbing "
+        "tag that drops it leaves it serving with nothing managing it"
+    ]
+
+
+def test_a_named_member_in_a_file_its_kustomization_does_not_list_is_flagged(tmp_path):
+    out = _cluster_base(tmp_path, "kind: ConfigMap\nmetadata:\n  name: x\n")
+    (out / "cluster" / "cluster-base" / "unlisted.yaml").write_text(CLUSTER_BASE)
+    assert len(bundle_census.member_census(out, ["cluster-base"])) == 3
+
+
+def test_a_named_member_in_the_tags_deferred_directory_is_clean(tmp_path):
+    out = _cluster_base(
+        tmp_path, DEPLOYMENT.format(name="x"), deferring=["cluster-base"]
+    )
+    (out / "cluster" / "cluster-base-deferred" / "deployment.yaml").write_text(
+        CLUSTER_BASE
+    )
+    assert bundle_census.member_census(out, ["cluster-base"]) == []
+
+
+def test_an_unpublished_plumbing_tag_is_not_judged(tmp_path):
+    """The census applies to a tag from the commit that publishes it."""
+    assert (
+        bundle_census.member_census(_bundle(tmp_path, ["bento-pdf"]), ["bento-pdf"])
+        == []
+    )
+
+
+def test_the_named_members_cover_the_six_plumbing_tags_and_the_drill():
+    """Named members: H1's *Plumbing tags are never pruned* names one list per tag, and H2.3b one."""
+    assert set(bundle_census.NAMED_MEMBERS) == {
+        "cluster-base",
+        "metallb",
+        "coredns",
+        "longhorn",
+        "longhorn-backup",
+        "longhorn-reconcile",
+        "longhorn-restore-drill",
+    }
+    assert ("PriorityClass", "homelab-critical") in bundle_census.NAMED_MEMBERS[
+        "cluster-base"
+    ]
+
+
+def test_check_bundle_fails_a_published_plumbing_tag_that_drops_a_named_member(
+    tmp_path, capsys
+):
+    services = _services(tmp_path, ["cluster-base"])
+    out = _cluster_base(tmp_path, CLUSTER_BASE.replace("homelab-critical", "x"))
+    code = bundle_census.report(out, bundle_census.published_tags(services))
+    assert code == FAILED
+    assert (
+        "cluster-base renders no PriorityClass homelab-critical"
+        in capsys.readouterr().err
+    )
+
+
+def test_a_named_member_in_a_directory_no_kustomization_applies_is_flagged(tmp_path):
+    """A stray `cluster-base-verify/` with no verify grant is never applied by Flux."""
+    out = _cluster_base(tmp_path, DEPLOYMENT.format(name="x"))
+    stray = out / "cluster" / "cluster-base-verify"
+    stray.mkdir()
+    (stray / "kustomization.yaml").write_text(kustomization_text(["members.yaml"]))
+    (stray / "members.yaml").write_text(CLUSTER_BASE)
+    assert len(bundle_census.member_census(out, ["cluster-base"])) == 3

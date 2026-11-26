@@ -1,0 +1,153 @@
+"""Argument parsing, and the budgets a test can shorten without an env knob.
+
+Run: uv run pytest scripts/deploy_tools/tests/land_merge/test_land_options.py
+"""
+
+import pytest
+
+from deploy_tools.land_lib import options
+from lib import exit_codes
+
+
+def test_pr_is_required():
+    with pytest.raises(SystemExit) as exc:
+        options.parse_args(["--arm-merge"], "desc")
+    assert exc.value.code == 64
+
+
+def test_flags_land_on_the_options():
+    o = options.parse_args(
+        [
+            "--pr",
+            "7",
+            "--since",
+            "abc",
+            "--arm-merge",
+            "--await-merge",
+            "--subject",
+            "S",
+        ],
+        "d",
+    )
+    assert (o.pr, o.since, o.arm_merge, o.await_merge, o.subject) == (
+        "7",
+        "abc",
+        True,
+        True,
+        "S",
+    )
+
+
+def test_land_primary_names_the_checkout(monkeypatch, tmp_path):
+    """`LAND_PRIMARY` is how a test aims a landing away from the live checkout."""
+    monkeypatch.setenv("LAND_PRIMARY", str(tmp_path))
+    assert options.parse_args(["--pr", "7"], "d").primary == tmp_path
+
+
+def test_primary_defaults_to_the_primary_checkout(monkeypatch):
+    monkeypatch.delenv("LAND_PRIMARY", raising=False)
+    assert options.parse_args(["--pr", "7"], "d").primary == options.PRIMARY_CHECKOUT
+
+
+def test_land_merge_poll_shortens_the_merge_wait(monkeypatch):
+    monkeypatch.setenv("LAND_MERGE_POLL", "2")
+    assert options.parse_args(["--pr", "7"], "d").merge_poll == 2
+
+
+def test_merge_poll_defaults_to_30s(monkeypatch):
+    monkeypatch.delenv("LAND_MERGE_POLL", raising=False)
+    assert options.parse_args(["--pr", "7"], "d").merge_poll == 30
+
+
+def test_land_require_author_names_the_only_author_arm_merge_accepts(monkeypatch):
+    """renovate-agent.service sets it; the agent's landings inherit it."""
+    monkeypatch.setenv("LAND_REQUIRE_AUTHOR", "app/renovate")
+    assert options.parse_args(["--pr", "7"], "d").require_author == "app/renovate"
+
+
+def test_require_author_defaults_to_any(monkeypatch):
+    monkeypatch.delenv("LAND_REQUIRE_AUTHOR", raising=False)
+    assert options.parse_args(["--pr", "7"], "d").require_author == ""
+
+
+def test_any_author_overrides_the_env(monkeypatch):
+    monkeypatch.setenv("LAND_REQUIRE_AUTHOR", "app/renovate")
+    assert options.parse_args(["--pr", "7", "--any-author"], "d").require_author == ""
+
+
+def test_land_require_head_pins_the_head_and_unset_pins_none(monkeypatch):
+    monkeypatch.setenv("LAND_REQUIRE_HEAD", "c" * 40)
+    assert options.parse_args(["--pr", "7"], "d").require_head == "c" * 40
+    monkeypatch.setenv("LAND_REQUIRE_HEAD", "")
+    o = options.parse_args(["--pr", "7"], "d")
+    assert o.require_head is None and not o.policy_active
+
+
+@pytest.mark.parametrize("value", ["abc1234", "C" * 40, "c" * 41])
+def test_a_require_head_that_is_no_full_sha_is_a_usage_error(monkeypatch, value):
+    monkeypatch.setenv("LAND_REQUIRE_HEAD", value)
+    with pytest.raises(SystemExit) as exc:
+        options.parse_args(["--pr", "7"], "d")
+    assert exc.value.code == exit_codes.USAGE_ERROR
+
+
+def test_help_prints_the_description(capsys):
+    with pytest.raises(SystemExit) as exc:
+        options.parse_args(["--help"], "Verdicts printed on stdout: settled")
+    assert exc.value.code == 0
+    assert "Verdicts printed on stdout" in capsys.readouterr().out
+
+
+def test_an_abbreviated_flag_is_rejected_rather_than_silently_resolved():
+    """An unknown flag is rejected outright: `--su x` is `land: unknown
+    argument '--su'`. argparse's default abbreviation matching would instead silently
+    resolve `--su` to `--subject` and `--sin` to `--since`."""
+    with pytest.raises(SystemExit) as exc:
+        options.parse_args(["--pr", "7", "--su", "text"], "d")
+    assert exc.value.code == 64
+
+
+def test_the_full_flag_still_works():
+    """The reject half above only proves something; this proves it isn't everything."""
+    assert options.parse_args(["--pr", "7", "--subject", "text"], "d").subject == "text"
+
+
+def test_main_renumbers_argparses_two_onto_the_shared_usage_error():
+    """`land.sh` answers a bad command line with 64, the number every entry point here uses.
+
+    `parse_args` still raises argparse's own 2 -- the tests above assert that -- and `main` is
+    the one place it becomes `LAND_BAD_ARGS`.
+    """
+    from deploy_tools import land
+
+    with pytest.raises(SystemExit) as exc:
+        land.main(["--arm-merge"])
+    assert exc.value.code == exit_codes.LAND_BAD_ARGS == 64
+
+
+def test_help_opens_on_the_summary_and_usage_not_the_rationale(capsys):
+    """`--help` skips the module docstring's rationale sections (#4448)."""
+    from deploy_tools import land
+
+    with pytest.raises(SystemExit):
+        land.main(["--help"])
+    out = capsys.readouterr().out
+    assert "Follow a merged PR through to a verified deploy" in out
+    assert "Usage::" in out and "Verdicts printed on stdout" in out
+    assert "WHY ONE INVOCATION" not in out
+
+
+def test_main_leaves_helps_zero_alone():
+    """The reject half: renumbering must not turn a successful `--help` into a usage error."""
+    from deploy_tools import land
+
+    with pytest.raises(SystemExit) as exc:
+        land.main(["--help"])
+    assert exc.value.code == 0
+
+
+@pytest.mark.parametrize(("value", "batch"), [("0", False), ("1", True), (None, True)])
+def test_a_landing_forms_a_batch_unless_land_batch_is_0(monkeypatch, value, batch):
+    if value is not None:
+        monkeypatch.setenv("LAND_BATCH", value)
+    assert options.parse_args(["--pr", "7"], "d").batch is batch

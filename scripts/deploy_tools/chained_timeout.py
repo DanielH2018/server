@@ -6,7 +6,7 @@ plan is docs/archive/deploy/d4-ordering.md, *What `promote` reads*, and the
 operator's view is docs/flux-deploy-plane.md, *The timeout follows the chain*. Like
 `changed_set`, it is pure and reaches no forge: the caller reads the bundle.
 
-Run: imported only. `uv run pytest scripts/deploy_tools/tests/test_chained_timeout.py`
+Run: imported only. `uv run pytest scripts/deploy_tools/tests/promote/test_chained_timeout.py`
 """
 
 import re

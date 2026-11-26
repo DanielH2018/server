@@ -7,7 +7,7 @@ changes against `last-good`, and records `prod`'s statuses for `verify`'s excuse
 `promote.py` when it reached its length cap (slice D7.5), and `promote.py` re-exports
 `Decision` and `hand_off`.
 
-Run: imported only. `uv run pytest scripts/deploy_tools/tests/test_promote_decide_verification.py`
+Run: imported only. `uv run pytest scripts/deploy_tools/tests/promote/test_promote_decide_verification.py`
 """
 
 import sys as _sys

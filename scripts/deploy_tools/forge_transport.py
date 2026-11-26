@@ -4,7 +4,7 @@
 and `Discord`, so a caller names them as `forge.<name>` and never imports this module. It
 holds no forge knowledge: no registry, repository or token. `Discord` is here because a
 webhook is one POST and no forge, and `forge.py` is at its length cap, as `Registry` is in `forge_registry.py`. Every request `promote.py` makes still goes through `forge.py`
-(scripts/deploy_tools/tests/test_promote_forge_boundary.py).
+(scripts/deploy_tools/tests/promote/test_promote_forge_boundary.py).
 """
 
 import json

@@ -63,7 +63,7 @@ passes cleanly in exactly that state. Merged branches are deleted on this repo
      message: GitHub creates no ``pull_request`` run for it, so CI never starts and its
      landing has nothing to wait on.
 
-Run: uv run pytest scripts/deploy_tools/tests/test_publish_pr.py
+Run: uv run pytest scripts/deploy_tools/tests/release/test_publish_pr.py
 """
 
 import argparse
