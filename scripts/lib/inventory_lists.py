@@ -8,7 +8,7 @@ was split out of ``render_guard``. ``containers_list`` is parsed by
 
 Three host roles a script must name without parsing YAML: ``LANDING_HOST``, ``PI_HOST``
 and ``K8S_HOST`` below. Each is a literal rather than a read of the inventory var that confers the
-role, because this module imports no YAML loader. ``scripts/lib/tests/test_inventory_lists.py``
+role, because this module imports no YAML loader. ``scripts/lib/tests/k8s/test_inventory_lists.py``
 pins each literal to that var instead, so moving the role in the inventory fails a test rather
 than leaving every script naming the old host.
 

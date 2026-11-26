@@ -1,6 +1,6 @@
 """Every Python entry point outside `scripts/` answers `--help` with exit 0.
 
-`scripts/lib/tests/test_entry_points_answer_help.py` holds `scripts/` to this. This test
+`scripts/lib/tests/script_census/test_entry_points_answer_help.py` holds `scripts/` to this. This test
 covers the rest of the tree: the Claude hooks, the scripts a role ships from its `files/`, and
 `evals/`. An entry point here is any tracked `.py` with an `if __name__ == "__main__"` guard
 that is not a test module.

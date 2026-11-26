@@ -2,7 +2,7 @@
 """The Pi's services are its `compose_services`.
 
 The `homelab-daniel-pi` package deploys the Pi's `compose_services` (H5). This census fails
-when that list lacks `docker-proxy` or `alloy`. `scripts/lib/tests/test_inventory_lists.py`
+when that list lacks `docker-proxy` or `alloy`. `scripts/lib/tests/k8s/test_inventory_lists.py`
 holds the other half: no host_vars file defines `containers_list`, a list nothing deploys.
 
 Run: uv run pytest hosts/tests/test_pi_service_lists_census.py

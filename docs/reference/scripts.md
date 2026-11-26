@@ -716,7 +716,7 @@ The sections below split them by **how each one is run**, which is derived from 
 
 ## Usage
 
-23 script(s) document how to invoke themselves. The rest take `--help`, which every catalogued entry point answers with exit 0 (`scripts/lib/tests/test_entry_points_answer_help.py`).
+23 script(s) document how to invoke themselves. The rest take `--help`, which every catalogued entry point answers with exit 0 (`scripts/lib/tests/script_census/test_entry_points_answer_help.py`).
 
 
 ### `scripts/docs/reference/backlog.py`

@@ -122,7 +122,7 @@ def _pytest_pythonpath(scripts: Path) -> list[Path]:
     """The directories pytest's `pythonpath` puts in front of every test, in order.
 
     A test imports a module from another directory by bare name, `from deploy_run import ...`
-    in `scripts/lib/tests/test_exit_codes.py`, and only this list says where that resolves.
+    in `scripts/lib/tests/script_census/test_exit_codes.py`, and only this list says where that resolves.
     Empty when the repo root holds no `pyproject.toml`, as a synthetic test tree does not.
     """
     pyproject = scripts.parent / "pyproject.toml"

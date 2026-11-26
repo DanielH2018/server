@@ -84,7 +84,7 @@ gone is ignored, because Claude Code does not release the lock when a session en
 why a worktree the current session still holds stays `keep` until that session exits. Nothing
 you can do from inside a worktree makes the pruner collect it. A fan-out batch's lock names
 its systemd unit, and it holds the tree while the unit runs
-(`scripts/lib/tests/test_fanout_lock.py::test_a_merged_tree_whose_batch_unit_runs_is_kept`)
+(`scripts/lib/tests/git_and_gh/test_fanout_lock.py::test_a_merged_tree_whose_batch_unit_runs_is_kept`)
 and for a day after the lock was written (`scripts/lib/fanout_lock.py`).
 
 `git worktree remove` refuses outright while a worktree is locked, and unlocking is a separate

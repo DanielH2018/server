@@ -84,7 +84,7 @@ ROWS = (
                 "tests/repo/ci_workflows/test_ci_empty_pr_merge_fails.py",
                 ".claude/hooks/tests/instructions/test_rules_globs_match_a_tracked_file.py",
                 "scripts/deploy_tools/tests/land/test_land_tools.py",
-                "scripts/lib/tests/test_render_guard.py",
+                "scripts/lib/tests/k8s/test_render_guard.py",
             }
         ),
     ),
@@ -109,7 +109,7 @@ ROWS = (
         min_matches=MODULE_FLOOR,
         allow={
             SELF: "the red fixtures above hold the offending spelling as text",
-            "scripts/lib/tests/test_git_testing.py": "the module under test IS the scrub",
+            "scripts/lib/tests/git_and_gh/test_git_testing.py": "the module under test IS the scrub",
         },
     ),
     Census(
@@ -236,7 +236,7 @@ ROWS = (
                 "tests/_helpers.py",
                 "tests/repo/suite/test_testpaths_covers_every_test_file.py",
                 "scripts/deploy_tools/tests/land/test_land_tools.py",
-                "scripts/lib/tests/test_git.py",
+                "scripts/lib/tests/git_and_gh/test_git.py",
             }
         ),
     ),

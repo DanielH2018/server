@@ -13,7 +13,7 @@ to refuse.
 
 Split out of `lib.k8s_roles`, which sat at its length cap.
 
-Run: uv run pytest scripts/lib/tests/test_k8s_role_callers.py
+Run: uv run pytest scripts/lib/tests/k8s/test_k8s_role_callers.py
 """
 
 import re

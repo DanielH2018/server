@@ -21,7 +21,7 @@ The callers come from five places. `.claude/settings.json` names each `run-hook.
 one with no flag runs `--no-project`. Each `.claude/wait-sources/*` script names the file and
 subcommand it runs. `FANOUT_UNITS` and `RUNBOOK_UNITS` list the legs whose command line is
 built in Python or in an array of a shell script; `FANOUT_UNITS` lists the two fan-out legs built in
-Python, which `scripts/lib/tests/test_stdlib_only.py` pins against the builders. The fourth is
+Python, which `scripts/lib/tests/script_census/test_stdlib_only.py` pins against the builders. The fourth is
 the role scripts a host runs `--no-project`, which `lib.role_installs` reads from each
 role's templates and each host component's files. The fifth is each workflow step that runs a
 script with the runner's own `python` rather than `uv run`. Such a step is rooted only when its
@@ -35,7 +35,7 @@ keys a staged member by its tree source; `members()` keeps each staged copy with
 install's directories, because `host_lib.py` ships to a dozen of them and a union of their
 directories would resolve an import through a sibling only another install carries.
 
-Run: uv run pytest scripts/lib/tests/test_stdlib_only.py
+Run: uv run pytest scripts/lib/tests/script_census/test_stdlib_only.py
 """
 
 import ast

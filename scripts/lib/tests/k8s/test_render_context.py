@@ -1,0 +1,338 @@
+"""The render context every validator builds, in Ansible's variable precedence.
+
+Each test lays out a throwaway inventory and role tree under `tmp_path` and hands the render an
+`Inventory` pointing at it, so a precedence rule is checked against a collision the real tree
+does not carry.
+
+Run: uv run pytest scripts/lib/tests/k8s/test_render_context.py
+"""
+
+import os
+from pathlib import Path
+
+import pytest
+import yaml
+
+from lib import render_context as rc
+from lib.container_entry import ContainerEntry, ContainerEntryError
+from lib.inventory_lists import host_vars_file
+from lib.render_guard import StrictChainableUndefined
+
+
+@pytest.fixture
+def tree(tmp_path: Path):
+    """A writer for `<tmp>/roles/<plane>/<role>` defaults, all.yml and host_vars files.
+
+    Each call returns the template path and the `Inventory` that points at the tree.
+    """
+    inventory = rc.Inventory(
+        all_vars=tmp_path / "all.yml",
+        host_vars=tmp_path / "hosts",
+        services=tmp_path / "services.yml",
+    )
+    inventory.host_vars.mkdir()
+
+    def write(
+        defaults: dict,
+        group: dict | None = None,
+        hosts: dict[str, dict] | None = None,
+        plane: str = "setup",
+    ) -> tuple[Path, rc.Inventory]:
+        role = tmp_path / "roles" / plane / "fixture"
+        (role / "defaults").mkdir(parents=True, exist_ok=True)
+        (role / "templates").mkdir(exist_ok=True)
+        (role / "defaults" / "main.yml").write_text(yaml.safe_dump(defaults))
+        inventory.all_vars.write_text(yaml.safe_dump(group or {}))
+        for name, values in (hosts or {}).items():
+            path = host_vars_file(name, inventory.host_vars)
+            path.parent.mkdir(exist_ok=True)
+            path.write_text(yaml.safe_dump(values))
+        return role / "templates" / "x.j2", inventory
+
+    return write
+
+
+def test_an_inventory_value_beats_a_role_default_of_the_same_name(tree):
+    # Role defaults are Ansible's weakest real layer. The k8s validator's old order put them
+    # over the inventory, which renders a value no deploy produces.
+    template, inv = tree({"shared": "default"}, group={"shared": "inventory"})
+    assert rc.render_context(template, inventory=inv)["shared"] == "inventory"
+
+
+def test_a_role_default_with_no_inventory_key_of_its_name_survives(tree):
+    template, inv = tree({"own": "default"}, group={"other": "inventory"})
+    ctx = rc.render_context(template, inventory=inv)
+    assert (ctx["own"], ctx["other"]) == ("default", "inventory")
+
+
+def test_a_role_default_beats_a_base_stub(tree):
+    # `BASE_CONTEXT` holds fallbacks for values no plaintext file carries, so any real file
+    # outranks it. The shell validator's old order laid the stubs over the defaults.
+    template, inv = tree({"email": "real@example.org"})
+    assert rc.render_context(template, inventory=inv)["email"] == "real@example.org"
+
+
+def test_a_role_default_names_its_own_file_through_role_file(tree):
+    # An image build's Dockerfile path renders inside image-builder, so it must already name
+    # the calling role's file when the context resolves.
+    template, inv = tree({"dockerfile": "{{ role_file('templates/Dockerfile.j2') }}"})
+    role = template.parents[1]
+    ctx = rc.render_context(template, inventory=inv)
+    assert ctx["dockerfile"] == str(role / "templates" / "Dockerfile.j2")
+
+
+@pytest.mark.parametrize("plane", ["setup", "k8s"])
+def test_a_render_that_names_no_host_takes_no_hosts_vars(tree, plane):
+    # A k8s role reads a host's value through `hosts`, so no host's values merge in unnamed.
+    template, inv = tree(
+        {}, group={"port": 1}, hosts={"daniel-box": {"port": 2}}, plane=plane
+    )
+    assert rc.render_context(template, inventory=inv)["port"] == 1
+
+
+def test_a_named_host_beats_group_vars_on_any_plane(tree):
+    template, inv = tree(
+        {}, group={"port": 1}, hosts={"pi": {"port": 3}}, plane="containers"
+    )
+    assert rc.render_context(template, host="pi", inventory=inv)["port"] == 3
+
+
+def test_a_role_directory_reads_the_same_defaults_as_its_template(tree):
+    template, inv = tree({"own": "default"})
+    assert rc.render_context(template.parents[1], inventory=inv)["own"] == "default"
+
+
+def test_a_default_aliasing_an_overridden_name_carries_the_override(tree):
+    # The override must be in place while values resolve, or the alias expands to the name's
+    # stub before the override is laid on.
+    template, inv = tree({"alias": "{{ some_secret }}"})
+    ctx = rc.render_context(
+        template, overrides={"some_secret": "SENTINEL"}, inventory=inv
+    )
+    assert ctx["alias"] == "SENTINEL"
+
+
+def test_a_host_vars_mapping_replaces_the_hosts_file_and_resolves(tree):
+    # A key the mapping leaves out stays out, and an alias in it expands like a file value.
+    template, inv = tree(
+        {"tunable": "default"},
+        group={"sys_user": "ubuntu"},
+        hosts={"box": {"tunable": "from-file", "unset_me": "x"}},
+        plane="k8s",
+    )
+    ctx = rc.render_context(
+        template, inventory=inv, host_vars={"alias": "{{ sys_user }}/a"}
+    )
+    assert (ctx["tunable"], ctx["alias"]) == ("default", "ubuntu/a")
+    assert "unset_me" not in ctx
+
+
+def test_services_arrive_parsed_with_each_entrys_jinja_expanded(tree):
+    # The filters read `services` as parsed entries, so expanding a value must keep the type.
+    template, inv = tree({}, group={"vip": "10.0.0.5"}, plane="k8s")
+    inv.services.write_text(
+        yaml.safe_dump({"containers_list": [{"name": "dns", "ip": "{{ vip }}"}]})
+    )
+    services = rc.render_context(template, inventory=inv)["services"]
+    assert services == ({"name": "dns", "ip": "10.0.0.5"},)
+    assert type(services[0]) is ContainerEntry
+
+
+def test_a_malformed_service_entry_fails_the_context_read(tree):
+    template, inv = tree({}, plane="k8s")
+    inv.services.write_text(
+        yaml.safe_dump({"containers_list": [{"name": "dns"}, {"port": 53}]})
+    )
+    with pytest.raises(ContainerEntryError, match="item 1 has no `name`"):
+        rc.render_context(template, inventory=inv)
+
+
+def test_a_value_that_will_not_expand_is_dropped(tree, capsys):
+    # A dropped key renders as STUB. Kept raw, its literal braces would reach the render.
+    template, inv = tree(
+        {"good": "{{ sys_user }}/x", "bad": "{{ 'x' | no_such_filter }}"},
+        group={"sys_user": "ubuntu"},
+    )
+    ctx = rc.render_context(template, inventory=inv)
+    assert ctx["good"] == "ubuntu/x"
+    assert "bad" not in ctx
+    assert "bad left undefined" in capsys.readouterr().err
+
+
+def test_a_value_that_will_not_expand_costs_the_rest_one_more_pass():
+    # `tick` runs once per pass over the dict, so its count is the number of passes.
+    passes = []
+    raw = {
+        "seen": "{{ tick() }}",
+        "url": "{{ host }}:{{ port }}",
+        "bad": "{{ nowhere }}",
+        "host": "box",
+        "port": 80,
+        "tick": lambda: passes.append(1) or "t",
+    }
+    resolved, dropped = rc._resolve(raw, StrictChainableUndefined)
+    assert (resolved["url"], set(dropped), len(passes)) == ("box:80", {"bad"}, 2)
+
+
+def test_a_value_reading_a_dropped_key_is_dropped_under_a_strict_class():
+    raw = {"alias": "{{ bad }}/x", "bad": "{{ nowhere }}", "kept": "k"}
+    resolved, dropped = rc._resolve(raw, StrictChainableUndefined)
+    assert (resolved, set(dropped)) == ({"kept": "k"}, {"alias", "bad"})
+
+
+def test_a_strict_context_raises_naming_the_value_that_will_not_expand(tree):
+    template, inv = tree({"bad": "{{ 'x' | no_such_filter }}"})
+    with pytest.raises(rc.UnresolvedVarsError) as exc:
+        rc.render_context(template, strict=True, inventory=inv)
+    assert set(exc.value.keys) == {"bad"}
+
+
+def test_a_group_var_reads_another_hosts_server_ip_through_hosts(tree):
+    # all.yml's k8s_pi_client_ip is this shape. A strict render raises only when
+    # `hosts` is absent. A `hosts` missing the Pi's entry resolves to None without
+    # raising, so the rows in _scrape_property_rows.py and _edge_property_rows.py compare each
+    # consumer against the Pi's literal.
+    template, inv = tree(
+        {},
+        group={"pi_ip": "{{ hosts['pi'].server_ip }}"},
+        hosts={"box": {"server_ip": "10.0.0.1"}, "pi": {"server_ip": "10.0.0.2"}},
+        plane="k8s",
+    )
+    assert (
+        rc.render_context(template, strict=True, inventory=inv)["pi_ip"] == "10.0.0.2"
+    )
+
+
+def test_hosts_carries_no_value_that_would_resolve_against_the_wrong_host(tree):
+    # The Pi's `ansible_host: "{{ server_ip }}"` would resolve against the rendered host's
+    # server_ip here, which no deploy does, so the layer holds the literal server_ip only.
+    template, inv = tree(
+        {},
+        hosts={
+            "box": {"server_ip": "10.0.0.1"},
+            "pi": {"server_ip": "10.0.0.2", "ansible_host": "{{ server_ip }}"},
+        },
+        plane="k8s",
+    )
+    hosts = rc.render_context(template, inventory=inv)["hosts"]
+    assert hosts == {
+        "box": {"server_ip": "10.0.0.1"},
+        "pi": {"server_ip": "10.0.0.2"},
+    }
+
+
+def test_hosts_carries_a_literal_compose_services_and_omits_a_templated_one(tree):
+    # observability's alloy-pi job reads the Pi's entry port this way. A templated
+    # list would resolve against the rendered host, so it stays out like `ansible_host`.
+    pi_list = [{"name": "alloy", "port": 12345}]
+    template, inv = tree(
+        {},
+        hosts={
+            "box": {"compose_services": [{"name": "x", "port": "{{ x_port }}"}]},
+            "pi": {
+                "server_ip": "10.0.0.2",
+                "compose_services": pi_list,
+                "containers_list": pi_list,
+            },
+        },
+        plane="k8s",
+    )
+    hosts = rc.render_context(template, inventory=inv)["hosts"]
+    assert hosts == {
+        "pi": {"server_ip": "10.0.0.2", "compose_services": tuple(pi_list)}
+    }
+    assert type(hosts["pi"]["compose_services"][0]) is ContainerEntry
+
+
+def test_a_malformed_pi_service_entry_fails_the_context_read(tree):
+    # Templates pass the Pi's list to the same filters as `services`, which re-check nothing.
+    template, inv = tree(
+        {},
+        hosts={"pi": {"compose_services": [{"name": "alloy"}, "not-an-entry"]}},
+        plane="k8s",
+    )
+    with pytest.raises(ContainerEntryError, match="compose_services item 1"):
+        rc.render_context(template, inventory=inv)
+
+
+def test_hosts_has_an_entry_per_host_vars_file_and_none_for_the_template(tree):
+    pi_list = [{"name": "alloy", "port": 12345}]
+    template, inv = tree(
+        {},
+        hosts={
+            "box": {"server_ip": "10.0.0.1"},
+            "pi": {"server_ip": "10.0.0.2", "compose_services": pi_list},
+            "_example": {"server_ip": "192.0.2.1"},
+        },
+        plane="k8s",
+    )
+    hosts = rc.render_context(template, inventory=inv)["hosts"]
+    assert hosts == {
+        "box": {"server_ip": "10.0.0.1"},
+        "pi": {"server_ip": "10.0.0.2", "compose_services": tuple(pi_list)},
+    }
+
+
+def test_a_callers_hosts_replaces_the_inventory_layer(tree):
+    template, inv = tree({}, hosts={"box": {"server_ip": "10.0.0.1"}}, plane="k8s")
+    ctx = rc.render_context(template, inventory=inv, overrides={"hosts": {"x": {}}})
+    assert ctx["hosts"] == {"x": {}}
+
+
+def test_a_host_vars_value_beats_a_component_default(tree):
+    # As an override the default would win, and beat the disarm a host's host_vars carry.
+    _, inv = tree({}, hosts={"pi": {"armed": False}})
+    ctx = rc.render_context(
+        None, "pi", inventory=inv, component_defaults={"armed": True}
+    )
+    assert ctx["armed"] is False
+
+
+def test_a_component_default_with_no_inventory_key_of_its_name_survives(tree):
+    _, inv = tree({}, group={"ip": "10.0.0.2"})
+    ctx = rc.render_context(None, inventory=inv, component_defaults={"url": "{{ ip }}"})
+    assert ctx["url"] == "10.0.0.2"
+
+
+def test_a_withheld_name_and_a_value_reading_it_are_dropped(tree):
+    _, inv = tree({}, group={"token": "t", "header": "Bearer {{ token }}", "kept": "k"})
+    ctx = rc.render_context(
+        None,
+        inventory=inv,
+        base={},
+        undefined_cls=StrictChainableUndefined,
+        withhold=frozenset({"token"}),
+    )
+    assert ("token" in ctx, "header" in ctx, ctx["kept"]) == (False, False, "k")
+
+
+def test_an_edit_between_two_renders_reaches_the_second(tree):
+    # load_yaml caches each parsed file; a fixture tree edited between renders must
+    # still render with its new values, on every file layer. Each edit keeps the file's size
+    # and its mtime is put back, so a cache keyed on (path, mtime, size) fails here too.
+    names = ("from_defaults", "from_group", "from_host")
+    template, inv = tree(
+        {"from_defaults": "d1"},
+        group={"from_group": "g1"},
+        hosts={"box": {"from_host": "h1"}},
+        plane="k8s",
+    )
+    ctx = rc.render_context(template, "box", inventory=inv)
+    assert [ctx[name] for name in names] == ["d1", "g1", "h1"]
+    files = (
+        template.parents[1] / "defaults" / "main.yml",
+        inv.all_vars,
+        host_vars_file("box", inv.host_vars),
+    )
+    stats = {path: path.stat() for path in files}
+    tree(
+        {"from_defaults": "d2"},
+        group={"from_group": "g2"},
+        hosts={"box": {"from_host": "h2"}},
+        plane="k8s",
+    )
+    for path, stat in stats.items():
+        assert path.stat().st_size == stat.st_size
+        os.utime(path, ns=(stat.st_atime_ns, stat.st_mtime_ns))
+    ctx = rc.render_context(template, "box", inventory=inv)
+    assert [ctx[name] for name in names] == ["d2", "g2", "h2"]
