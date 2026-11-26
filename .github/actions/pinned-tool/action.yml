@@ -72,6 +72,10 @@ runs:
             url="https://github.com/vale-cli/vale/releases/download/$VERSION/vale_${VERSION#v}_Linux_64-bit.tar.gz"
             member=vale
             probe=(--version) ;;
+          dyff)
+            url="https://github.com/homeport/dyff/releases/download/$VERSION/dyff_${VERSION#v}_linux_amd64.tar.gz"
+            member=dyff
+            probe=(version) ;;
           *)
             echo "::error::pinned-tool has no release URL for '$TOOL'"
             exit 1 ;;

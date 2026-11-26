@@ -1,6 +1,6 @@
 name: Install the tools the test suite runs
 description: >-
-  sops, age, apt-utils and the dotfiles packages, which the suite's tests run and import. The
+  sops, age, apt-utils, dyff and the dotfiles packages, which the suite's tests run and import. The
   one place those installs live, so ci.yml's pytest legs and the nightly sweep in
   pytest-sweep.yml cannot drift apart.
 
@@ -58,6 +58,25 @@ runs:
         tool: sops
         version: ${{ steps.sops.outputs.version }}
         sha256: ${{ steps.sops.outputs.sha256 }}
+    # The tree-diff tests run the real dyff, so they check its output and not a stand-in's.
+    # The pin is render-diff.yml's, which Renovate moves, so CI holds no second copy of it.
+    - name: Read the dyff pin
+      id: dyff
+      shell: bash
+      run: |
+        set -euo pipefail
+        workflow=.github/workflows/render-diff.yml
+        dyff_version=$(awk '$1 == "DYFF_VERSION:" {print $2; exit}' "$workflow")
+        dyff_sha256=$(awk '$1 == "DYFF_SHA256:" {print $2; exit}' "$workflow")
+        [ -n "$dyff_version" ] && [ -n "$dyff_sha256" ]
+        echo "version=$dyff_version" >> "$GITHUB_OUTPUT"
+        echo "sha256=$dyff_sha256" >> "$GITHUB_OUTPUT"
+    - name: Fetch the pinned dyff and check its sha256
+      uses: $/.github/actions/pinned-tool
+      with:
+        tool: dyff
+        version: ${{ steps.dyff.outputs.version }}
+        sha256: ${{ steps.dyff.outputs.sha256 }}
     - name: Install age and apt-utils for the tests
       shell: bash
       run: |
@@ -122,7 +141,7 @@ runs:
     - name: Fail on a missing binary the suite skips without
       shell: bash
       env:
-        BASELINE: apt-config logger node perl rsync sshd systemd-analyze systemd-tmpfiles visudo
+        BASELINE: apt-config dyff logger node perl rsync sshd systemd-analyze systemd-tmpfiles visudo
       run: |
         set -euo pipefail
         read -ra bins <<< "$BASELINE"
