@@ -77,6 +77,7 @@ def test_package_entry_points_finds_run_and_main_modules():
         "monitors",
         "pi_plane",
         "push_rules",
+        "qbit",
         "readonly_rbac",
         "shed_set",
         "takeover",

@@ -1,0 +1,11 @@
+# Shipped by homelab-daniel-pi (the pi-tuning component): log2ram's own stanza, which logrotate
+# never reads from the package's /etc/logrotate.d/log2ram directory.
+/var/log/log2ram.log
+{
+  rotate 7
+  daily
+  missingok
+  notifempty
+  delaycompress
+  compress
+}
