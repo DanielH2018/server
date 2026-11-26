@@ -23,7 +23,7 @@ spec:
     spec:
       # Pinned to the VIP-announcing node while the MetalLB L2Advertisement is pinned
       # to daniel-box: with externalTrafficPolicy Local, a VIP-backed pod on the other
-      # node makes the announcer DROP all forwarded LAN traffic (2026-08-14 post-boot
+      # node makes the announcer DROP all forwarded LAN traffic (the post-boot
       # DNS blackout). DECIDED: permanent posture (operator 2026-08-14) — with ETP Local
       # load-bearing for client IPs, announcement and placement stay on one node as a
       # unit; this pin only ever moves together with the L2Advertisement nodeSelector.
