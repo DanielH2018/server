@@ -64,6 +64,16 @@ lidarr_quality_profiles:
     allowed:
       - FLAC
 
+# ── the stall sweep (templates/stall-sweep-cronjob.yaml.j2) ─────────────────────────────────
+# The same python:3.15-alpine digest flux_job_image pins; Renovate moves both in one PR.
+lidarr_k8s_stall_sweep_image: python:3.15-alpine@sha256:0f9552bb28711333da16915ec146f5e6bb44a7fdac9ced15dc17c2e0206346dd
+# Hourly. A dead torrent blocks no queue slot, so a late removal costs only time.
+lidarr_k8s_stall_sweep_schedule: "41 * * * *"
+# TTL: one period plus the 300s deadline and a margin, so the newest run is always visible.
+lidarr_k8s_stall_sweep_job_ttl_seconds: 4200
+# false reports what the sweep would remove and removes nothing; true removes.
+lidarr_k8s_stall_sweep_armed: false
+
 k8s_claims:
   - name: "{{ lidarr_k8s_claim }}"
     storage_class: "{{ lidarr_k8s_storage_class }}"
@@ -75,3 +85,7 @@ render_secrets:
   - name: lidarr-exportarr
     string_data:
       api_key: lidarr_api_key
+  # qBittorrent's WebUI API key, which the stall sweep reads torrents with.
+  - name: lidarr-stall-sweep
+    string_data:
+      qbt_api_key: qbittorrent_api_key

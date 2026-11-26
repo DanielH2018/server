@@ -1,0 +1,96 @@
+{% from 'container-resources.yml.j2' import job_container_resources with context %}
+{% from 'security-context.yml.j2' import job_hardened_security_context with context %}
+{#
+  Removes dead music torrents through Lidarr; `files/sweep_lidarr_stalls.py` has the rule.
+  This file only schedules it.
+
+  DECIDED: the sweep reads qBittorrent for `time_active`, not Lidarr's queue alone. Lidarr's
+  `added` is the grab time, and a torrent can wait hours in qBittorrent's queue before it
+  starts, so a Lidarr-only rule would remove a magnet in its first minutes of fetching
+  metadata. Cross-run state in a ConfigMap would also avoid that, at the cost of RBAC, a token
+  and a kubectl image. The qBittorrent read costs one Secret key and one fence entry.
+
+  DECIDED: no `flux_cronjob_gates` entry. Lidarr has a Deployment, so the rule for CronJob-only
+  roles does not bind, and a gate copy would remove torrents at every revision. The scheduled
+  run is the evidence, as for janitorr's health CronJob.
+
+  The pod carries `app: lidarr-stall-sweep`, a peer that lidarr's and qbittorrent's
+  `netpol_from` both list in `k8s/services.yml`.
+#}
+{% set script = 'sweep_lidarr_stalls.py' %}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: lidarr-stall-sweep
+  namespace: {{ k8s_namespace }}
+data:
+  {{ script }}: |
+{{ lookup('file', role_file('files/' + script)) | indent(4, true) }}
+  flux_job_connect.py: |
+{{ lookup('file', repo_file('scripts/renderer/job_files/flux_job_connect.py')) | indent(4, true) }}
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: lidarr-stall-sweep
+  namespace: {{ k8s_namespace }}
+spec:
+  schedule: "{{ lidarr_k8s_stall_sweep_schedule }}"
+  timeZone: Etc/UTC
+  # Two runs at once would each remove the same records; the second's DELETE would fail.
+  concurrencyPolicy: Forbid
+  startingDeadlineSeconds: 600
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 2
+  jobTemplate:
+    spec:
+      activeDeadlineSeconds: 300
+      ttlSecondsAfterFinished: {{ lidarr_k8s_stall_sweep_job_ttl_seconds }}
+      # No retry: a removal that half-applied is read fresh by the next hourly run.
+      backoffLimit: 0
+      template:
+        metadata:
+          labels:
+            app: lidarr-stall-sweep
+            netpol-baseline: enforced
+        spec:
+          restartPolicy: Never
+          enableServiceLinks: false
+          # The sweep reads Lidarr's and qBittorrent's APIs, not the Kubernetes API.
+          automountServiceAccountToken: false
+          priorityClassName: homelab-best-effort
+          containers:
+            - name: sweep
+              image: {{ lidarr_k8s_stall_sweep_image }}
+              imagePullPolicy: IfNotPresent
+              command: ["python3", "/sweep/{{ script }}"]
+              env:
+                - name: LIDARR_URL
+                  value: http://{{ container_item.name }}.{{ k8s_namespace }}.svc.cluster.local:{{ container_item.port }}
+                - name: LIDARR_API_KEY
+                  valueFrom:
+                    secretKeyRef:
+                      name: lidarr-exportarr
+                      key: api_key
+                - name: QBT_URL
+                  value: http://qbittorrent.{{ k8s_namespace }}.svc.cluster.local:8080
+                - name: QBT_API_KEY
+                  valueFrom:
+                    secretKeyRef:
+                      name: lidarr-stall-sweep
+                      key: qbt_api_key
+                - name: ARMED
+                  value: "{{ 'true' if lidarr_k8s_stall_sweep_armed else 'false' }}"
+                - name: PYTHONDONTWRITEBYTECODE
+                  value: "1"
+{{ job_hardened_security_context(read_only=true, non_root=true, run_as_user=65534, run_as_group=65534) }}
+              volumeMounts:
+                - name: lidarr-stall-sweep
+                  mountPath: /sweep
+                  readOnly: true
+{{ job_container_resources(cpu_limit='100m', mem_limit='64Mi', cpu_request='10m', mem_request='32Mi') }}
+          volumes:
+            - name: lidarr-stall-sweep
+              configMap:
+                name: lidarr-stall-sweep

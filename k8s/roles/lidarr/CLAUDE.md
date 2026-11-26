@@ -8,7 +8,7 @@ serves read-only (`k8s/roles/navidrome/defaults/main.yml:navidrome_k8s_media_sub
 <!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates or containers_list entry, or the Longhorn tier lists in k8s/roles/longhorn-reconcile/defaults/main.yml. -->
 - **Applied by:** Flux, through `promote`; `land.sh --tags=lidarr` gates the rollout
 - **Images:** `lscr.io/linuxserver/lidarr` (`lidarr_k8s_image`), `ghcr.io/onedr0p/exportarr`
-  (`lidarr_k8s_exportarr_image`)
+  (`lidarr_k8s_exportarr_image`), `python` (`lidarr_k8s_stall_sweep_image`)
 - **Route:** `lidarr.<domain>` · `lidarr.local.<domain>`, Authelia one_factor
 - **Claims:** `lidarr-config` (weekly -> B2 (default target)), `media-data` (not Longhorn
   (media-local))
@@ -77,6 +77,37 @@ serves read-only (`k8s/roles/navidrome/defaults/main.yml:navidrome_k8s_media_sub
   `k8s/roles/arr-notification/defaults/main.yml:arr_notification_include_health_warnings`
   keeps warnings out of `Discord (health)`. With a Last.fm list beside the Spotify ones, an
   expired Spotify token shows only on Lidarr's System, Status page.
+
+## Autonomous-role contract
+
+The `lidarr-stall-sweep` CronJob removes Lidarr queue records with no human in the loop
+(`templates/stall-sweep-cronjob.yaml.j2`, `files/sweep_lidarr_stalls.py`).
+
+- **Scope.** It removes a record only for a `lidarr`-category torrent that qBittorrent reports
+  `stalledDL` or `metaDL`, that has run for 2 hours, and that has received no data for 1 hour
+  (`k8s/roles/lidarr/files/sweep_lidarr_stalls.py:is_dead`). Each removal also deletes the
+  torrent from qBittorrent, blocklists that release and starts a search for another one. It
+  never touches another category or a record without a torrent behind it.
+- **Why it reads qBittorrent.** Lidarr's `added` is the grab time, and a torrent can wait hours
+  in qBittorrent's queue before it starts. Only qBittorrent's `time_active` counts running time,
+  so a magnet that has just started is never removed in its first minutes
+  (`k8s/roles/lidarr/tests/test_sweep_lidarr_stalls.py::test_a_torrent_that_just_left_the_queue_is_not_dead`).
+  The qBittorrent key reaches the pod through the `lidarr-stall-sweep` Secret.
+- **Mode and arming.** `k8s/roles/lidarr/defaults/main.yml:lidarr_k8s_stall_sweep_armed`. While
+  it is false, each run logs what it would remove and removes nothing. To stop the sweep, set it
+  false again.
+- **Abort valves.** A run removes nothing when qBittorrent reports fewer than 10 DHT nodes,
+  because a dropped VPN tunnel stalls every torrent at once
+  (`k8s/roles/lidarr/tests/test_sweep_lidarr_stalls.py::test_a_run_with_too_few_dht_nodes_refuses_before_any_removal`).
+  It also refuses a Lidarr queue page shorter than Lidarr's total. It removes at most 10 records
+  per run, the longest idle first. `activeDeadlineSeconds` bounds a hung run.
+- **Required evidence.** Each run logs one count line in Loki,
+  `lidarr stall sweep: N removed, M over the cap, K untracked, T checked`, then one line per
+  removal with its state, progress, running time and idle time. Nothing pages on a failed run.
+  A failure only leaves dead torrents in the queue, and they no longer block a queue slot.
+- **Next-run review.** A run that removes a torrent you expected to finish means the
+  thresholds are too tight. Read the removal line's running and idle hours before widening
+  anything.
 
 ## Editing
 - Manifest: `templates/deployment.yaml.j2`, a single call to
