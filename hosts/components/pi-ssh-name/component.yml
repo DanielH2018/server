@@ -15,7 +15,7 @@
 # REVERSE: dropping this component makes dpkg remove /etc/ssh/ssh_known_hosts. The line arm
 # never removes a line, so the /etc/hosts entry stays until it is deleted by hand.
 #
-# hosts/tests/test_server_names_daniel_pi.py holds the name and the pin on each node.
+# hosts/tests/pi/test_server_names_daniel_pi.py holds the name and the pin on each node.
 lines:
   - {path: /etc/hosts, line: "{{ hosts['daniel-pi'].server_ip }} daniel-pi", regexp: '^\S+\s+daniel-pi(\s|$)', mode: "0644"}
 files:

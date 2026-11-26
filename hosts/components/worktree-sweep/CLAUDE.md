@@ -15,11 +15,11 @@
   `.claude/prune-worktrees.json` in the primary checkout. The script passes `--require` with
   `scripts/lib/_claude_worktree.py:REQUIRED_INTERFACE`, so a host with no copy, or a copy older
   than this repo was written for, fails the run and pages
-  (`hosts/tests/test_worktree_sweep_cron_reports_its_exit.py::test_a_host_with_no_pruner_fails_the_run_and_pings_the_failure`).
+  (`hosts/tests/repo_crons/test_worktree_sweep_cron_reports_its_exit.py::test_a_host_with_no_pruner_fails_the_run_and_pings_the_failure`).
   daniel-server's dotfiles checkout needs a `git pull --ff-only` before its `chezmoi apply`.
 - **A checkout with no policy file fails the run.** Without `.claude/prune-worktrees.json` the
   pruner keeps every fan-out tree and exits 0, so the script skips the pruner and exits 66
-  (`hosts/tests/test_worktree_sweep_cron_reports_its_exit.py::test_a_checkout_with_no_policy_file_fails_the_run_and_pings_the_failure`).
+  (`hosts/tests/repo_crons/test_worktree_sweep_cron_reports_its_exit.py::test_a_checkout_with_no_policy_file_fails_the_run_and_pings_the_failure`).
   The cause is a stale primary checkout, which `CheckoutSyncFailed` or
   `CheckoutSyncNotReporting` pages first on a host that lists `checkout-sync`. Clear what
   parks the sync, or run `git pull --ff-only` in `/home/<sys_user>/server`.
@@ -35,4 +35,4 @@
   `journalctl -t worktree-sweep` for the removal or branch deletion that failed.
 
 ENFORCED: hosts/lib/tests/test_worktree_sweep_component.py, and
-hosts/tests/test_worktree_sweep_cron_reports_its_exit.py, which runs the rendered script.
+hosts/tests/repo_crons/test_worktree_sweep_cron_reports_its_exit.py, which runs the rendered script.

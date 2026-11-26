@@ -77,11 +77,11 @@ SCANNED = {
 
 # Every entry is permanent: a render erases the thing it reads.
 TEMPLATE_SOURCE_READERS = {
-    "hosts/tests/test_host_python_invocations.py": (
+    "hosts/tests/host_config/test_host_python_invocations.py": (
         "whether a manifest embeds a `.sh.j2` through `lookup('template', ...)` is the "
         "subject, and the render replaces that call with the script's text"
     ),
-    "hosts/tests/test_docs_refresh_failure_path.py": (
+    "hosts/tests/repo_crons/test_docs_refresh_failure_path.py": (
         "the tmpfiles `d` line's owner and mode are the subject, and the file is a one-line "
         "package path, not a shell script with a render to run"
     ),
@@ -171,7 +171,7 @@ TEMPLATE_SOURCE_READERS = {
         "render, and `test_every_source_fallback_is_a_template_no_render_covers` holds that "
         "nothing else falls back"
     ),
-    "hosts/tests/test_nut_host_secondary.py": (
+    "hosts/tests/host_config/test_nut_host_secondary.py": (
         "whether the two push-token expressions carry `| mandatory`, which decides whether an "
         "undefined token fails the play or renders empty. A render resolves every secret to "
         "`STUB`, so no render distinguishes `mandatory` from `default('')`"
@@ -213,14 +213,14 @@ KNOWN_MEMBERS = frozenset(
         "staging/test_etcd_drill_vm.py",
         "staging/test_staging_egress_fence.py",
         "staging/test_staging_network.py",
-        "hosts/tests/test_claude_code_on_daniel_server.py",
-        "hosts/tests/test_claude_memory_sync.py",
-        "hosts/tests/test_claude_rc_unit.py",
-        "hosts/tests/test_coredns_metrics_binds_wildcard.py",
-        "hosts/tests/test_etcd_metrics_single_switch.py",
-        "hosts/tests/test_k3s_control_plane_hardening.py",
-        "hosts/tests/test_loki_route_witness.py",
-        "hosts/tests/test_nut_host_secondary.py",
+        "hosts/tests/claude_code/test_claude_code_on_daniel_server.py",
+        "hosts/tests/claude_code/test_claude_memory_sync.py",
+        "hosts/tests/claude_code/test_claude_rc_unit.py",
+        "hosts/tests/k3s/test_coredns_metrics_binds_wildcard.py",
+        "hosts/tests/k3s/test_etcd_metrics_single_switch.py",
+        "hosts/tests/k3s/test_k3s_control_plane_hardening.py",
+        "hosts/tests/repo_crons/test_loki_route_witness.py",
+        "hosts/tests/host_config/test_nut_host_secondary.py",
     }
 )
 
@@ -332,7 +332,7 @@ def test_a_new_module_reading_a_role_template_is_named_as_an_offender():
 def test_a_new_host_guard_reading_a_role_template_is_named_as_an_offender():
     """The `hosts/tests` directory, and the reason the keys carry one.
 
-    `hosts/tests/test_nut_host_secondary.py` is exempt, so a basename-keyed exemption would
+    `hosts/tests/host_config/test_nut_host_secondary.py` is exempt, so a basename-keyed exemption would
     wave through a `services/` module of the same name. Both halves are modules that are not on
     disk, which is what makes this a proof the gate can fail.
     """

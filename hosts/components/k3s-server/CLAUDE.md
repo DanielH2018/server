@@ -13,7 +13,7 @@
 - **Abort valves:** none needed, since a run only reads.
 - **Required evidence, every run:** the `kubelet-shutdown-lock` and `wired-gateway` textfiles.
 
-ENFORCED: hosts/tests/test_k3s_server_component.py, hosts/tests/test_kubelet_shutdown_lock_check.py, hosts/tests/test_wired_gateway_check.py.
+ENFORCED: hosts/tests/k3s/test_k3s_server_component.py, hosts/tests/host_checks/test_kubelet_shutdown_lock_check.py, hosts/tests/host_checks/test_wired_gateway_check.py.
 
 ## Autonomous-role contract (`homelab-kubepods-memory-low.path`, the reload after kubelet's reset)
 
@@ -29,4 +29,4 @@ ENFORCED: hosts/tests/test_k3s_server_component.py, hosts/tests/test_kubelet_shu
   `k3s_kubepods_memory_low`. `docs/claude-code-rc-caps.md` has the derivation and the verify
   commands.
 
-ENFORCED: hosts/tests/test_k3s_server_component.py::test_kubelets_reset_of_kubepods_memory_low_is_overridden_and_reapplied.
+ENFORCED: hosts/tests/k3s/test_k3s_server_component.py::test_kubelets_reset_of_kubepods_memory_low_is_overridden_and_reapplied.

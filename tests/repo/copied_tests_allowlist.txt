@@ -14,10 +14,10 @@ hosts/lib/tests/test_box_firewall_and_maintenance.py 1
 hosts/lib/tests/test_box_sshd_apt_and_tuning.py 1
 hosts/lib/tests/test_server_firewall_and_maintenance.py 1
 hosts/lib/tests/test_server_sshd_apt_and_tuning.py 1
-hosts/tests/test_claude_fanout_server_lander.py 1
-hosts/tests/test_claude_pipeline_timeline.py 1
-hosts/tests/test_docs_refresh_failure_path.py 1
-hosts/tests/test_eval_run_failure_path.py 1
+hosts/tests/claude_code/test_claude_fanout_server_lander.py 1
+hosts/tests/claude_code/test_claude_pipeline_timeline.py 1
+hosts/tests/repo_crons/test_docs_refresh_failure_path.py 1
+hosts/tests/repo_crons/test_eval_run_failure_path.py 1
 k8s/roles/game-stats/tests/test_stats.py 1
 k8s/roles/game-stats/tests/test_valheim_stats.py 1
 k8s/roles/headlamp/tests/test_headlamp_verify.py 4

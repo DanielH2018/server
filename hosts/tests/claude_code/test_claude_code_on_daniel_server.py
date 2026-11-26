@@ -1,0 +1,112 @@
+#!/usr/bin/env python3
+"""daniel-server is a Claude session host with its own cap numbers.
+
+The caps are per-host overrides of the claude_code role's defaults/main.yml. The render goes
+through `_setup_render`, the same harness the sibling test_claude_login_slice_caps.py uses,
+with the host's own vars laid over the role's defaults as `overrides`.
+Run: uv run pytest hosts/tests/claude_code/test_claude_code_on_daniel_server.py
+"""
+
+from _agent_package import agent_setup_script
+from _helpers import load_yaml
+from lib.estate import host_vars
+from _setup_render import CLAUDE_CODE, render_component_text
+from docs.fragment_readers import hosts_listing_component
+from test_claude_fleet_slice_cap import SUB_BOUNDS, to_bytes
+
+ROLE = CLAUDE_CODE
+DEFAULTS = load_yaml(ROLE / "defaults" / "main.yml")
+SERVER = host_vars("daniel-server")
+BOX = host_vars("daniel-box")
+
+
+def _violating_planes(merged_vars: dict) -> list[str]:
+    """The SUB_BOUNDS plane vars in `merged_vars` that exceed the fleet var they sit under.
+
+    Empty means every plane stays within its fleet bound.
+    """
+    return [
+        plane_var
+        for plane_var, fleet_var in SUB_BOUNDS.items()
+        if to_bytes(merged_vars[plane_var]) > to_bytes(merged_vars[fleet_var])
+    ]
+
+
+def _render(template: str, host_vars: dict) -> str:
+    """One claude_code template rendered with `host_vars` laid over the role's defaults.
+
+    The host's vars arrive as render OVERRIDES rather than as a context assembled here, so the
+    text asserted on below is the text `validate/render_lib/setup_plane.py` renders.
+    """
+    return render_component_text("claude-code", template, host_vars)
+
+
+def shared_overrides(box: dict, server: dict) -> list[str]:
+    """The claude-code keys both hosts' host_vars set to one value, which belongs in defaults."""
+    return sorted(
+        key
+        for key in box.keys() & server.keys()
+        if key.startswith(("claude_code_", "claude_agent_")) and box[key] == server[key]
+    )
+
+
+def test_no_claude_code_value_is_set_alike_on_both_hosts_is_clean():
+    assert shared_overrides(BOX, SERVER) == []
+
+
+def test_a_claude_code_value_set_alike_on_both_hosts_is_flagged():
+    box = {"claude_code_x": True, "claude_code_y": 1, "has_x": True}
+    server = {"claude_code_x": True, "claude_code_y": 2, "has_x": True}
+    assert shared_overrides(box, server) == ["claude_code_x"]
+
+
+def test_daniel_server_opts_in_without_the_remote_control_unit():
+    assert "daniel-server" in hosts_listing_component("claude-code")
+    assert SERVER["claude_code_rc_enabled"] is False
+    # daniel-box keeps the role default (true); the RC host stays single.
+    assert "claude_code_rc_enabled" not in BOX
+
+
+def test_daniel_server_carries_its_own_fleet_cap():
+    """Its unreclaimable footprint is larger than daniel-box's (a KVM guest), so the number differs."""
+    assert (
+        SERVER["claude_code_fleet_memory_high"]
+        != DEFAULTS["claude_code_fleet_memory_high"]
+    )
+    rendered = _render("fleet-slice-caps.conf.j2", SERVER)
+    assert f"MemoryHigh={SERVER['claude_code_fleet_memory_high']}" in rendered
+    assert "MemoryHigh=%s" % DEFAULTS["claude_code_fleet_memory_high"] not in rendered
+
+
+def test_daniel_box_render_is_unchanged_by_the_server_block():
+    rendered = _render("fleet-slice-caps.conf.j2", BOX)
+    assert "MemoryHigh=%s" % DEFAULTS["claude_code_fleet_memory_high"] in rendered
+
+
+def test_the_package_enables_linger_for_the_session_user(tmp_path):
+    setup = agent_setup_script(tmp_path)
+    assert 'loginctl enable-linger "$agent" "$operator"' in setup
+
+
+def test_daniel_server_planes_stay_under_its_fleet_cap():
+    """Its own fleet override (10G/2G) must still bound its own planes (8G/2G).
+
+    test_claude_fleet_slice_cap.py's sibling check reads only defaults/main.yml, so it never
+    sees a host_vars override — a future edit dropping daniel-server's fleet cap below one of
+    its planes would pass that check green.
+    """
+    merged = {**DEFAULTS, **SERVER}
+    violations = _violating_planes(merged)
+    assert not violations, (
+        f"{violations} exceed daniel-server's fleet bound "
+        f"({SERVER['claude_code_fleet_memory_high']}/{SERVER['claude_code_fleet_swap_max']})"
+    )
+
+
+def test_the_sub_bound_check_rejects_a_lowered_server_fleet_cap():
+    """Rejecting half of the pair above: a fleet cap dropped below a plane's must not pass."""
+    lowered = {**DEFAULTS, **SERVER, "claude_code_fleet_memory_high": "6G"}
+    assert _violating_planes(lowered) == ["claude_code_rc_memory_high"], (
+        "lowering claude_code_fleet_memory_high below claude_code_rc_memory_high must be "
+        "caught, or the check is not actually reading the override"
+    )

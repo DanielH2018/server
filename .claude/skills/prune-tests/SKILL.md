@@ -76,7 +76,7 @@ Each rule below overrides step 2. Move the candidate off the list and note which
   refuses a path that would restart both DNS replicas at once. A `# DECIDED:` marker beside
   the subject is the same signal.
 - **A `legacy:` list.** Reconcile deletes those paths on each host, so a test over one tests
-  a mechanism that runs. `hosts/tests/test_legacy_cache_directories.py` is one.
+  a mechanism that runs. `hosts/tests/host_config/test_legacy_cache_directories.py` is one.
 - **A sharded module.** `scripts/renderer/tests/bundle/test_renderer_determinism_0.py` and its
   numbered siblings split one workload across workers.
 - **An interpreter-grammar parse test.** `hosts/lib/tests/test_host_lib.py` holds the shipped

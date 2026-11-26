@@ -28,7 +28,7 @@ session works, what the Discord digest measures, and the exit codes behind the a
 `component.yml` names each module in `files:`. The list is not derived from the directory, so a
 module in `files/` and not on the list is one the host never receives.
 ENFORCED:
-`hosts/tests/test_renovate_agent_modules_are_shipped.py::test_every_shipped_module_is_installed`.
+`hosts/tests/repo_crons/test_renovate_agent_modules_are_shipped.py::test_every_shipped_module_is_installed`.
 
 ## The lander
 
@@ -193,7 +193,7 @@ The session reads third-party text: release notes, changelogs and PR bodies. It 
 - **Deploy holds.** The wrapper reads no hold. `land.sh`, run by the lander as the operator,
   refuses a landing under `DEPLOY_HOLD`.
 
-ENFORCED: `hosts/tests/test_renovate_agent_identity.py`, which also runs the prompt's
+ENFORCED: `hosts/tests/repo_crons/test_renovate_agent_identity.py`, which also runs the prompt's
 `systemctl` commands through the repo's own PreToolUse:Bash dispatcher.
 
 ## Arming it
@@ -282,7 +282,7 @@ path read-only but four tmpfs mounts and the exchange's `requests/` and `out/`. 
 holds them with room to spare, so a full mount fails with ENOSPC rather than an OOM kill. The
 unit also sets `TasksMax`, `MemorySwapMax=0` and `CLAUDE_CODE_DISABLE_AUTO_MEMORY=1`.
 `templates/renovate-agent-pins.j2` pins every size and cap.
-`hosts/tests/test_unattended_session_bounds.py` holds both unattended session units to these
+`hosts/tests/host_config/test_unattended_session_bounds.py` holds both unattended session units to these
 bounds.
 
 Leaving the open set is not landing. A session can close a Renovate PR without merging it,

@@ -56,7 +56,7 @@ generated_sha: f2e8e29f8
 | [adr/0007-backup-tiering-r2-daily-b2-weekly.md](../adr/0007-backup-tiering-r2-daily-b2-weekly.md) | 2026-11-21 | 3 | 3 | `docs/break-glass.md` (2026-11-26) |
 | [jellyfin-plugins.md](../jellyfin-plugins.md) | 2026-11-23 | 4 | 3 | `k8s/roles/jellyfin/CLAUDE.md` (2026-11-26) |
 | [renovate-notify-internals.md](../renovate-notify-internals.md) | 2026-11-23 | 11 | 3 | `renovate.json` (2026-11-26) |
-| [security-tools.md](../security-tools.md) | 2026-11-25 | 11 | 3 | `hosts/tests/test_aide_check_lines.py` (2026-11-26) |
+| [security-tools.md](../security-tools.md) | 2026-11-25 | 11 | 3 | `hosts/tests/host_checks/test_aide_check_lines.py` (2026-11-26) |
 | [adr/0015-d2-for-hand-authored-diagrams.md](../adr/0015-d2-for-hand-authored-diagrams.md) | 2026-09-01 | 2 | 2 | `scripts/docs/build_docs.py` (2026-11-25) |
 | [adr/0014-kopia-retired-longhorn-owns-the-b2-credentials.md](../adr/0014-kopia-retired-longhorn-owns-the-b2-credentials.md) | 2026-09-28 | 3 | 2 | `scripts/secrets_mgmt/git_dates.py` (2026-11-26) |
 | [adr/0019-fact-support-stops-at-the-repo-store.md](../adr/0019-fact-support-stops-at-the-repo-store.md) | 2026-11-13 | 2 | 2 | `CLAUDE.md` (2026-11-26) |

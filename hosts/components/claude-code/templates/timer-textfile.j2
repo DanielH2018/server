@@ -14,7 +14,7 @@ The deadline is two timer periods plus `slack_s` plus 300s
 second covers one failed or skipped run, `slack_s` is the longest legitimate run, and the 300s
 covers the 1m `node` scrape and the 1m rule evaluation. `period` is an `<N>min` timespan. Any
 other shape fails the render rather than publish a guessed deadline.
-`hosts/tests/test_claude_timer_rule_literals.py` pins each rule's literals to the render.
+`hosts/tests/claude_code/test_claude_timer_rule_literals.py` pins each rule's literals to the render.
 -#}
 {% macro timer_textfile(check, period, slack_s=0) -%}
 {%- set _minutes = period | string | regex_replace('^([0-9]+)min$', '\\1') -%}
