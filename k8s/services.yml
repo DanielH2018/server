@@ -543,6 +543,6 @@ containers_list:
     netpol_fences:
       - app: airflow-scheduler
         port: 8974
-        from: [monitor-bridge]  # AIRFLOW_SCHEDULER_URL
+        from: [blackbox-exporter]  # the scheduler health probe
         role_owned: true
   - name: netpol-baseline

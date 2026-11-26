@@ -21,4 +21,4 @@
 
 ENFORCED: hosts/tests/repo_crons/test_github_ruleset_drift.py and
 hosts/tests/repo_crons/test_github_interaction_limit.py (each script against stubs), and
-hosts/lib/tests/test_h737_box_components.py (the units and the legacy entries).
+hosts/lib/tests/host_baselines/test_h737_box_components.py (the units and the legacy entries).

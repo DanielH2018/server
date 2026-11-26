@@ -8,7 +8,7 @@
 # The service runs as sys_user, the user the three pi-heartbeats services run as. systemd re-owns
 # a LogsDirectory= tree to the starting unit's user when the owner differs, so a probe running as
 # root every minute would take /var/log/pi-health/ from the heartbeat writers.
-# hosts/lib/tests/test_crowdsec_probe_component.py asserts that every unit declaring
+# hosts/lib/tests/components/test_crowdsec_probe_component.py asserts that every unit declaring
 # LogsDirectory=pi-health declares the same User=. The probe reads no secret.
 files:
   - {src: crowdsec-edge-probe.sh, dst: /usr/lib/homelab/crowdsec-edge-probe, mode: "0755"}

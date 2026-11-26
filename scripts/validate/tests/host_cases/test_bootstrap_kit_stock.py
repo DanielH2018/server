@@ -117,10 +117,8 @@ def test_a_kit_download_differing_from_its_pin_is_flagged(tmp_path):
 
 def test_the_kit_s_uv_sync_skips_the_lint_group(tmp_path):
     clone = tmp_path / "clone"
-    (clone / "inventory/group_vars").mkdir(parents=True)
-    (clone / "inventory/group_vars/all.yml").write_text(
-        'host_python_version: "3.15.2"\n'
-    )
+    (clone / "estate").mkdir(parents=True)
+    (clone / "estate/vars.yml").write_text('host_python_version: "3.15.2"\n')
     calls = []
 
     case.stock_uv_cache(

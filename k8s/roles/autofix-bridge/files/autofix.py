@@ -35,6 +35,7 @@ Environment (all optional; deployment.yaml.j2 sets them, the credentials from th
                               on /metrics (default 0: none; `--once` never serves)
 """
 
+import argparse
 import json
 import sys
 import time
@@ -410,7 +411,18 @@ def report_cycle(exposition, ok, msg):
         exposition.record(CHECK, ok, time.time())
 
 
-def main():
+def parse_args(argv):
+    """Parses the bridge's flags, exiting non-zero on an unknown one."""
+    parser = argparse.ArgumentParser(
+        description=__doc__.strip().split("\n\n")[0], allow_abbrev=False
+    )
+    parser.add_argument(
+        "--once", action="store_true", help="run a single cycle and exit"
+    )
+    return parser.parse_args(argv)
+
+
+def main(argv):
     """Runs the poll+decide+act loop, reporting each cycle's verdict.
 
     Loops forever at INTERVAL seconds unless invoked with --once, in which case it runs a
@@ -418,7 +430,7 @@ def main():
     DOWN verdict rather than allowed to kill the loop. Each verdict reaches the exporter
     (`report_cycle`), which `--once` never starts.
     """
-    once = "--once" in sys.argv
+    once = parse_args(argv).once
     state = CycleState()
     exposition = None if once else start_exporter(CHECK_EXPORTER_PORT, INTERVAL)
     bridge.common.log(
@@ -436,7 +448,4 @@ def main():
 
 
 if __name__ == "__main__":
-    if any(arg in ("-h", "--help") for arg in sys.argv[1:]):
-        print(__doc__.strip())
-        sys.exit(0)
-    main()
+    main(sys.argv[1:])

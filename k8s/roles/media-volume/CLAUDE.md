@@ -34,7 +34,7 @@ and slskd mounts it read-only too. No route — infra role, no Deployment of its
   `torrents/` subdirectories are `tmpfiles.d` lines in
   `hosts/daniel-box/tmpfiles.d/homelab-media-volume.conf.j2`, created at boot and by
   `bootstrap-host.sh`. `hosts/daniel-box/package.yml` holds a copy of `media_volume_host_path`,
-  and `hosts/lib/tests/test_box_k3s_host_half.py` holds the copy equal to this role's default.
+  and `hosts/lib/tests/host_baselines/test_box_k3s_host_half.py` holds the copy equal to this role's default.
 - **HISTORY —** the library was seeded once, at the 2026-08 migration, by an opt-in rsync from
   daniel-server's `containers/data`. That directory no longer exists, so D5 deleted the seeding
   tasks rather than move them. Nothing backs the library up.

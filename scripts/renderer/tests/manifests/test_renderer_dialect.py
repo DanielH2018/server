@@ -32,7 +32,7 @@ from renderer.renderer_lib.dialect import (
 )
 from renderer.renderer_lib.environment import render_file, renderer_env
 from renderer.renderer_lib.restart import TARGET_KEYS
-from renderer.renderer_lib.task_inputs import include_vars
+from renderer.renderer_lib.task_inputs import render_defaults
 
 ADR = REPO / "docs" / "adr" / "0028-the-renderer-supports-a-closed-jinja-subset.md"
 
@@ -202,7 +202,9 @@ _RESOLVED_INCLUDE_KEYS = INCLUDE_KEYS | frozenset(TARGET_KEYS)
 
 
 def _resolved_include_values(role: Path) -> dict:
-    return {k: v for k, v in include_vars(role).items() if k in _RESOLVED_INCLUDE_KEYS}
+    return {
+        k: v for k, v in render_defaults(role).items() if k in _RESOLVED_INCLUDE_KEYS
+    }
 
 
 def _include_value_problems(roles: Path) -> dict[str, set[Construct]]:
@@ -219,7 +221,7 @@ def _include_value_problems(roles: Path) -> dict[str, set[Construct]]:
 def test_every_include_value_the_render_resolves_stays_on_the_list():
     assert any(
         k in INCLUDE_KEYS and _jinja_values(v)
-        for k, v in include_vars(K8S_ROLES / "navidrome").items()
+        for k, v in render_defaults(K8S_ROLES / "navidrome").items()
     ), "the census no longer reaches navidrome's templated file list"
     authelia = _resolved_include_values(K8S_ROLES / "authelia")
     assert _jinja_values(authelia.get("manifests_extra_rollouts")), (

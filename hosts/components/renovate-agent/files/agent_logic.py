@@ -16,15 +16,11 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 
 
-# The session's result JSON marks its final object with this `type`. Anything printed before
-# it on stdout is a warning or progress line, which is why the parse scans rather than loads.
+# Output before the result object is warning or progress text, so the parse scans rather than loads.
 _RESULT_TYPE = "result"
 
-# How much of the session's own closing summary reaches Discord. host_lib.discord_post caps
-# the whole message at 1900 characters; this leaves room for the delta lines above it.
+# host_lib.discord_post caps the message at 1900 characters; this leaves room for the delta lines.
 _SUMMARY_CHARS = 900
-# host_lib.discord_post's cap, less a margin. The summary shrinks further whenever the lines
-# around it are long enough to push the digest past this.
 _DIGEST_CHARS = 1850
 
 
@@ -33,9 +29,8 @@ class OpenPR:
     number: int
     title: str
     url: str = ""
-    # GitHub's `updatedAt` for the PR, as the census read it. Comparing the before-census
-    # value with the after-census one is the only signal a comment-only triage leaves on a PR
-    # that stays open. "" when the census could not read it.
+    # The before/after-census difference is the only signal a comment-only triage leaves on an open
+    # PR.
     updated_at: str = ""
 
 
@@ -63,8 +58,6 @@ class Outcome:
     turns: int
     denials: tuple[str, ...]
     error: str = ""
-    # The harness's id for the session, recorded in runs.jsonl. "" when the result JSON
-    # carried none.
     session_id: str = ""
 
 
@@ -281,8 +274,8 @@ def render_digest(
     if unlanded:
         lines.append("nominated, not landed: " + "; ".join(unlanded))
     if outcome.denials:
-        # A denial is the failure this whole design rests on not happening: auto mode refusing
-        # the session's writes leaves it reading green while doing nothing.
+        # A denial is the failure the design rests on not happening: refused writes read green while
+        # doing nothing.
         lines.append("permission denials: " + ", ".join(sorted(set(outcome.denials))))
     tail = [f"{outcome.turns} turns, ${outcome.cost_usd:.2f} — transcript: {log_path}"]
     if outcome.summary:

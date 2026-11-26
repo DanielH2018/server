@@ -352,7 +352,7 @@ before deciding what is due. Examples:
 - `pi_peer_backup_ssh_key`: generate a new ed25519 keypair, store the private half with
   `sops set`, and commit the public half over
   `hosts/components/pi-peer-backup-target/pi-peer-backup.pub` and into the `line:` of that
-  component's `component.yml`, which `hosts/lib/tests/test_pi_tuning_component.py` and
+  component's `component.yml`, which `hosts/lib/tests/host_baselines/test_pi_tuning_component.py` and
   `tests/services/pi_peer_backup/test_pi_peer_backup_forced_command.py` hold equal. The private key is
   multi-line, so it has a Secret of its own, `pi-peer-backup-ssh-key`, rendered from
   `k8s/roles/pi-peer-backup/templates/ssh-key-secret.yaml.j2`. Flux owns pi-peer-backup,
@@ -472,7 +472,7 @@ pod rolls, and the old credential still works. The registry marks them `source: 
 Verify against the app, not the deploy: a login, an API call, a monitor past its grace window.
 `audit` cannot tell the cases apart — it derives `last_rotated` from the git history of
 `secrets.yml`, so committing the copy advances the date either way. Before calling any
-rotation done, grep the key across `k8s/`, `hosts/`, `inventory/` and `scripts/`, and ask whether
+rotation done, grep the key across `k8s/`, `hosts/`, `estate/` and `scripts/`, and ask whether
 a hit *writes* it to the app or only reads it; a single reader means SOPS is a record. Mark that key `source: record` in the
 registry and add its mechanism bullet above.
 

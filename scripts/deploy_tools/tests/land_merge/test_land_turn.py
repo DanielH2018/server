@@ -23,8 +23,8 @@ from _land_turn_fakes import (
     call_order,
     turn_landing,
 )
-from deploy_tools.land_lib import line, turn
-from deploy_tools.land_lib.outcome import Outcome
+from deploy_tools.land_lib import line, stale_base, turn
+from deploy_tools.land_lib.outcome import Outcome, Verdict
 from lib.exit_codes import CI_RED
 from lib.proc_testing import fake_bin, path_with
 
@@ -114,6 +114,29 @@ def test_a_draft_the_holder_of_the_turn_merged_stops_waiting_and_merges_nothing(
     out = capsys.readouterr().out
     assert "the landing that holds the turn merged PR #999 with its own" in out
     assert "merged after 7s, 7s of it waiting for the landing turn" in out
+
+
+@pytest.mark.parametrize(
+    ("turns", "calls_made"),
+    [
+        pytest.param([False, False], ["try_turn", "try_turn"], id="while-it-waits"),
+        pytest.param(
+            [False, True],
+            ["try_turn", "try_turn", "release_turn"],
+            id="as-the-turn-frees",
+        ),
+    ],
+)
+def test_a_draft_the_holder_found_conflicting_ends_merge_conflict(
+    landing, turns, calls_made
+):
+    ln, calls = turn_landing(landing, turn=turns, line=["", line.CONFLICT])
+    with pytest.raises(Outcome) as ended:
+        land_in_turn(ln)
+    assert ended.value.verdict == Verdict.MERGE_CONFLICT
+    # It merges nothing, holds no turn and leaves its place.
+    assert call_order(calls) == calls_made
+    assert line_calls(calls)[-1] == ("leave", "999")
 
 
 def test_a_draft_merged_by_the_holder_that_frees_the_turn_gives_it_straight_back(
@@ -281,6 +304,20 @@ def test_an_update_github_refuses_leaves_the_pr_the_run_it_has(landing, capsys):
     assert call_order(calls)[-4:] == ["update", "pr ready", "merge", "release_turn"]
     assert merged_sha(calls) == HEAD
     assert "going on with the run the PR has" in capsys.readouterr().out
+
+
+def test_an_update_github_refuses_as_a_conflict_ends_merge_conflict(landing):
+    ln, calls = turn_landing(
+        landing,
+        compare=MASTER_MOVED,
+        gh_merge_rc=[1],
+        gh_stderr=f"gh: {stale_base.CONFLICT_REFUSAL} (HTTP 422)",
+    )
+    with pytest.raises(Outcome) as ended:
+        land_in_turn(ln)
+    assert ended.value.verdict == Verdict.MERGE_CONFLICT
+    # No run starts on a head that cannot merge: the draft is never marked ready.
+    assert call_order(calls)[-2:] == ["update", "release_turn"]
 
 
 @pytest.mark.parametrize(

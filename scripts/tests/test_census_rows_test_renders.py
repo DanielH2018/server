@@ -114,19 +114,19 @@ ROWS = (
     Census(
         name="tests-take-inventory-paths-from-repo-paths",
         reason=(
-            "`lib.repo_paths` owns `HOSTS_INI`, `ALL_VARS`, `HOST_VARS`, `K3S_SERVER`, "
+            "`lib.repo_paths` owns `ESTATE_VARS`, `K8S_VARS`, `HOSTS_SHARED_VARS`, `K3S_SERVER`, "
             "`K3S_HOST_CHECKS`, `K3S_FILES` and `K3S_DEFAULTS`, and #3912, #3982 and #4133 "
             "moved the test modules "
             "onto them. A hit is a `/` chain whose string parts spell one of those paths; the "
             "message names the constant. Its root is `REPO` (or `_REPO`, `REPO_ROOT`), `ANSIBLE`, `ROLES`, "
-            "`INVENTORY`, `K3S_SERVER` or `K3S_HOST_CHECKS` (also as `Path(...)` or "
+            "`K3S_SERVER` or `K3S_HOST_CHECKS` (also as `Path(...)` or "
             "`v.ROLES`), an "
             'alias of one, a local name bound to an anchored chain (`K3S = REPO / "hosts" / '
             '"components" / "k3s-server"`, then `K3S / "defaults" / "main.yml"`), or '
             "`Path(__file__)` arithmetic "
             "evaluated at the module (#4135). A chain counts only for the segments it spells "
-            'itself, so `K3S_SERVER / "templates"` passes. A module binding its own `INVENTORY` is a '
-            'hit too. A repo-relative string such as `"inventory/group_vars/all.yml"` '
+            'itself, so `K3S_SERVER / "templates"` passes. A repo-relative string such as '
+            '`"estate/vars.yml"` '
             "is not a chain, which is how the deploy classifiers' tests pass those as inputs. "
             "A name imported from a first-party module takes that module's binding "
             "(`from _restore_drill import K3S`), and an imported module's `m.__file__` is "
@@ -135,9 +135,9 @@ ROWS = (
         files=pytest_only_modules,
         offence=lambda s: inline_inventory_paths(s.text, REPO / s.rel, _SIBLINGS),
         red=(
-            Subject("a.py", 'REPO / "inventory/group_vars/all.yml"\n'),
-            Subject("b.py", 'INVENTORY / "group_vars" / "all.yml"\n'),
-            Subject("c.py", 'Path(REPO) / "inventory/host_vars" / name\n'),
+            Subject("a.py", 'REPO / "estate/vars.yml"\n'),
+            Subject("b.py", 'REPO / "k8s" / "vars.yml"\n'),
+            Subject("c.py", 'Path(REPO) / "hosts/vars.yml"\n'),
             Subject(
                 "d.py", '_REPO / "hosts/components" / "k3s-server/defaults/main.yml"\n'
             ),
@@ -145,9 +145,6 @@ ROWS = (
                 "e.py",
                 'REPO / "hosts" / "components" / "k3s-server" / "defaults" / "main.yml"\n',
             ),
-            # A local INVENTORY shadowing the repo_paths one, and a chain built from it.
-            Subject("f.py", 'INVENTORY = REPO / "inventory"\n'),
-            Subject("g.py", 'INVENTORY / "group_vars" / "all.yml"\n'),
             # The k3s component directories and files/, however the chain is rooted.
             Subject("h.py", 'REPO / "hosts" / "components" / "k3s-host-checks"\n'),
             Subject(
@@ -170,7 +167,7 @@ ROWS = (
             Subject(
                 "k8s/roles/x/tests/test_y.py",
                 "ROLE = Path(__file__).resolve().parents[1]\n"
-                'ROLE.parents[2] / "inventory" / "host_vars" / "daniel-box.yml"\n',
+                'ROLE.parents[2] / "estate" / "vars.yml"\n',
             ),
             # A root bound in a sibling module, which owns nothing until the import resolves.
             Subject(
@@ -188,10 +185,11 @@ ROWS = (
         ),
         green=(
             Subject(
-                "a.py", "from lib.repo_paths import ALL_VARS\nALL_VARS.read_text()\n"
+                "a.py",
+                "from lib.repo_paths import ESTATE_VARS\nESTATE_VARS.read_text()\n",
             ),
-            Subject("b.py", 'classify(["inventory/group_vars/all.yml"])\n'),
-            Subject("c.py", 'tmp_path / "inventory" / "group_vars" / "all.yml"\n'),
+            Subject("b.py", 'classify(["estate/vars.yml"])\n'),
+            Subject("c.py", 'tmp_path / "estate" / "vars.yml"\n'),
             Subject("d.py", 'REPO / "k8s" / "templates"\n'),
             Subject("e.py", 'K3S_SERVER / "templates" / "config.yaml.j2"\n'),
             # A local alias of a constant spells nothing past it.

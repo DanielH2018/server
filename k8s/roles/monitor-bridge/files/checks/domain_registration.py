@@ -49,7 +49,7 @@ def days_remaining(probe: RegistrationCache, now: float) -> float | None:
     return (probe["expiry"] - now) / DAY_S
 
 
-def domain_registration(
+def check_domain_registration(
     cfg: Config,
     src: Sources,
     now: float | None = None,
@@ -84,7 +84,3 @@ def domain_registration(
         days_remaining(probe, now),
         (now - probe["ts"]) / 3600,
     )
-
-
-def check_domain_registration(cfg: Config, src: Sources) -> tuple[bool, str]:
-    return domain_registration(cfg, src)

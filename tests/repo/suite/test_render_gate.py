@@ -81,7 +81,7 @@ def test_a_template_path_imported_from_a_sibling_module_is_flagged():
     assert (
         template_source_reads(
             "from _fence_probe import HOST_VARS\nHOST_VARS.read_text()\n",
-            {"_fence_probe": 'HOST_VARS = INVENTORY / "host_vars"\n'},
+            {"_fence_probe": 'HOST_VARS = REPO / "hosts"\n'},
         )
         == []
     )
@@ -168,7 +168,7 @@ def test_a_render_and_a_fixture_are_not_flagged():
     # An inventory read is not a template read.
     assert (
         template_source_reads(
-            'HOST_VARS = INVENTORY / "host_vars"\n'
+            'HOST_VARS = REPO / "hosts"\n'
             'for f in HOST_VARS.glob("*.yml"):\n    f.read_text()\n'
         )
         == []

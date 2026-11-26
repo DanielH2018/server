@@ -1,10 +1,9 @@
 """Backblaze B2 checks for monitor-bridge — reachability (the B2_DEPENDENT gate) and storage usage.
 
 Reads config as `cfg.X` and queries B2 through the `src` argument (`bridge.sources.Sources`),
-which a test replaces with a fake; `b2_reachable` and `b2_authorize` are patched on THIS module, where
-`check_b2_reachable` reads them. The probe caches are `src.state.b2_probe` / `src.state.b2_storage`
-(`bridge.streaks.State`), so every `Sources` starts with its own. Rule and enforcement:
-bridge/config.py's header.
+which a test replaces with a fake, so no test patches this module. The probe caches are
+`src.state.b2_probe` / `src.state.b2_storage` (`bridge.streaks.State`), so every `Sources`
+starts with its own. Rule and enforcement: bridge/config.py's header.
 """
 
 import base64
@@ -33,10 +32,10 @@ def b2_authorize_data(cfg: Config, src: Sources) -> JsonObject:
     """The parsed b2_authorize_account response. Raises on any transport/HTTP failure.
 
     The bridge's only authorize call, a Class C transaction: `b2_authorize` (the gate) and
-    `b2_storage_usage` both reach B2 through it.
+    `check_b2_storage` both reach B2 through it.
 
     DECIDED: the bridge keeps this client rather than using scripts/lib/b2.py's `B2Session`
-    `b2_reachable` picks its cache TTL from the exception type: `Sources.get_json`
+    `check_b2_reachable` picks its cache TTL from the exception type: `Sources.get_json`
     (over `bridge.net._get_json`) re-raises an HTTPError untouched (B2 answered, so the call
     was billed) and wraps a transport failure as RuntimeError (nothing billed).
     `lib.b2.http_json` folds both into one
@@ -73,7 +72,7 @@ def b2_storage_api(auth: dict) -> tuple[str | None, str | None, str | None]:
     return storage.get("apiUrl"), auth.get("authorizationToken"), bucket_id
 
 
-def b2_storage_usage(
+def check_b2_storage(
     cfg: Config, src: Sources, now: float | None = None
 ) -> tuple[bool, str]:
     """Throttled B2 storage-headroom probe. (ok, msg).
@@ -155,10 +154,6 @@ def b2_list_versions(
     return pages, True
 
 
-def check_b2_storage(cfg: Config, src: Sources) -> tuple[bool, str]:
-    return b2_storage_usage(cfg, src)
-
-
 def b2_authorize(cfg: Config, src: Sources) -> tuple[bool, str]:
     """Authenticate against B2, then spend one Class B call. (ok, msg).
 
@@ -209,7 +204,7 @@ def b2_authorize(cfg: Config, src: Sources) -> tuple[bool, str]:
     )
 
 
-def b2_reachable(
+def check_b2_reachable(
     cfg: Config, src: Sources, now: float | None = None
 ) -> tuple[bool, str]:
     """Throttled B2 reachability probe — the gate for the B2_DEPENDENT checks. (ok, msg).
@@ -260,10 +255,6 @@ def b2_reachable(
     src.state.b2_probe["msg"] = msg
     src.state.b2_probe["ttl"] = ttl
     return ok, msg
-
-
-def check_b2_reachable(cfg: Config, src: Sources) -> tuple[bool, str]:
-    return b2_reachable(cfg, src)
 
 
 def check_b2_object_lock(

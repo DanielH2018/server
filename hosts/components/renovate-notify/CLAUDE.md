@@ -129,4 +129,4 @@ An empty `last_notified` means nothing needs a human — not that the notifier i
   RenovateNotifyNotReporting reads, and a page from homelab-alert@ on a crash.
 - **Next-run review:** `journalctl -u homelab-renovate-notify` before you change a threshold.
 
-ENFORCED: this component's tests/ and hosts/lib/tests/test_h737_box_components.py.
+ENFORCED: this component's tests/ and hosts/lib/tests/host_baselines/test_h737_box_components.py.

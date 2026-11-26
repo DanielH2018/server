@@ -21,7 +21,7 @@ def render_daniel_box(tmp_path: Path, *components: str) -> host_mode.Package:
     (hosts / "daniel-box").mkdir(parents=True)
     (hosts / "components").symlink_to(REPO / "hosts" / "components")
     (hosts / "lib").symlink_to(REPO / "hosts" / "lib")
-    for name in ("k8s", "inventory", "secrets"):
+    for name in ("k8s", "estate", "secrets"):
         (tmp_path / name).symlink_to(REPO / name)
     names = ", ".join((*BASE_COMPONENTS, *components))
     (hosts / "daniel-box" / "package.yml").write_text(

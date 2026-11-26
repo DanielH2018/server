@@ -29,7 +29,7 @@ on:
       - "k8s/roles/crowdsec/**"
       - "estate/vars.yml"
       - "k8s/vars.yml"
-      - "hosts/lib/tests/test_pi_compose_network_measurement.py"
+      - "hosts/lib/tests/pi_compose/test_pi_compose_network_measurement.py"
       - "pyproject.toml"
       - "uv.lock"
       # `$/` pins the setup action to this pull request's commit.
@@ -119,5 +119,5 @@ jobs:
       - name: Run the image tests
         run: >-
           uv run python -m pytest --color yes -n 0 -s -m image tests/longhorn/
-          hosts/lib/tests/test_pi_compose_network_measurement.py
+          hosts/lib/tests/pi_compose/test_pi_compose_network_measurement.py
           k8s/roles/crowdsec/tests/test_jobs_image.py

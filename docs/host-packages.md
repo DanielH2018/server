@@ -142,7 +142,7 @@ design is [the H4 plan](archive/host/h4-secrets-unit.md), *The restart contract*
   host that runs the package before its release upgrade still removes the leftover after it.
   A failed `dpkg-query` keeps the entry and fails the run, like a failed `dpkg -S`.
   `ownership()` in `hosts/lib/homelab-reconcile` decides it, and
-  `hosts/lib/tests/test_homelab_reconcile.py::test_a_live_conffile_waits_unretired_and_goes_once_an_upgrade_makes_it_obsolete`
+  `hosts/lib/tests/reconcile/test_homelab_reconcile.py::test_a_live_conffile_waits_unretired_and_goes_once_an_upgrade_makes_it_obsolete`
   holds it.
 - **A toggle-gated legacy entry.** A `legacy:` entry may carry `when:`, and ships only while it
   holds. The claude-code component uses it to remove the textfile metrics a disarmed timer
@@ -287,7 +287,7 @@ before an enable of UFW applies it.
   `net-define` collide with the live object. Both fail the render.
 
 The line arm's two owning-package upgrade cases run on both sides. The tests in
-`hosts/lib/tests/test_reconcile_lines_arm.py` cover the arm's side with stub `dpkg`. The
+`hosts/lib/tests/reconcile/test_reconcile_lines_arm.py` cover the arm's side with stub `dpkg`. The
 `host_packages` container job covers the `dpkg` side (`scripts/validate/validate_lib/conffile_case.py`).
 It installs a fixture package that owns a conffile, then a homelab fixture whose `lines:` edit lands
 in it, and upgrades the owner under `--force-confold`: once with the conffile unchanged and once
@@ -298,7 +298,7 @@ reconcile.
 ### Getting a host out of one of these holds
 
 A fault in these arms holds the host like any failed reconcile. The updater stops installing
-until a version reconciles. `hosts/lib/tests/test_reconcile_hold_way_out.py` drives the real
+until a version reconciles. `hosts/lib/tests/reconcile/test_reconcile_hold_way_out.py` drives the real
 updater against the real reconcile through a uid mismatch. It proves that `--clear-hold` alone
 keeps the hold while the fault stands, and that installing a version which declares the live uid
 clears it. The commands are the ones in *Clearing a host's hold* (**operator-only**).
@@ -1039,7 +1039,7 @@ arm64 only. The `arm64` build ships only the tools daniel-pi's packages name. To
    canary: a package that breaks daniel-box can stop the publish of its own fix
    (`docs/archive/host/h3-pi-pilot.md`, *Staged rollout (C5)*).
 
-`hosts/lib/tests/test_host_census.py` fails when a directory under `hosts/` is missing from `NAMED`,
+`hosts/lib/tests/host_lib/test_host_census.py` fails when a directory under `hosts/` is missing from `NAMED`,
 from both `CANARY_ORDER` and `NEVER_CANARY`, or from `HOSTS`, or has no creation rule of its own. It names the set. The `host_packages`
 job builds a fixture host from step 1's file list, so the YAML block above stays one that renders.
 
@@ -1259,7 +1259,7 @@ Every `k3s` subcommand needs root.
     Do not edit `/etc/sudoers.d/10-timestamp` on the host. The `host-hardening` package owns
     it, so the verify step's `dpkg --verify` reports the edit and the next update restores the
     file. A setting either implementation's `visudo` refuses fails
-    `hosts/lib/tests/test_pi_host_hardening.py::test_visudo_accepts_the_sudoers_file_and_rejects_a_broken_copy`.
+    `hosts/lib/tests/host_baselines/test_pi_host_hardening.py::test_visudo_accepts_the_sudoers_file_and_rejects_a_broken_copy`.
     Reboot only once the second session's sudo works and the step that puts the sources back
     has run:
 

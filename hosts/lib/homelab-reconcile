@@ -4,7 +4,7 @@
 The design is H3's *The reconcile unit* (docs/archive/host/h3-pi-pilot.md), and the
 step numbers below are that section's. `homelab-reconcile.service` runs this as root, under the
 host's /usr/bin/python3. It uses the standard library only, and
-hosts/lib/tests/test_reconcile_component.py parses it with the 3.12 grammar. The activation step,
+hosts/lib/tests/reconcile/test_reconcile_component.py parses it with the 3.12 grammar. The activation step,
 the four arms and the metrics file live in the reconcile_lib package beside it, which the same
 component ships; the reconcile-size census counts both against one line ceiling.
 
@@ -100,6 +100,7 @@ which its Alloy ships to Loki, because no agent can read that host's journal arc
 HOMELAB_ROOT prefixes every path this reads or writes. Only the tests in hosts/lib/tests/ set it.
 """
 
+import argparse
 import enum
 import fcntl
 import hashlib
@@ -113,7 +114,7 @@ from dataclasses import asdict, dataclass
 from pathlib import Path, PurePosixPath
 
 from reconcile_lib import activate, libvirt, lines, textfile, udev, ufw, users
-from reconcile_lib.common import ERR, ROOT, run, log, systemctl, timed, under_root
+from reconcile_lib.common import ERR, ROOT, log, run, systemctl, timed, under_root
 
 LOCK = ROOT / "var/lib/dpkg/lock-frontend"
 MANIFEST = ROOT / "usr/lib/homelab/manifest.json"
@@ -178,7 +179,7 @@ def read_installed(packages: list[str]) -> dict[str, tuple[str, str]]:
 def load_json(path: Path) -> dict:
     try:
         value = json.loads(path.read_text())
-    except (OSError, ValueError):
+    except OSError, ValueError:
         return {}
     return value if isinstance(value, dict) else {}
 
@@ -589,7 +590,7 @@ def read_pending() -> set[str]:
         queue = json.loads(PENDING.read_text())
     except FileNotFoundError:
         return set()
-    except (OSError, ValueError):
+    except OSError, ValueError:
         queue = None
     if not isinstance(queue, list):
         log(f"{PENDING} is unreadable; reading it as empty", ERR)
@@ -665,7 +666,7 @@ def read_secrets_manifest() -> tuple[list[str], list[SecretOutput]] | None:
             and all(isinstance(key, str) for key in credentials)
             and None not in outputs
         )
-    except (OSError, ValueError, KeyError, TypeError):
+    except OSError, ValueError, KeyError, TypeError:
         valid = False
     if not valid:
         log(f"{SECRETS_JSON} is unusable", ERR)
@@ -948,7 +949,7 @@ def metrics(host: str) -> int:
     state = load_json(APPLIED)
     try:
         activations = parse_manifest(MANIFEST.read_text()).activations
-    except (OSError, ManifestError):
+    except OSError, ManifestError:
         activations = None
     if activations is not None:
         pending = parse_applied(state).pending
@@ -957,11 +958,30 @@ def metrics(host: str) -> int:
     return 0
 
 
-def main() -> int:
-    if sys.argv[1:] == ["--wait-for-apt"]:
+def parse_args(argv: list[str]) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description=__doc__.split("\n\n")[0], allow_abbrev=False
+    )
+    mode = parser.add_mutually_exclusive_group()
+    mode.add_argument(
+        "--metrics",
+        action="store_true",
+        help="rewrite the metrics file from the record; acts on nothing",
+    )
+    mode.add_argument(
+        "--wait-for-apt",
+        action="store_true",
+        help="block until dpkg's frontend lock is free",
+    )
+    return parser.parse_args(argv)
+
+
+def main(argv: list[str]) -> int:
+    args = parse_args(argv)
+    if args.wait_for_apt:
         return wait_for_apt()
     host = run("hostname").stdout.strip()
-    if sys.argv[1:] == ["--metrics"]:
+    if args.metrics:
         return metrics(host)
     packages = ["homelab-updater", f"homelab-{host}"]
     text, prev, installed = read_under_lock(packages)
@@ -1009,4 +1029,4 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    sys.exit(main(sys.argv[1:]))

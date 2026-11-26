@@ -16,7 +16,7 @@ from _test_module_rules import pytest_only_modules
 from lib.repo_paths import REPO
 
 HOST_LIB_MODULES = [
-    "hosts/lib/tests/test_checkout_sync.py",
+    "hosts/lib/tests/host_lib/test_checkout_sync.py",
     "hosts/lib/tests/_bootstrap_host.py",
 ]
 

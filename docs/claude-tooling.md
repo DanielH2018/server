@@ -404,6 +404,13 @@ registration come from `homelab-claude-agent-browser.service` in the `claude-cod
 component (`hosts/components/claude-code/`), behind `claude_code_agent_homelab_ui_enabled`. That registration passes `NODE_BIN`, because the
 wrapper's default is a Node path in the operator's home.
 
+`ui_mcp.sh` runs `playwright-mcp install-browser chromium` before it starts the server, for
+either user. The install uses the playwright-mcp the wrapper is about to launch, so the
+Chromium revision always matches it, and a playwright-mcp update needs no hand install. A launch
+that finds the browser downloads nothing. The first launch after an update downloads about
+150 MB inside Claude Code's MCP startup timeout; if the client gives up, the next launch
+finishes the download. A failed install stops the launch.
+
 `ui_login.py --verify <svc>` proves the cookie reaches the backend without involving the browser,
 and it reads a portal 302 as a failure rather than as a reachable service.
 

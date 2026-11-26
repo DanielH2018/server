@@ -2,7 +2,7 @@
 
 A key could reach a template through a variable whose value names it, and every template that
 transformed the variable would then transform the key. `vars_file_refusals` closes that path:
-no Jinja string in the k8s roles' `defaults/main.yml` or the inventory's vars files may name a
+no Jinja string in the k8s roles' `defaults/main.yml` or the vars files may name a
 secret key, bare or through a `vars` lookup. A template reads a key by its own name, where the
 template clause judges it.
 
@@ -81,13 +81,13 @@ def not_alias_problems(
 
 
 def rule5_var_files() -> list[Path]:
-    """The k8s roles' `defaults/main.yml` and every inventory vars file."""
+    """The k8s roles' `defaults/main.yml` and every vars file."""
     return sorted([*K8S_ROLES.glob("*/defaults/main.yml"), *REPO_INVENTORY.var_files()])
 
 
 def var_tag(path: Path) -> str:
-    """The role a defaults file belongs to, or `inventory`."""
-    return path.parent.parent.name if path.parent.name == "defaults" else "inventory"
+    """The role a defaults file belongs to, or `vars`."""
+    return path.parent.parent.name if path.parent.name == "defaults" else "vars"
 
 
 def _jinja_strings(value) -> Iterable[str]:

@@ -10,6 +10,7 @@ from typing import NoReturn
 from deploy_tools.land_lib import promotion
 from deploy_tools.land_lib.landing import Landing
 from deploy_tools.land_lib.outcome import Cause, Verdict, host_not_waited_note, say
+from lib.path_kinds import moves_the_bundle
 
 
 def derive_from_diff(ln: Landing) -> None:
@@ -80,7 +81,7 @@ def deploy_phase(ln: Landing) -> None:
     waits = (
         bool(ln.flux_tags)
         or ln.needs_diff
-        or promotion.moves_the_bundle(ln.classification.pr_paths)
+        or moves_the_bundle(ln.classification.pr_paths)
     )
     if not waits:
         if ln.host_targets and not ln.plane:

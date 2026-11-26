@@ -84,7 +84,7 @@ from renderer.renderer_lib.ordering import (
     precheck_files,
     verify_files,
 )
-from renderer.renderer_lib.task_inputs import include_vars
+from renderer.renderer_lib.task_inputs import render_defaults
 
 
 # The tags every bundle publishes: the cluster's plumbing, without which nothing else serves.
@@ -118,7 +118,7 @@ def deferring_tags(
     found, problems = set(), []
     for tag in sorted(set(published)):
         try:
-            value = include_vars(roles / tag).get("manifests_deferred_files")
+            value = render_defaults(roles / tag).get("manifests_deferred_files")
         except (OSError, ValueError) as err:
             problems.append(f"could not tell whether {tag} defers files: {err}")
             continue

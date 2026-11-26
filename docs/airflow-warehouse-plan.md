@@ -57,8 +57,8 @@ role as built.
   temperature per host. Done when `land.sh` reads healthy, the backfill fills every day
   Prometheus holds, a cleared day reloads to the same row counts, and the idle footprint is in
   the role's `CLAUDE.md`.
-- **Slice 0b, the scheduler deadman.** A monitor-bridge check on the scheduler's health,
-  and its alert rule, so a dead scheduler pages. Done: the `airflow_scheduler` row reads the
+- **Slice 0b, the scheduler deadman.** A probe of the scheduler's health,
+  and its alert rule, so a dead scheduler pages. Done: a `blackbox-extra` target probes the
   scheduler's own health server, and `AirflowSchedulerDown` pages it.
 - **Slice 1, long-term metrics (idea 1).** Volume usage and growth per claim, node load and
   memory, GPU busy and UPS battery, as `prom_series_rollup` into `prom.series_daily`, plus a

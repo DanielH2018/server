@@ -5,8 +5,8 @@ Run: uv run pytest scripts/deploy_tools/tests/land_merge/test_land_rejoin_line.p
 
 import pytest
 
-from deploy_tools.land_lib import batch, turn
-from deploy_tools.land_lib.outcome import Outcome
+from deploy_tools.land_lib import batch, stale_base, turn
+from deploy_tools.land_lib.outcome import Outcome, Verdict
 from _land_turn_fakes import (
     A_RUN,
     HEAD,
@@ -209,6 +209,23 @@ def test_a_refused_update_after_the_draft_conversion_marks_the_pr_ready_again(
     assert call_order(calls)[:3] == ["pr ready", "update", "pr ready"]
     assert merged_sha(calls) == HEAD
     assert "(boom); marking it ready again" in capsys.readouterr().out
+
+
+def test_an_update_refused_as_a_conflict_marks_the_pr_ready_and_ends_merge_conflict(
+    landing,
+):
+    ln, calls = turn_landing(
+        landing,
+        start=READY,
+        head_runs=_ran_then_skipped,
+        compare=MASTER_MOVED,
+        gh_merge_rc=[0, 1, 0],
+        gh_stderr=f"gh: {stale_base.CONFLICT_REFUSAL} (HTTP 422)",
+    )
+    with pytest.raises(Outcome) as ended:
+        land_in_turn(ln)
+    assert ended.value.verdict == Verdict.MERGE_CONFLICT
+    assert call_order(calls) == ["pr ready", "update", "pr ready"]
 
 
 def test_a_rejoined_pr_a_rule_refuses_in_the_turn_is_marked_ready_again(landing):

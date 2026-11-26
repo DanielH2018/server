@@ -14,11 +14,8 @@ name: image-smoke
 on:
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
-  # Inert: merge queues are not offered on this user-owned repository (see the note in
-  # ci.yml). Kept because `pull + boot changed images` is a required status context, and if
-  # a queue ever existed every required context would have to report on its entries. On this
-  # event `github.base_ref` is empty, so the collect step finds nothing to diff and the job is
-  # a fast green; the images were already booted on the PR run.
+  # Inert: merge queues are not offered on this repository, and `github.base_ref` is empty on this
+  # event so the job is a fast green.
   merge_group:
   workflow_dispatch:
     inputs:
@@ -55,10 +52,8 @@ jobs:
         with:
           uv: "false"
 
-      # No setup-uv step: scripts/dev/smoke_extract.py imports only the stdlib, and `uv run` would
-      # resolve the whole `dev` group (uncached, since this workflow does not set enable-cache)
-      # to run it. If the script gains a third-party import, add `astral-sh/setup-uv` WITH
-      # enable-cache and invoke it through `uv run`.
+      # No setup-uv step: smoke_extract.py imports only the stdlib, and `uv run` would resolve the
+      # whole `dev` group uncached.
       - name: Collect changed image refs
         id: images
         env:
@@ -107,7 +102,7 @@ jobs:
           # not --find-renames pairs the move.
           diff="$(git diff --find-renames "origin/$BASE_REF"...HEAD -- \
             'k8s/roles/*/defaults/main.yml' \
-            'inventory/group_vars/all.yml' 'estate/vars.yml' 'k8s/vars.yml')"
+            'estate/vars.yml' 'k8s/vars.yml')"
           images="$(printf '%s' "$diff" | python scripts/dev/smoke_extract.py)"
           {
             echo "list<<EOF"

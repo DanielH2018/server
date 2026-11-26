@@ -169,7 +169,7 @@ def entity_id_valid(entity_id: str) -> bool:
 
 
 # File-read jail
-# The container bind-mounts the checkout's k8s/, inventory/ and tests/ read-only;
+# The container bind-mounts the checkout's k8s/, estate/ and tests/ read-only;
 # these guards keep a read_file tool inside them. secrets/ and the age private key
 # (~/.config/sops) live outside the mounts, so the worst a jail bug could leak is
 # repo content, and secret file names are additionally denied below.

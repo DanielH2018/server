@@ -22,6 +22,7 @@
 
 # Tooling and platforms
 [Aa]nsible
+[Tt]estmon
 [Aa]uthelia
 [Cc]loudflare
 CrowdSec
@@ -32,6 +33,7 @@ Grafana
 Loki
 MkDocs
 Portainer
+Pylance
 Prometheus
 Renovate
 prek

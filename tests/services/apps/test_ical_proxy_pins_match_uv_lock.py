@@ -1,8 +1,8 @@
 """Guard: ical-proxy's Dockerfile pip pins must match uv.lock's dev-group versions.
 
 The ical-proxy test suite (`k8s/roles/ical-proxy/tests/test_app.py`) imports
-`ical_proxy.py`, which imports flask — so it validates the app against whatever flask/requests uv.lock
-pins for the `dev` group. The runtime image installs them via `pip install flask==X requests==Y`
+`ical_proxy.py`, which imports flask, requests and icalendar — so it validates the app against whatever
+versions uv.lock pins for the `dev` group. The runtime image installs them via `pip install flask==X ...`
 in `templates/Dockerfile.j2`. If those versions drift, the test certifies a flask the container
 never runs. Read off the RENDERED Dockerfile — the text k8s/image-builder stages for the
 build — so a pin moved into a role default is still read. This fails the instant they diverge, forcing the Dockerfile pin
@@ -16,14 +16,14 @@ from _k8s_render import rendered_build_text
 
 UV_LOCK = REPO / "uv.lock"
 
-_TRACKED = ("flask", "requests")
+_TRACKED = ("flask", "requests", "icalendar")
 
 
 def _dockerfile_pins():
     text = rendered_build_text("ical-proxy")
     return {
         m.group(1): m.group(2)
-        for m in re.finditer(r"\b(flask|requests)==([^\s\"']+)", text)
+        for m in re.finditer(rf"\b({'|'.join(_TRACKED)})==([^\s\"']+)", text)
     }
 
 

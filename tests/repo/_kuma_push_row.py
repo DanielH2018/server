@@ -8,7 +8,7 @@ from lib.repo_paths import REPO
 
 _KUMA_PUSH = re.compile(r"kuma[_-]push|KUMA_PUSH|uptime-kuma-alive")
 _TEST_PATH = re.compile(r"(^|/)tests/|(^|/)test_[^/]*\.py$")
-_ROOTS = ("hosts/*", "k8s/*", "scripts/*", "inventory/*", ".claude/*", ".github/*")
+_ROOTS = ("hosts/*", "k8s/*", "scripts/*", "estate/*", ".claude/*", ".github/*")
 AFFECTED_TABLE = TABLE_PATH.relative_to(REPO).as_posix()
 
 

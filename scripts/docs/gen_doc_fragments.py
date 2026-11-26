@@ -69,6 +69,7 @@ from docs.fragment_readers import (
 from docs.fragment_renderers import (
     render_autodeploy_coverage,
     render_crowdsec_agent_liveness,
+    DeadmanInputs,
     render_deadman_cadences,
     render_etcd_offbox_retention,
     render_fail2ban_jails,
@@ -188,26 +189,27 @@ def _traefik_ports() -> tuple[str, list[str]]:
     ), ["k8s/roles/traefik/defaults/main.yml"]
 
 
-def deadman_inputs(
-    estate: Estate | None = None,
-) -> tuple[dict, dict, dict, dict, dict, list[str], list[str], dict, list[str], str]:
+def deadman_inputs(estate: Estate | None = None) -> DeadmanInputs:
     """The arguments `deadman_crons` takes, read from the tree.
 
     Shared with the monitor-bridge expectations test, so the fragment and the test cannot read
     different sources.
     """
     estate = estate or Estate()
-    return (
-        estate.role_vars(K3S_HOST_CHECKS),
-        estate.role_vars(PI_PEER_ROLE),
-        estate.role_vars(REGISTRY_ROLE),
-        estate.group_vars,
-        {**estate.role_vars(PI_DOCKER), **estate.role_vars(WORKTREE_SWEEP)},
-        estate.hosts(),
-        hosts_listing_component("pi-docker"),
-        estate.role_vars(OBSERVABILITY_ROLE),
-        hosts_listing_component("worktree-sweep"),
-        warehouse_freshness_schedule(),
+    return DeadmanInputs(
+        k3s=estate.role_vars(K3S_HOST_CHECKS),
+        pi_peer=estate.role_vars(PI_PEER_ROLE),
+        registry=estate.role_vars(REGISTRY_ROLE),
+        group_vars=estate.group_vars,
+        host_timers={
+            **estate.role_vars(PI_DOCKER),
+            **estate.role_vars(WORKTREE_SWEEP),
+        },
+        hosts=estate.hosts(),
+        docker_hosts=hosts_listing_component("pi-docker"),
+        observability=estate.role_vars(OBSERVABILITY_ROLE),
+        sweep_hosts=hosts_listing_component("worktree-sweep"),
+        warehouse_freshness=warehouse_freshness_schedule(),
     )
 
 
@@ -226,7 +228,7 @@ def warehouse_freshness_schedule(path: _Path = WAREHOUSE_FRESHNESS) -> str:
 
 
 def _deadman() -> tuple[str, list[str]]:
-    return render_deadman_cadences(*deadman_inputs()), [
+    return render_deadman_cadences(deadman_inputs()), [
         "hosts/components/k3s-host-checks/defaults/main.yml",
         "k8s/roles/pi-peer-backup/defaults/main.yml",
         "k8s/roles/registry/defaults/main.yml",

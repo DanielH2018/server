@@ -82,8 +82,8 @@ SERVICES = Path("k8s/services.yml")
 # Where a base from before the move to `k8s/` holds the list; goes once no open PR has one.
 PRE_MOVE_SERVICES = Path("cluster/services.yml")
 ROLES_DIR = Path("k8s/roles")
-# The namespace keys, in a tree after ADR-0042's split and in one from before it.
-CLUSTER_VARS_FILES = (Path("k8s/vars.yml"), Path("inventory/group_vars/all.yml"))
+# The namespace keys.
+CLUSTER_VARS = Path("k8s/vars.yml")
 
 
 class RenderFailed(RuntimeError):
@@ -252,7 +252,7 @@ def snapshot(
 
     The render runs `tree`'s `homelab_render.py` under `python`, so each side of a PR renders
     with its own code. The dependency map is this checkout's `build_k8s_dep_map` over `tree`'s
-    inventory and templates.
+    vars files and templates.
 
     Every tag is passed with `--role`, so the render writes the publish bundle and its
     `digests.json`. The shared kinds' directories are left out of what
@@ -324,9 +324,7 @@ def snapshot(
         for tag in names
         if tag in dirs
     }
-    group = yaml_fast.safe_load(
-        next(tree / p for p in CLUSTER_VARS_FILES if (tree / p).exists()).read_text()
-    )
+    group = yaml_fast.safe_load((tree / CLUSTER_VARS).read_text())
     objects, unpruned = _objects(dirs)
     return Snapshot(
         renders=renders,
@@ -346,7 +344,7 @@ def snapshot(
 
 
 # The top-level trees a render reads. `extract` skips one a commit does not hold.
-RENDER_TREES = ("k8s", "inventory", "estate", "secrets", "scripts", "hosts", "cluster")
+RENDER_TREES = ("k8s", "estate", "secrets", "scripts", "hosts", "cluster")
 
 
 def render_side(sha: str, dest: Path, repo: Path = REPO) -> Snapshot:

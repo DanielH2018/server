@@ -110,7 +110,7 @@ def test_reconcile_never_restarts_a_running_collection(package):
 def test_the_toggle_drops_the_files_the_link_and_the_policy(tmp_path):
     root = tmp_path / "hosts"
     (root / "daniel-box").mkdir(parents=True)
-    for name in ("k8s", "inventory", "secrets"):
+    for name in ("k8s", "estate", "secrets"):
         (tmp_path / name).symlink_to(REPO / name)
     (root / "components").mkdir()
     (root / "components" / "registry-gc").symlink_to(COMPONENT)

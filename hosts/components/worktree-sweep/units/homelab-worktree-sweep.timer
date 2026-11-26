@@ -1,7 +1,7 @@
 # Shipped by the host package's worktree-sweep component with its enable link. Sunday 04:20, the cron's slot. The values
 # equal worktree_sweep_cron_* in the component defaults, which the deadman
 # cadences fragment and monitor-bridge's Healthchecks.io expectation still read
-# (hosts/lib/tests/test_worktree_sweep_component.py holds the two equal).
+# (hosts/lib/tests/components/test_worktree_sweep_component.py holds the two equal).
 [Unit]
 Description=Run the weekly worktree sweep on Sunday at 04:20
 

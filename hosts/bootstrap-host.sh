@@ -51,7 +51,7 @@
 # the repository's address, not a name, because the LAN's DNS runs in the cluster; the archive
 # key's fingerprint; and the pins of the tools it fetches. tests/repo/
 # test_lan_facts_have_one_source.py holds the URL equal to daniel-box's server_ip and the
-# fingerprint equal to hosts/keys/'s keyring. hosts/lib/tests/test_bootstrap_host_pins.py holds
+# fingerprint equal to hosts/keys/'s keyring. hosts/lib/tests/bootstrap/test_bootstrap_host_pins.py holds
 # the nfpm, uv and k3s pins equal to their sources.
 #
 # HOMELAB_ROOT prefixes every path the script writes. Only the tests in hosts/lib/tests/ set it.
@@ -73,7 +73,7 @@ AGE_KEY=/etc/homelab/age.key
 HOSTS="daniel-box daniel-server daniel-pi"
 GITHUB_REPO=DanielH2018/server
 # sys_user in estate/vars.yml, and pi_swapfile_path and pi_swapfile_size in the Pi's host_vars
-# (hosts/lib/tests/test_bootstrap_host_pins.py).
+# (hosts/lib/tests/bootstrap/test_bootstrap_host_pins.py).
 SYS_USER=ubuntu
 PI_SWAPFILE=/swapfile
 PI_SWAPFILE_SIZE=1G
@@ -585,9 +585,8 @@ else
     # git archive reads the clone and writes nothing into it.
     sha=$(git -C "$clone" rev-parse HEAD) || die "cannot read HEAD of $clone"
     git -C "$clone" archive HEAD | tar -x -C "$work/tree" || die "cannot archive HEAD of $clone"
-    pin_file=$work/tree/estate/vars.yml
-    [ -f "$pin_file" ] || pin_file=$work/tree/inventory/group_vars/all.yml
-    python_version=$(sed -n 's/^host_python_version: "\(.*\)"$/\1/p' "$pin_file")
+    python_version=$(sed -n 's/^host_python_version: "\(.*\)"$/\1/p' \
+        "$work/tree/estate/vars.yml")
     [ -n "$python_version" ] || die "cannot read host_python_version from the clone"
     phase "the git archive of the clone"
 

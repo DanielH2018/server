@@ -120,7 +120,7 @@ def healthchecks_verdict(
     )
 
 
-def healthchecks_drift(
+def check_healthchecks_drift(
     cfg: Config,
     src: Sources,
     now: float | None = None,
@@ -161,7 +161,3 @@ def healthchecks_drift(
     probe["ts"] = now
     probe["ok"], probe["msg"] = result
     return result
-
-
-def check_healthchecks_drift(cfg: Config, src: Sources) -> tuple[bool, str]:
-    return healthchecks_drift(cfg, src)

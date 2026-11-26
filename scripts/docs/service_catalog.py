@@ -16,7 +16,7 @@ for exactly which facts that is, and why.
 
 WHY STATIC PARSING ONLY. This must never shell out to ansible or kubectl. A fresh
 worktree has no Ansible collections installed (fresh-worktree-has-no-ansible-collections
-in project memory), and inventory/*.yml contains SOPS-lookup and other Jinja
+in project memory), and the vars files contain SOPS-lookup and other Jinja
 expressions that do not render outside a real deploy. Every value below is read with
 `yaml.safe_load` and plain regex over template text — never executed.
 

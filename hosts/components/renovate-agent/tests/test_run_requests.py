@@ -182,7 +182,7 @@ def test_a_leftover_requests_directory_is_set_aside_unread(tmp_path):
     "verdict",
     [
         "VERDICT: nothing-to-deploy (PR #71 touched no service)",
-        "REFUSED: PR #71 changes inventory/",
+        "REFUSED: PR #71 changes estate/",
     ],
 )
 def test_the_next_nomination_lands_after_one_that_ends_well(tmp_path, verdict):

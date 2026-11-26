@@ -34,7 +34,7 @@
 # (operator-only); the revert restores that task file's import.
 #
 # ENFORCED: hosts/tests/k3s/test_k3s_server_component.py and
-# hosts/lib/tests/test_box_k3s_host_half.py.
+# hosts/lib/tests/host_baselines/test_box_k3s_host_half.py.
 depends:
   - open-iscsi
   - nfs-common

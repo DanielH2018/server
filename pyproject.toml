@@ -65,6 +65,13 @@ dev = [                              # `dev` is uv's default group for `uv run`/
   "lxml-stubs",                     # lxml.etree is a C extension; ty resolves it only from these
   "loguru",                         # karakeep's test_time_tagger_logging.py runs the tagger's real handler setup
   "hypothesis>=6.170",              # property tests (test_fake_remux_ledger.py)
+  "icalendar",                      # ical-proxy ical_proxy.py parses and writes every feed with it (test_app.py)
+  "import-linter>=2.17",            # [tool.importlinter] contracts (test_scripts_import_direction.py)
+]
+# Local test reruns only, absent from `default-groups`, so CI never installs it. docs/ci-throughput.md
+# says how to run it. The cap keeps testmon below 2.4.0, which has not been measured here.
+local = [
+  "pytest-testmon>=2.3,<2.4",
 ]
 # Tools only prek hooks and hand-run commands call, never a test. The CI jobs that run no lint
 # hook set UV_NO_GROUP=lint, so a lint tool's install (actionlint-py downloads its binary from
@@ -149,6 +156,60 @@ pythonpath = [
   # the test's directory.
   "scripts",
 ]
+
+# Import contracts over scripts/, run by scripts/tests/test_scripts_import_direction.py. A module
+# split out of a facade never imports it back: every facade also runs as `__main__`, so a leaf
+# importing it gets a second copy under a second name.
+[tool.importlinter]
+root_packages = ["backup", "deploy_tools", "dev", "diagnostics", "docs", "freshrss", "grafana", "home_assistant", "infra_map", "lib", "renderer", "secrets_mgmt", "validate", "z2m"]
+
+[[tool.importlinter.contracts]]
+name = "secret_rotation's leaves never import it"
+type = "forbidden"
+source_modules = ["secrets_mgmt.consumers", "secrets_mgmt.git_dates", "secrets_mgmt.rotation_tools", "secrets_mgmt.secrets_lib.secret_registry"]
+forbidden_modules = ["secrets_mgmt.secret_rotation"]
+
+[[tool.importlinter.contracts]]
+name = "script_classify never imports the scripts page generator"  # split into lib/ so the `--help` test skips the generator
+type = "forbidden"
+source_modules = ["lib.script_classify"]
+forbidden_modules = ["docs.reference.scripts"]
+
+[[tool.importlinter.contracts]]
+name = "the render rule modules never import their render family"
+type = "forbidden"
+source_modules = ["lib.k8s_yaml", "validate.validate_lib.k8s_net_rules", "validate.validate_lib.k8s_schema", "validate.validate_lib.shell_lint"]
+forbidden_modules = ["validate.render_lib.k8s", "validate.render_lib.shell"]
+
+[[tool.importlinter.contracts]]
+name = "catalog_lib never imports service_catalog, and catalog_model imports no sibling"
+type = "layers"
+layers = ["docs.service_catalog", "docs.catalog_lib.catalog_facts | docs.catalog_lib.catalog_render | docs.catalog_lib.catalog_backup", "docs.catalog_lib.catalog_model"]
+
+[[tool.importlinter.contracts]]
+name = "the fragment readers and renderers never import gen_doc_fragments"
+type = "forbidden"
+source_modules = ["docs.fragment_readers", "docs.fragment_renderers"]
+forbidden_modules = ["docs.gen_doc_fragments"]
+
+[[tool.importlinter.contracts]]
+name = "findings_lib never imports findings"
+type = "forbidden"
+source_modules = ["dev.findings_lib"]
+forbidden_modules = ["dev.findings"]
+
+[[tool.importlinter.contracts]]
+name = "probe_lib's split-out leaves never import the module they left"
+type = "forbidden"
+source_modules = ["diagnostics.probe_lib.b2_spend", "diagnostics.probe_lib.longhorn_budget", "diagnostics.probe_lib.longhorn_cluster", "diagnostics.probe_lib.health_cronjob", "diagnostics.probe_lib.health_docker", "diagnostics.probe_lib.health_rollout"]
+forbidden_modules = ["diagnostics.probe_lib.b2_ledger", "diagnostics.probe_lib.longhorn", "diagnostics.probe_lib.health"]
+
+[[tool.importlinter.contracts]]
+name = "outside code imports dev.fanout_lib.review only through its api"
+type = "protected"
+protected_modules = ["dev.fanout_lib.review"]
+allowed_importers = ["**.tests.**"]
+ignore_imports = ["** -> dev.fanout_lib.review.api"]
 
 [tool.ruff]
 # One minor behind `requires-python`: ruff supports py315 only in preview and warns on every run.
@@ -507,3 +568,72 @@ include = [
 ]
 [tool.ty.overrides.rules]
 import-not-found = "ignore"
+
+# Pylance in VS Code reads this table; no gate runs pyright. typeCheckingMode stays unset so the
+# editor's own setting applies.
+[tool.pyright]
+pythonVersion = "3.15"
+venvPath = "."
+venv = ".venv"
+include = ["scripts", ".claude", "k8s", "tests", "evals", "hosts"]
+# An explicit exclude replaces pyright's defaults, whose `**/.*` would drop `.claude/hooks`.
+# `.claude/worktrees` holds a full copy of every module per live session.
+exclude = [".claude/worktrees", "**/__pycache__", "**/node_modules", ".venv", ".git", "site"]
+# Equal to [tool.ty.environment] extra-paths, held by test_ty_config_covers_the_repo.py.
+extraPaths = [
+  "tests",
+  "hosts/components/worktree-holders/files",
+  "hosts/components/gh-quota/files",
+  "hosts/components/aide-scan/files",
+  "hosts/lib",
+  "hosts/components/deploy-ui/files",
+  "k8s/roles/monitor-bridge/files",
+  "k8s/roles/game-stats/files",
+  "k8s/roles/gpu-exporter/files",
+  "k8s/roles/karakeep/files",
+  "k8s/roles/longhorn-reconcile/files",
+  "scripts",
+  ".claude/hooks",
+  "k8s/roles/autofix-bridge/files",
+  "k8s/roles/configarr/files",
+  "k8s/roles/janitorr/files",
+  "k8s/roles/qbittorrent/files",
+  "k8s/roles/pihole/files",
+  "k8s/roles/arr-notification/files",
+  "k8s/roles/lidarr/files",
+  "scripts/renderer/job_files",
+  "hosts/components/fake-remux/files",
+  "k8s/roles/ical-proxy/files",
+  "k8s/roles/homelab-mcp/files",
+  "k8s/roles/airflow/files",
+  "k8s/roles/crowdsec/files",
+  "k8s/roles/traefik/files",
+  "k8s/roles/artifacts/files",
+  "hosts/components/k3s-host-checks/files",
+  "hosts/components/hypervisor/files",
+  "hosts/components/renovate-notify/files",
+  "hosts/components/renovate-agent/files",
+  "hosts/components/claude-code/files",
+  "k8s/roles/home-assistant/files",
+  "k8s/roles/tdarr/files",
+  "k8s/roles/sonarr/files",
+  "k8s/roles/dri-device-plugin/files",
+  "k8s/roles/n8n/files",
+  "k8s/roles/prowlarr/files",
+  "k8s/roles/headlamp/files",
+  "k8s/roles/observability/files",
+  "k8s/roles/media-volume/files",
+  "k8s/roles/jellyfin/files",
+  "k8s/roles/registry/files",
+  "k8s/roles/netpol-baseline/files",
+  "k8s/roles/system-upgrade/files",
+  "scripts/backup/tests",
+  "scripts/deploy_tools/tests",
+  "scripts/dev/tests",
+  "scripts/diagnostics/tests",
+  "tests/k8s",
+  "tests/repo",
+  "scripts/renderer/tests",
+  "hosts/tests",
+  "scripts/docs/tests",
+]

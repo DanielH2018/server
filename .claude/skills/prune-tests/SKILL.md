@@ -67,7 +67,7 @@ Give each candidate exactly one of these, or drop it from the list.
 Each rule below overrides step 2. Move the candidate off the list and note which rule applied.
 
 - **A red half.** A check ships with an input it must reject, and that test reads as a copy
-  of the accepting one. `hosts/lib/tests/test_reconcile_ufw_arm.py` holds a pair, the second
+  of the accepting one. `hosts/lib/tests/reconcile/test_reconcile_ufw_arm.py` holds a pair, the second
   named `test_red_...`.
 - **A non-vacuity assertion.** An assertion that a census holds named members is the only
   thing that fails when its glob matches nothing. `KNOWN_CONSUMERS` in
@@ -79,7 +79,7 @@ Each rule below overrides step 2. Move the candidate off the list and note which
   a mechanism that runs. `hosts/tests/host_config/test_legacy_cache_directories.py` is one.
 - **A sharded module.** `scripts/renderer/tests/bundle/test_renderer_determinism_0.py` and its
   numbered siblings split one workload across workers.
-- **An interpreter-grammar parse test.** `hosts/lib/tests/test_host_lib.py` holds the shipped
+- **An interpreter-grammar parse test.** `hosts/lib/tests/host_lib/test_host_lib.py` holds the shipped
   scripts to the hosts' own Python.
 - **An environment skip.** A skip on a missing binary, on root or on systemd is deliberate.
 - **An order assertion that encodes safety.**

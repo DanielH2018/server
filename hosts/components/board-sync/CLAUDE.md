@@ -22,6 +22,6 @@
   A `board has no "Status" field` or `has no option` line means the board's schema moved, and
   recurs every hour until the board or board.py changes. Any other reason is gh or GitHub.
 
-ENFORCED: hosts/lib/tests/test_board_sync_component.py, which renders the package and holds the
+ENFORCED: hosts/lib/tests/components/test_board_sync_component.py, which renders the package and holds the
 unit, the timer, its enable link and this contract, and hosts/tests/repo_crons/test_board_sync_paging.py,
 which runs the rendered script through a failure streak.

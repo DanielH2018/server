@@ -57,15 +57,11 @@ from run_requests import REQUESTS_DIR, Outcome, carry_out
 # it, and the first armed tick would be its first execution.
 CONFIG = os.environ.get("RENOVATE_AGENT_CONFIG", "/etc/renovate-agent/config.env")
 USER_AGENT = "renovate-agent"
-# The session's JSON result carries its whole closing summary, so it gets far more room than a
-# request file; the cap only stops a session filling the controller's memory.
 SESSION_OUTPUT_MAX = 1 << 20
 # The census lists every open PR and filters locally, so the cap covers all authors.
 OPEN_PR_LIMIT = 200
 # One JSON line per tick under STATE_DIR, from agent_logic.run_record.
 RUNS_FILE = "runs.jsonl"
-# Each session's transcript, under STATE_DIR, named by the run's Unix time. The newest
-# TRANSCRIPTS_KEPT stay: a month of daily ticks.
 TRANSCRIPTS_DIR = "transcripts"
 TRANSCRIPTS_KEPT = 30
 # The unit the session runs in; polkit lets this process's user start it.
@@ -234,11 +230,10 @@ def main(tools: AgentTools = TOOLS, config_path: str = CONFIG) -> int:
     exchange = cfg["EXCHANGE_DIR"]
     log_path = os.path.join(state_dir, "last_session.json")
     spool = discord_spool(state_dir)
-    # Every tick, before anything can fail or take the quiet skip: a crash report queued during
-    # an outage would otherwise wait for a day that has PRs to digest.
+    # Every tick, before anything can fail or take the quiet skip, so a queued crash report is not
+    # held back.
     tools.flush_discord_spool(spool, webhook, USER_AGENT, log=log)
-    # Before the skip too: a run killed after its session leaves the session's files here, and
-    # a tick with no PRs would otherwise keep them until the next session.
+    # Before the skip too: a killed run leaves session files that a no-PR tick would otherwise keep.
     requests_dir = fresh_dir(exchange, REQUESTS_DIR)
     out = fresh_dir(exchange, OUT_DIR)
 

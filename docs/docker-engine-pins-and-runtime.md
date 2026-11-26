@@ -47,8 +47,8 @@ The package declares no `Depends` on the engine and ships no apt preferences pin
 can never move it. A merged pin PR changes only `/usr/lib/homelab/docker-engine.pins`, and the
 updater then writes `homelab_docker_engine_pending{host="daniel-pi"} 1` beside its own series in
 `homelab_host.prom` until the operator starts the unit. ENFORCED by
-`hosts/lib/tests/test_pi_docker_component.py::test_the_package_cannot_move_the_engine_is_clean`
-and `hosts/lib/tests/test_pi_docker_component.py::test_the_updater_reports_the_value_the_engine_script_prints`.
+`hosts/lib/tests/host_lib/test_pi_docker_component.py::test_the_package_cannot_move_the_engine_is_clean`
+and `hosts/lib/tests/host_lib/test_pi_docker_component.py::test_the_updater_reports_the_value_the_engine_script_prints`.
 
 ## The incident behind the hold
 
@@ -96,7 +96,7 @@ play relied on `ansible.builtin.apt` doing the same match: measured on daniel-pi
 check mode, `containerd.io=2.3.4-*~ubuntu.24.04~noble` built `apt-get --simulate install
 'containerd.io=2.3.4-2~ubuntu.24.04~noble'`, while a spec naming a revision the index lacks
 answered `E: Version '2.3.4-9~ubuntu.24.04~noble' for 'containerd.io' was not found`. ENFORCED by
-`hosts/lib/tests/test_pi_docker_component.py::test_a_fresh_host_installs_the_newest_matching_revision_and_holds_it`.
+`hosts/lib/tests/host_lib/test_pi_docker_component.py::test_a_fresh_host_installs_the_newest_matching_revision_and_holds_it`.
 
 **Cost accepted:** a revision-only repackage does not read as pending, because the installed `-1`
 still matches the glob. A run of the engine unit therefore leaves `-1` in place until an upstream

@@ -67,7 +67,7 @@ def test_yaml_key_is_clean():
 
 
 def test_yaml_dotted_key_is_clean():
-    c = _one("`inventory/host_vars/daniel-box.yml:containers_list.0.name`")
+    c = _one("`hosts/daniel-box/vars.yml:containers_list.0.name`")
     assert c.form == "yaml" and c.selector == "containers_list.0.name"
 
 
