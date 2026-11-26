@@ -19,12 +19,10 @@ headlamp_k8s_gid: 101
 # How long a browser session survives before Headlamp re-reads the ServiceAccount token.
 headlamp_k8s_session_ttl: 86400
 headlamp_k8s_netpol_probe_image: alpine:3.24@sha256:f59abe656b692d901e184be3445e084786602108599d2a51d229c0f5a48c71bf
-# CRD groups the built-in `view` ClusterRole cannot cover. Only Flux's six groups aggregate
-# into `view` (flux-view-flux-system, pinned by tests/k8s/test_aggregated_clusterroles.py),
-# so any other group missing here degrades silently: the UI loads, that one resource list is empty,
-# and it reads as "the cluster has none of those". Mirrors k3s_readonly_crd_api_groups
-# (k8s/roles/cluster-base/defaults) plus the two k3s-internal groups a cluster UI wants to show;
-# that var is a different role's default and is not in scope for the k8s deploy play.
+# Only Flux's six groups aggregate into `view`, so any other group missing here leaves an empty
+# resource list that reads as "none exist".
+# Mirrors k3s_readonly_crd_api_groups plus two k3s-internal groups; that var is another role's
+# default, out of scope for the k8s deploy play.
 headlamp_k8s_crd_api_groups:
   - traefik.io
   - metallb.io
@@ -62,37 +60,22 @@ headlamp_k8s_plugins:
     sha256: 48abf409e6f6e5b7898532d036e38c3d8b4329d646f2b3bf9af10f5f5a2b924f
     asset_prefix: "headlamp-k8s-"
 
-# The Kubernetes Group an OIDC login arrives as, bound in templates/rbac.yaml.j2 alongside the
-# ServiceAccount. TWO pieces concatenated, and both belong to hosts/components/k3s-server:
-# `k3s_oidc_groups_prefix` + the Authelia group. The prefix exists so an Authelia group can
-# never collide with a built-in `system:` group; the API server applies it to every value of
-# the `groups` claim before RBAC sees it.
-#
-# Cross-role by necessity — the API server is the thing that mints the group name, and it is
-# configured in a host package the k8s deploy play never runs (homelab-daniel-box).
+# TWO pieces, both owned by hosts/components/k3s-server: `k3s_oidc_groups_prefix` + the Authelia
+# group. The prefix keeps an Authelia group from colliding with a `system:` group. Cross-role by
+# necessity: the API server mints the name from a host package this play never runs.
 headlamp_k8s_oidc_group: "oidc:admins"
 
-# Turning it on REPLACES the ServiceAccount identity with the browser's:
-# Headlamp forwards the `id_token` and the API SERVER decides, so this switch is only safe
-# while daniel-box's apiserver reads an `AuthenticationConfiguration` trusting Authelia. That
-# is `hosts/components/k3s-server/templates/authentication-config.yaml.j2`, which the
-# homelab-daniel-box package ships and `homelab-k3s-restart` loads with one windowed restart of
-# k3s. (`--kube-apiserver-arg=oidc-*` flags and the file are mutually exclusive.)
-#
-# So this variable is NOT independently safe to flip: it depends on state in a host package the
-# k8s deploy play never runs. Read the component's `k3s_oidc_*` block before changing it, and if that trust is ever removed from the API server, turn this
-# off in the same change — a token the API server does not trust leaves a dashboard that logs
-# in and Forbids every call.
-#
-# The Authelia client and its credential are rendered EITHER WAY. An unused client authorises
-# nobody, and keeping them out of the switch means arming this is one variable rather than a
-# second round of secret work.
+# Turning it on REPLACES the ServiceAccount identity with the browser's: the API SERVER decides, so
+# this is only safe while daniel-box's apiserver trusts Authelia via authentication-config.yaml.j2
+# (host package homelab-daniel-box, loaded by one windowed k3s restart; `--oidc-*` flags and the
+# file are mutually exclusive).
+# If that trust is removed, turn this off in the same change: the dashboard would log in and Forbid
+# every call.
+# The Authelia client and credential render either way; an unused client authorises nobody.
 headlamp_k8s_oidc_enabled: true
-# The client id, which is also the audience: Authelia's default
-# `id_token_audience_mode: specification` puts only the client id in `aud`, and the API server
-# matches it against the `audiences` of every issuer in its authentication config. One value,
-# three places, tied by test_headlamp_client_id_agrees_across_authelia_headlamp_and_k3s in
-# hosts/tests/test_k3s_oidc_trusts_authelia.py.
+# The client id is also the audience: Authelia's default `id_token_audience_mode: specification`
+# puts only it in `aud`, which the API server matches against each issuer's `audiences`. Tied by
+# test_headlamp_client_id_agrees_across_authelia_headlamp_and_k3s.
 headlamp_k8s_oidc_client_id: headlamp
 # THE PUBLIC name, and pinning it is forced by Headlamp's code rather than chosen. Headlamp
 # reads `-oidc-idp-issuer-url` ONCE, at server start, and builds one `oidc.Provider` from it
@@ -110,12 +93,10 @@ headlamp_k8s_oidc_client_id: headlamp
 # The API server trusts BOTH issuers regardless (`k3s_oidc_issuer_urls`), so this choice is
 # not a lockout: it decides which name a login goes through, not which token is accepted.
 headlamp_k8s_oidc_issuer_url: "https://auth.{{ domain }}"
-# EMPTY, and empty is the working value rather than an unset one. Headlamp builds the callback
-# from the incoming request when this is blank — `getOidcCallbackURL` reads the request host
-# and `X-Forwarded-Proto`, per request (backend/cmd/headlamp.go) — so one instance serves
-# `headlamp.local.<domain>` and `headlamp.<domain>` with the right `redirect_uri` for each.
-# Setting it pins every login to one hostname's callback. Both URIs are registered on the Authelia client to match; a callback
-# Authelia does not know fails the exchange with `invalid_request`.
+# EMPTY on purpose: Headlamp builds the callback from the incoming request, so one instance serves
+# both hostnames; setting it pins every login to one.
+# Both URIs are registered on the Authelia client; a callback Authelia does not know fails with
+# `invalid_request`.
 headlamp_k8s_oidc_callback_url: ""
 # `openid` is NOT listed, and adding it would send it twice: Headlamp prepends it itself —
 # `Scopes: append([]string{oidc.ScopeOpenID}, oidcAuthConfig.Scopes...)` in
@@ -124,21 +105,17 @@ headlamp_k8s_oidc_callback_url: ""
 # list call is Forbidden.
 headlamp_k8s_oidc_scopes: "profile,email,groups"
 
-# The Prometheus proxy Role and RoleBinding live in the observability namespace, which the
-# armed apply's `-n homelab` refuses. The renderer emits them as the deferred
-# document `headlamp-deferred`.
+# The armed apply's `-n homelab` refuses these observability-namespace objects, so the renderer
+# emits them as the deferred document `headlamp-deferred`.
 manifests_deferred_files:
   - rbac-observability.yaml
 
 manifests_deferred_dir_name: headlamp-observability
 
-# Each entry renders k8s/templates/secret-default.yaml.j2 as secret-<name>.yaml:
-# its `string_data` maps a Secret field to the SOPS key its value comes from.
 render_secrets:
-  # Read by the Deployment as HEADLAMP_CONFIG_OIDC_CLIENT_SECRET while
-  # headlamp_k8s_oidc_enabled is on, and rendered while it is off, so arming the login is one
-  # variable. It is the plaintext half of the Authelia client credential: Authelia holds only
-  # the pbkdf2 digest `headlamp_oidc_client_secret_hash`, so rotate the two keys together.
+  # The plaintext half of the Authelia client credential (Authelia holds only the pbkdf2 digest
+  # `headlamp_oidc_client_secret_hash`), so rotate the two keys together.
+  # Rendered while the login is off too, so arming it is one variable.
   - name: headlamp-oidc
     string_data:
       client_secret: headlamp_oidc_client_secret

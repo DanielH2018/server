@@ -24,8 +24,6 @@ n8n_k8s_runners_image: "{{ k8s_registry_pull_host }}/n8n-runners:{{ k8s_built_im
 k8s_autodeploy: false
 k8s_autodeploy_reason: "two reasons: (1) probe-less n8n-runners sub-deployment; (2) migrating state — Recreate + RWO PVC (n8n-data) holding the encryption key + credentials DB. COUPLING NOTE for a future promotion: n8n declares TWO claims, n8n-data and n8n-files — a revert of one without the other desyncs which workflow-referenced /files paths actually exist against the credentials/workflow state in n8n-data"
 
-# One set of blast-radius caps for both workloads. Memory requests are per workload: the
-# 7-day p95 working set was 439Mi for n8n and 97Mi for the runners.
 n8n_k8s_cpu_limit: "2"
 n8n_k8s_mem_limit: 2048Mi
 n8n_k8s_cpu_request: "100m"
@@ -43,10 +41,8 @@ n8n_k8s_claim: n8n-data
 n8n_k8s_storage_class: longhorn
 n8n_k8s_size: 4Gi
 
-# The `/files` mount. Empty, but a claim rather than an
-# emptyDir because a workflow references /files/PAL_E4389.pdf — so the path is live, and an
-# emptyDir would silently turn "the file persists" into "the file vanishes on restart", which
-# fails at workflow-run time rather than at deploy time. Nothing to seed; created empty.
+# A claim, not an emptyDir: a workflow references /files/PAL_E4389.pdf, which an emptyDir would lose
+# on restart.
 n8n_k8s_files_claim: n8n-files
 # `longhorn` (backed up) rather than longhorn-nobackup: unlike a search index, nothing
 # regenerates a file a workflow wrote here.
@@ -62,9 +58,8 @@ k8s_claims:
     storage_class: "{{ n8n_k8s_files_storage_class }}"
     size: "{{ n8n_k8s_files_size }}"
 
-# The task-runner broker port. Not container_item.port (5678, the UI) — a second port on the
-# same Service, so N8N_RUNNERS_TASK_BROKER_URI stays http://n8n:5679 and the runners image
-# needs no change.
+# Not the UI port: a second port on the same Service keeps N8N_RUNNERS_TASK_BROKER_URI at
+# http://n8n:5679.
 n8n_k8s_broker_port: 5679
 
 # The budget of the n8n-prepull Kustomization, whose Job pulls both Deployments' images onto
@@ -81,8 +76,6 @@ n8n_k8s_broker_port: 5679
 # ignores it.
 flux_prepull_timeout: 3600s
 
-# The runners' readiness gate (see deployment-runners.yaml.j2). alpine because busybox `nc -z`
-# is all it needs and the image is already the fleet's small-utility choice.
 n8n_k8s_wait_image: alpine:3.24@sha256:f59abe656b692d901e184be3445e084786602108599d2a51d229c0f5a48c71bf
 
 image_builder_builds:
@@ -90,26 +83,22 @@ image_builder_builds:
     image_builder_dockerfile: "{{ role_file('templates/Dockerfile.j2') }}"
   - image_builder_name: n8n-runners
     image_builder_dockerfile: "{{ role_file('templates/Dockerfile-runners.j2') }}"
-    # The one file either Dockerfile COPYs. The key must be the exact path the COPY names,
-    # since the ConfigMap mount puts each key at the context root under that name.
+    # The key must be the exact path the Dockerfile COPY names; the ConfigMap mount puts each key at
+    # the context root.
     image_builder_context:
       "{{ role_file('templates/config/n8n-task-runners.json.j2') }}": n8n-task-runners.json
 
-# deployment-runners.yaml is a second Deployment running a second built image. Without this
-# nothing rolls it: the rebuilt-image trigger keys on manifests_service (`n8n`) while
-# image-builder records `n8n-runners`, and the rollout targets one name regardless.
+# Second Deployment: the rebuilt-image trigger keys on `n8n` while image-builder records
+# `n8n-runners`, so nothing rolls it without this.
 manifests_extra_rollouts:
   - name: n8n-runners
     image: n8n-runners
 
-# Each entry renders k8s/templates/secret-default.yaml.j2 as secret-<name>.yaml:
-# its `string_data` maps a Secret field to the SOPS key its value comes from.
 render_secrets:
-  # The credential-encryption key is not here: it lives in the data volume at `config`, and
-  # an N8N_ENCRYPTION_KEY other than the on-disk value crashes n8n.
+  # Not here: the credential-encryption key lives in the data volume; a different N8N_ENCRYPTION_KEY
+  # crashes n8n.
   - name: n8n
     string_data:
-      # Shared by the broker and the runner. A mismatch does not fail
-      # at startup: every workflow that runs code hangs until
+      # Shared by broker and runner; a mismatch hangs every code workflow until
       # N8N_RUNNERS_TASK_REQUEST_TIMEOUT.
       N8N_RUNNERS_AUTH_TOKEN: n8n_runner_auth_token

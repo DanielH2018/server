@@ -13,9 +13,6 @@ freshrss_k8s_cache_image: nginx:alpine@sha256:7fc0fb4af7bf006aeb31aea88069976060
 # a reset, and the operator reverts the claim through docs/volume-snapshot-drills.md.
 k8s_autodeploy: true
 k8s_autodeploy_reason: "migrating state — Recreate + RWO PVC, protected by the freshrss-snapshot Job before each revision and an operator revert to it after a failed one; still tracks :latest by digest with no version signal to misread"
-# The claim snapshotted before each revision applies. Under Flux the renderer turns this
-# list into the freshrss-snapshot Kustomization, whose Job snapshots it before freshrss applies.
-# The snapshot is the recovery point this role's auto-deploy depends on.
 k8s_autodeploy_snapshot_pvcs: [freshrss-config]
 freshrss_k8s_cpu_limit: "1"
 freshrss_k8s_mem_limit: 512Mi
@@ -27,21 +24,16 @@ freshrss_k8s_cache_mem_limit: 128Mi
 freshrss_k8s_cache_cpu_request: "50m"
 freshrss_k8s_cache_mem_request: 16Mi
 
-# 86M and 730 files — mostly the extensions unpacked under
-# config/www/freshrss/extensions. Sized with room for the feed database to grow.
 freshrss_k8s_claim: freshrss-config
 freshrss_k8s_storage_class: longhorn
 freshrss_k8s_size: 2Gi
 
-# The claim the renderer emits for this role. The freshrss Kustomization applies it after the
-# freshrss-snapshot Job.
 k8s_claims:
   - name: "{{ freshrss_k8s_claim }}"
     storage_class: "{{ freshrss_k8s_storage_class }}"
     size: "{{ freshrss_k8s_size }}"
 
-# The feed cache is nginx, and nginx rereads conf.d only on start or SIGHUP. Its config
-# arrives as a ConfigMap this role renders, so kubelet updates the file on disk and nothing
-# tells nginx: an edited cache config applies, reports changed, and never takes effect.
+# nginx rereads conf.d only on start or SIGHUP and a ConfigMap update tells it nothing, so an edited
+# cache config would apply, report changed, and never take effect.
 manifests_extra_rollouts:
   - name: freshrss-feed-cache

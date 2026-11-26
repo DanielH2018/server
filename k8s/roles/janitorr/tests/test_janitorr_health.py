@@ -132,9 +132,9 @@ def test_the_reader_imports_from_the_pods_mounted_layout(tmp_path):
     assert "items" not in volume["configMap"]
     for key, text in configmap["data"].items():
         (tmp_path / key).write_text(text)
-    # `--help` returns after every module-level import has run, so exit 0 proves the import
-    # closure resolves from the mounted files alone. `-S` drops the venv's site-packages: the
-    # pod's bare python image has no wheels. `-P` keeps the working directory off sys.path.
+    # `--help` exits after all module-level imports, so exit 0 proves the import closure resolves
+    # from the mounted files.
+    # `-S` drops site-packages (the pod has no wheels); `-P` keeps the cwd off sys.path.
     proc = subprocess.run(
         [
             sys.executable,

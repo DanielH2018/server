@@ -65,8 +65,6 @@ def test_a_plan_with_no_status_reads_in_progress():
 
 
 def test_complete_with_a_stale_version_reads_in_progress():
-    # The red fixture for the stale-status race: a bumped Plan keeps the previous run's
-    # Complete=True until SUC reconciles it.
     assert _state(_exprs(), _plan(STALE, [COMPLETE_TRUE])) == "InProgress"
 
 
@@ -75,8 +73,6 @@ def test_complete_in_sucs_munged_form_reads_current():
 
 
 def test_the_unmunged_pin_never_matches_what_suc_stores():
-    # SUC stores v1.37.2-k3s1. A literal built from the pin's own spelling would never be
-    # Current, so every apply would time out red.
     assert _state(_exprs(), _plan(PIN, [COMPLETE_TRUE])) == "InProgress"
 
 
@@ -97,8 +93,6 @@ def test_a_node_still_applying_reads_in_progress():
 
 
 def test_dropping_the_version_clause_would_read_a_stale_status_as_current():
-    # The fixture's red proof: the `current` expression minus its version comparison accepts
-    # the stale Complete=True that the real expression rejects.
     check = dict(_exprs())
     check["current"] = check["current"].split(" && has(status.latestVersion)")[0]
     assert "latestVersion" not in check["current"]
@@ -143,18 +137,12 @@ def test_the_checked_in_defaults_name_each_expression():
     assert {"inProgress", "failed", "current"} <= set(check)
 
 
-# Measured by the H6.1b2 rehearsal of `k3s-redproof` (run 20261024T193003Z on daniel-server,
-# `--expect red --plan k3s-redproof`), copied from its rehearsal-verdict.txt. This is Flux's
-# reading of the Plan. The evaluator here cannot produce it, so the tests below hold only the
-# parts of it that the repo's own files determine.
 OBSERVED_MESSAGE = (
     "health check failed after 5m5.044785708s: failed early due to stalled resources: "
     "[Plan/system-upgrade/k3s-redproof status: 'Failed']"
 )
 
 
-# The drill Plan, reduced to what the tests below read. It is a fixture
-# because the Plan was reverted after the drill, so no template renders it.
 DRILL_PLAN = {
     "metadata": {"name": "k3s-redproof", "namespace": "system-upgrade"},
     "spec": {"jobActiveDeadlineSecs": 300},
@@ -184,6 +172,5 @@ def test_the_observed_red_arrived_at_the_drill_deadline_not_at_the_timeout():
     timeout = found["system-upgrade"].timeout
     assert timeout is not None
     timeout_minutes = int(timeout.removesuffix("m"))
-    # A red that arrives only at the Kustomization's timeout would prove the timeout (H6 step 4).
     assert deadline <= elapsed < deadline + 120
     assert elapsed < timeout_minutes * 60 / 10

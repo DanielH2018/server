@@ -9,10 +9,7 @@
   )
 }}
 ---
-{#
-  Homepage's speedtest widget (a session-less API-key caller, which is why the pod CIDR is
-  allowed). The main route carries Authelia, which 401s the widget, so /api/ gets this separate route.
-#}
+{# A separate /api/ route: Authelia on the main route would 401 homepage's session-less widget. #}
 {{ monitoring_route(
     container_item.name,
     container_item.hostname | default(container_item.name),

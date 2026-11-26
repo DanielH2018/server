@@ -54,14 +54,11 @@ stringData:
 apiVersion: traefik.io/v1alpha1
 kind: TLSOption
 metadata:
-  # Referenced by name from every public-Host router. Not `default` — that name is reserved
-  # (see the `modern` TLSOption in k8s/roles/traefik/templates/dynamic.yaml.j2).
+  # Not `default`: that name is reserved (see `modern` in the traefik role).
   name: cloudflare-origin-pull
   namespace: {{ namespace }}
 spec:
-  # `modern` plus clientAuth: the public name keeps the same protocol floor and cipher policy
-  # as the `.local.` one. test_public_routes_require_cloudflare_origin_pull.py keeps the two in
-  # step, so a cipher change to `modern` fails until it is made here too.
+  # Same TLS floor and ciphers as `modern`; a test keeps the two equal.
   minVersion: VersionTLS12
   cipherSuites:
     - TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256
@@ -74,7 +71,6 @@ spec:
     # The Secret origin_pull_ca_secret() renders in this same namespace.
     secretNames:
       - cloudflare-origin-pull-ca
-    # Require AND verify: RequireAnyClientCert would accept a self-signed certificate, which
-    # is no gate at all.
+    # Require AND verify: RequireAnyClientCert accepts a self-signed certificate, which is no gate.
     clientAuthType: RequireAndVerifyClientCert
 {%- endmacro %}

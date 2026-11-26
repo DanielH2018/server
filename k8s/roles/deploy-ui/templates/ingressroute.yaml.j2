@@ -1,9 +1,6 @@
 {% from 'ingressroute.yml.j2' import ingressroute with context %}
-{#
-   Both `deploy.local.<domain>` and, when `k8s_public_route` is on, `deploy.<domain>` render. Each
-   sits behind Authelia two_factor: the generated per-service rule covers the LAN name and the
-   `*.<domain>` wildcard covers the public one (k8s/roles/authelia config-secret.yaml.j2).
-#}
+{# Each name sits behind Authelia two_factor: the per-service rule covers the LAN name and the
+   `*.<domain>` wildcard the public one. #}
 ---
 {{ ingressroute(
     container_item.name,

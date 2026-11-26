@@ -24,10 +24,5 @@ karma_k8s_mem_limit: 256Mi
 karma_k8s_cpu_request: "50m"
 karma_k8s_mem_request: 64Mi
 
-# The uid the container runs as, pinned rather than left to the image's named user.
-# `tests/k8s/test_container_security_context.py::test_every_asserting_container_pins_a_uid`
-# requires it: a pod asserting runAsNonRoot with no runAsUser still passes admission after a
-# tag bump moves that named user to a different uid. Read the image's own uid and set it here.
-# The image is plain gcr.io/distroless/static, whose user is root; 65532 is distroless's
-# `nonroot` uid, chosen here. Karma writes nothing to disk, so no fsGroup-owned path depends on it.
+# Pinned because a test requires a uid: runAsNonRoot alone survives a tag bump changing the user.
 karma_k8s_uid: 65532

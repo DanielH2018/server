@@ -6,8 +6,4 @@ metadata:
   namespace: {{ k8s_namespace }}
 data:
   default.conf: |
-{#
-  Read from this role's files/nginx-feed-cache.conf, the one source of truth for the nginx
-  config.
-#}
 {{ lookup('file', role_file('files/nginx-feed-cache.conf')) | indent(4, true) }}

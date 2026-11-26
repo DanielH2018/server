@@ -20,36 +20,25 @@ spec:
         app: wg-easy
         netpol-baseline: enforced
     spec:
-      # Pinned to the VIP-announcing node while the MetalLB L2Advertisement is pinned to
-      # daniel-box: with externalTrafficPolicy Local, a VIP-backed pod on the other node
-      # makes the announcer DROP all forwarded LAN traffic. This pin only ever moves together
-      # with the L2Advertisement nodeSelector.
-      #
-      # wg-easy-udp carries ETP Local and VIP 10.0.0.244, so a reschedule onto
-      # daniel-server would black-hole UDP 51820 while the pod reported healthy — and
-      # because this IS the remote-access path, it would also remove the way back in to
-      # diagnose it.
+      # Pinned to the VIP node: with ETP Local a pod elsewhere black-holes UDP 51820 while healthy.
+      # Moves only with the L2Advertisement nodeSelector; this is the remote-access path.
       nodeSelector:
         kubernetes.io/hostname: {{ k8s_primary_node }}
-      # Tier 1, not tier 4 as a VPN utility first looks: this is the remote-access path.
-      # Evicting it under memory pressure removes the way back in to deal with whatever
-      # caused the pressure, so it ranks with the edge rather than with the dashboards.
+      # Tier 1, not tier 4: evicting the remote-access path removes the way back in to fix the
+      # pressure.
 {{ pod_shell(services | tier_priority_class('wg-easy')) }}
       securityContext:
-        # Both namespaced; kubelet admits them only because k3s-server and k3s-agent allow-list them.
-        # ip_forward: the SERVER routes between wg0 and eth0 inside the pod netns, and
-        # /proc/sys is ro in a pod even with NET_ADMIN, so the spec is the only way in.
-        # src_valid_mark: wg-quick requires it; pre-setting it makes wg-quick skip its own doomed write.
+        # /proc/sys is read-only in a pod: sysctls go in the spec, admitted by the kubelet
+        # allow-list.
+        # src_valid_mark is pre-set so wg-quick skips its own doomed write.
         sysctls:
           - name: net.ipv4.ip_forward
             value: "1"
           - name: net.ipv4.conf.all.src_valid_mark
             value: "1"
-      # The image runs as root (wg-quick + iptables leave no choice), but the seeded files
-      # arrive uid-1000 from the unprivileged ssh|tar pipeline — and root with ALL caps
-      # dropped has no DAC_OVERRIDE, so it cannot even READ them, and wg-easy would then silently
-      # GENERATE a fresh keypair, invalidating every client config. CAP_CHOWN alone lets the init
-      # hand the tree to uid 0; no DAC_OVERRIDE anywhere.
+      # Seeded files arrive uid-1000, and root without DAC_OVERRIDE cannot read them: wg-easy would
+      # then generate a new keypair and invalidate every client. CAP_CHOWN lets the init chown to
+      # uid 0.
       initContainers:
         - name: config-chown
           image: {{ wg_easy_k8s_image }}
@@ -110,41 +99,28 @@ spec:
           # `container_item.default_dns` in host_vars records what the client DNS should be;
           # nothing renders it.
           env:
-            # Traefik terminates TLS at the edge and proxies PLAIN HTTP to this port, so
-            # without INSECURE v15 refuses the request — including the first-boot setup
-            # wizard, which is the only v14 -> v15 import path. Not a downgrade of the
-            # external route: that is https, Authelia-fronted, and unchanged.
+            # Plain HTTP from Traefik is refused by v15 without INSECURE; the public route stays
+            # https.
             - name: INSECURE
               value: "true"
-            # kubelet's allowed-unsafe-sysctls is exactly
-            # net.ipv4.conf.all.src_valid_mark,net.ipv4.ip_forward (the kubelet-arg in the
-            # k3s-server and k3s-agent host components' component.yml), and the net.ipv6.* sysctls upstream's compose sets are excluded
-            # there ON PURPOSE. Rather than widen that allow-list — a k3s server-arg change
-            # and a restart of BOTH nodes, on the sole remote-access path — turn v15's IPv6
-            # support off. NOTE the UI still displays IPv6 addresses it will not route, and
-            # the CLI overrides this with its own --no-ipv6 flag, so check a freshly
-            # generated peer config before handing it to a device.
+            # IPv6 off: the kubelet allow-list excludes net.ipv6.* on purpose, and widening it
+            # restarts both nodes.
+            # The UI still shows unrouted IPv6 addresses; the CLI overrides this, so check new peer
+            # configs.
             - name: DISABLE_IPV6
               value: "true"
-          # NET_ADMIN for the wg interface and its routing/fwmark rules. NET_RAW is carried
-          # over from v14, where wg-quick ran iptables and its CLI opened a raw socket to
-          # init the nat table; v15 marks NET_RAW as Podman-only, so it is a candidate to
-          # drop once v15 is proven running — verified removal, not a same-commit guess.
-          # No SYS_MODULE — the wireguard module is loaded on the host, and /lib/modules is
-          # mounted read-only below.
+          # NET_RAW is carried over from v14 and is a candidate to drop once v15 is proven.
+          # No SYS_MODULE: the wireguard module loads on the host, and /lib/modules is read-only.
 {{ hardened_security_context(add=['NET_ADMIN', 'NET_RAW']) }}
           volumeMounts:
             - name: wg-easy-config
               mountPath: /etc/wireguard
-            # Added at the v15 upgrade to match upstream's own compose file. v15 checks for
-            # the wireguard module here; the module is loaded on the host, so this read-only
-            # view is enough and SYS_MODULE stays dropped. If a v15 startup ever fails on
-            # modprobe, that capability is the next thing to add — not before.
+            # Read-only view for v15's wireguard module check; the host loads it, so SYS_MODULE
+            # stays dropped.
             - name: host-lib-modules
               mountPath: /lib/modules
               readOnly: true
-          # TCP on the admin UI: proves the node app is up. The wg interface itself has no
-          # cheap in-pod probe; the real gate is a client handshake after deploy.
+          # TCP on the admin UI proves the app is up; the wg interface has no cheap in-pod probe.
           readinessProbe:
             tcpSocket:
               port: {{ container_item.port }}

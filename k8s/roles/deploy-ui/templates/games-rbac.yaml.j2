@@ -1,5 +1,4 @@
 ---
-# The identity deploy.local's Games panel starts and stops the game servers with (ADR-0033).
 # The operator copies the token into daniel-box's host secrets; deploy-ui loads it with
 # LoadCredential=, never through ~/.kube/config.
 apiVersion: v1
@@ -15,8 +14,8 @@ metadata:
   namespace: {{ k8s_namespace }}
   annotations:
     kubernetes.io/service-account.name: {{ deploy_ui_games_sa_name }}
-# Non-expiring, like the read-only token: the daemon has no way to mint a replacement. Revoke
-# by deleting this Secret and the ServiceAccount.
+# Non-expiring: the daemon cannot mint a replacement. Revoke by deleting this Secret and the
+# ServiceAccount.
 type: kubernetes.io/service-account-token
 ---
 apiVersion: rbac.authorization.k8s.io/v1

@@ -179,8 +179,5 @@ def test_a_producer_with_a_different_help_text_is_flagged():
     texts = _producer_texts()
     path = "k8s/roles/node-exporter/files/iscsi-sessions.sh"
     texts[path] = texts[path].replace("last verdict was up", "verdict is up")
-    # The first producer, in path order, to carry each text names its variant: the iSCSI
-    # script's edited one, and the shared check library's for the text every other
-    # producer still writes.
     first = "hosts/components/check-lib/files/homelab-check-lib.sh"
     assert help_conflicts(texts) == [f"homelab_check_success: {sorted([path, first])}"]

@@ -1,9 +1,6 @@
 {% from 'container-resources.yml.j2' import container_resources with context %}
 {% from 'workload-shell.yml.j2' import pod_shell with context %}
 ---
-# SC3: the collector runs on every node — today daniel-box only, which ADDS its
-# never-monitored NVMe; the Phase F join extends it to daniel-server automatically and
-# retires the Docker spoke there.
 apiVersion: apps/v1
 kind: DaemonSet
 metadata:
@@ -19,23 +16,15 @@ spec:
         app: scrutiny-collector
         netpol-baseline: enforced
     spec:
-      # Unpinned — the DaemonSet covers both nodes. Both hosts' SMART source is the
-      # same /dev/nvme0 controller path.
-      # No serviceAccountName is set (defaults SA) and the collector never talks to the API
-      # server, so it has no use for the token — and a privileged pod is the last place to
-      # leave one mounted anyway.
+      # The collector never talks to the API server, and a privileged pod should not mount a token.
 {{ pod_shell('homelab-best-effort') }}
       containers:
         - name: collector
           image: {{ scrutiny_k8s_collector_image }}
           imagePullPolicy: IfNotPresent
           securityContext:
-            # The cap set (SETUID/SETGID/SYS_RAWIO/SYS_ADMIN) + a CharDevice hostPath is NOT enough
-            # under k8s — the device cgroup still refuses the open (`smartctl --info
-            # --device nvme /dev/nvme0` → exit status 2, device detected but unreadable).
-            # Unlike Docker's `devices:`, k8s has no per-device grant short of a device
-            # plugin, so this DaemonSet is privileged — the node-exporter-style trade for
-            # host-hardware readers.
+            # Privileged: capabilities plus a CharDevice hostPath are not enough, as the device
+            # cgroup refuses the open; k8s has no per-device grant short of a device plugin.
             privileged: true
           env:
             - name: COLLECTOR_API_ENDPOINT

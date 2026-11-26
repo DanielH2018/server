@@ -1,43 +1,27 @@
 ---
-# The cluster identity and the workload-tier PriorityClasses, handed to Flux. Two
-# objects here are needed before Flux can run: Flux's own controllers name `homelab-critical`,
-# and the read-only kubeconfig carries the token this Secret holds. So a rebuilt cluster
-# applies this tag by hand before it installs Flux (docs/longhorn-disaster-recovery.md,
-# *Procedure (fresh host, total loss)*, step 2).
+# Flux's controllers name `homelab-critical` and the read-only kubeconfig carries this Secret's
+# token, so a rebuilt cluster applies this tag by hand before installing Flux.
 
-# The read-only ServiceAccount, mirrored from hosts/components/k3s-server/defaults/main.yml. The
-# host files there (the kubeconfig and the audit policy) read k3s_readonly_sa_name and
-# k3s_readonly_sa_namespace, and this role's template reads these two, because a k8s role's
-# defaults are invisible to a host component and the reverse. tests/k8s/test_cluster_base_mirrors_the_k3s_identity.py holds each pair equal,
-# so a rename changes both sides in one PR.
+# Mirrored because a k8s role's defaults are invisible to a host component and the reverse;
+# tests/k8s/test_cluster_base_mirrors_the_k3s_identity.py holds each pair equal.
 cluster_base_readonly_sa_name: homelab-readonly
 cluster_base_readonly_sa_namespace: kube-system
 
-# CRD API groups the read-only role can read. The built-in `view` ClusterRole covers no CRD
-# group except Flux's six: the vendored ClusterRole `flux-view-flux-system` aggregates read on
-# them into `view`, and tests/k8s/test_aggregated_clusterroles.py lists and pins that
-# grant. Any other group left off this list means `kubectl get` on that resource falls back to
-# sudo. Add a group when a new operator's CRDs need inspecting. headlamp_k8s_crd_api_groups
-# mirrors this list.
+# A CRD group left off this list makes `kubectl get` on it fall back to sudo; `view` covers only
+# Flux's six.
+# headlamp_k8s_crd_api_groups mirrors this list.
 k3s_readonly_crd_api_groups:
   - traefik.io
   - metallb.io
   - longhorn.io
-  # k3s's own CRDs. `scripts/deploy_tools/runbook_gates.py etcd-restore` gate 3 reads
-  # ETCDSnapshotFile to check that the snapshot an operator is about to restore exists and
-  # reports `status.readyToUse`, the one cluster-side answer to that question. The template
-  # grants `resources: ["*"]` per group, so this also grants read on `Addon`, the group's only
-  # other resource. Both are safe to read: ETCDSnapshotFile's `spec.s3` records the bucket,
-  # endpoint, folder and region but no keys (those stay in the root-only etcd S3 env file under
-  # /etc/rancher/k3s), and an Addon records a manifest's path and checksum.
+  # Read by runbook_gates.py etcd-restore gate 3 (ETCDSnapshotFile). Granted `*` per group, so Addon
+  # too;
+  # both are safe to read and hold no keys.
   - k3s.cattle.io
-  # system-upgrade-controller's Plans. `k3s_gates.py host` reads them to refuse a restart while
-  # a Plan is applying. The template grants `resources: ["*"]`, which also covers the
-  # group's only other resource, and both are read-only and hold no credential.
+  # Read by `k3s_gates.py host` to refuse a restart while a Plan is applying; read-only, no
+  # credential.
   - upgrade.cattle.io
 
-# The inert ConfigMap that proves the `kustomize.toolkit.fluxcd.io/reconcile=disabled`
-# annotation (templates/skip-probe-configmap.yaml.j2).
 cluster_base_skip_probe_name: cluster-base-skip-probe
 
 # DECIDED: never pruned. Deleting a PriorityClass or the read-only identity from the render
@@ -47,8 +31,7 @@ cluster_base_skip_probe_name: cluster-base-skip-probe
 # deletes it (**operator-only**). Full analysis: the H1 plan's *Plumbing tags are never pruned*.
 flux_prune: false
 
-# Auto-deploy stance. Flux applies the tag, so this gates no apply; the reason records why a bad
-# merge here is not a routine image bump.
+# Flux applies the tag, so this gates no apply.
 k8s_autodeploy: false
 k8s_autodeploy_reason: "platform — the PriorityClasses every pod names and the read-only identity every diagnostic runs as; a bad apply stops pod admission or locks out kubectl, and host probes stay green through both"
 

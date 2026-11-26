@@ -18,8 +18,8 @@ import yaml
 
 FILES = Path(__file__).resolve().parent.parent / "files"
 
-# The sensor the gate is calibrated against. The threshold is scale-specific, so the gate template
-# and the presence_on trigger must both read THIS one.
+# The threshold is scale-specific, so the gate template and the presence_on trigger must both read
+# this sensor.
 GATE_SENSOR = "sensor.aqara_t1_illuminance"
 
 

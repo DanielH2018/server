@@ -1,42 +1,23 @@
 ---
-# The one volume the whole media stack shares. Nine workloads mount it at /data, and they must
-# all see ONE filesystem or sonarr/radarr imports silently become copies instead of hardlinks.
+# All workloads must see ONE filesystem, or sonarr/radarr imports become copies instead of
+# hardlinks.
 media_volume_claim: media-data
 
-# A STATIC local PV rather than a dynamic local-path PVC, which gets three things wrong here:
-#
-#   1. local-path names its directory pvc-<uuid>_<ns>_<claim>. The seeding rsync needs a path
-#      that a human, a doc and an Ansible task can all name before the volume exists.
-#   2. local-path's class reclaims Delete. A mistyped `kubectl delete pvc` would take the
-#      library with it, and nothing backs up containers/data/.
-#   3. WaitForFirstConsumer leaves a dynamic PVC unbound, and its directory absent, until a pod
-#      mounts it. The seeding rsync fills the volume BEFORE any workload exists.
-#
-# Named explicitly on the claim. Two StorageClasses on this cluster are both marked default, so
-# an omitted class is non-deterministic, and a dynamic provisioner could answer the claim with an
-# empty volume somewhere else entirely.
+# A STATIC local PV, because local-path names its directory pvc-<uuid>_<ns>_<claim>, reclaims
+# Delete, and WaitForFirstConsumer leaves the directory absent before the seeding rsync.
+# Named explicitly on the claim: two StorageClasses are default, so an omitted class is
+# non-deterministic.
 media_volume_storage_class: media-local
-# Its MODE is inherited from daniel-server's containers/data (0755, owner {{ puid }}) and is
-# deliberately not enforced. daniel-box's package creates the directories from a copy of this
-# key (hosts/daniel-box/tmpfiles.d/), and hosts/lib/tests/test_box_k3s_host_half.py holds the copy
-# equal.
+# Mode is inherited from daniel-server's containers/data (0755) and deliberately not enforced;
+# hosts/lib/tests/test_box_k3s_host_half.py holds daniel-box's tmpfiles copy equal.
 media_volume_host_path: /srv/media
 
-# ADVISORY ONLY. This is a directory on the node's ext4 root with no quota behind it, so
-# nothing enforces the number — it exists to satisfy the PV/PVC binding contract. Sized as
-# headroom against 838 G free and a 19 G library, not as a limit.
-#
-# The claim requests this same number, matching the PV exactly: binding requires the request to
-# be no larger than the capacity.
+# ADVISORY ONLY: no quota backs this directory. The claim requests the same number, because binding
+# needs the request no larger than the capacity.
 media_volume_size: 400Gi
 
-# The claim the renderer emits for this role, which the media-volume Kustomization applies.
-# ReadWriteMany matches the PV and the live claim; a claim's access modes are immutable
-# once created.
-#
-# The media-volume Kustomization applies the claim, `media-local` and the PV together. On a fresh
-# cluster a claim created before the PV waits Pending; the PV's pre-bound `claimRef` binds it
-# once the PV exists.
+# ReadWriteMany matches the PV and live claim; access modes are immutable. A claim created before
+# the PV waits Pending until the PV's pre-bound `claimRef` binds it.
 k8s_claims:
   - name: "{{ media_volume_claim }}"
     storage_class: "{{ media_volume_storage_class }}"

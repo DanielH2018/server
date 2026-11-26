@@ -163,8 +163,6 @@ def test_the_group_names_are_the_ones_setup_k3s_and_the_recurring_jobs_use():
     assert len(lr.SHARDS) == 7
 
 
-# (claim, target before) -> target after. The r2 list holds `homelab/traefik-acme` only.
-# A blank target on an unlisted claim stays blank.
 TARGET_TRANSITIONS = [
     pytest.param(
         "homelab/traefik-acme", "default", "r2", id="listed-claim-moves-to-r2"

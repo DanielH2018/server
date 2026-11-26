@@ -13,8 +13,6 @@ loki_homelab_k8s_alloy_image: grafana/alloy:v1.20.1@sha256:2aa2099af76c0098d4af7
 k8s_autodeploy: false
 k8s_autodeploy_reason: "observability — log store other monitors read from; a broken deploy blinds them without paging. ALSO Recreate + PVC on its own log data"
 
-# `longhorn-nobackup` on purpose: logs are bulky, rotating, and reconstructible in spirit; the
-# 31-day retention is the real bound.
 loki_homelab_claim: loki-homelab-data
 loki_homelab_size: 5Gi
 loki_homelab_storage_class: longhorn-nobackup
@@ -27,11 +25,8 @@ k8s_claims:
 
 loki_homelab_retention: 744h
 
-# The Loki ruler's rule groups, one file each under files/rules/, carried into the
-# loki-homelab-rules ConfigMap by templates/rules-configmap.yaml.j2. The list names each file
-# because the offline renderer has no fileglob, so a file it does not name never reaches the
-# ruler. scripts/validate/alert_rules.py fails when the files, this list and the rendered
-# ConfigMap's keys disagree.
+# The offline renderer has no fileglob, so a rule file not named in this list never reaches the
+# ruler.
 loki_homelab_rule_groups:
   - homelab-logs
 
@@ -40,13 +35,12 @@ loki_homelab_mem_limit: 1024Mi
 loki_homelab_cpu_request: "100m"
 loki_homelab_mem_request: 256Mi
 
-# Flux prunes by its own inventory, which holds the Alloy ClusterRole and ClusterRoleBinding,
-# so dropping one deletes it live.
+# Flux prunes by its inventory, which holds the Alloy ClusterRole and binding, so dropping one
+# deletes it live.
 manifests_rollout: loki-homelab
 
-# manifests_rollout names the loki-homelab DEPLOYMENT; the Alloy shipper reads the same
-# ConfigMap and is a DaemonSet, so it is rolled as an extra. The shared role skips the
-# restart on the run that created it, and queues it for the batch drain like any other.
+# manifests_rollout names the Deployment; Alloy is a DaemonSet reading the same ConfigMap, so it
+# rolls as an extra.
 manifests_extra_rollouts:
   - name: alloy
     kind: daemonset
