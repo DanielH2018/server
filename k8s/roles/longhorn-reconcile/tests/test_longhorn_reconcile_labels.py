@@ -5,7 +5,7 @@ from hypothesis import example, given
 from hypothesis import strategies as st
 
 CLAIMS = ("ns/a", "ns/b", "ns/c", "ns/d")
-JUNK = {"longhorn.io/other": "kept", "app": "x"}
+OTHER_KEYS = ("app", "longhorn.io/other")
 
 
 @st.composite
@@ -27,7 +27,7 @@ def worlds(draw):
     }
     keys = draw(st.sets(st.sampled_from(sorted(lr.label_keys()))))
     labels = dict.fromkeys(keys, lr.ENABLED)
-    labels.update(draw(st.dictionaries(st.sampled_from(sorted(JUNK)), st.text())))
+    labels.update(draw(st.dictionaries(st.sampled_from(OTHER_KEYS), st.text())))
     return (
         labels,
         draw(st.sampled_from(CLAIMS)),
