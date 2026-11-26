@@ -55,8 +55,7 @@ R2_CLASS_B_ACTIONS = frozenset(
     }
 )
 
-# Free operations — billed on neither arm, so counting them either way would report headroom
-# that has not been spent.
+# Billed on neither arm, so counting them would report headroom that has not been spent.
 R2_FREE_ACTIONS = frozenset({"DeleteObject", "DeleteBucket", "AbortMultipartUpload"})
 
 
@@ -107,8 +106,7 @@ def b2_storage_verdict(
         versions,
     )
     if truncated:
-        # Under-reporting is the dangerous direction, so a truncated walk is a failure, not a
-        # smaller number reported confidently.
+        # A truncated walk is a failure: under-reporting is the dangerous direction.
         return CheckResult(
             False,
             "B2 storage listing truncated at %d pages — %s is a FLOOR, not the total"

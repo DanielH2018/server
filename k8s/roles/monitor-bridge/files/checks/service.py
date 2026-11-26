@@ -108,9 +108,8 @@ def check_arr_queue(cfg: Config, src: Sources, now=None) -> tuple[bool, str]:
         ),
         (
             "Radarr",
-            # includeUnknownMovieItems is Radarr's spelling of Sonarr's
-            # includeUnknownSeriesItems — both default FALSE, hiding exactly the unmapped/
-            # poisoned-release queue items this check exists for.
+            # includeUnknownMovieItems is Radarr's spelling of Sonarr's includeUnknownSeriesItems;
+            # both default FALSE and hide the unmapped queue items this check is for.
             cfg.RADARR_URL + "/api/v3/queue?includeUnknownMovieItems=true&pageSize=250",
             cfg.RADARR_API_KEY,
         ),
@@ -260,8 +259,8 @@ def check_prowlarr_indexers(cfg: Config, src: Sources) -> tuple[bool, str]:
         src.get_json(cfg.PROWLARR_URL + "/api/v1/indexer", headers=headers),
         "prowlarr indexers",
     )
-    # An indexer with no name maps to "", which indexers_down reads as falsy and replaces with
-    # "indexer <id>"; skipping it would also shrink the count in the all-ok message.
+    # A nameless indexer maps to "", which indexers_down replaces with "indexer <id>"; skipping it
+    # would shrink the all-ok count.
     name_by_id: dict[int, str] = {}
     for indexer in indexers:
         indexer_id, name = indexer.get("id"), indexer.get("name")

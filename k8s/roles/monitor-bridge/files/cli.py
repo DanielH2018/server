@@ -26,8 +26,8 @@ from bridge.types import Check
 from check_table import CHECKS
 from checks.domain_registration import days_remaining
 
-# `lib/exit_codes.py:USAGE_ERROR`, which the pod cannot import: it mounts only this role's
-# `files/`. 2 stays the config-fault exit `main()` documents.
+# Mirrors `lib/exit_codes.py:USAGE_ERROR`, which the pod cannot import: it mounts only this role's
+# `files/`.
 USAGE_ERROR = 64
 
 
@@ -106,10 +106,8 @@ def main(
       The process exit code: 0 after a completed --once run, 2 on a configuration fault.
     """
     args = build_parser().parse_args(argv)
-    # Building the config never raises; bridge.common.CONFIG_PROBLEMS carries HTTP_TIMEOUT's own
-    # parse failure, parsed there because autofix-bridge shares that module.
-    #
-    # `env` reaches `load_config` and nothing else: the registry reads no environment.
+    # Building the config never raises; CONFIG_PROBLEMS carries HTTP_TIMEOUT's parse failure. `env`
+    # reaches `load_config` and nothing else.
     environment = os.environ if env is None else env
     cfg = load_config(environment, problems=bridge.common.CONFIG_PROBLEMS)
     if cfg.CONFIG_PROBLEMS:
@@ -152,8 +150,6 @@ def main(
         if check_exposition is None:
             check_exposition = verdict_export.CheckExposition(cfg.INTERVAL)
             check_exposition.serve(cfg.CHECK_EXPORTER_PORT)
-        # Counted from the table, not from `checks`, so the gauge is the table's length whatever
-        # registry a caller hands in.
         check_exposition.set_rows(
             sum(check.check_enabled(row.name, only, cfg.CHECKS_SKIP) for row in CHECKS)
         )

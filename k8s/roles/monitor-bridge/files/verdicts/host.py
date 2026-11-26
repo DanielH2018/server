@@ -118,8 +118,7 @@ def speedtest_verdict(
         "name"
     ) or "unknown server"
     if mbps < min_mbps:
-        # A contiguous run backwards from the newest result, not a count of sub-floor rows in
-        # the window: one slow result either side of a fast one is two incidents, not a run.
+        # A contiguous run from the newest result, not a count of sub-floor rows in the window.
         run = 1
         for older in list(prev_rows or [])[: max(0, floor_consecutive - 1)]:
             if not _sub_floor(older, min_mbps):

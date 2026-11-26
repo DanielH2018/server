@@ -194,12 +194,8 @@ def host_packages(
     return True, "builder caught up%s%s" % (which, note)
 
 
-# Sonarr's two self-clearing title holds, verbatim from
-# NzbDrone.Core/MediaFiles/EpisodeImport/Specifications/EpisodeTitleSpecification.cs
-# (ImportRejectionReason.TitleTba and .TitleMissing). Sonarr applies them itself and clears them
-# itself once the title arrives; no operator action exists for either. Matched as an exact
-# message rather than a loose `TBA` regex, so a reason that merely mentions a TBA title still
-# pages.
+# Sonarr clears these holds itself; matched as an exact message so a reason merely mentioning a TBA
+# title still pages.
 SELF_CLEARING_TITLE_HOLDS = (
     "Episode has a TBA title and recently aired",
     "Episode does not have a title and recently aired",

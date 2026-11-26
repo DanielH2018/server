@@ -79,15 +79,21 @@ conventions.
   `templates/verify/release-profile.yaml.j2` is a seed Job in `sonarr-verify` that declares a
   Sonarr Release Profile with the air-date restriction on. Sonarr then rejects a release whose
   indexer publish date is more than `sonarr_k8s_air_date_grace_hours` before its episode airs,
-  and an episode with no air date. Series tagged with a `sonarr_k8s_air_date_excluded_tags`
-  entry are exempt. `files/seed_sonarr_release_profile.py` has the rule and why anime is
-  excluded.
+  and an episode with no air date. Series of a type in
+  `k8s/roles/sonarr/defaults/main.yml:sonarr_k8s_air_date_excluded_series_types` are exempt,
+  as are series tagged with a `sonarr_k8s_air_date_excluded_tags` entry.
+  `files/seed_sonarr_release_profile.py` has the rule and why anime is excluded.
+  - **A series type is exempted through a tag.** A Release Profile excludes only by tag, so
+    the seed declares an Auto Tagging rule that adds a tag named after the type to every
+    series of that type, and excludes that tag. Sonarr applies a rule when it adds or
+    refreshes a series, so the seed starts a refresh whenever it writes a rule. The rule
+    never removes the tag.
   - **The seed owns the profile, not configarr.** configarr refuses a negative grace; the
     `DECIDED:` note in the template says what adding `release_profiles` to configarr would do.
   - **It writes through the v5 API.** A profile written through v3 never applies; the
     script's docstring says why.
-  - **To exempt a series**, add a tag to `sonarr_k8s_air_date_excluded_tags`, tag the
-    series in Sonarr and deploy. A rejected release shows on the episode's interactive search
+  - **To exempt a series**, create a tag in Sonarr, add it to
+    `sonarr_k8s_air_date_excluded_tags`, tag the series and deploy. A rejected release shows on the episode's interactive search
     with the air-date reason.
 - **The rollout budget is 660s.** A first boot installing the striptracks DOCKER_MODS takes up
   to 10 minutes. `k8s/roles/sonarr/defaults/main.yml:manifests_rollout_timeout` is the

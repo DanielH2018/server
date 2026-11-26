@@ -1,7 +1,8 @@
-"""sonarr's release-profile seed: it declares the air-date profile and nothing else.
+"""sonarr's release-profile seed: it declares the air-date profile and its Auto Tagging rules.
 
 The script tests run the rendered ConfigMap's two files, as the Job's container runs them,
-against a local HTTP server that keeps release profiles and tags the way Sonarr's v5 API does.
+against a local HTTP server that keeps release profiles, Auto Tagging rules and tags the way
+Sonarr's v5 API does.
 
 Run: uv run pytest k8s/roles/sonarr/tests/test_seed_sonarr_release_profile.py
 """
@@ -86,11 +87,15 @@ def declaration(flipped) -> str:
 
 
 class FakeSonarr:
-    """Sonarr's v5 release-profile and tag endpoints, with the writes it received."""
+    """Sonarr's v5 release-profile, auto-tagging, tag and command endpoints, with the writes."""
 
     def __init__(self, profiles: list[dict], tags: list[dict] = TAGS):
-        self.profiles = [dict(p) for p in profiles]
-        self.tags = tags
+        self.store = {
+            "releaseprofile": [dict(p) for p in profiles],
+            "autotagging": [],
+            "tag": [dict(t) for t in tags],
+            "command": [],
+        }
         self.writes: list[tuple[str, str, dict]] = []
         fake = self
 
@@ -106,32 +111,31 @@ class FakeSonarr:
             def _body(self) -> dict:
                 return json.loads(self.rfile.read(int(self.headers["Content-Length"])))
 
+            def _resource(self) -> str:
+                return self.path.removeprefix("/api/v5/").split("/")[0]
+
             def do_GET(self):
                 if self.headers.get("X-Api-Key") != KEY:
                     return self._answer(401, {"message": "Unauthorized"})
-                bodies = {
-                    "/api/v5/tag": fake.tags,
-                    "/api/v5/releaseprofile": fake.profiles,
-                }
-                if self.path not in bodies:
+                resource = self._resource()
+                if resource not in fake.store:
                     return self._answer(404, {})
-                return self._answer(200, bodies[self.path])
+                return self._answer(200, fake.store[resource])
 
             def do_POST(self):
                 body = self._body()
                 fake.writes.append(("POST", self.path, body))
-                created = {
-                    **body,
-                    "id": 1 + max((p["id"] for p in fake.profiles), default=0),
-                }
-                fake.profiles.append(created)
+                items = fake.store[self._resource()]
+                created = {**body, "id": 1 + max((i["id"] for i in items), default=0)}
+                items.append(created)
                 self._answer(201, created)
 
             def do_PUT(self):
                 body = self._body()
                 fake.writes.append(("PUT", self.path, body))
-                fake.profiles = [
-                    body if p["id"] == body["id"] else p for p in fake.profiles
+                resource = self._resource()
+                fake.store[resource] = [
+                    body if i["id"] == body["id"] else i for i in fake.store[resource]
                 ]
                 self._answer(202, body)
 
@@ -175,9 +179,17 @@ def sonarr():
         fake.close()
 
 
-def _declared(profiles: list[dict]) -> dict:
-    (profile,) = [p for p in profiles if p["name"] == NAME]
+def _declared(fake: FakeSonarr) -> dict:
+    (profile,) = [p for p in fake.store["releaseprofile"] if p["name"] == NAME]
     return profile
+
+
+def _profile_writes(fake: FakeSonarr) -> list[tuple[str, str]]:
+    return [w[:2] for w in fake.writes if "releaseprofile" in w[1]]
+
+
+def _with(declaration: str, **changes) -> str:
+    return json.dumps({**json.loads(declaration), **changes})
 
 
 def test_an_absent_profile_is_created_with_the_air_date_rule(
@@ -187,12 +199,38 @@ def test_an_absent_profile_is_created_with_the_air_date_rule(
     result = fake.run(script_dir, declaration)
     assert result.returncode == 0, result.stderr
     assert "created release profile" in result.stdout
-    profile = _declared(fake.profiles)
+    profile = _declared(fake)
     assert profile["airDateRestriction"] is True
     assert profile["airDateGracePeriod"] == -24
     assert profile["excludedTags"] == [1]
     assert profile["tags"] == [] and profile["indexerIds"] == []
-    assert [w[:2] for w in fake.writes] == [("POST", "/api/v5/releaseprofile")]
+    assert _profile_writes(fake) == [("POST", "/api/v5/releaseprofile")]
+
+
+def test_an_excluded_series_type_gets_a_rule_that_tags_its_series(
+    script_dir, declaration, sonarr
+):
+    fake = sonarr([])
+    result = fake.run(script_dir, declaration)
+    assert result.returncode == 0, result.stderr
+    (rule,) = fake.store["autotagging"]
+    assert rule["tags"] == [1]
+    assert rule["removeTagsAutomatically"] is False
+    (spec,) = rule["specifications"]
+    assert spec["implementation"] == "SeriesTypeSpecification"
+    assert spec["fields"] == [{"name": "value", "value": 2}]
+    assert fake.store["command"] == [{"name": "RefreshSeries", "id": 1}]
+
+
+def test_a_missing_series_type_tag_is_created_and_excluded(
+    script_dir, declaration, sonarr
+):
+    fake = sonarr([], tags=[{"id": 2, "label": "kids"}])
+    result = fake.run(script_dir, declaration)
+    assert result.returncode == 0, result.stderr
+    assert {"id": 3, "label": "anime"} in fake.store["tag"]
+    assert fake.store["autotagging"][0]["tags"] == [3]
+    assert _declared(fake)["excludedTags"] == [3]
 
 
 def test_a_second_run_changes_nothing(script_dir, declaration, sonarr):
@@ -203,6 +241,24 @@ def test_a_second_run_changes_nothing(script_dir, declaration, sonarr):
     assert result.returncode == 0, result.stderr
     assert "already matches; no change" in result.stdout
     assert fake.writes == []
+
+
+def test_a_drifted_rule_is_corrected_and_starts_a_refresh(
+    script_dir, declaration, sonarr
+):
+    fake = sonarr([OTHER_PROFILE])
+    assert fake.run(script_dir, declaration).returncode == 0
+    (rule,) = fake.store["autotagging"]
+    rule["removeTagsAutomatically"] = True
+    rule["specifications"][0]["fields"] = [{"name": "value", "value": 0}]
+    fake.writes.clear()
+    result = fake.run(script_dir, declaration)
+    assert result.returncode == 0, result.stderr
+    assert "removeTagsAutomatically, specifications" in result.stdout
+    assert [w[:2] for w in fake.writes] == [
+        ("PUT", f"/api/v5/autotagging/{rule['id']}"),
+        ("POST", "/api/v5/command"),
+    ]
 
 
 def test_a_drifted_profile_is_corrected_and_others_are_left_alone(
@@ -222,18 +278,28 @@ def test_a_drifted_profile_is_corrected_and_others_are_left_alone(
     result = fake.run(script_dir, declaration)
     assert result.returncode == 0, result.stderr
     assert "airDateGracePeriod, excludedTags" in result.stdout
-    assert [w[:2] for w in fake.writes] == [("PUT", "/api/v5/releaseprofile/3")]
-    assert _declared(fake.profiles)["airDateGracePeriod"] == -24
-    assert OTHER_PROFILE in fake.profiles
+    assert _profile_writes(fake) == [("PUT", "/api/v5/releaseprofile/3")]
+    assert _declared(fake)["airDateGracePeriod"] == -24
+    assert OTHER_PROFILE in fake.store["releaseprofile"]
 
 
-def test_a_missing_excluded_tag_fails_and_writes_nothing(
+def test_a_missing_excluded_tag_fails_without_writing_the_profile(
     script_dir, declaration, sonarr
 ):
-    fake = sonarr([], tags=[{"id": 2, "label": "kids"}])
-    result = fake.run(script_dir, declaration)
+    fake = sonarr([])
+    result = fake.run(script_dir, _with(declaration, excluded_tags=["early"]))
     assert result.returncode == 1
-    assert "Sonarr has no tag ['anime']" in result.stderr
+    assert "Sonarr has no tag ['early']" in result.stderr
+    assert _profile_writes(fake) == []
+
+
+def test_an_unknown_series_type_fails_and_writes_nothing(
+    script_dir, declaration, sonarr
+):
+    fake = sonarr([])
+    result = fake.run(script_dir, _with(declaration, excluded_series_types=["cartoon"]))
+    assert result.returncode == 1
+    assert "Sonarr has no series type ['cartoon']" in result.stderr
     assert fake.writes == []
 
 
@@ -255,4 +321,5 @@ def test_the_declaration_is_the_roles_defaults(declaration):
         "name": NAME,
         "air_date_grace_hours": DEFAULTS["sonarr_k8s_air_date_grace_hours"],
         "excluded_tags": DEFAULTS["sonarr_k8s_air_date_excluded_tags"],
+        "excluded_series_types": DEFAULTS["sonarr_k8s_air_date_excluded_series_types"],
     }

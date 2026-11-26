@@ -37,6 +37,7 @@ renderer writes `dependsOn`*.
 
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
+from graphlib import CycleError, TopologicalSorter
 from pathlib import Path
 
 
@@ -370,22 +371,11 @@ def dependency_cycle(graph: Mapping[str, Iterable[str]]) -> list[str]:
     The cycle is returned as a path that starts and ends on the same name. A name `graph`
     does not map has no edges.
     """
-    state: dict[str, int] = {}  # 1 while on the walk's path, 2 once finished
-    for root in sorted(graph):
-        if state.get(root):
-            continue
-        path = [root]
-        stack = [iter(sorted(graph.get(root, ())))]
-        state[root] = 1
-        while stack:
-            dep = next(stack[-1], None)
-            if dep is None:
-                state[path.pop()] = 2
-                stack.pop()
-            elif state.get(dep) == 1:
-                return path[path.index(dep) :] + [dep]
-            elif not state.get(dep):
-                state[dep] = 1
-                path.append(dep)
-                stack.append(iter(sorted(graph.get(dep, ()))))
+    sorter = TopologicalSorter(
+        {name: sorted(deps) for name, deps in sorted(graph.items())}
+    )
+    try:
+        sorter.prepare()
+    except CycleError as error:
+        return error.args[1][::-1]
     return []
