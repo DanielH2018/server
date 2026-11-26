@@ -512,7 +512,9 @@ runs as `claude`:
 
 - It installs a pinned Node tarball under `~/.local/share/node`, `@playwright/mcp` at the
   operator's release, and the Chromium that release's playwright pins. The pins are in
-  `hosts/components/claude-code/component.yml`'s `defaults:`.
+  `hosts/components/claude-code/component.yml`'s `defaults:`. `ui_mcp.sh` runs the same
+  `playwright-mcp install-browser chromium` at each launch, for the operator too; this run
+  keeps the agent's download off the MCP startup.
 - It registers `homelab-ui` at user scope in the agent's `~/.claude.json`. The entry
   launches `~/server/scripts/diagnostics/ui_mcp.sh` with `NODE_BIN` set to the agent's Node.
   The registration is not in the repo's `.mcp.json`: a project-scope server waits for an
