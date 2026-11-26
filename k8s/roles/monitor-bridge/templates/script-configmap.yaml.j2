@@ -7,7 +7,7 @@
   part of this role's manifests. Under Ansible a module edit
   changes the render and the shared role's rollout restart rolls the pod. Under Flux the
   renderer's `checksum/restart` hashes every ConfigMap the pod's projected volume names.
-  scripts/renderer/tests/test_renderer_monitor_bridge_script.py holds both halves.
+  scripts/renderer/tests/manifests/test_renderer_monitor_bridge_script.py holds both halves.
 
   One per module, not one for all: a client-side apply copies each object
   into a `last-applied-configuration` annotation capped at 262144 bytes. The modules total about

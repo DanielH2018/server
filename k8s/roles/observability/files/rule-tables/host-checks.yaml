@@ -1213,7 +1213,7 @@ groups:
       # updater first writes 1 at its 03:05 fire, so the pin waits 21h25m for the next 00:30. The
       # unit's TimeoutStartSec is 90 minutes, and the updater's 03:05 fire after it, its 60s delay
       # and its own 50-minute TimeoutStartSec rewrite the 1 to 0: 24h51m in all.
-      # scripts/renderer/tests/test_renderer_host_update_limits.py derives it from the unit
+      # scripts/renderer/tests/host/test_renderer_host_update_limits.py derives it from the unit
       # files and fails a window shorter than it.
       #
       # It reads the range, never a `for:`. A failed scrape or the Pi's weekly reboot marks the

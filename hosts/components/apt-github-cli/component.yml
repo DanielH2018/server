@@ -5,7 +5,7 @@
 # upgrade moves it to GitHub's.
 #
 # The keyring's sha256 is 6084d5d7...811b, the digest github_cli pinned.
-# scripts/renderer/tests/test_apt_source_components.py holds it.
+# scripts/renderer/tests/host/test_apt_source_components.py holds it.
 depends:
   - gh
 files:

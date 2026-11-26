@@ -18,7 +18,7 @@ description: Pinned upstream binaries the homelab packages call by absolute path
 # the one arm64 host, and it takes no work the other two hosts could do: the full set is a
 # 119 MB download and a 349 MB unpack onto its SD card at every publish. Every tool still pins
 # arm64 below, because hosts/bootstrap-host.sh embeds the nfpm and uv blocks.
-# scripts/renderer/tests/test_renderer_host_tools.py holds this list equal to the tools the Pi's
+# scripts/renderer/tests/host/test_renderer_host_tools.py holds this list equal to the tools the Pi's
 # packages name.
 tools_on:
   arm64: [node-exporter, sops]

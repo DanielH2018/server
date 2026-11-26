@@ -79,7 +79,7 @@ generated_sha: f2e8e29f8
 | [what-the-migration-built.md](../what-the-migration-built.md) | 2026-11-21 | 1 | 1 | `CLAUDE.md` (2026-11-26) |
 | [adr/0003-sops-with-age-for-secrets-at-rest.md](../adr/0003-sops-with-age-for-secrets-at-rest.md) | 2026-11-25 | 6 | 1 | `hosts/bootstrap-host.sh` (2026-11-26) |
 | [adr/0009-networkpolicy-default-deny-ingress.md](../adr/0009-networkpolicy-default-deny-ingress.md) | 2026-11-25 | 1 | 1 | `k8s/roles/netpol-baseline/defaults/main.yml` (2026-11-26) |
-| [adr/0028-the-renderer-supports-a-closed-jinja-subset.md](../adr/0028-the-renderer-supports-a-closed-jinja-subset.md) | 2026-11-25 | 5 | 1 | `scripts/renderer/tests/test_renderer_dialect.py` (2026-11-26) |
+| [adr/0028-the-renderer-supports-a-closed-jinja-subset.md](../adr/0028-the-renderer-supports-a-closed-jinja-subset.md) | 2026-11-25 | 5 | 1 | `scripts/renderer/tests/manifests/test_renderer_dialect.py` (2026-11-26) |
 | [adr/0032-cis-heavy-jobs-may-run-on-runner-pods.md](../adr/0032-cis-heavy-jobs-may-run-on-runner-pods.md) | 2026-11-25 | 3 | 1 | `hosts/components/github-checks/templates/github-ruleset-drift.sh.j2` (2026-11-26) |
 | [adr/0004-authelia-is-the-single-sign-on-layer.md](../adr/0004-authelia-is-the-single-sign-on-layer.md) | 2026-09-02 | 0 | 0 | — |
 | [jellyfin-attachment-latency.md](../jellyfin-attachment-latency.md) | 2026-10-30 | 0 | 0 | — |

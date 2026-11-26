@@ -158,11 +158,11 @@ statuses and Discord errors. `docs/flux-deploy-plane.md` describes each object.
   delete that CRD and every object of its kind, and `deletionPolicy: Orphan` covers only a
   delete of the Kustomization itself. The cost is traefik-crds': an object a later upgrade
   drops stays until the operator deletes it (**operator-only**).
-  `scripts/renderer/tests/test_renderer_crd_census.py` names `flux` as a member. The lever
+  `scripts/renderer/tests/bundle/test_renderer_crd_census.py` names `flux` as a member. The lever
   reaches `flux` alone (`scripts/renderer/renderer_lib/bundle.py:flux_files`, its decision
   marker), so a sync object the render drops is pruned.
 - **The source is pinned.**
-  `scripts/renderer/tests/test_renderer_bootstrap_documents.py` fails a render whose
+  `scripts/renderer/tests/manifests/test_renderer_bootstrap_documents.py` fails a render whose
   OCIRepositories move off `oci://ghcr.io/danielh2018/homelab-manifests`, `prod` and
   `last-good`, or the `promote` signer, because a broken source cuts Flux off from the commit
   that would fix it.

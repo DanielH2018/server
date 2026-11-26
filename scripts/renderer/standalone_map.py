@@ -9,7 +9,7 @@ is the projection of the renderer's standalone key sets: the committed file
 to the sorted keys that stand alone in its directories, every one of them. A tag with no
 such key is left out.
 
-`scripts/renderer/tests/test_renderer_standalone_map.py` holds the committed map
+`scripts/renderer/tests/bundle/test_renderer_standalone_map.py` holds the committed map
 equal to the render, so CI fails a template change that adds a standalone use until the map
 is regenerated. `docs/homelab-render.md` is the operator's page.
 

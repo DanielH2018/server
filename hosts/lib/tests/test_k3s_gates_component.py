@@ -2,7 +2,7 @@
 
 The k3s-agent Plan's `prepare` runs /host/usr/lib/homelab/k3s_gates.py on daniel-server, whose
 package does not list `k3s-restart`, so a component of its own must ship the file. The renderer
-already refuses one path from two components (scripts/renderer/tests/test_renderer_host_mode.py).
+already refuses one path from two components (scripts/renderer/tests/host/test_renderer_host_mode.py).
 
 Run: uv run pytest hosts/lib/tests/test_k3s_gates_component.py
 """

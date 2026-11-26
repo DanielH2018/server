@@ -33,7 +33,7 @@ every routed role reaches the CRDs through its edge to `traefik`
   kind, would make Flux delete that CRD, and the API server would then delete every
   IngressRoute or Middleware of the kind: the whole edge goes down. `deletionPolicy` does not
   help, because it governs deleting the Kustomization, not pruning an object the render
-  dropped. `scripts/renderer/tests/test_renderer_crd_census.py` fails a CRD in any tag that
+  dropped. `scripts/renderer/tests/bundle/test_renderer_crd_census.py` fails a CRD in any tag that
   renders `prune: true`, with this tag as its named member.
 - **The cost of `prune: false`:** a CRD a later upstream release retires stays live until
   the operator deletes it (**operator-only**). Never revert `flux_prune: false` while the tag is
