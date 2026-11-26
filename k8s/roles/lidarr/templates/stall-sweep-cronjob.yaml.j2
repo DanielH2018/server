@@ -10,9 +10,9 @@
   metadata. Cross-run state in a ConfigMap would also avoid that, at the cost of RBAC, a token
   and a kubectl image. The qBittorrent read costs one Secret key and one fence entry.
 
-  DECIDED: no `flux_cronjob_gates` entry. Lidarr has a Deployment, so the rule for CronJob-only
-  roles does not bind, and a gate copy would remove torrents at every revision. The scheduled
-  run is the evidence, as for janitorr's health CronJob.
+  DECIDED: the sweep runs on a schedule and once per revision. `flux_cronjob_gates` copies the
+  jobTemplate into `lidarr-verify`, which waits on qbittorrent (`flux_verify_after`). A gate run
+  removes only what a scheduled run would, and a second run finds nothing more.
 
   The pod carries `app: lidarr-stall-sweep`, a peer that lidarr's and qbittorrent's
   `netpol_from` both list in `k8s/services.yml`.

@@ -83,7 +83,11 @@ def test_the_script_passes_the_job_census_helper_rules():
 
 
 class _Apps:
-    """Answers like qBittorrent and Lidarr on one port, and keeps the DELETEs it receives."""
+    """Answers like qBittorrent and Lidarr on one port, and keeps the DELETEs it receives.
+
+    A queue record's id is its torrent's hash read as a number, and a DELETE drops the
+    torrents it names, as Lidarr's `removeFromClient` does.
+    """
 
     def __init__(self, torrents: list[dict], dht_nodes: int = 300):
         self.torrents = torrents
@@ -104,11 +108,13 @@ class _Apps:
         if headers.get("X-Api-Key") != "lidarr-key":
             return 401, {}
         if method == "DELETE" and path == "/api/v1/queue/bulk":
-            self.deletes.append((query, json.loads(body)))
+            ids = json.loads(body)["ids"]
+            self.deletes.append((query, {"ids": ids}))
+            self.torrents = [t for t in self.torrents if int(t["hash"], 16) not in ids]
             return 200, None
         records = [
-            {"id": n, "downloadId": t["hash"].upper()}
-            for n, t in enumerate(self.torrents)
+            {"id": int(t["hash"], 16), "downloadId": t["hash"].upper()}
+            for t in self.torrents
         ]
         return 200, {"totalRecords": len(records), "records": records}
 
@@ -162,7 +168,7 @@ def test_an_armed_run_removes_the_dead_with_blocklist_and_research(serve, capsys
     env = {**serve(apps), "ARMED": "true"}
     assert sweep.sweep(env, NOW) == 0
     ((query, body),) = apps.deletes
-    assert body == {"ids": [0]}
+    assert body == {"ids": [1]}
     assert query == {
         "removeFromClient": ["true"],
         "blocklist": ["true"],
@@ -183,3 +189,12 @@ def test_a_run_with_too_few_dht_nodes_refuses_before_any_removal(serve):
     with pytest.raises(sweep.SweepError):
         sweep.sweep({**serve(apps), "ARMED": "true"}, NOW)
     assert apps.deletes == []
+
+
+def test_a_second_run_removes_nothing(serve):
+    # fact: k8s/roles/lidarr/CLAUDE.md#Autonomous-role contract
+    apps = _Apps([_torrent(1), _torrent(2)])
+    env = {**serve(apps), "ARMED": "true"}
+    assert sweep.sweep(env, NOW) == 0
+    assert sweep.sweep(env, NOW) == 0
+    assert [body["ids"] for _, body in apps.deletes] == [[1, 2]]

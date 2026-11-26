@@ -95,7 +95,10 @@ The `lidarr-stall-sweep` CronJob removes Lidarr queue records with no human in t
   The qBittorrent key reaches the pod through the `lidarr-stall-sweep` Secret.
 - **Mode and arming.** `k8s/roles/lidarr/defaults/main.yml:lidarr_k8s_stall_sweep_armed`. While
   it is false, each run logs what it would remove and removes nothing. To stop the sweep, set it
-  false again.
+  false again. Besides the hourly schedule, a gate copy runs once per revision in
+  `lidarr-verify`, after qbittorrent is Ready (`k8s/roles/lidarr/defaults/main.yml:flux_verify_after`).
+  A second run finds nothing more to remove
+  (`k8s/roles/lidarr/tests/test_sweep_lidarr_stalls.py::test_a_second_run_removes_nothing`).
 - **Abort valves.** A run removes nothing when qBittorrent reports fewer than 10 DHT nodes,
   because a dropped VPN tunnel stalls every torrent at once
   (`k8s/roles/lidarr/tests/test_sweep_lidarr_stalls.py::test_a_run_with_too_few_dht_nodes_refuses_before_any_removal`).

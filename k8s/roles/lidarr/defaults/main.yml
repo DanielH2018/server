@@ -73,6 +73,16 @@ lidarr_k8s_stall_sweep_schedule: "41 * * * *"
 lidarr_k8s_stall_sweep_job_ttl_seconds: 4200
 # false reports what the sweep would remove and removes nothing; true removes.
 lidarr_k8s_stall_sweep_armed: false
+# The renderer copies the sweep's jobTemplate into `lidarr-verify` as
+# `lidarr-stall-sweep-deploy-gate-<spec digest8>`, a real run once per revision. A second run
+# finds nothing more to remove, so the gate is a post-apply mutation.
+flux_cronjob_gates:
+  lidarr-stall-sweep:
+    kind: mutation
+    rerun_safe: k8s/roles/lidarr/tests/test_sweep_lidarr_stalls.py::test_a_second_run_removes_nothing
+# The sweep's gate reads qBittorrent, so verify waits on its rolled pod.
+flux_verify_after:
+  - qbittorrent
 
 k8s_claims:
   - name: "{{ lidarr_k8s_claim }}"
