@@ -72,7 +72,7 @@ Each rule below overrides step 2. Move the candidate off the list and note which
 - **A non-vacuity assertion.** An assertion that a census holds named members is the only
   thing that fails when its glob matches nothing. `KNOWN_CONSUMERS` in
   `scripts/diagnostics/tests/probe_cli/test_probe_boundaries.py` is the pattern.
-- **A reintroduction that would cause harm.** `tests/services/test_pihole_redundancy.py`
+- **A reintroduction that would cause harm.** `tests/services/network/test_pihole_redundancy.py`
   refuses a path that would restart both DNS replicas at once. A `# DECIDED:` marker beside
   the subject is the same signal.
 - **A `legacy:` list.** Reconcile deletes those paths on each host, so a test over one tests

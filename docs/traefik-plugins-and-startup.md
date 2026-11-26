@@ -15,7 +15,7 @@ The probe targets `edge-selfcheck-ingressroute.yaml.j2`, a router of Traefik's o
 kills it too and kubelet restarts the container instead.
 
 Three constraints hold it together, all ENFORCED by
-`tests/services/test_traefik_edge_selfcheck.py`: the route stays on an entrypoint
+`tests/services/traefik/test_traefik_edge_selfcheck.py`: the route stays on an entrypoint
 whose chain names the `crowdsec` Middleware, the probe path stays the route's own, and the
 route matches on a path rather than a Host. A kubelet probe sends no SNI, and Traefik
 answers a matched `Host()` router with 421 when SNI and Host disagree.

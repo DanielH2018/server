@@ -44,7 +44,7 @@ redundant, and a scrape job pointed straight at the Pi-holes would be simpler an
 
 DNS is load-balanced across two independent FTLs (`pihole` and `pihole-2`), each keeping its
 own `pihole-FTL.db`
-(`tests/services/test_pihole_redundancy.py::test_both_instances_are_selected_by_the_dns_service`). A scrape that reached one of them would report roughly **half** the
+(`tests/services/network/test_pihole_redundancy.py::test_both_instances_are_selected_by_the_dns_service`). A scrape that reached one of them would report roughly **half** the
 house's query volume — silently, with a graph that looks entirely plausible.
 
 So `PIHOLE_HOSTNAME` carries both Services
@@ -56,7 +56,7 @@ Instance 2's Service, `pihole-2-web`, was added to the pihole role for this. It 
 IngressRoute and must not get one: the admin UI is deliberately pinned to instance 1, because a
 session round-robined across two FTLs 401s at random (the comment on the `pihole` Service says
 so at the line, and
-`tests/services/test_pihole_redundancy.py::test_only_the_web_service_is_pinned_to_one_instance`
+`tests/services/network/test_pihole_redundancy.py::test_only_the_web_service_is_pinned_to_one_instance`
 holds the pin).
 
 ## It holds no credential of its own

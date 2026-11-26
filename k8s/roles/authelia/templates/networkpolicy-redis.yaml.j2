@@ -13,7 +13,7 @@
 # constraint to violate.
 #
 # 6379 is the containerPort AND the Service port, and
-# tests/services/test_authelia_redis_sessions.py keeps them matching. That test also
+# tests/services/authelia/test_authelia_redis_sessions.py keeps them matching. That test also
 # pins this file's co-location, so moving it fails the suite rather than the pod.
 #
 # The crowdsec agent sidecar shares the authelia pod, so it arrives here carrying `app:

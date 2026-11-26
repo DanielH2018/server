@@ -176,7 +176,7 @@ groups:
             `dockerhub-mirror-pull` container on daniel-server.
       # registry-gc.sh writes the registry-gc textfile, and these two rules watch it. The
       # NotReporting literals equal the DEADLINE_S the script renders:
-      # tests/services/test_registry_gc_watchers_cover_the_worst_run.py pins both. Both rules
+      # tests/services/registry_gc/test_registry_gc_watchers_cover_the_worst_run.py pins both. Both rules
       # are `warning`, so Discord alone.
       - alert: RegistryGcFailed
         expr: homelab_check_success{check="registry-gc",origin="daniel-box"} == 0

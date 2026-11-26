@@ -34,9 +34,7 @@ class Probe:
 code = pytest.main([*sys.argv[1:], "-n0", "-p", "no:cacheprovider"], plugins=[Probe()])
 print(f"PROBE exit={int(code)} built={seen[:1]}")
 """
-_PROBE_TEST = (
-    "tests/services/test_karakeep_public_bypass.py::test_the_old_wide_prefix_is_flagged"
-)
+_PROBE_TEST = "tests/services/apps/test_karakeep_public_bypass.py::test_the_old_wide_prefix_is_flagged"
 
 
 def _built_before_the_first_test(*extra: str) -> str:

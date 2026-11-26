@@ -111,7 +111,7 @@ valheim_k8s_server_size: 20Gi
 # nobackup: every byte here is re-downloadable from Steam, and B2 is the scarce resource.
 valheim_k8s_server_storage_class: longhorn-nobackup
 # Largest update transient (2.2 G) as 3 GiB; PVCBelowFreeFloor pages below it.
-# tests/services/test_storage_rule_literals.py fails when the two declarations drift.
+# tests/services/alert_rules/test_storage_rule_literals.py fails when the two declarations drift.
 valheim_k8s_server_update_transient_bytes: 3221225472
 
 # ── server identity ─────────────────────────────────────────────────────────────────────

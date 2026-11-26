@@ -83,7 +83,7 @@ See repo-root `CLAUDE.md` for shared conventions.
   which is the same assertion a gate would make, made where the revision's soak acts on it. (2) An unbounded wait trades a bounded
   post-boot crash loop for an indefinite `Init` stall, with no restart count and no
   CrashLoopBackOff to notice — see the docstring of
-  `tests/services/test_karakeep_backend_policies.py`, which is where that pattern
+  `tests/services/apps/test_karakeep_backend_policies.py`, which is where that pattern
   DOES apply and what it costs. (3) A pod that never leaves `Init` after a node reboot waits for
   a human, because no apply runs then and no Kustomization `wait` sees it, and this is the one
   role in the fleet that deletes real media. Contradict this at a cited `file:line` with new evidence.

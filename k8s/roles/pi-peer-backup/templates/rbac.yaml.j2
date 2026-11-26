@@ -10,7 +10,7 @@
   GET. The grant names the object, so the token reaches no other ConfigMap. The pod mounts the
   token only because of this export: the backup itself never calls the API.
 
-  tests/services/test_pi_peer_backup_verdict_export.py holds this Role to the call.
+  tests/services/pi_peer_backup/test_pi_peer_backup_verdict_export.py holds this Role to the call.
 #}
 ---
 apiVersion: v1

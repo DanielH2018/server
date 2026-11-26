@@ -144,9 +144,22 @@ k8s_namespace: homelab
 # It does not say why a workload is pinned; that is recorded at each pin.
 k8s_primary_node: daniel-box
 
-# Stream labels render from here; test_loki_stream_labels.py checks every consumer's `job` is
-# listed.
-# Two roles share `job: syslog`; monitor-bridge's file-tail arm must exclude pi_health's machine.
+# The label values loki-homelab's streams carry, one entry per stream role. Both Alloy
+# configs stamp their streams from this map: k8s/roles/loki-homelab for the cluster nodes and
+# hosts/components/pi-compose/services/alloy for daniel-pi. monitor-bridge's LogQL selectors in config/env.yaml.j2
+# are rendered from it too.
+#
+# A consumer that cannot render a var is compared against it instead: the Grafana dashboards,
+# the observability deploy-annotation expr, probe.py's alert reconstruction and monitor-bridge's
+# Python constants. tests/services/scraping/test_loki_stream_labels.py holds both directions:
+# every value here is emitted, and every `job` value a consumer selects is one listed here.
+#
+# Only daniel-pi's streams name a `machine`. A cluster stream's machine is the node's HOSTNAME,
+# which Alloy reads at runtime, so no inventory value can own it.
+#
+# Two roles share `job: syslog`. That is deliberate: one parser and one board read every
+# host's verdict lines. It is also why monitor-bridge's file-tail arm must exclude
+# pi_health's machine.
 loki_streams:
   cluster_pods:
     job: k8s
@@ -282,9 +295,10 @@ k8s_registry_port: 5000
 k8s_registry_host_ip: 127.0.0.1
 # Same string as the registries.yaml mirror KEY, so image refs are node-portable; endpoints differ.
 k8s_registry_pull_host: "localhost:{{ k8s_registry_port }}"
-# Renderer rewrites container `image:` to this host; a ref it cannot reach (ConfigMap text) names it
-# directly.
-# tests/services/test_airflow_task_image.py holds the two equal.
+# Where a Flux-owned tag pulls each built image. The renderer rewrites every container `image:`
+# naming a built image to this host (scripts/renderer/renderer_lib/images.py:GHCR); a ref
+# the rewrite cannot reach, such as one inside ConfigMap text, names it directly.
+# tests/services/apps/test_airflow_task_image.py holds the two equal.
 k8s_ghcr_pull_host: ghcr.io/danielh2018
 # Pinned: agents' registries.yaml names it, and containerd resolves no cluster DNS.
 # Plain HTTP between nodes is accepted (own hosts, own switch).

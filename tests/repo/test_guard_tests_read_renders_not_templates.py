@@ -18,7 +18,8 @@ byte-identical templates — both render differently from what they test — and
 with none. `hosts/tests/` joined, as `tests/setup/`, with two, each keyed on
 something no render carries: a Jinja FILTER, and the behaviour of a variable no render leaves
 undefined. Every test directory is scanned. Entries are keyed `<label>/<module>.py`,
-where the label is the directory's key in `SCANNED`, because a basename alone would let a
+where the label is the directory's key in `SCANNED` and the rest is the module's path below it,
+because a basename alone would let a
 module in one directory inherit another's exemption.
 
 The exposure is the same one the `tests-read-shell-templates-rendered` row of
@@ -88,26 +89,26 @@ TEMPLATE_SOURCE_READERS = {
         "whether a tiered role's `pod_shell(...)` call passes a literal class or the derived "
         "one — both render the same `priorityClassName`, so only the source tells them apart"
     ),
-    "services/test_n8n_build_is_pinned.py": (
+    "services/apps/test_n8n_build_is_pinned.py": (
         "Renovate's `matchString` runs against `Dockerfile.j2` on disk, braces intact; a "
         "render is not what Renovate sees"
     ),
-    "services/test_nut_fsd_login_confined.py": (
+    "services/network/test_nut_fsd_login_confined.py": (
         "which ROLES name `nut_monitor_password` — every render of that secret is the same "
         "`STUB`, so the census has to key on the variable name"
     ),
-    "services/test_qbittorrent_mullvad_account_secret.py": (
+    "services/media/test_qbittorrent_mullvad_account_secret.py": (
         "the account must render with an int `mullvad_account`, as SOPS types it, and "
         "`_k8s_render`'s stubs are strings; the to_json red case also mutates the source"
     ),
-    "services/test_storage_rule_literals.py": (
+    "services/alert_rules/test_storage_rule_literals.py": (
         "which ROLES write `snapshotMaxSize` in a verify Job — the census keys on the field "
         "NAME, which a render does not change, across every role's verify templates"
     ),
-    "services/test_smtp_wiring.py": (
+    "services/alertmanager/test_smtp_wiring.py": (
         "a `# DECIDED:` comment in authelia's config-secret template, which no render carries"
     ),
-    "services/test_strangler_bridge.py": (
+    "services/monitor_bridge/test_strangler_bridge.py": (
         "the ABSENCE of a retired variable name (`bridge_hostname`) across every template, "
         "which a render cannot show — an undefined name renders as nothing"
     ),
@@ -180,12 +181,12 @@ TEMPLATE_SOURCE_READERS = {
 # An empty or partial scan means the walk stopped matching, not that the directory is clean.
 KNOWN_MEMBERS = frozenset(
     {
-        "services/_homepage_config.py",
-        "services/_jellyfin_plugins.py",
-        "services/test_authelia_access_tiers.py",
-        "services/test_monitor_bridge_modules.py",
-        "services/test_smtp_wiring.py",
-        "services/test_strangler_bridge.py",
+        "services/homepage/_homepage_config.py",
+        "services/jellyfin/_jellyfin_plugins.py",
+        "services/authelia/test_authelia_access_tiers.py",
+        "services/monitor_bridge/test_monitor_bridge_modules.py",
+        "services/alertmanager/test_smtp_wiring.py",
+        "services/monitor_bridge/test_strangler_bridge.py",
         "longhorn/_restore_drill.py",
         "longhorn/test_daily_group_membership_is_the_r2_list.py",
         "longhorn/test_longhorn_reap_never_scheduled.py",
@@ -225,23 +226,27 @@ KNOWN_MEMBERS = frozenset(
 
 
 def _modules() -> dict[str, Path]:
-    """Every scanned module, by its `<label>/<module>.py` key."""
+    """Every scanned module, by its `<label>/<path below the directory>` key."""
     return {
-        f"{label}/{p.name}": p
+        f"{label}/{p.relative_to(directory).as_posix()}": p
         for label, directory in SCANNED.items()
-        for p in sorted(directory.glob("*.py"))
+        for p in sorted(directory.rglob("*.py"))
         if p.name != "__init__.py"
     }
 
 
 @functools.cache
-def _importable(label: str) -> tuple[tuple[str, str], ...]:
-    """Every module a test in the `label` directory can import, as (module name, text) pairs.
+def _importable(directory: str) -> tuple[tuple[str, str], ...]:
+    """Every module a test in `directory` can import, as (module name, text) pairs.
 
-    Cached as a tuple because `functools.cache` needs a hashable return value and the census
-    asks for the same directory once per module in it.
+    `directory` is a module key without its file name: a label, or a group below one. A grouped
+    test also reaches its suite's root. Cached as a tuple because `functools.cache` needs a
+    hashable return value and the census asks for the same directory once per module in it.
     """
-    return tuple(sibling_sources(SCANNED[label], TESTS).items())
+    label = next(k for k in SCANNED if f"{directory}/".startswith(f"{k}/"))
+    group = SCANNED[label] / directory.removeprefix(label).lstrip("/")
+    sources = sibling_sources(SCANNED[label], TESTS) | sibling_sources(group, TESTS)
+    return tuple(sources.items())
 
 
 def test_the_census_reaches_every_known_module():

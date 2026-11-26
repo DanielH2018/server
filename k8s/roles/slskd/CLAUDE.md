@@ -19,7 +19,7 @@ into `media/music`.
 - **Sharing has one switch:** `slskd_k8s_share_library` in `defaults/main.yml`. `true` shares
   `media/music` read-only at `/music`; `false` shares and mounts nothing of the library. A PR
   that flips it restarts the pod with the new share
-  (`tests/services/test_slskd_share_switch.py`).
+  (`tests/services/media/test_slskd_share_switch.py`).
 - **The tunnel is the shared `k8s/templates/wireguard-sidecar.yml.j2`**, qbittorrent's
   sidecar, with a Mullvad device of its own (`slskd_wireguard_private_key`) on the same account.
   qbittorrent's `CLAUDE.md` has its traps: the kill-switch that outlives a container, the netns

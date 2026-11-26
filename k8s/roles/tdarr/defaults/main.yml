@@ -75,7 +75,7 @@ tdarr_k8s_webui_port: 8265
 tdarr_k8s_server_port: 8266
 
 # Separate literal from jellyfin's, the plugin's and the extended-resource check's; a partial rename
-# leaves the pod unschedulable. tests/services/test_dri_resource_name_agrees.py couples them.
+# leaves the pod unschedulable. tests/services/media/test_dri_resource_name_agrees.py couples them.
 tdarr_k8s_dri_resource: devic.es/dri
 
 tdarr_k8s_cpu_limit: "6"

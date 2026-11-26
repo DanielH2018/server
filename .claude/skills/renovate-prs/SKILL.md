@@ -269,7 +269,7 @@ A half-done bump is a normal code change: worktree, fix, test, PR. Three rules s
   your own branch, then `gh pr close <renovate-pr>` naming the superseding PR. Keeping the
   bot's commit preserves the provenance of the version bump.
 - **A coupled pin moves with it.** `raise jellyfin with it` means the image bump is part of
-  the same PR, because the repo guards the pair (`tests/services/test_anisync_pin_matches_server.py::test_the_plugin_target_abi_does_not_exceed_the_server`). Run
+  the same PR, because the repo guards the pair (`tests/services/jellyfin/test_anisync_pin_matches_server.py::test_the_plugin_target_abi_does_not_exceed_the_server`). Run
   the guard the rule points at; it is the completion criterion.
 - **The unattended run cannot finish a work order.** It runs as its own user with a token
   that cannot push, merge or file an issue, so it opens no superseding PR

@@ -272,7 +272,7 @@ defined. The sidecar jobs render one per entry of
 
 Read the job before writing a CrowdSec query: `node` is not a CrowdSec label and only the
 DaemonSet job attaches one, so a per-node selector on an engine or sidecar metric matches nothing
-(ENFORCED by `tests/services/test_dashboard_queries_match_this_clusters_labels.py`).
+(ENFORCED by `tests/services/dashboards/test_dashboard_queries_match_this_clusters_labels.py`).
 
 **A sidecar job also needs the pod's containerPort and a :6060 grant**, which netpol-baseline's
 `networkpolicy-crowdsec-sidecars.yaml.j2` renders from the same map (#4088). ENFORCED by
