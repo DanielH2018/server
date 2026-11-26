@@ -137,7 +137,7 @@ edits to the inventory and drift in the running fleet both show up here on their
 {_table_view(model)}
 
 <footer>
-Sources: <code>inventory/</code> for declared state; live state from
+Sources: the vars files (<code>estate/</code>, <code>k8s/vars.yml</code>, <code>hosts/</code>) for declared state; live state from
 <code>kubectl</code> on daniel-box (deployments, nodes, pods, Longhorn volumes and
 backup targets) and one <code>docker ps</code> over ssh to daniel-pi.
 The diagram's <em>shape</em> is fixed in <code>scripts/infra_map/diagram.py</code> — those edges

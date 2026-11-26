@@ -14,7 +14,8 @@ on:
       - scripts/renderer/**
       - scripts/lib/**
       - k8s/roles/**
-      - inventory/group_vars/**
+      - hosts/vars.yml
+      - hosts/*/vars.yml
       - estate/**
       - k8s/vars.yml
       - k8s/services.yml

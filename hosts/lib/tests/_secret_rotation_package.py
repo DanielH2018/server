@@ -27,7 +27,7 @@ def render_fixture(tmp_path: Path, components: tuple[str, ...]) -> host_mode.Pac
     root = tmp_path / "hosts"
     (root / HOST).mkdir(parents=True)
     # A `shared` entry resolves against the tree's root, one level above `hosts/`.
-    for name in ("k8s", "inventory", "secrets"):
+    for name in ("k8s", "estate", "secrets"):
         (tmp_path / name).symlink_to(REPO / name)
     (root / "components").symlink_to(REPO / "hosts" / "components")
     (root / "lib").symlink_to(REPO / "hosts" / "lib")

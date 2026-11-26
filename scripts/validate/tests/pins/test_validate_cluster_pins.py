@@ -217,12 +217,6 @@ def test_the_real_tree_overrides_no_pin():
             "- include_role:\n    name: x\n  vars:\n    k3s_longhorn_version: v1.11.0\n",
         ),
         (
-            "inventory/extra.ini",
-            "[k3s]\ndaniel-box k3s_longhorn_version=v1.11.0\n",
-        ),
-        ("inventory/extra.ini", "[all:vars]\nk3s_longhorn_version = v1.11.0\n"),
-        ("inventory/group_vars/all", "k3s_longhorn_version: v1.11.0\n"),
-        (
             "k8s/roles/system-upgrade/tasks/x.yml",
             "- set_fact:\n    k3s_longhorn_version: v1.11.0\n",
         ),
@@ -236,31 +230,18 @@ def test_the_real_tree_overrides_no_pin():
             '- hosts: all\n  vars: {note: "see #1", k3s_longhorn_version: v1.11.0}\n',
         ),
         (
-            "inventory/extra.ini",
-            '[k3s]\ndaniel-box note="a #b" k3s_longhorn_version=v1.11.0\n',
-        ),
-        (
             "k8s/site.yml",
             "- hosts: all\n  vars: {note: 'it''s #1', k3s_longhorn_version: v1.11.0}\n",
-        ),
-        (
-            "inventory/extra.ini",
-            "[k3s]\ndaniel-box ansible_user=x;y k3s_longhorn_version=v1.11.0\n",
         ),
     ],
     ids=[
         "play-vars",
         "include-role-vars",
-        "ini-host-var",
-        "ini-all-vars",
-        "extensionless",
         "set-fact",
         "flow",
         "hash-in-a-value",
         "spaced-hash-in-a-quoted-yaml-value",
-        "spaced-hash-in-a-quoted-ini-value",
         "spaced-hash-after-a-yaml-quote-escape",
-        "semicolon-in-a-value",
     ],
 )
 def test_an_override_the_column_zero_grep_missed_is_flagged(repo, capsys, path, text):
@@ -272,9 +253,11 @@ def test_an_override_the_column_zero_grep_missed_is_flagged(repo, capsys, path, 
     )
 
 
-def test_an_inventory_override_of_a_pin_is_flagged(repo, capsys):
+@pytest.mark.parametrize(
+    "group_vars", ["estate/vars.yml", "hosts/vars.yml", "hosts/daniel-box/vars.yml"]
+)
+def test_a_vars_file_override_of_a_pin_is_flagged(repo, capsys, group_vars):
     base = _commit(repo, {K3S: "k3s_longhorn_version: v1.12.1\n"})
-    group_vars = "inventory/group_vars/all.yml"
     head = _commit(repo, {group_vars: "k3s_longhorn_version: v1.11.0\n"})
     assert cluster_pins.check(base, head, repo) == cluster_pins.REFUSED
     assert f"[FAIL] {group_vars}: k3s_longhorn_version is set outside" in (

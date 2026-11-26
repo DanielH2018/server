@@ -9,6 +9,8 @@ The provenance header is not a renderer's business: `gen_doc_fragments.header` p
 because the marker names the entry point a reader has to run to regenerate the file.
 """
 
+from dataclasses import dataclass
+
 
 def _code_list(items: list[str]) -> str:
     return ", ".join(f"`{item}`" for item in items)
@@ -136,18 +138,36 @@ def render_record_keys(keys: list[str]) -> str:
     )
 
 
-def deadman_crons(
-    k3s: dict,
-    pi_peer: dict,
-    registry: dict,
-    group_vars: dict,
-    host_timers: dict,
-    hosts: list[str],
-    docker_hosts: list[str],
-    observability: dict,
-    sweep_hosts: list[str],
-    warehouse_freshness: str,
-) -> list[tuple[str, str, str]]:
+@dataclass(frozen=True)
+class DeadmanInputs:
+    """The variables `deadman_crons` assembles its rows from.
+
+    Attributes:
+        k3s: the `k3s-host-checks` component's defaults.
+        pi_peer: the `pi-peer-backup` role's defaults.
+        registry: the `registry` role's defaults.
+        group_vars: the estate-wide group variables.
+        host_timers: the `pi-docker` and `worktree-sweep` components' defaults, merged.
+        hosts: each host the weekly reboot pings a slug for.
+        docker_hosts: each host whose package lists the `pi-docker` component.
+        observability: the `observability` role's defaults.
+        sweep_hosts: each host whose package lists the `worktree-sweep` component.
+        warehouse_freshness: the cron of Airflow's `warehouse_freshness` DAG.
+    """
+
+    k3s: dict
+    pi_peer: dict
+    registry: dict
+    group_vars: dict
+    host_timers: dict
+    hosts: list[str]
+    docker_hosts: list[str]
+    observability: dict
+    sweep_hosts: list[str]
+    warehouse_freshness: str
+
+
+def deadman_crons(inputs: DeadmanInputs) -> list[tuple[str, str, str]]:
     """(slug, cron, source) per Healthchecks.io slug, assembled from the variables that set it.
 
     Shared with tests/services/monitor_bridge/test_monitor_bridge_healthchecks_expected.py, which holds
@@ -163,6 +183,9 @@ def deadman_crons(
     every `observability_alertmanager_watchdog_repeat_seconds`. Its cadence is `every <N>s`,
     a form no cron expression takes, so a reader cannot mistake it for one.
     """
+    k3s, pi_peer, registry = inputs.k3s, inputs.pi_peer, inputs.registry
+    group_vars, host_timers = inputs.group_vars, inputs.host_timers
+    observability = inputs.observability
     every_10 = f"{k3s['k3s_longhorn_backup_health_cron_minute']} * * * *"
     rows = [
         (
@@ -208,7 +231,7 @@ def deadman_crons(
             reboot,
             f"`weekly_reboot_weekday` / `_hour` / `_minute`, on {host}",
         )
-        for host in hosts
+        for host in inputs.hosts
     ]
     prune = (
         f"{host_timers['docker_prune_cron_minute']} "
@@ -220,7 +243,7 @@ def deadman_crons(
             prune,
             f"`docker_prune_cron_hour` / `_minute`, on {host}",
         )
-        for host in docker_hosts
+        for host in inputs.docker_hosts
     ]
     sweep = (
         f"{host_timers['worktree_sweep_cron_minute']} "
@@ -233,43 +256,21 @@ def deadman_crons(
             sweep,
             f"`worktree_sweep_cron_weekday` / `_hour` / `_minute`, on {host}",
         )
-        for host in sweep_hosts
+        for host in inputs.sweep_hosts
     ]
     rows.append(
         (
             "airflow-warehouse-fresh",
-            warehouse_freshness,
+            inputs.warehouse_freshness,
             "`HC_SCHEDULE` in Airflow's `homelab_warehouse/freshness.py`, a DAG, not a host cron",
         )
     )
     return rows
 
 
-def render_deadman_cadences(
-    k3s: dict,
-    pi_peer: dict,
-    registry: dict,
-    group_vars: dict,
-    host_timers: dict,
-    hosts: list[str],
-    docker_hosts: list[str],
-    observability: dict,
-    sweep_hosts: list[str],
-    warehouse_freshness: str,
-) -> str:
+def render_deadman_cadences(inputs: DeadmanInputs) -> str:
     """One row per Healthchecks.io slug: the cron that pings it, assembled from its vars."""
-    rows = deadman_crons(
-        k3s,
-        pi_peer,
-        registry,
-        group_vars,
-        host_timers,
-        hosts,
-        docker_hosts,
-        observability,
-        sweep_hosts,
-        warehouse_freshness,
-    )
+    rows = deadman_crons(inputs)
     lines = ["| Check slug | Cron (host clock, UTC) | Set by |", "|---|---|---|"]
     lines += [f"| `{slug}` | `{cron}` | {source} |" for slug, cron, source in rows]
     return "\n".join(lines) + "\n"

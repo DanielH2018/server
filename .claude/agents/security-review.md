@@ -33,7 +33,7 @@ Focus your review on:
 - `hosts/components/k3s-server/` — cluster-level config, RBAC, the read-only ServiceAccount
 - `hosts/components/pi-compose/` — the Pi's Docker Compose templates and the unit that runs them (daniel-pi only)
 - `secrets/` — Secrets files (check encryption, not contents)
-- `inventory/` — Variable files for credential exposure
+- `estate/vars.yml`, `k8s/vars.yml`, `hosts/vars.yml` and `hosts/<host>/vars.yml` — Variable files for credential exposure
 - `containers/` — Deployed compose files (read-only reference; flag plaintext secrets only)
 - `scripts/` — Python scripts for injection risks
 

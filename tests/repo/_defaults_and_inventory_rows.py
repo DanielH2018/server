@@ -271,7 +271,7 @@ _ONLY_A_BACKUP_QUERY_READS_VOLUMENAME = Census(
         "lines are skipped, because the prose explaining this trap mentions the field. Use "
         "`.metadata.name` for a Volume."
     ),
-    files=lambda: tracked("k8s/*.j2", "k8s/*.yml", "inventory/*.j2", "inventory/*.yml"),
+    files=lambda: tracked("k8s/*.j2", "k8s/*.yml", "estate/*.yml"),
     offence=_volume_cr_volumename_reads,
     red=(
         Subject(

@@ -62,7 +62,6 @@ HOST_LIB_FILES = REPO / "hosts" / "lib"
 GH_QUOTA_FILES = REPO / "hosts" / "components" / "gh-quota" / "files"
 SHARED_TPL = K8S / "templates"  # shared macros
 
-INVENTORY = REPO / "inventory"
 # The SOPS files, their creation rules and the plaintext rotation register.
 SECRETS = REPO / "secrets"
 # Each cluster key's ciphertext digest, which `checksum/restart` and the verify Jobs' roll hash.

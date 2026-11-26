@@ -55,8 +55,8 @@ installed=$(node -p "require('$package/package.json').version" 2> /dev/null || t
 if [ "$installed" != "{{ claude_code_agent_playwright_mcp_version }}" ]; then
   npm install --global --no-fund --no-audit "@playwright/mcp@{{ claude_code_agent_playwright_mcp_version }}"
 fi
-# The playwright CLI nested under @playwright/mcp, so the browser revision is the one it drives.
-node "$package/node_modules/playwright/cli.js" install chromium
+# ui_mcp.sh runs the same install at launch; this run keeps the download off the MCP startup.
+playwright-mcp install-browser chromium
 
 launcher={{ claude_code_agent_user_clone_dir }}/scripts/diagnostics/ui_mcp.sh
 want=$(jq -ncS --arg command "$launcher" --arg node_bin "$node_bin" \
