@@ -64,6 +64,10 @@ _NO_READINESS = {
         "soularr",
     ): "a poll loop with no port; readiness would gate slskd's Service",
     (
+        "tft-assistant",
+        "tft-assistant-crawler",
+    ): "a crawl loop with no port; the web container beside it carries the page's probe",
+    (
         "prowlarr",
         "exportarr",
     ): "metrics sidecar; readiness would gate prowlarr's Service",
@@ -139,6 +143,11 @@ _NO_LIVENESS = {
         "slskd",
         "soularr",
     ): "a poll loop with no port, and it writes no heartbeat an exec probe could read",
+    (
+        "tft-assistant",
+        "tft-assistant-crawler",
+    ): "a crawl loop with no port; a failed crawl exits the process, and a hung one shows as "
+    "the age of the newest match in the page's footer",
     (
         "cloudflare-ddns",
         "cloudflare-ddns",
