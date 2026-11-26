@@ -23,6 +23,7 @@ BLACKLIST = "/etc/modprobe.d/blacklist-rare-network.conf"
 TMPFILES = "/usr/lib/tmpfiles.d/homelab-hardening.conf"
 KEEP_CONFFILES = "/etc/apt/apt.conf.d/53homelab-keep-conffiles"
 APPORT_DROPIN = "/usr/lib/systemd/system/apport.service.d/50-homelab.conf"
+LXD_INSTALLER_DROPIN = "/usr/lib/systemd/system/lxd-installer.socket.d/50-homelab.conf"
 BANNER = (
     "WARNING: Unauthorized access to this system is prohibited.\n"
     "All connections are monitored and recorded.\n"
@@ -224,3 +225,15 @@ def test_the_apport_dropin_condition_never_holds(package):
     # A line systemd cannot parse also exits 1, so each condition must be reported as failed.
     for condition in conditions:
         assert f"{condition} failed." in result.stderr, result.stderr
+
+
+@pytest.mark.parametrize("host", ["daniel-box", "daniel-server", "daniel-pi"])
+def test_every_host_stops_the_lxd_installer_socket(host):
+    rendered = host_mode.render_host(host)
+    assert (
+        rendered.files[LXD_INSTALLER_DROPIN][0]
+        .decode()
+        .endswith("ConditionPathExists=!/\n")
+    )
+    units = json.loads(rendered.files[MANIFEST][0])["units"]
+    assert units["lxd-installer.socket"] == {}
