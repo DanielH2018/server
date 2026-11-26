@@ -46,6 +46,8 @@ PROXY = Dep(
 WG_EASY = Dep(
     "ghcr.io/wg-easy/wg-easy", f"{PI_COMPOSE}/wg-easy/compose.yaml.j2", "docker"
 )
+AUTOHEAL_RULE = "willfarrell/autoheal:latest"
+MONTHLY = ["before 6am on the first day of the month"]
 ALLOY_PI = Dep("grafana/alloy", f"{PI_COMPOSE}/alloy/compose.yaml.j2", "docker")
 ALLOY_K8S = k8s_image("grafana/alloy", "loki-homelab")
 PI_RULES = (
@@ -100,7 +102,7 @@ IMAGE_ROWS = [
     *(
         Row(f"pi-autoheal-digest-{field}", AUTOHEAL, "digest", field, value)
         for field, value in (
-            ("schedule", ["before 6am on the first day of the month"]),
+            ("schedule", MONTHLY),
             ("updateNotScheduled", False),
         )
     ),
@@ -110,6 +112,19 @@ IMAGE_ROWS = [
         "digest",
         "schedule",
         None,
+    ),
+    Row(
+        "autoheal-rule-widened-to-every-pi-service-schedules-the-proxy",
+        PROXY,
+        "digest",
+        "schedule",
+        MONTHLY,
+        rules=edited(
+            AUTOHEAL_RULE,
+            lambda rule: rule.update(
+                matchFileNames=[f"{PI_COMPOSE}/*/compose.yaml.j2"]
+            ),
+        ),
     ),
     *(
         Row(f"pi-wg-easy-{u}-{field}", WG_EASY, u, field, value)

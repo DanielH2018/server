@@ -545,4 +545,9 @@ containers_list:
         port: 8974
         from: [blackbox-exporter]  # the scheduler health probe
         role_owned: true
+  - name: tft-assistant
+    hostname: "tft"
+    port: 8080
+    use_authelia: true
+    auth_tier: one_factor
   - name: netpol-baseline
