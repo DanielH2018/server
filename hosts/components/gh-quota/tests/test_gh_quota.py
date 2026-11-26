@@ -33,7 +33,19 @@ from _gh_quota_fakes import RESET, SESSION, identity_of, make_ledger
             ["api", "graphql", "-f", "query=mutation { addComment(input: {}) { id } }"],
             ("graphql", "api mutation"),
         ),
-        (["api", "repos/o/r/pulls", "--paginate"], ("core", "api rest")),
+        (
+            ["api", "repos/o/r/pulls", "--paginate"],
+            ("core", "api rest repos/{o}/{r}/pulls"),
+        ),
+        (
+            ["api", "repos/o/r/commits/0123abcd4567/check-runs?per_page=100"],
+            ("core", "api rest repos/{o}/{r}/commits/{sha}/check-runs"),
+        ),
+        (
+            ["api", "/repos/o/r/actions/runs/9876/jobs"],
+            ("core", "api rest repos/{o}/{r}/actions/runs/{n}/jobs"),
+        ),
+        (["api", "orgs/acme/packages"], ("core", "api rest orgs/{o}/packages")),
         (
             ["api", "repos/o/r/issues/1/comments", "-f", "body=hi"],
             ("core", "api write"),
@@ -41,7 +53,7 @@ from _gh_quota_fakes import RESET, SESSION, identity_of, make_ledger
         (["api", "-XDELETE", "repos/o/r/git/refs/heads/x"], ("core", "api write")),
         (
             ["api", "-X", "GET", "search/issues", "-f", "q=is:open"],
-            ("core", "api rest"),
+            ("core", "api rest search/issues"),
         ),
         (["api", "rate_limit", "--jq", ".resources.core.reset"], None),
         (["auth", "token"], None),
@@ -435,3 +447,28 @@ def test_the_command_says_so_when_the_host_does_not_record(tmp_path: Path, capsy
     mode, status = capsys.readouterr().out.splitlines()
     assert mode == "off"
     assert "gh-quota is off on this host" in status
+
+
+def test_status_all_totals_each_rest_path_template_across_sessions():
+    window = Window(
+        identities=("uid-1000",),
+        bucket="core",
+        used=100,
+        quota=5000,
+        reset=RESET,
+        sessions={
+            "a": Counter({"pr view": 50, "api rest repos/{o}/{r}/pulls": 3}),
+            "b": Counter(
+                {"api rest repos/{o}/{r}/pulls": 4, "api rest search/issues": 1}
+            ),
+        },
+    )
+    shown = render([window], [], failures=0, every=True)
+    assert shown[-2:] == [
+        "  api rest repos/{o}/{r}/pulls x7",
+        "  api rest search/issues x1",
+    ]
+    assert not any(
+        line.startswith("  api rest")
+        for line in render([window], [], failures=0, every=False)
+    )

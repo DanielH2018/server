@@ -130,8 +130,8 @@ def test_github_get_counts_an_authenticated_read_under_the_token_it_sends(
             return b"{}"
 
     for path, token in [
-        ("repos/o/n/commits/abc/check-runs?per_page=100", "builder-token"),
-        ("repos/o/n/commits/abc/check-runs?per_page=100", None),
+        ("repos/o/n/commits/abc1234/check-runs?per_page=100", "builder-token"),
+        ("repos/o/n/commits/abc1234/check-runs?per_page=100", None),
         ("rate_limit", "builder-token"),
     ]:
         github_rest.github_get(
@@ -140,7 +140,9 @@ def test_github_get_counts_an_authenticated_read_under_the_token_it_sends(
 
     (window,) = ledger.windows()
     assert window.identity == "tok-" + hashlib.sha256(b"builder-token").hexdigest()[:12]
-    assert window.sessions == {"session-under-test": {"api rest": 1}}
+    assert window.sessions == {
+        "session-under-test": {"api rest repos/{o}/{r}/commits/{sha}/check-runs": 1}
+    }
 
 
 def test_every_sandboxed_unit_that_reads_through_github_rest_can_write_the_ledger(
