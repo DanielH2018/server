@@ -25,6 +25,9 @@
 # runs before the `sshd` component's AllowGroups line lands. A `.ssh` owner drifted to root returns
 # at the next boot, through the tmpfiles.d line.
 #
+# lxd-installer.socket installs the LXD snap as root for any member of the lxd group, which the
+# sys user is. LXD is not installed, so its drop-in, like apport's, keeps the socket from starting.
+#
 # Keep the sudoers file valid: a malformed drop-in locks sudo out. `visudo -cf` in
 # hosts/lib/tests/test_pi_host_hardening.py holds it under each visudo the runner has: classic
 # sudo's and sudo-rs's, which 26.04 selects. Any setting either one refuses stays out of the file.
@@ -48,6 +51,7 @@ files:
   - {src: templates/wireguard.conf, dst: /etc/modules-load.d/wireguard.conf, activate: modules-load}
   - {src: templates/coredump-disable.conf, dst: /etc/systemd/coredump.conf.d/disable.conf}
   - {src: templates/apport-dropin.conf, dst: /usr/lib/systemd/system/apport.service.d/50-homelab.conf}
+  - {src: templates/lxd-installer-dropin.conf, dst: /usr/lib/systemd/system/lxd-installer.socket.d/50-homelab.conf}
   - {src: tmpfiles.d/homelab-hardening.conf.j2, dst: /usr/lib/tmpfiles.d/homelab-hardening.conf}
   - {src: templates/53homelab-keep-conffiles, dst: /etc/apt/apt.conf.d/53homelab-keep-conffiles}
   - {src: templates/i915.conf, dst: /etc/modprobe.d/i915.conf, when: has_igpu}
