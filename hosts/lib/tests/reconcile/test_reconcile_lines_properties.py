@@ -13,7 +13,7 @@ import re
 from hypothesis import assume, example, given
 from hypothesis import strategies as st
 
-from reconcile_lib.lines import split, valid_edit, with_block, with_line
+from reconcile_lib.lines import valid_edit, with_block, with_line
 
 MARKERS = ("# {mark} MANAGED", "{mark}", "# {mark}\x0c")
 TOKENS = (
@@ -75,6 +75,10 @@ def ends(edit: dict) -> tuple[str, str]:
     return tuple(edit["marker"].replace("{mark}", w) for w in ("BEGIN", "END"))
 
 
+def split(text: str) -> list[str]:
+    return re.findall(r"[^\n]*\n|[^\n]+\Z", text)
+
+
 def bare(line: str) -> str:
     return line.removesuffix("\n").removesuffix("\r")
 
@@ -95,7 +99,7 @@ def test_a_crlf_file_holding_the_block_keeps_exactly_one_begin_marker():
 
 
 def test_a_line_anchored_at_its_end_replaces_its_crlf_copy():
-    edit = {"path": "/etc/f", "line": "x=1", "regexp": "^x=.*$"}
+    edit = {"path": "/etc/f", "line": "x=1", "regexp": r"^x=\d$"}
 
     assert with_line("x=0\r\ny=2\r\n", edit) == "x=1\ny=2\r\n"
 
