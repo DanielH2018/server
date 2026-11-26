@@ -75,20 +75,28 @@ render does not reach a branch that is off, so the whole suite runs too.
 ### Step 3: gates and installed readers accept both layouts
 
 No file moves. A host package installs after its merge, so each reader must be live before the
-move. The order is ADR-0030's.
+move. The order is ADR-0030's. As built:
 
 | Reader | Change | Fails if late |
 |---|---|---|
-| `land_renovate_pr.py:INVENTORY` | refuse `inventory/`, `estate/`, `k8s/vars.yml`, `hosts/vars.yml` and `hosts/<host>/vars.yml` | open: a PR to the new files can land unattended |
-| `t2-approval-floor` | add `estate/` and `k8s/vars.yml`; `hosts/` is on it | open: the same |
-| `test_renovate_floor.py:OFF_FLOOR` | drop `inventory` in step 6 | closed: the test fails |
-| `cluster_pins.py` | scan `estate/**` and `hosts/**/vars.yml` too | open: a pin override is accepted |
-| `builder_python.py:PYTHON_PIN` | read `estate/vars.yml`, then the old path | falls back to the unit's interpreter |
-| `bootstrap_anchor.py`, `bootstrap-host.sh` | read both paths | closed: bootstrap stops |
-| `render-diff.yml`, `image-leg.yml`, `image-smoke.yml` | match both paths | open: a check does not run |
-| the dotfiles repo's auto-mode text | check it for an `inventory/` path | outside this repo |
+| `land_renovate_pr.py:VARS_FILE` | refuses `inventory/`, `estate/`, `k8s/vars.yml`, `hosts/vars.yml` and `hosts/<host>/vars.yml` | open: a PR to the new files can land unattended |
+| `test_renovate_floor.py:OFF_FLOOR` | lists `estate`; drop `inventory` in step 6 | closed: the test fails |
+| `cluster_pins.py:VARS_YAML` | scans `estate/**/*.yml`, `hosts/vars.yml` and `hosts/*/vars.yml` too | open: a pin override is accepted |
+| `host_inputs.py:HOST_INPUTS` | adds `estate/` and `k8s/vars.yml` | open: no host package is built for the change |
+| `render_diff_gates.py:RENDER_TREES` | adds `estate` | closed: the render reads no estate |
+| `builder_python.py:PYTHON_PINS` | reads `estate/vars.yml`, then the old path | falls back to the unit's interpreter |
+| `bootstrap_anchor.py`, `bootstrap-host.sh`, `bootstrap_case.py` | read `estate/vars.yml`, then the old path | closed: bootstrap stops |
+| `render-diff.yml`, `image-leg.yml`, `image-smoke.yml` | match the new paths too | open: a check does not run |
 
-Several of these files are on the approval list, so the PR waits for the operator's approval.
+The T2 approval floor and the claude-land approval list stay as they are. Neither lists
+`inventory/`: the operator ruled that the inventory lands without approval
+(`docs/claude-agent-user.md`), and the Renovate lander refuses it outright. The new files keep
+that parity. `hosts/vars.yml` and `hosts/<host>/vars.yml` sit under `hosts/`, which the T2
+floor lists, so they gain approval there.
+
+The dotfiles repo's auto-mode text names `inventory/` as a place an inline secret could sit.
+Step 6 updates it, in that repo, when the files move.
+
 The PR also adds `estate/CLAUDE.md`, which states the layer rules, and `!/estate` in
 `.gitignore`.
 
