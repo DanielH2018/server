@@ -135,6 +135,27 @@ off_by_variable = st.sampled_from(
 )
 
 
+def _select_by_name(name: str) -> Piece:
+    return Piece(
+        f"{{{{ xs | select('{name}') }}}}",
+        frozenset({Construct("filter", "select"), Construct("test", name)}),
+    )
+
+
+def _rejectattr_by_name(name: str) -> Piece:
+    return Piece(
+        f"{{{{ xs | rejectattr('a', '{name}') }}}}",
+        frozenset({Construct("filter", "rejectattr"), Construct("test", name)}),
+    )
+
+
+off_carriers = st.builds(
+    lambda place, name: place(name),
+    st.sampled_from([_select_by_name, _rejectattr_by_name]),
+    off_names,
+)
+
+
 @FIXED
 @given(st.lists(in_subset_pieces, min_size=1, max_size=6))
 def test_a_template_inside_the_subset_names_its_constructs_and_passes(pieces):
@@ -156,3 +177,13 @@ def test_a_template_one_construct_outside_the_subset_is_refused_by_that_construc
     texts = [piece.text for piece in pieces]
     texts.insert(data.draw(st.integers(0, len(texts))), text)
     assert off_the_list("\n".join(texts)) == {construct}
+
+
+@FIXED
+@given(st.lists(in_subset_pieces, max_size=5), off_carriers, st.data())
+def test_an_off_list_filter_that_takes_a_test_by_name_is_refused_with_that_test(
+    pieces, carrier, data
+):
+    texts = [piece.text for piece in pieces]
+    texts.insert(data.draw(st.integers(0, len(texts))), carrier.text)
+    assert off_the_list("\n".join(texts)) == carrier.names
