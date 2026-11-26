@@ -91,6 +91,7 @@ def test_desired_values_are_scalars_the_api_accepts() -> None:
 def test_a_dead_swarm_does_not_hold_a_download_slot() -> None:
     # fact: k8s/roles/qbittorrent/CLAUDE.md#Throughput settings live on the PVC, not in this role
     assert apply_prefs.DESIRED["dont_count_slow_torrents"] is True
+    assert _int_pref("max_active_torrents") >= 4 * _int_pref("max_active_downloads")
 
 
 def test_hashing_threads_stays_within_the_container_cpu_limit() -> None:
