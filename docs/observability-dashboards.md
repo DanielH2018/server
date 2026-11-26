@@ -62,7 +62,7 @@ sonarr and radarr (`internal/commands/arr.go`), never for prowlarr; the flag gat
 `_unmonitored_total` and `_quality_total`, at two extra app API calls per series per scrape.
 Issue #1404 held that separate trade-off and shipped it for sonarr alone: sonarr's sidecar
 carries the flag, radarr's and prowlarr's do not, and
-`tests/services/test_exportarr_sidecars.py::test_only_sonarr_enables_the_additional_metrics_collector`
+`tests/services/scraping/test_exportarr_sidecars.py::test_only_sonarr_enables_the_additional_metrics_collector`
 asserts both halves. Measured after the change, sonarr's `scrape_duration_seconds` moved from
 ~18 ms to 335-403 ms while radarr's and prowlarr's stayed at ~12-15 ms.
 
