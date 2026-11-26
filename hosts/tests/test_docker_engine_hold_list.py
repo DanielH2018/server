@@ -22,8 +22,6 @@ MUST_BE_HELD = frozenset({"docker-ce", "containerd.io"})
 
 def test_the_shared_package_list_names_the_engine():
     packages = shared_vars().get(PACKAGES_VAR)
-    assert isinstance(packages, list), (
-        f"{PACKAGES_VAR} is not a list in group_vars/all.yml"
-    )
+    assert isinstance(packages, list), f"{PACKAGES_VAR} is not a list in hosts/vars.yml"
     missing = MUST_BE_HELD - set(packages)
     assert not missing, f"{PACKAGES_VAR} no longer lists {sorted(missing)}"

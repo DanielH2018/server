@@ -131,7 +131,7 @@ def pinned_keys(repo: Path, rel: str) -> frozenset[str]:
 
 
 _VAR_FILES = re.compile(
-    r"^(?:k8s/roles/[^/]+/defaults/[^/]+|inventory/(?:group|host)_vars/[^/]+)\.ya?ml$"
+    r"^(?:k8s/roles/[^/]+/defaults/[^/]+|(?:estate|k8s|hosts|hosts/[^/]+)/vars)\.ya?ml$"
 )
 _COMPOSE_FILES = re.compile(
     r"^hosts/components/pi-compose/services/[^/]+/compose\.ya?ml\.j2$"

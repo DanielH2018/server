@@ -6,7 +6,7 @@
 # journal.
 
 # The apiserver reads the audit policy at STARTUP and refuses to come up if it is missing.
-# k3s_audit_log_* live in group_vars/all.yml: loki-homelab reads them, and a role default is
+# k3s_audit_log_* live in k8s/vars.yml: loki-homelab reads them, and a role default is
 # invisible to another role.
 
 # Namespaced sysctls; /proc/sys is ro in a pod even with NET_ADMIN, so the pod spec is the only

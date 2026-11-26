@@ -48,9 +48,15 @@ def _make(tmp_path):
     # media-volume: an infra role with no ingressroute template at all.
     _defaults("media-volume")
     (roles / "media-volume" / "templates").mkdir(parents=True)
-    group_vars = tmp_path / "all.yml"
-    group_vars.write_text("k8s_public_route: true\n")
-    return Inventory(services=services, all_vars=group_vars), roles
+    estate_vars = tmp_path / "estate-vars.yml"
+    estate_vars.write_text("k8s_public_route: true\n")
+    inventory = Inventory(
+        estate_vars=estate_vars,
+        k8s_vars=tmp_path / "k8s-vars.yml",
+        host_vars=tmp_path / "hosts",
+        services=services,
+    )
+    return inventory, roles
 
 
 def test_only_services_with_a_route_appear(tmp_path):
@@ -69,7 +75,7 @@ def test_public_false_is_reported_as_lan_only(tmp_path):
 def test_public_route_flag_off_makes_every_route_lan_only(tmp_path):
     """`public=false` is one of two gates; the cluster-wide flag is the other."""
     inventory, roles = _make(tmp_path)
-    inventory.all_vars.write_text("k8s_public_route: false\n")
+    inventory.estate_vars.write_text("k8s_public_route: false\n")
     for row in g.build_rows(inventory, roles):
         assert row["reach"] == "LAN only", row["name"]
 

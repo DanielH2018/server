@@ -23,10 +23,11 @@ Run: uv run pytest hosts/tests/test_k3s_control_plane_hardening.py
 import functools
 
 import pytest
-from _helpers import ALL_VARS, load_defaults, load_yaml
+from _helpers import load_defaults
 from _k8s_render import render_role_template, rendered_k8s_text
 from _setup_render import role_context
 from lib import yaml_fast
+from lib.estate import shared_vars
 from lib.repo_paths import K3S_SERVER
 from renderer.renderer_lib import host as host_mode
 from renderer.renderer_lib.bundle import homelab_namespace_files
@@ -37,7 +38,7 @@ SERVER_CONFIG = "/etc/rancher/k3s/config.yaml.d/50-homelab.yaml"
 
 
 def _all_vars() -> dict:
-    return load_yaml(ALL_VARS)
+    return shared_vars()
 
 
 @functools.cache
@@ -325,7 +326,7 @@ def test_audit_log_vars_are_visible_to_both_roles():
     shared, role = _all_vars(), load_defaults(K3S_SERVER)
     for name in ("k3s_audit_log_enabled", "k3s_audit_log_dir", "k3s_audit_log_path"):
         assert name in shared, (
-            f"{name} must live in group_vars/all.yml. setup/k3s writes the log and "
+            f"{name} must live in k8s/vars.yml. setup/k3s writes the log and "
             "loki-homelab tails it; as a role default the second role sees only the "
             "`| default(false)` fallback, so the shipper silently never tails the file."
         )

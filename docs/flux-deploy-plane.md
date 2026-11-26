@@ -1297,7 +1297,7 @@ promotion verifying across the reboot would therefore hold.
 - **The window.** It opens T's own derived verify timeout before the reboot, and it closes when
   M2's mute ends. The reboot is the cron's fire plus `weekly_reboot_shutdown_delay_minutes`,
   and the mute ends `weekly_reboot_mute_recovery_minutes` after the reboot. `decide` reads the
-  `weekly_reboot_*` variables from `inventory/group_vars/all.yml` in its checkout.
+  `weekly_reboot_*` variables from `estate/vars.yml` in its checkout.
   At the committed schedule, the window closes at 08:15 UTC on Sunday and opens between about
   02:05 and 07:30, depending on T.
 - **Which timeout `decide` reads.** It is T's own, from `verify_promotion.expected_set`, the
@@ -1784,7 +1784,7 @@ gate's name.
   holds no Kustomization, and a document whose `spec.path` is not a directory under
   `cluster/`.
 - **host**: every `Host(...)` in an IngressRoute ends in `.<domain>`, the literal that
-  `inventory/group_vars/all.yml` defines. A `${domain}`, a `stub-domain` and a
+  `estate/vars.yml` defines. A `${domain}`, a `stub-domain` and a
   hand-written host each fail. While bento-pdf is published, its `.local.` route is the
   gate's named member, and the gate fails when that route holds no matching Host rule.
 - **no-stub**: no file in the bundle holds an R1 stub value, `stub-<key>` for a key name of

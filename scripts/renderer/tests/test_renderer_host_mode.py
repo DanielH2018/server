@@ -104,9 +104,13 @@ def test_a_template_reading_a_secret_is_flagged(hosts):
 def test_a_template_reading_an_inventory_alias_of_a_secret_is_flagged(hosts, tmp_path):
     # The repo's inventory defines no secret name, so this one does, to prove the alias is
     # dropped even when the name it reads has a value in a layer.
-    inventory = Inventory(all_vars=tmp_path / "all.yml", host_vars=tmp_path / "hv")
+    inventory = Inventory(
+        estate_vars=tmp_path / "estate-vars.yml",
+        k8s_vars=tmp_path / "k8s-vars.yml",
+        host_vars=tmp_path / "hv",
+    )
     inventory.host_vars.mkdir()
-    inventory.all_vars.write_text(
+    inventory.estate_vars.write_text(
         yaml.safe_dump({"email": "a@example.org", "site": "mailto:{{ email }}"})
     )
     root = hosts(*_one("templates/x.j2", "{{ site }}\n"))

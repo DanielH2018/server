@@ -22,7 +22,7 @@ metallb_vendored_manifests:
 
 # Must sit OUTSIDE the router's DHCP scope. The ingress VIP is in its own autoAssign: false pool, so
 # only a Service naming it can claim it.
-# `k3s_metallb_ingress_vip` lives in group_vars/all.yml because Pi-hole on daniel-server consumes it
+# `k3s_metallb_ingress_vip` lives in k8s/vars.yml because Pi-hole on daniel-server consumes it
 # on a host that never runs this role.
 k3s_metallb_pool: 10.0.0.241-10.0.0.250
 

@@ -300,7 +300,13 @@ ROWS = (
         offence=lambda s: inventory_reads(s.text, REPO / s.rel),
         red=(
             Subject(
-                "a.py", "from lib.repo_paths import ALL_VARS\nload_yaml(ALL_VARS)\n"
+                "a.py",
+                "from lib.repo_paths import ESTATE_VARS\nload_yaml(ESTATE_VARS)\n",
+            ),
+            Subject(
+                "g.py",
+                "from lib.repo_paths import K8S_VARS, HOSTS_SHARED_VARS\n"
+                "load_yaml(K8S_VARS)\nHOSTS_SHARED_VARS.read_text()\n",
             ),
             Subject(
                 "b.py",
@@ -309,8 +315,8 @@ ROWS = (
             ),
             Subject(
                 "c.py",
-                "from lib.repo_paths import INVENTORY\n"
-                'GROUP = INVENTORY / "group_vars" / "all.yml"\n'
+                "from lib.repo_paths import REPO\n"
+                'GROUP = REPO / "estate" / "vars.yml"\n'
                 "GROUP.read_text()\n",
             ),
             Subject(
@@ -353,14 +359,9 @@ ROWS = (
             **dict.fromkeys(
                 (
                     "hosts/lib/tests/test_bootstrap_host_pins.py",
-                    "hosts/lib/tests/test_builder_component.py",
-                    "hosts/lib/tests/test_t2_egress_component.py",
                     "hosts/tests/test_etcd_metrics_single_switch.py",
-                    "hosts/tests/test_k3s_control_plane_hardening.py",
-                    "hosts/tests/test_nut_host_secondary.py",
                     "hosts/tests/test_unattended_origins_pattern.py",
                     "tests/deploy/test_renovate_automerge_follows_the_autodeploy_denylist.py",
-                    "tests/services/monitor_bridge/test_strangler_bridge.py",
                 ),
                 "it reads the file's text or asserts which file declares a key, which "
                 "ADR-0042 step 6 decides per key",

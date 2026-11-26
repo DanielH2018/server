@@ -211,7 +211,6 @@ def test_a_soak_status_that_is_not_renovates_success_is_flagged(statuses, names)
 # or listed here.
 OFF_FLOOR = {
     "k8s": "its floor paths are listed one by one: templates, role tests and role code",
-    "inventory": "host and group vars the renderer reads, with no code a session runs",
     "estate": "estate-wide vars the renderer reads, with no code a session runs",
     "docs": "pages a session may read, with no code a session runs",
     "CLAUDE.md": "on the floor through **/CLAUDE.md",

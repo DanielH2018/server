@@ -49,9 +49,11 @@ def test_the_hook_runs_the_generator_in_fix_mode():
         "k8s/roles/sonarr/defaults/main.yml",
         "k8s/roles/sonarr/templates/deployment.yaml.j2",
         "k8s/roles/sonarr/CLAUDE.md",
-        "inventory/host_vars/daniel-box.yml",
-        "inventory/host_vars/daniel-pi.yml",
-        "inventory/group_vars/all.yml",
+        "hosts/daniel-box/vars.yml",
+        "hosts/daniel-pi/vars.yml",
+        "hosts/vars.yml",
+        "estate/vars.yml",
+        "k8s/vars.yml",
         # Read from the modules themselves, so a move to a directory outside the gate goes red.
         *(
             Path(m.__file__).resolve().relative_to(REPO).as_posix()

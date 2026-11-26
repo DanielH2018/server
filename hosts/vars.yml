@@ -1,0 +1,46 @@
+---
+# Must equal `TREE_LOCK` in scripts/lib/tree_lock.py (test-enforced).
+server_git_tree_lock: /var/lock/server-git-tree.lock
+# Entries must use `key=value,key=value` form; legacy `origin:archive` needs a `Suite:` field.
+# The Pi's Docker repo is deliberately absent: a docker-ce upgrade restarts the daemon.
+unattended_upgrades_origins_patterns:
+  - "origin=${distro_id},archive=${distro_codename}-updates"
+  - "origin=gh,codename=stable"
+has_igpu: false
+
+# Shorter than the hourly cron so at most one slot is skipped (see boot_grace_active in
+# homelab-check-lib.sh).
+loki_route_witness_boot_grace_s: 600
+# Needs the primary checkout, uv, gh and local kubectl, which only daniel-box carries together.
+ops_cron_host: daniel-box
+has_fwupd: false
+# A docker-ce/containerd.io upgrade restarts the daemon under every container, so on the Pi these
+# move only through homelab-docker-engine.service, which stops containers first.
+docker_engine_packages:
+  - docker-ce
+  - docker-ce-cli
+  - containerd.io
+  - docker-compose-plugin
+  - docker-buildx-plugin
+# daniel-pi overrides false: rsyslog is masked there (journald is the log of record).
+# ENFORCED by hosts/tests/test_journald_syslog_forwarding.py.
+has_rsyslog: true
+has_repo_checkout: true
+
+# Global: the hypervisor role builds from gateway+netmask, the fence needs the prefix form.
+# A wrong fence is no fence: tests/staging/test_staging_egress_fence.py asserts they match.
+staging_net_cidr: "192.168.140.0/24"
+# Deadline derives from this cadence: a yearly alarm over a monthly cron hides eleven failures.
+# Runs clear of every backup window and the Monday 10:20 list-only slot.
+etcd_drill_full_cron: "20 11 1 * *"
+# Derived from the cron: the longest gap is 31 days plus four days of slack.
+# tests/staging/test_etcd_drill_vm.py pins it between one and two periods.
+etcd_drill_full_deadline_s: 3024000
+has_github_cli: false
+has_chezmoi: false
+
+# Group var, not a role default: the key host's ssh config reads every peer's switch through hosts.
+# False removes the key and the ssh-users membership.
+claude_agent_ssh_login_enabled: false
+claude_agent_ssh_key_host: daniel-box
+claude_agent_ssh_key_path: /var/lib/claude/.ssh/peers_ed25519

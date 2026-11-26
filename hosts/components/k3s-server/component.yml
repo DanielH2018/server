@@ -53,7 +53,7 @@ defaults:
   k3s_audit_log_maxage: 30       # days a rotated file is kept
   k3s_audit_log_maxbackup: 5     # rotated files kept
   k3s_audit_log_maxsize: 100     # MiB before rotating
-  # Armed by `k3s_audit_log_enabled` in group_vars/all.yml; loki-homelab reads the same switch and
+  # Armed by `k3s_audit_log_enabled` in k8s/vars.yml; loki-homelab reads the same switch and
   # `k3s_audit_log_path`.
   k3s_server_audit_args:
     - "audit-policy-file={{ k3s_audit_policy_path }}"
@@ -117,7 +117,7 @@ defaults:
   #                      plaintext Secret to R2. Secrets written before the flag stay plaintext
   #                      until `k3s secrets-encrypt rotate-keys` rewrites them: docs/host-packages.md,
   #                      *Rebuilding daniel-box*, has that check.
-  #   etcd-expose-metrics  gated on the single switch in group_vars/all.yml, which the
+  #   etcd-expose-metrics  gated on the single switch in k8s/vars.yml, which the
   #                      Prometheus etcd scrape job also reads.
   #   kube-apiserver-arg the audit flags above, then the authentication config. That file
   #                      configures the JWT authenticator, which is mutually exclusive with the

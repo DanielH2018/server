@@ -161,7 +161,10 @@ def _variable_layers() -> dict[str, dict]:
             str(path): yaml_fast.safe_load(path.read_text())
             for path in sorted(K8S_ROLES.glob("*/defaults/*.yml"))
         },
-        str(inventory.all_vars): estate.group_vars,
+        **{
+            str(path): yaml_fast.safe_load(path.read_text())
+            for path in inventory.shared_files()
+        },
         **{
             str(host_vars_file(host, inventory.host_vars)): estate.own_vars(host)
             for host in estate.hosts()

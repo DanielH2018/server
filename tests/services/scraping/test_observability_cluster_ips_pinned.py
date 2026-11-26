@@ -17,7 +17,8 @@ import pathlib
 
 import pytest
 from lib import yaml_fast
-from _helpers import ALL_VARS, K8S_ROLES
+from _helpers import K8S_ROLES
+from lib.repo_paths import K8S_VARS
 from _k8s_render import rendered_docs
 
 ROLE = K8S_ROLES / "observability"
@@ -30,16 +31,14 @@ PINNED = {
     "tempo": "observability_tempo_cluster_ip",
 }
 
-ALL_VARS_FILE = ALL_VARS
-
 # An explicit registry, not a glob: a glob collects the `pihole_k8s_dns_cluster_ip` alias, a Jinja
 # string.
 CROSS_ROLE_PINS = {
     "observability_loki_cluster_ip": DEFAULTS,
     "observability_prometheus_cluster_ip": DEFAULTS,
     "observability_tempo_cluster_ip": DEFAULTS,
-    "dns_k8s_cluster_ip": ALL_VARS_FILE,
-    "k8s_registry_cluster_ip": ALL_VARS_FILE,
+    "dns_k8s_cluster_ip": K8S_VARS,
+    "k8s_registry_cluster_ip": K8S_VARS,
 }
 
 # An address outside k3s's Service CIDR is rejected by the API server at apply time.

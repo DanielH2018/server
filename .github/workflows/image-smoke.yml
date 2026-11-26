@@ -3,7 +3,7 @@ name: image-smoke
 # Runs on EVERY PR (no `paths:` filter) on purpose: this is a required status check, and a
 # path-filtered workflow that never triggers would leave the PR's required check stuck at
 # "Expected — waiting for status". The job self-scopes instead: the "Collect changed image
-# refs" step diffs only the k8s role defaults and group_vars/all.yml, so a PR that changes no
+# refs" step diffs only the k8s role defaults and k8s/vars.yml, so a PR that changes no
 # image ref there yields an empty list and the boot step is skipped (a fast green). On a draft
 # the job skips at job level, which takes no runner and reads as a pass; GitHub refuses to
 # merge a draft, and `ready_for_review` starts the run that counts.
@@ -90,7 +90,7 @@ jobs:
           # does for every scoped job in ci.yml. Its file lists go unused: this step needs the
           # diff TEXT of a pathspec, which smoke_extract.py reads for the changed refs.
           "$GITHUB_WORKSPACE/scripts/dev/pr_changed_files.sh"
-          # Scope is the k8s image plane: role defaults plus group_vars/all.yml (crowdsec_k8s_image
+          # Scope is the k8s image plane: role defaults plus k8s/vars.yml (crowdsec_k8s_image
           # lives there). Compose templates are out of scope: both cluster hosts are drained
           # and daniel-pi has no CI deploy path, so that glob would match nothing deployable.
           #

@@ -829,7 +829,7 @@ data:
       # HTTP and no auth by k3s's design — the port is protected the same way :10250 is, by the
       # host's default-deny UFW policy, and it carries no cluster data, only counters.
       #
-      # ONE switch drives both halves — `k3s_etcd_expose_metrics` in group_vars/all.yml gates
+      # ONE switch drives both halves — `k3s_etcd_expose_metrics` in k8s/vars.yml gates
       # this job and the k3s flag alike, so they cannot drift into "port open, nobody scraping"
       # or "job armed, port closed". They still land in two runs: flip the var, run
       # k3s-bringup.yml to rewrite the unit and restart k3s, THEN deploy observability. Deploying

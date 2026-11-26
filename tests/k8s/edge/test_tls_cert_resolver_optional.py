@@ -132,7 +132,7 @@ def test_production_still_declares_a_resolver():
     """An empty default would disable prod's certificate issuance everywhere, silently."""
     value = shared_vars()[RESOLVER_VAR]
     assert value == "cloudflare", (
-        f"{RESOLVER_VAR} in group_vars/all.yml is {value!r}. Production issues through the "
+        f"{RESOLVER_VAR} in k8s/vars.yml is {value!r}. Production issues through the "
         f"`cloudflare` ACME resolver defined in the traefik role's static config; emptying the "
         f"DEFAULT rather than overriding it per host would drop every cluster to self-signed "
         f"certificates, and browsers are the only thing that would report it."

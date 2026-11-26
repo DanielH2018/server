@@ -8,7 +8,7 @@
 A package lists its components, and may carry files and defaults of its own, laid out as a
 component's are. A component directory under `hosts/components/` holds a `component.yml`::
 
-    defaults: {name: value}         # beneath group_vars/all.yml (H3, *Component variables*)
+    defaults: {name: value}         # beneath the shared vars files (H3, *Component variables*)
     component: k3s-server           # its defaults sit below `defaults`; `component:<path>` loads from it
     files:
       - {src: templates/x.sh.j2, dst: /usr/lib/homelab/x, mode: "0755"}
@@ -187,7 +187,7 @@ def render_package(
     inventory: Inventory = REPO_INVENTORY,
     secrets: Path = SECRETS,
 ) -> Package:
-    """`hosts/packages/<name>/package.yml`, rendered with `group_vars/all.yml` and no host.
+    """`hosts/packages/<name>/package.yml`, rendered with the shared vars files and no host.
 
     Raises:
         RenderRefused: The package does not exist, or the spec is malformed.

@@ -2,7 +2,6 @@
 # secrets/ and tests/.
 /*
 !/k8s
-!/inventory
 !/estate
 !/secrets
 !/tests

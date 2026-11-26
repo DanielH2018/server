@@ -18,7 +18,6 @@ homelab_mcp_k8s_mem_request: 32Mi
 homelab_mcp_source_dirs:
   - k8s
   - estate
-  - inventory
   - tests
 
 image_builder_builds:

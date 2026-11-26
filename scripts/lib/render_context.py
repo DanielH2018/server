@@ -2,7 +2,7 @@
 """The variable context a role template renders with, in Ansible's precedence.
 
 Every render guard under ``scripts/validate/`` builds its context here, so no validator layers
-the base stubs, ``group_vars/all.yml``, host_vars and role defaults itself: a validator that
+the base stubs, the shared vars files, a host's own file and role defaults itself: a validator that
 renders with the wrong precedence checks a value no deploy produces (failure class 2 in ``docs/failure-classes.md``).
 
 The layers, weakest first::
@@ -34,12 +34,12 @@ from lib.estate import (
     role_defaults,
 )
 from lib.k8s_context import failed_key, resolve_vars
+from lib.repo_paths import K8S_ROLES
 from lib.render_guard import (
     BASE_CONTEXT,
     StubUndefined,
     host_layer,
     k8s_services,
-    load_yaml,
 )
 
 __all__ = [
@@ -127,7 +127,7 @@ def render_context(
                 **(role_defaults(role_dir) if role_dir else {}),
                 **(component_defaults or {}),
             },
-            load_yaml(inventory.all_vars),
+            inventory.shared_layer(cluster=_is_cluster(role_dir, host)),
             _host_layer(inventory, host) if host_vars is None else host_vars,
         ),
         **({"role_path": str(role_dir)} if role_dir else {}),
@@ -149,6 +149,10 @@ def render_context(
             _NOTED.add(note)
             warn(note)
     return {**resolved, **overrides}
+
+
+def _is_cluster(role_dir: Path | None, host: str | None) -> bool:
+    return host is None and role_dir is not None and K8S_ROLES in role_dir.parents
 
 
 def _host_layer(inventory: Inventory, host: str | None) -> dict:

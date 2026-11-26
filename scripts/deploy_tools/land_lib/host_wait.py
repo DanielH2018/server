@@ -109,7 +109,7 @@ POLL_TIMER = "homelab-updater-poll.timer"
 SHARED_TIMER = Path("hosts/packages/homelab-updater/units") / UPDATER_TIMER
 
 # DECIDED: the schedule is read in UTC. OnCalendar fires on the host's local clock, and every
-# host runs Etc/UTC (`weekly_reboot_timezone` in group_vars/all.yml records the same fact for
+# host runs Etc/UTC (`weekly_reboot_timezone` in estate/vars.yml records the same fact for
 # the reboot cron).
 MAX_WAIT_S = 45 * 60
 POLL_S = 30

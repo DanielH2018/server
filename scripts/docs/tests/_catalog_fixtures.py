@@ -30,8 +30,8 @@ def make_repo(tmp_path):
             use_authelia: true
         """,
     )
-    all_vars = tmp_path / "all.yml"
-    write(all_vars, "k8s_namespace: homelab\n")
+    estate_vars = tmp_path / "estate-vars.yml"
+    write(estate_vars, "k8s_namespace: homelab\n")
     k3s_defaults = tmp_path / "k3s_defaults.yml"
     write(
         k3s_defaults,
@@ -49,7 +49,7 @@ def make_repo(tmp_path):
         write(k8s_roles / role / "defaults" / "main.yml", "---\n")
     return {
         "services": services,
-        "all_vars": all_vars,
+        "estate_vars": estate_vars,
         "k3s_defaults": k3s_defaults,
         "k8s_roles": k8s_roles,
     }
@@ -58,7 +58,12 @@ def make_repo(tmp_path):
 def catalog_args(paths):
     """`service_catalog.build_rows`'s keyword arguments over the synthetic repo `paths`."""
     return {
-        "inventory": Inventory(all_vars=paths["all_vars"], services=paths["services"]),
+        "inventory": Inventory(
+            estate_vars=paths["estate_vars"],
+            k8s_vars=paths["estate_vars"].parent / "k8s-vars.yml",
+            host_vars=paths["estate_vars"].parent / "hosts",
+            services=paths["services"],
+        ),
         "k8s_roles": paths["k8s_roles"],
         "k3s_defaults": paths["k3s_defaults"],
     }

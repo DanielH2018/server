@@ -56,7 +56,7 @@ def render_cni0_gateways(gateways: list[str]) -> str:
 def _cluster_addresses() -> tuple[str, list[str]]:
     estate = Estate()
     gateways = [str(g) for g in estate.group_vars["k3s_cni0_gateways"]]
-    return render_cni0_gateways(gateways), [_rel(estate.inventory.all_vars)]
+    return render_cni0_gateways(gateways), [_rel(estate.inventory.k8s_vars)]
 
 
 # --- loadbalancer-services -----------------------------------------------------------------

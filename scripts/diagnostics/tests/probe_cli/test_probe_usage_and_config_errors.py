@@ -9,11 +9,10 @@ real code and stubs only the transport under it.
 Run: uv run pytest scripts/diagnostics/tests/probe_cli/test_probe_usage_and_config_errors.py
 """
 
-import builtins
-import io
 import json
 import socket
 import ssl
+from pathlib import Path
 
 import pytest
 
@@ -21,6 +20,7 @@ import pytest
 from diagnostics import probe
 from diagnostics.probe_lib import core, ha
 from lib.exit_codes import FAILED, TEMP_FAIL, USAGE_ERROR
+from lib.repo_paths import ESTATE_VARS, HOSTS_SHARED_VARS, K8S_VARS
 
 
 def _exit_code(call):
@@ -53,14 +53,15 @@ def test_bad_since_exits_usage_error(capsys):
 
 
 def test_group_vars_key_missing_stays_a_failure(monkeypatch, capsys):
-    real_open = builtins.open
+    real_read = Path.read_text
+    shared = {ESTATE_VARS, K8S_VARS, HOSTS_SHARED_VARS}
 
-    def open_without_vip(path, *args, **kwargs):
-        if path == core.GROUP_VARS_PATH:
-            return io.StringIO("domain: example.test\nk8s_namespace: homelab\n")
-        return real_open(path, *args, **kwargs)
+    def read_without_vip(path, *args, **kwargs):
+        if path == ESTATE_VARS:
+            return "domain: example.test\nk8s_namespace: homelab\n"
+        return "" if path in shared else real_read(path, *args, **kwargs)
 
-    monkeypatch.setattr(builtins, "open", open_without_vip)
+    monkeypatch.setattr(Path, "read_text", read_without_vip)
     rc = _exit_code(lambda: probe.main(["b2-deletions", "--since", "1h"]))
     assert rc == FAILED, f"a missing group_vars key exited {rc}"
 

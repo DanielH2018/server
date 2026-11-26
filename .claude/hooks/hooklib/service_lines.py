@@ -16,12 +16,12 @@ import subprocess
 
 
 def k8s_namespace(repo):
-    """Return k8s_namespace from the same plaintext inventory file probe.py reads it from.
+    """Return k8s_namespace from the plaintext vars file probe.py reads it from.
 
     Duplicated rather than imported — `target_problems` shells out to probe.py rather than
     importing it (see its own docstring), and this stays consistent with that.
     """
-    path = os.path.join(repo, "inventory", "group_vars", "all.yml")
+    path = os.path.join(repo, "k8s", "vars.yml")
     try:
         with open(path) as f:
             for line in f:

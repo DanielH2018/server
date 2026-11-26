@@ -44,7 +44,7 @@ git clone https://github.com/DanielH2018/server.git   # use a GitHub PAT as the 
 ```
 
 Clone it to **`/home/<user>/server`, as the user named by `sys_user`** (`ubuntu`, in
-`inventory/group_vars/all.yml`). Both the path and the username are baked into role templates and
+`estate/vars.yml`). Both the path and the username are baked into role templates and
 systemd units, such as the secret-rotation crons and AIDE's local config. A repo cloned elsewhere, or owned by a
 differently named user, breaks those with no clear error.
 
@@ -78,7 +78,7 @@ touching SOPS:
      repo-root `CLAUDE.md` → "Project Overview").
    - Any hardware capability flags a role you plan to deploy expects — for example `has_igpu: true`
      only if the host has an Intel iGPU (gates `/dev/dri` passthrough for jellyfin/tdarr;
-     defaults to `false` in `inventory/group_vars/all.yml`).
+     defaults to `false` in `hosts/vars.yml`).
 
 ## 5. Onboard the host to SOPS
 

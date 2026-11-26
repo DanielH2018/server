@@ -167,7 +167,7 @@ walks the tree with inheritance.
 
 **The weekly reboot mutes every paging route, never the Watchdog.** The `weekly-reboot` time
 interval derives from the reboot cron's `weekly_reboot_*` values and the mute's lead and
-recovery allowance in `group_vars/all.yml`. A schedule written here as a literal would stop
+recovery allowance in `estate/vars.yml`. A schedule written here as a literal would stop
 following the reboot.
 `tests/services/alertmanager/test_alertmanager_reboot_mute.py::test_moving_the_reboot_moves_the_mute`
 holds the interval to that sum, and

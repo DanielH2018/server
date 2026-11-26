@@ -1,7 +1,7 @@
 """Alertmanager's `weekly-reboot` mute, as rendered and as the reboot schedule implies.
 
 `mute_minutes` reads the mute Alertmanager is given. `window_minutes` is the sum the template
-does, from the `weekly_reboot_*` values in group_vars/all.yml alone. Both count minutes of the
+does, from the `weekly_reboot_*` values in estate/vars.yml alone. Both count minutes of the
 week from Sunday 00:00, and both take the same template-variable overrides.
 """
 

@@ -42,7 +42,7 @@ claims are unchanged.
 - Stock `python` (`game_stats_k8s_image`), not an `image-builder` build: both scripts and `stats_lib.py` are
   pure stdlib, so a build would add a layer and change nothing that runs.
   **Not because a built image could not be pulled here.** The in-cluster `registry` serves a
-  cross-node pull — `inventory/group_vars/all.yml:k8s_registry_pull_host` is one
+  cross-node pull — `k8s/vars.yml:k8s_registry_pull_host` is one
   mirror key every node's `registries.yaml` carries, and `k8s/roles/ical-proxy/` is
   the live proof. An earlier version of this bullet claimed the opposite and would have
   talked a sibling role out of a build it could have (#2703).
@@ -64,7 +64,7 @@ claims are unchanged.
   `players` schema, `load_state` and `save`, over a `stats_lib.SqliteStore` subclass.
 - **It runs while the game server does.** Neither Deployment renders `replicas:`; deploy.local's
   Games panel starts and stops each exporter with its server, from the `game_servers` registry
-  in `inventory/group_vars/all.yml` (ADR-0033). The scrape job renders either way, and its
+  in `estate/vars.yml` (ADR-0033). The scrape job renders either way, and its
   `ScrapeTargetDown` rule mutes while kube-state-metrics reads 0 replicas, because a Service
   with no endpoint reads `up == 0`.
 

@@ -1561,7 +1561,7 @@ new version, which costs each host one install.
 
 The builder grades each commit over `CI_CONTEXTS`, which the role renders from
 `ci_required_contexts`. When a CI job is renamed, no commit carries the old context, so no
-commit is ever green. Change `ci_required_contexts` in `inventory/group_vars/all.yml` to
+commit is ever green. Change `ci_required_contexts` in `estate/vars.yml` to
 the new name, spelled exactly as `ci.yml`'s `name:`, and merge that. The builder's
 `builder.conf` and the `homelab-checkout-sync` unit both render the key, so neither changes
 until a host package carries it. The updater installs the builder's copy once the builder
@@ -1585,7 +1585,7 @@ procedure above. The first builder run after the fix builds.
 
 The builder refuses to grade anything, because `CI_CONTEXTS` is empty or
 `CI_ANCESTOR_WALK_MAX` is not a positive integer. Restore `ci_required_contexts` or
-`ci_ancestor_walk_max` in `inventory/group_vars/all.yml` and merge it.
+`ci_ancestor_walk_max` in `estate/vars.yml` and merge it.
 
 ### `reason="token"` and `reason="build"`
 

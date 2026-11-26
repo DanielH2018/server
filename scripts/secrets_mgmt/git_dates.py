@@ -123,7 +123,7 @@ RETIRED: frozenset[str] = frozenset(
         "staging_gate_ssh_key",
         "healthchecks_password",
         "healthchecks_secret_key",
-        # Published as an inventory variable; inventory/group_vars/all.yml holds it.
+        # Published as a variable; estate/vars.yml holds it.
         "domain",
         "monitor_bridge_kuma_notify_failures_push_token",
         "monitor_bridge_loki_push_token",

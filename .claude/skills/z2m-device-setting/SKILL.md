@@ -6,7 +6,7 @@ allowed-tools: Bash
 
 Set a Zigbee2MQTT **device** setting at runtime. Z2M and Mosquitto run in the k3s cluster on
 daniel-box (`k8s/roles/zigbee2mqtt/`, `k8s/roles/mosquitto/`); the broker is reachable LAN-wide
-at the pinned VIP `inventory/group_vars/all.yml:mqtt_k8s_vip` and requires auth
+at the pinned VIP `k8s/vars.yml:mqtt_k8s_vip` and requires auth
 (`k8s/roles/mosquitto/templates/config-secret.yaml.j2`). The MQTT clients the script runs come from the
 `mosquitto-clients` host package (install it if missing). Run from the repo root on either
 host.

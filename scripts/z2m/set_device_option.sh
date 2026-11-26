@@ -27,7 +27,7 @@
 #   64  usage
 #
 # Environment (each has a default; the tests override them):
-#   Z2M_MQTT_HOST         broker address (default: mqtt_k8s_vip from group_vars/all.yml)
+#   Z2M_MQTT_HOST         broker address (default: mqtt_k8s_vip from k8s/vars.yml)
 #   Z2M_SECRETS_FILE      SOPS file holding mqtt_username / mqtt_password
 #   Z2M_READBACK_TIMEOUT  seconds to wait for the republished state
 #
@@ -58,7 +58,7 @@ secrets_file=${Z2M_SECRETS_FILE:-$repo_root/secrets/secrets.yml}
 timeout_s=${Z2M_READBACK_TIMEOUT:-20}
 
 if [[ -z "${Z2M_MQTT_HOST:-}" ]]; then
-  Z2M_MQTT_HOST=$(sed -n 's/^mqtt_k8s_vip:[[:space:]]*//p' "$repo_root/inventory/group_vars/all.yml")
+  Z2M_MQTT_HOST=$(sed -n 's/^mqtt_k8s_vip:[[:space:]]*//p' "$repo_root/k8s/vars.yml")
 fi
 [[ -n "$Z2M_MQTT_HOST" ]] || { echo "set_device_option: no broker address (Z2M_MQTT_HOST unset, mqtt_k8s_vip not in group_vars)" >&2; exit 64; }
 

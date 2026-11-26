@@ -14,7 +14,7 @@ verification*, the design:
   a published name whose file or directories it could not examine, so it never passes over
   nothing.
 - `host`: every `Host(...)` in an IngressRoute ends in `.<domain>`, the literal that
-  `inventory/group_vars/all.yml` defines. While bento-pdf is published, its `.local.`
+  `estate/vars.yml` defines. While bento-pdf is published, its `.local.`
   route is the gate's named member, and a gate that finds no Host rule there fails.
 - `no-stub`: no file under the bundle holds an R1 stub value, `stub-<key>` for a key name of
   `secrets.yml`, with each Secret's `data` decoded too.
@@ -84,10 +84,10 @@ def inventory_domain(inventory: Inventory = REPO_INVENTORY) -> str:
     try:
         value = Estate(inventory).group_vars.get("domain")
     except (OSError, yaml.YAMLError) as err:
-        raise ValueError(f"{inventory.all_vars}: {err}") from err
+        raise ValueError(f"{inventory.estate_vars}: {err}") from err
     if not isinstance(value, str) or not value or "{" in value or "$" in value:
         raise ValueError(
-            f"{inventory.all_vars} defines no literal domain, got {value!r}"
+            f"{inventory.estate_vars} defines no literal domain, got {value!r}"
         )
     return value
 

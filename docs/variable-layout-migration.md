@@ -154,17 +154,34 @@ three names.
 ```
 
 The same commit moves the `renovate.json` entries, the prek regexes, the rule globs, the
-citations in docs, agents and skills, and the `# DECIDED:` markers with their keys. It adds the
-layer check with a clean and a flagged case per rule, and the marker ADR-0042 governs. A Renovate dry run (`scripts/validate/renovate_extract.py`) must list the same pins as
-before, by name.
+citations in docs, agents and skills, and the `# DECIDED:` markers with their keys. A Renovate
+dry run (`scripts/validate/renovate_extract.py`) must list the same pins as before, by name.
+
+As built, the split moves each top-level key with the comment block above it, so every
+`DECIDED:` marker stays beside its key. `lib.estate.Inventory` names `estate_vars`, `k8s_vars`
+and the hosts directory, whose `vars.yml` is the every-host layer. `Inventory.shared_layer`
+merges them for a host render, leaves `hosts/vars.yml` out of a k8s role's render, and is the
+layer check: it raises when two of the three files declare the same key, so every render
+enforces it. `crowdsec_k8s_image` was the shared file's one Renovate pin, and the `renovate.json`
+entries name `k8s/vars.yml`. homelab-mcp stops mounting `inventory`, whose hostPath would no
+longer exist.
+
+Six comments name the old path and render into a manifest or a host package, so editing them
+here would restart their workloads: `k8s/roles/home-assistant/files/configuration.yaml`,
+`k8s/roles/loki-homelab/files/rules/homelab-logs.yaml`,
+`k8s/roles/monitor-bridge/files/checks/cloudflare_ips.py`,
+`k8s/roles/observability/files/rules/bridge-exporter.yaml`,
+`hosts/components/fake-remux/files/fake_remux_lib/fake_remux_logic.py` and
+`hosts/components/k3s-agent/templates/registries.yaml.j2`. Step 7 changes them.
 
 **Done when** the cluster and host renders are byte-identical, the extracted pins match, and
 `git ls-files inventory` is empty.
 
 ### Step 7: the old paths go
 
-The installed readers drop `inventory/`, and homelab-mcp stops mounting it. The comment in
-`k8s/roles/pi-peer-backup/templates/secret.yaml.j2` names `hosts/daniel-pi/vars.yml`. The readers that
+The installed readers drop `inventory/`. The rendered comments step 5 and step 6 left on the
+old path name the new files: `k8s/roles/pi-peer-backup/templates/secret.yaml.j2` and the six
+step 6 lists. Each restarts its workload, so they land one role at a time. The readers that
 compare two commits drop the old layout last: `render_diff_gates.py` and `cluster_pins.py` keep
 it until no open PR and no `promote` revision predates step 6.
 

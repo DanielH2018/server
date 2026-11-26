@@ -62,7 +62,7 @@ stub instead, which the filter `homelab_secret_stub` builds:
 - `domain` takes no stub and no placeholder, because it is not in `secrets/secrets.yml`.
   The operator ruled on 2026-10-14 that it is a variable, not a secret, and deleted it from
   the store on 2026-10-15. Every render reads its value from
-  `inventory/group_vars/all.yml`.
+  `estate/vars.yml`.
 
 Two more filters serve the stale-stub-file refusal. `homelab_stub_keys` lists the key names
 that take a stub, from the parsed `secrets.yml`. It reads keys only, so the ciphertext file is
@@ -186,7 +186,7 @@ on a usage error. `scripts/lib/exit_codes.py` holds the four codes as its `RENDE
 
 A role's templates render with these variables:
 
-- role defaults and `group_vars/all.yml`, in that rising precedence, with the stub file's
+- role defaults, `estate/vars.yml` and `k8s/vars.yml`, in that rising precedence, with the stub file's
   variables over both. No host's host_vars merge in: a template names the host it reads, as
   `hosts[k8s_primary_node].render_gid`;
 - `services`: every entry of `k8s/services.yml`, in the dependency order of
@@ -904,7 +904,7 @@ service, timer, socket or path.
 A host package's context is the host's inventory layers, as
 `scripts/lib/render_context.py:render_context` builds them, with `inventory_hostname` set to
 the host. A shared package's context has no host_vars layer. The component's `defaults:` map
-goes in through the `component_defaults` keyword, beneath `group_vars/all.yml`. A host_vars
+goes in through the `component_defaults` keyword, beneath `estate/vars.yml`, `k8s/vars.yml` and `hosts/vars.yml`. A host's
 value of the same name therefore wins, as it does over a role default. No `ansible_facts`
 value is in the context, so a template that reads one fails. A fact a template needs becomes
 an inventory variable.

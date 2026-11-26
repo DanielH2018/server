@@ -7,7 +7,7 @@ host-over-group precedence, and walk the service list through its own helper. ``
 that reading done once; a generator asks it for values and only renders.
 
 THE PRECEDENCE RULE LIVES HERE, ONCE. ``inventory_layers`` is the order Ansible applies,
-role defaults < ``group_vars/all.yml`` < host_vars. ``render_context`` builds its render
+role defaults < the shared vars files < a host's own file. ``render_context`` builds its render
 context on top of it, adding the stubs and the Jinja resolution a template render needs.
 The docs generators take the layers RAW: a page prints what the inventory says, and an
 expanded or ``STUB``-ed value would be a value no file holds.
@@ -19,7 +19,7 @@ Typical usage example:
 
     estate = Estate()
     estate.vars("daniel-pi")["has_fwupd"]  # False
-    estate.source("daniel-pi", "has_fwupd")  # "group": only group_vars/all.yml declares it
+    estate.source("daniel-pi", "has_fwupd")  # "group": only hosts/vars.yml declares it
 """
 
 from dataclasses import dataclass
@@ -30,7 +30,7 @@ from typing import Literal
 from lib.container_entry import ContainerEntry
 from lib.inventory_lists import host_names
 from lib.render_guard import host_layer, k8s_services, load_yaml
-from lib.repo_paths import ALL_VARS, HOST_VARS, K8S_SERVICES
+from lib.repo_paths import ESTATE_VARS, HOST_VARS, K8S_SERVICES, K8S_VARS
 
 __all__ = [
     "REPO_INVENTORY",
@@ -48,26 +48,50 @@ class Inventory:
     """Where the inventory layers live, so a test can point a reader at a throwaway tree.
 
     Attributes:
-        all_vars: The group_vars file every host shares.
-        host_vars: The hosts directory, holding one ``<host>/vars.yml`` per host.
+        estate_vars: ``estate/vars.yml``, the facts every render reads.
+        k8s_vars: ``k8s/vars.yml``, the cluster's facts, which every render reads too.
+        host_vars: The hosts directory: ``vars.yml`` for every host, ``<host>/vars.yml`` for one.
         services: The k8s service list, ``k8s/services.yml``.
     """
 
-    all_vars: Path = ALL_VARS
+    estate_vars: Path = ESTATE_VARS
+    k8s_vars: Path = K8S_VARS
     host_vars: Path = HOST_VARS
     services: Path = K8S_SERVICES
 
+    def shared_files(self, cluster: bool = False) -> tuple[Path, ...]:
+        """The shared vars files, weakest first; a `cluster` render reads no host defaults."""
+        files = (self.estate_vars, self.k8s_vars)
+        return files if cluster else (*files, self.host_vars / "vars.yml")
+
+    def shared_layer(self, cluster: bool = False) -> dict:
+        """The shared files merged; see `shared_files`.
+
+        Raises:
+            ValueError: two shared files declare the same key, so which one a render reads
+              would depend on the layer order rather than on where the key belongs.
+        """
+        merged: dict = {}
+        owner: dict[str, Path] = {}
+        for path in self.shared_files(cluster):
+            layer = load_yaml(path)
+            for key in layer.keys() & owner.keys():
+                raise ValueError(f"{key} is declared in both {owner[key]} and {path}")
+            owner |= dict.fromkeys(layer, path)
+            merged |= layer
+        return merged
+
     def var_files(self) -> list[Path]:
-        """Every vars file, sorted: the shared one and each host's, `_example`'s included."""
-        return sorted([self.all_vars, *self.host_vars.glob("*/vars.yml")])
+        """Every vars file, sorted: the shared ones and each host's, `_example`'s included."""
+        return sorted([*self.shared_files(), *self.host_vars.glob("*/vars.yml")])
 
 
 REPO_INVENTORY = Inventory()
 
 
 def shared_vars() -> dict:
-    """The repo's layer every host shares, raw: what ``group_vars/all.yml`` declares."""
-    return load_yaml(REPO_INVENTORY.all_vars)
+    """The repo's shared layer, raw: estate, k8s and every-host vars merged."""
+    return REPO_INVENTORY.shared_layer()
 
 
 def host_vars(host: str) -> dict:
@@ -107,8 +131,8 @@ class Estate:
 
     @cached_property
     def group_vars(self) -> dict:
-        """``group_vars/all.yml``, the layer every host shares."""
-        return load_yaml(self.inventory.all_vars)
+        """The shared layer every host reads: estate, k8s and every-host vars merged."""
+        return self.inventory.shared_layer()
 
     def hosts(self) -> list[str]:
         """Every host, one per ``<host>/vars.yml``, sorted; ``_example`` is not a host."""

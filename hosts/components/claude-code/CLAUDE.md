@@ -284,7 +284,7 @@ template carries why it is a host timer at all.
   `claude_code_artifacts_peer_dir`, `claude_code_artifacts_stars_file`,
   `claude_code_otlp_host_ip` and `claude_code_otlp_port` are each held equal to the k8s key by
   `hosts/lib/tests/test_claude_artifacts_node_timers.py`. A change edits both roles. One key in
-  `group_vars/all.yml` would route as a deploy-plane change only.
+  a shared vars file would route as a deploy-plane change only.
 - **The package creates the directories the artifacts pod mounts.**
   `hosts/components/claude-code/tmpfiles.d/homelab-artifacts.conf.j2` declares the local tree,
   each peer directory, the star list directory and the textfile directory, and the sync's

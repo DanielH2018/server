@@ -4,7 +4,7 @@
 Fixture-driven — synthetic service list and roles under tmp_path, never the real service list
 (which changes; see scripts/deploy_tools/tests/test_deploy_tags.py's REAL-inventory tests for the
 pattern this deliberately does NOT follow — the catalog derives facts rather than guarding a set).
-`main` takes no group-variables override, so its test reads the real `group_vars/all.yml`.
+`main` takes no group-variables override, so its test reads the repo's real shared vars.
 Run: uv run pytest scripts/docs/tests/test_service_catalog.py
 """
 
@@ -13,7 +13,6 @@ from _catalog_fixtures import catalog_args, make_repo, write
 from docs.catalog_lib.catalog_facts import k8s_route
 from docs.catalog_lib.catalog_model import ServiceRow
 from docs.catalog_lib.catalog_render import render_html, render_markdown
-from lib.estate import Inventory
 
 
 def test_auth_tier_true_false_and_missing(tmp_path):
@@ -55,7 +54,7 @@ def test_k8s_route_uses_hostname_default_name_when_ingressroute_exists(tmp_path)
     )
     assert row.route.startswith("jellyfin.local.<domain>")
     entry = {"name": "jellyfin", "hostname": "jellyfin"}
-    direct = k8s_route(entry, paths["k8s_roles"], Inventory(all_vars=paths["all_vars"]))
+    direct = k8s_route(entry, paths["k8s_roles"], catalog_args(paths)["inventory"])
     assert direct == row.route
 
 
@@ -74,7 +73,7 @@ def test_k8s_route_is_lan_only_when_public_route_is_off(tmp_path):
 
 def test_k8s_route_names_both_tiers_when_public_route_is_on(tmp_path):
     paths = make_repo(tmp_path)
-    write(paths["all_vars"], "k8s_namespace: homelab\nk8s_public_route: true\n")
+    write(paths["estate_vars"], "k8s_namespace: homelab\nk8s_public_route: true\n")
     role = paths["k8s_roles"] / "jellyfin" / "templates"
     write(role / "ingressroute.yaml.j2", "{{ ingressroute(...) }}\n")
     row = next(
@@ -88,7 +87,7 @@ def test_k8s_route_names_both_tiers_when_public_route_is_on(tmp_path):
 def test_k8s_route_stays_lan_only_when_the_role_opts_out(tmp_path):
     """`public=false` in the role's own macro call beats the cluster-wide flag."""
     paths = make_repo(tmp_path)
-    write(paths["all_vars"], "k8s_namespace: homelab\nk8s_public_route: true\n")
+    write(paths["estate_vars"], "k8s_namespace: homelab\nk8s_public_route: true\n")
     role = paths["k8s_roles"] / "jellyfin" / "templates"
     write(role / "ingressroute.yaml.j2", "{{ ingressroute(..., public=false) }}\n")
     row = next(

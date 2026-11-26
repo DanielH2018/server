@@ -81,7 +81,7 @@ jellyfin_k8s_dri_resource: devic.es/dri
 
 # VIP PINNED, not pool-assigned: `homelab-pool` autoAssigns, and clients have it typed in by hand.
 # UDP discovery ports (1900, 7359) are NOT exposed: MetalLB L2 carries no multicast. lan_ip is in
-# group_vars/all.yml.
+# k8s/vars.yml.
 
 # What the server advertises to clients as its own address — the LAN VIP above.
 jellyfin_k8s_published_url: "http://{{ jellyfin_k8s_lan_ip }}:8096"

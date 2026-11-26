@@ -23,7 +23,7 @@ def estate(tmp_path: Path) -> Estate:
     (tmp_path / "services.yml").write_text(
         yaml.safe_dump({"containers_list": [{"name": "web"}, {"name": "db"}]})
     )
-    (tmp_path / "all.yml").write_text(
+    (tmp_path / "estate-vars.yml").write_text(
         yaml.safe_dump({"port": 1, "has_fwupd": False, "alias": "{{ sys_user }}"})
     )
     host_vars_file("box", host_vars).write_text(
@@ -43,7 +43,8 @@ def estate(tmp_path: Path) -> Estate:
     )
     return Estate(
         Inventory(
-            all_vars=tmp_path / "all.yml",
+            estate_vars=tmp_path / "estate-vars.yml",
+            k8s_vars=tmp_path / "k8s-vars.yml",
             host_vars=host_vars,
             services=tmp_path / "services.yml",
         )
@@ -86,3 +87,15 @@ def test_role_vars_lets_the_inventory_override_a_role_default(estate, tmp_path):
     setup = estate.role_vars(tmp_path / "roles" / "setup" / "r")
     assert (k8s["port"], k8s["own"]) == (1, "default")
     assert setup["port"] == 1
+
+
+def test_a_cluster_render_reads_no_every_host_default(estate):
+    (estate.inventory.host_vars / "vars.yml").write_text("has_igpu: false\n")
+    assert "has_igpu" in estate.inventory.shared_layer()
+    assert "has_igpu" not in estate.inventory.shared_layer(cluster=True)
+
+
+def test_a_key_in_two_shared_files_is_refused(estate):
+    estate.inventory.k8s_vars.write_text("port: 3\n")
+    with pytest.raises(ValueError, match="port is declared in both"):
+        estate.inventory.shared_layer()

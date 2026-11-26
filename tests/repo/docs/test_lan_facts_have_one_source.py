@@ -36,7 +36,7 @@ PATTERNS = {
     "cni0_gateway": re.compile(r"10\.42\.[01]\.1/32"),
 }
 
-SCAN_ROOTS = ("k8s", "inventory", "tests", "scripts", "docs", "hosts")
+SCAN_ROOTS = ("k8s", "estate", "tests", "scripts", "docs", "hosts")
 SCAN_SUFFIXES = (".yml", ".yaml", ".j2", ".py", ".md", ".sh")
 
 # A path matching any entry is exempt.
@@ -51,11 +51,11 @@ ALLOWLIST: list[tuple[str, str]] = [
     (r"(^|/)CLAUDE\.md$", "prose"),
     (r"(^|/)SETUP\.md$", "prose"),
     (
-        r"^inventory/group_vars/all\.yml$",
+        r"^(estate|k8s)/vars\.yml$",
         "the source definition site for every fact this guard covers",
     ),
     (
-        r"^hosts/(daniel-box|daniel-pi|daniel-server|daniel-stage)/vars\.yml$",
+        r"^hosts/((daniel-box|daniel-pi|daniel-server|daniel-stage)/)?vars\.yml$",
         "per-host source definitions; daniel-stage's MetalLB pool is a deliberately separate "
         "override, not a duplicate of the production one",
     ),
@@ -190,7 +190,7 @@ def test_a_duplicated_literal_is_flagged():
 
 
 def test_an_allowlisted_path_is_not_flagged_even_with_a_bare_literal():
-    files = {"inventory/group_vars/all.yml": "k3s_metallb_ingress_vip: 10.0.0.240\n"}
+    files = {"k8s/vars.yml": "k3s_metallb_ingress_vip: 10.0.0.240\n"}
     assert flagged(files) == []
 
 
@@ -206,7 +206,8 @@ def test_no_lan_fact_literal_sits_outside_the_allowlist():
 
 CONVERTED_FILES = frozenset(
     {
-        "inventory/group_vars/all.yml",
+        "estate/vars.yml",
+        "k8s/vars.yml",
         "k8s/roles/netpol-baseline/defaults/main.yml",
         "k8s/roles/netpol-baseline/templates/networkpolicy-mosquitto.yaml.j2",
         "k8s/roles/netpol-baseline/templates/networkpolicy-nut.yaml.j2",

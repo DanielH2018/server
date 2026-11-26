@@ -1,4 +1,4 @@
-"""loki-homelab's `job` label values have one owner: `loki_streams` in group_vars/all.yml.
+"""loki-homelab's `job` label values have one owner: `loki_streams` in estate/vars.yml.
 
 Both Alloy configs stamp their streams from it, and monitor-bridge's settings render its
 selectors from it. Neither direction is checked by the render alone, so this holds both:

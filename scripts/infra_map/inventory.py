@@ -10,9 +10,9 @@ from pathlib import Path
 from collections.abc import Sequence
 from typing import Any
 
-from lib import yaml_fast
 from lib.inventory_lists import K8S_HOST, PI_HOST, pi_entries_in
 from lib.container_entry import ContainerEntry
+from lib.estate import Inventory
 from lib.render_guard import host_layer, k8s_services
 
 from infra_map.constants import (
@@ -123,10 +123,11 @@ def load_inventory(
     repo_root: Path = REPO_ROOT,
 ) -> tuple[dict[str, Any], dict[str, dict], tuple[ContainerEntry, ...]]:
     """Return ``(global_vars, {host: host_vars}, k8s services)`` from the inventory."""
-    inventory = repo_root / "inventory"
-    global_vars = (
-        yaml_fast.safe_load((inventory / "group_vars" / "all.yml").read_text()) or {}
-    )
+    global_vars = Inventory(
+        estate_vars=repo_root / "estate" / "vars.yml",
+        k8s_vars=repo_root / "k8s" / "vars.yml",
+        host_vars=repo_root / "hosts",
+    ).shared_layer()
     host_vars = {host: host_layer(repo_root / "hosts", host) for host in HOSTS}
     return global_vars, host_vars, k8s_services(repo_root / "k8s" / "services.yml")
 

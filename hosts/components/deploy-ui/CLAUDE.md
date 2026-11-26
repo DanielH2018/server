@@ -80,7 +80,7 @@ the label's hover text, and the log shows as its file name
 Only a `land` row is cancellable (`hosts/components/deploy-ui/tests/test_deploy_ui_app.py::test_cancel_lock_row_is_flagged`).
 
 The daemon runs outside the venv. The unit renders `DEPLOY_UI_TREE_LOCK` from
-`inventory/group_vars/all.yml:server_git_tree_lock`.
+`hosts/vars.yml:server_git_tree_lock`.
 
 ## Landing queue
 
@@ -159,7 +159,7 @@ daemon cannot import land_lib
 
 ## Game servers
 
-The *Game servers* panel shows each game in `game_servers` (`inventory/group_vars/all.yml`), which
+The *Game servers* panel shows each game in `game_servers` (`estate/vars.yml`), which
 the component renders into `games.json` beside the daemon (`templates/games.json.j2`) and the unit
 names in `DEPLOY_UI_GAMES_FILE`. A game is its server's Deployment plus every Deployment
 that runs only while it does, such as its game-stats exporter. `files/deploy_ui_lib/deploy_ui_games.py`
@@ -203,7 +203,7 @@ them where the panel sets them.
   reason (`hosts/components/deploy-ui/tests/test_deploy_ui_game_control.py::test_a_refused_start_scales_nothing_is_flagged`);
   stop stays allowed (`hosts/components/deploy-ui/tests/test_deploy_ui_game_control.py::test_a_refused_game_can_still_be_stopped_is_clean`).
   terraria carries one until issue #822's restore checklist is done
-  (`inventory/group_vars/all.yml:game_servers`).
+  (`estate/vars.yml:game_servers`).
 - Every action writes one audit line through `logger -t deploy-ui`:
   `action=game-<action> game=<name>`, and the restart's outcome as
   `action=game-restart game=<name> result=started|left-stopped`

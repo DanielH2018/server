@@ -50,7 +50,7 @@ def test_every_root_entry_is_tracked_or_expected():
     tracked = _tracked_root_entries()
     assert {
         "k8s",
-        "inventory",
+        "estate",
         "secrets",
         "tests",
         "scripts",

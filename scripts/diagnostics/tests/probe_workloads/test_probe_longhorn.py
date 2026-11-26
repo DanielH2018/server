@@ -331,20 +331,10 @@ def test_backup_target_url_is_empty_when_disarmed_or_unreadable():
 
 
 def _inventory_bucket():
-    """The `k3s_longhorn_b2_bucket:` value a tracked inventory file holds, or None if none does."""
-    from lib import proc_testing
-    from lib.repo_paths import REPO
+    """The `k3s_longhorn_b2_bucket` value the repo's shared vars hold, or None if they hold none."""
+    from lib.estate import shared_vars
 
-    tracked = proc_testing.run(
-        ["git", "ls-files", "inventory"], cwd=REPO, check=True
-    ).stdout.split()
-    for name in tracked:
-        if not name.endswith((".yml", ".yaml")):
-            continue
-        for line in (REPO / name).read_text().splitlines():
-            if line.startswith("k3s_longhorn_b2_bucket:"):
-                return line.split(":", 1)[1].strip().strip("'\"")
-    return None
+    return shared_vars().get("k3s_longhorn_b2_bucket")
 
 
 def _bucket_b2_was_asked_for(monkeypatch, tmp_path, subcommand):
@@ -426,5 +416,5 @@ def test_b2_longhorn_dry_run_names_the_real_bucket_without_an_age_key(
     out = capsys.readouterr().out
     assert "<longhorn_b2_bucket>" not in out
     bucket = _inventory_bucket()
-    assert bucket, "no tracked inventory file defines k3s_longhorn_b2_bucket"
+    assert bucket, "no shared vars file defines k3s_longhorn_b2_bucket"
     assert f"bucket={bucket} " in out

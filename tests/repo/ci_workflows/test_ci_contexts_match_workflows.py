@@ -45,7 +45,7 @@ def _contexts_in(variables: dict, key: str) -> set[str]:
 def _gate_contexts() -> set[str]:
     """The gate every deploy path grades by, read from the YAML rather than from the rendered
     settings file, which is root-owned and only exists on daniel-box. It is
-    `ci_required_contexts` in group_vars/all.yml since H7.2e."""
+    `ci_required_contexts` in estate/vars.yml since H7.2e."""
     return _contexts_in(shared_vars(), "ci_required_contexts")
 
 

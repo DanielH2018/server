@@ -82,7 +82,7 @@ on:
     branches: [master]
   # The weekly reboot's no-promotion window ends here, at the cron's 07:30 UTC Sunday plus the
   # 5-minute shutdown delay and the mute's 40-minute recovery, all from
-  # inventory/group_vars/all.yml. GitHub reads this literal, so
+  # estate/vars.yml. GitHub reads this literal, so
   # scripts/deploy_tools/tests/promote/test_promote_reboot_window.py derives it and fails a drift.
   schedule:
     - cron: "15 8 * * 0"

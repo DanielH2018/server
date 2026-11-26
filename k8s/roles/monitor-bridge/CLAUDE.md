@@ -18,7 +18,7 @@ two exporters, prerequisites, gate-set membership and test-patching rules.
 - **Claims:** none (no PVC)
 <!-- /generated_from -->
 
-**Host:** daniel-box, pinned by `nodeSelector` to `inventory/group_vars/all.yml:k8s_primary_node`
+**Host:** daniel-box, pinned by `nodeSelector` to `k8s/vars.yml:k8s_primary_node`
 because the `etcd_restore_drill` check reads the drill's stamp directory over a hostPath. Every
 source is reached by in-cluster Service name.
 
