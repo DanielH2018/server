@@ -12,7 +12,7 @@ probe; this rule refuses the run itself, before any input is read (#6110).
 
 The rule denies `probe.py health` and `probe.py takeover` when the probe's checkout is a linked worktree and HEAD
 differs from `origin/master` in a file that `origin/master` changed since the merge base,
-under `k8s/`, `inventory/` or `scripts/`. Three cases stay clean:
+under `k8s/`, `estate/` or `scripts/`. Three cases stay clean:
 
 - The primary checkout, the remedy #5912 names. `homelab-checkout-sync` fast-forwards it, so it lags
   `origin/master` by at most one timer run, and inside that window `stale_checkout_reason` still
@@ -38,7 +38,7 @@ from _hook_common import primary_checkout
 GATE_SUBCOMMANDS = frozenset({"health", "takeover"})
 # The root options of `probe_lib/cli_parser.py:_build_parser` that take a separate value.
 _VALUED_ROOT_OPTIONS = frozenset({"--cluster"})
-_READ_PATHS = ("k8s", "inventory", "scripts")
+_READ_PATHS = ("k8s", "estate", "scripts")
 # How many stale files the denial lists by name.
 _SHOWN = 3
 

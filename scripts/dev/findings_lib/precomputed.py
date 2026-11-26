@@ -24,7 +24,7 @@ from lib.repo_paths import REPO
 from lib.role_paths import role_for
 
 # The shared trees every k8s role renders through.
-_SHARED_RENDER_INPUTS = ("k8s/templates/", "inventory/")
+_SHARED_RENDER_INPUTS = ("k8s/templates/", "k8s/vars.yml", "estate/")
 
 
 def deploy_line(paths: list[str]) -> str:
