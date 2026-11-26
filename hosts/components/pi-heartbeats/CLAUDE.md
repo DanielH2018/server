@@ -37,5 +37,5 @@ The other four heartbeats only read and report. This one acts: pi-recovery-healt
 - **Next-run review:** a repeat `restarted:` for the same container needs fixing upstream. Read
   the week's status=down lines before widening the watch set.
 
-ENFORCED: hosts/tests/test_pi_recovery_restarts_and_reports.py::test_a_dead_container_is_restarted,
+ENFORCED: hosts/tests/pi/test_pi_recovery_restarts_and_reports.py::test_a_dead_container_is_restarted,
 which renders the script and runs it against a stub `docker`.

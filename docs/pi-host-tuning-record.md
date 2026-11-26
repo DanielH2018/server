@@ -279,9 +279,15 @@ The caps themselves, set when the tmpfs was 81% full on 2026-06-11:
   and user journals, and each journald restart and boot adds more. An archive held about
   270 KB, so 1 MiB holds one, and 32 archives keep about a week of history. That covers the
   weekly rkhunter report, which logs to the journal.
-- `ACCT_LOGGING="3"` cuts pacct retention from 30 daily generations (savelog via
-  `/etc/cron.daily/acct`, about 28 MB/day of healthcheck exec churn) to 3. savelog leaves
-  `pacct.0` uncompressed, so pacct holds about 62 MB at its daily peak.
+- `rotate 3` in `/etc/logrotate.d/acct` cuts pacct retention from 30 daily generations
+  (about 28 MB/day of healthcheck exec churn) to 3: `pacct.0`, `pacct.1.gz` and
+  `pacct.2.gz`. The stanza's `start 0` and `delaycompress` leave `pacct.0` uncompressed,
+  so pacct holds about 62 MB at its daily peak. Ubuntu 26.04's acct 6.6.4 rotates pacct
+  only through that logrotate stanza. A scratch logrotate run on daniel-pi on 2026-11-26
+  confirmed the generation count `rotate 3` keeps.
+  **HISTORY —** On 24.04, savelog in `/etc/cron.daily/acct` rotated pacct and read
+  `ACCT_LOGGING="3"` from `/etc/default/acct`. 26.04's acct ships no cron script and reads
+  nothing from that file, so the line left there does nothing.
 - auditd is capped to a 12 MB ceiling. Its free-space thresholds have their own section below.
 - `HISTORY=2` cuts sysstat's shipped 7 days — 18 sa/sar files, 9.9 MB — to 2.
 
@@ -388,7 +394,7 @@ It replaced the `node-exporter` container on 2026-09-18 (#2005; the retired role
 `git show 2460d0675fd748e70fcbcde87185371ffd62402b:ansible/roles/containers/archive/node-exporter/`).
 The trade was one containerd shim, about 5 MB, off a host that keeps 10-25 MB free — and this
 was the one container whose host form changes no decision.
-`hosts/tests/test_pi_node_exporter_host_unit.py` holds the unit to the archived
+`hosts/tests/pi/test_pi_node_exporter_host_unit.py` holds the unit to the archived
 compose's collector set with the `netclass` and textfile collectors on, the directory to M3's contract, and the
 version to the cluster DaemonSet's.
 

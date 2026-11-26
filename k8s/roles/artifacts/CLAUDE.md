@@ -53,7 +53,7 @@ how that sync behaves.
   The claude-code component's triage tmpfiles entry creates it (`2750 claude-triage-ctl:ubuntu`),
   and the pod reads it through the same group. The path equals `report_dir` in
   `hosts/components/claude-code/templates/claude-triage-pins.j2`
-  (`hosts/tests/test_claude_triage.py::test_the_artifacts_pod_mounts_the_report_tree_the_host_creates`).
+  (`hosts/tests/claude_code/test_claude_triage.py::test_the_artifacts_pod_mounts_the_report_tree_the_host_creates`).
 
 ## The peer sync runs from daniel-box, and the direction is not arbitrary
 daniel-box's host package ships `/usr/lib/homelab/sync-artifacts` and

@@ -130,7 +130,7 @@ uid.
 - **The approval list covers the socket's four files.** #6350 expected the sudo grant's
   entries to cover it, and they cover only the script. The helper, the client and the two unit
   templates are listed in `hosts/components/claude-code/templates/claude-land-approval-paths.j2` and in `FLOOR` in
-  `hosts/tests/test_claude_lander.py`.
+  `hosts/tests/claude_code/test_claude_lander.py`.
 - **To take it back:** remove the four socket entries from
   `hosts/components/claude-code/component.yml`, and the socket group from the `groups=` line of
   `hosts/components/claude-code/templates/claude-agent-setup.sh.j2`. The next package version

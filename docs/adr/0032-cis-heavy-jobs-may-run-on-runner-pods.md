@@ -126,7 +126,7 @@ record manages.
 The check that reads the fork approval policy is in
 `hosts/components/github-checks/templates/github-ruleset-drift.sh.j2`. The `# DECIDED:` marker
 there opens "a fork's pull request waits for approval" and cites this record.
-`hosts/tests/test_github_ruleset_drift.py` holds its accepting and rejecting cases. The same
+`hosts/tests/repo_crons/test_github_ruleset_drift.py` holds its accepting and rejecting cases. The same
 component's `github-interaction-limit` script re-applies the interaction limit. Conditions 1, 2
 and 5 have no line in the tree until the runner role exists, and that role's markers join this
 list in the change that adds it.

@@ -1,6 +1,6 @@
 """The rendered `loki-route-witness` component: each cluster node's Loki read-route witness.
 
-The script's behaviour is run against stubs in `hosts/tests/test_loki_route_witness.py`.
+The script's behaviour is run against stubs in `hosts/tests/repo_crons/test_loki_route_witness.py`.
 These tests hold what the move added: the unit that runs it, which loads no credential since
 M6 batch B2's Cutover-2 dropped the Kuma push, and the timer and boot-rerun shape of the kuma-check form M6 left.
 Both cluster nodes list the component, and the role keeps no witness task.

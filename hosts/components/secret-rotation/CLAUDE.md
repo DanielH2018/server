@@ -25,6 +25,6 @@
   clears at the next 08:30 run after the operator refreshes the kit and commits
   `scripts/secrets_mgmt/recovery_kit.py record`'s stamp.
 
-ENFORCED: hosts/tests/test_host_check_textfiles.py (the audit's behaviour
-against stubs), hosts/tests/test_cron_scripts_publish_via_pr.py and
+ENFORCED: hosts/tests/host_checks/test_host_check_textfiles.py (the audit's behaviour
+against stubs), hosts/tests/repo_crons/test_cron_scripts_publish_via_pr.py and
 hosts/lib/tests/test_secret_rotation_component.py (the units and the legacy entries).

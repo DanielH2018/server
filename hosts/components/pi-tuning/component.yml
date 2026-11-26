@@ -6,7 +6,7 @@
 #
 # - conffiles, so the line arm: /etc/default/zramswap (zram-tools),
 #   /etc/watchdog.conf (watchdog), /etc/log2ram.conf (log2ram), /etc/sysstat/sysstat (sysstat),
-#   /etc/default/acct (acct), /etc/audit/auditd.conf (auditd);
+#   /etc/logrotate.d/acct (acct), /etc/audit/auditd.conf (auditd);
 # - unowned, so the line arm: /boot/firmware/config.txt, /etc/locale.gen (written by locales'
 #   postinst) and /etc/hosts (the latter is in pi-resolver);
 # - owned and not a conffile: /usr/bin/log2ram (log2ram). It takes the homelab copy below.
@@ -116,7 +116,9 @@ lines:
   - {path: /etc/watchdog.conf, line: "max-load-5 = 24", regexp: '^#?max-load-5\s*=', activate: "try-restart:watchdog.service"}
   - {path: /etc/watchdog.conf, line: "max-load-15 = 24", regexp: '^#?max-load-15\s*=', activate: "try-restart:watchdog.service"}
   - {path: /etc/sysstat/sysstat, line: "HISTORY=2", regexp: '^#?HISTORY='}
-  - {path: /etc/default/acct, line: 'ACCT_LOGGING="3"', regexp: '^#?ACCT_LOGGING='}
+  # acct keeps pacct, an uncompressed pacct.0 and N-1 gzipped generations. The packaged line is
+  # tab-indented, and a regexp that missed it would append the line after the stanza's `}`.
+  - {path: /etc/logrotate.d/acct, line: "\trotate 3", regexp: '^\s*rotate\s'}
   # auditd reports CanReload=no, so the action is a restart.
   - {path: /etc/audit/auditd.conf, line: "max_log_file = 4", regexp: '^max_log_file\s*=', activate: "try-restart:auditd.service"}
   - {path: /etc/audit/auditd.conf, line: "num_logs = 3", regexp: '^num_logs\s*=', activate: "try-restart:auditd.service"}

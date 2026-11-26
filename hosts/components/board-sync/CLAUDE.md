@@ -23,5 +23,5 @@
   recurs every hour until the board or board.py changes. Any other reason is gh or GitHub.
 
 ENFORCED: hosts/lib/tests/test_board_sync_component.py, which renders the package and holds the
-unit, the timer, its enable link and this contract, and hosts/tests/test_board_sync_paging.py,
+unit, the timer, its enable link and this contract, and hosts/tests/repo_crons/test_board_sync_paging.py,
 which runs the rendered script through a failure streak.

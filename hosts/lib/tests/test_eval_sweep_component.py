@@ -4,7 +4,7 @@
 env file. These tests hold what the move carries: the credential that replaces the env file, the
 `+` ExecStartPre that creates the state directory as
 root for a service that runs as `sys_user`, the PATH and HOME the cron set, the timer's slot and
-the legacy entries. The script's behaviour is run in `hosts/tests/test_eval_sweep_cron.py`
+the legacy entries. The script's behaviour is run in `hosts/tests/repo_crons/test_eval_sweep_cron.py`
 and `test_eval_run_failure_path.py`.
 
 Run: uv run pytest hosts/lib/tests/test_eval_sweep_component.py

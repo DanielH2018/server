@@ -110,7 +110,7 @@ k3s_system_slice_memory_low: 3G
 # Each group opens at its priority and runs to the next one. 1000000000 is the value of
 # Longhorn's `longhorn-critical` PriorityClass, and 2000000000 is Kubernetes'
 # system-cluster-critical; system-node-critical (2000001000) lands in that last group.
-# ENFORCED: hosts/tests/test_k3s_server_component.py.
+# ENFORCED: hosts/tests/k3s/test_k3s_server_component.py.
 #
 # DECIDED: 90 seconds in total, because the UPS chain cannot give more. upsmon's SHUTDOWNCMD is
 # `systemctl poweroff`, which waits on kubelet's delay lock like the weekly reboot does, and an

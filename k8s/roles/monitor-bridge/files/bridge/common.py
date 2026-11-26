@@ -44,9 +44,8 @@ consumer scripts — never fork a second edited copy under autofix-bridge/files/
 import os
 import time
 
-# Discord rejects a message over 2000 characters with HTTP 400. The pod-side twin of host_lib's
-# `DISCORD_MAX` and `clamp_discord`: the two programs ship by different mechanisms and cannot
-# share a module (host_lib's `discord_post` says so too), so edit both together.
+# Pod-side twin of host_lib's `DISCORD_MAX` and `clamp_discord`; the two ship by different
+# mechanisms and cannot share a module, so edit both together.
 DISCORD_MAX = 1900
 DISCORD_TRUNCATED = "\n…(truncated)"
 
@@ -55,20 +54,10 @@ def _env(name: str, default: str) -> str:
     return os.environ.get(name, default)
 
 
-# Every env value this module or bridge/config.py could not parse, one operator-readable line
-# each.
-#
-# IMPORTING A MODULE THAT USES THESE MUST NOT RAISE. `python /app/cli.py` imports both this
-# module and bridge/config.py transitively, so a ValueError on one malformed number would kill
-# the pod during import — before the heartbeat file existed, before a single monitor could be
-# told, and with a traceback naming neither the env var nor its value. `_int`/`_num` below
-# record the problem, fall back to the documented default, and let cli.py's `main()` print the
-# whole list and exit 2. One clear line per bad value, at startup, where an operator is looking.
-#
-# Defined here rather than in bridge/config.py because this module's own HTTP_TIMEOUT needs the
-# same treatment and is imported before bridge/config.py exists as a module; bridge/config.py
-# imports CONFIG_PROBLEMS and _int/_num from here so both modules share the one list and the one
-# pair of parsers.
+# IMPORTING MUST NOT RAISE: `_int`/`_num` record a bad env value in CONFIG_PROBLEMS and use the
+# default, so cli.py's `main()` prints the list and exits 2 instead of the pod dying at import with
+# a traceback naming neither the variable nor its value. bridge/config.py imports the list and
+# parsers from here.
 CONFIG_PROBLEMS: list[str] = []
 
 
@@ -107,15 +96,8 @@ def _num(name: str, default: str) -> float:
         return float(default)
 
 
-# The seconds every outbound HTTP call in both bridges is bounded by. Defined here rather than
-# once per bridge because it was the same line in both, and a timeout that drifts between two
-# scripts drifts in the one direction nobody notices: the slower copy fails open more often, and
-# a check that fails open is inert behind a green monitor.
-#
-# It is a CEILING, not a budget. A glances /api/4/containers shows what that distinction costs: it answered in 4.43s and then timed out at this bound
-# on the very next call, where its siblings answer in 0.03-0.06s. A source that slow needs the
-# cheap signal to decide and the expensive one only to explain — this constant cannot make that
-# choice for a caller, it can only stop a hang.
+# A CEILING, not a budget: it only stops a hang. A slow source needs the cheap signal to decide and
+# the expensive one only to explain.
 HTTP_TIMEOUT = _int("HTTP_TIMEOUT", "10")
 
 

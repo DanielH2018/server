@@ -21,7 +21,7 @@
 # REVERSE: the line arm never removes a line. Dropping this component leaves the widened
 # attachment, to restore by hand from the `apparmor` package's copy.
 #
-# hosts/tests/test_k3s_runc_apparmor_profile.py holds the listing, the label and the attachment.
+# hosts/tests/k3s/test_k3s_runc_apparmor_profile.py holds the listing, the label and the attachment.
 depends:
   - apparmor
 lines:
