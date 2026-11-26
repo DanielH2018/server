@@ -2,9 +2,9 @@
 
 Flux applies every k8s `containers_list` entry once `promote` moves `prod`. `split_k8s` therefore
 takes every such tag out of `resolved_tags`. A tag `--tags` named is kept for the
-wait, and a tag this PR's paths named is dropped: every landing whose PR `moves_the_bundle` waits
-on the promotion, and land-wait's changed set, read from the two `digests.json` files, names the
-tags the health gate and the `source=promote` marker read (`WaitResult.tags`). A PR that moves no
+wait, and a tag this PR's paths named is dropped: every landing whose PR moves the bundle
+(`lib.path_kinds.moves_the_bundle`) waits on the promotion, and land-wait's changed set,
+read from the two `digests.json` files, names the tags the health gate and the `source=promote` marker read (`WaitResult.tags`). A PR that moves no
 bundle file waits on `homelab` alone and gates no tag. The plan is
 docs/archive/deploy/d6-delete-old-path.md, *`land.sh`'s k8s tags after D6*.
 
@@ -43,24 +43,6 @@ from deploy_tools.land_lib.outcome import (
     say,
 )
 from deploy_tools.promote_lib.wait import WaitVerdict
-from lib.path_kinds import is_doc, is_test_only_path
-
-
-def _reaches_no_render(path: str) -> bool:
-    """A document or a test, which no render reads; a `.md` a role ships under `files/` may."""
-    if is_test_only_path(path):
-        return True
-    return is_doc(path) and not (path.startswith("k8s/roles/") and "/files/" in path)
-
-
-def moves_the_bundle(paths) -> bool:
-    """Whether a changed path may move the bundle `promote` publishes (D6.12).
-
-    Every path but a document or a test may: the landing waits on land-wait, whose changed
-    set says what moved, and a PR that moved nothing waits on `homelab` alone. A prefix list
-    of render inputs would end a PR it missed at `nothing-to-deploy` unwaited.
-    """
-    return not all(_reaches_no_render(p) for p in paths)
 
 
 def gated_tags(ln: Landing) -> list[str]:

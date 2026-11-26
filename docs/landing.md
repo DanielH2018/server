@@ -228,7 +228,7 @@ is waited out first, as the bullets below say. A refused landing exits 75 with
   the turn, a serial PR is still refused at once.
 - A PR of documents and tests alone passes a live serial landing without waiting
   (`live_limit.QUIET`). It moves no bundle, so it waits on no promotion
-  (`promotion.moves_the_bundle`), and a promotion the serial landing fails cannot reach
+  (`lib/path_kinds.py:moves_the_bundle`), and a promotion the serial landing fails cannot reach
   it. On 2026-11-26, 2 of the 15 landings that waited behind a serial landing were such PRs,
   and the waits behind serial landings that day totalled 6.3 hours.
 - Every other PR waits in line while another landing holds the serial lock, instead of refusing.
@@ -702,7 +702,7 @@ set still names the k8s tags it gates. `--tags` overrides the scope entirely.
 
 **The changed set names the k8s tags, not the PR's paths.** `split_k8s` drops a path-derived
 k8s tag and keeps one `--tags` named. Every PR with a path other than a document or a test waits
-on the promotion (`land_lib/promotion.py:moves_the_bundle`), and land-wait's changed set, joined
+on the promotion (`lib/path_kinds.py:moves_the_bundle`), and land-wait's changed set, joined
 with any `--tags`, names the k8s tags the gate grades and the annotation names. A
 shared template, an inventory edit or a `manifests` change therefore gates exactly the tags whose
 render moved. A PR that moves no bundle file waits on `homelab` alone and gates nothing. The

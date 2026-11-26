@@ -36,10 +36,11 @@ from pathlib import Path
 from typing import NoReturn
 
 
-from deploy_tools.land_lib import live_limit, pin_gate, promotion, turn
+from deploy_tools.land_lib import live_limit, pin_gate, turn
 from deploy_tools.land_lib.landing import Landing
 from deploy_tools.land_lib.outcome import Verdict, say
 from deploy_tools.land_lib.serial_lock import SERIAL_NAME, record_holder
+from lib.path_kinds import moves_the_bundle
 from lib.progress import OnChange
 
 # DECIDED: 6. The operator set it on 2026-11-15 (D10 in docs/ci-throughput.md): on 2026-11-14,
@@ -323,13 +324,13 @@ def _bar_after_waits(ln: Landing, head: str, in_turn_waits: bool) -> Bar | None:
 def _kind(ln: Landing, head: str) -> str:
     """The kind of the PR's files at `head`; "" when they cannot be read.
 
-    `live_limit.QUIET` for a PR that moves no bundle (`promotion.moves_the_bundle`), else
+    `live_limit.QUIET` for a PR that moves no bundle (`lib.path_kinds.moves_the_bundle`), else
     `live_limit.kind`.
     """
     paths = live_limit.fail_open(lambda: ln.changed_paths(head))
     if not paths:
         return ""
-    if not promotion.moves_the_bundle(paths):
+    if not moves_the_bundle(paths):
         return live_limit.QUIET
     return live_limit.kind(paths)
 
