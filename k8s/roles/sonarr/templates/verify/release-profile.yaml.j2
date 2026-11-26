@@ -1,0 +1,52 @@
+{#
+  The seed Job that declares Sonarr's air-date Release Profile; `files/seed_sonarr_release_profile.py`
+  has the rule and why anime is excluded. The renderer emits it into `sonarr-verify`, which Flux
+  applies once `sonarr` is Ready, beside the verify Job and arr-notification's seed.
+
+  DECIDED: this Job owns the profile, not configarr. configarr 1.39.2 refuses a negative
+  `air_date_grace_period`, and the rule needs one. configarr's config has no `release_profiles`
+  block, so it never touches Sonarr's release profiles; adding that block would delete this one.
+
+  The spec embeds a digest of sonarr's rendered Deployment, so every revision that rolls sonarr
+  runs the seed again; it changes nothing when the profile already matches.
+#}
+{% from 'digest-job.yml.j2' import digest_job with context %}
+{% set script = 'seed_sonarr_release_profile.py' %}
+{% set deployment_digest8 = (lookup('template', 'deployment.yaml.j2') | hash('sha256'))[:8] %}
+{% set declaration = {
+  'name': sonarr_k8s_air_date_profile_name,
+  'air_date_grace_hours': sonarr_k8s_air_date_grace_hours | int,
+  'excluded_tags': sonarr_k8s_air_date_excluded_tags,
+} %}
+{% set head %}
+# One retry. A second run reads the profile again and writes only what still differs.
+backoffLimit: 1
+# Below the 600s `manifests_rollout_timeout_default` every `<tag>-verify` Kustomization takes.
+# Three API calls of at most 30s each, plus the helper's 60s of retries on the first connect.
+activeDeadlineSeconds: 300
+{% endset %}
+{% set env %}
+- name: SONARR_URL
+  value: http://{{ container_item.name }}.{{ k8s_namespace }}.svc.cluster.local:{{ container_item.port }}
+- name: SONARR_API_KEY
+  valueFrom:
+    secretKeyRef:
+      name: sonarr-exportarr
+      key: api_key
+- name: SONARR_RELEASE_PROFILE
+  value: {{ declaration | to_json(sort_keys=True) | to_json }}
+- name: SONARR_DEPLOYMENT_DIGEST8
+  value: "{{ deployment_digest8 }}"
+{% endset %}
+{{ digest_job(
+     name='sonarr-release-profile',
+     script=script,
+     script_text=lookup('file', role_file('files/' + script), rstrip=False),
+     head=head,
+     env=env,
+     sa='sonarr-verify',
+     container='seed',
+     label_note="# The label the `sonarr-verify` entry in sonarr's `netpol_from` admits.",
+     token_note="# The Job reads sonarr's API, not the Kubernetes API, so its pod holds no token.",
+     annotations='homelab/job-kind: mutation
+homelab/rerun-safe: k8s/roles/sonarr/tests/test_seed_sonarr_release_profile.py::test_a_second_run_changes_nothing') }}
