@@ -186,6 +186,9 @@ def test_lines_render_with_the_host_context_and_their_activation_joins_the_manif
         pytest.param([{**SYSCTL, "path": "/etc/../sysctl.conf"}], id="climbing-path"),
         pytest.param([{**SYSCTL, "line": "a=1\nb=2", "regexp": "a="}], id="two-lines"),
         pytest.param([{**ZSHENV, "marker": "# MANAGED"}], id="marker-without-mark"),
+        pytest.param(
+            [{**ZSHENV, "block": "x=1\n# END MANAGED"}], id="body-holds-a-marker"
+        ),
         pytest.param([{**SYSCTL, "block": "x"}], id="line-and-block"),
         pytest.param([{**SYSCTL, "extra": 1}], id="unknown-key"),
         pytest.param([{**SYSCTL, "activate": "restart:x.service"}], id="action"),
