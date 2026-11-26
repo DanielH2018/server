@@ -8,11 +8,7 @@ WORKDIR /app
 # manager in renovate.json); the packageRule there caps mcp at `<2` so the 1.x line is what it
 # offers.
 RUN pip install --no-cache-dir mcp==1.30.0 httpx==0.28.1 uvicorn==0.54.0
-# COPY . (not `COPY app.py safe_reads.py`): the context is a ConfigMap mount, whose
-# files are symlinks into ..data/, and buildkit's followPaths optimization for a
-# multi-file COPY drops all but the first symlinked file from the transfer ("not
-# found" — a single-file COPY like n8n-runners' works). COPY .
-# ships the whole snapshot, so the ..data dir arrives and every symlink resolves.
-# The image gains the Dockerfile + ConfigMap dotdirs under /app — harmless.
+# COPY . (not a multi-file COPY): ConfigMap mount files are symlinks into ..data/, and buildkit
+# drops all but the first from a multi-file COPY.
 COPY . ./
 CMD ["python", "app.py"]
