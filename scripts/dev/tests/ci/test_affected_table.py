@@ -1,7 +1,7 @@
 """`affected_lib/table.py`: which test modules a diff selects, and the file the rows live in.
 
 Every case builds its own small table, so nothing here reads the committed one except the
-last test, which checks the paths the rule names against the tree.
+two that check the full-sweep paths and the committed rows against the tree.
 
 Run: uv run pytest scripts/dev/tests/ci/test_affected_table.py
 """
@@ -186,3 +186,31 @@ def test_every_full_sweep_path_names_something_in_the_tree():
 
     assert not lost
     assert "scripts/dev/pytest_shard.py" in table.FULL_SWEEP_PATHS
+
+
+def _rows_with_a_missing_path_under_a_file(rows: table.Table, tracked) -> list[str]:
+    """Modules holding a path that cannot exist while a tracked file above it does."""
+    return sorted(
+        module
+        for module, row in rows.rows.items()
+        if not set(tracked).isdisjoint(table.parent_dirs(row.missing))
+    )
+
+
+def test_a_missing_path_under_a_tracked_file_is_flagged():
+    rows = _table()
+    rows.put(NARROW, _row(missing=["lib/n.py/pyvenv.cfg"]), "0" * 40)
+
+    assert _rows_with_a_missing_path_under_a_file(rows, TREE) == [NARROW]
+
+
+def test_the_committed_table_holds_no_missing_path_under_a_tracked_file():
+    """`record.py:reduce` stores the tracked file instead."""
+    committed = table.load()
+    stale = _rows_with_a_missing_path_under_a_file(committed, table.tracked_blobs(REPO))
+
+    assert committed.rows
+    assert not stale, (
+        "re-record these rows: uv run python scripts/dev/affected_tests.py record "
+        + " ".join(stale)
+    )
