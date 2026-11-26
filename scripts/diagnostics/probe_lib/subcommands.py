@@ -38,6 +38,7 @@ from diagnostics.probe_lib.longhorn import (
 from diagnostics.probe_lib.metrics import run_query
 from diagnostics.probe_lib.monitors import run_monitors
 from diagnostics.probe_lib.pi_plane import run_pi_containers, run_targets
+from diagnostics.probe_lib.qbit import run_qbit
 from diagnostics.probe_lib.push_rules import run_push_rules
 from diagnostics.probe_lib.readonly_rbac import run_readonly_rbac
 from diagnostics.probe_lib.shed_set import run_shed_set
@@ -149,6 +150,12 @@ SUBCOMMANDS = [
         run_health,
     ),
     ("arr", "read-only *arr API GET (key from SOPS, fed via stdin)", "arr", run_arr),
+    (
+        "qbit",
+        "read-only qBittorrent API GET (API key from SOPS, fed via stdin)",
+        "qbit",
+        run_qbit,
+    ),
     (
         "uptime-robot",
         "assert every Uptime Robot monitor docs/uptime-robot-monitors.md names exists and is "

@@ -402,6 +402,19 @@ def _build_parser():
         "print credential-bearing field values instead of <redacted> "
         "(they land in the transcript — see issue #1388)",
     )
+    qb = sub.add_parser(
+        "qbit", help="read-only qBittorrent API GET (API key from SOPS, fed via stdin)"
+    )
+    qb.add_argument(
+        "path", help="api path, e.g. torrents/info?category=lidarr, app/preferences"
+    )
+    _flag(qb, "--json", "print one-line JSON instead of pretty-printed")
+    _flag(
+        qb,
+        "--show-secrets",
+        "print credential-bearing values instead of <redacted> "
+        "(they land in the transcript — see issue #1388)",
+    )
     ha = sub.add_parser("ha", help="Home Assistant live state (read-only, GET)")
     hasub = ha.add_subparsers(dest="ha_cmd", required=True)
     hs = hasub.add_parser("state", help="GET /api/states/<entity_id>")

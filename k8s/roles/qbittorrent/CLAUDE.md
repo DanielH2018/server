@@ -149,6 +149,14 @@ login that succeeded. Check for the `QBT_SID` cookie instead, as
 `k8s/roles/qbittorrent/files/qbittorrent_job.py:SESSION_COOKIE` does; a bad password sets none.
 `web_ui_max_auth_fail_count` is 5, so don't debug a login by retrying it.
 
+### Reading live state: `probe.py qbit`
+To read torrents, preferences or transfer state, run `probe.py qbit <api-path>`, for example
+`probe.py qbit 'torrents/info?category=lidarr' --json` or `probe.py qbit app/preferences`. It sends
+SOPS `qbittorrent_api_key` as a bearer header and never logs in, so it cannot trip the lockout
+(`scripts/diagnostics/probe_lib/qbit.py`). The key has full WebUI rights. The probe sends only GET,
+which qBittorrent 5 refuses for any endpoint that changes state. Only one key exists at a
+time, so regenerating it in the WebUI breaks the probe until SOPS holds the new one.
+
 ## The Flux Jobs in `templates/verify/`
 
 The renderer emits two Jobs from that directory into `qbittorrent-verify`
