@@ -91,13 +91,14 @@ Deleting needs the root-only admin kubeconfig, so run the same interpreter under
 Read the dry run, then re-run the same command with --apply.
 """
 
+import argparse
 import os
 import sys
 from dataclasses import dataclass
 
 from lib import host_modules  # noqa: F401
 import host_lib
-from lib.cli_help import answer_help
+from lib.cli_help import ArgumentParser, answer_help
 from lib.exit_codes import USAGE_ERROR
 from backup.longhorn_reap_lib import logic, selection
 from lib.k8s_objects import LonghornVolume
@@ -123,18 +124,6 @@ ADMIN_KUBECONFIG = os.environ.get(
 # root is the admin one.
 READONLY_KUBECONFIG = os.environ.get("LONGHORN_REAP_READONLY_KUBECONFIG", "")
 SUDO_HINT = logic.sudo_hint(logic.ENTRY_POINT, "backups")
-
-_MAX_DELETIONS_FLAG = "--max-deletions"
-_MODE_FLAG = "--mode"
-_CLAIM_FLAG = "--claim"
-_SEED_FLOOR_FLAG = "--seed-floor"
-_USAGE = "expected --apply, --apply-deleted-volumes, %s N, %s <%s>, %s <pvc>, %s N" % (
-    _MAX_DELETIONS_FLAG,
-    _MODE_FLAG,
-    "|".join(MODES),
-    _CLAIM_FLAG,
-    _SEED_FLOOR_FLAG,
-)
 
 
 def _delete_backup(name: str, config: logic.ReapConfig) -> tuple[int, str]:
@@ -197,95 +186,64 @@ class Args:
     seed_floor: int | None = None
 
 
-def _flag_value(arg: str, flag: str, rest: list[str]) -> tuple[str, str]:
-    """The value of `flag`, taken from `arg` after an `=` or popped off `rest`.
+def _positive_int(raw: str) -> int:
+    try:
+        count = int(raw)
+    except ValueError:
+        raise argparse.ArgumentTypeError("expects an integer, got: %s" % raw) from None
+    if count < 1:
+        raise argparse.ArgumentTypeError("must be at least 1, got: %d" % count)
+    return count
 
-    Both spellings are accepted for every value flag, because an operator typing this by hand
-    under sudo will write either. Returns (value, error); `error` is empty on success.
+
+def _pvc_name(raw: str) -> str:
+    if not raw:
+        raise argparse.ArgumentTypeError("needs a PVC name")
+    return raw
+
+
+def _parse_args(argv: list[str]) -> Args:
+    """Parse argv into an `Args`; a bad command line exits 64 through `parser.error`.
+
+    A flag that belongs to another mode is an error rather than a silent no-op: `--claim`
+    ignored in the strays mode would read as "this run was scoped to one claim" while reaping
+    every stray in the cluster.
     """
-    if "=" in arg:
-        return arg.split("=", 1)[1], ""
-    if rest:
-        return rest.pop(0), ""
-    return "", "%s needs a value (%s)" % (flag, _USAGE)
-
-
-def _parse_args(argv: list[str]) -> tuple[Args, str]:
-    """Split argv into an `Args`, or return the error to print before exiting 2.
-
-    `error` is empty on a good parse. A flag that belongs to another mode is an error rather
-    than a silent no-op: `--claim` ignored in the strays mode would read as "this run was
-    scoped to one claim" while reaping every stray in the cluster.
-    """
-    args = Args()
-    rest = list(argv)
-    while rest:
-        arg = rest.pop(0)
-        if arg == "--apply":
-            args.apply = True
-        elif arg == "--apply-deleted-volumes":
-            args.apply_deleted = True
-        elif arg == _MODE_FLAG or arg.startswith(_MODE_FLAG + "="):
-            value, err = _flag_value(arg, _MODE_FLAG, rest)
-            if err:
-                return args, err
-            if value not in MODES:
-                return args, "unknown mode: %s (expected one of: %s)" % (
-                    value,
-                    ", ".join(MODES),
-                )
-            args.mode = value
-        elif arg == _CLAIM_FLAG or arg.startswith(_CLAIM_FLAG + "="):
-            value, err = _flag_value(arg, _CLAIM_FLAG, rest)
-            if err:
-                return args, err
-            if not value:
-                return args, "%s needs a PVC name (%s)" % (_CLAIM_FLAG, _USAGE)
-            args.claim = value
-        elif arg in (_MAX_DELETIONS_FLAG, _SEED_FLOOR_FLAG) or arg.startswith(
-            (_MAX_DELETIONS_FLAG + "=", _SEED_FLOOR_FLAG + "=")
-        ):
-            flag = (
-                _MAX_DELETIONS_FLAG
-                if arg.startswith(_MAX_DELETIONS_FLAG)
-                else _SEED_FLOOR_FLAG
-            )
-            value, err = _flag_value(arg, flag, rest)
-            if err:
-                return args, err
-            try:
-                count = int(value)
-            except ValueError:
-                return args, "%s expects an integer, got: %s" % (flag, value)
-            if count < 1:
-                return args, "%s must be at least 1, got: %d" % (flag, count)
-            if flag == _MAX_DELETIONS_FLAG:
-                args.max_deletions = count
-            else:
-                args.seed_floor = count
-        else:
-            return args, "unknown argument: %s (%s)" % (arg, _USAGE)
+    parser = ArgumentParser(
+        prog="longhorn_reap.py backups",
+        allow_abbrev=False,
+        example="longhorn_reap.py backups --mode migrated-chain --claim sonarr-config",
+    )
+    parser.add_argument("--apply", action="store_true")
+    parser.add_argument(
+        "--apply-deleted-volumes", dest="apply_deleted", action="store_true"
+    )
+    parser.add_argument("--mode", choices=MODES)
+    parser.add_argument("--claim", type=_pvc_name, metavar="PVC")
+    parser.add_argument("--max-deletions", type=_positive_int, metavar="N")
+    parser.add_argument("--seed-floor", type=_positive_int, metavar="N")
+    # The namespace is an `Args`, so its field defaults stand for every flag left off.
+    args = parser.parse_args(argv, namespace=Args())
 
     if args.apply_deleted and args.mode != STRAYS_MODE:
-        return args, (
+        parser.error(
             "--apply-deleted-volumes is the %s mode's flag: it deletes backups whose volume no "
             "longer exists, which in the %s mode is the selection itself. Pass --apply."
             % (STRAYS_MODE, args.mode)
         )
     if args.claim and args.mode == STRAYS_MODE:
-        return args, (
-            "%s selects within the %s and %s modes; the %s mode reaps every stray it finds."
-            % (_CLAIM_FLAG, MIGRATED_CHAIN_MODE, SEEDS_MODE, STRAYS_MODE)
+        parser.error(
+            "--claim selects within the %s and %s modes; the %s mode reaps every stray it finds."
+            % (MIGRATED_CHAIN_MODE, SEEDS_MODE, STRAYS_MODE)
         )
     if args.mode == MIGRATED_CHAIN_MODE and not args.claim:
-        return args, "--mode %s needs %s <pvc>" % (MIGRATED_CHAIN_MODE, _CLAIM_FLAG)
+        parser.error("--mode %s needs --claim <pvc>" % MIGRATED_CHAIN_MODE)
     if args.seed_floor is not None and args.mode != SEEDS_MODE:
-        return args, "%s is the %s mode's floor; this run is --mode %s" % (
-            _SEED_FLOOR_FLAG,
-            SEEDS_MODE,
-            args.mode,
+        parser.error(
+            "--seed-floor is the %s mode's floor; this run is --mode %s"
+            % (SEEDS_MODE, args.mode)
         )
-    return args, ""
+    return args
 
 
 def _print_dry_run(args: Args, buckets: list[tuple[str, list, bool]]) -> None:
@@ -321,10 +279,7 @@ def _print_dry_run(args: Args, buckets: list[tuple[str, list, bool]]) -> None:
 
 def main(argv: list[str]) -> int:
     answer_help(__doc__, argv)
-    args, arg_err = _parse_args(argv)
-    if arg_err:
-        print(arg_err, file=sys.stderr)
-        return USAGE_ERROR
+    args = _parse_args(argv)
     try:
         config = logic.parse_reap_config()
     except ValueError as e:

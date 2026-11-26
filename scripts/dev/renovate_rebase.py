@@ -42,6 +42,7 @@ status does not read SUCCESS, so nothing was written; 64 the arguments are not o
 and an optional `--retick`.
 """
 
+import argparse
 import json
 import subprocess
 import sys
@@ -50,11 +51,10 @@ from collections.abc import Callable
 from pathlib import Path as _Path
 
 
-from lib.cli_help import answer_help
+from lib.cli_help import ArgumentParser, answer_help
 from lib.exit_codes import (
     RENOVATE_REBASE_GH_FAILED,
     RENOVATE_REBASE_SOAKING,
-    USAGE_ERROR,
 )
 from lib.gh import gh as _gh
 from lib import host_modules  # noqa: F401
@@ -115,21 +115,26 @@ def _edit_body(gh: Gh, number: str, body: str) -> str | None:
     return None
 
 
+def _pr_number(raw: str) -> str:
+    if not raw.isdigit():
+        raise argparse.ArgumentTypeError(f"not a PR number: {raw}")
+    return raw
+
+
 def main(
     argv: list[str] | None = None, gh: Gh = _gh, out=sys.stdout, stderr=sys.stderr
 ) -> int:
     argv = sys.argv[1:] if argv is None else argv
     answer_help(__doc__, argv)
-    retick = "--retick" in argv
-    positional = [a for a in argv if a != "--retick"]
-    if (
-        len(positional) != 1
-        or not positional[0].isdigit()
-        or argv.count("--retick") > 1
-    ):
-        print(__doc__, file=sys.stderr)
-        return USAGE_ERROR
-    number = positional[0]
+    parser = ArgumentParser(
+        prog="renovate_rebase.py",
+        allow_abbrev=False,
+        example="renovate_rebase.py --retick 123",
+    )
+    parser.add_argument("--retick", action="store_true")
+    parser.add_argument("number", type=_pr_number, metavar="pr-number")
+    args = parser.parse_args(argv)
+    retick, number = args.retick, args.number
     try:
         # One read for both: the body carries the box, the rollup carries the soak status.
         view = json.loads(
