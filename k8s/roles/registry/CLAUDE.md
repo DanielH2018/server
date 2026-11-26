@@ -92,7 +92,7 @@ karakeep, which no consumer pulls. See repo-root `CLAUDE.md` for shared conventi
       and panics on a refused connection. As a peer container, `ghcr-resume` lost that race,
       so the mirror restarted on every rollout and failed `probe.py health registry` (#7792).
       The startupProbe holds the mirror's start until the port answers.
-      `tests/k8s/test_registry_ghcr_mirror.py::test_the_resume_sidecar_listens_before_the_mirror_starts`
+      `tests/k8s/edge/test_registry_ghcr_mirror.py::test_the_resume_sidecar_listens_before_the_mirror_starts`
       holds it.
     - The sidecar relays every request to ghcr.io, and rewrites a 401 challenge's
       `https://ghcr.io/token` realm to its own `http://127.0.0.1:<port>/token`, which it
@@ -181,7 +181,7 @@ karakeep, which no consumer pulls. See repo-root `CLAUDE.md` for shared conventi
   - **The `PVCFull` rule's page is the bound** (#5752). It pages when a claim passes
     85%, and `registry-data` is not in its `persistentvolumeclaim!~` exclusion. On 2026-10-24 the claim was 38% full
     (3.98 GB), so at about 1 GiB a year of pins it pages years before the claim fills.
-    `tests/services/test_storage_rule_literals.py::test_no_uncollected_claim_is_excluded_from_the_fullness_page`
+    `tests/services/alert_rules/test_storage_rule_literals.py::test_no_uncollected_claim_is_excluded_from_the_fullness_page`
     fails if the claim joins the exclusion. When it pages, `docs/registry-push-store-gc.md` is
     the procedure. The operator untags what nothing runs while the registry serves, then
     suspends the `registry` Kustomization before scaling `deploy/registry` to zero, so Flux

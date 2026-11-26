@@ -9,11 +9,8 @@ metadata:
   name: n8n
   namespace: {{ k8s_namespace }}
 spec:
-  # Both PVCs are ReadWriteOnce and Longhorn runs one replica, so a rolling update would
-  # deadlock: the new pod waits for a volume the old pod still holds.
-  #
-  # Recreate is also the only safe strategy for a SQLite writer. Two n8n processes against one
-  # database.sqlite is corruption, and DB_SQLITE_VACUUM_ON_STARTUP rewrites the whole file.
+  # Recreate: an RWO volume deadlocks a rolling update, and two n8n processes on one SQLite file
+  # corrupt it.
 {{ spec_shell('Recreate') }}
   replicas: 1
   selector:
@@ -23,12 +20,8 @@ spec:
     metadata:
       labels:
         app: n8n
-        # Opted OUT of the namespace baseline (slice 5). `networkpolicy.yaml.j2` (live name
-        # `n8n-broker`) is tighter than the baseline, and the baseline is additive.
-        #
-        # This label belongs HERE and not in `deployment-runners.yaml.j2`: n8n-broker selects
-        # `app: n8n` only, so n8n-runners has no bespoke policy and the baseline is the only
-        # thing fencing it. Exempting the runners would unfence them with nothing to notice.
+        # Exempt here, not on the runners: n8n-broker selects `app: n8n` only, so the baseline is
+        # the only fence on the runners.
         netpol-baseline-exempt: "true"
     spec:
 {{ pod_shell('homelab-best-effort') }}
@@ -37,20 +30,13 @@ spec:
       containers:
         - name: n8n
           image: {{ n8n_k8s_image }}
-          # The registry tag is mutable by design (see defaults). Without Always, a rebuilt
-          # image is never picked up: the node already has something called :latest.
+          # Mutable tag: without Always a rebuilt image is never picked up.
           imagePullPolicy: Always
           ports:
             - containerPort: {{ container_item.port }}
             - containerPort: {{ n8n_k8s_broker_port }}
-          # Pins what the comment below already relies on. `USER node` is an image property
-          # that a rebuild can move silently; asserted here, a move fails admission instead.
-          # The uid is explicit because `runAsNonRoot` alone pins nothing, and the kubelet
-          # refuses a container whose image names its user rather than numbering it — `node`
-          # is a name.
-          # Drop ALL with no cap_add. The image runs as `node` (uid 1000) and the seeded tree
-          # is uid 1000 too — tar restored it with --numeric-owner — so nothing here needs
-          # CHOWN or DAC_OVERRIDE.
+          # Explicit uid pins the image's `USER node`, a name the kubelet refuses under
+          # runAsNonRoot; drop ALL since the tree is uid 1000.
 {{ hardened_security_context(non_root=true, run_as_user=1000) }}
           env:
             - name: TZ
@@ -59,18 +45,10 @@ spec:
               value: "{{ tz }}"
             - name: NODE_ENV
               value: production
-            # n8n builds absolute URLs from these, so both must be the hostname a browser and an
-            # external webhook caller actually arrive on. N8N_WEBHOOK_URL is the load-bearing one:
-            # third parties have already registered URLs against https://n8n.{{ domain }}/, and a
-            # wrong value here does not fail at startup — the pod goes ready and every inbound
-            # webhook is registered against a name nobody calls. Same treatment as karakeep's
-            # NEXTAUTH_URL.
-            #
-            # N8N_WEBHOOK_URL, not WEBHOOK_URL: 2.33.5 logs `WEBHOOK_URL -> Use N8N_WEBHOOK_URL
-            # instead, which sets the base URL for both test and production webhooks`. That wider
-            # scope is safe here and does NOT re-expose /webhook-test/ — the dev endpoint is kept
-            # off the public edge by a Traefik rule (bridge_bypass_prefixes lists /webhook/ only),
-            # never by this variable. It does set the Test URL shown in the editor.
+            # N8N_WEBHOOK_URL must be the hostname webhook callers use: a wrong value goes ready but
+            # registers webhooks against a name nobody calls.
+            # N8N_WEBHOOK_URL, not WEBHOOK_URL; it does not expose /webhook-test/, which Traefik
+            # keeps off the public edge.
             - name: N8N_HOST
               value: "{{ container_item.hostname | default(container_item.name) }}.{{ domain }}"
             - name: N8N_WEBHOOK_URL
@@ -90,12 +68,8 @@ spec:
               value: "2"
             - name: N8N_ENFORCE_SETTINGS_FILE_PERMISSIONS
               value: "true"
-            # Four outbound calls this instance makes by default and nobody here consumes.
-            #
-            # N8N_TEMPLATES_ENABLED=false is a REAL UI change, not a silent one: it removes the
-            # editor's "browse workflow templates" panel, which pulls from n8n.io. That is the
-            # trade being made here — this instance runs one set of self-authored workflows, and
-            # the panel has not been used. Set it back to "true" if you want the browser again.
+            # N8N_TEMPLATES_ENABLED=false removes the editor's workflow-templates panel; set it back
+            # to "true" to restore it.
             - name: N8N_DIAGNOSTICS_ENABLED
               value: "false"
             - name: N8N_VERSION_NOTIFICATIONS_ENABLED
@@ -115,18 +89,8 @@ spec:
             # this repo records which packages are installed. See this role's CLAUDE.md.
             - name: N8N_COMMUNITY_PACKAGES_ENABLED
               value: "true"
-            # The two sibling flags that govern WHAT may be installed and what happens when
-            # the files are missing. Names and defaults read from
-            # packages/cli/src/modules/community-packages/community-packages.config.ts at tag
-            # `n8n@2.38.5` — the version the running pod reports.
-            #
-            # N8N_UNVERIFIED_PACKAGES_ENABLED gates INSTALLING a package outside n8n's
-            # verified list. Upstream's default is true today, and 2.38.5 logs a deprecation
-            # warning saying the default becomes false in v3 and to set it explicitly to keep
-            # the current behaviour. Held at "true" rather than tightened: no session can
-            # enumerate what is installed (this role's CLAUDE.md records why both routes are
-            # closed), so flipping it is a change whose blast radius cannot be measured from
-            # here. Flip it once the operator has read Settings → Community nodes.
+            # Held at "true": installed packages cannot be enumerated, so tightening has an
+            # unmeasurable blast radius.
             - name: N8N_UNVERIFIED_PACKAGES_ENABLED
               value: "true"
             # N8N_REINSTALL_MISSING_PACKAGES makes n8n npm-install, at boot, any package the
@@ -137,23 +101,15 @@ spec:
             # an npm registry fetch on the startup path for no case that can occur here.
             - name: N8N_REINSTALL_MISSING_PACKAGES
               value: "false"
-            # N8N_COMMUNITY_PACKAGES_ALLOW_TOOL_USAGE — whether an AI Agent node may call a
-            # community node as a tool — is NOT set, because the variable does not exist at
-            # 2.38.5. It is absent from community-packages.config.ts, from the rest of
-            # n8n-io/n8n and from n8n-io/n8n-docs at that tag; n8n made
-            # community nodes usable as tools unconditionally and dropped the switch. Setting
-            # it would be an inert line that reads like a control. Nothing here narrows what
-            # an AI Agent may reach, which is a consequence of enabling community packages at
-            # all — reconsider that switch if it ever matters, not this one.
-            # N8N_RUNNERS_ENABLED is not set: 2.41.6 logs it as no longer needed.
+            # N8N_COMMUNITY_PACKAGES_ALLOW_TOOL_USAGE is not set: the variable does not exist at
+            # 2.38.5, so it would be an inert line.
+            # N8N_RUNNERS_ENABLED is not set: no longer needed.
             - name: NODE_RUNNERS_ENABLED
               value: "true"
             - name: N8N_RUNNERS_MODE
               value: external
-            # Binds the broker on all interfaces (n8n has no per-interface bind option), so
-            # every pod in {{ k8s_namespace }} could reach it. networkpolicy.yaml.j2 is what
-            # actually narrows that to the runners pod — the auth token below is the second
-            # layer, not the only one.
+            # The broker binds all interfaces; networkpolicy.yaml.j2 narrows it to the runners pod,
+            # and the token is the second layer.
             - name: N8N_RUNNERS_BROKER_LISTEN_ADDRESS
               value: 0.0.0.0
             - name: N8N_NATIVE_PYTHON_RUNNER
@@ -173,8 +129,6 @@ spec:
             # To let Code nodes run longer, raise BOTH, or the lower one still wins.
             - name: N8N_RUNNERS_TASK_TIMEOUT
               value: "60"
-            # The Compression node's decompression limits: 2 GiB (dropping to 256 MiB) and 5000
-            # ZIP entries (dropping to 1000).
             - name: N8N_COMPRESSION_NODE_MAX_DECOMPRESSED_SIZE_BYTES
               value: "2147483648"
             - name: N8N_COMPRESSION_NODE_MAX_ZIP_ENTRIES
@@ -216,17 +170,14 @@ spec:
             # n8n's .cache is re-derived (kopia's .cache/ rule).
             - name: n8n-cache
               mountPath: /home/node/.n8n/.cache
-          # /healthz answers 200 without credentials — it is n8n's own liveness endpoint, not
-          # a routed one, so Authelia is not in the path here.
           readinessProbe:
             httpGet:
               path: /healthz
               port: {{ container_item.port }}
             initialDelaySeconds: 30
             periodSeconds: 10
-          # Generous initialDelay because DB_SQLITE_VACUUM_ON_STARTUP rewrites the whole
-          # database before n8n listens. Killing it mid-vacuum is the one restart that can
-          # leave the file in a state a restart does not fix.
+          # Generous initialDelay: VACUUM_ON_STARTUP rewrites the database, and killing it
+          # mid-vacuum can leave a file a restart does not fix.
           livenessProbe:
             httpGet:
               path: /healthz

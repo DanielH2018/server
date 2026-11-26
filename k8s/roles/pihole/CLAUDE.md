@@ -1,7 +1,7 @@
 # pihole — LAN DNS resolver, running two instances
 
 Pi-hole plus an unbound sidecar, deployed as two independent pods for deploy-time DNS
-continuity (`tests/services/test_pihole_redundancy.py::test_two_instances_are_rendered`).
+continuity (`tests/services/network/test_pihole_redundancy.py::test_two_instances_are_rendered`).
 
 **HISTORY —** Coexisted with a Docker-era copy through the DNS cutover; that copy is retired.
 
@@ -23,7 +23,7 @@ continuity (`tests/services/test_pihole_redundancy.py::test_two_instances_are_re
   `k8s/roles/pihole/defaults/main.yml:pihole_k8s_lan_ip` (`dns_k8s_vip`), not through Traefik.
 - **Persists:** two independent PVCs, `pihole_k8s_claim` / `pihole_k8s_claim_2`, one per pod
   — `/etc/pihole` is RWO/single-writer, so each instance gets its own rather than sharing
-  (`tests/services/test_pihole_redundancy.py::test_instances_do_not_share_a_volume`).
+  (`tests/services/network/test_pihole_redundancy.py::test_instances_do_not_share_a_volume`).
   `k8s/roles/pihole/defaults/main.yml:pihole_k8s_storage_class`: every byte is derivable —
   `gravity.db` from `pihole_k8s_adlists`, `pihole.toml` from the `FTLCONF` env, `pihole-FTL.db` is query history, not state.
 
@@ -48,7 +48,7 @@ continuity (`tests/services/test_pihole_redundancy.py::test_two_instances_are_re
   parser could reject at startup — on both instances at once, leaving no resolver to fetch a
   fix through — and it also forwards a whole TLD, which would hand the `.lan` names the
   `host-record=` lines answer for to the router. ENFORCED by
-  `tests/services/test_pihole_lan_reverse_forwarding.py`.
+  `tests/services/network/test_pihole_lan_reverse_forwarding.py`.
 - **pihole-exporter reads `pihole_password` from this role's `pihole-env` Secret.** Its
   `defaults/main.yml` declares the Secret under `manifests_outside_secrets`, so a rotation moves the
   exporter's restart checksum annotation and Flux rolls it with this role's pods (#5416). Renaming
@@ -90,7 +90,7 @@ continuity (`tests/services/test_pihole_redundancy.py::test_two_instances_are_re
   reads `pihole-dns`'s LoadBalancer ingress from kube-state-metrics, at `warning` with
   `verify="true"`, so the soak checks it on every revision. Its address is a literal, so moving
   `dns_k8s_vip` is an edit to that rule too.
-  `tests/services/test_lan_address_rules_agree.py` holds the literal to the rendered
+  `tests/services/alert_rules/test_lan_address_rules_agree.py` holds the literal to the rendered
   Service.
 
 ## The sibling guard and its break-glass

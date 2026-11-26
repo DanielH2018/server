@@ -1,0 +1,83 @@
+---
+server_ip: 10.0.0.215
+# Static pin keeps k3s starting with DHCP down. Confirm the gateway keeps server_ip out of its DHCP
+# pool before applying: with DHCPv4 off, nothing renews a lease on it.
+k3s_node_static_link: eno1
+# MediaTek MT7922, the fallback uplink while eno1 has no carrier.
+k3s_node_wifi_link: wlp4s0
+# Cloud-init image: the drop-in is sshd's real config; the bare path is never loaded.
+ssh_config_path: /etc/ssh/sshd_config.d/50-cloud-init.conf
+has_fwupd: true
+# live = grab a genuine replacement, verify, delete the fake + import. off/shadow also available.
+autofix_fake_remux_replace_mode: live
+# Quality range is deferred to Sonarr's profile; authenticity is enforced post-download,
+# codec-agnostically.
+autofix_fake_remux_policy:
+  deny_release_groups: [NTRX]
+  prefer_release_groups: [VARYG]
+  prefer_indexers: [Nyaa.si, Knaben]
+  depreference_codecs: [av1]
+  gop_max_s: 5
+  min_size_gb: 0.4
+  max_size_gb: 8.0  # sanity ceiling — wide enough for a genuine 2160p WEB-DL episode
+  max_concurrent_replacements: 5
+  searches_per_tick: 2
+  search_spacing_s: 20
+  download_stall_hours: 12
+  import_timeout_s: 3600
+  grab_grace_s: 300
+  max_attempts: 3
+  history_retention_days: 14
+
+# Developer environment, opted in (both default false in group_vars/all.yml).
+has_github_cli: true
+has_chezmoi: true
+# The only memory store sessions write; the timer copies it one-way, overwriting, to daniel-server.
+claude_code_memory_sync_enabled: true
+claude_code_fanout_server_lander_enabled: true
+claude_code_pipeline_timeline_enabled: true
+# Posts the previous week's triage runs and Renovate ticks every Monday.
+# False removes the timer and its units; the posted-week record stays.
+claude_code_weekly_summary_enabled: true
+# homelab-claude-restart@<name>.service: root restarts one allowlisted Deployment. False removes the unit, the script and the config.
+claude_code_restart_enabled: true
+claude_code_takeover_check_enabled: true
+# Switching to `claude_code_agent_user` restarts the host on first apply, dropping live sessions,
+# copies the memory store once and needs one interactive `/login` as `claude`.
+claude_code_user: ubuntu
+# Must equal the `claude` entry in hosts/daniel-box/package.yml `users:`; no default, a mismatch
+# fails the render.
+claude_code_user_uid: 900
+claude_code_lander_enabled: true
+# Needs claude_code_triage_claude_oauth_token in secrets.yml.
+claude_code_triage_enabled: true
+claude_code_config_render_enabled: true
+claude_code_agent_homelab_ui_enabled: true
+# Background jobs and fan-out still start as ubuntu; the login caps leave user-1000.slice.
+# claude-cgroup-metrics.sh counts uid-1000 `claude` processes; no alert rule reads that count.
+claude_code_login_uids: []
+claude_code_watch_uids: ["{{ claude_code_login_uid }}"]
+# `has_igpu` is deliberately unset: it is the Docker-side switch; k8s workloads use render_gid.
+# The `render` group GID on this host; a wrong value gives EACCES on open (EPERM is the cgroup
+# filter).
+render_gid: 993
+
+# The unattended Renovate agent (hosts/components/renovate-agent). The timer fires at 06:00
+# America/Chicago daily and spends one headless session over the open Renovate PRs, landing up
+# to renovate_agent_max_prs of them through the renovate-agent-land@ lander. Setting this back
+# to false stops and disables the timer; that is the rollback.
+#
+# Armed only while both guardrails hold: the session runs with a read-only token and its GitHub
+# writes go through the renovate-agent-ctl runner (B2r), and t2-egress's nftables fence refuses
+# every connection uid 901 opens except the egress proxy and the loopback OTLP collector (B3).
+renovate_agent_enabled: true
+# B3-0: the T2 session users' egress table, recording only (hosts/components/t2-egress).
+t2_egress_enabled: true
+# B3-1: the T2 egress proxy's listen address. The t2-egress component's squid binds it, and the
+# triage and Renovate session units point HTTPS_PROXY at it. Removing it takes the proxy out of
+# both sessions.
+t2_egress_proxy: "127.0.0.2:3128"
+
+# Avoids the 11:30-11:45 cron fires, the hourly :23 timer and the 1st of the month (drill at 11:20).
+# hosts/lib/tests/test_k3s_restart_window.py derives and re-checks it.
+k3s_restart_window: "Mon..Fri *-*-02..31 11:32:00"

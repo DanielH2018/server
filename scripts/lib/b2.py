@@ -85,8 +85,8 @@ def http_json(
         with urllib.request.urlopen(request, timeout=timeout) as response:
             body = response.read()
     except urllib.error.HTTPError as exc:
-        # An HTTPError owns the open error response; left unclosed it raises a ResourceWarning
-        # wherever garbage collection happens to run.
+        # An HTTPError owns the open response; unclosed it raises a ResourceWarning wherever GC
+        # runs.
         with exc:
             raw = exc.read()
         try:

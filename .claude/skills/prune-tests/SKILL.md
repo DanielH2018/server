@@ -72,7 +72,7 @@ Each rule below overrides step 2. Move the candidate off the list and note which
 - **A non-vacuity assertion.** An assertion that a census holds named members is the only
   thing that fails when its glob matches nothing. `KNOWN_CONSUMERS` in
   `scripts/diagnostics/tests/probe_cli/test_probe_boundaries.py` is the pattern.
-- **A reintroduction that would cause harm.** `tests/services/test_pihole_redundancy.py`
+- **A reintroduction that would cause harm.** `tests/services/network/test_pihole_redundancy.py`
   refuses a path that would restart both DNS replicas at once. A `# DECIDED:` marker beside
   the subject is the same signal.
 - **A `legacy:` list.** Reconcile deletes those paths on each host, so a test over one tests
@@ -116,10 +116,10 @@ For each test the operator agreed to:
    the set of subjects it covers, so a subject that drops out fails the test.
 2. Delete any fixture, helper or constant that nothing else uses.
 3. Delete production code that only the removed test called. `uv run pytest
-   tests/repo/test_vulture_test_only_names.py` names it.
+   tests/repo/ratchets/test_vulture_test_only_names.py` names it.
 4. Find every document that cites the node id with `git grep -nF "<file>::<name>" -- '*.md'`.
    Re-point each one, or drop the citation.
-   `tests/repo/test_documented_paths_exist.py::test_every_cited_test_exists` fails on a cited
+   `tests/repo/docs/test_documented_paths_exist.py::test_every_cited_test_exists` fails on a cited
    node id that no longer resolves.
 
 Then run `uv run pytest <path>` and `uv run python scripts/dev/repo_guards.py`.

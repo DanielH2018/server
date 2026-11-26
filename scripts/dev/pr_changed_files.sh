@@ -10,7 +10,7 @@
 # One caller uses only the fetch: image-smoke.yml's collect step diffs its own pathspec after
 # it, and leaves the file lists below unread. The fetch is
 # here so that no workflow carries its own copy of the token header; the `workflows-fetch-
-# through-the-shared-script` row of tests/repo/test_census_rows_text.py checks that.
+# through-the-shared-script` row of tests/repo/census_rows/test_census_rows_text.py checks that.
 #
 # Inputs, from the environment:
 #   BASE_REF          the PR's base branch (github.base_ref)

@@ -17,7 +17,7 @@
 #   which only moves when a run exits 0.
 #
 # THE LITERALS. The pi-peer-backup age limit is three periods of the CronJob's daily schedule.
-# tests/services/test_pod_producer_rule_literals.py pins it and the ConfigMap name to the
+# tests/services/alert_rules/test_pod_producer_rule_literals.py pins it and the ConfigMap name to the
 # role's defaults (M1 convention 1), and the autofix-bridge `check` literal to autofix.py.
 #
 # `service` NAMES THE THING CHECKED (the DECIDED block in bridge-exporter.yaml). The autofix-bridge rules report on the remediation loop itself, so they

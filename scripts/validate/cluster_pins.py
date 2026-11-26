@@ -23,7 +23,7 @@ The key set anywhere else under `k8s/` or `inventory/` is refused: inventory, pl
 vars and `set_fact` override a role default, so a pin there would move the deployed version
 while the role file stays put. That scan matches the key at any indent, as YAML `key:` or as
 INI `key=`, in every YAML and INI file and every file under `inventory/`, `group_vars/` or
-`host_vars/`. A `-e` passed at run time is outside its reach.
+`hosts/<host>/vars.yml`. A `-e` passed at run time is outside its reach.
 
 There is no bypass. The plan is docs/archive/host/h1-cluster-config-to-flux.md,
 *CI checks on the pins*, and docs/landing.md says what to do with a refused PR.
@@ -65,6 +65,9 @@ VARS_YAML = (
     ":(glob)k8s/**/*.yaml",
     ":(glob)inventory/**/*.yml",
     ":(glob)inventory/**/*.yaml",
+    ":(glob)estate/**/*.yml",
+    "hosts/vars.yml",
+    ":(glob)hosts/*/vars.yml",
 )
 # Every file a render reads variables from. Inventory files take any extension or none.
 VARS_FILES = (*VARS_YAML, ":(glob)inventory/**")

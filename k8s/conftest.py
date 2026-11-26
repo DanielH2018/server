@@ -14,7 +14,7 @@ module and pass while the same import fails at deploy time, where a role ships o
 The insert happens when pytest collects the file, before it imports the module, and stays for
 the rest of the session, exactly as a module-level insert did. Two roles' modules therefore
 still share one `sys.path`; the `no-two-import-roots-share-a-module-basename` row of
-`tests/repo/test_census_rows_python.py` keeps their basenames unique (#2608).
+`tests/repo/census_rows/test_census_rows_python.py` keeps their basenames unique (#2608).
 
 `scripts/tests/test_test_module_bootstraps_present.py` loads `role_files_dir` from this file,
 credits the directory it names, and refuses an insert of it as redundant.

@@ -32,13 +32,10 @@
 {% set head %}
 # A flaky check fails rather than passing on a retry.
 backoffLimit: 0
-# Below the 600s `manifests_rollout_timeout_default` every `<tag>-verify` Kustomization takes.
-# The control's 60s of connect retries, then two 5s connects.
 activeDeadlineSeconds: 180
 {% endset %}
 {% set label_note %}
-# A peer of neither n8n port, which is what the two isolation legs need. It must never
-# be `traefik`, `monitor-bridge` or `n8n-runners`.
+# A peer of neither n8n port; never traefik, monitor-bridge or n8n-runners.
 {% endset %}
 {% set env %}
 - name: CONTROL_URL

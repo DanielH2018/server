@@ -19,7 +19,7 @@
       The timer that writes the file is `hosts/components/crowdsec-probe/`, and the same test
       pins the stage. The label values render from `loki_streams` in `group_vars/all.yml`,
       which the cluster's Alloy and monitor-bridge's selectors also read;
-      `tests/services/test_loki_stream_labels.py` holds the consumers to it.
+      `tests/services/scraping/test_loki_stream_labels.py` holds the consumers to it.
     - **Config.** config.alloy (River) is a plain package file beside this one, mounted
       read-only. It carries no secret: it reads the HTTP password as
       `sys.env("ALLOY_PI_HTTP_PASSWORD")` and the domain as `sys.env("HOMELAB_DOMAIN")`. The
@@ -212,7 +212,7 @@ services:
     # address: observability's `alloy-pi` Prometheus job scrapes k8s_pi_client_ip:12345 as a
     # STATIC target (k8s/roles/observability/templates/prometheus.yaml.j2), and the
     # `blackbox-pi-ports` job probes the published port, which PiPortDead pages when it closes
-    # (pinned by tests/services/test_pi_publishing_containers.py). Metrics are why the
+    # (pinned by tests/services/scraping/test_pi_publishing_containers.py). Metrics are why the
     # port exists: dropped entries, batch retries and send latency say whether shipping is
     # keeping up, and a log shipper that silently stops is the failure this makes visible.
     #

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Generate docs/reference/hosts.md — the three hosts and what each one is.
 
-STATIC PARSING ONLY. Reads inventory/host_vars/*.yml, k8s/services.yml and each
+STATIC PARSING ONLY. Reads hosts/*/vars.yml, k8s/services.yml and each
 hosts/<host>/package.yml with yaml.safe_load and plain text parsing, never `ansible` or
 `kubectl`. A fresh worktree has
 no Ansible collections installed, and the inventory contains SOPS lookups that do not
@@ -108,7 +108,7 @@ def render_markdown(rows: list[dict[str, str]]) -> str:
 
     parts = [generated_banner("scripts/docs/reference/hosts.py")]
     parts.append("# Hosts\n")
-    parts.append(f"{len(rows)} host(s) in `inventory/host_vars/`.\n")
+    parts.append(f"{len(rows)} host(s) in `hosts/`.\n")
 
     for row in sorted(rows, key=lambda r: r["name"]):
         parts.append(f"\n## {row['name']}\n")

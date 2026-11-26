@@ -17,6 +17,7 @@ homelab_mcp_k8s_mem_request: 32Mi
 # Each is a read-only hostPath mount from the pinned node's checkout; secrets/ stays out.
 homelab_mcp_source_dirs:
   - k8s
+  - estate
   - inventory
   - tests
 

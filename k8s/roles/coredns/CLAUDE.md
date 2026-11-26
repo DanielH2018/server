@@ -48,7 +48,7 @@ the bundle from GHCR. A bad apply here stops name resolution, and host probes st
 - **`NEVER_SHED` names the tag** in `scripts/renderer/template_filters/service_tier.py`. The role is
   untiered, because its pod keeps `system-cluster-critical`, which `tier: platform` would
   lower. CoreDNS at zero replicas stops cluster DNS, and Flux then cannot fetch the bundle that
-  restores it. `_SYSTEM_TIER` in `tests/k8s/test_pod_template_hygiene.py` records the
+  restores it. `_SYSTEM_TIER` in `tests/k8s/workloads/test_pod_template_hygiene.py` records the
   class.
 - **The pod template differs from the k3s addon in four fields** (H1.4), each forced by a
   fleet guard: `enableServiceLinks: false`, the pod-level `runAsNonRoot: true` with

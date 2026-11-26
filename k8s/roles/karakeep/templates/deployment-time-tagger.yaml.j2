@@ -24,24 +24,13 @@ spec:
     spec:
 {{ pod_shell('homelab-standard') }}
       initContainers:
-        # A start gate on karakeep being READY, which has NO k8s `depends_on` equivalent —
-        # pods start in parallel. Without this
-        # the tagger raced the app, failed its initial connection check against
-        # /api/v1/users/me with ECONNREFUSED, and crashed; observed on the first deploy.
-        #
-        # It does not merely fail once. The script's loop only touches /tmp/healthy after a
-        # SUCCESSFUL run, so the liveness probe finds no file, restarts the pod, and the whole
-        # `uv pip install` runs again — a restart loop that resolves only when a run happens to
-        # land after the app is up.
-        #
-        # A TCP connect to the SERVICE is the faithful translation, not an approximation: a k8s
-        # Service routes only to READY endpoints, so this connects exactly when karakeep's
-        # readiness probe passes, which is what service_healthy meant.
+        # Start gate: k8s has no depends_on, and a tagger starting before karakeep restart-loops
+        # because liveness needs a successful run.
         - name: wait-for-karakeep
           image: {{ karakeep_k8s_tagger_image }}
           # Built in-cluster, so `Always` rather than the `IfNotPresent` an unchanged content tag
           # would otherwise take from the node's cache — see the
-          # `built-images-pull-always` row of tests/k8s/_workload_property_rows.py.
+          # `built-images-pull-always` row of tests/k8s/rendered_properties/_workload_property_rows.py.
           imagePullPolicy: Always
           command:
             - python3
@@ -54,12 +43,6 @@ spec:
                       break
                   except OSError:
                       time.sleep(5)
-          # read_only, for the same reason as the identically shaped wait-for-deps init
-          # container in deployment.yaml.j2: the whole program is the `python3 -c` above, it
-          # imports two stdlib modules whose bytecode is already in the image, and it writes
-          # nothing — so it needs no writable path and gets no emptyDir. Even if the bytecode
-          # were missing, CPython's `__pycache__` write is best-effort and fails soft on a
-          # read-only tree, so the container still runs.
 {{ hardened_security_context(read_only=true, non_root=true, run_as_user=1000, run_as_group=1000) }}
 {{ container_resources(cpu_limit='250m', mem_limit='128Mi', cpu_request='10m', mem_request='16Mi') }}
 {{ node_affinity_preference('daniel-server') }}
@@ -107,10 +90,8 @@ spec:
           # bigger change than the hardening it buys.
 {{ hardened_security_context(non_root=true, run_as_user=1000, run_as_group=1000) }}
           env:
-{# Never set LOGURU_AUTOINIT=false here. setup_logging() drops loguru's default handler itself,
-   and KarakeepAPI() then calls logger.remove(0) to drop that same default. Without the default,
-   the script's INFO handler is id 0, so the library removes it and installs a DEBUG catch-all,
-   and every DEBUG line ships. #}
+{# Never set LOGURU_AUTOINIT=false: the library would remove the script's INFO handler and ship every
+   DEBUG line. #}
             - name: TZ
               value: "{{ tz }}"
             - name: KARAKEEP_PYTHON_API_ENDPOINT
@@ -124,18 +105,13 @@ spec:
             - name: time-tagger-script
               mountPath: /script
               readOnly: true
-            # /uv-cache, not /root/.cache/uv: `UV_CACHE_DIR` in templates/Dockerfile.j2 names this
-            # path, and the two move together. kubelet creates an emptyDir 0777, so uid 1000 can
-            # write it with no fsGroup and nothing to chown.
+            # Matches UV_CACHE_DIR in Dockerfile.j2; an emptyDir is 0777, so uid 1000 writes it.
             - name: time-tagger-uv-cache
               mountPath: /uv-cache
             - name: time-tagger-work
               mountPath: /work
-          # /tmp/healthy is touched only after a SUCCESSFUL run, so a hung or persistently
-          # failing tagger goes stale even though the process is
-          # alive. The loop sleeps 900s, so <2100 allows one missed cycle. No readiness probe —
-          # nothing routes to this and nothing waits on it, so readiness would only add a state
-          # that means nothing.
+          # /tmp/healthy is touched only after a successful run; the loop sleeps 900s, so <2100
+          # allows one missed cycle.
           livenessProbe:
             exec:
               command:

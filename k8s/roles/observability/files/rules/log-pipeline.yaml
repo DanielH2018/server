@@ -20,7 +20,7 @@
 # per reason. A reboot morning with two reasons each under 3000 and a sum over it does not
 # page.
 #
-# tests/services/test_scrape_target_rule_jobs.py pins each number below as a literal.
+# tests/services/alert_rules/test_scrape_target_rule_jobs.py pins each number below as a literal.
 groups:
   - name: log-pipeline
     rules:

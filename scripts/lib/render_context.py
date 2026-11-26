@@ -24,11 +24,9 @@ Typical usage example:
 
 from pathlib import Path
 
-# The layers and where they live are lib.estate's, which the docs generators read through too,
-# so a template render and a docs page cannot disagree about which value wins.
 from lib.cli_help import warn
 from lib.container_entry import parse_containers_list
-from lib.inventory_lists import PI_LIST_KEY
+from lib.inventory_lists import PI_LIST_KEY, host_names
 from lib.estate import (
     REPO_INVENTORY,
     Inventory,
@@ -39,7 +37,6 @@ from lib.k8s_context import failed_key, resolve_vars
 from lib.render_guard import (
     BASE_CONTEXT,
     StubUndefined,
-    host_files,
     host_layer,
     k8s_services,
     load_yaml,
@@ -142,14 +139,12 @@ def render_context(
     resolved, dropped = _resolve(raw, undefined_cls)
     if dropped and strict:
         raise UnresolvedVarsError(dropped)
-    # Under a strict class a dropped key needs no note: a template that reads it stops the
-    # render, as Ansible's lazy evaluation fails only the task that reads the variable.
+    # Under a strict class a dropped key needs no note: a template that reads it stops the render.
     if undefined_cls is not StubUndefined:
         dropped = {}
     for key, reason in sorted(dropped.items()):
         note = f"{key} left undefined, renders as STUB: {reason}"
-        # Once per process: every template of a role shares its defaults, so the same drop
-        # would otherwise print once for each of them.
+        # Once per process: every template of a role shares its defaults.
         if note not in _NOTED:
             _NOTED.add(note)
             warn(note)
@@ -184,8 +179,8 @@ def _hosts(inventory: Inventory) -> dict[str, dict]:
     passes its own ``hosts``.
     """
     found = {}
-    for path in host_files(inventory.host_vars):
-        layer = host_layer(path.parent, path.stem)
+    for host in host_names(inventory.host_vars):
+        layer = host_layer(inventory.host_vars, host)
         literal = {
             key: layer[key]
             for key in _HOSTS_KEYS
@@ -196,7 +191,7 @@ def _hosts(inventory: Inventory) -> dict[str, dict]:
                 literal[PI_LIST_KEY], key=PI_LIST_KEY
             )
         if literal:
-            found[path.stem] = literal
+            found[host] = literal
     return found
 
 

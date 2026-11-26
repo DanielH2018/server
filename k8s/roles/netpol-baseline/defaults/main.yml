@@ -112,7 +112,7 @@ netpol_baseline_obs_node_cidrs: "{{ k3s_cni0_gateways + k3s_flannel_node_ips }}"
 # followed the running state would dial a server that is not yet safe to dial, on every
 # netpol-baseline deploy. Add the row once the image is past 1.4.5.7:
 # `{service: terraria, plane: homelab, port: 7777, expect: open, policy: networkpolicy-terraria.yaml.j2}`.
-# `tests/k8s/test_netpol_probe_targets.py` fails if the row is present while the start is refused.
+# `tests/k8s/edge/test_netpol_probe_targets.py` fails if the row is present while the start is refused.
 netpol_baseline_probe_targets:
   - {service: littlelink, plane: homelab, port: 3000, expect: refused, policy: networkpolicy.yaml.j2}
   # Per-workload caller lists: each admits named callers, and this pod is none of them.

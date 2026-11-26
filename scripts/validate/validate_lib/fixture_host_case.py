@@ -16,12 +16,13 @@ import shutil
 import textwrap
 from pathlib import Path
 
+from lib.inventory_lists import host_vars_file
 from validate.validate_lib.host_container import CaseFailed
 
 FIXTURE_HOST = "daniel-fixture"
 WALKTHROUGH = "docs/host-packages.md"
 SCRIPT = "hosts/bootstrap-host.sh"
-EXAMPLE_VARS = "inventory/host_vars/_example.yml"
+EXAMPLE_VARS = "hosts/_example/vars.yml"
 # An address no host holds, for the example file's placeholder. Nothing dials it in a render.
 FIXTURE_IP = "10.0.0.250"
 
@@ -57,7 +58,7 @@ def apply_walkthrough(tree: Path, host: str = FIXTURE_HOST) -> None:
     spec.write_text(walkthrough_spec((tree / WALKTHROUGH).read_text(), host))
 
     host_vars = tree / EXAMPLE_VARS
-    copy = host_vars.with_name(f"{host}.yml")
+    copy = host_vars_file(host, tree / "hosts")
     shutil.copyfile(host_vars, copy)
     copy.write_text(
         _replace_one(

@@ -118,7 +118,7 @@ without running it.
 
 **Adding a module means adding its path to `monitor_bridge_modules`** in `defaults/main.yml`.
 Each entry renders as its own ConfigMap, and a module missing from the list kills the pod at
-import on its next roll; `tests/services/test_monitor_bridge_modules.py` catches that.
+import on its next roll; `tests/services/monitor_bridge/test_monitor_bridge_modules.py` catches that.
 The internals page says why it is one ConfigMap per module and which module stays off the list.
 
 ## Configuration is a parameter, not a module global
@@ -137,7 +137,7 @@ the `cfg` fixture is that render (`k8s/roles/monitor-bridge/tests/conftest.py:cf
 ## Editing & testing
 Unit tests are `uv run pytest k8s/roles/monitor-bridge/tests`, one file per domain.
 **A shared test helper goes under `tests/`, never beside `cli.py`** — every `.py` in `files/` is
-production code to `tests/services/test_monitor_bridge_modules.py:_runtime_modules`. Smoke test
+production code to `tests/services/monitor_bridge/test_monitor_bridge_modules.py:_runtime_modules`. Smoke test
 one pass with
 `sudo k3s kubectl -n homelab exec deploy/monitor-bridge -- python /app/cli.py --once`
 (**operator-only**); `--check <name>` runs a gated check without its gate, which reads as up

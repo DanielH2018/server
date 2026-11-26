@@ -42,15 +42,12 @@ class VarsLookupSite(NamedTuple):
     names: Callable[[], set[str]]
 
 
-# The non-literal `vars` lookups that rule 5 does not count as a secret reference, for any of
-# its clauses. Each entry fails the check when its site has gone, or when a name its argument
-# can take is a secret key. The tree holds no such lookup, so every non-literal `vars` lookup
-# is refused until an entry here names it.
+# Each entry fails the check when its site has gone or a name its argument can take is a secret key;
+# the tree holds no such lookup.
 NON_SECRET_VARS_LOOKUPS: frozenset[VarsLookupSite] = frozenset()
 
-# The bindings rule 5 must see and must not read as an alias, as `(template, name)`. The
-# `observability_prometheus_config` set block holds no key, and the Deployment hashes the block
-# with `hash('sha1')`, so the hash must not make it an alias of one.
+# The `observability_prometheus_config` block holds no key, and the Deployment hashes it with
+# `hash('sha1')`, which must not make it an alias.
 NOT_ALIASES: tuple[tuple[str, str], ...] = (
     (
         "k8s/roles/observability/templates/prometheus.yaml.j2",

@@ -57,7 +57,7 @@ verbatim-prompts store this role's LAN route
 - Alloy replaced Promtail on 2026-09-02 (Promtail reached end of life 2026-03-02).
 - **The `job` label values are not this role's to choose.** They render from `loki_streams` in
   `group_vars/all.yml`, shared with the Pi's Alloy and with every selector that reads them
-  (#3740). `tests/services/test_loki_stream_labels.py` fails when an emitted value
+  (#3740). `tests/services/scraping/test_loki_stream_labels.py` fails when an emitted value
   and the consumers' values drift apart.
 - **`stage.replace` stages redact credentials on the way in.** Each substitutes the
   capture group only, so the rest of the record survives:
@@ -76,11 +76,11 @@ verbatim-prompts store this role's LAN route
     Subsonic `u`, `t`, `s` and `p` under `/rest/` only, because `p=` is pagination elsewhere.
     The parameter name stays, so a count by name still works.
 
-  `tests/k8s/_alloy_pods_pipeline.py` runs the rendered stages over a line, scoped as
+  `tests/k8s/alloy/_alloy_pods_pipeline.py` runs the rendered stages over a line, scoped as
   Alloy scopes them, and the `test_alloy_redacts_*` files under `tests/k8s/` fail on
   either half. `scripts/diagnostics/probe_lib/core.py:redact_log_secrets` carries the same
   patterns for output.
-  `tests/k8s/test_alloy_redacts_access_log_query_credentials.py` also fails when the
+  `tests/k8s/alloy/test_alloy_redacts_access_log_query_credentials.py` also fails when the
   access-log stages and `redact_log_secrets` redact different names. Each stage is prospective: a record shipped before it still carries
   the value for the 744h retention window, and `kubectl logs` still shows it, because Alloy
   reads the pod's log file and never rewrites it.
@@ -90,19 +90,19 @@ verbatim-prompts store this role's LAN route
   `error` or `fatal`, so `{namespace="homelab"} | level="error"` filters every format at once.
   A line with no token carries no field. Loki's own `detected_level` guesses from bare words,
   and filed a `[WRN] ... error receiving data` line as an error.
-  `tests/k8s/test_alloy_tags_pod_log_level.py` runs the rendered stages over real line shapes.
+  `tests/k8s/alloy/test_alloy_tags_pod_log_level.py` runs the rendered stages over real line shapes.
 - **The access-log drop keeps a person's 302 and drops a pod's.** blackbox-exporter's
   `http_sso_302` module probes every SSO-gated name from the pod CIDR, and those probes were
   about 35,000 of 37,000 302s a day. The drop counts as `traefik_pod_probe_302` in
-  `loki_process_dropped_lines_total`. `tests/services/test_traefik_access_log_drop.py` holds
+  `loki_process_dropped_lines_total`. `tests/services/traefik/test_traefik_access_log_drop.py` holds
   both halves.
 - **The Flux controllers' and the CrowdSec LAPI's routine info lines are dropped here**
   (#8988), because a level flag on either app would also hide lines worth keeping. Flux at
   `--log-level=error` loses its warnings. CrowdSec logs a ban and a `WAF block:` at info, so a
   global warn level hides them. Each drop names one success shape; Flux's applies that changed
   an object, its dispatched failure events and CrowdSec's non-2xx LAPI calls still ship.
-  `tests/k8s/test_alloy_drops_routine_success_lines.py` holds each shape both ways, through
-  `dropped_by` in `tests/k8s/_alloy_pods_pipeline.py`. blackbox-exporter, exportarr and
+  `tests/k8s/alloy/test_alloy_drops_routine_success_lines.py` holds each shape both ways, through
+  `dropped_by` in `tests/k8s/alloy/_alloy_pods_pipeline.py`. blackbox-exporter, exportarr and
   karakeep run at warn in their own config instead. The Pi's Alloy drops docker-proxy's 2xx
   request lines and keeps its 403s and 503s
   (`hosts/lib/tests/test_pi_compose_alloy.py::test_a_proxy_denial_or_dead_socket_line_still_ships`).
@@ -117,7 +117,7 @@ verbatim-prompts store this role's LAN route
   `KubeletCSIMountReadOnly`'s, since this rule stores nothing when loki-homelab's own claim is
   the read-only one. The stage runs
   only `stage.regex` and `stage.labels`, because those rules' line filters and the `event=`
-  logfmt queries read the raw rsyslog line. `tests/k8s/test_alloy_labels_host_program.py` fails on a missing
+  logfmt queries read the raw rsyslog line. `tests/k8s/alloy/test_alloy_labels_host_program.py` fails on a missing
   label or an added stage. A `uv run` cron logs under the tag `uv`, so the line names the script.
 - **k3s's own log ships warnings and worse only, as `{job="k3s"}` on each node** (#6177).
   `/var/log/k3s.log` is kept out of the journal and syslog on purpose, and Alloy tails the file
@@ -127,7 +127,7 @@ verbatim-prompts store this role's LAN route
   watches this stream for freshness. No rule reads it: kubelet's `Failed to start node shutdown
   manager` line is the diagnosis a reader looks up, and the alert reads the lock itself
   (`hosts/components/k3s-server/files/kubelet-shutdown-lock-check.sh`), because kubelet logs
-  nothing on success. `tests/k8s/test_alloy_ships_k3s_log.py` runs the
+  nothing on success. `tests/k8s/alloy/test_alloy_ships_k3s_log.py` runs the
   filter over real line shapes and holds the path to the `k3s_log_file` both k3s host components
   carry.
   **A selector is a double-quoted LogQL string, never a backtick one.** Alloy's match-stage
@@ -142,7 +142,7 @@ verbatim-prompts store this role's LAN route
   kernel's BPF, netfilter and systemd-service records and their unkeyed SYSCALL lines, which
   were about 15000 of 27000 lines in 10 hours on daniel-box. One event spans several lines that
   share `msg=audit(<time>:<serial>)`, so find the key on the SYSCALL line, then read the PATH
-  line with the same serial. `tests/k8s/test_alloy_ships_audit_log.py` runs the drops
+  line with the same serial. `tests/k8s/alloy/test_alloy_ships_audit_log.py` runs the drops
   over real line shapes.
 
 ## Ruler

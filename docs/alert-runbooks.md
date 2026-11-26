@@ -6,7 +6,7 @@ covers, one section per alert, named as the alert is. A warning has a section to
 edge cases did not fit its description. An alert's description says what to do
 first. Its section here says what the alert means, then the cases the description leaves out.
 
-`tests/services/test_alert_runbook_urls.py` fails a critical rule with no `runbook_url` and a
+`tests/services/alert_rules/test_alert_runbook_urls.py` fails a critical rule with no `runbook_url` and a
 link to a section this page does not have. It also fails any alert, warning or critical, whose
 description is over the cap the notification can carry.
 

@@ -1,9 +1,6 @@
 ---
-# The game join port, answered on the NODE's own address (the wg-easy-udp pattern): the
-# router's port-forward UI only targets DHCP/ARP-known devices, and its 7777 forward
-# points at the device daniel-box. Local policy so the server logs real
-# client addresses. No Traefik in the path: a raw-TCP game protocol can't use the HTTP
-# CrowdSec/rate-limit chain.
+# On the node's own address: the router's 7777 forward targets the device daniel-box.
+# Local policy keeps real client addresses; no Traefik, since the game is raw TCP.
 apiVersion: v1
 kind: Service
 metadata:

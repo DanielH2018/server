@@ -37,7 +37,7 @@ ROLE_PYTHON_HAS_TESTS = Census(
         "A role that ships a `files/*.py` with logic gets a `tests/` directory "
         "(.claude/rules/python-layout.md). The sibling guards start from test files, so a "
         "role with code and no tests at all is invisible to them. "
-        "`tests/repo/test_testpaths_covers_every_test_file.py` holds each test it finds "
+        "`tests/repo/suite/test_testpaths_covers_every_test_file.py` holds each test it finds "
         "under a testpath."
     ),
     files=_roles_shipping_python,

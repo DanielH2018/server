@@ -78,7 +78,7 @@ tools:
       url: https://github.com/fluxcd/flux2/releases/download/{version}/flux_{bare}_linux_arm64.tar.gz
       member: flux
   # The Vale the prek hook runs, at the version CI installs
-  # (tests/repo/test_vale_matches_the_ci_pin.py holds the copies equal). Both digests come
+  # (tests/repo/ci_workflows/test_vale_matches_the_ci_pin.py holds the copies equal). Both digests come
   # from the release's checksums file:
   # https://github.com/vale-cli/vale/releases/download/v3.25.1/vale_3.25.1_checksums.txt
   vale:

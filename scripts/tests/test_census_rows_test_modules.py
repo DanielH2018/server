@@ -81,7 +81,7 @@ ROWS = (
         min_matches=MODULE_FLOOR,
         must_find=frozenset(
             {
-                "tests/repo/test_ci_empty_pr_merge_fails.py",
+                "tests/repo/ci_workflows/test_ci_empty_pr_merge_fails.py",
                 ".claude/hooks/tests/instructions/test_rules_globs_match_a_tracked_file.py",
                 "scripts/deploy_tools/tests/land/test_land_tools.py",
                 "scripts/lib/tests/test_render_guard.py",
@@ -234,7 +234,7 @@ ROWS = (
             {
                 ".claude/hooks/tests/hook_contract/test_hook_scripts_executable.py",
                 "tests/_helpers.py",
-                "tests/repo/test_testpaths_covers_every_test_file.py",
+                "tests/repo/suite/test_testpaths_covers_every_test_file.py",
                 "scripts/deploy_tools/tests/land/test_land_tools.py",
                 "scripts/lib/tests/test_git.py",
             }
@@ -280,7 +280,7 @@ ROWS = (
                 "the shipped-files row that refuses a stub citation names the directory in "
                 "its pattern and subjects; it reads no plan"
             ),
-            "tests/services/test_alert_runbook_urls.py": (
+            "tests/services/alert_rules/test_alert_runbook_urls.py": (
                 "its `CITED_PAGE` pattern excludes a design-doc citation from the runbook "
                 "rule, and its fixture is an alert description; it reads no plan"
             ),
@@ -293,7 +293,7 @@ ROWS = (
             "nothing after the move. Read a value through `lib.estate.shared_vars()` or "
             "`host_vars(host)`, or an `Estate`. A hit is a call that takes an inventory path "
             "as its receiver or an argument, or a function whose parameter defaults to one; "
-            "`relative_to` and `copytree` only name the path. Every Python file is in the "
+            "`relative_to`, `copytree`, `copy_host_files` and `host_vars_file` only name the path. Every Python file is in the "
             "census, not only the tests."
         ),
         files=lambda: tracked("*.py"),
@@ -305,7 +305,7 @@ ROWS = (
             Subject(
                 "b.py",
                 "from lib.repo_paths import HOST_VARS\n"
-                'vars_of(HOST_VARS / "daniel-pi.yml")\n',
+                'vars_of(HOST_VARS / "daniel-pi" / "vars.yml")\n',
             ),
             Subject(
                 "c.py",
@@ -351,11 +351,6 @@ ROWS = (
                 "`lib.estate` reads the files through it",
             ),
             **dict.fromkeys(
-                ("hosts/components/renovate-agent/files/land_renovate_pr.py",),
-                "a host package ships it without `scripts/lib`, so it cannot import "
-                "`lib.estate`; ADR-0042 step 3 teaches it the new paths",
-            ),
-            **dict.fromkeys(
                 (
                     "hosts/lib/tests/test_bootstrap_host_pins.py",
                     "hosts/lib/tests/test_builder_component.py",
@@ -365,7 +360,7 @@ ROWS = (
                     "hosts/tests/test_nut_host_secondary.py",
                     "hosts/tests/test_unattended_origins_pattern.py",
                     "tests/deploy/test_renovate_automerge_follows_the_autodeploy_denylist.py",
-                    "tests/services/test_strangler_bridge.py",
+                    "tests/services/monitor_bridge/test_strangler_bridge.py",
                 ),
                 "it reads the file's text or asserts which file declares a key, which "
                 "ADR-0042 step 6 decides per key",

@@ -11,6 +11,8 @@ import shutil
 import pytest
 from lib import yaml_fast
 from lib.estate import Inventory
+from lib.inventory_lists import host_vars_file
+from lib.render_guard import copy_host_files
 from lib.repo_paths import HOST_VARS, REPO
 from renderer.renderer_lib import host as host_mode
 from validate.validate_lib import fixture_host_case as case
@@ -45,7 +47,7 @@ def test_the_file_list_adds_the_host_to_the_package_the_vars_and_the_script(tree
 
     host = case.FIXTURE_HOST
     assert (tree / "hosts" / host / "package.yml").is_file()
-    host_vars = tree / "inventory/host_vars" / f"{host}.yml"
+    host_vars = host_vars_file(host, tree / "hosts")
     assert f"server_ip: {case.FIXTURE_IP}\n" in host_vars.read_text()
     assert f'{host}"\n' in (tree / case.SCRIPT).read_text()
 
@@ -59,22 +61,17 @@ def test_a_script_whose_hosts_line_moved_is_flagged(tree):
 
 
 def test_the_walkthrough_host_renders_with_the_real_renderer(tree):
-    inventory = tree / "inventory"
-    # Templates read other hosts' variables, so the fleet's files stay beside the new one.
-    shutil.copytree(
-        HOST_VARS,
-        inventory / "host_vars",
-        dirs_exist_ok=True,
-    )
-    case.apply_walkthrough(tree)
     hosts_root = tree / "hosts"
+    # Templates read other hosts' variables, so the fleet's files stay beside the new one.
+    copy_host_files(hosts_root, HOST_VARS)
+    case.apply_walkthrough(tree)
     for shared in ("components", "keys", "lib", "packages"):
         (hosts_root / shared).symlink_to(REPO / "hosts" / shared)
 
     package = host_mode.render_host(
         case.FIXTURE_HOST,
         hosts_root=hosts_root,
-        inventory=Inventory(host_vars=inventory / "host_vars"),
+        inventory=Inventory(host_vars=hosts_root),
     )
 
     assert package.name == f"homelab-{case.FIXTURE_HOST}"

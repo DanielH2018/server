@@ -1,10 +1,8 @@
 """The bundle's root `README.md`: a static note on the layout `bundle.py` writes."""
 
 README = "README.md"
-# The bundle's layout, for a reader who pulls the artifact. It sits at the bundle root, which
-# no Kustomization's `path` reaches, so Flux applies nothing from it. It counts for no name,
-# so it lands under `_unclassified`, and a change to this text moves every Kustomization's
-# changed set (C1, C2). Keep it free of anything per-revision.
+# Sits at the bundle root, which no Kustomization reaches; a change moves every changed set, so keep
+# it free of anything per-revision.
 BUNDLE_README = """# Homelab publish bundle
 
 This artifact is what `scripts/renderer/homelab_render.py cluster` renders from the git tree.

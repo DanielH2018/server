@@ -11,8 +11,8 @@ metadata:
 spec:
   # ReadWriteOnce PVC — two pods can't both mount /data during a rolling update.
 {{ spec_shell('Recreate') }}
-  # No `replicas:`. deploy.local's Games panel starts and stops this exporter with the terraria
-  # server (ADR-0033), because it tails a console that only exists while the server runs.
+  # No `replicas:`: deploy.local's Games panel starts and stops this exporter with the server
+  # (ADR-0033), since it tails a console that exists only while the server runs.
   selector:
     matchLabels:
       app: terraria-stats
@@ -53,9 +53,8 @@ spec:
               value: "28"
           ports:
             - containerPort: {{ services | metrics_port('terraria-stats') }}
-          # /healthz is 503 until the first successful poll and whenever the last one is
-          # older than HEALTH_MAX_AGE; a failing liveness recreates the pod (and feeds the
-          # crash-loop alert arm).
+          # A failing liveness recreates the pod when /healthz is 503: before the first poll, or
+          # when the last one is older than HEALTH_MAX_AGE.
           livenessProbe:
             httpGet:
               path: /healthz

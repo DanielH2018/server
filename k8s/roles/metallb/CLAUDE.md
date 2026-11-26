@@ -28,7 +28,7 @@ probes stay green.
   annotations** on the controller and the speaker. Only `kubectl-client-side-apply` owns them
   live, so a vendored file without them would remove them and roll every MetalLB pod at the
   next promote.
-  `tests/k8s/test_metallb_vendored_manifest.py::test_the_vendored_file_declares_the_prometheus_template_annotations`
+  `tests/k8s/edge/test_metallb_vendored_manifest.py::test_the_vendored_file_declares_the_prometheus_template_annotations`
   holds them.
 - **The file declares no `caBundle` and no data for the `metallb-webhook-cert` Secret.** The
   controller writes both at runtime, and under server-side apply a field the render does not
@@ -40,13 +40,13 @@ probes stay green.
   Upstream ships both with no `resources`, so their pods ran BestEffort, the kubelet's first
   eviction under memory pressure, and an evicted speaker drops the node's announcements.
   Each patch's header comment names the peak its values were sized from.
-  `tests/k8s/test_namespace_resource_defaults.py` holds every key but `limits.memory` on both
+  `tests/k8s/workloads/test_namespace_resource_defaults.py` holds every key but `limits.memory` on both
   containers, and exempts `limits.memory` under a `DECIDED:` marker.
   A kustomize patch cannot read a variable, so
-  `tests/k8s/test_metallb_vendored_manifest.py::test_each_patch_requests_its_defaults_value`
+  `tests/k8s/edge/test_metallb_vendored_manifest.py::test_each_patch_requests_its_defaults_value`
   holds each memory request equal to `k3s_metallb_controller_memory_request` or
   `k3s_metallb_speaker_memory_request`, and
-  `tests/k8s/test_metallb_vendored_manifest.py::test_no_metallb_workload_runs_besteffort`
+  `tests/k8s/edge/test_metallb_vendored_manifest.py::test_no_metallb_workload_runs_besteffort`
   fails a render that leaves either workload without a request. Changing a request or a limit
   rolls the speakers, which blips every VIP while the primary node's speaker restarts.
 - **The tag renders `prune: false`** (`flux_prune: false`, with the `DECIDED:` marker beside
@@ -56,17 +56,17 @@ probes stay green.
 - **The tag is forward-only** (`flux_forward_only: true` in `defaults/main.yml`). When a
   revision that changes it fails, `promote` writes `DEPLOY_HOLD` and leaves `prod` where it
   is, because a reset would re-apply an older vendored file over upgraded CRDs.
-  `tests/k8s/test_forward_only_tags.py` holds the flagged roles equal to its
+  `tests/k8s/flux/test_forward_only_tags.py` holds the flagged roles equal to its
   `PLAN_FORWARD_ONLY` set.
 - **`NEVER_SHED` names the tag** in `scripts/renderer/template_filters/service_tier.py`. The role is
   untiered, and the lost-node break-glass must not scale the announcer down.
-  `tests/k8s/test_shed_set_is_derived_from_tier.py::test_never_shed_matches_the_untiered_roles_that_never_prune`
+  `tests/k8s/workloads/test_shed_set_is_derived_from_tier.py::test_never_shed_matches_the_untiered_roles_that_never_prune`
   holds the set equal to the untiered roles that set `flux_prune: false`.
-- **`k3s_metallb_pool` is defined here**, and `tests/repo/test_lan_facts_have_one_source.py`
+- **`k3s_metallb_pool` is defined here**, and `tests/repo/docs/test_lan_facts_have_one_source.py`
   exempts this file for it. `templates/metallb-pool.yaml.j2` carries the
   `DECIDED:` and `PERMANENT` comments: the L2Advertisement announces from `k8s_primary_node`
   alone, and every VIP-backed workload's `nodeSelector` is the same variable.
-  `tests/k8s/test_vip_pins.py::test_announcement_and_the_primary_node_variable_agree`
+  `tests/k8s/edge/test_vip_pins.py::test_announcement_and_the_primary_node_variable_agree`
   holds the two halves together.
 - **The pools apply through MetalLB's validating webhook** (`failurePolicy: Fail`). On a fresh
   cluster the first apply of the pools can fail until the controller serves the webhook, and

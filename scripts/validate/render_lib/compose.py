@@ -6,7 +6,7 @@ variables are stubbed, so no access to the SOPS-encrypted ``secrets.yml`` is
 needed.
 
 The service set and per-service parameters are taken from the real
-``compose_services`` in each ``inventory/host_vars/*.yml`` file (the Pi package's Compose
+``compose_services`` in each ``hosts/<host>/vars.yml`` file (the Pi package's Compose
 project, H5), so each ``hosts/components/pi-compose/services/<name>/compose.yaml.j2`` is
 exercised with the same shape it is deployed with (port, hostname, networks,
 use_authelia). Commented-out services are skipped automatically (they are not in
@@ -130,7 +130,7 @@ def find_undigested_images(docs, exempt=frozenset()) -> list[tuple[str, str]]:
     can ever raise a PR against, and nothing in the repo records which bytes are running.
     ``tag@sha256:`` fixes both — it is reproducible on a cold pull, and it is the shape
     the k8s plane already uses (see the every-external-image-pin-carries-a-digest row of
-    tests/repo/test_census_rows_roles.py, whose selector
+    tests/repo/census_rows/test_census_rows_roles.py, whose selector
     reach k8s/roles but never the Pi's package; this is that gate's Pi half).
     """
     missing: list[tuple[str, str]] = []

@@ -6,7 +6,6 @@ would need CAP_NET_ADMIN. squid parses its config on the host the same way.
 
 import re
 import shlex
-import shutil
 from urllib.parse import urlsplit
 
 import pytest
@@ -15,8 +14,10 @@ import yaml
 from diagnostics.probe_lib import alertmanager_api, alerts, obs_api
 from lib import yaml_fast
 from lib.estate import Inventory
+from lib.inventory_lists import host_vars_file
 from lib.proc_testing import run, write_exec
-from lib.repo_paths import ALL_VARS, HOST_VARS, REPO
+from lib.render_guard import copy_host_files
+from lib.repo_paths import ALL_VARS, REPO
 from renderer.renderer_lib import host as host_mode
 from _setup_render import CLAUDE_CODE, role_context
 
@@ -64,9 +65,8 @@ def box() -> host_mode.Package:
 @pytest.fixture(scope="module")
 def box_off(tmp_path_factory) -> host_mode.Package:
     """daniel-box with the egress table and the session proxy both switched off."""
-    host_vars = tmp_path_factory.mktemp("off") / "host_vars"
-    shutil.copytree(HOST_VARS, host_vars)
-    path = host_vars / "daniel-box.yml"
+    host_vars = copy_host_files(tmp_path_factory.mktemp("off") / "hosts")
+    path = host_vars_file("daniel-box", host_vars)
     values = yaml.safe_load(path.read_text())
     del values["t2_egress_proxy"]
     values["t2_egress_enabled"] = False
@@ -142,7 +142,7 @@ def test_the_rules_cover_exactly_the_session_users_the_users_arm_declares(box):
 
 def test_squid_binds_the_proxy_address_logs_to_a_file_and_never_to_syslog(box):
     """I6: the request log stays in /var/log/squid, which Alloy does not tail."""
-    proxy = yaml_fast.safe_load((HOST_VARS / "daniel-box.yml").read_text())[
+    proxy = yaml_fast.safe_load(host_vars_file("daniel-box").read_text())[
         "t2_egress_proxy"
     ]
     conf = rendered(box, SQUID_CONF)
@@ -158,7 +158,7 @@ def test_squid_binds_the_proxy_address_logs_to_a_file_and_never_to_syslog(box):
 
 
 def test_both_sessions_send_their_traffic_through_the_proxy(box):
-    proxy = yaml_fast.safe_load((HOST_VARS / "daniel-box.yml").read_text())[
+    proxy = yaml_fast.safe_load(host_vars_file("daniel-box").read_text())[
         "t2_egress_proxy"
     ]
     for unit in SESSION_UNITS:
@@ -192,7 +192,7 @@ def test_without_a_proxy_address_no_session_names_one(box_off):
 def test_the_triage_kubeconfig_names_the_api_by_the_hosts_lan_address(box, tmp_path):
     """B3-1: no loopback port stays open to the session; the API goes through the proxy."""
     # fact: hosts/components/claude-code/CLAUDE.md#Autonomous-role contract (`claude-triage@`, a session started by a monitor episode)
-    server_ip = yaml_fast.safe_load((HOST_VARS / "daniel-box.yml").read_text())[
+    server_ip = yaml_fast.safe_load(host_vars_file("daniel-box").read_text())[
         "server_ip"
     ]
     setup = rendered(box, TRIAGE_SETUP)
@@ -232,7 +232,7 @@ def first(lines: list[str], needle: str) -> int:
 def test_each_session_uid_is_refused_everything_after_its_trace_and_the_proxy(box):
     """The trace sees refused attempts too, and only squid's address and port get past."""
     proxy_host, proxy_port = yaml_fast.safe_load(
-        (HOST_VARS / "daniel-box.yml").read_text()
+        host_vars_file("daniel-box").read_text()
     )["t2_egress_proxy"].split(":")
     rules = [s for s in statements(rendered(box, RULESET)) if s.startswith("add rule")]
     accept = first(
@@ -270,7 +270,7 @@ def test_each_session_uid_reaches_the_otlp_collector_by_its_pre_dnat_address(box
 
 
 def test_squid_admits_exactly_the_ruled_hosts_and_refuses_the_rest(box):
-    server_ip = yaml_fast.safe_load((HOST_VARS / "daniel-box.yml").read_text())[
+    server_ip = yaml_fast.safe_load(host_vars_file("daniel-box").read_text())[
         "server_ip"
     ]
     conf = statements(rendered(box, SQUID_CONF))

@@ -11,7 +11,7 @@
   as a credential, and .gitleaks.toml admits only a snake_case key name.
 
   No secret goes in here, and the pod takes none from a Secret.
-  tests/k8s/test_no_secret_in_a_moved_jobs_configmap.py renders this file with every
+  tests/k8s/flux/test_no_secret_in_a_moved_jobs_configmap.py renders this file with every
   secrets.yml key bound to a sentinel and fails on any sentinel it finds.
 #}
 ---

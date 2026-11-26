@@ -3,7 +3,7 @@
 
 A DECLARED role's `tests/` must not derive that role's deploy tag, or a pytest-only PR to
 monitor-bridge deploys monitor-bridge. A role's `tests/` covers its `files/*.py` and is staged
-by nothing (the `no-role-ships-a-pytest-file` row of `tests/repo/test_census_rows_roles.py`
+by nothing (the `no-role-ships-a-pytest-file` row of `tests/repo/census_rows/test_census_rows_roles.py`
 holds that tree-wide), so no deploy can apply it.
 
 Run: uv run pytest scripts/deploy_tools/tests/land_deploy/test_land_role_tests_reach_no_cluster.py

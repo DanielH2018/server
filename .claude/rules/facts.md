@@ -71,7 +71,7 @@ scripts/deploy_tools/land_lib/land_tags.py:DECIDED: name the changed keys
 
 The examples are fenced because the lint reads every instruction file: unfenced, each one
 would be support for this section rather than an illustration of the form. The fence hides
-them from this lint only: `tests/repo/test_documented_paths_exist.py::test_every_cited_test_exists`
+them from this lint only: `tests/repo/docs/test_documented_paths_exist.py::test_every_cited_test_exists`
 reads every line of every doc, fenced or not, so the test node in the example names a real
 test, and renaming that test fails the guard here.
 
@@ -91,7 +91,7 @@ otherwise.
 - `one-way-test` (warning): a cited test node whose body carries no `# fact: <doc>#<heading>`
   for the citing section, so the support points one way. The other direction is a test, not
   a lint rule: a `# fact:` comment whose doc or heading is gone fails
-  `tests/repo/test_fact_comments_resolve.py::test_every_fact_comment_names_a_section_that_exists`.
+  `tests/repo/docs/test_fact_comments_resolve.py::test_every_fact_comment_names_a_section_that_exists`.
 - `renovate-pin`: a YAML key whose value Renovate bumps. Every bump would move the atom, which
   puts a notice on every bump PR for a section whose prose the bump cannot change. Cite the
   file as a path atom and name the key in prose. The rule derives the managed keys from
@@ -110,8 +110,8 @@ claim still holds.
 The notice compares cited atoms only, so a sentence that cites nothing can go stale with no
 row to show it. Some lint rules therefore read the prose itself.
 
-- `retired-host` (error) flags a host-shaped word that names no file in
-  `inventory/host_vars/`. The rule derives the host prefix from the inventory, never
+- `retired-host` (error) flags a host-shaped word that names no directory under
+  `hosts/` holding a `vars.yml`. The rule derives the host prefix from those files, never
   from a list. A word inside a path or a longer name, such as `/srv/artifacts/daniel-box-claude`
   or the domain `daniel-hunter.com`, is not a host mention.
 - `version-as-fact` (warning) flags a backticked `image:tag` span whose image the tree pins.
@@ -201,12 +201,12 @@ continuation lines and nested bullets with it; a history paragraph ends at the n
   a store has no `git diff`, so run it with `--dry-run` first.
   `scripts/lib/facts/renames.py:move` has the rules.
 
-`lint` blocks through two checks. `tests/repo/test_every_section_lints_clean.py` fails CI on
+`lint` blocks through two checks. `tests/repo/docs/test_every_section_lints_clean.py` fails CI on
 any error rule in any section, except `vanished-identifier`, which needs a range. The
 `facts-lint-changed` prek hook lints the sections the branch edits, and runs
 `vanished-identifier` over every section. It fires on a commit that touches an instruction
 file or any non-Markdown file other than the paths the docs-refresh and eval-run crons commit.
-`tests/repo/test_every_section_lints_clean.py::test_the_lint_hook_fires_on_exactly_the_instruction_files`
+`tests/repo/docs/test_every_section_lints_clean.py::test_the_lint_hook_fires_on_exactly_the_instruction_files`
 holds the hook's `files` pattern against `is_fact_doc`.
 `docs/adr/0023-fact-support-is-a-diff-notice.md` records why the notice replaced the stored
 hashes and their blocking test.

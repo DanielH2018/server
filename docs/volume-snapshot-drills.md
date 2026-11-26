@@ -9,7 +9,7 @@ short and the evidence stays findable (the same split `docs/monitor-bridge-check
 monitor-bridge, #2699).
 
 Text rules read the runbook: the `RunbookRule` rows of
-`tests/repo/test_runbook_rules.py`. Nothing tests the measurements.
+`tests/repo/census_rows/test_runbook_rules.py`. Nothing tests the measurements.
 `scripts/renderer/job_files/flux_snapshot.py` is the authority on what the Job does; where a
 paragraph here disagrees with it, the script is right.
 

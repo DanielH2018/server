@@ -3,7 +3,7 @@
 `files/home_ips_discover.py` runs with stubbed `/proc/net/if_inet6` bodies, a stub opener for
 ipify and the WAN probes, and a `Kube` subclass that records the merge patch. The patch is the
 module's whole output, so each test reads what it would have written. The CronJob's RBAC
-against these calls is in tests/k8s/test_rbac_against_rest_script.py.
+against these calls is in tests/k8s/rbac/test_rbac_against_rest_script.py.
 
 Run: uv run pytest k8s/roles/crowdsec/tests/test_home_ips_discover.py
 """

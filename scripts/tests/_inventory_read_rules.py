@@ -21,8 +21,10 @@ _NOT_READS = frozenset(
         "as_posix",
         "copy",
         "copy2",
+        "copy_host_files",
         "copytree",
         "exists",
+        "host_vars_file",
         "is_dir",
         "is_file",
         "is_relative_to",
@@ -39,13 +41,24 @@ def _name(func: ast.expr) -> str:
 
 
 def _inventory(node: ast.expr, names: dict, module: Path | None) -> bool:
-    """Whether `node` is a path in the inventory, spelled or bound."""
+    """Whether `node` is a path in the inventory, spelled or bound.
+
+    The hosts directory is an inventory path through the `HOST_VARS` name or a spelled
+    `hosts/<host>/vars.yml`, because the rest of `hosts/` is not inventory.
+    """
     if isinstance(node, ast.Name):
-        return names.get(node.id, ())[:1] == ("inventory",)
+        return names.get(node.id, ())[:1] == ("inventory",) or (
+            node.id == "HOST_VARS" and names.get(node.id) == ("hosts",)
+        )
     if isinstance(node, ast.Attribute) and node.attr in ("parent",):
         return _inventory(node.value, names, module)
     chain = _chain(node, names, module) if isinstance(node, ast.BinOp) else None
-    return chain is not None and chain[1][:1] == ["inventory"]
+    if chain is None:
+        return False
+    segments = chain[1]
+    return segments[:1] == ["inventory"] or (
+        segments[:1] == ["hosts"] and segments[-1] == "vars.yml"
+    )
 
 
 def inventory_reads(source: str, module: Path | None = None) -> list[str]:

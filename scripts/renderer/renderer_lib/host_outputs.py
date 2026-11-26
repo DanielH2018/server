@@ -57,8 +57,7 @@ from renderer.renderer_lib.host_package import Package
 from renderer.renderer_lib.host_sources import file_mode
 from renderer.renderer_lib.placeholders import Sentinels
 
-# The component a package lists to ship the unit. Not `secrets`: the operator's tooling guard
-# denies agent writes under any `secrets/` directory.
+# Not `secrets`: the tooling guard denies agent writes under any `secrets/` directory.
 SECRETS_COMPONENT = "secrets-unit"
 # A rendered output and its template, and what `homelab-secrets` reads (the script's constants).
 TEMPLATE_ROOT = PurePosixPath("/usr/lib/homelab/secret-templates")
@@ -72,8 +71,7 @@ SOPS_SUFFIX = ".sops.yaml"
 
 REQUIRED = frozenset({"src", "path", "owner", "group", "mode", "keys"})
 OPTIONAL = frozenset({"destination", "persist", "dependents", "link", "format"})
-# The formats an output may declare. A dotenv file is read by Compose, whose parser the script
-# guards (H5, *Secrets*). The script escapes each value of a json output for a JSON string.
+# The script escapes each value of a json output for a JSON string.
 FORMATS = frozenset({"dotenv", "json"})
 # The script's `NAME` and `KEY`: a placeholder name, and a credential's file name.
 PLACEHOLDER_NAME = re.compile(r"[A-Za-z0-9_]+")
@@ -265,8 +263,7 @@ def finish(package: Package, host: str | None, sops_dir: Path) -> None:
         raise RenderRefused(
             f"{package.name}: a symlink and a file both install {clash}"
         )
-    # A shared package, such as `validate/render_lib/units.py`'s wrapper around a component no
-    # host lists yet, has no host to carry a ciphertext or a manifest for.
+    # A shared package has no host to carry a ciphertext or a manifest for.
     if not package.secrets or host is None:
         return
     cipher = sops_dir / f"{host}{SOPS_SUFFIX}"

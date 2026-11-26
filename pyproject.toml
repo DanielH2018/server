@@ -66,14 +66,14 @@ dev = [                              # `dev` is uv's default group for `uv run`/
 ]
 # Tools only prek hooks and hand-run commands call, never a test. The CI jobs that run no lint
 # hook set UV_NO_GROUP=lint, so a lint tool's install (actionlint-py downloads its binary from
-# GitHub releases) cannot fail them. tests/repo/test_ci_lint_group.py holds both halves.
+# GitHub releases) cannot fail them. tests/repo/ci_workflows/test_ci_lint_group.py holds both halves.
 lint = [
   "ruff>=0.16",                     # first-party Python lint gate (prek hook); pinned via uv.lock.
   # The floor is the version the [tool.ruff] `*.md` exclusion was written against.
   "actionlint-py",                  # workflow lint gate (prek hook); its build fetches the actionlint binary
   "mkdocs-material>=9.5",           # the docs site; `uv run mkdocs build` renders docs/ into site/
   "zizmor>=1.0",
-  "ty==0.0.108",                     # first-party Python type gate (prek hook). Pinned exactly, not
+  "ty==0.0.111",                     # first-party Python type gate (prek hook). Pinned exactly, not
   # `>=`, because ty is pre-1.0: a 0.0.x bump can add a rule or
   # change an inference and turn master red on an unrelated PR.
   # Renovate raises the bump as its own PR, which is where the
@@ -104,7 +104,7 @@ filterwarnings = [
 # and read SOPS.
 markers = [
   "image: runs a script inside its pinned container image with `docker run`; deselected from the pytest shards and run with `-m image` by .github/workflows/image-leg.yml and the nightly .github/workflows/pytest-sweep.yml",
-  "ui: live checks against the homelab's own routes — browser smoke (scripts/diagnostics/tests/ui_smoke/test_ui_smoke.py) and the Uptime Robot keyword rules (tests/repo/test_uptime_robot_keywords.py)",
+  "ui: live checks against the homelab's own routes — browser smoke (scripts/diagnostics/tests/ui_smoke/test_ui_smoke.py) and the Uptime Robot keyword rules (tests/repo/docs/test_uptime_robot_keywords.py)",
 ]
 # hosts/lib: host_lib is the module the host components' scripts share, shipped beside them in
 # each host package — on pythonpath so the
@@ -399,6 +399,8 @@ extra-paths = [
   "scripts/deploy_tools/tests",
   "scripts/dev/tests",
   "scripts/diagnostics/tests",
+  "tests/k8s",
+  "tests/repo",
   "scripts/docs/tests",
 ]
 

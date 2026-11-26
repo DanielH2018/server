@@ -210,12 +210,6 @@ ROWS = (
                 "tests/k8s/_manifest_guards.py",
             }
         ),
-        allow={
-            "scripts/lib/tests/test_render_guard.py": (
-                "`test_anchors_resolve_to_the_real_tree` checks that `repo_paths`' own "
-                "`INVENTORY` anchor reaches the real tree, so it spells a path under it"
-            ),
-        },
     ),
     Census(
         name="tests-read-shell-templates-rendered",
@@ -403,9 +397,9 @@ ROWS = (
             {
                 "hosts/tests/test_aide_check.py",
                 "tests/deploy/test_k8s_toposort.py",
-                "tests/k8s/test_configmap_keys_not_absorbed.py",
-                "tests/k8s/test_vip_pins.py",
-                "tests/k8s/test_volume_names_descriptive.py",
+                "tests/k8s/workloads/test_configmap_keys_not_absorbed.py",
+                "tests/k8s/edge/test_vip_pins.py",
+                "tests/k8s/workloads/test_volume_names_descriptive.py",
                 "tests/longhorn/test_pvc_sizes_match_block_size.py",
             }
         ),

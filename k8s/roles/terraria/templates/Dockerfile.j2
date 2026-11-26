@@ -35,16 +35,5 @@
 # server may refuse or damage a world it wrote.
 FROM beardedio/terraria:vanilla-latest@sha256:a9ac6cc8e5869bb98677ffcaa0bd8f8dfce5dbf13184ccc73a9c2b164875dd9c
 
-# The whole fix. Two paths, for two different reasons:
-#
-#   /root     the hardcoded HOME above. Left at 0700 rather than widened to 0755 — owned by
-#             1000 it is already traversable by the only uid that needs it, and 0700 is the
-#             tighter of the two.
-#   /vanilla  the WORKDIR. The server prints "Error Logging Enabled" at startup and writes its
-#             error log relative to the working directory, so a read-only /vanilla would fail
-#             the first time it actually had something to report — the worst possible moment.
-#
-# Chowning /vanilla lets the app rewrite its own binaries, which is worth stating plainly. It is
-# still strictly LESS privilege than the status quo: today PID 1 is root and can rewrite every
-# path in the container, this one included.
+# /root is the hardcoded HOME (kept 0700); /vanilla is the WORKDIR the error log is written into.
 RUN chown -R 1000:1000 /root /vanilla

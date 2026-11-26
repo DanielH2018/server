@@ -15,7 +15,7 @@ The probe targets `edge-selfcheck-ingressroute.yaml.j2`, a router of Traefik's o
 kills it too and kubelet restarts the container instead.
 
 Three constraints hold it together, all ENFORCED by
-`tests/services/test_traefik_edge_selfcheck.py`: the route stays on an entrypoint
+`tests/services/traefik/test_traefik_edge_selfcheck.py`: the route stays on an entrypoint
 whose chain names the `crowdsec` Middleware, the probe path stays the route's own, and the
 route matches on a path rather than a Host. A kubelet probe sends no SNI, and Traefik
 answers a matched `Host()` router with 421 when SNI and Host disagree.
@@ -75,7 +75,7 @@ too.
 
 A name mismatch between `experimental.localPlugins`, the Middleware, the ConfigMap items and
 the manifest's `import` disables every plugin at startup, and `--dry-run` cannot see that.
-`tests/k8s/test_traefik_cloudflare_realip.py` pins the names.
+`tests/k8s/edge/test_traefik_cloudflare_realip.py` pins the names.
 
 To change the Go source, run it first under the release binary of `traefik_k8s_image`'s
 version with a local `plugins-local/` tree: a Yaegi error appears only at Traefik startup, as
@@ -120,7 +120,7 @@ SNI, so the `ingressroute()` macro renders the public and `.local.` hosts as two
 (`<name>-public` and `<name>`) and only the public one names the option; a LAN or WireGuard
 client holds no certificate.
 
-`tests/k8s/test_public_routes_require_cloudflare_origin_pull.py` exists for two traps:
+`tests/k8s/edge/test_public_routes_require_cloudflare_origin_pull.py` exists for two traps:
 
 - Every router on ONE public host must name the SAME option, or Traefik falls back to the
   default options, which require nothing — the bypass documents and healthchecks' ping twin

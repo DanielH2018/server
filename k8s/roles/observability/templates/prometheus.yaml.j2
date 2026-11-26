@@ -209,7 +209,7 @@ data:
       # item on monitor-bridge's entry, because the deploy tags derive a change to that field
       # onto every role that reads it. The port is monitor-bridge's
       # monitor_bridge_deploy_pipeline_port, which this role cannot read, and
-      # tests/services/test_deploy_pipeline_scrape.py holds the two equal.
+      # tests/services/scraping/test_deploy_pipeline_scrape.py holds the two equal.
       # `ScrapeTargetDown` (service monitor-bridge, files/rules/scrape-targets.yaml) pages a
       # failed scrape.
       - job_name: deploy-pipeline

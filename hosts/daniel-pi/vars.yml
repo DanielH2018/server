@@ -1,0 +1,69 @@
+---
+server_ip: 10.0.0.139
+# The Pi's one address literal. group_vars' k8s_pi_client_ip reads it through hosts.
+# The Pi's sshd host key, a public key, which the pi-ssh-name component pins on both k3s nodes
+# and pi-peer-backup pins in its CronJob's known_hosts. A reflash changes
+# it, and trusting the changed key is the operator's decision: on the Pi,
+# `ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub` prints the fingerprint to compare,
+# SHA256:JARYzuFmM51svNv21q3ZEasx7UaI6F1883tdwAQ2YkQ for this value.
+ssh_host_ed25519_key: ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIKldKcWhT3hMsOEZ3PSHSVU1yzQA8ucgl5vQjdr5lYPi
+ssh_config_path: /etc/ssh/sshd_config.d/50-cloud-init.conf
+# No `domain` override: daniel-pi.com does not resolve; use `pi.`-prefixed subdomains instead.
+# rsyslog is masked (journald is the log of record), so the package must not list `rsyslog-filter`.
+has_rsyslog: false
+# On 512 MB, heavy apt/dpkg steps OOM-kill mid-transaction and corrupt the package DB without swap.
+# Created by hosts/bootstrap-host.sh before its apt steps.
+pi_swapfile_path: /swapfile
+pi_swapfile_size: 1G
+# Slow cadence: each probe is 2 runc invocations, and the template defaults stall this board.
+container_healthcheck_interval: 60s
+# Deploy memory thrash stalls exec probes past short timeouts; autoheal then restarts a healthy
+# container.
+# Worst-case detection is 5 x (60s interval + 60s timeout) = 10 min; wg-easy reads these too.
+container_healthcheck_timeout: 60s
+container_healthcheck_retries: 5
+  # Host metrics for the central Prometheus are NOT a container here: node_exporter runs as a
+  # host unit from hosts/components/pi-node-exporter/, on the LAN IP and port 9100 the
+  # cluster's `node-pi` scrape job reads. The cluster `node` scrape job uses pod discovery, so
+  # it covers the two k3s nodes and structurally cannot reach a host that runs no kubelet.
+  #
+  # NOTE for whoever adds the next node-exporter host: observability's disk and memory rules
+  # (k8s/roles/observability/files/rules/hosts.yaml) name daniel-box and daniel-server
+  # literally, one rule per host, so a new host needs its own copies there. This host has its
+  # own Pi* rules in the same file, with thresholds sized for a 456 MB box.
+# The Pi's services that the `homelab-daniel-pi` package deploys as one Compose project.
+# Entries use the field names of k8s/services.yml's entries. Every reader of the Pi's
+# services fails on a missing key, so keep it even when it is empty. The cluster templates that
+# read it are named in docs/archive/host/h5-pi-compose.md (The service list).
+compose_services:
+  # Also declares the docker-proxy-lifecycle sub-proxy (restart-only, serves autoheal).
+  - name: docker-proxy
+    use_authelia: false
+    networks:
+      - proxy
+  # Needs `depends_on: docker-proxy-lifecycle` in its service file.
+  - name: autoheal
+    use_authelia: false
+    networks:
+      # lifecycle-only: reaches docker-proxy-lifecycle (write proxy), not the broad nets
+      - lifecycle
+  # Needs `depends_on: docker-proxy` and the `proxy` network: discovery goes through the read-only
+  # proxy.
+  # Cap 128M on a 456 MB board; if RSS nears it, use a syslog forwarder, not a bigger limit.
+  - name: alloy
+    port: 12345
+    use_authelia: false
+    networks:
+      - proxy
+  # Peer keys live in ./config, which the pi-peer-backup CronJob pulls nightly.
+  - name: wg-easy
+    port: 51821
+    udp_port: 51822
+    # DECIDED: no Authelia and no PASSWORD_HASH on the Pi's wg-easy UI (accepted risk
+    # 2026-06-23); the UI binds the LAN IP. See hosts/components/pi-compose/services/wg-easy/compose.yaml.j2.
+    # LAN-only host, so the admin UI is open to anyone on the Pi's LAN (it's bound to the LAN
+    # IP, never internet-exposed or on the tunnel). To gate it, add a PASSWORD_HASH env from
+    # SOPS.
+    use_authelia: false
+    networks:
+      - proxy

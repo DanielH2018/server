@@ -21,7 +21,7 @@ Two classes, both always a mistake in this repo:
   2. A SOPS-encrypted file (e.g. `secrets/secrets.yml`) — editing the ciphertext
      corrupts it, and pasting a plaintext secret in risks committing it. You must go
      through `sops`. (`.claude/rules/secrets.md`.) Detection is CONTENT-based, not
-     path-based: `host_vars/*.yml` / `group_vars/all.yml` contain the substring
+     path-based: `hosts/<host>/vars.yml` / `group_vars/all.yml` contain the substring
      "vars/" but are PLAINTEXT and must stay editable. It keys off the SOPS integrity
      MAC field — NOT a bare ciphertext substring, so a file that merely *mentions* the
      marker (a doc, a test, this hook) is not misclassified. The MAC is a `mac:` metadata

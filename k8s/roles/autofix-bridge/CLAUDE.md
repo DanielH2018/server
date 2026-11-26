@@ -50,7 +50,7 @@ here must satisfy this summary.
 - **Mode (per actuator, explicit + reversible):** sidecar `DRY_RUN` (live, in
   `k8s/roles/autofix-bridge/templates/deployment.yaml.j2`) and fake-remux
   `FAKE_REMUX_REPLACE_MODE` (off/shadow/live, run `live` by host_vars:
-  `inventory/host_vars/daniel-box.yml:autofix_fake_remux_replace_mode`). Returning either
+  `hosts/daniel-box/vars.yml:autofix_fake_remux_replace_mode`). Returning either
   plane to report-only is one env flip, merged (the sidecar's reaches the pod through
   `promote`) or deployed (fake-remux's through daniel-box's package) — preserve that.
 - **Authoritative sources:** the *arr `/api/v3/queue` (`k8s/roles/autofix-bridge/files/autofix.py:run_once`)

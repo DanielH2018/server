@@ -37,7 +37,7 @@ process on one host shares.
 collections: import time plus parametrize time, the larger of what any worker measured, since
 under `--dist loadscope` every worker collects the whole selection.
 
-Run: uv run pytest tests/repo/test_phase_timing.py
+Run: uv run pytest tests/repo/suite/test_phase_timing.py
 """
 
 import time

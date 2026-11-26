@@ -442,7 +442,7 @@ needs no checkout, and it grades each commit against that commit's own docs and 
                           ~ precision(): also returns its (commit, unit, atom) moves
  scripts/dev/fact_status.py
 +  notice [--since REF] [--head REV] [--format text|markdown|github|json]
- tests/repo/test_census_rows_python.py
+ tests/repo/census_rows/test_census_rows_python.py
                           ~ _raw_call_offence(): also matches subprocess.Popen
  .github/workflows/ci.yml   (hooks job)
 +  step "Notice: CLAUDE.md sections citing atoms this PR moved"   (id: notice)

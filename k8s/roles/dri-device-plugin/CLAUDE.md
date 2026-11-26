@@ -3,7 +3,7 @@
 A `generic-device-plugin` DaemonSet that advertises `/dev/dri/renderD128` to the kubelet as
 the extended resource `devic.es/dri`, so jellyfin and tdarr can request GPU transcoding
 without either pod running privileged
-(`tests/services/test_dri_resource_name_agrees.py::test_the_plugin_advertises_the_name_the_consumers_request`). See repo-root `CLAUDE.md` for shared conventions.
+(`tests/services/media/test_dri_resource_name_agrees.py::test_the_plugin_advertises_the_name_the_consumers_request`). See repo-root `CLAUDE.md` for shared conventions.
 
 ## At a glance
 <!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates or containers_list entry, or the Longhorn tier lists in k8s/roles/longhorn-reconcile/defaults/main.yml. -->

@@ -10,8 +10,8 @@ metadata:
   name: jellyfin
   namespace: {{ k8s_namespace }}
 spec:
-  # The config PVC is ReadWriteOnce on single-replica Longhorn, so a rolling update deadlocks:
-  # the new pod waits for a volume the old pod has not released.
+  # The config PVC is RWO on single-replica Longhorn: a rolling update deadlocks on a volume the old
+  # pod has not released.
 {{ spec_shell('Recreate') }}
   replicas: 1
   selector:
@@ -24,31 +24,17 @@ spec:
         netpol-baseline: enforced
     spec:
 {{ pod_shell('homelab-standard') }}
-      # Pinned to the node media-data's local PV names (k8s/media-volume pins it to the same
-      # `k8s_primary_node`), so the pin moves no pod: jellyfin could run nowhere else. It is
-      # written here because the jellyfin-prepull Job copies this pod's placement and cannot read
-      # a PV's, and the renderer refuses a pre-pull for a workload that names no node.
+      # Pinned to the node media-data's PV names: the prepull Job copies this pod's placement and
+      # needs a named node.
 {{ node_affinity_required(k8s_primary_node) }}
-      # THE OTHER HALF OF THE GPU WIRING. The device plugin gets the container past the
-      # cgroup v2 device filter; this gets it past the file mode — /dev/dri/renderD128 is
-      # crw-rw---- root:render, and the container runs as uid {{ puid }}. Host-specific by
-      # nature, which is why it lives in host_vars rather than here: nothing guarantees 993
-      # elsewhere, and daniel-server joining the cluster is exactly when a hardcoded one breaks.
+      # Passes the file mode (/dev/dri/renderD128 is crw-rw---- root:render); host-specific, so it
+      # lives in host_vars.
       securityContext:
         supplementalGroups:
           - {{ hosts[k8s_primary_node].render_gid }}
-      # ── the one-time Intel → AMD conversion ───────────────────────────────────────────────
-      # The settings are elements in /config/encoding.xml, so the conversion is deterministic.
-      #
-      # It runs HERE, as an initContainer, for two reasons. Jellyfin reads this file at startup
-      # and rewrites the whole file on any admin save, so an edit made against a running pod is
-      # clobbered — this is the last moment nothing is attached. And it shares the pod, so it
-      # never contends for the ReadWriteOnce volume the way a separate Job would once the
-      # Deployment is up.
-      #
-      # Guarded on the value being `qsv` so it converges exactly once and then leaves the file
-      # alone. That is what keeps it from fighting the UI: templating the whole file would
-      # revert every setting the user changes on the next deploy.
+      # One-time Intel -> AMD edit of /config/encoding.xml, here because Jellyfin rewrites it on any
+      # admin save.
+      # Guarded on `qsv` so it converges once; templating the file would revert every UI change.
       initContainers:
         - name: convert-encoding-settings
           image: {{ jellyfin_k8s_image }}
@@ -69,46 +55,26 @@ spec:
                 echo "already converted (or never Intel) — leaving encoding.xml alone"
                 exit 0
               fi
-              # VppTonemapping is the Intel QSV VPP filter specifically and has no AMD
-              # equivalent; leaving it on asks ffmpeg for a filter this hardware cannot build.
+              # VppTonemapping is the Intel QSV VPP filter with no AMD equivalent; leaving it on
+              # asks ffmpeg for a filter this hardware cannot build.
               sed -i \
                 -e 's|<HardwareAccelerationType>qsv</HardwareAccelerationType>|<HardwareAccelerationType>vaapi</HardwareAccelerationType>|' \
                 -e 's|<EnableVppTonemapping>true</EnableVppTonemapping>|<EnableVppTonemapping>false</EnableVppTonemapping>|' \
                 "$f"
               grep -q '<HardwareAccelerationType>vaapi</HardwareAccelerationType>' "$f"
               echo "converted encoding.xml: qsv -> vaapi, VppTonemapping off"
-          # As the OWNER of /config, not as root. The LSIO image's default user is root, and
-          # `sed -i` writes a temp file in the target directory — with every capability
-          # dropped, a root process has no DAC_OVERRIDE and cannot write into a directory
-          # owned by uid {{ puid }}. The "couldn't open temporary file ... Permission denied"
-          # error reads like a read-only mount and is not one. Running as the owner needs no
-          # capability at all.
+          # Runs as the OWNER of /config, not root: with all caps dropped root has no DAC_OVERRIDE,
+          # so `sed -i`'s temp file fails with "Permission denied" (it looks like a read-only
+          # mount).
 {{ hardened_security_context(non_root=true, run_as_user=puid, run_as_group=pgid) }}
           volumeMounts:
             - name: jellyfin-config
               mountPath: /config
 {{ container_resources(cpu_limit='500m', mem_limit='128Mi', cpu_request='10m', mem_request='32Mi') }}
-          # ── Plugin allowlist sweep ──────────────────────────────────────────────────────────
-          # Removes every plugin this role does not install. Dropping an installer is not a
-          # removal: the install wrote `<Name>_<Version>` onto the jellyfin-config PVC, Jellyfin
-          # scans that directory on every start, and the read-only ServiceAccount cannot exec
-          # into the pod. An init container is the repo's only write path to the PVC, so the
-          # uninstall is one too. A dashboard install of any plugin not in KEEP does not
-          # survive a restart, which is the intended state.
-          #
-          # A plugin is a top-level `<Name>_<Version>` directory under /config/data/plugins,
-          # and the sweep keeps it when `<Name>` is in KEEP. It matches the name, not the
-          # version: each installer below owns its own versions.
-          #
-          # `configurations/` is not a plugin. It holds every plugin's settings — Media
-          # Cleaner's deletion rules, Webhook's destination — and git holds none of them, so the
-          # sweep skips it by name and never reads inside it. That also means a retired
-          # plugin's settings file outlives it, configuring nothing. Loose files are reported,
-          # not swept: Jellyfin loads plugins from directories only.
-          #
-          # It runs BEFORE the installers, so a sixth installer added without a KEEP entry
-          # costs a re-download on every start instead of losing the plugin on every start.
-          # test_jellyfin_plugin_allowlist.py holds KEEP equal to the set the installers write.
+          # Removes plugins this role does not install: Jellyfin rescans the PVC and the read-only
+          # SA cannot exec.
+          # Runs BEFORE the installers; `configurations/` is never swept;
+          # test_jellyfin_plugin_allowlist.py pins KEEP.
         - name: sweep-unlisted-plugins
           image: {{ jellyfin_k8s_plugin_init_image }}
           imagePullPolicy: IfNotPresent
@@ -120,8 +86,6 @@ spec:
               from pathlib import Path
 
               PLUGINS = Path("/config/data/plugins")
-              # The `<Name>` half of the directory each installer below writes, which is the
-              # name its meta.json declares.
               KEEP = ("Ani-Sync", "Intro Skipper", "Webhook", "Merge Versions", "Media Cleaner")
               SETTINGS = "configurations"
 
@@ -146,19 +110,10 @@ spec:
             - name: jellyfin-config
               mountPath: /config
 {{ container_resources(cpu_limit='500m', mem_limit='128Mi', cpu_request='10m', mem_request='32Mi') }}
-          # ── jellyfin-ani-sync (AniList watch-status sync) ────────────────────────────────────
-          # Installs the plugin from its published release instead of leaving it to a click in the
-          # admin dashboard, so a config PVC restored from nothing comes back with it. The
-          # plugin's SETTINGS are deliberately not managed here: the AniList OAuth token is
-          # account-specific, is written to /config/plugins/configurations/, and nothing below
-          # touches that directory.
-          #
-          # python:3.15-alpine rather than the alpine:3.24 the container above uses: the release
-          # is a .zip and /config is owned by uid {{ puid }}, so a plain alpine container would
-          # have to `apk add unzip` as root, and root here holds no DAC_OVERRIDE (see the
-          # comment above) and could not write the files it unpacked. urllib, hashlib and
-          # zipfile are stdlib, so the whole install runs as the owning uid and installs
-          # nothing at runtime.
+          # Installed from its release so a PVC restored from nothing gets it; settings (AniList
+          # OAuth token) are NOT managed.
+          # python:3.15-alpine: unzip as the owning uid (root has no DAC_OVERRIDE); stdlib only,
+          # nothing installs at runtime.
         - name: install-ani-sync
           image: {{ jellyfin_k8s_plugin_init_image }}
           imagePullPolicy: IfNotPresent
@@ -178,31 +133,23 @@ spec:
               URL = "{{ jellyfin_k8s_anisync_url }}"
               WANT_MD5 = "{{ jellyfin_k8s_anisync_md5 }}"
               DLL = "jellyfin-ani-sync.dll"
-              # /config/DATA/plugins, not /config/plugins. Jellyfin scans only the former: an
-              # install under the latter reports success with the files on disk, and GET
-              # /Plugins never lists the plugin.
+              # /config/data/plugins, not /config/plugins: Jellyfin scans only the former; an
+              # install under the latter reports success but GET /Plugins never lists it.
               PLUGINS = Path("/config/data/plugins")
-              # `<Name>_<Version>`, the layout Jellyfin's own installer writes and the one the
-              # sibling plugins on this volume use (`SSO Authentication_<version>`). Name and
-              # version are meta.json's, not ours to choose.
+              # `<Name>_<Version>` is Jellyfin's own layout; name and version are meta.json's.
               PLUGIN_DIR = PLUGINS / ("Ani-Sync_" + VERSION)
 
-              # The guard, and the reason a routine pod restart costs nothing: with the plugin
-              # in place this container opens no socket at all. The DIRECTORY is the marker —
-              # its name carries the version and it is renamed into place complete, so there is
-              # no separate marker file to disagree with what is on disk. It guards the DOWNLOAD
-              # only. Everything below the branch runs on every start, because the work that
-              # holds the pin — sweeping a superseded directory, turning autoUpdate off — is
-              # exactly what an already-installed plugin needs.
+              # The directory is the marker (its name carries the version, renamed in complete). It
+              # guards the DOWNLOAD only;
+              # sweeping superseded directories and autoUpdate off run on every start.
               if (PLUGIN_DIR / DLL).exists():
                   print("ani-sync " + VERSION + " already installed")
               else:
                   print("installing ani-sync " + VERSION + " from " + URL)
                   PLUGINS.mkdir(parents=True, exist_ok=True)
 
-                  # Staged INSIDE the plugins directory, not /tmp: same filesystem, so the swap
-                  # below is a rename rather than a cross-device copy, and a half-written plugin
-                  # directory is never visible to Jellyfin.
+                  # Staged INSIDE the plugins directory, not /tmp: same filesystem, so the swap is a
+                  # rename and a half-written directory is never visible.
                   with tempfile.TemporaryDirectory(dir=PLUGINS) as tmp:
                       archive = Path(tmp) / "plugin.zip"
                       with urllib.request.urlopen(URL, timeout=60) as response:
@@ -217,42 +164,31 @@ spec:
                       with zipfile.ZipFile(archive) as bundle:
                           bundle.extractall(staged)
 
-                      # Checked rather than assumed. An archive that extracts without raising but
-                      # carries no DLL leaves a plugin directory Jellyfin silently ignores, which
-                      # presents as "the plugin does nothing" rather than as a failed deploy.
+                      # Checked: an archive that extracts but carries no DLL leaves a directory
+                      # Jellyfin silently ignores.
                       if not (staged / DLL).exists():
                           found = sorted(path.name for path in staged.iterdir())
                           raise SystemExit("archive has no " + DLL + ": " + repr(found))
 
-                      # Renamed into place COMPLETE, only once the DLL is proven present. That is
-                      # what makes a failed install retry on the next start rather than latch: a
-                      # partial extraction never becomes a directory Jellyfin can find.
+                      # Renamed into place COMPLETE, only once the DLL is present, so a failed
+                      # install retries on the next start rather than latching.
                       if PLUGIN_DIR.is_dir():
                           shutil.rmtree(PLUGIN_DIR)
                       shutil.move(staged, PLUGIN_DIR)
 
                   print("installed ani-sync " + VERSION)
 
-              # Older builds are their OWN directories, because the name carries the version —
-              # and Jellyfin's `Update Plugins` task writes one too, dropping a NEWER build beside
-              # the pinned one seconds after startup. Swept UNCONDITIONALLY, so an unpinned copy
-              # goes on the start where the pinned version is already installed. Still swept
-              # AFTER the install above, so a failed download leaves the working version
-              # untouched.
+              # Older builds are their own directories, and `Update Plugins` drops a NEWER one
+              # beside the pinned build.
+              # Swept UNCONDITIONALLY, but AFTER the install, so a failed download keeps the working
+              # version.
               for stale in sorted(PLUGINS.glob("Ani-Sync_*")):
                   if stale != PLUGIN_DIR:
                       print("removing superseded " + stale.name)
                       shutil.rmtree(stale)
 
-              # ── and stop Jellyfin fetching a newer one ─────────────────────────────────────────
-              # The sweep above only removes an unpinned build until `Update Plugins` runs
-              # again. Jellyfin's
-              # InstallationManager.GetAvailablePluginUpdates skips a plugin whose manifest carries
-              # `autoUpdate: false` (read from Emby.Server.Implementations/Updates/
-              # InstallationManager.cs at v10.11.11), and PluginManager preserves the local value
-              # when it rewrites the manifest. The flag defaults to TRUE, so it is written on every
-              # start rather than at install: a directory on this PVC can predate this container,
-              # and the already-installed path above needs it too.
+              # autoUpdate: false stops `Update Plugins` fetching a newer build; the flag defaults
+              # to TRUE, so write it on every start.
               meta_path = PLUGIN_DIR / "meta.json"
               if meta_path.is_file():
                   meta = json.loads(meta_path.read_text())
@@ -279,7 +215,7 @@ spec:
           # ── Intro Skipper (skip-intro / skip-credits) ───────────────────────────────────────
           # A second copy of the container above rather than one loop over both plugins, and
           # deliberately so: the ani-sync installer's paths are asserted as literal strings by
-          # tests/services/test_anisync_pin_matches_server.py, and a textual guard
+          # tests/services/jellyfin/test_anisync_pin_matches_server.py, and a textual guard
           # stops seeing what it guards the moment the thing moves behind an indirection.
           # The two installs also differ where it matters — see the meta.json note below.
           #
@@ -309,11 +245,9 @@ spec:
               TARGET_ABI = "{{ jellyfin_k8s_introskipper_target_abi }}"
               GUID = "{{ jellyfin_k8s_introskipper_guid }}"
               DLL = "IntroSkipper.dll"
-              # /config/data/plugins, the only directory Jellyfin scans — the same trap the
-              # sibling container's comment records, and the same answer.
               PLUGINS = Path("/config/data/plugins")
-              # `<Name>_<Version>`, with the space Jellyfin's own installer writes. "Intro
-              # Skipper" is the name the published manifest declares.
+              # `<Name>_<Version>`, with the space Jellyfin's installer writes; "Intro Skipper" is
+              # the name the published manifest declares.
               PLUGIN_DIR = PLUGINS / ("Intro Skipper_" + VERSION)
 
               if (PLUGIN_DIR / DLL).exists():
@@ -328,9 +262,8 @@ spec:
                           with archive.open("wb") as handle:
                               shutil.copyfileobj(response, handle)
 
-                      # sha256, not the md5 the sibling install checks. Upstream's manifest
-                      # publishes an MD5, but GitHub reports a sha256 digest for the asset itself,
-                      # so the stronger one is the one that can be re-derived from the release.
+                      # sha256, not the md5: GitHub reports a sha256 for the asset itself, which can
+                      # be re-derived from the release.
                       got = hashlib.sha256(archive.read_bytes()).hexdigest()
                       if got != WANT_SHA256:
                           raise SystemExit("sha256 mismatch: got " + got + ", want " + WANT_SHA256)
@@ -343,13 +276,8 @@ spec:
                           found = sorted(path.name for path in staged.iterdir())
                           raise SystemExit("archive has no " + DLL + ": " + repr(found))
 
-                      # THE DIFFERENCE FROM ani-sync: this release ships the DLL alone, with no
-                      # meta.json. Jellyfin's LoadManifest falls back to inventing one from the
-                      # directory name when the file is missing — id becomes an MD5 of the folder
-                      # name rather than the plugin's real GUID, and targetAbi becomes whatever
-                      # server happens to be running. Writing the real manifest keeps the dashboard
-                      # entry, the config page and the plugin's own configuration directory bound
-                      # to the GUID the plugin compiles against.
+                      # No meta.json in the release: Jellyfin would invent one (id an MD5 of the
+                      # folder). Write the real manifest to bind the GUID.
                       meta = {
                           "category": "MoviesAndShows",
                           "description": "Analyzes the audio of television episodes and detects introduction sequences.",
@@ -401,19 +329,10 @@ spec:
             - name: jellyfin-config
               mountPath: /config
 {{ container_resources(cpu_limit='500m', mem_limit='128Mi', cpu_request='10m', mem_request='32Mi') }}
-          # ── Webhook (playback and library events out to HTTP endpoints) ─────────────────────
-          # A copy of the containers above rather than a loop, for the reason the Intro Skipper
-          # comment records.
-          #
-          # Closest to ani-sync of the two: the release zip carries its own meta.json, so
-          # nothing here writes one. It differs in where it comes from — repo.jellyfin.org
-          # serves a redirect to a mirror, which urllib follows, and the digest is the MD5 the
-          # official manifest publishes rather than a GitHub asset sha256.
-          #
-          # The plugin's DESTINATIONS (the Home Assistant webhook URL, the event selection, the
-          # Handlebars templates) are deliberately unmanaged, exactly as the two siblings'
-          # settings are: they live in /config/data/plugins/configurations/ and nothing here
-          # touches that directory.
+          # A copy, not a loop (see Intro Skipper). The zip carries its own meta.json; the digest is
+          # the manifest's MD5.
+          # Destinations (HA webhook URL, events, templates) are unmanaged, in
+          # /config/data/plugins/configurations/.
         - name: install-webhook
           image: {{ jellyfin_k8s_plugin_init_image }}
           imagePullPolicy: IfNotPresent
@@ -433,11 +352,8 @@ spec:
               URL = "{{ jellyfin_k8s_webhook_url }}"
               WANT_MD5 = "{{ jellyfin_k8s_webhook_md5 }}"
               DLL = "Jellyfin.Plugin.Webhook.dll"
-              # /config/data/plugins, the only directory Jellyfin scans — the same trap both
-              # sibling containers' comments record, and the same answer.
               PLUGINS = Path("/config/data/plugins")
-              # `<Name>_<Version>`, taken from the zip's own meta.json (`"name": "Webhook"`),
-              # not invented here.
+              # `<Name>_<Version>` from the zip's own meta.json ("name": "Webhook").
               PLUGIN_DIR = PLUGINS / ("Webhook_" + VERSION)
 
               if (PLUGIN_DIR / DLL).exists():
@@ -460,9 +376,8 @@ spec:
                       with zipfile.ZipFile(archive) as bundle:
                           bundle.extractall(staged)
 
-                      # This release ships seven bundled dependency DLLs beside the plugin's own,
-                      # so "the archive extracted" says very little. The plugin DLL is the one that
-                      # decides whether Jellyfin loads anything.
+                      # This release ships seven bundled dependency DLLs, so "the archive extracted"
+                      # says little; the plugin DLL decides whether Jellyfin loads anything.
                       if not (staged / DLL).exists():
                           found = sorted(path.name for path in staged.iterdir())
                           raise SystemExit("archive has no " + DLL + ": " + repr(found))
@@ -505,20 +420,8 @@ spec:
             - name: jellyfin-config
               mountPath: /config
 {{ container_resources(cpu_limit='500m', mem_limit='128Mi', cpu_request='10m', mem_request='32Mi') }}
-          # ── Merge Versions (duplicate quality versions collapsed into one entry) ────────────
-          # A copy of the containers above rather than a loop, for the reason the Intro Skipper
-          # comment records.
-          #
-          # Intro Skipper's shape, not Webhook's. The release zip holds
-          # Jellyfin.Plugin.MergeVersions.dll and nothing else — no meta.json — so this
-          # container writes the manifest itself from the guid, name and targetAbi in
-          # defaults/main.yml. Jellyfin's LoadManifest otherwise invents one from the directory
-          # name, which sets the id to an MD5 of the folder rather than the plugin's real GUID
-          # and turns AutoUpdate off.
-          #
-          # The plugin's SETTINGS — which libraries it scans, and whether it merges on a
-          # schedule — are deliberately unmanaged, exactly as the three siblings' are: they live
-          # in /config/data/plugins/configurations/ and nothing here touches that directory.
+          # A copy, not a loop. Intro Skipper's shape: the zip holds the DLL alone, so this writes
+          # the manifest. Settings unmanaged.
         - name: install-merge-versions
           image: {{ jellyfin_k8s_plugin_init_image }}
           imagePullPolicy: IfNotPresent
@@ -540,13 +443,9 @@ spec:
               TARGET_ABI = "{{ jellyfin_k8s_mergeversions_target_abi }}"
               GUID = "{{ jellyfin_k8s_mergeversions_guid }}"
               DLL = "Jellyfin.Plugin.MergeVersions.dll"
-              # /config/data/plugins, the only directory Jellyfin scans — the same trap all
-              # three sibling containers' comments record, and the same answer.
               PLUGINS = Path("/config/data/plugins")
-              # `<Name>_<Version>`, with the space Jellyfin's own installer writes. "Merge
-              # Versions" is the name the published manifest declares, and it is the name the
-              # meta.json written below carries — the two must agree or the dashboard entry and
-              # the directory describe different plugins.
+              # "Merge Versions" is the manifest's name and must agree with the meta.json written
+              # below, or the dashboard entry and directory describe different plugins.
               PLUGIN_DIR = PLUGINS / ("Merge Versions_" + VERSION)
 
               if (PLUGIN_DIR / DLL).exists():
@@ -561,9 +460,8 @@ spec:
                           with archive.open("wb") as handle:
                               shutil.copyfileobj(response, handle)
 
-                      # sha256, as Intro Skipper's install checks. Upstream's published manifest
-                      # carries an MD5; GitHub reports a sha256 for the asset itself, so the
-                      # stronger digest is the one that can be re-derived from the release.
+                      # sha256, as Intro Skipper's install: GitHub reports one for the asset, which
+                      # can be re-derived from the release.
                       got = hashlib.sha256(archive.read_bytes()).hexdigest()
                       if got != WANT_SHA256:
                           raise SystemExit("sha256 mismatch: got " + got + ", want " + WANT_SHA256)
@@ -576,10 +474,8 @@ spec:
                           found = sorted(path.name for path in staged.iterdir())
                           raise SystemExit("archive has no " + DLL + ": " + repr(found))
 
-                      # THE DIFFERENCE FROM Webhook, and the reason this container imports json at
-                      # all: the release ships the DLL alone. Writing the real manifest keeps the
-                      # dashboard entry, the config page and the plugin's configuration directory
-                      # bound to the GUID the plugin compiles against.
+                      # This container imports json because the release ships the DLL alone; the
+                      # real manifest binds the entry to the plugin's GUID.
                       meta = {
                           "category": "General",
                           "description": "Merge all repeated movies and episodes in your library into one",
@@ -631,23 +527,10 @@ spec:
             - name: jellyfin-config
               mountPath: /config
 {{ container_resources(cpu_limit='500m', mem_limit='128Mi', cpu_request='10m', mem_request='32Mi') }}
-          # ── Media Cleaner (rule-based deletion of watched media) ────────────────────────────
-          # A copy of the containers above rather than a loop, for the reason the Intro Skipper
-          # comment records.
-          #
-          # Webhook's shape, not Intro Skipper's — the zip carries its own meta.json, so nothing
-          # here writes one. What is unusual is the PLUGIN VERSION: its fourth segment encodes
-          # the server ABI, because one upstream release tag ships three per-ABI assets and the
-          # published manifest publishes each as its own version. defaults/main.yml explains the
-          # encoding; the test re-derives it from the targetAbi.
-          #
-          # THIS PLUGIN DELETES MEDIA FILES. The install is all this container owns: which
-          # libraries it may delete from, and every rule that decides what goes, are plugin
-          # configuration under /config/data/plugins/configurations/ — a directory nothing here
-          # touches, exactly as the four siblings leave their own settings alone. That matters
-          # more here than for them. It also means the sweep below is safe against a
-          # dashboard-installed copy: the configuration lives outside the plugin directory, so
-          # removing a differently-named directory loses no rules.
+          # A copy, not a loop. Webhook's shape; the version's fourth segment encodes the ABI
+          # (defaults/main.yml).
+          # THIS PLUGIN DELETES MEDIA: this container owns only the install; rules live outside the
+          # plugin directory.
         - name: install-media-cleaner
           image: {{ jellyfin_k8s_plugin_init_image }}
           imagePullPolicy: IfNotPresent
@@ -667,18 +550,13 @@ spec:
               URL = "{{ jellyfin_k8s_mediacleaner_url }}"
               WANT_SHA256 = "{{ jellyfin_k8s_mediacleaner_sha256 }}"
               DLL = "MediaCleaner.dll"
-              # The release ships MediaCleaner.Core.dll beside the plugin's own, and the plugin
-              # does not load without it — so both are checked rather than just the one whose
-              # name Jellyfin matches.
+              # The release ships MediaCleaner.Core.dll beside the plugin's own and the plugin does
+              # not load without it, so both are checked.
               DEP_DLL = "MediaCleaner.Core.dll"
-              # /config/data/plugins, the only directory Jellyfin scans — the same trap all four
-              # sibling containers' comments record, and the same answer.
               PLUGINS = Path("/config/data/plugins")
-              # `<Name>_<Version>`, taken from the zip's own meta.json (`"name": "Media
-              # Cleaner"`), not invented here. This is also the name Jellyfin's own dashboard
-              # installer wrote, so on the volume that already carries a dashboard-installed
-              # copy at the pinned version the guard below matches and this container opens no
-              # socket at all.
+              # `<Name>_<Version>` from the zip's meta.json; it matches the dashboard installer's
+              # name, so a dashboard-installed copy at the pinned version makes the guard match and
+              # nothing downloads.
               PLUGIN_DIR = PLUGINS / ("Media Cleaner_" + VERSION)
 
               if (PLUGIN_DIR / DLL).exists():
@@ -693,9 +571,8 @@ spec:
                           with archive.open("wb") as handle:
                               shutil.copyfileobj(response, handle)
 
-                      # sha256, the digest GitHub reports for the asset. Upstream's published
-                      # manifest carries an MD5; the stronger digest is the one that can be
-                      # re-derived from the release itself.
+                      # sha256, the digest GitHub reports; the manifest carries an MD5, and the
+                      # stronger digest can be re-derived from the release.
                       got = hashlib.sha256(archive.read_bytes()).hexdigest()
                       if got != WANT_SHA256:
                           raise SystemExit("sha256 mismatch: got " + got + ", want " + WANT_SHA256)
@@ -717,13 +594,7 @@ spec:
 
                   print("installed media-cleaner " + VERSION)
 
-              # Older builds are their OWN directories, because the name carries the version —
-              # and Jellyfin's `Update Plugins` task writes one too, dropping a NEWER build beside
-              # the pinned one seconds after startup. Swept UNCONDITIONALLY, so an unpinned copy
-              # goes on the start where the pinned version is already installed. Still swept
-              # AFTER the install above, so a failed download leaves the working version
-              # untouched.
-              # Two directories here would mean two rule engines deleting from one library.
+              # Two directories would mean two rule engines deleting from one library.
               for stale in sorted(PLUGINS.glob("Media Cleaner_*")):
                   if stale != PLUGIN_DIR:
                       print("removing superseded " + stale.name)
@@ -768,58 +639,28 @@ spec:
           volumeMounts:
             - name: jellyfin-config
               mountPath: /config
-            # BOTH media mounts are read-only: jellyfin only READS the library. SaveLocalMetadata
-            # is off in every library, artwork and trickplay live in /config, and every writer
-            # has its own mount. This caps the blast radius of the one internet-facing,
-            # Authelia-less media parser.
-            #
-            # subPath `media`, NOT the volume root. The *arrs mount the WHOLE tree at /data
-            # because their databases store /data/media/tv/... and they hardlink from
-            # /data/torrents. jellyfin's own mount is one level DEEPER, so its library paths are
-            # /data/tv and /data/movies with no `media` component. Mounting the root puts
-            # /data/media and /data/torrents in front of it, the libraries point at paths that
-            # do not exist, and every playback fails with an IO error on /data/tv/... while the
-            # pod stays Ready and the UI lists the whole library from its database.
+            # BOTH mounts read-only: jellyfin only reads, which caps the blast radius of the
+            # Authelia-less parser.
+            # subPath `media`, NOT the root: libraries are /data/tv and /data/movies; the root
+            # breaks every playback.
             - name: media
               mountPath: /data
               subPath: media
               readOnly: true
-            # THE SAME TREE AGAIN, DELIBERATELY. janitorr mounts the
-            # data root at /data and hands Jellyfin a leaving-soon dir of /data/media/leaving-soon,
-            # whose symlink TARGETS are /data/media/tv/... — those resolve only if /data/media/*
-            # exists in THIS namespace too. Reproduce it; do not tidy it. Moving the libraries
-            # instead would mean editing paths in Jellyfin's own database.
-            # Same subPath again, at the deeper path, which lands the media directory on top
-            # of the real `media` subdirectory that already exists inside it.
+            # THE SAME TREE AGAIN, on purpose: janitorr's leaving-soon symlink targets are
+            # /data/media/tv/...; do not tidy it.
             - name: media
               mountPath: /data/media
               subPath: media
               readOnly: true
-            # THE WHOLE CACHE, off Longhorn — not just the transcode scratch. TranscodingTempPath
-            # is unset in encoding.xml, so Jellyfin's default <cache>/transcodes lands inside this
-            # emptyDir and the write-heavy scratch stays on node storage.
-            #
-            # Every byte under /config/cache is derived and Jellyfin rebuilds it, but it churns
-            # constantly, and Longhorn backs up allocated device BLOCKS rather than live files —
-            # so a cache that deletes and rewrites itself leaves freed-but-never-discarded blocks
-            # behind, which the weekly backup then ships forever. The durable library —
-            # /config/data, /config/*.xml — stays on the PVC.
-            #
-            # Losing this on a pod move is intended and costs a rebuild, nothing more.
+            # THE WHOLE CACHE, off Longhorn: Longhorn backs up allocated BLOCKS, so a self-rewriting
+            # cache leaves freed blocks the weekly backup ships forever. TranscodingTempPath is
+            # unset, so transcodes land here too.
             - name: jellyfin-cache
               mountPath: /config/cache
-          # Both probes set timeoutSeconds explicitly. Kubernetes defaults it to 1s, which
-          # counts any /health slower than one second as a failure — and the two probes fail
-          # into different symptoms, so both matter. Readiness owns the OUTAGE: it runs every
-          # 10s, and once it trips the Deployment has no ready endpoint, Traefik drops the
-          # `jellyfin` router entirely, and every request to the hostname returns 404 rather
-          # than 503. Liveness owns the RESTART: three failures 30s apart kill the container
-          # with exit 137.
-          #
-          # /health answers in 1.5ms on an idle server, so 1s is not marginal at rest — but a
-          # library scan or a transcode can plausibly cross it, and 5s costs nothing when the
-          # endpoint is healthy. A wedged process still gets recycled by a longer timeout, just
-          # one probe period later.
+          # Explicit timeoutSeconds (default 1s): a readiness trip drops the Traefik router (404,
+          # not 503);
+          # three liveness failures at 30s restart the container. 5s costs nothing when healthy.
           readinessProbe:
             httpGet:
               path: /health
@@ -829,7 +670,7 @@ spec:
             timeoutSeconds: 5
 {# DECIDED: no startupProbe; its case is a first-boot DOCKER_MODS install, which this image does
    not run, and the liveness initialDelaySeconds covers a measured 60s boot. #}
-          # start-up on a slow or post-update boot runs a library scan and hardware-init before
+          # Start-up on a slow or post-update boot runs a library scan and hardware-init before
           # /health answers.
           livenessProbe:
             httpGet:
@@ -838,8 +679,7 @@ spec:
             initialDelaySeconds: 90
             periodSeconds: 30
             timeoutSeconds: 5
-          # Extended resources must request exactly what they limit — Kubernetes rejects a
-          # mismatch, and omitting the request entirely defaults it to the limit anyway.
+          # Extended resources must request exactly what they limit; Kubernetes rejects a mismatch.
 {{ container_resources(cpu_limit=jellyfin_k8s_cpu_limit, mem_limit=jellyfin_k8s_mem_limit, cpu_request=jellyfin_k8s_cpu_request, mem_request=jellyfin_k8s_mem_request, extra=jellyfin_k8s_dri_resource) }}
       volumes:
         - name: jellyfin-config

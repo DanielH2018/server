@@ -18,6 +18,7 @@ from pathlib import Path
 
 from deploy_tools.land_lib import health_gate as notify_mod
 from lib import snapshot_uv
+from lib.inventory_lists import host_vars_file
 
 
 def _result(returncode, stdout="", stderr=""):
@@ -30,7 +31,7 @@ def _k8s_tools(run):
 
 def _k8s_inventory(root, tag):
     """Write a checkout whose ONLY service list entry is `tag`."""
-    (root / "inventory" / "host_vars").mkdir(parents=True)
+    (root / "hosts").mkdir(parents=True)
     (root / "k8s").mkdir()
     (root / "k8s" / "services.yml").write_text(f"containers_list:\n  - name: {tag}\n")
 
@@ -107,9 +108,9 @@ def test_a_pi_compose_service_tag_probes_the_pi_alone(tmp_path):
     DaemonSet's ready pods cannot answer for the Pi's container.
     """
     _k8s_inventory(tmp_path, "loki-homelab")
-    (tmp_path / "inventory" / "host_vars" / "daniel-pi.yml").write_text(
-        "compose_services:\n  - name: alloy\n"
-    )
+    pi_vars = host_vars_file("daniel-pi", tmp_path / "hosts")
+    pi_vars.parent.mkdir()
+    pi_vars.write_text("compose_services:\n  - name: alloy\n")
     seen = []
 
     def run(argv, **kwargs):
@@ -129,7 +130,7 @@ def test_a_tag_no_tree_declares_still_probes_k8s_first(tmp_path):
     Same call with an inventory that declares nothing -- `set()` keeps the old order, k8s then
     `--docker`, which is what a block tag reaching the gate relies on.
     """
-    (tmp_path / "inventory" / "host_vars").mkdir(parents=True)
+    (tmp_path / "hosts").mkdir(parents=True)
     seen = []
 
     def run(argv, **kwargs):

@@ -1,7 +1,4 @@
 {% from 'service.yml.j2' import service with context %}
 ---
-# THE NAME IS LOAD-BEARING. prowlarr's seeded database stores the FlareSolverr URL as
-# `http://flaresolverr:8191`. A Service called anything else
-# leaves prowlarr reporting an ordinary connection failure against every Cloudflare-protected
-# indexer — the same class of trap as freshrss's feed-cache.
+# The name is load-bearing: prowlarr's seeded database stores http://flaresolverr:8191.
 {{ service('flaresolverr', prowlarr_k8s_flaresolverr_port) -}}

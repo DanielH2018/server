@@ -19,8 +19,7 @@ from pathlib import Path
 
 LABEL_FILE = ".claim"
 
-# A banner line names several sessions; a label longer than this pushes the changed-paths
-# list off the line it shares.
+# A longer label pushes the changed-paths list off the banner line.
 MAX_LABEL_CHARS = 80
 
 # The prefixes Claude Code gives a worktree it named itself.

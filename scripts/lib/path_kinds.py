@@ -16,12 +16,12 @@ def is_test_only_path(path: str) -> bool:
     Two shapes. The directory shape is the one the tree uses: `tests/` holds the
     repo-wide guards plus `_helpers.py`, which matches no name pattern at all, and every other
     suite sits in a role-local or per-script-directory `tests/`, a layout
-    `tests/repo/test_testpaths_covers_every_test_file.py` enforces. The name shape,
+    `tests/repo/suite/test_testpaths_covers_every_test_file.py` enforces. The name shape,
     a `test_*.py` or `conftest.py` wherever it sits, covers `scripts/conftest.py` and a test a
     session adds beside code before that guard catches it.
 
     The invariant this rests on: no role copies a test file to a host. The
-    `no-role-ships-a-pytest-file` row of `tests/repo/test_census_rows_roles.py` guards
+    `no-role-ships-a-pytest-file` row of `tests/repo/census_rows/test_census_rows_roles.py` guards
     it, so a role that starts shipping one fails there rather than widening this predicate.
     """
     if path.startswith("tests/"):

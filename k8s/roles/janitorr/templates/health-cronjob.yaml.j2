@@ -1,23 +1,9 @@
 {% from 'container-resources.yml.j2' import job_container_resources with context %}
 {% from 'security-context.yml.j2' import job_hardened_security_context with context %}
-{#
-  The janitorr error health reader, every 10 minutes: read the running janitorr pod's start
-  time and, past the startup grace, count the cleanup errors in its log, then record the
-  verdict as a log line and on the verdict ConfigMap's annotations
-  (health-verdict-configmap.yaml.j2).
-
-  Two containers, because the reader is Python and kubectl ships in neither image alone. The
-  init container copies kubectl out of alpine/k8s into an emptyDir, and the reader runs it from
-  there with the pod's own ServiceAccount (health-rbac.yaml.j2) as its credential. That is why
-  this pod mounts its ServiceAccount token.
-
-  The labels are `app: janitorr-health`, never `app: janitorr`. The reader and tasks/verify.yml
-  both take the first Running pod labelled `app=janitorr`, so that label here could make either
-  read this pod instead of janitorr's.
-
-  No gate Job: janitorr's defaults declare no `flux_cronjob_gates`, so `janitorr-verify` runs no
-  copy of this CronJob.
-#}
+{# The Python reader and kubectl ship in neither image alone: the init container copies kubectl from
+   alpine/k8s.
+   Label `app: janitorr-health`, never `app: janitorr`: the reader and verify.yml pick the first
+   Running app=janitorr pod. #}
 ---
 apiVersion: batch/v1
 kind: CronJob
@@ -83,8 +69,7 @@ spec:
                 # The ConfigMap the verdict is also written to (health-verdict-configmap.yaml.j2).
                 - name: JANITORR_VERDICT_CONFIGMAP
                   value: "{{ janitorr_k8s_health_verdict_configmap }}"
-                # kubectl's discovery cache goes under $HOME, and the root filesystem is
-                # read-only.
+                # kubectl's discovery cache goes under $HOME and the root filesystem is read-only.
                 - name: HOME
                   value: /tmp
                 # The ConfigMap mount is read-only, so Python cannot write __pycache__ there.

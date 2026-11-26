@@ -249,7 +249,7 @@ def test_path_is_denied_blocks_secrets(rel):
     [
         "deploy.yml",
         "roles/containers/traefik/templates/config.yml.j2",
-        "inventory/host_vars/daniel-server.yml",
+        "hosts/daniel-server/vars.yml",
         "README.md",
     ],
 )
@@ -312,7 +312,7 @@ def test_resolve_within_jail_allows_benign_symlink(tmp_path):
 
 def test_allowed_hosts_and_origins():
     hosts, origins = allowed_hosts_and_origins("mcp.local.example.com")
-    # Exact match, not `in`: see tests/repo/test_census_rows_python.py (row `no-host-shaped-membership-literal`)
+    # Exact match, not `in`: see tests/repo/census_rows/test_census_rows_python.py (row `no-host-shaped-membership-literal`)
     assert any(h == "mcp.local.example.com" for h in hosts)
     assert origins == ["https://mcp.local.example.com"]
     assert allowed_hosts_and_origins("") == ([], [])

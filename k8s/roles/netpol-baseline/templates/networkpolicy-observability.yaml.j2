@@ -57,7 +57,7 @@ spec:
         # Intra-namespace: grafana -> prometheus/loki/tempo, prometheus -> kube-state-metrics /
         # the otel collector. This bare selector leans on the namespace being SOLE-TENANT:
         # observability is the only role that renders into it (guarded by
-        # tests/k8s/test_rendered_properties.py). A second role landing in the namespace would
+        # tests/k8s/rendered_properties/test_rendered_properties.py). A second role landing in the namespace would
         # get free ingress to every already-fenced pod here with no policy change of its own.
         # Enumerating each workload's pairwise edges would add review surface without adding a
         # boundary; the boundary that matters is the namespace edge. A bare podSelector means

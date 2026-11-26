@@ -111,7 +111,7 @@ is escaped. `tests/_k8s_render.py:rendered_docs` reads `render_tag`'s output, wh
 holds no vendored file, so the fleet guards never read them. H1's *Vendored upstream manifests*
 (`docs/archive/host/h1-cluster-config-to-flux.md`) says why that is accepted. The
 one exception is the per-container resources guard in
-`tests/k8s/test_namespace_resource_defaults.py`, which reads each vendored workload with its
+`tests/k8s/workloads/test_namespace_resource_defaults.py`, which reads each vendored workload with its
 patches applied.
 
 A placeholder render with `--role` also writes the publish bundle, `DIR/flux/` and
@@ -195,7 +195,7 @@ A role's templates render with these variables:
   in the list therefore does not matter: an ordering no template carries goes in
   `depends_on:` on the entry;
 - `container_item`, the tag's own entry from that list;
-- `hosts`, one entry per `inventory/host_vars/` file, holding that host's literal
+- `hosts`, one entry per `hosts/<host>/vars.yml`, holding that host's literal
   `server_ip`, `compose_services`, `claude_agent_ssh_login_enabled`, `ssh_host_ed25519_key`,
   `render_gid` and `claude_code_triage_enabled` (`scripts/lib/render_context.py:_hosts`). `group_vars`' `k8s_pi_client_ip` reads
   `hosts['daniel-pi'].server_ip`, so it is daniel-pi's address, not daniel-box's.
@@ -440,7 +440,7 @@ transform of the key.
   bound it to a literal container, a length test in an `{% if %}`. A value alias passes none
   of the three.
 - **Role defaults and inventory name no key.** A Jinja string in
-  `k8s/roles/*/defaults/main.yml`, `inventory/group_vars/` or `inventory/host_vars/` that
+  `k8s/roles/*/defaults/main.yml`, `inventory/group_vars/` or `hosts/<host>/vars.yml` that
   names a secret key, bare or through a literal `vars` lookup, is a violation, and so is a
   non-literal `vars` lookup there. A template reads a key by its own name, so no template
   sees an alias it did not bind itself
@@ -785,7 +785,7 @@ installed in an xdist worker would outlive the test.
 
 The same subprocess sets `sys.modules['ansible'] = None`, so `import ansible` raises wherever the
 renderer reaches for it, and the four modules together render every tag that way.
-`tests/repo/test_ansible_core_census.py` reads every tracked Python file for an import of
+`tests/repo/census_rows/test_ansible_core_census.py` reads every tracked Python file for an import of
 `ansible`, executed or not, which holds the validator and the host packages to the same rule.
 
 In CI, each module writes one `digest_line` per directory it rendered to two places. Each

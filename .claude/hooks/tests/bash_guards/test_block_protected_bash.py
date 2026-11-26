@@ -52,7 +52,7 @@ CLEAN_WRITES = [
     "echo x > /tmp/scratch.txt",
     "sed -i s/a/b/ README.md",
     "cat secrets/secrets.yml",
-    "echo x >> inventory/host_vars/daniel-box.yml",
+    "echo x >> hosts/daniel-box/vars.yml",
     "echo x >> docs/reference/topology.md",
     "grep -n 'sed -i secrets/secrets.yml' notes.md",
 ]

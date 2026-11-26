@@ -130,5 +130,5 @@ configarr. Do not re-propose these.
 inventory file sets them, so the `default(5)` in
 `hosts/components/fake-remux/templates/fake-remux.config.env.j2` applies to both.
 `autofix_fake_remux_replace_mode` (off/shadow/live) gates the reconciler, and
-`inventory/host_vars/daniel-box.yml` sets it. `autofix_fake_remux_policy`, also in that
+`hosts/daniel-box/vars.yml` sets it. `autofix_fake_remux_policy`, also in that
 host_vars file, is the git-tracked selection-policy dict rendered to `policy.json`.

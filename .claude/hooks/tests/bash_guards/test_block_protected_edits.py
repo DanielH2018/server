@@ -7,7 +7,7 @@ The guard denies two classes of direct edit that are always a mistake here:
   2. a SOPS-encrypted file — editing ciphertext corrupts it / risks committing a
      plaintext secret; you must go through `sops`.
 
-The SOPS check is CONTENT-based, not path-based: `host_vars/*.yml` and
+The SOPS check is CONTENT-based, not path-based: `hosts/<host>/vars.yml` and
 `group_vars/all.yml` contain the substring "vars/" but are PLAINTEXT and must stay
 editable, so the guard keys off the file's actual `ENC[AES256_GCM` markers.
 

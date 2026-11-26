@@ -76,7 +76,7 @@ configarr_k8s_health_deadline_seconds: 420
 # How long a finished configarr-health Job, and so its pod, stays visible. A run the weekly reboot
 # interrupts fails, and without a TTL it reads Failed until two later runs fail.
 # 30 minutes clears it inside the hour after boot
-# (tests/k8s/test_reboot_window_cronjobs_age_out.py); the run's output is in Loki past that.
+# (tests/k8s/flux/test_reboot_window_cronjobs_age_out.py); the run's output is in Loki past that.
 configarr_k8s_health_job_ttl_seconds: 1800
 
 configarr_k8s_health_cpu_limit: "200m"

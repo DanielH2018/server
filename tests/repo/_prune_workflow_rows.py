@@ -10,7 +10,7 @@ from _promote_workflow import PROMOTE_REF, REF_GUARD
 from _row_table import Census, Subject, tracked
 from _workflow_rows import PROMOTE, checkouts, condition, jobs, judge, load, mutants
 from _workflow_rows import report_job_problems, steps, triggers
-from test_promote_workflow_retry import LOAD_RETRY
+from _workflow_rows import LOAD_RETRY
 
 PRUNE = ".github/workflows/prune-artifacts.yml"
 PRUNE_PERMISSIONS = {"contents": "read", "packages": "write"}

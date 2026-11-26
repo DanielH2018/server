@@ -24,14 +24,14 @@ ROOT_RETRY_S = 60
 # interval. test_chained_timeout.py fails a flag the flux role adds.
 REQUEUE_DEPENDENCY_S = 30
 # Workers kustomize-controller reconciles at once; a changed set larger than this queues in rounds.
-# tests/k8s/test_flux_role.py fails a drift from `k8s_rollout_batch_width` plus one.
+# tests/k8s/workloads/test_flux_role.py fails a drift from `k8s_rollout_batch_width` plus one.
 CONCURRENT = 5
 # The ceiling of every derived timeout, 5.5 hours. GitHub stops a hosted job at 6 hours, and a
 # `verify` stopped by its job limit leaves no verdict, so `settle` writes `<T> unverified`,
 # which names no Kustomization. Capping here makes `verify` print `failed` first, naming the
 # names (d4-ordering.md, *The cap*). The three workflow limits are sized from this figure
 # (the `promote-verify-timeout-holds-the-capped-derived-timeout` row of
-# tests/repo/test_census_rows_workflows.py).
+# tests/repo/census_rows/test_census_rows_workflows.py).
 # DECIDED: the clamp stands although the published bundle's all-changed chain is past it
 # (#5868: 38172s with 128 Kustomizations, soak included, against 19800s). `verify`'s own wait is the same
 # `promote_timeout`, so it stops at this cap too. Lifting only the soak's rendered wait would

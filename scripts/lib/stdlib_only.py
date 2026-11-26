@@ -54,21 +54,16 @@ from lib.repo_paths import K8S_ROLES, REPO, ROLE_MODULES
 HOOKS = REPO / ".claude" / "hooks"
 WORKFLOWS = REPO / ".github" / "workflows"
 WAIT_SOURCES = REPO / ".claude" / "wait-sources"
-# Modules a hook imports from outside the tree: `_claude_guard.py` inserts the dotfiles
-# directory that holds them.
+# Modules a hook imports from outside the tree: `_claude_guard.py` inserts the dotfiles directory.
 OUT_OF_TREE = frozenset({"claude_guard", "claude_worktree"})
-# The fan-out legs `uv run --no-project` runs whose command line is built in Python, as
-# (entry, argv): `launch.review_command` runs `fanout.py review`, and
-# `clean.remote_clean_command` runs `fanout.py place clean-one`. `notify.stop_post` runs
-# `fanout_lib/notify.py` directly, with no subcommand.
+# Fan-out legs run by `uv run --no-project` whose command line is built in Python, as (entry, argv).
 _DEV = REPO / "scripts" / "dev"
 FANOUT_UNITS = (
     (_DEV / "fanout.py", ("review",)),
     (_DEV / "fanout.py", ("place", "clean-one")),
     (_DEV / "fanout_lib" / "notify.py", ()),
 )
-# The weekly etcd restore drill runs this gate under `uv run --no-project` when the checkout has
-# no `.venv` (`scripts/backup/etcd_restore_drill.sh`'s `GATE_CMD`), as (entry, argv).
+# Run under `uv run --no-project` when the checkout has no `.venv`, as (entry, argv).
 RUNBOOK_UNITS = (
     (REPO / "scripts" / "deploy_tools" / "runbook_gates.py", ("etcd-restore",)),
 )

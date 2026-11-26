@@ -29,7 +29,7 @@ recovered by *Recovering Flux by hand*.
 
 Renovate opens a manual PR for a new `fluxcd/flux2` release, because its hosted app can bump
 `flux_version` but cannot run `flux install`. The PR is finished by regenerating the vendored
-file at the new release. Until then, the header test in `tests/k8s/test_flux_role.py`
+file at the new release. Until then, the header test in `tests/k8s/workloads/test_flux_role.py`
 fails, because the file's first line still names the old release. Land the finished PR with
 `land.sh`; `promote` publishes it, and the Kustomization `flux` rolls the controllers. A
 release that breaks the controllers is the first branch of *Recovering Flux by hand*.
@@ -426,7 +426,7 @@ ClusterRole `flux-view-flux-system` carries the label
 `watch` on six Flux API groups to `view`, which that identity binds. No change to
 `k3s_readonly_crd_api_groups` is needed. The operator accepted the aggregation on 2026-10-12.
 
-Two guards in `tests/k8s/test_aggregated_clusterroles.py` keep the grant from
+Two guards in `tests/k8s/rbac/test_aggregated_clusterroles.py` keep the grant from
 widening unseen. Every ClusterRole that aggregates into `view`, `edit` or `admin` must be on
 that module's allowlist with a reason. `flux-view-flux-system` must stay read-only on exactly
 its six groups, so a Flux upgrade that widens it fails CI.
@@ -647,7 +647,7 @@ to fetch the commit that fixes it. In this order:
   owner would stay on every field, and a later commit that removed one would never take
   effect.
 
-The `recovery-*` rows of `tests/repo/test_runbook_rules.py` fail this section on a suspend
+The `recovery-*` rows of `tests/repo/census_rows/test_runbook_rules.py` fail this section on a suspend
 or a resume without `--field-manager=homelab-operator`, on a server-side apply without
 `--force-conflicts`, and on a hand-apply branch whose apply precedes its `DEPLOY_HOLD` step.
 
@@ -813,7 +813,7 @@ Every hand apply in steps 3, 5, 6 and 9 is
 file. That is the root's own field manager, so the root and the `flux` tag adopt each object
 without a conflict.
 
-The `bootstrap-*` rows of `tests/repo/test_runbook_rules.py` fail this section when the
+The `bootstrap-*` rows of `tests/repo/census_rows/test_runbook_rules.py` fail this section when the
 root's apply comes before the restore step, when a hand apply lacks
 `--field-manager=kustomize-controller`, and when a step names `reset_to_last_good` without its
 condition and the recorded exception. They also refuse, on any line of the section, fenced
@@ -1350,7 +1350,7 @@ only after its dependencies finish, so the wait sums four terms, with the soak b
 The root `homelab`'s 5-minute `timeout` is the floor of the first two terms. The flux role
 leaves `--requeue-dependency` at its default, and
 `scripts/deploy_tools/tests/promote/test_chained_timeout.py` fails a vendored install or role default
-that sets it. `tests/k8s/test_flux_role.py` holds `chained_timeout.CONCURRENT` equal to
+that sets it. `tests/k8s/workloads/test_flux_role.py` holds `chained_timeout.CONCURRENT` equal to
 the `--concurrent` the role renders, less the soak's worker.
 A `dependsOn` naming a Kustomization the bundle does not hold, or a cycle, fails `verify`
 with no verdict, and `settle` holds it as `<T> unverified`.
@@ -1360,7 +1360,7 @@ with no verdict, and `settle` holds it as `<T> unverified`.
 `<T> unverified`, which names no Kustomization. At the cap `verify` prints `failed` with the
 names that never passed, and `settle` writes that hold like any other timeout. Three limits
 are sized from the cap, and the `promote-verify-*` and `promote-job-timeout-*` rows of
-`tests/repo/test_census_rows_workflows.py` hold them against each other:
+`tests/repo/census_rows/test_census_rows_workflows.py` hold them against each other:
 
 | Limit | Value | Why |
 |---|---|---|
@@ -1422,7 +1422,7 @@ and no tag, so the first decryption of the cluster file gets a revision of its o
 branches pass `--all-images`, because the `images` job refuses a render without
 `images/tags.json` and `publish` needs that job (#5593).
 The `promote-render-no-tag-branch-renders-the-shared-kinds` row of
-`tests/repo/test_census_rows_workflows.py` fails a no-tag branch without
+`tests/repo/census_rows/test_census_rows_workflows.py` fails a no-tag branch without
 `--shared-only` or `--all-images`.
 
 After the census, the step `ciphertext` runs `cluster_vars.py check --ciphertext-only` on
@@ -1506,7 +1506,7 @@ placeholder gets both fields, one without gets neither and keeps `${HOME}` as wr
 
 The renderer generates every `dependsOn` from its own dependency map, and no template
 writes one. The `no-template-hand-writes-depends-on` row of
-`tests/repo/test_census_rows_text.py` fails a template that does.
+`tests/repo/census_rows/test_census_rows_text.py` fails a template that does.
 `scripts/renderer/renderer_lib/cluster.py:bundle_ordering` builds the map with `build_k8s_dep_map` over the full k8s
 `containers_list`, so a `--role` render gives a tag
 the same toposort edges as a full one. The `<tag>-deferred` edges come from the tags the

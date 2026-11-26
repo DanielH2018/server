@@ -46,9 +46,8 @@ JOB_KIND = "homelab/job-kind"
 RERUN_SAFE = "homelab/rerun-safe"
 ROLE_DIGEST8 = "homelab/role-digest8"
 GATE_INFIX = "-deploy-gate-"
-# The Job controller names a pod `<job>-<5 characters>` and truncates the base past 58
-# characters, the trailing `-` included. `pull-pi-peers.sh` recognises a gate run by its pod
-# name's prefix, so a longer Job name would break that match.
+# The Job controller truncates the base name past 58 characters; `pull-pi-peers.sh` matches a gate
+# run by pod-name prefix.
 MAX_NAME = 57
 
 

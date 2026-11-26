@@ -24,20 +24,14 @@ spec:
     spec:
       # No fsGroup: the LSIO image chowns /config itself on startup.
 {{ pod_shell('homelab-best-effort') }}
-      # Pinned to daniel-box: CPU-bound builds and language
-      # servers run there, and the pre-pull Job copies this placement, so a required affinity
-      # guarantees the image is pulled onto the node the pod runs on.
+      # Pinned to daniel-box; the pre-pull Job copies this placement, so the image is pulled onto
+      # the node the pod runs on.
 {{ node_affinity_required(k8s_primary_node) }}
-      # First boot only: copies the four keepers onto the backed-up claim. It has to run here, before the workload's subPath mounts land, because those mounts
-      # shadow the originals: once /config/workspace, /config/.ssh and /config/.config point at
-      # the workspace claim, the copies on the config volume are unreachable from this pod.
-      # Nothing is deleted — the config volume keeps everything, it just stops being backed up.
-      # Idempotent through a marker file, so every later start is a no-op.
+      # First boot only: runs before the subPath mounts shadow /config/workspace, .ssh and .config.
+      # Nothing is deleted; a marker file makes every later start a no-op.
       initContainers:
         - name: seed-workspace-claim
           image: {{ code_server_k8s_image }}
-          # Under Flux the renderer rewrites this ref to GHCR's content tag with IfNotPresent
-          # (scripts/renderer/renderer_lib/images.py:ghcr_refs), so `Always` never reaches the cluster.
           imagePullPolicy: Always
           command:
             - /bin/sh
@@ -52,16 +46,14 @@ spec:
               cp -a /config/workspace/. /keep/workspace/ || true
               cp -a /config/.ssh/. /keep/ssh/ || true
               cp -a /config/.config/. /keep/config/ || true
-              # The git identity rides along inside .config at git's XDG path. Mounting
-              # ~/.gitconfig itself by subPath would break `git config --global`: it writes a
-              # .lock file and rename()s it over the target, and a rename onto a bind-mounted
-              # file fails EBUSY.
+              # The git identity rides inside .config at git's XDG path: a subPath mount on
+              # ~/.gitconfig breaks `git config --global`, whose rename() onto a bind-mounted file
+              # fails EBUSY.
               if [ -f /config/.gitconfig ] && [ ! -f /keep/config/git/config ]; then
                 mkdir -p /keep/config/git
                 cp -a /config/.gitconfig /keep/config/git/config
               fi
-              # ~/.gitconfig outranks the XDG path, so it has to stop existing. Renamed rather
-              # than removed, so the original is still there if this turns out to be wrong.
+              # ~/.gitconfig outranks the XDG path, so it must stop existing; renamed, not removed.
               if [ -f /config/.gitconfig ]; then
                 mv /config/.gitconfig /config/.gitconfig.pre-split
               fi
@@ -75,10 +67,9 @@ spec:
             capabilities:
               drop:
                 - ALL
-              # A fresh claim's root is root:root while the files being copied are the pod
-              # uid's, so this container needs both halves: DAC_OVERRIDE to read them and
-              # CHOWN to hand the result back. Root WITHOUT DAC_OVERRIDE is weaker than the
-              # pod uid here, not stronger.
+              # A fresh claim's root is root:root and the files are the pod uid's: DAC_OVERRIDE to
+              # read, CHOWN to hand back.
+              # Root WITHOUT DAC_OVERRIDE is weaker than the pod uid.
               add:
                 - CHOWN
                 - DAC_OVERRIDE
@@ -95,9 +86,8 @@ spec:
           imagePullPolicy: Always  # as on the init container above
           ports:
             - containerPort: {{ container_item.port }}
-          # The s6 privilege-drop set.
-          # s6/DOCKER_MODS init chmods files it doesn't own (e.g. /config/.ssh to
-          # 0700) — without FOWNER that EPERMs and .ssh is left world-readable 0755.
+          # s6/DOCKER_MODS init chmods files it doesn't own; without FOWNER that EPERMs and .ssh
+          # stays world-readable 0755.
 {{ hardened_security_context(add=['CHOWN', 'SETUID', 'SETGID', 'FOWNER', 'DAC_OVERRIDE']) }}
           env:
 {{ lsio_env() }}
@@ -109,9 +99,7 @@ spec:
           volumeMounts:
             - name: code-server-config
               mountPath: /config
-            # The backed-up paths, carved out of /config by subPath. Order does not matter —
-            # kubelet mounts parents before children — but each of these must exist in the
-            # claim, which is what the initContainer guarantees.
+            # Each path must exist in the claim, which the initContainer guarantees.
             - name: code-server-workspace
               mountPath: /config/workspace
               subPath: workspace
@@ -121,8 +109,8 @@ spec:
             - name: code-server-workspace
               mountPath: /config/.config
               subPath: config
-          # First boot runs 10-extensions.sh (installs the baked vsix set into /config)
-          # before the listener comes up — allow up to 5 min before liveness takes over.
+          # First boot runs 10-extensions.sh before the listener comes up: allow up to 5 min before
+          # liveness takes over.
           startupProbe:
             httpGet:
               path: /healthz/

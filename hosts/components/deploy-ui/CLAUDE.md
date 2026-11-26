@@ -18,7 +18,7 @@ visible decision:
   them. ENFORCED: `hosts/lib/tests/test_deploy_ui_component.py`.
 - Authelia `two_factor` gates `deploy.local`: `auth_tier: two_factor` on the `deploy-ui`
   containers_list entry, rendered into the authelia role's access_control rules.
-  ENFORCED: `tests/services/test_authelia_access_tiers.py`.
+  ENFORCED: `tests/services/authelia/test_authelia_access_tiers.py`.
 
 DECIDED: a pod inside the cluster reaches the daemon without Authelia. Accepted 2026-09-10 —
 a hostile pod already has kubectl-adjacent reach. Nothing stops it at the network layer:

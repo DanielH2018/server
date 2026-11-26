@@ -343,7 +343,7 @@ def snapshot(
 
 
 # The top-level trees a render reads. `extract` skips one a commit does not hold.
-RENDER_TREES = ("k8s", "inventory", "secrets", "scripts", "hosts", "cluster")
+RENDER_TREES = ("k8s", "inventory", "estate", "secrets", "scripts", "hosts", "cluster")
 
 
 def render_side(sha: str, dest: Path, repo: Path = REPO) -> Snapshot:

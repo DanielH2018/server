@@ -80,11 +80,9 @@ ENV CARGO_HOME=/config/.cargo
 ENV CARGO_TARGET_DIR=/config/.cargo-target
 ENV PATH="/config/.cargo/bin:$PATH"
 
-# 4. Python virtual environment outside /config so it survives volume mounts, with its
-#    packages and its ownership settled in the SAME layer. `chown -R` rewrites every file,
-#    and a rewritten file is a new file to the layer format — so doing it in a later step
-#    would store a second full copy of the venv (89 M compressed) on top of the one already
-#    written here. The chown must stay last: pip writes into the venv after it exists.
+# The chown stays in the SAME layer as the venv: a rewritten file is a new file to the layer format,
+# so a later step would store a second copy (89 M). It must stay last: pip writes into the venv
+# after it exists.
 ENV VIRTUAL_ENV=/opt/venv
 ENV PATH="$VIRTUAL_ENV/bin:$PATH"
 #    python3-pip is deliberately NOT installed. `python3 -m venv` builds the venv's own pip
@@ -114,14 +112,9 @@ RUN python3 -m venv $VIRTUAL_ENV \
 RUN npm install -g @anthropic-ai/claude-code@2.1.325 \
     && npm cache clean --force
 
-# 6. VS Code extensions, downloaded at build time from the exact URL each entry in
-#    code_server_k8s_extensions (defaults/main.yml) names, and kept only when the sha256
-#    matches. Asking an API for the CURRENT version takes the first build listed, which for a
-#    platform-specific extension is alpine-arm64 (ruff, ty) or win32-x64 (Claude Code). The
-#    defaults comment has the details and the bump recipe.
-#    The marketplace serves a vspackage gzip-encoded, `--compressed` decodes it, and the
-#    recorded hash is over the decoded VSIX. Open VSX serves the file as-is, so `-A` and
-#    `--compressed` are inert there.
+# Downloaded from each entry's exact URL and kept only when the sha256 matches: asking for the
+# CURRENT version takes the first build listed, wrong for platform-specific extensions.
+# `--compressed` decodes the marketplace's gzip; the hash is over the decoded VSIX.
 RUN mkdir -p /opt/vsix
 {% for ext in code_server_k8s_extensions %}
 # {{ ext.name }} {{ ext.version }}
@@ -129,8 +122,6 @@ RUN curl -fsSL --compressed -A "VSCode/1.95.0" -o "/opt/vsix/{{ ext.name }}@{{ e
     && echo "{{ ext.sha256 }}  /opt/vsix/{{ ext.name }}@{{ ext.version }}.vsix" | sha256sum -c -
 {% endfor %}
 
-# 7. Startup script installs each /opt/vsix extension the config volume does not hold. A file
-#    is named <id>@<version>, the form `--list-extensions --show-versions` prints, so each
-#    entry's version must equal its VSIX manifest's or the script reinstalls it every start.
+# Each entry's version must equal its VSIX manifest's, or the script reinstalls it every start.
 COPY extensions.sh /custom-cont-init.d/10-extensions.sh
 RUN chmod +x /custom-cont-init.d/10-extensions.sh

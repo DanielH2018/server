@@ -11,6 +11,7 @@ from lib.inventory_lists import (
     K8S_HOST,
     PI_HOST,
     host_names,
+    host_vars_file,
     pi_entries_in,
 )
 from docs.fragment_readers import hosts_listing_component
@@ -20,9 +21,11 @@ from lib.repo_paths import SCRIPTS
 
 
 def test_host_names_lists_the_sorted_host_vars_stems_and_skips_a_template(tmp_path):
-    for name in ("daniel-server.yml", "daniel-box.yml", "_example.yml"):
-        (tmp_path / name).write_text("x: 1\n")
+    for name in ("daniel-server", "daniel-box", "_example"):
+        host_vars_file(name, tmp_path).parent.mkdir()
+        host_vars_file(name, tmp_path).write_text("x: 1\n")
     (tmp_path / "notes.txt").write_text("not a host\n")
+    (tmp_path / "no-vars").mkdir()
     assert host_names(tmp_path) == ("daniel-box", "daniel-server")
 
 
@@ -51,8 +54,11 @@ def test_k8s_host_is_the_primary_node_and_no_host_vars_declares_a_containers_lis
 
 
 def test_a_host_vars_file_declaring_a_containers_list_breaks_the_pin(tmp_path):
-    (tmp_path / "daniel-box.yml").write_text("containers_list:\n  - name: a\n")
-    (tmp_path / "daniel-pi.yml").write_text("containers_list:\n  - name: b\n")
+    for name, item in (("daniel-box", "a"), ("daniel-pi", "b")):
+        host_vars_file(name, tmp_path).parent.mkdir()
+        host_vars_file(name, tmp_path).write_text(
+            f"containers_list:\n  - name: {item}\n"
+        )
     assert hosts_declaring_k8s(Inventory(host_vars=tmp_path)) == (
         "daniel-box",
         "daniel-pi",

@@ -75,20 +75,28 @@ render does not reach a branch that is off, so the whole suite runs too.
 ### Step 3: gates and installed readers accept both layouts
 
 No file moves. A host package installs after its merge, so each reader must be live before the
-move. The order is ADR-0030's.
+move. The order is ADR-0030's. As built:
 
 | Reader | Change | Fails if late |
 |---|---|---|
-| `land_renovate_pr.py:INVENTORY` | refuse `inventory/`, `estate/`, `k8s/vars.yml`, `hosts/vars.yml` and `hosts/<host>/vars.yml` | open: a PR to the new files can land unattended |
-| `t2-approval-floor` | add `estate/` and `k8s/vars.yml`; `hosts/` is on it | open: the same |
-| `test_renovate_floor.py:OFF_FLOOR` | drop `inventory` in step 6 | closed: the test fails |
-| `cluster_pins.py` | scan `estate/**` and `hosts/**/vars.yml` too | open: a pin override is accepted |
-| `builder_python.py:PYTHON_PIN` | read `estate/vars.yml`, then the old path | falls back to the unit's interpreter |
-| `bootstrap_anchor.py`, `bootstrap-host.sh` | read both paths | closed: bootstrap stops |
-| `render-diff.yml`, `image-leg.yml`, `image-smoke.yml` | match both paths | open: a check does not run |
-| the dotfiles repo's auto-mode text | check it for an `inventory/` path | outside this repo |
+| `land_renovate_pr.py:VARS_FILE` | refuses `inventory/`, `estate/`, `k8s/vars.yml`, `hosts/vars.yml` and `hosts/<host>/vars.yml` | open: a PR to the new files can land unattended |
+| `test_renovate_floor.py:OFF_FLOOR` | lists `estate`; drop `inventory` in step 6 | closed: the test fails |
+| `cluster_pins.py:VARS_YAML` | scans `estate/**/*.yml`, `hosts/vars.yml` and `hosts/*/vars.yml` too | open: a pin override is accepted |
+| `host_inputs.py:HOST_INPUTS` | adds `estate/` and `k8s/vars.yml` | open: no host package is built for the change |
+| `render_diff_gates.py:RENDER_TREES` | adds `estate` | closed: the render reads no estate |
+| `builder_python.py:PYTHON_PINS` | reads `estate/vars.yml`, then the old path | falls back to the unit's interpreter |
+| `bootstrap_anchor.py`, `bootstrap-host.sh`, `bootstrap_case.py` | read `estate/vars.yml`, then the old path | closed: bootstrap stops |
+| `render-diff.yml`, `image-leg.yml`, `image-smoke.yml` | match the new paths too | open: a check does not run |
 
-Several of these files are on the approval list, so the PR waits for the operator's approval.
+The T2 approval floor and the claude-land approval list stay as they are. Neither lists
+`inventory/`: the operator ruled that the inventory lands without approval
+(`docs/claude-agent-user.md`), and the Renovate lander refuses it outright. The new files keep
+that parity. `hosts/vars.yml` and `hosts/<host>/vars.yml` sit under `hosts/`, which the T2
+floor lists, so they gain approval there.
+
+The dotfiles repo's auto-mode text names `inventory/` as a place an inline secret could sit.
+Step 6 updates it, in that repo, when the files move.
+
 The PR also adds `estate/CLAUDE.md`, which states the layer rules, and `!/estate` in
 `.gitignore`.
 
@@ -100,6 +108,10 @@ each installed file names the new path. Check with `grep` on the host, not from 
 `homelab_mcp_source_dirs` gains `estate`. A hostPath to a missing directory holds the pod in
 ContainerCreating, so this follows step 3's merge and `checkout-sync`'s next pull on
 `k8s_primary_node`. `k8s` is served in full, so it covers `k8s/vars.yml`.
+
+The tool docstrings in `app.py` and the jail comment in `safe_reads.py` still list `k8s/`,
+`inventory/` and `tests/`. They change in step 7, when `inventory` leaves the list, because a
+fan-out issue held those files when step 4 landed.
 
 **Done when** the pod lists `estate/CLAUDE.md`.
 
@@ -116,8 +128,18 @@ ContainerCreating, so this follows step 3's merge and `checkout-sync`'s next pul
 + hosts/_example/vars.yml
 ```
 
-`host_names` derives from `hosts/*/package.yml`. The checks that read every directory under
-`hosts/` must skip `_example`, which has no package. The fan-out pauses for this PR.
+As built, `lib.repo_paths.HOST_VARS` names `hosts/`, and `inventory_lists.host_vars_file` is the
+one function that turns a host into its file. `host_names` lists each directory under `hosts/`
+that holds a `vars.yml`, skipping a `_`-prefixed one, so `_example` stays a template and
+`components/`, `lib/` and `packages/` are never hosts. A test that edits a host's values copies
+the vars files with `render_guard.copy_host_files`, not the 8 MB `hosts/` tree. The fan-out
+pauses for this PR.
+
+Two references stay on the old path. The comment in
+`k8s/roles/pi-peer-backup/templates/secret.yaml.j2` renders into the Secret, so editing it
+would restart the role; step 7 changes it. `scripts/dev/affected_tests.json` is the
+docs-refresh cron's to re-record, and until it does, a change to a host's file runs the whole
+suite.
 
 **Done when** each host package's content is byte-identical and `host_names` returns the same
 three names.
@@ -141,7 +163,8 @@ before, by name.
 
 ### Step 7: the old paths go
 
-The installed readers drop `inventory/`, and homelab-mcp stops mounting it. The readers that
+The installed readers drop `inventory/`, and homelab-mcp stops mounting it. The comment in
+`k8s/roles/pi-peer-backup/templates/secret.yaml.j2` names `hosts/daniel-pi/vars.yml`. The readers that
 compare two commits drop the old layout last: `render_diff_gates.py` and `cluster_pins.py` keep
 it until no open PR and no `promote` revision predates step 6.
 

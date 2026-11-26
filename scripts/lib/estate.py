@@ -28,7 +28,8 @@ from pathlib import Path
 from typing import Literal
 
 from lib.container_entry import ContainerEntry
-from lib.render_guard import host_files, host_layer, k8s_services, load_yaml
+from lib.inventory_lists import host_names
+from lib.render_guard import host_layer, k8s_services, load_yaml
 from lib.repo_paths import ALL_VARS, HOST_VARS, K8S_SERVICES
 
 __all__ = [
@@ -48,7 +49,7 @@ class Inventory:
 
     Attributes:
         all_vars: The group_vars file every host shares.
-        host_vars: The directory holding one ``<host>.yml`` per inventory host.
+        host_vars: The hosts directory, holding one ``<host>/vars.yml`` per host.
         services: The k8s service list, ``k8s/services.yml``.
     """
 
@@ -57,8 +58,8 @@ class Inventory:
     services: Path = K8S_SERVICES
 
     def var_files(self) -> list[Path]:
-        """Every vars file, sorted: the shared one and each host's, `_example.yml` included."""
-        return sorted([self.all_vars, *self.host_vars.glob("*.yml")])
+        """Every vars file, sorted: the shared one and each host's, `_example`'s included."""
+        return sorted([self.all_vars, *self.host_vars.glob("*/vars.yml")])
 
 
 REPO_INVENTORY = Inventory()
@@ -110,8 +111,8 @@ class Estate:
         return load_yaml(self.inventory.all_vars)
 
     def hosts(self) -> list[str]:
-        """Every host, one per host_vars file, sorted; ``_example.yml`` is not a host."""
-        return [p.stem for p in host_files(self.inventory.host_vars)]
+        """Every host, one per ``<host>/vars.yml``, sorted; ``_example`` is not a host."""
+        return list(host_names(self.inventory.host_vars))
 
     def own_vars(self, host: str) -> dict:
         """What `host`'s host_vars file declares, or ``{}`` for a host without one."""

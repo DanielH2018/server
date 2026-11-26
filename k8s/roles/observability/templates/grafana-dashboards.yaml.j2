@@ -9,7 +9,7 @@
 
   Flux applies these server-side, which writes no `last-applied-configuration` annotation. A
   client-side apply would copy each object into one capped at 262144 bytes, and the
-  Infrastructure folder is about 600 KB as JSON. tests/services/test_dashboard_configmaps.py
+  Infrastructure folder is about 600 KB as JSON. tests/services/dashboards/test_dashboard_configmaps.py
   holds every ConfigMap under the 1 MiB object cap.
 
   `lookup('file')` strips trailing whitespace, which the JSON parse ignores. The `|` block keeps
