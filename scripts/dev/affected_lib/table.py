@@ -13,6 +13,8 @@ row is measured.
   directories, each of them counts up to the first one both trees share.
 - An added file selects each module that asked for that path, or for a directory above it,
   and did not find it.
+  A module that asked for a path under a tracked file holds that file instead, so turning
+  the file into a directory selects it.
 - A module with no row is always selected, and so is a module whose file changed after its
   row was recorded: editing a test is the commonest way it gains a dependency.
 
@@ -79,7 +81,8 @@ class Row:
     Attributes:
         files: Tracked files the module's run resolved.
         dirs: Tracked directories whose entries it read; the repository root is `""`.
-        missing: Paths it asked for that did not exist.
+        missing: Paths it asked for that did not exist. A path under a tracked file is
+            held as that file.
         tree: Whether it read git's index, which lists every tracked path.
     """
 

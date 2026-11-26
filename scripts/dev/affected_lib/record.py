@@ -52,6 +52,9 @@ def reduce(
     surrogate as a lone `\\udcXX` escape, which strict JSON parsers reject, and git reports
     no change name such a row could match.
 
+    A missing path under a tracked file is recorded as that file: the path can only come to
+    exist once the file becomes a directory, and that change adds a path below the file.
+
     Args:
         touched: The parsed trace of one module's run.
         harness_listed: Directories only the import system or the collector listed, which
@@ -68,29 +71,37 @@ def reduce(
             return ""
         return path[len(root) + 1 :] if path.startswith(root + "/") else None
 
-    def in_tracked_dir(rel: str) -> bool:
-        """Whether the nearest directory that exists above `rel` is a tracked one."""
+    def recorded_as(rel: str) -> str | None:
+        """What to record for `rel`, a path that was not found, or None to keep nothing.
+
+        That is the tracked file above `rel` when there is one, else `rel` itself when the
+        nearest directory that exists above it is a tracked one.
+        """
         if "__pycache__" in rel.split("/") or rel.endswith(_NEVER_TRACKED_SUFFIXES):
-            return False
-        while "/" in rel:
-            rel = rel.rsplit("/", 1)[0]
-            if (repo / rel).is_dir():
-                return rel in tracked_dirs
-        return True
+            return None
+        above = rel
+        while "/" in above:
+            above = above.rsplit("/", 1)[0]
+            if above in tracked:
+                return above
+            if (repo / above).is_dir():
+                return rel if above in tracked_dirs else None
+        return rel
 
     listed = set()
     for pid, dirs in touched.listed.items():
         listed |= dirs - harness_listed if pid == touched.root_pid else dirs
     reads = {relative(path) for path in touched.reads}
-    missing = {relative(path) for path in touched.missing}
+    missing = {
+        kept
+        for path in map(relative, touched.missing)
+        if path and path not in tracked and _is_utf8(path)
+        if (kept := recorded_as(path))
+    }
     return Row(
         files=frozenset(tracked.intersection(reads)),
         dirs=frozenset(tracked_dirs.intersection(relative(path) for path in listed)),
-        missing=frozenset(
-            path
-            for path in missing
-            if path and path not in tracked and _is_utf8(path) and in_tracked_dir(path)
-        ),
+        missing=frozenset(missing),
         tree=git_index in touched.reads,
     )
 
