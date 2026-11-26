@@ -45,7 +45,7 @@ netpol_baseline_obs_exempt_workloads: []
 
 # All four node addresses, where the homelab list carries only the two cni0 /32s: the cni0 pair
 # (`k3s_cni0_gateways`) followed by the flannel.1 pair (`k3s_flannel_node_ips`), both from
-# group_vars/all.yml. The callers each entry admits, in that order:
+# k8s/vars.yml. The callers each entry admits, in that order:
 #   - daniel-box cni0: otelq's loopback path when loki/prometheus/tempo land on daniel-box, and
 #     the API server's proxy for Headlamp's Prometheus plugin under the same condition.
 #   - daniel-server cni0: otelq's loopback path when loki/prometheus/tempo land on daniel-server.
@@ -103,7 +103,7 @@ netpol_baseline_obs_node_cidrs: "{{ k3s_cni0_gateways + k3s_flannel_node_ips }}"
 # the sentinel, and to nothing else.
 #
 # terraria is ABSENT while the Games panel refuses to start it (`start_refused` on its
-# `game_servers` entry in group_vars/all.yml). Its EndpointSlice is empty then, so its row would
+# `game_servers` entry in estate/vars.yml). Its EndpointSlice is empty then, so its row would
 # fail the gate on every netpol-baseline deploy.
 #
 # DECIDED: terraria's row stays a hand toggle and is not derived from whether terraria runs

@@ -17,7 +17,7 @@ The end is exclusive, so the scheduled run that fires at the end promotes rather
 `weekly_reboot_mute_lead_minutes` opens the mute 10 minutes before the reboot, inside every
 window, so it shortens none of them.
 
-THE INPUTS are the reboot cron's own variables in `inventory/group_vars/all.yml`, read
+THE INPUTS are the reboot cron's own variables in `estate/vars.yml`, read
 from the checkout the way `bundle_census.published_tags` reads the inventory, so moving the
 reboot moves the window. `promote.yml`'s `schedule:` cron is a literal GitHub reads, so a test
 derives it here (`end_cron`) and fails when the two differ.
@@ -34,12 +34,12 @@ import yaml
 
 
 from lib import yaml_fast
-from lib.repo_paths import ALL_VARS, REPO
+from lib.repo_paths import ESTATE_VARS, REPO
 
 from deploy_tools.promote_lib.prune import ReadError
 
 # The file, relative to the checkout `--repo` names.
-SOURCE = ALL_VARS.relative_to(REPO)
+SOURCE = ESTATE_VARS.relative_to(REPO)
 # Each integer the window derives from, with its inclusive range.
 _INTEGERS = {
     "weekly_reboot_minute": (0, 59),
@@ -55,7 +55,7 @@ TIMEZONE_KEY = "weekly_reboot_timezone"
 
 @dataclass(frozen=True)
 class Schedule:
-    """The weekly reboot as group_vars/all.yml states it.
+    """The weekly reboot as estate/vars.yml states it.
 
     Attributes:
         minute, hour, weekday: the reboot cron's fields, `weekday` 0 for Sunday.

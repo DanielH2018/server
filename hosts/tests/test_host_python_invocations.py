@@ -233,8 +233,8 @@ def test_hook_wrappers_pin_the_same_version_as_ansible():
                 offenders.append(f"{path.name}:{n}: {stripped[:100]}")
 
     assert not offenders, (
-        f"these request an interpreter other than the Ansible pin ({pin}, from "
-        "inventory/group_vars/all.yml):\n  " + "\n  ".join(offenders)
+        f"these request an interpreter other than the host Python pin ({pin}, from "
+        "estate/vars.yml):\n  " + "\n  ".join(offenders)
     )
 
 

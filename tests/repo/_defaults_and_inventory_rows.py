@@ -49,7 +49,7 @@ _IMAGE_PINS_CARRY_A_DIGEST = Census(
         "covers is one Renovate can bump. A built image starts with "
         "`{{ k8s_registry_pull_host }}`, which the pattern cannot match."
     ),
-    files=lambda: tracked(_ROLE_DEFAULTS, "inventory/group_vars/all.yml"),
+    files=lambda: tracked(_ROLE_DEFAULTS, "k8s/vars.yml"),
     offence=lambda s: [
         f"{m.group('var')}: {m.group('repo')}:{m.group('tag')} carries no digest"
         for m in _image_pins(s)
@@ -77,9 +77,7 @@ _IMAGE_PINS_CARRY_A_DIGEST = Census(
     ),
     count=lambda s: len(_image_pins(s)),
     min_matches=21,
-    must_find=frozenset(
-        {"inventory/group_vars/all.yml", "k8s/roles/traefik/defaults/main.yml"}
-    ),
+    must_find=frozenset({"k8s/vars.yml", "k8s/roles/traefik/defaults/main.yml"}),
 )
 
 # ── Each restart_on entry names only signals the renderer knows ─────────────────────────
@@ -195,7 +193,9 @@ _INVENTORY_BLOCK_SCALARS_HAVE_NO_COMMENT_SHAPED_LINE = Census(
     ),
     files=lambda: [
         rel
-        for rel in tracked("inventory/*.yml", "inventory/*.yaml", "hosts/*/vars.yml")
+        for rel in tracked(
+            "estate/vars.yml", "k8s/vars.yml", "hosts/vars.yml", "hosts/*/vars.yml"
+        )
         if not any(part.startswith("_") for part in PurePosixPath(rel).parts)
     ],
     offence=_comment_shaped_continuations,
@@ -220,7 +220,9 @@ _INVENTORY_BLOCK_SCALARS_HAVE_NO_COMMENT_SHAPED_LINE = Census(
     ),
     must_find=frozenset(
         {
-            "inventory/group_vars/all.yml",
+            "estate/vars.yml",
+            "k8s/vars.yml",
+            "hosts/vars.yml",
             "hosts/daniel-box/vars.yml",
             "hosts/daniel-server/vars.yml",
             "hosts/daniel-pi/vars.yml",

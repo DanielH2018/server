@@ -95,7 +95,8 @@ from lib.inventory_lists import (
 )
 from lib.estate import Estate
 from lib.repo_paths import (
-    ALL_VARS,
+    ESTATE_VARS,
+    K8S_VARS,
     K3S_HOST_CHECKS,
     K3S_SERVER,
     K8S_ROLES,
@@ -233,7 +234,9 @@ def _deadman() -> tuple[str, list[str]]:
         "hosts/components/pi-docker/defaults/main.yml",
         "hosts/components/worktree-sweep/defaults/main.yml",
         "k8s/roles/airflow/files/dags/homelab_warehouse/freshness.py",
-        "inventory/group_vars/all.yml",
+        "estate/vars.yml",
+        "k8s/vars.yml",
+        "hosts/vars.yml",
         *(f"hosts/{h}/vars.yml" for h in host_names()),
         *(
             f"hosts/{h}/package.yml"
@@ -264,7 +267,8 @@ def _lan() -> tuple[str, list[str]]:
         str(group["lan_subnet"]),
         str(group["wg_client_subnet"]),
     ), [
-        ALL_VARS.relative_to(REPO).as_posix(),
+        ESTATE_VARS.relative_to(REPO).as_posix(),
+        K8S_VARS.relative_to(REPO).as_posix(),
         K8S_SERVICES.relative_to(REPO).as_posix(),
         PI_HOST_VARS.relative_to(REPO).as_posix(),
     ]

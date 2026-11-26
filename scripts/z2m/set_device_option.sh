@@ -27,7 +27,7 @@
 #   64  usage
 #
 # Environment (each has a default; the tests override them):
-#   Z2M_MQTT_HOST         broker address (default: mqtt_k8s_vip from group_vars/all.yml)
+#   Z2M_MQTT_HOST         broker address (default: mqtt_k8s_vip from k8s/vars.yml)
 #   Z2M_SECRETS_FILE      SOPS file holding mqtt_username / mqtt_password
 #   Z2M_READBACK_TIMEOUT  seconds to wait for the republished state
 #

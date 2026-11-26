@@ -29,7 +29,7 @@ def r2_volumes(
     Args:
         entries: the service entries to derive from; ``k8s/services.yml``'s when omitted.
         namespace: the namespace for an entry that names none; ``k8s_namespace`` from
-            ``group_vars/all.yml`` when omitted.
+            ``k8s/vars.yml`` when omitted.
     """
     if entries is None:
         entries = list(k8s_entries().values())

@@ -17,7 +17,7 @@ from pathlib import PurePosixPath
 
 import pytest
 
-from lib.repo_paths import ALL_VARS, REPO
+from lib.repo_paths import K8S_VARS, REPO
 from validate.renovate_extract import IMAGE_DEFAULTS, REGISTRY_BUILT_IMAGES
 from _renovate import (
     EXPECTED_DEPS,
@@ -94,7 +94,7 @@ def test_no_k8s_role_image_is_disabled_by_a_package_rule() -> None:
     disabling_rules = _disabling_currentvalue_rules(_PACKAGE_RULES)
     defaults = sorted((_REPO / "k8s/roles").glob("*/defaults/main.yml"))
     defaults += [_REPO / p for p in IMAGE_DEFAULTS if "*" not in p]
-    assert ALL_VARS in defaults, "the census lost inventory/group_vars/all.yml"
+    assert K8S_VARS in defaults, "the census lost k8s/vars.yml"
     disabled = []
     for f in defaults:
         rel_path = str(f.relative_to(_REPO))

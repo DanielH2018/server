@@ -3,8 +3,7 @@
 ADR-0042 (`docs/adr/0042-each-variable-lives-with-what-it-describes.md`) puts each variable
 beside the thing it describes. This directory holds the facts that are true of the estate as a
 whole, whichever plane reads them: the domain, the time zone, the LAN subnets, the interpreter
-pin and the CI contexts. Step 6 of `docs/variable-layout-migration.md` moves them here, into
-`vars.yml`, out of `inventory/group_vars/all.yml`.
+pin and the CI contexts. They live in `estate/vars.yml`.
 
 ## Which file a variable goes in
 

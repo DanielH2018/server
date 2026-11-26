@@ -21,12 +21,13 @@ from lib.render_guard import StrictChainableUndefined
 
 @pytest.fixture
 def tree(tmp_path: Path):
-    """A writer for `<tmp>/roles/<plane>/<role>` defaults, all.yml and host_vars files.
+    """A writer for `<tmp>/roles/<plane>/<role>` defaults, shared vars and host vars files.
 
     Each call returns the template path and the `Inventory` that points at the tree.
     """
     inventory = rc.Inventory(
-        all_vars=tmp_path / "all.yml",
+        estate_vars=tmp_path / "estate-vars.yml",
+        k8s_vars=tmp_path / "k8s-vars.yml",
         host_vars=tmp_path / "hosts",
         services=tmp_path / "services.yml",
     )
@@ -42,7 +43,7 @@ def tree(tmp_path: Path):
         (role / "defaults").mkdir(parents=True, exist_ok=True)
         (role / "templates").mkdir(exist_ok=True)
         (role / "defaults" / "main.yml").write_text(yaml.safe_dump(defaults))
-        inventory.all_vars.write_text(yaml.safe_dump(group or {}))
+        inventory.estate_vars.write_text(yaml.safe_dump(group or {}))
         for name, values in (hosts or {}).items():
             path = host_vars_file(name, inventory.host_vars)
             path.parent.mkdir(exist_ok=True)
@@ -321,7 +322,7 @@ def test_an_edit_between_two_renders_reaches_the_second(tree):
     assert [ctx[name] for name in names] == ["d1", "g1", "h1"]
     files = (
         template.parents[1] / "defaults" / "main.yml",
-        inv.all_vars,
+        inv.estate_vars,
         host_vars_file("box", inv.host_vars),
     )
     stats = {path: path.stat() for path in files}

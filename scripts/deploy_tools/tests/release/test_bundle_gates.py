@@ -29,12 +29,17 @@ secretGenerator:
 
 @pytest.fixture
 def inputs(tmp_path):
-    """The fixture `secrets.yml` and `group_vars/all.yml`, as gate keyword arguments."""
+    """The fixture `secrets.yml` and shared vars, as gate keyword arguments."""
     secrets = tmp_path / "secrets.yml"
     secrets.write_text("domain: ENC[x]\nemail: ENC[x]\nsops:\n  version: 3\n")
-    all_vars = tmp_path / "all.yml"
-    all_vars.write_text(f"domain: {DOMAIN}\n")
-    return {"secrets": secrets, "inventory": Inventory(all_vars=all_vars)}
+    estate_vars = tmp_path / "estate-vars.yml"
+    estate_vars.write_text(f"domain: {DOMAIN}\n")
+    inventory = Inventory(
+        estate_vars=estate_vars,
+        k8s_vars=tmp_path / "k8s-vars.yml",
+        host_vars=tmp_path / "hosts",
+    )
+    return {"secrets": secrets, "inventory": inventory}
 
 
 def _gates(tmp_path, inputs, files, published=("bento-pdf",), kinds=()):

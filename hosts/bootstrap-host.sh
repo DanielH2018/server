@@ -72,7 +72,7 @@ ARCHIVE_FINGERPRINT=83B57416B342DDE1CBA0752D435D139ADFD6F016
 AGE_KEY=/etc/homelab/age.key
 HOSTS="daniel-box daniel-server daniel-pi"
 GITHUB_REPO=DanielH2018/server
-# sys_user in group_vars/all.yml, and pi_swapfile_path and pi_swapfile_size in the Pi's host_vars
+# sys_user in estate/vars.yml, and pi_swapfile_path and pi_swapfile_size in the Pi's host_vars
 # (hosts/lib/tests/test_bootstrap_host_pins.py).
 SYS_USER=ubuntu
 PI_SWAPFILE=/swapfile

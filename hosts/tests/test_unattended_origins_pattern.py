@@ -29,7 +29,7 @@ import re
 import pytest
 from homelab_repo_sign import COMPONENT, SUITE
 from lib import yaml_fast
-from _helpers import ALL_VARS
+from lib.repo_paths import HOSTS_SHARED_VARS
 from _host_packages import HOSTS, shipped_text
 
 DROP_IN = "/etc/apt/apt.conf.d/52unattended-upgrades-local"
@@ -56,14 +56,14 @@ MATCHERS = {
 
 
 def patterns() -> list[str]:
-    value = yaml_fast.safe_load(ALL_VARS.read_text())[VAR]
+    value = yaml_fast.safe_load(HOSTS_SHARED_VARS.read_text())[VAR]
     assert isinstance(value, list), f"{VAR} must be a list, got {type(value).__name__}"
     return value
 
 
 def test_var_is_defined():
-    assert VAR in yaml_fast.safe_load(ALL_VARS.read_text()), (
-        f"{VAR} is missing from group_vars/all.yml; the unattended-upgrades component renders it unconditionally "
+    assert VAR in yaml_fast.safe_load(HOSTS_SHARED_VARS.read_text()), (
+        f"{VAR} is missing from hosts/vars.yml; the unattended-upgrades component renders it unconditionally "
         f"and a tag-scoped run would die on the undefined var."
     )
 

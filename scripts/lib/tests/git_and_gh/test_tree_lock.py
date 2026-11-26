@@ -1,6 +1,6 @@
 """The git-tree lock's path has one definition per language, and the two agree.
 
-Host templates render `server_git_tree_lock` from `group_vars/all.yml`; Python imports
+Host templates render `server_git_tree_lock` from `hosts/vars.yml`; Python imports
 `tree_lock.TREE_LOCK`. A drift between them splits the lock in two: the host crons and the
 Python readers would each serialise against a different file (#3276).
 

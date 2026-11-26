@@ -22,7 +22,7 @@ itself.
 Defaults are not rejection-free either, which is why the ceiling is checked and not just its
 absence: a container that states a request and no limit is given `default` as its limit, and
 the API server refuses the pod if that limit lands below the request. See
-k8s_default_limitrange in group_vars/all.yml for why the ceiling is set where it is.
+k8s_default_limitrange in k8s/vars.yml for why the ceiling is set where it is.
 """
 
 import re
@@ -316,7 +316,7 @@ def test_both_workload_namespaces_get_a_limitrange() -> None:
     expected = {all_vars["k8s_namespace"], all_vars["k8s_observability_namespace"]}
     found = _limitranges()
     assert set(found) == expected
-    # One name across both, so the rollback line in group_vars deletes what it says it does.
+    # One name across both, so the rollback line in k8s/vars.yml deletes what it says it does.
     assert {doc["metadata"]["name"] for doc in found.values()} == {_LIMITRANGE_NAME}
 
 
@@ -330,7 +330,7 @@ def test_the_limitrange_sets_defaults_only() -> None:
             assert entry.get("defaultRequest"), f"{namespace}: no default request"
             assert "min" not in entry, (
                 f"{namespace}: a `min` REJECTS any pod below it at admission, where a default "
-                "only fills one in. See k8s_default_limitrange in group_vars/all.yml."
+                "only fills one in. See k8s_default_limitrange in k8s/vars.yml."
             )
             assert "max" not in entry, (
                 f"{namespace}: a `max` REJECTS any pod above it at admission. Several "
@@ -340,7 +340,7 @@ def test_the_limitrange_sets_defaults_only() -> None:
             # API server refuses the pod when that is below the request.
             assert entry["default"]["memory"] == "2Gi", (
                 f"{namespace}: the memory ceiling refuses any requests-only pod asking for "
-                "more than it. Read the rejection path in group_vars/all.yml before lowering."
+                "more than it. Read the rejection path in k8s/vars.yml before lowering."
             )
 
 
@@ -402,7 +402,13 @@ def test_no_resourcequota_is_declared_outside_the_runner_namespace() -> None:
     # Grepped, not read off rendered docs: a quota staged by `kubectl create quota` would never
     # appear there.
     # Matched on the forms that APPLY one, not the bare word.
-    scope = ["k8s/", "inventory/", "secrets/cluster-manifests/"]
+    scope = [
+        "k8s/",
+        "estate/",
+        "hosts/vars.yml",
+        "hosts/*/vars.yml",
+        "secrets/cluster-manifests/",
+    ]
     # A pathspec that names no tracked file makes the grep below pass over nothing.
     for path in scope:
         listed = run(["git", "ls-files", "--", path], cwd=_REPO, check=True).stdout
@@ -428,7 +434,7 @@ def test_no_resourcequota_is_declared_outside_the_runner_namespace() -> None:
         "CPU/memory quota makes requests and "
         "limits MANDATORY on every pod in the namespace — a pod that omits them stops being "
         "defaulted and starts being refused. If this is deliberate, the reasoning in "
-        "k8s_default_limitrange (group_vars/all.yml) is what needs updating first."
+        "k8s_default_limitrange (k8s/vars.yml) is what needs updating first."
     )
 
 

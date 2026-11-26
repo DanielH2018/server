@@ -302,7 +302,7 @@ def render_lan_addresses(
         pi_wg_port: the WireGuard UDP port for the Pi's LAN-only wg-easy.
         lan_subnet: the physical LAN subnet.
         wg_client_subnet: wg-easy's own client pool (not an Ansible input; see the
-            `wg_client_subnet` comment in group_vars/all.yml).
+            `wg_client_subnet` comment in estate/vars.yml).
     """
     rows = [
         ("k3s ingress VIP (MetalLB; every `.local` service answers here)", ingress_vip,

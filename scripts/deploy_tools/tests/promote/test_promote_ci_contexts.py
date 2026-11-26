@@ -1,6 +1,6 @@
 """`promote.py` reads the required CI contexts from this repository's own tree.
 
-`ci_required_contexts` lives in `group_vars/all.yml`, and the deployer's role default is a Jinja
+`ci_required_contexts` lives in `estate/vars.yml`, and the deployer's role default is a Jinja
 reference to it. A read of the role default would get a string and refuse every promotion, so
 this test runs the CLI's read against the checkout and fails the PR that moves the key without
 repointing `promote.py`. The red half writes a Jinja reference in place of the list, which is

@@ -1,7 +1,7 @@
 """Alertmanager's `weekly-reboot` mute covers the minutes the reboot schedule implies.
 
 The mute derives from the reboot's `weekly_reboot_*` values and the lead and recovery allowance
-in group_vars/all.yml. This module holds the rendered mute to `tests/_reboot_mute.py`'s sum of
+in estate/vars.yml. This module holds the rendered mute to `tests/_reboot_mute.py`'s sum of
 those values, at the committed schedule and at schedules whose window crosses midnight in
 either direction.
 

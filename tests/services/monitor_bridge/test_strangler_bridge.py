@@ -20,7 +20,7 @@ from lib.guard_jinja_env import template_env
 from _helpers import K8S_ROLES, SHARED_TPL
 from lib.container_entry import ContainerEntry
 from lib.render_guard import k8s_services
-from lib.repo_paths import ALL_VARS
+from lib.estate import shared_vars
 
 
 GATE = K8S_ROLES / "traefik" / "templates" / "livesync-gate-secret.yaml.j2"
@@ -133,7 +133,6 @@ def test_dual_hostname_machinery_stays_retired():
         assert not (entry.get("hostname") or "").endswith("-k8s"), (
             f"{entry['name']}: the -k8s hostname suffix is retired"
         )
-    all_vars = ALL_VARS.read_text()
-    assert "\nk8s_hostname_suffix:" not in all_vars
+    assert "k8s_hostname_suffix" not in shared_vars()
     macro = (SHARED_TPL / "ingressroute.yml.j2").read_text()
     assert "unsuffixed_hostname" not in macro

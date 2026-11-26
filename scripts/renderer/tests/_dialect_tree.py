@@ -69,13 +69,14 @@ def write_tree(root: Path, template: str = _TREE_TEMPLATE) -> tuple[Path, Invent
         (host_vars / host).mkdir(parents=True)
     host_vars_file("h1", host_vars).write_text(_H1_VARS)
     host_vars_file("h2", host_vars).write_text(_H2_VARS)
-    group_vars = root / "inventory" / "group_vars"
-    group_vars.mkdir(parents=True)
-    (group_vars / "all.yml").write_text(_GROUP_VARS)
+    estate_vars = root / "estate" / "vars.yml"
+    estate_vars.parent.mkdir(parents=True)
+    estate_vars.write_text(_GROUP_VARS)
     services = root / "services.yml"
     services.write_text(_SERVICES)
     inventory = Inventory(
-        all_vars=group_vars / "all.yml",
+        estate_vars=estate_vars,
+        k8s_vars=root / "k8s" / "vars.yml",
         host_vars=host_vars,
         services=services,
     )

@@ -34,7 +34,7 @@ reads for its native etcd snapshot uploads to R2.
   `scripts/renderer/renderer_lib/secret_checks.py:PLACEHOLDER_KIND_EXEMPT` admits the bucket
   placeholder in a BackupTarget and nowhere else.
 - **B2's bucket is plaintext inventory, not SOPS.** The `default` URL renders
-  `inventory/group_vars/all.yml:k3s_longhorn_b2_bucket` as a literal, and `probe.py b2-longhorn`
+  `k8s/vars.yml:k3s_longhorn_b2_bucket` as a literal, and `probe.py b2-longhorn`
   reads the same key, so a rename is one edit.
 - **A wrong region makes a target unreachable.** Nothing ties `k3s_longhorn_b2_region` to the
   SOPS key `longhorn_b2_endpoint`. `probe.py health longhorn-backup` reports a target

@@ -114,7 +114,7 @@ def test_the_filter_component_lists_exactly_on_hosts_with_rsyslog():
     assert not lists_the_filter("daniel-pi")
     assert filter_listing_errors(HOSTS, lists_the_filter, has_rsyslog) == []
     assert shared_vars().get("has_rsyslog") is True, (
-        "has_rsyslog has no true default in group_vars/all.yml, so a new host would list no "
+        "has_rsyslog has no true default in hosts/vars.yml, so a new host would list no "
         "filter while its rsyslog runs"
     )
 

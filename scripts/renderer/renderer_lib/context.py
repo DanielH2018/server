@@ -1,6 +1,6 @@
 """The variables one k8s role's templates render with, built from the git tree alone.
 
-`render_context` layers role defaults and `group_vars/all.yml` in Ansible's
+`render_context` layers role defaults, `estate/vars.yml` and `k8s/vars.yml` in Ansible's
 precedence, and adds `services` and `hosts`. This module adds two things on top:
 
 - `services` is the toposorted view: `k8s/services.yml` sorted with `toposort_containers`,

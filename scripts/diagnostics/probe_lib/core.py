@@ -15,12 +15,15 @@ import shlex
 import socket
 import subprocess
 from datetime import datetime
+from pathlib import Path
 from zoneinfo import ZoneInfo
 
 import sys as _sys
 
 
+from lib.estate import shared_vars
 from lib.inventory_lists import LANDING_HOST, PI_HOST
+from lib.render_guard import load_yaml
 from lib.exit_codes import PROBE_UNREADABLE, PROBE_USAGE_ERROR
 from lib.repo_paths import REPO
 
@@ -67,7 +70,7 @@ def domain(group_vars_path=None):
     `domain` is not a secret, so this needs no age key.
 
     Args:
-        group_vars_path: The group_vars file to read. None reads the repo's `all.yml`.
+        group_vars_path: The vars file to read. None reads the repo's shared layer.
     """
     return group_var("domain", group_vars_path)
 
@@ -90,17 +93,15 @@ def group_var(key, group_vars_path=None):
 
     Args:
         key: The variable name.
-        group_vars_path: The group_vars file to read. None reads the repo's `all.yml`.
+        group_vars_path: The vars file to read. None reads the repo's shared layer.
 
     Raises:
-        SystemExit: The file defines no `key`.
+        SystemExit: The vars define no `key`.
     """
-    path = group_vars_path or GROUP_VARS_PATH
-    with open(path) as f:
-        for line in f:
-            if line.startswith(f"{key}:"):
-                return line.split(":", 1)[1].strip()
-    raise SystemExit(f"{key} not found in {path}")
+    values = load_yaml(Path(group_vars_path)) if group_vars_path else shared_vars()
+    if key not in values:
+        raise SystemExit(f"{key} not found in {group_vars_path or 'the shared vars'}")
+    return str(values[key])
 
 
 def pi_ssh_argv(remote, hostname=None):
@@ -217,14 +218,6 @@ SECRETS_PATH = os.path.join(
     REPO,
     "secrets",
     "secrets.yml",
-)
-
-# Inventory group vars (plaintext), which `group_var` reads.
-GROUP_VARS_PATH = os.path.join(
-    REPO,
-    "inventory",
-    "group_vars",
-    "all.yml",
 )
 
 # observability role defaults (plaintext) — source of that stack's pinned Loki ClusterIP.

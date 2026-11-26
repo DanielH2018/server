@@ -9,6 +9,7 @@ import yaml
 
 from lib.guard_jinja_env import template_env
 from lib.estate import Estate, Inventory
+from lib.inventory_lists import host_vars_file
 from lib.render_guard import StrictChainableUndefined, load_yaml
 from lib.repo_paths import K8S_ROLES, K8S_SERVICES
 from renderer import shadow_diff
@@ -77,26 +78,30 @@ def test_a_name_only_a_play_or_one_hosts_layer_holds_is_flagged(ctx, name):
 
 
 def _inventory(tmp_path, **edits):
-    """Each host's layer and all.yml (`group`) as the renderer reads them, `edits` applied."""
+    """Each host's layer and the shared layer (`group`) as the renderer reads them, `edits` applied."""
     real = Estate()
-    host_vars = tmp_path / "host_vars"
-    host_vars.mkdir()
+    host_vars = tmp_path / "hosts"
     for host in real.hosts():
         layer = real.own_vars(host)
         edit = edits.get(host.replace("-", "_"))
-        (host_vars / f"{host}.yml").write_text(
-            yaml.safe_dump(edit(layer) if edit else layer)
-        )
+        host_file = host_vars_file(host, host_vars)
+        host_file.parent.mkdir(parents=True)
+        host_file.write_text(yaml.safe_dump(edit(layer) if edit else layer))
     services = tmp_path / "services.yml"
     entries = load_yaml(K8S_SERVICES)["containers_list"]
     edit = edits.get("services")
     services.write_text(
         yaml.safe_dump({"containers_list": edit(entries) if edit else entries})
     )
-    all_vars = tmp_path / "all.yml"
+    estate_vars = tmp_path / "estate-vars.yml"
     group, edit = real.group_vars, edits.get("group")
-    all_vars.write_text(yaml.safe_dump(edit(group) if edit else group))
-    return Inventory(all_vars=all_vars, host_vars=host_vars, services=services)
+    estate_vars.write_text(yaml.safe_dump(edit(group) if edit else group))
+    return Inventory(
+        estate_vars=estate_vars,
+        k8s_vars=tmp_path / "k8s-vars.yml",
+        host_vars=host_vars,
+        services=services,
+    )
 
 
 def test_template_context_installs_the_sorted_view_over_a_reordered_list(tmp_path):

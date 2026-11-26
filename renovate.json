@@ -450,11 +450,11 @@
     },
     {
       "customType": "regex",
-      "description": "Container images in k8s role defaults, inventory/group_vars/all.yml and hosts/components/registry-gc/defaults/main.yml, the cluster's only update signal. autoReplaceStringTemplate lets a tag-only pin gain an `@sha256` suffix (#2392) and must keep the literal `_image: ` prefix, because Renovate replaces the whole matched span. scripts/tests/test_renovate_managers.py asserts it reproduces every live pin byte for byte.",
+      "description": "Container images in k8s role defaults, k8s/vars.yml and hosts/components/registry-gc/defaults/main.yml, the cluster's only update signal. autoReplaceStringTemplate lets a tag-only pin gain an `@sha256` suffix (#2392) and must keep the literal `_image: ` prefix, because Renovate replaces the whole matched span. scripts/tests/test_renovate_managers.py asserts it reproduces every live pin byte for byte.",
       "managerFilePatterns": [
         "/^k8s/roles/[^/]+/defaults/main\\.yml$/",
         "/^hosts/components/registry-gc/defaults/main\\.yml$/",
-        "/^inventory/group_vars/all\\.yml$/"
+        "/^k8s/vars\\.yml$/"
       ],
       "matchStrings": [
         "_image:\\s*[\"']?(?<depName>[^:\\s\"'@]+):(?<currentValue>[^\\s\"'@]+)(?:@(?<currentDigest>sha256:[a-f0-9]+))?[\"']?"
@@ -498,7 +498,7 @@
       ],
       "matchFileNames": [
         "k8s/roles/**",
-        "inventory/group_vars/all.yml",
+        "k8s/vars.yml",
         "hosts/components/registry-gc/defaults/main.yml"
       ],
       "groupName": "k8s image {{depName}}"
@@ -513,7 +513,7 @@
       ],
       "matchFileNames": [
         "k8s/roles/**",
-        "inventory/group_vars/all.yml",
+        "k8s/vars.yml",
         "hosts/components/registry-gc/defaults/main.yml"
       ],
       "matchUpdateTypes": [
@@ -594,7 +594,7 @@
       ],
       "matchFileNames": [
         "k8s/roles/**",
-        "inventory/group_vars/all.yml",
+        "k8s/vars.yml",
         "hosts/components/registry-gc/defaults/main.yml"
       ],
       "matchUpdateTypes": [
@@ -630,7 +630,7 @@
       "minimumReleaseAge": "1 day"
     },
     {
-      "description": "NO automerge for an image bump in a role declaring `k8s_autodeploy: false` (#1886), because `promote` and Flux apply every merged bump. matchFileNames is the denylist spelled as paths, and tests/deploy/test_renovate_automerge_follows_the_autodeploy_denylist.py asserts the two are equal. registry-gc's defaults copy the registry role's pins (#5827), and group_vars/all.yml holds `crowdsec_k8s_image` (#1936). POSITION is load-bearing: after the rules it overrides, before the per-package manual rules. A per-package groupName carries `k8s_autodeploy: false` where a denied role owns the pin, because the title marker keeps the unattended renovate_agent off it (#1963), and `groupSingleUpdates: true` puts it in a single-dependency title (#2646).",
+      "description": "NO automerge for an image bump in a role declaring `k8s_autodeploy: false` (#1886), because `promote` and Flux apply every merged bump. matchFileNames is the denylist spelled as paths, and tests/deploy/test_renovate_automerge_follows_the_autodeploy_denylist.py asserts the two are equal. registry-gc's defaults copy the registry role's pins (#5827), and k8s/vars.yml holds `crowdsec_k8s_image` (#1936). POSITION is load-bearing: after the rules it overrides, before the per-package manual rules. A per-package groupName carries `k8s_autodeploy: false` where a denied role owns the pin, because the title marker keeps the unattended renovate_agent off it (#1963), and `groupSingleUpdates: true` puts it in a single-dependency title (#2646).",
       "matchManagers": [
         "custom.regex"
       ],
@@ -638,7 +638,7 @@
         "docker"
       ],
       "matchFileNames": [
-        "inventory/group_vars/all.yml",
+        "k8s/vars.yml",
         "k8s/roles/airflow/defaults/main.yml",
         "k8s/roles/arr-notification/defaults/main.yml",
         "k8s/roles/authelia/defaults/main.yml",
@@ -726,7 +726,7 @@
         "docker"
       ],
       "matchFileNames": [
-        "inventory/group_vars/all.yml",
+        "k8s/vars.yml",
         "k8s/roles/authelia/defaults/main.yml",
         "k8s/roles/crowdsec/defaults/main.yml",
         "k8s/roles/pihole/defaults/main.yml",
@@ -1411,7 +1411,7 @@
       "matchFileNames": [
         "k8s/roles/*/defaults/main.yml",
         "hosts/components/registry-gc/defaults/main.yml",
-        "inventory/group_vars/all.yml",
+        "k8s/vars.yml",
         "hosts/components/pi-compose/services/*/compose.yaml.j2"
       ],
       "pinDigests": true,

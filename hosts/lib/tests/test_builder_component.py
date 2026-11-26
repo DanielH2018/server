@@ -19,7 +19,8 @@ import pytest
 from _checkout_package import render_daniel_box
 
 from lib import yaml_fast
-from lib.repo_paths import ALL_VARS, REPO
+from lib.estate import shared_vars
+from lib.repo_paths import REPO
 from renderer.renderer_lib import host as host_mode
 
 UNITS = "/usr/lib/systemd/system"
@@ -175,7 +176,7 @@ def test_the_interpreter_installs_in_exec_start_pre_and_only_exec_start_forbids_
 ):
     unit = text(package, BUILDER)
     got = directives(unit)
-    version = yaml_fast.safe_load(_group_vars())["host_python_version"]
+    version = _group_vars()["host_python_version"]
     pre = got["ExecStartPre"]
     assert pre[-1] == f"/usr/lib/homelab/bin/uv python install --no-bin {version}"
     assert not any("UV_PYTHON_DOWNLOADS" in line for line in pre)
@@ -193,8 +194,8 @@ def test_the_interpreter_installs_in_exec_start_pre_and_only_exec_start_forbids_
     assert env["UV_CACHE_DIR"].startswith(env["HOME"])
 
 
-def _group_vars() -> str:
-    return ALL_VARS.read_text()
+def _group_vars() -> dict:
+    return shared_vars()
 
 
 def test_a_unit_that_sets_the_download_ban_for_the_install_too_is_flagged(package):
@@ -233,7 +234,7 @@ def test_the_settings_carry_the_shared_ci_contexts_and_the_prometheus_cluster_ip
         for line in text(package, SETTINGS).splitlines()
         if line and not line.startswith("#")
     )
-    groups = yaml_fast.safe_load(_group_vars())
+    groups = _group_vars()
     assert settings["CI_CONTEXTS"] == ",".join(groups["ci_required_contexts"])
     assert settings["CI_ANCESTOR_WALK_MAX"] == str(groups["ci_ancestor_walk_max"])
     observability = yaml_fast.safe_load(

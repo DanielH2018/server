@@ -52,7 +52,6 @@ def test_the_jail_mounts_the_source_trees_read_only_and_no_ansible_tree() -> Non
     }
     assert sorted(p.relative_to(checkout).as_posix() for p in host_paths.values()) == [
         "estate",
-        "inventory",
         "k8s",
         "tests",
     ]

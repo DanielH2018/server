@@ -11,7 +11,7 @@ Undefined and then judges each name it collected. A name is allowed to be undefi
   - supplied by the host renderer (`renderer_lib/host.py`) — `hosts`, `services` and
     `inventory_hostname` (`HOST_RENDER_SUPPLIED`);
   - a SOPS secret, by name, from the plaintext registry `secrets/secret_rotation.yml`;
-  - defined anywhere in the inventory — `group_vars/all.yml` or any host's `host_vars` file;
+  - defined in a vars file — a shared one or any host's `hosts/<host>/vars.yml`;
   - declared in the component's own `defaults/main.yml`. `lib.render_context` leaves out a
     default whose value will not expand (it names a filter the light environment lacks), so the
     key reads as undefined in the render while the component still defines it;

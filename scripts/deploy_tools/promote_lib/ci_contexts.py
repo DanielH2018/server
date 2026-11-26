@@ -22,7 +22,7 @@ from deploy_tools.promote_lib.prune import READ_ERRORS, ReadError
 from lib import host_modules  # noqa: F401
 from ci_verdict import CIVerdict, ci_verdict
 
-CI_CONTEXTS_SOURCE = "inventory/group_vars/all.yml"
+CI_CONTEXTS_SOURCE = "estate/vars.yml"
 CI_CONTEXTS_KEY = "ci_required_contexts"
 
 

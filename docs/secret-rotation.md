@@ -185,7 +185,7 @@ key a host file carries. No cron calls `sync`.
   the promote workflow's `PROMOTE_TOKEN`. The audit flags the copy before the token expires.
 - `pinned` — **must not be naively swapped**. The special procedure, below.
 - `ignore` — not a secret: usernames, the R2 bucket name, static addresses. `domain` left
-  the store on 2026-10-15 and is an inventory variable in `inventory/group_vars/all.yml`.
+  the store on 2026-10-15 and is a variable in `estate/vars.yml`.
 
 `sync` gives a newly registered key its tier from one name rule in
 `scripts/secrets_mgmt/secrets_lib/secret_classify.py`: `*_user` and `*_username` are `ignore`,

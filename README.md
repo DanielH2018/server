@@ -36,14 +36,16 @@ work already executed.
 k8s/              # Render inputs for the k8s workloads   ← EDIT HERE
   roles/              # One role per k8s workload (manifests rendered from templates)
   services.yml        # One entry per k8s deploy tag
+  vars.yml            # The cluster's facts: CIDRs, VIPs, namespaces
   templates/          # Shared Jinja partials the k8s roles include
-inventory/        # group_vars/all.yml, host_vars/<host>.yml (one file per host)
+estate/           # vars.yml: facts every plane reads (domain, subnets, CI contexts)
 secrets/          # SOPS-encrypted secrets.yml, its .sops.yaml and the rotation register
 tests/            # Tests over the roles, their renders and the deploy path
 hosts/            # Host packages and the setup plane each one ships
   components/         # Units, timers and scripts a host package installs; the Pi's
                       #   Docker services are pi-compose/
-  daniel-box/ …       # One package.yml per host
+  vars.yml            # Defaults every host shares
+  daniel-box/ …       # One package.yml and vars.yml per host
   packages/           # Packages shared across hosts
   lib/                # The updater, reconcile and checkout-sync helpers
   bootstrap-host.sh   # One-time bring-up of a new host

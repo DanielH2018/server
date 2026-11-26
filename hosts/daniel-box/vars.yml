@@ -29,7 +29,7 @@ autofix_fake_remux_policy:
   max_attempts: 3
   history_retention_days: 14
 
-# Developer environment, opted in (both default false in group_vars/all.yml).
+# Developer environment, opted in (both default false in hosts/vars.yml).
 has_github_cli: true
 has_chezmoi: true
 # The only memory store sessions write; the timer copies it one-way, overwriting, to daniel-server.

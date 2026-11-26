@@ -253,7 +253,7 @@ was one request the WAF never saw, about 0.05% of traffic, and the syslog source
 Only the engine binary fixes it. crowdsecurity/crowdsec#4678 sets `CompleteLines: true` on the
 file datasource's tailer, and every release from v1.8.2 carries it. `CompleteLines` is not an
 `acquis.yaml` key, so nothing in this repo can set it. `crowdsec_k8s_image` (set in
-`inventory/group_vars/all.yml`) has pinned a release carrying the fix since #2124.
+`k8s/vars.yml`) has pinned a release carrying the fix since #2124.
 A recurrence therefore means the pinned image lost the fix, not that a config changed.
 `docs/crowdsec-waf-record.md` has the measurements and the dates. To check, run
 `probe.py loki-query '{container="crowdsec-agent"} |= "UnmarshalJSON"' --since 24h`, which
@@ -267,7 +267,7 @@ plus AppSec), `crowdsec-node-agents` (the DaemonSet), `crowdsec-traefik-agent` a
 `crowdsec-authelia-agent` (the two sidecars). The `crowdsec` job renders from the `metrics`
 item on this role's `containers_list` entry, which is also where the engine's `:6060` is
 defined. The sidecar jobs render one per entry of
-`inventory/group_vars/all.yml:crowdsec_k8s_sidecar_agents`, which the
+`k8s/vars.yml:crowdsec_k8s_sidecar_agents`, which the
 `lapi-register` initContainer also reads; `crowdsec-node-agents` is hand-written.
 
 Read the job before writing a CrowdSec query: `node` is not a CrowdSec label and only the

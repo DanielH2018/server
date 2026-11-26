@@ -1,11 +1,12 @@
-"""The census row holding every `*_host` key of `group_vars/all.yml` to a reader."""
+"""The census row holding every `*_host` key of the shared vars files to a reader."""
 
 import re
 from functools import cache
 
 from _row_table import Census, Subject, tracked
 
-_ALL_VARS = "inventory/group_vars/all.yml"
+_SHARED_VARS = ("estate/vars.yml", "k8s/vars.yml", "hosts/vars.yml")
+_RED_FILE = "estate/vars.yml"
 _HOST_KEY = re.compile(r"^([a-z0-9_]+_host):", re.MULTILINE)
 _READER_ROOTS = ("hosts/*", "k8s/*", "scripts/*", ".github/*", ".claude/*")
 _READER_SUFFIXES = (".yml", ".yaml", ".j2", ".py", ".sh")
@@ -40,9 +41,9 @@ HOST_KEYS_IN_GROUP_VARS_HAVE_A_READER = Census(
         "operator edits it and expects a timer to move. A component lands on a host through "
         "its host package. Delete the key, or read it where it matters."
     ),
-    files=lambda: [_ALL_VARS],
+    files=lambda: list(_SHARED_VARS),
     offence=_unread_keys,
-    red=(Subject(_ALL_VARS, "renovate_notify_host: daniel-box\n"),),
-    green=(Subject(_ALL_VARS, "ups_host: daniel-server\nunrelated: 1\n"),),
-    must_find=frozenset({_ALL_VARS}),
+    red=(Subject(_RED_FILE, "renovate_notify_host: daniel-box\n"),),
+    green=(Subject(_RED_FILE, "ups_host: daniel-server\nunrelated: 1\n"),),
+    must_find=frozenset(_SHARED_VARS),
 )

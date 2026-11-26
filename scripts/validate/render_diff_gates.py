@@ -82,7 +82,8 @@ SERVICES = Path("k8s/services.yml")
 # Where a base from before the move to `k8s/` holds the list; goes once no open PR has one.
 PRE_MOVE_SERVICES = Path("cluster/services.yml")
 ROLES_DIR = Path("k8s/roles")
-GROUP_VARS = Path("inventory/group_vars/all.yml")
+# The namespace keys, in a tree after ADR-0042's split and in one from before it.
+CLUSTER_VARS_FILES = (Path("k8s/vars.yml"), Path("inventory/group_vars/all.yml"))
 
 
 class RenderFailed(RuntimeError):
@@ -323,7 +324,9 @@ def snapshot(
         for tag in names
         if tag in dirs
     }
-    group = yaml_fast.safe_load((tree / GROUP_VARS).read_text())
+    group = yaml_fast.safe_load(
+        next(tree / p for p in CLUSTER_VARS_FILES if (tree / p).exists()).read_text()
+    )
     objects, unpruned = _objects(dirs)
     return Snapshot(
         renders=renders,

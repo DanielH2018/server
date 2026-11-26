@@ -17,7 +17,8 @@ from lib.estate import Inventory
 from lib.inventory_lists import host_vars_file
 from lib.proc_testing import run, write_exec
 from lib.render_guard import copy_host_files
-from lib.repo_paths import ALL_VARS, REPO
+from lib.estate import shared_vars
+from lib.repo_paths import REPO
 from renderer.renderer_lib import host as host_mode
 from _setup_render import CLAUDE_CODE, role_context
 
@@ -323,7 +324,7 @@ def test_every_read_path_probe_builds_is_admitted_is_clean(box):
     """The allowlist follows probe.py: a path it gains and the gateway lacks turns this red."""
     conf = statements(rendered(box, SQUID_CONF))
     assert set(read_hosts(conf)) == {"prom", "am", "loki"}
-    domain = yaml_fast.safe_load((ALL_VARS).read_text())["domain"]
+    domain = shared_vars()["domain"]
     prom, am, loki = (
         f"http://{h}.local.{domain}"
         for h in ("prometheus", "alertmanager", "loki-homelab")
@@ -346,7 +347,7 @@ def test_every_read_path_probe_builds_is_admitted_is_clean(box):
 
 def test_a_write_or_an_unlisted_read_is_refused_is_flagged(box):
     conf = statements(rendered(box, SQUID_CONF))
-    domain = yaml_fast.safe_load((ALL_VARS).read_text())["domain"]
+    domain = shared_vars()["domain"]
     for url in (
         f"http://loki-homelab.local.{domain}/loki/api/v1/push",
         f"http://prometheus.local.{domain}/api/v1/admin/tsdb/delete_series",
@@ -368,7 +369,7 @@ def traefik_connects(conf: list[str], domain: str, vip: str) -> list[str]:
 
 def test_no_connect_destination_lands_on_traefik_is_clean(box):
     """A tunnel to Traefik's VIP would let the session pick any route inside it."""
-    inventory = yaml_fast.safe_load((ALL_VARS).read_text())
+    inventory = shared_vars()
     conf = statements(rendered(box, SQUID_CONF))
     assert (
         traefik_connects(
@@ -379,7 +380,7 @@ def test_no_connect_destination_lands_on_traefik_is_clean(box):
 
 
 def test_a_connect_to_a_local_name_or_the_vip_is_flagged(box):
-    inventory = yaml_fast.safe_load((ALL_VARS).read_text())
+    inventory = shared_vars()
     domain, vip = inventory["domain"], inventory["k3s_metallb_ingress_vip"]
     planted = [
         f"acl t2_https dstdomain grafana.local.{domain}",

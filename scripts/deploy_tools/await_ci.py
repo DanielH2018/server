@@ -62,7 +62,7 @@ CI_REPO = "DanielH2018/server"
 # check.
 #
 # This must equal the gate every deploy path grades by, which is `ci_required_contexts` in
-# inventory/group_vars/all.yml (checkout-sync and the builder render it to CI_CONTEXTS in their
+# estate/vars.yml (checkout-sync and the builder render it to CI_CONTEXTS in their
 # units and settings on daniel-box). Equal in BOTH directions: a name here that
 # `ci_required_contexts` lacks blocks a landing that checkout-sync's gate would pass. `renovate
 # config validator` is the live instance. It is a PR check: the ci.yml job skips push, so a master

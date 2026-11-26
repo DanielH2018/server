@@ -53,7 +53,7 @@ def namespace_documents() -> dict[str, dict]:
         }
     }
     if settings["limitrange"]:
-        # Defaults only: see k8s_default_limitrange in group_vars/all.yml for why no min, max or
+        # Defaults only: see k8s_default_limitrange in k8s/vars.yml for why no min, max or
         # ResourceQuota.
         documents[LIMITRANGE_FILE] = {
             "apiVersion": "v1",

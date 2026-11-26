@@ -410,7 +410,7 @@ checks each gate suppresses.
   The probe classifies, not the error text: parsing curl exit codes and git stderr across
   heterogeneous crons is the "green and inert" shape that library's header records paying for
   twice, and a GitHub 403 while the link is up makes the probe succeed, so that alert still pages.
-  The endpoint list is `inventory/group_vars/all.yml:wan_probe_urls`, pinned equal to this
+  The endpoint list is `estate/vars.yml:wan_probe_urls`, pinned equal to this
   gate's `WAN_PROBE_DEFAULT` by a test, because two halves disagreeing about what "the internet"
   means would leave a single-endpoint outage reported by nothing. The one wrong case is an
   HTTP-level failure coinciding with a WAN outage, reported as a skip; both alerts would have

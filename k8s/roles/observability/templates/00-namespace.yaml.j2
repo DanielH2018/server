@@ -7,7 +7,7 @@ kind: Namespace
 metadata:
   name: {{ k8s_observability_namespace }}
 {% if k8s_psa_labels %}
-  # Pod Security Admission, warn+audit only — see k8s_psa_labels in group_vars/all.yml for
+  # Pod Security Admission, warn+audit only — see k8s_psa_labels in k8s/vars.yml for
   # why nothing is enforced here. Four workloads in this namespace publish a loopback
   # hostPort, so `enforce: baseline` would refuse loki, tempo, prometheus and the collector.
   labels:

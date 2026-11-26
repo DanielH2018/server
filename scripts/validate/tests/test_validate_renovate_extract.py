@@ -297,7 +297,7 @@ def test_the_pin_line_census_finds_its_known_members_in_the_tree() -> None:
     }
     known = {
         ("k8s/roles/traefik/defaults/main.yml", "an `_image:` key"),
-        ("inventory/group_vars/all.yml", "an `_image:` key"),
+        ("k8s/vars.yml", "an `_image:` key"),
         ("hosts/components/registry-gc/defaults/main.yml", "an `_image:` key"),
         ("k8s/roles/system-upgrade/defaults/main.yml", "a control-plane version"),
         (".github/workflows/ci.yml", "a `# renovate:` annotation"),

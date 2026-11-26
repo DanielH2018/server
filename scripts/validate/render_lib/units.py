@@ -5,7 +5,7 @@ Without it a typo'd directive key reaches a live host with systemd loading the u
 ignoring the bad line with only a journal warning.
 
 Render context = `lib.render_context`: StubUndefined (`scripts.lib.render_guard`) under the
-OWNING ROLE's `defaults/main.yml` under `inventory/group_vars/all.yml`, every value
+OWNING ROLE's `defaults/main.yml` under the shared vars files, every value
 expanded the way Ansible expands it. Bare stubs are not enough: `systemd-analyze verify` treats
 `OnCalendar=STUB` and `OnUnitActiveSec=STUB` as parse failures, so a timer would be red on a clean repo until its role's
 real schedule value is layered in. What still renders as STUB: `inventory_hostname` and

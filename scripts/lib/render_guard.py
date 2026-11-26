@@ -38,7 +38,6 @@ from lib.role_files import cluster_vars_source, repo_file, role_file
 from lib.container_entry import ContainerEntry, parse_containers_list
 from lib.inventory_lists import K8S_HOST, host_names, host_vars_file
 from lib.repo_paths import (
-    ALL_VARS,
     HOST_VARS,
     INVENTORY,
     K8S_SERVICES,
@@ -47,7 +46,6 @@ from lib.repo_paths import (
 )
 
 __all__ = [
-    "ALL_VARS",
     "BASE_CONTEXT",
     "BUILT_IMAGE_TAG_STUBS",
     "HOST_VARS",
@@ -233,12 +231,13 @@ def host_files(host_vars: Path = HOST_VARS) -> list[Path]:
 
 
 def copy_host_files(dest: Path, host_vars: Path = HOST_VARS) -> Path:
-    """Copy every vars file under `host_vars`, ``_example`` included, into `dest`; return it.
+    """Copy every vars file under `host_vars` into `dest`, keeping its path; return `dest`.
 
+    That is the every-host ``vars.yml`` and each ``<host>/vars.yml``, ``_example`` included.
     A test edits the copy and points an ``Inventory`` at it, without copying the packages.
     """
-    for src in host_vars.glob("*/vars.yml"):
-        target = host_vars_file(src.parent.name, dest)
+    for src in [*host_vars.glob("vars.yml"), *host_vars.glob("*/vars.yml")]:
+        target = dest / src.relative_to(host_vars)
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_bytes(src.read_bytes())
     return dest

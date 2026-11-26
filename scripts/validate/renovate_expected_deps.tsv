@@ -70,7 +70,7 @@ regex	hosts/packages/homelab-tools/package.yml	twpayne/chezmoi	github-release-at
 regex	hosts/packages/homelab-tools/package.yml	twpayne/chezmoi	github-release-attachments	digest	-
 regex	hosts/packages/homelab-tools/package.yml	vale-cli/vale	github-release-attachments	digest	-
 regex	hosts/packages/homelab-tools/package.yml	vale-cli/vale	github-release-attachments	digest	-
-regex	inventory/group_vars/all.yml	crowdsecurity/crowdsec	docker	digest	-
+regex	k8s/vars.yml	crowdsecurity/crowdsec	docker	digest	-
 regex	k8s/roles/airflow/defaults/main.yml	postgres	docker	digest	-
 regex	k8s/roles/artifacts/defaults/main.yml	python	docker	digest	-
 regex	k8s/roles/authelia/defaults/main.yml	authelia/authelia	docker	digest	-

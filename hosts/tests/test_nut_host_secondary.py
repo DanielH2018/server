@@ -20,14 +20,14 @@ Run: uv run pytest hosts/tests/test_nut_host_secondary.py
 """
 
 from lib import yaml_fast
-from _helpers import ALL_VARS, K8S_ROLES
+from _helpers import K8S_ROLES
 
 from _shell_render import rendered_shell_text
+from lib.estate import shared_vars
 from lib.proc_testing import run
 from lib.repo_paths import REPO
 
 
-ALL_VARS_TEXT = ALL_VARS.read_text()
 NUT_DEFAULTS = K8S_ROLES / "nut" / "defaults" / "main.yml"
 NUT_SERVICE = K8S_ROLES / "nut" / "templates" / "service.yaml.j2"
 NUT_COMPONENT = REPO / "hosts" / "components" / "nut-secondary" / "component.yml"
@@ -116,7 +116,7 @@ def onbatt_delay_verdict(delay: int, armed_beyond_ups_host: bool) -> str | None:
 
 def _armed_hosts_beyond_ups_host() -> list[str]:
     """Hosts other than ups_host whose package lists the nut-secondary component."""
-    ups_host = yaml_fast.safe_load(ALL_VARS_TEXT)["ups_host"]
+    ups_host = shared_vars()["ups_host"]
     return [
         path.parent.name
         for path in sorted((REPO / "hosts").glob("*/package.yml"))

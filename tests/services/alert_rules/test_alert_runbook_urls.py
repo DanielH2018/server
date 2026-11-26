@@ -23,7 +23,7 @@ its source.
 
 DECIDED: runbook_url is a literal URL in each rule, not a page slug that the Alertmanager
 template expands. The rule files are plain YAML that Jinja never renders, so the domain is a
-literal there, and this module pins it to `domain` in `group_vars/all.yml`. A slug would need
+literal there, and this module pins it to `domain` in `estate/vars.yml`. A slug would need
 a second Jinja-rendered template in the alertmanager-config Secret, and the same define in
 amtool's offline render, for a domain the public repo already names in many files.
 

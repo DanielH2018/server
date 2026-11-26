@@ -231,12 +231,12 @@ def test_backup_tier_backup_class_off_every_list_is_not_no_backup(tmp_path):
 
 
 def test_backup_tier_reads_a_group_vars_override_of_a_tier_list(tmp_path):
-    # An all.yml override reaches Ansible, so it must reach the catalogue too.
+    # An estate-vars override reaches the render, so it must reach the catalogue too.
     paths = make_repo(tmp_path)
     pvc = _pvc_block("jellyfin-config", "longhorn")
     assert _jellyfin_tier(paths, pvc).startswith("weekly")
     write(
-        paths["all_vars"],
+        paths["estate_vars"],
         """\
         k8s_namespace: homelab
         k3s_longhorn_weekly_volumes: []
@@ -249,7 +249,7 @@ def test_backup_tier_reads_a_group_vars_override_of_a_tier_list(tmp_path):
 
 def test_backup_tier_derives_the_r2_set_from_the_injected_service_list(tmp_path):
     paths = make_repo(tmp_path)
-    write(paths["all_vars"], "k8s_namespace: lab\n")
+    write(paths["estate_vars"], "k8s_namespace: lab\n")
     write(paths["k8s_roles"] / "svc" / "defaults" / "main.yml", "---\n")
     write(
         paths["k3s_defaults"],

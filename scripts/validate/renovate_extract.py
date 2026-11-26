@@ -91,7 +91,7 @@ REGISTRY_BUILT_IMAGES = frozenset(
 IMAGE_DEFAULTS = (
     "k8s/roles/*/defaults/main.yml",
     "hosts/components/registry-gc/defaults/main.yml",
-    "inventory/group_vars/all.yml",
+    "k8s/vars.yml",
 )
 CONTROL_PLANE_DEFAULTS = "k8s/roles/system-upgrade/defaults/main.yml"
 

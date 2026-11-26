@@ -88,7 +88,7 @@ case outstanding here. `GET /api/episodes/wanted` and `GET /api/movies/wanted` b
 `"total": 0` on 2026-09-10: the three providers satisfy the only language profile with nothing
 missing. Against that, Whisper needs an ASR sidecar (`whisperai.endpoint` is already stubbed at
 `http://whisper:9001` in Bazarr's own defaults, pointing at nothing) and a CPU budget on
-`daniel-box` (`inventory/group_vars/all.yml:k8s_primary_node`), which is also the node running
+`daniel-box` (`k8s/vars.yml:k8s_primary_node`), which is also the node running
 the GPU transcoder and most other workloads. So
 the cost is real and the benefit was zero on 2026-09-10. **Revisit when a wanted count stays
 non-zero** — that is the measurement that would change the answer, not a judgement about the

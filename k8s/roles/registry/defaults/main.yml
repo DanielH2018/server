@@ -12,7 +12,7 @@ registry_k8s_image: registry:3.1.2@sha256:82f6ff4a7f982960c8aa51617fea3aabc485df
 k8s_autodeploy: false
 k8s_autodeploy_reason: "dependency edges — image-supply path for n8n/homelab-mcp/ical-proxy/nut/pi-peer-backup/code-server/terraria/valheim/karakeep; no intra-tick ordering. ALSO Recreate + its own PVC (blob store) — two independent reasons. COUPLING NOTE for a future promotion: a revert drops recently-pushed digests from the blob store while nodes that already pulled them keep running until their next pull 404s"
 
-# The address vars (k8s_registry_port / _host_ip / _pull_host) live in group_vars/all.yml
+# The address vars (k8s_registry_port / _host_ip / _pull_host) live in k8s/vars.yml
 # because the k3s-server and k3s-agent host components need them too, to write containerd's
 # trust config (templates/registries.yaml.j2 in each).
 
@@ -129,7 +129,7 @@ registry_k8s_netpol_probe_image: alpine:3.24@sha256:f59abe656b692d901e184be3445e
 # SNAT'd to this address before it reaches the pod, so a podSelector cannot admit it — only an
 # ipBlock can. A second node hosting the registry would need this widened to the full
 # `k3s_cni0_gateways` list to admit that node's own cni0 gateway too. Aliases
-# `k3s_cni0_gateways[0]` (`inventory/group_vars/all.yml`) rather than repeating the
+# `k3s_cni0_gateways[0]` (`k8s/vars.yml`) rather than repeating the
 # literal — daniel-box is index 0 there, and the verification above is what pins this to that
 # single entry instead of the full pair netpol-baseline admits.
 registry_k8s_netpol_cni_gateway: "{{ k3s_cni0_gateways[0] }}"

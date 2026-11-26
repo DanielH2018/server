@@ -210,7 +210,7 @@ If that happens, stop and read the log before trying again.
    "copy the IEEE address" guide. The address is `coordinatorIeeeAddress` in the backup.
 6. **Give the replacement the old address and port.** Either reserve `10.0.0.127` for it on
    the LAN and set its Zigbee TCP port to 6638, or change `slzb_ip` in
-   `inventory/group_vars/all.yml`. That variable feeds both the Zigbee2MQTT config and the
+   `estate/vars.yml`. That variable feeds both the Zigbee2MQTT config and the
    blackbox probe in `k8s/roles/observability/templates/prometheus.yaml.j2`, so changing it
    is a merged change.
 7. **Let the pod reconnect.** Zigbee2MQTT exits when it cannot reach the coordinator, and the

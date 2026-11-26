@@ -37,7 +37,7 @@ HOOKS = REPO / ".claude" / "hooks"
 PROBE = Path(__file__).resolve().parents[1] / "_hook_import_probe.py"
 SKIPPED_DIRS = frozenset({"tests", "__pycache__"})
 OUT_OF_TREE = frozenset({"claude_guard", "_claude_guard"})
-COPIED = (".claude/hooks", "scripts", "k8s", "inventory")
+COPIED = (".claude/hooks", "scripts", "k8s", "estate")
 # Anchored: the fallback after `||` names `run-hook.sh` again in its message text.
 _ENTRY = re.compile(
     r'"\$CLAUDE_PROJECT_DIR"/\.claude/hooks/run-hook\.sh ([\w.-]+)((?: --\S+)*)'

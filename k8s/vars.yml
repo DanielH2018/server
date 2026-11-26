@@ -1,38 +1,4 @@
 ---
-# Cloudflare IP ranges - https://www.cloudflare.com/ips/
-cloudflare_ips:
-  - "173.245.48.0/20"
-  - "103.21.244.0/22"
-  - "103.22.200.0/22"
-  - "103.31.4.0/22"
-  - "104.16.0.0/13"
-  - "104.24.0.0/14"
-  - "108.162.192.0/18"
-  - "131.0.72.0/22"
-  - "141.101.64.0/18"
-  - "162.158.0.0/15"
-  - "172.64.0.0/13"
-  - "188.114.96.0/20"
-  - "190.93.240.0/20"
-  - "197.234.240.0/22"
-  - "198.41.128.0/17"
-  - "2400:cb00::/32"
-  - "2606:4700::/32"
-  - "2803:f800::/32"
-  - "2405:b500::/32"
-  - "2405:8100::/32"
-  - "2a06:98c0::/29"
-  - "2c0f:f248::/32"
-
-# Exact patch: uv resolves a bare minor to whatever it has. Must track .python-version.
-# Bump the dotfiles `python` pin and chezmoi apply on both hosts first, or units find no Python.
-host_python_version: "3.15.2"
-
-# Must equal `TREE_LOCK` in scripts/lib/tree_lock.py (test-enforced).
-server_git_tree_lock: /var/lock/server-git-tree.lock
-
-domain: daniel-hunter.com
-
 # The B2 bucket Longhorn's `default` BackupTarget writes to, which `probe.py b2-longhorn` and
 # `b2-budget` list. A bucket name grants nothing without the key pair, and the BackupTarget CR
 # already shows it to the read-only ServiceAccount, so the probe reads it here with no age key.
@@ -40,22 +6,6 @@ domain: daniel-hunter.com
 # DECIDED: not named `longhorn_b2_bucket`. Every `secrets.yml` key's stub overrides inventory in
 # a render, so that name would keep rendering the SOPS key's placeholder.
 k3s_longhorn_b2_bucket: daniel-server-kopia
-
-# Linux Vars
-sys_user: ubuntu
-tz: America/Chicago
-puid: 1000
-pgid: 1000
-# Entries must use `key=value,key=value` form; legacy `origin:archive` needs a `Suite:` field.
-# The Pi's Docker repo is deliberately absent: a docker-ce upgrade restarts the daemon.
-unattended_upgrades_origins_patterns:
-  - "origin=${distro_id},archive=${distro_codename}-updates"
-  - "origin=gh,codename=stable"
-has_igpu: false
-# Narrow /24, not the broader RFC1918 range (see traefik's trustedIPs comment).
-lan_subnet: "10.0.0.0/24"
-# Also the DHCP server: only it knows leased device names, so Pi-hole forwards PTR lookups here.
-lan_router_ip: "10.0.0.1"
 # Global because the hypervisor role's staging-guest egress fence must name these ranges.
 # Unfenced, the guest reaches prod's unauthenticated Longhorn API (ClusterIPs are off the LAN).
 k3s_pod_cidr: "10.42.0.0/16"
@@ -101,8 +51,6 @@ k3s_flannel_node_ips:
   - 10.42.1.0/32
 k3s_agent_node_ips:
   - "{{ hosts['daniel-server'].server_ip }}"
-# Exists only so comments citing wg-easy's client range share one name; no template reads it.
-wg_client_subnet: "10.8.0.0/24"
 k3s_metallb_ingress_vip: 10.0.0.240
 # MQTT is raw TCP: it crosses hosts by this VIP, not a Traefik hostname.
 mqtt_k8s_vip: 10.0.0.242
@@ -113,16 +61,6 @@ dns_k8s_vip: 10.0.0.243
 # blackholes traffic MetalLB's announcer would forward to another node.
 dns_k8s_cluster_ip: 10.43.252.187
 jellyfin_k8s_lan_ip: 10.0.0.241
-# Panel finds pods by `app=<deployment>` and console by Loki `container=<server deployment>`.
-# `start_refused` blocks start/restart with that reason; stop stays allowed.
-game_servers:
-  - name: terraria
-    deployments: [terraria, terraria-stats]
-    # 1.4.5.7 crashes on any bare TCP connect, so the port monitor stays off until the image is
-    # newer.
-    start_refused: "issue #822: Terraria 1.4.5.7 crashes on a bare TCP connect; follow the restore checklist first"
-  - name: valheim
-    deployments: [valheim, valheim-stats]
 # Global: shared by the crowdsec and traefik roles, which cannot see each other's defaults.
 crowdsec_k8s_image: crowdsecurity/crowdsec:v1.8.2@sha256:65b74942f7e7ed5c60fde4ac15fc4ba715904c398c8b16dd451f4907d90347d4
 # Four readers derive from this map: sidecar username, machine registration, scrape jobs, netpol
@@ -132,8 +70,6 @@ crowdsec_k8s_sidecar_agents:
   authelia: k8s-authelia-agent
 crowdsec_k8s_lapi_port: 8080
 crowdsec_k8s_appsec_port: 7422
-# Fixed PAN ids so a redeploy never regenerates the mesh; network_key is sensitive (SOPS).
-slzb_ip: 10.0.0.127
 zigbee_pan_id: 6754
 zigbee_ext_pan_id: [221, 187, 17, 34, 51, 68, 85, 102]
 # One namespace: Traefik Middleware references are namespace-scoped, so splitting costs a qualified
@@ -143,52 +79,6 @@ k8s_namespace: homelab
 # Every nodeSelector pin and `hosts[...]` lookup meaning "primary node" reads this, not the literal.
 # It does not say why a workload is pinned; that is recorded at each pin.
 k8s_primary_node: daniel-box
-
-# The label values loki-homelab's streams carry, one entry per stream role. Both Alloy
-# configs stamp their streams from this map: k8s/roles/loki-homelab for the cluster nodes and
-# hosts/components/pi-compose/services/alloy for daniel-pi. monitor-bridge's LogQL selectors in config/env.yaml.j2
-# are rendered from it too.
-#
-# A consumer that cannot render a var is compared against it instead: the Grafana dashboards,
-# the observability deploy-annotation expr, probe.py's alert reconstruction and monitor-bridge's
-# Python constants. tests/services/scraping/test_loki_stream_labels.py holds both directions:
-# every value here is emitted, and every `job` value a consumer selects is one listed here.
-#
-# Only daniel-pi's streams name a `machine`. A cluster stream's machine is the node's HOSTNAME,
-# which Alloy reads at runtime, so no inventory value can own it.
-#
-# Two roles share `job: syslog`. That is deliberate: one parser and one board read every
-# host's verdict lines. It is also why monitor-bridge's file-tail arm must exclude
-# pi_health's machine.
-loki_streams:
-  cluster_pods:
-    job: k8s
-  host_syslog:
-    job: syslog
-  host_authlog:
-    job: authlog
-  k8s_audit:
-    job: k8s-audit
-  host_k3s:
-    job: k3s
-  host_audit:
-    job: audit
-  pi_containers:
-    job: pi
-    machine: daniel-pi
-  pi_health:
-    job: syslog
-    machine: daniel-pi
-
-# By hostname, never anycast IP, so DNS failure is part of the probe. Empty disables the gate.
-# Must equal bridge/config_io.py:WAN_PROBE_DEFAULT (test-enforced).
-wan_probe_urls:
-  - https://cloudflare.com/cdn-cgi/trace
-  - https://www.google.com/generate_204
-
-# Shorter than the hourly cron so at most one slot is skipped (see boot_grace_active in
-# homelab-check-lib.sh).
-loki_route_witness_boot_grace_s: 600
 
 # Warn/audit only, no `enforce`: this namespace holds privileged, hostNetwork, hostPath pods.
 # Rollback: set to {} and promote; PSA acts only at pod create and update.
@@ -313,87 +203,3 @@ k8s_registry_node: "{{ k8s_primary_node }}"
 # Fully qualified: a builder pod may lack a search domain, and a wrong namespace reads as a DNS
 # failure.
 k8s_registry_push_host: "registry.{{ k8s_namespace }}.svc.cluster.local:{{ k8s_registry_port }}"
-# Paired with the k8s/nut pod's nodeSelector.
-ups_host: daniel-server
-# Needs the primary checkout, uv, gh and local kubectl, which only daniel-box carries together.
-ops_cron_host: daniel-box
-# Window, Alertmanager mute and promote.yml cron derive from these; written twice they drift:
-# a reboot moved without the window pages straight through it.
-weekly_reboot_minute: 30
-weekly_reboot_hour: 7
-# Cron day-of-week, 0 = Sunday.
-weekly_reboot_weekday: 0
-# Hosts go down this many minutes AFTER the cron fires; the maintenance window length derives from
-# it.
-weekly_reboot_shutdown_delay_minutes: 5
-# Hosts run Etc/UTC, NOT `tz` (America/Chicago): a window derived in `tz` would open at midday and
-# page.
-weekly_reboot_timezone: UTC
-# Slack for a monitor flipping around the cron: the hosts go down only after the shutdown delay.
-weekly_reboot_mute_lead_minutes: 5
-# Measured node recovery ~16 min plus room; alertmanager-secret.yaml.j2 computes the window.
-weekly_reboot_mute_recovery_minutes: 40
-has_fwupd: false
-# A docker-ce/containerd.io upgrade restarts the daemon under every container, so on the Pi these
-# move only through homelab-docker-engine.service, which stops containers first.
-docker_engine_packages:
-  - docker-ce
-  - docker-ce-cli
-  - containerd.io
-  - docker-compose-plugin
-  - docker-buildx-plugin
-# daniel-pi overrides false: rsyslog is masked there (journald is the log of record).
-# ENFORCED by hosts/tests/test_journald_syslog_forwarding.py.
-has_rsyslog: true
-has_repo_checkout: true
-
-# Global: the hypervisor role builds from gateway+netmask, the fence needs the prefix form.
-# A wrong fence is no fence: tests/staging/test_staging_egress_fence.py asserts they match.
-staging_net_cidr: "192.168.140.0/24"
-# Deadline derives from this cadence: a yearly alarm over a monthly cron hides eleven failures.
-# Runs clear of every backup window and the Monday 10:20 list-only slot.
-etcd_drill_full_cron: "20 11 1 * *"
-# Derived from the cron: the longest gap is 31 days plus four days of slack.
-# tests/staging/test_etcd_drill_vm.py pins it between one and two periods.
-etcd_drill_full_deadline_s: 3024000
-has_github_cli: false
-has_chezmoi: false
-
-# Group var, not a role default: the key host's ssh config reads every peer's switch through hosts.
-# False removes the key and the ssh-users membership.
-claude_agent_ssh_login_enabled: false
-claude_agent_ssh_key_host: daniel-box
-claude_agent_ssh_key_path: /var/lib/claude/.ssh/peers_ed25519
-
-# --- The CI gate every deploy path grades by ---
-#
-# Check-run names that must be green on a master commit before anything deploys it. These are
-# GitHub's check-run NAMES, which are also the strings branch protection calls contexts, so they
-# must match ci.yml's `name:` EXACTLY, and that file carries a comment saying as much.
-# `renovate config validator` is deliberately not required, but NOT because it skips: ci.yml's
-# guard is `if: github.event_name != 'pull_request' || steps.scope.outputs.changed == 'true'`,
-# whose left operand is true on a push, so it runs unconditionally on master. It is excluded
-# because a red renovate.json does not change what a deploy renders or applies: the config is
-# consumed by the hosted Mend app when it opens PRs, a plane no deploy path touches. Blocking the
-# gate on it would park every later image bump behind a dependency-management fault.
-#
-# Four readers share the list, so it lives here: `scripts/deploy_tools/promote.py decide`, the
-# host packages' builder, `homelab-checkout-sync` and
-# `tests/repo/ci_workflows/test_ci_contexts_match_workflows.py`. `decide` reads this file by path and
-# refuses anything but a non-empty list of strings, so this key stays a literal list. `scripts/deploy_tools/await_ci.py` names it in a comment.
-#
-# A change to this key or to `ci_ancestor_walk_max` reaches daniel-box only through its host
-# package: the builder and checkout-sync components render both into `homelab-daniel-box`, so
-# they take effect when daniel-box installs the package version carrying them. Until then a
-# renamed CI job leaves both waiting on the old name.
-ci_required_contexts:
-  - prek (lint + validate + tests + secrets)
-
-# How far back from a non-green tip the gate walks for a green ancestor; each step is a GitHub
-# request.
-# Keep small (anonymous quota is 60/hour). A non-positive-integer value stops both readers.
-ci_ancestor_walk_max: 10
-
-# Physical location, feeds the homepage weather widget.
-lat: 38.89
-long: -77.08
