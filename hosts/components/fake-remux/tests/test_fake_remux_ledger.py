@@ -1,17 +1,15 @@
 """The ledger refuses an unlisted move, and `advance` only deletes a fake it has replaced.
 
-The property tests take a fixed seed and no example database, so a CI run cannot differ from a
-local one.
+The property tests run under the profile `tests/hypothesis_profiles.py` loads.
 """
 
 import pytest
 from fake_remux_lib import fake_remux_replace as shell
 from fake_remux_lib import fake_remux_replace_logic as rl
 from fake_remux_lib.fake_remux_ledger import TRANSITIONS, State, move, parse
-from hypothesis import given, settings
+from hypothesis import given
 from hypothesis import strategies as st
 
-FIXED = settings(derandomize=True, database=None, deadline=None, max_examples=300)
 
 NOW = 1_000_000
 POLICY = {"max_attempts": 3, "gop_max_s": 5}
@@ -70,7 +68,6 @@ def test_a_reconcile_on_an_unknown_state_fails_before_it_reaches_sonarr(tmp_path
         shell.reconcile_once(cfg, sonarr=object())
 
 
-@FIXED
 @given(records, queues, probes, files)
 def test_advance_deletes_only_the_fake_and_only_after_an_authentic_probe(
     record, queue, probe, file
@@ -92,7 +89,6 @@ def test_advance_deletes_only_the_fake_and_only_after_an_authentic_probe(
         assert new["13"]["state"] == State.IMPORTING
 
 
-@FIXED
 @given(records, st.lists(st.tuples(queues, probes, files), max_size=8))
 def test_a_run_of_ticks_never_deletes_the_same_fake_twice(record, ticks):
     ledger = {"13": record}
