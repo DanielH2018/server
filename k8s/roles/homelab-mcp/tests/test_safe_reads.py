@@ -1,6 +1,8 @@
 import json
 
 import pytest
+from hypothesis import given, settings
+from hypothesis import strategies as st
 
 from safe_reads import (
     allowed_hosts_and_origins,
@@ -414,3 +416,34 @@ def test_redact_log_secrets_covers_the_cast_refresh_token():
     token = "f" * 64
     out = redact_log_secrets(f"cast failed: {{'refresh_token': '{token}'}}")
     assert out == "cast failed: {'refresh_token': '<redacted>'}"
+
+
+FIXED = settings(derandomize=True, database=None, deadline=None, max_examples=300)
+
+JSON = st.recursive(
+    st.none() | st.booleans() | st.integers() | st.text(),
+    lambda inner: (
+        st.lists(inner, max_size=3)
+        | st.dictionaries(st.text(max_size=6), inner, max_size=3)
+    ),
+    max_leaves=8,
+)
+
+
+@FIXED
+@given(token=st.text(min_size=1), header=st.none() | st.text())
+def test_bearer_token_valid_never_raises_and_accepts_only_the_exact_token(
+    token, header
+):
+    assert bearer_token_valid(header, token) is (header == f"Bearer {token}")
+
+
+@pytest.mark.parametrize("parse", [parse_metric, parse_loki])
+@FIXED
+@given(row=JSON)
+def test_a_malformed_upstream_row_raises_value_error_or_parses(parse, row):
+    try:
+        rows = parse({"data": {"result": [row]}})
+    except ValueError:
+        return
+    assert isinstance(rows, list)
