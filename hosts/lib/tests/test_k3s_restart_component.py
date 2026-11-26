@@ -183,7 +183,7 @@ def test_a_daniel_box_package_without_the_link_leaves_the_updater_unarmed(tmp_pa
     hosts = tmp_path / "hosts"
     shutil.copytree(REPO / "hosts", hosts)
     # Sources outside hosts/ resolve against the root's parent.
-    for name in ("k8s", "inventory", "secrets", "scripts", "docs"):
+    for name in ("k8s", "estate", "secrets", "scripts", "docs"):
         (tmp_path / name).symlink_to(REPO / name)
     spec_path = hosts / "daniel-box/package.yml"
     spec = yaml.safe_load(spec_path.read_text())

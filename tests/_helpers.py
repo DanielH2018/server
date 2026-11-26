@@ -17,7 +17,6 @@ from lib.k8s_roles import ROLLOUT_TIMEOUT_DEFAULT
 # The `X as X` names are re-exports for the guards that import them from here.
 from lib.repo_paths import (
     HOST_VARS as HOST_VARS,
-    INVENTORY as INVENTORY,
     K8S_ROLES as K8S_ROLES,
     REPO,
     SECRETS as SECRETS,

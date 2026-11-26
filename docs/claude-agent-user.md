@@ -259,7 +259,7 @@ lander. The checks and the merge live in `land.sh`, and the lander does not re-i
 
 The approval list is a floor. It keeps the explicit grant points and the gate itself. The agent's
 own components (`claude-code`, `renovate-agent`),
-`host_lib.py` and `inventory/` are not on it, so a PR changing them lands without the
+`host_lib.py` and the vars files are not on it, so a PR changing them lands without the
 operator.
 
 `hosts/components/claude-code/templates/claude-land-approval-paths.j2` is the source of
