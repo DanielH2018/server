@@ -109,6 +109,10 @@ each installed file names the new path. Check with `grep` on the host, not from 
 ContainerCreating, so this follows step 3's merge and `checkout-sync`'s next pull on
 `k8s_primary_node`. `k8s` is served in full, so it covers `k8s/vars.yml`.
 
+The tool docstrings in `app.py` and the jail comment in `safe_reads.py` still list `k8s/`,
+`inventory/` and `tests/`. They change in step 7, when `inventory` leaves the list, because a
+fan-out issue held those files when step 4 landed.
+
 **Done when** the pod lists `estate/CLAUDE.md`.
 
 ### Step 5: host values move beside the packages
