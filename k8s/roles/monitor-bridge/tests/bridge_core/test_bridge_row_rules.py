@@ -225,7 +225,6 @@ def test_each_gate_value_holds_the_rows_its_rules_were_placed_for():
             "prowlarr_indexers",
             "scrutiny",
             "speedtest",
-            "airflow_scheduler",
         },
         "prometheus": {"host_packages"},
         None: {"arr_queue", "etcd_restore_drill", "ha_heartbeat"},
