@@ -199,6 +199,8 @@ def build_tools(f: Fakes) -> tuple[Tools, list]:
             "isDraft,state,mergeable,headRefOid", [{"isDraft": False, **polls[0]}]
         )
     views.setdefault("commits", [{"commits": []}])
+    # What a wait for the serial landing reads (`slots._conflict_reads`).
+    views.setdefault("mergeable", [{"mergeable": "MERGEABLE"}])
     # What `Landing.changed_paths` reads for the merge wait's rules: no file, so no rule bars.
     head = polls[0].get("headRefOid", "") if polls else ""
     views.setdefault("files,headRefOid", [{"files": [], "headRefOid": head}])
