@@ -355,11 +355,10 @@ def refuse_before_run(ln: Landing, head: str) -> None:
     other merges out during the run, and `refuse_before_merge` waits out the rest.
     """
     bar = _bar_after_waits(ln, head, in_turn_waits=False)
-    if bar is None:
-        return
-    if bar.clears is not Clears.VERDICTS:
+    if bar and bar.clears is not Clears.VERDICTS:
         _refuse(ln, bar.why)
-    say(f"{bar.why}; starting its run, and it waits in the turn for that to clear")
+    if bar:
+        say(f"{bar.why}; starting its run, and it waits in the turn for that to clear")
 
 
 def refuse_before_merge(ln: Landing, head: str) -> None:
