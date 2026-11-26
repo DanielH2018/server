@@ -3,7 +3,7 @@
 The etcd drill's guest script signs its R2 requests with `curl --aws-sigv4 "aws:amz:auto:s3"`;
 the pod's image ships no curl, so this is the same signature in stdlib Python. It signs `host`,
 `x-amz-content-sha256` and `x-amz-date`, the three headers curl signs, and
-`k8s/roles/monitor-bridge/tests/test_sigv4.py` holds it to signatures curl produced.
+`k8s/roles/monitor-bridge/tests/check_bodies/test_sigv4.py` holds it to signatures curl produced.
 """
 
 import hashlib

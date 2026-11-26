@@ -40,7 +40,7 @@ def test_role_for_names_no_role_for_a_document_or_a_setup_path(path):
     "path",
     [
         "tests/deploy/test_k3s_pin_routing.py",
-        "k8s/roles/monitor-bridge/tests/test_b2_storage.py",
+        "k8s/roles/monitor-bridge/tests/check_bodies/test_b2_storage.py",
         "scripts/conftest.py",
         "k8s/roles/sonarr/files/test_helper.py",
     ],

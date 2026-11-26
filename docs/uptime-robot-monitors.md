@@ -174,7 +174,7 @@ To read the scheduled check's last verdict, run
 The table above is the oracle. `scripts/diagnostics/probe_lib/uptime_robot.py` parses it, and
 the keyword test reads the same rows. The bridge pod carries no checkout, so it reads the ids
 and names from `monitor_bridge_uptime_robot_monitors`, rendered into its environment.
-`k8s/roles/monitor-bridge/tests/test_check_uptime_robot.py::test_the_rendered_monitor_list_is_the_docs_table`
+`k8s/roles/monitor-bridge/tests/check_bodies/test_check_uptime_robot.py::test_the_rendered_monitor_list_is_the_docs_table`
 fails when that list and the table differ.
 
 ### The key

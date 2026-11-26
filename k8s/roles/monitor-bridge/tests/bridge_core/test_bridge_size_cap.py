@@ -7,7 +7,7 @@ body that wants to join replaces one, or raises the cap in a reviewed PR.
 
 from pathlib import Path
 
-FILES = Path(__file__).resolve().parents[1] / "files"
+FILES = Path(__file__).resolve().parents[2] / "files"
 
 # Measured at M6 batch A6-8: 7,836 physical lines over 39 modules, deploy_pipeline.py included.
 # Rounded up to the next 500, which is how the plan sets it.

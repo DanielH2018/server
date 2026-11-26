@@ -7,7 +7,7 @@ runbooks cite can vanish unnoticed.
 This POSTs v2 `getMonitors` with the account's READ-ONLY key and is down when a monitor in
 `UPTIME_ROBOT_MONITORS` is missing or paused. The pod's env renders that list from
 monitor-bridge's `monitor_bridge_uptime_robot_monitors`, and a test holds it to the doc's
-table (tests/test_check_uptime_robot.py). A monitor that is down is not a failure here:
+table (tests/check_bodies/test_check_uptime_robot.py). A monitor that is down is not a failure here:
 Uptime Robot pages on that itself.
 
 Same cache idiom as `checks/healthchecks.py`: a success is cached for

@@ -19,7 +19,7 @@ from deploy_tools.land_lib.outcome import Outcome
 from lib.repo_paths import REPO as REPO_ROOT
 from lib.role_paths import tag_for
 
-_DECLARED_TESTS = "k8s/roles/monitor-bridge/tests/test_b2_storage.py"
+_DECLARED_TESTS = "k8s/roles/monitor-bridge/tests/check_bodies/test_b2_storage.py"
 _DECLARED_FILES = "k8s/roles/monitor-bridge/files/checks/service.py"
 
 

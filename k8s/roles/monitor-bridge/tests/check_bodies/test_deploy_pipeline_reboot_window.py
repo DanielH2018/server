@@ -7,7 +7,7 @@ it reports the widest window any target has, `chained_timeout.VERIFY_CAP_S` (5.5
 the reboot, the one `land-wait` reads. At the committed schedule (07:30 cron, a 5-minute
 shutdown delay, 40 minutes of recovery) that is Sunday 02:05 to 08:15 UTC, end exclusive.
 
-Run: uv run pytest k8s/roles/monitor-bridge/tests/test_deploy_pipeline_reboot_window.py
+Run: uv run pytest k8s/roles/monitor-bridge/tests/check_bodies/test_deploy_pipeline_reboot_window.py
 """
 
 from dataclasses import replace

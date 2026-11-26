@@ -27,7 +27,7 @@ A KEY THE POD'S ENVIRONMENT RENDERS HAS NO DEFAULT HERE. `templates/config/env.y
 value the pod runs with, and the role's `render_secrets` the credentials, so a second default in this package would be a copy the deploy never reads, and
 the two would drift apart. A read with no default is required:
 an absent key records a problem the same way a malformed one does. A default survives only on a
-key the template does not render. `tests/test_config_reads_the_rendered_env.py` holds both
+key the template does not render. `tests/bridge_core/test_config_reads_the_rendered_env.py` holds both
 directions.
 
 Constants only. The mutable per-check state (the streak counters and probe caches) is
@@ -58,7 +58,7 @@ class Config(HostConfig, ServiceConfig, IoConfig):
     the pod log — which Alloy ships to Loki. `test_repr_hides_every_credential_but_not_
     ordinary_config` pins both halves: the secrets absent, and ordinary config still present.
     That test anchors a sentinel LIST, so it cannot see a new credential added with neither
-    marker nor sentinel; `tests/test_config_credential_shape.py` covers that by SHAPE, failing
+    marker nor sentinel; `tests/bridge_core/test_config_credential_shape.py` covers that by SHAPE, failing
     on any field named like a credential (TOKEN, KEY, PASSWORD, WEBHOOK, …) that the repr would
     still render.
 

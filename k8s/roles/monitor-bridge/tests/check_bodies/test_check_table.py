@@ -19,7 +19,7 @@ from check_table import CHECKS
 from renderer.template_filters.py_table import py_table
 
 
-_TABLE = Path(__file__).resolve().parents[1] / "files" / "check_table.py"
+_TABLE = Path(__file__).resolve().parents[2] / "files" / "check_table.py"
 _GATES = frozenset({"b2_reachable", "wan_reachable"})
 _GATE_VALUES = _GATES | {"prometheus", "startup_grace", None}
 

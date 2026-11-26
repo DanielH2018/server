@@ -1,7 +1,7 @@
 """The labels loki-homelab's streams carry, and how a LogQL stream selector matches them.
 
 Two guards hold selectors to the streams Alloy emits:
-`k8s/roles/monitor-bridge/tests/test_check_loki.py` for monitor-bridge's selectors and
+`k8s/roles/monitor-bridge/tests/check_bodies/test_check_loki.py` for monitor-bridge's selectors and
 `tests/services/scraping/test_loki_stream_labels.py` for the Loki ruler's rule files. Both read
 the label vocabulary, the Pi's streams and the matcher from here, so the two cannot disagree
 about what a selector selects.

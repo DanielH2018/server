@@ -10,7 +10,7 @@ from pathlib import Path
 
 from _bridge_env import bridge_env
 
-BRIDGE = Path(__file__).resolve().parents[1] / "files" / "bridge"
+BRIDGE = Path(__file__).resolve().parents[2] / "files" / "bridge"
 PARSERS = {"_env", "_int", "_num"}
 
 
