@@ -41,6 +41,8 @@ claims are unchanged.
   Both scripts read `METRICS_PORT` with no default, so the port has no second copy (#3816).
 - Stock `python` (`game_stats_k8s_image`), not an `image-builder` build: both scripts and `stats_lib.py` are
   pure stdlib, so a build would add a layer and change nothing that runs.
+  The exposition stays hand-written rather than prometheus_client for the same reason
+  (`k8s/roles/game-stats/defaults/main.yml:DECIDED: stock python`).
   **Not because a built image could not be pulled here.** The in-cluster `registry` serves a
   cross-node pull — `k8s/vars.yml:k8s_registry_pull_host` is one
   mirror key every node's `registries.yaml` carries, and `k8s/roles/ical-proxy/` is
