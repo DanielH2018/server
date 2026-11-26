@@ -25,9 +25,8 @@ spec:
       # best-effort: a read-only viewer over a hostPath should lose an eviction race to every
       # workload that serves state.
 {{ pod_shell('homelab-best-effort', run_as_user=puid, run_as_group=pgid, fs_group=pgid, non_root=true) }}
-      # hostPath is node-local, so the pod MUST land where the artifacts are. Unpinned, it
-      # schedules onto the other node and every mount resolves to an empty directory — the
-      # index then reads as "no artifacts" rather than as a scheduling mistake.
+      # hostPath is node-local; unpinned, every mount resolves to an empty directory and the index
+      # reads empty.
       nodeSelector:
         kubernetes.io/hostname: {{ artifacts_k8s_node }}
       containers:
@@ -48,8 +47,6 @@ spec:
               value: "1"
             - name: TZ
               value: {{ tz }}
-          # The server writes only the star list, into the one writable mount below. The index
-          # is in memory and every artifact tree is mounted read-only.
 {{ hardened_security_context(read_only=true) }}
           ports:
             - containerPort: {{ container_item.port }}
@@ -88,9 +85,8 @@ spec:
               mountPath: /srv/artifacts/{{ peer.name }}
               readOnly: true
 {% endfor %}
-            # A directory, not the file: StarStore replaces the list by renaming a temp file
-            # over it, and a rename onto a single-file bind mount fails with EBUSY. Outside
-            # /srv/artifacts, or the index would list it as a host.
+            # A directory, not the file: a rename onto a single-file bind mount fails with EBUSY.
+            # Outside /srv/artifacts, or the index lists it as a host.
             - name: artifacts-stars
               mountPath: /srv/stars
 {{ container_resources(cpu_limit=artifacts_k8s_cpu_limit, mem_limit=artifacts_k8s_mem_limit, cpu_request=artifacts_k8s_cpu_request, mem_request=artifacts_k8s_mem_request) }}
@@ -98,28 +94,22 @@ spec:
         - name: artifacts-script
           configMap:
             name: artifacts-server
-        # type: Directory, not DirectoryOrCreate — kubelet would create a missing directory
-        # as root, and the sync (which runs as ubuntu) could then never write into it.
-        # daniel-box's host package creates both paths with the right ownership first.
+        # type: Directory, not DirectoryOrCreate: kubelet would create it as root and the sync could
+        # not write.
         - name: artifacts-{{ artifacts_k8s_node }}
           hostPath:
             path: {{ artifacts_host_dir }}
             type: Directory
 {% if artifacts_agent_dir | length > 0 %}
-        # type: Directory, not DirectoryOrCreate — kubelet would create a missing path as
-        # root inside the agent's home, where the agent could not write and claude-agent-setup
-        # would then fight it. With Directory a missing path leaves the new pod in
-        # ContainerCreating while the old pod keeps serving, so the failure is visible on the
-        # rollout rather than an empty index. claude-agent-setup (hosts/components/claude-code/)
-        # creates the directory (2750 claude:ubuntu); this role must not.
+        # type: Directory, not DirectoryOrCreate: kubelet would create it as root.
+        # claude-agent-setup creates it (2750 claude:ubuntu); this role must not.
         - name: artifacts-agent
           hostPath:
             path: {{ artifacts_agent_dir }}
             type: Directory
 {% endif %}
 {% if artifacts_triage_dir | length > 0 %}
-        # type: Directory for the agent tree's reason. The claude-code host component's triage
-        # tmpfiles entry creates it; until then the new pod waits and the old one keeps serving.
+        # type: Directory, for the agent tree's reason; the triage tmpfiles entry creates it.
         - name: artifacts-triage
           hostPath:
             path: {{ artifacts_triage_dir }}

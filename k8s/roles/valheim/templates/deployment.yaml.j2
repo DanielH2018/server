@@ -8,14 +8,10 @@ metadata:
   name: valheim
   namespace: {{ k8s_namespace }}
 spec:
-  # Same reasoning as terraria: RWO claims on single-replica Longhorn deadlock a rolling
-  # update, and two servers writing one world would be worse than the deadlock.
+  # Recreate: RWO claims deadlock a rolling update, and two servers must never write one world.
 {{ spec_shell('Recreate') }}
-  # No `replicas:`. deploy.local's Games panel owns the count (ADR-0033); a rendered value would
-  # make Flux reset every start or stop.
-  # The same budget as Flux's health-check `timeout`, which is why both read one variable. See
-  # manifests_rollout_timeout in defaults/main.yml for the measurement behind it
-  # and for why the deadline and the wait have to move together.
+  # No `replicas:`: deploy.local's Games panel owns the count (ADR-0033); Flux would reset it.
+  # progressDeadlineSeconds equals Flux's timeout (manifests_rollout_timeout).
   progressDeadlineSeconds: {{ valheim_k8s_rollout_timeout[:-1] | int }}
   selector:
     matchLabels:
@@ -26,46 +22,20 @@ spec:
         app: valheim
         netpol-baseline: enforced
     spec:
-      # Pinned to the VIP-announcing node while the MetalLB L2Advertisement is pinned
-      # to daniel-box: with externalTrafficPolicy Local, a VIP-backed pod on the other
-      # node makes the announcer DROP all forwarded LAN traffic.
-      # Permanent posture (operator decision): with ETP Local
-      # load-bearing for client IPs, announcement and placement stay on one node as a
-      # unit; this pin only ever moves together with the L2Advertisement nodeSelector.
-      #
-      # The Service carries ETP Local and a homelab-pool VIP, so a reschedule onto daniel-server
-      # would black-hole the game port with the pod itself reporting healthy.
+      # Pinned to the VIP-announcing node: with externalTrafficPolicy Local, a pod on the other node
+      # makes the announcer drop LAN traffic while the pod reports healthy. Moves only with the
+      # L2Advertisement nodeSelector.
       nodeSelector:
         kubernetes.io/hostname: {{ k8s_primary_node }}
 {{ pod_shell('homelab-standard') }}
-      # Places the pinned BepInEx plugins before the server starts. Runs as root, like the
-      # server container: /config and /opt/valheim are root-owned (PUID/PGID default to 0), and
-      # root writing root-owned files needs no DAC_OVERRIDE.
-      #
-      # It writes BOTH locations, and each covers a gap the other has. Neither is redundant:
-      #
-      #   /config/bepinex/plugins   the image's sanctioned drop point. `merge_mod` rebuilds the
-      #                             install tree from scratch on every BepInEx or Valheim update
-      #                             and rsyncs this directory into it, so a plugin that lives
-      #                             only in the install tree is discarded by the next update.
-      #   /opt/valheim/bepinex/…    the live install tree the server actually loads from. That
-      #                             rsync runs ONLY inside a merge, so a pod restart with
-      #                             nothing to update — a mod bump, which changes neither the
-      #                             game nor BepInEx — would otherwise leave the old DLLs
-      #                             running. Guarded on the directory existing, because it does
-      #                             not until BepInEx has installed once.
-      #
-      # Both writes are wipe-then-copy into a `homelab/` subdirectory rather than into the
-      # plugins root. BepInEx scans plugins recursively, so a subdirectory loads identically —
-      # and it makes the set this repo owns removable without touching anything BepInEx put
-      # there. Without the wipe, dropping a mod from valheim_k8s_mods would leave its DLL on the
-      # PVC and BepInEx would keep loading it.
+      # Both locations: /config/bepinex/plugins survives updates; /opt/valheim/bepinex is what
+      # loads.
+      # Wipe-then-copy into `homelab/`, so dropping a mod from valheim_k8s_mods removes its DLL.
 {% if valheim_k8s_mods %}
       initContainers:
         - name: mods
           image: {{ valheim_k8s_mods_image }}
-          # Pushed to a mutable :latest by k8s/image-builder, so without this the node runs
-          # whatever it cached and a mod bump never reaches the pod.
+          # Always: the image is pushed to a mutable :latest, so a cached one hides a mod bump.
           imagePullPolicy: Always
           command:
             - sh
@@ -85,8 +55,6 @@ spec:
               echo "installed plugins:"
               ls -l "$cfg"
 {{ hardened_security_context() }}
-          # Seven file copies totalling ~7 M. Sized for that rather than left to the namespace
-          # LimitRange, whose default is a guard rail for something unmanaged.
 {{ container_resources(cpu_limit='200m', mem_limit='64Mi', cpu_request='10m', mem_request='16Mi') }}
           volumeMounts:
             - name: valheim-config
@@ -112,28 +80,19 @@ spec:
               value: "{{ valheim_k8s_world_name }}"
             - name: SERVER_PUBLIC
               value: "{{ valheim_k8s_server_public }}"
-            # Rewrites /config/adminlist.txt on every boot (common's write_adminlist), so this
-            # var is the source of truth rather than anything edited in-place on the PVC.
             - name: ADMINLIST_IDS
               value: "{{ valheim_k8s_admin_ids }}"
-            # Appended to the server's launch line unquoted by the image, so a multi-token
-            # value works. Carries the vanilla `portals casual` world modifier — see defaults.
             - name: SERVER_ARGS
               value: "{{ valheim_k8s_server_args }}"
             - name: TZ
               value: "{{ tz }}"
-            # Installs BepInExPack beside the vanilla server and runs the server through it.
-            # The image creates BepInEx/plugins and patchers itself before syncing /config/bepinex
-            # into them, so a PRE_BEPINEX_CONFIG_HOOK `mkdir -p "$plugins_path"` (a variable the
-            # 1.4.0 wrapper dropped) would run `mkdir -p ""` and abort the install on every updater
-            # tick. Don't re-add it.
+            # The image creates plugins and patchers itself. Do not add a PRE_BEPINEX_CONFIG_HOOK
+            # `mkdir -p "$plugins_path"`: the variable no longer exists, so it runs `mkdir -p ""`
+            # and aborts.
             - name: BEPINEX
               value: "{{ valheim_k8s_bepinex }}"
-            # The image zips worlds_local hourly and keeps three days of zips. Left at the
-            # default /config/backups those land on the backed-up claim, and because a zip
-            # shares no bytes with the last one, every weekly Longhorn backup would re-upload the
-            # whole rotation: 2.2 G of new blocks a week. The nobackup claim keeps the local rollback zips and costs B2 nothing.
-            # A sibling of the SteamCMD install, not inside it — steamcmd only touches server/.
+            # Off the backed-up claim: zips share no bytes, so each weekly backup re-uploads them.
+            # A sibling of the SteamCMD install: steamcmd only touches server/.
             - name: BACKUPS_DIRECTORY
               value: /opt/valheim/backups
             - name: SERVER_PASS
@@ -141,50 +100,30 @@ spec:
                 secretKeyRef:
                   name: valheim-env
                   key: SERVER_PASS
-          # Steam's threading layer raises its own thread priority at startup. Without
-          # it the server still runs but logs a failed-priority warning every boot.
-          # The container runs its own cron — that is what drives the hourly world
-          # backup and the Steam update check. cron calls initgroups() before every
-          # job, which is setgroups(), which needs this even when the target user is
-          # already root. Without it every tick dies with
-          #   (CRON) error (do_command:initgroups(0) failed: Operation not permitted)
-          # and the log otherwise looks healthy — observed on the first boot here, so
-          # the backups would have silently never run.
-          # No DAC_OVERRIDE, unlike terraria: PUID/PGID default to 0, the seed pod
-          # restores the source's uid 0 with `tar -p --numeric-owner`, and root
-          # writing root-owned files needs no override. Add it only if a world save
-          # ever fails on the backup step.
+          # SYS_NICE: Steam raises its thread priority at startup. SETGID: the container's cron
+          # calls initgroups(), which needs it even as root; without it every cron job fails
+          # silently (`initgroups(0) failed`).
 {{ hardened_security_context(add=['SYS_NICE', 'SETGID']) }}
           volumeMounts:
             - name: valheim-config
               mountPath: /config
             - name: valheim-server
               mountPath: /opt/valheim
-          # Valheim speaks UDP, so terraria's /proc/net/tcp LISTEN check cannot work here —
-          # a UDP socket has no LISTEN state and never appears in that table. This greps
-          # a bound socket on :2456 (hex 0998) instead, which is a real kernel-side check
-          # and, like terraria's, never touches the game protocol: a probe that actually
-          # spoke to the port would log a join attempt every cycle.
-          # BOTH tables, and that is not belt-and-braces — the server binds v6, so the
-          # socket appears ONLY in /proc/net/udp6. Checking /proc/net/udp alone never
-            # matched: the pod sat un-Ready for 27 minutes with a fully working server behind it,
-            # and would have been killed at the threshold.
+          # UDP has no LISTEN state: grep a bound :2456 (hex 0998) socket, not touching the game
+          # protocol.
+          # Both tables: the server binds v6, so the socket appears only in /proc/net/udp6.
           startupProbe:
             exec:
               command: ["sh", "-c", "grep -q ':0998 ' /proc/net/udp /proc/net/udp6"]
             periodSeconds: 15
-            # 15 min. The FIRST boot on an empty /opt/valheim PVC downloads ~1.8 G through
-            # SteamCMD before anything binds; later boots are a delta check plus world load
-            # and clear this in well under a minute.
+            # 15 min: the first boot downloads ~1.8 G through SteamCMD before anything binds.
             failureThreshold: 60
           livenessProbe:
             exec:
               command: ["sh", "-c", "grep -q ':0998 ' /proc/net/udp /proc/net/udp6"]
             periodSeconds: 30
             failureThreshold: 4
-          # A dedicated server needs room to finish its shutdown save rather than be
-          # SIGKILLed at the default
-          # 30s; the exact shutdown behaviour of this image has not been observed here.
+          # Room for the shutdown save instead of SIGKILL at the default 30s.
 {{ container_resources(cpu_limit=valheim_k8s_cpu_limit, mem_limit=valheim_k8s_mem_limit, cpu_request=valheim_k8s_cpu_request, mem_request=valheim_k8s_mem_request) }}
       terminationGracePeriodSeconds: 120
       volumes:

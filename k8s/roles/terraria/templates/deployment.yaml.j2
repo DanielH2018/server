@@ -8,11 +8,9 @@ metadata:
   name: terraria
   namespace: {{ k8s_namespace }}
 spec:
-  # RWO config PVC on single-replica Longhorn — a rolling update deadlocks on the volume,
-  # and two servers writing one world would be worse than the deadlock.
+  # Recreate: the RWO PVC deadlocks a rolling update, and two servers must never write one world.
 {{ spec_shell('Recreate') }}
-  # No `replicas:`. deploy.local's Games panel owns the count (ADR-0033); a rendered value would
-  # make Flux reset every start or stop.
+  # No `replicas:`: deploy.local's Games panel owns the count (ADR-0033); Flux would reset it.
   selector:
     matchLabels:
       app: terraria
@@ -30,49 +28,31 @@ spec:
       # unit; this pin only ever moves together with the L2Advertisement nodeSelector.
       nodeSelector:
         kubernetes.io/hostname: {{ k8s_primary_node }}
-      # Runs as 1000, which is what lets the capability set below be empty. The volume is
-      # uid-1000-owned from the cutover seed, so the server
-      # writes its own data as its owner rather than overriding the permission check to reach
-      # it. The image cannot do this unmodified — see templates/Dockerfile.j2.
-      #
-      # fsGroup is separately load-bearing and must not be dropped as redundant. Each world-save
-      # rewrites .wld.bak, and any left by an earlier root process sit 0:0 644, so a uid-1000
-      # truncate would EACCES on the backup step. fsGroup has the kubelet chown the
-      # volume's group and OR in group-write at every mount, which fixes them declaratively where
-      # a one-shot chown would drift back. That needs `Always`: under `OnRootMismatch` the
-      # kubelet skips the walk once the root is right, and a stray 0:0 file stays unwritable.
+      # Runs as 1000 so the capability set can be empty; the volume is uid-1000-owned.
+      # fsGroup must stay, with `Always`: it fixes root-left .wld.bak files (0:0 644) at every
+      # mount.
 {{ pod_shell('homelab-standard', run_as_user=puid, run_as_group=pgid, fs_group=pgid, non_root=true, fs_group_change_policy='Always') }}
       containers:
         - name: terraria
           image: {{ terraria_k8s_image }}
-          # Rolling tier: the registry tag is rebuilt in place by image-builder, so pod
-          # creation must re-pull. Explicit rather than left to the `:latest` default, because
-          # the API server defaults this field only when it is ABSENT at create time: a
-          # Deployment created with an upstream `@sha256:` pin gets IfNotPresent, and a later apply
-          # that changed only `image` leaves that value in place, so the node reuses its cached
-          # `:latest` after a rebuild.
+          # Always: the tag is rebuilt in place, and the API server defaults this field only at
+          # create time.
           imagePullPolicy: Always
           # The image's console needs a TTY and an open stdin.
           stdin: true
           tty: true
           ports:
             - containerPort: 7777
-          # Empty, and the pod-level uid above plus the chowned image is what earns that: PID 1
-          # runs as the owner of the uid-1000-owned /config, so no DAC_OVERRIDE is needed.
-          #
-          # WHAT TO WATCH IF THIS REGRESSES: the failure lands on the world-save backup step,
-          # not at startup, so a Running pod proves nothing. The signal is a complete
-          # `Saving world data … Validating world save … Backing up world file` cycle in the
-          # log, which fires every 1-2 min, plus new .wld.bak files owned by 1000.
+          # Empty: PID 1 owns /config, so no DAC_OVERRIDE. A regression fails the backup step, not
+          # startup:
+          # check the log for a full `Backing up world file` cycle and .wld.bak files owned by 1000.
 {{ hardened_security_context() }}
           volumeMounts:
             - name: terraria-config
               mountPath: /config
-          # Liveness = a LISTEN socket on 7777 in the kernel table, NOT a connect probe:
-          # the binary protocol logs every accepted socket as "<ip> is connecting...", so
-          # a tcpSocket probe would spam the game console ~2900x/day. 1E61 = hex 7777.
-          # The startup probe covers the ~74s world-load before the port binds; a
-          # first-boot world GENERATION can exceed it but the seed ships existing worlds.
+          # Liveness reads the LISTEN socket on 7777 (hex 1E61): a tcpSocket probe spams the game
+          # console.
+          # The startup probe covers the ~74s world load before the port binds.
           startupProbe:
             exec:
               command: ["bash", "-c", "grep -q ':1E61 [0-9A-F]*:0000 0A ' /proc/net/tcp"]

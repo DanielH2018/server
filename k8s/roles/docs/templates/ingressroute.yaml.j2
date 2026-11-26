@@ -1,18 +1,8 @@
 {% from 'ingressroute.yml.j2' import ingressroute with context %}
-{#
-  Public as well as LAN, which is the macro's default — so this call passes no `public`
-  argument at all.
-
-  The operator wants a name reachable off the LAN. The reference pages map every service,
-  hostname, auth tier and backup posture, so the map is only as exposed as the gate in front
-  of it.
-
-  What makes that safe is that the gate covers EVERY path. There is one route, matched on the
-  Host rule alone, and `bypass_prefixes` is empty — so `/healthz` and `/build-info.json` sit
-  behind Authelia on the public name exactly as the pages do. Adding a bypass prefix here
-  would put an unauthenticated endpoint on the internet; there is no reason to want one, since
-  the readiness probe dials the pod directly and never traverses this route.
-#}
+{# Public as well as LAN. The gate covers EVERY path: one route on the Host rule and an empty
+   `bypass_prefixes`, so /healthz and /build-info.json sit behind Authelia too.
+   A bypass prefix would put an unauthenticated endpoint on the internet; the readiness probe dials
+   the pod directly, so none is needed. #}
 ---
 {{ ingressroute(
     container_item.name,

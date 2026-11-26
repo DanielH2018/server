@@ -9,8 +9,7 @@ metadata:
   name: livesync
   namespace: {{ k8s_namespace }}
 spec:
-  # The PVC is ReadWriteOnce and Longhorn runs one replica, so a rolling update would deadlock:
-  # the new pod waits for a volume the old pod still holds.
+  # RWO PVC with one replica: a rolling update would deadlock on the volume.
 {{ spec_shell('Recreate') }}
   replicas: 1
   selector:
@@ -24,14 +23,9 @@ spec:
     spec:
 {{ pod_shell('homelab-best-effort') }}
       initContainers:
-        # local.d must be WRITABLE, which is why it is an emptyDir with a copy rather than the
-        # ConfigMap mounted straight onto /opt/couchdb/etc/local.d. CouchDB's entrypoint writes
-        # the admin credential from COUCHDB_USER/COUCHDB_PASSWORD into local.d/docker.ini on
-        # startup, and a read-only mount makes that fail.
-        #
-        # Nothing in there needs to persist: local.ini is regenerated from the ConfigMap every
-        # start, docker.ini from the env. That is also why this directory is NOT one of the
-        # seeded volumes — copying it would freeze a stale docker.ini into the PVC.
+        # local.d must be writable: CouchDB's entrypoint writes docker.ini there, so it is an
+        # emptyDir copy.
+        # Not a seeded volume, since that would freeze a stale docker.ini into the PVC.
         - name: seed-config
           image: {{ livesync_k8s_image }}
           imagePullPolicy: IfNotPresent
@@ -53,20 +47,8 @@ spec:
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: {{ container_item.port }}
-          # CouchDB's entrypoint chowns /opt/couchdb/data and then drops to the couchdb user
-          # via setpriv.
-          #
-          # FOWNER is the one addition, and it is required because the volume is an ext4
-          # Longhorn PVC, so it carries a lost+found at mode 0700. The entrypoint's second
-          # pass is
-          #   find /opt/couchdb/data -type d ! -perm 0755 -exec chmod -f 0755 {} +
-          # which matches lost+found — which the entrypoint's PRECEDING chown pass has just
-          # handed to couchdb, so root is no longer its owner, and chmod on a file you do not
-          # own needs FOWNER. Without it the chmod fails with EPERM, `-f` suppresses the message
-          # but NOT the exit status, find propagates it, and `set -e` kills the entrypoint.
-          #
-          # The failure mode is invisible: the container exits 1 having logged absolutely
-          # nothing, which reads like a crashed image rather than a permission error.
+          # FOWNER is required: the entrypoint chmods the PVC's lost+found after its chown pass, and
+          # without FOWNER that fails EPERM and `set -e` kills the container with nothing logged.
 {{ hardened_security_context(add=['CHOWN', 'SETUID', 'SETGID', 'DAC_OVERRIDE', 'FOWNER']) }}
           env:
             - name: COUCHDB_USER
@@ -81,15 +63,8 @@ spec:
               mountPath: /opt/couchdb/data
             - name: livesync-local-d
               mountPath: /opt/couchdb/etc/local.d
-          # An exec probe, not httpGet, because local.ini sets require_valid_user = true: BOTH
-          # `/` and `/_up` answer 401 to an unauthenticated request. A `curl -s` with no -f
-          # passes on the 401 and proves only that a
-          # socket answered, and a k8s httpGet treats 401 as failure, so the pod would never
-          # go ready.
-          #
-          # The credential comes from the container's own env, so it appears in no manifest.
-          # `/_up` is CouchDB's health endpoint and returns {"status":"ok"} once the node is
-          # serving, which is a real readiness signal rather than a liveness one.
+          # An exec probe: require_valid_user makes `/` and `/_up` answer 401, which httpGet counts
+          # as failure.
           readinessProbe:
             exec:
               command:
