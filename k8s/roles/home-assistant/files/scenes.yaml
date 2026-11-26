@@ -1,6 +1,5 @@
 ---
-# Source of truth — shipped verbatim in the role's ConfigMap and overwritten on deploy. HA UI scene edits are
-# NOT persistent. To change a scene, edit this file and redeploy home-assistant.
+# Source of truth, overwritten on deploy; UI scene edits are not persistent.
 - id: bedroom_bright
   name: Bedroom Bright
   entities:

@@ -1,26 +1,8 @@
 ---
-# The git-owned config plane, shipped from k8s/roles/home-assistant, which is the authoring
-# home (validate-ha-config, the macro tests, the skills all anchor there); this manifest only
-# carries its files into the cluster. lookup('file'), not
-# 'template': every file here is copied verbatim by contract, and 'file' makes a regression
-# to real templating fail the deploy loudly. validate_ha_config.py also rejects an Ansible
-# marker in the three files an operator would reach for a var in (configuration.yaml,
-# customize.yaml, ui-lovelace.yaml): lookup('file') would ship it literally and HA renders an
-# unknown name to an empty string without an error.
-#
-# One ConfigMap per tree, each carrying exactly the files its list in defaults/main.yml
-# names. The lists are the single source of what ships: the init container in
-# deployment.yaml.j2 installs whatever each ConfigMap holds, and validate_ha_config.py fails
-# when a list and its directory disagree, so a file that validates clean cannot silently
-# stay out of the pod. Listed rather than globbed because a glob that shipped nothing would
-# surface only as missing automations at runtime.
-#
-# The init container installs these into the /config PVC on every pod start. Runtime-owned
-# state (.storage/, the recorder DB, custom_components/) lives only on the PVC and is never
-# touched. The ConfigMap names stay as they are: kubectl apply does not
-# delete an object it stops declaring, so a rename would leave the old ConfigMap live.
-#
-# The (ConfigMap, subdirectory) pairing appears once more, in deployment.yaml.j2's volumes.
+# lookup('file'), not 'template': verbatim copy, so a regression to real templating fails the deploy
+# loudly.
+# Keep ConfigMap names: kubectl apply leaves a renamed one live. The lists in defaults/main.yml
+# bound each tree.
 {% set config_trees = [
      ('home-assistant-config', '', home_assistant_root_files),
      ('home-assistant-automations', 'automations/', home_assistant_automation_files),

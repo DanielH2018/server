@@ -1,11 +1,7 @@
 ---
 # The bedroom display's dashboard/ambient switching. Conventions: see README.md in this directory.
 
-# ── Nest Hub Max dashboard (cast to media_player.bedroom_display) ─────────────────────────────────
-# Keep the Bedroom Lovelace view up on the Hub while the room is lit + awake; let it fall back to the
-# Hub's ambient screen when dark or in sleep mode. Cast itself is config-entry/UI-only (known_hosts =
-# 10.0.0.137); these just drive cast.show_lovelace_view / media_player.turn_off. Lux thresholds
-# (show > 60, dark < 50; FP300 reads ~553 lights-on / ~48 lights-off) are STARTING POINTS — tune here.
+# Cast setup is config-entry/UI-only; lux thresholds (show > 60, dark < 50) are starting points.
 - id: bedroom_display_show
   alias: Bedroom display keep dashboard up
   description: >-
@@ -28,8 +24,8 @@
         - idle
         - "off"
         - standby
-      # A Cast socket reconnect sets the Hub to idle for a moment, and without a hold each one
-      # re-cast into the same blocked socket window.
+      # Hold 1 min: a Cast socket reconnect briefly sets the Hub idle, and a re-cast hits the
+      # blocked socket.
       for: "00:01:00"
     - platform: state
       entity_id: input_boolean.bedroom_sleep_mode
@@ -39,9 +35,8 @@
       above: 60
       for: "00:00:30"
   condition:
-    # Only keep the dashboard up while you're actually home — otherwise a bright away-day (sun
-    # pushes FP300 illuminance > 60 in an empty room) re-casts to the Hub every 10 min for nobody.
-    # Mirrors the person-home gate every other bedroom on-path carries.
+    # Only keep the dashboard up while home; a bright away-day would re-cast every 10 min for
+    # nobody.
     - condition: state
       entity_id: person.daniel
       state: "home"
@@ -51,9 +46,8 @@
     - condition: numeric_state
       entity_id: sensor.aqara_fp300_illuminance
       above: 60
-    # Lights-off daylight swings the FP300 between 40 and 87 and meets both 30 s holds; the 50/60
-    # gap is narrower than that noise. Above 200
-    # (lights on read ~600) is out of that band, so turning the lights on still casts at once.
+    # Lights-off daylight swings the FP300 40-87, wider than the 50/60 gap; above 200 is out of that
+    # band.
     - condition: template
       value_template: >-
         {% set dismissed = state_attr('automation.bedroom_display_go_ambient_when_dark_or_sleeping', 'last_triggered') %}
@@ -70,8 +64,6 @@
           state:
             - unavailable
             - unknown
-    # Only (re)cast when the Hub isn't actively showing something — avoids flicker on an already-cast
-    # dashboard and never clobbers user-started media (both report media_player state 'playing').
     - condition: not
       conditions:
         - condition: state
@@ -126,8 +118,8 @@
     - wait_template: >-
         {{ not is_state_attr('media_player.bedroom_display', 'app_name', 'Home Assistant Lovelace') }}
       timeout: "00:00:15"
-    # A Cast connection of its own, which the loop cannot block. It re-reads the running app
-    # itself, so HA's stale view cannot make it stop user media.
+    # Quit through its own Cast connection, which re-reads the running app so a stale HA view cannot
+    # stop user media.
     - if: "{{ not wait.completed }}"
       then:
         - service: shell_command.bedroom_display_quit_app

@@ -5,8 +5,6 @@ homeassistant:
   enabled: true
 mqtt:
   base_topic: zigbee2mqtt
-  # The broker is the in-cluster Service name, set through zigbee2mqtt_k8s_mqtt_broker=mosquitto;
-  # the MetalLB VIP is the fallback for a render that does not set it.
   server: mqtt://{{ zigbee2mqtt_k8s_mqtt_broker | default(mqtt_k8s_vip) }}:1883
   user: "{{ mqtt_username }}"
   password: "{{ mqtt_password }}"
@@ -19,8 +17,7 @@ frontend:
   port: 8080
 advanced:
   log_level: info
-  # Pinned network identity — fixed so a templated-config redeploy can't regenerate it
-  # and silently un-pair every device.
+  # Pinned identity: a templated redeploy must not regenerate it and un-pair every device.
   network_key: {{ zigbee_network_key }}
   pan_id: {{ zigbee_pan_id }}
   ext_pan_id: {{ zigbee_ext_pan_id }}
