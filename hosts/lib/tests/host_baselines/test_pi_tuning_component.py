@@ -147,6 +147,16 @@ def test_the_log2ram_hold_is_reapplied_daily_before_the_unattended_upgrade(packa
     assert re.search(r"^RandomizedDelaySec=0$", timer, re.M)
 
 
+def test_every_unattended_upgrade_run_syncs_the_log_tmpfs_to_the_card_first(package):
+    """A reset during the run would otherwise restore /var/log from the 23:55 write."""
+    dropin = _text(
+        package, "/usr/lib/systemd/system/apt-daily-upgrade.service.d/50-homelab.conf"
+    )
+    assert re.search(
+        r"^ExecStartPre=-/usr/bin/systemctl reload log2ram\.service$", dropin, re.M
+    )
+
+
 # The line arm: each edit adopts what Ansible wrote.
 
 # (path, the line Ansible's task wrote or the stock line it replaces, the action)
