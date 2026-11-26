@@ -68,6 +68,11 @@ dev = [                              # `dev` is uv's default group for `uv run`/
   "icalendar",                      # ical-proxy ical_proxy.py parses and writes every feed with it (test_app.py)
   "import-linter>=2.17",            # [tool.importlinter] contracts (test_scripts_import_direction.py)
 ]
+# Local test reruns only, absent from `default-groups`, so CI never installs it. docs/ci-throughput.md
+# says how to run it. The cap keeps testmon below 2.4.0, which has not been measured here.
+local = [
+  "pytest-testmon>=2.3,<2.4",
+]
 # Tools only prek hooks and hand-run commands call, never a test. The CI jobs that run no lint
 # hook set UV_NO_GROUP=lint, so a lint tool's install (actionlint-py downloads its binary from
 # GitHub releases) cannot fail them. tests/repo/ci_workflows/test_ci_lint_group.py holds both halves.
