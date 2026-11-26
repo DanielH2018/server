@@ -41,22 +41,20 @@ depends:
   - multipath-tools
   - zsh
 defaults:
-  # The log file k3s writes. The k3s-agent component carries the same path, because Alloy tails
-  # one literal on every node; tests/k8s/test_alloy_ships_k3s_log.py holds all three equal.
+  # Same path in the k3s-agent component, because Alloy tails one literal on every node.
   k3s_log_file: /var/log/k3s.log
-  # The two paths `kube-apiserver-arg` names below, shipped at the literal paths under `files:`
-  # (a `dst:` is not rendered). The shipped-paths test holds each flag value to a shipped file.
+  # Shipped at literal paths under `files:` (a `dst:` is not rendered); a test holds each flag value
+  # to a shipped file.
   k3s_audit_policy_path: /var/lib/rancher/k3s/server/audit.yaml
   k3s_authentication_config_path: /var/lib/rancher/k3s/server/authentication-config.yaml
-  # Audit log rotation, and it is not optional. An unrotated audit log grows without bound on
-  # the disk `disk-health.sh` watches. A Metadata-level policy on a cluster this chatty writes a
-  # steady stream of entries, so the apiserver's own rotation keeps the control-plane disk from
-  # filling. 5 x 100 MiB bounds the log at about 500 MiB. Only the flags below read these.
+  # Rotation is not optional: an unrotated audit log grows without bound on the disk
+  # `disk-health.sh` watches.
+  # 5 x 100 MiB bounds it at about 500 MiB.
   k3s_audit_log_maxage: 30       # days a rotated file is kept
   k3s_audit_log_maxbackup: 5     # rotated files kept
   k3s_audit_log_maxsize: 100     # MiB before rotating
-  # The audit flags, armed by `k3s_audit_log_enabled` in group_vars/all.yml. loki-homelab reads
-  # the same switch and `k3s_audit_log_path` to tail the file, so neither moves here.
+  # Armed by `k3s_audit_log_enabled` in group_vars/all.yml; loki-homelab reads the same switch and
+  # `k3s_audit_log_path`.
   k3s_server_audit_args:
     - "audit-policy-file={{ k3s_audit_policy_path }}"
     - "audit-log-path={{ k3s_audit_log_path }}"
@@ -167,30 +165,29 @@ defaults:
     etcd-snapshot-compress: true
     etcd-snapshot-schedule-cron: "0 */12 * * *"
     etcd-snapshot-retention: 28
-  # The read-only ServiceAccount the audit policy exempts. cluster-base holds the twins
-  # `cluster_base_readonly_sa_*`; a test holds the three members of each triple equal.
+  # cluster-base holds the twins `cluster_base_readonly_sa_*`; a test holds the three members of
+  # each triple equal.
   k3s_server_readonly_sa_name: homelab-readonly
   k3s_server_readonly_sa_namespace: kube-system
-  # The API server's JWT trust in Authelia. `k3s_oidc_issuer_urls` lists both hostnames Authelia answers on, with NO trailing
-  # slash, because the comparison against the token's `iss` is exact.
+  # No trailing slash: the comparison against the token's `iss` is exact. Lists both hostnames
+  # Authelia answers on.
   k3s_oidc_issuer_urls:
     - "https://auth.local.{{ domain }}"
     - "https://auth.{{ domain }}"
   # The audience: the Authelia client id. Authelia puts only that id in `aud`.
   k3s_oidc_client_id: headlamp
-  # Authelia hydrates neither claim into the ID token by default, so its client must name a
-  # claims policy carrying both. There is no username prefix variable: the template writes the
-  # empty string, which is how structured authentication config disables prefixing.
+  # Authelia hydrates neither claim into the ID token by default, so its client needs a claims
+  # policy carrying both.
+  # No username prefix variable: the template writes the empty string, which disables prefixing.
   k3s_oidc_username_claim: preferred_username
   k3s_oidc_groups_claim: groups
-  # The prefix that keeps an Authelia group from reading as a built-in `system:` group.
-  # `headlamp_k8s_oidc_group` is this prefix plus the Authelia group, and
-  # hosts/tests/test_k3s_oidc_trusts_authelia.py fails when the two drift.
+  # Keeps an Authelia group from reading as a built-in `system:` group. `headlamp_k8s_oidc_group` is
+  # this prefix plus the group; a test fails when they drift.
   k3s_oidc_groups_prefix: "oidc:"
 files:
   - {src: templates/50-homelab.conf.j2, dst: /usr/lib/systemd/system/k3s.service.d/50-homelab.conf, activate: "manual:k3s.service"}
-  # The server's flags. The only file in config.yaml.d, and nothing ships config.yaml. World-
-  # readable: it holds no secret, and backup-health check 12 reads it as `sys_user`.
+  # The only file in config.yaml.d; nothing ships config.yaml. World-readable: no secret, and
+  # backup-health check 12 reads it as `sys_user`.
   - {src: templates/50-homelab.yaml.j2, dst: /etc/rancher/k3s/config.yaml.d/50-homelab.yaml, mode: "0644", activate: "manual:k3s.service"}
   - {src: templates/audit-policy.yaml.j2, dst: /var/lib/rancher/k3s/server/audit.yaml, mode: "0600", activate: "manual:k3s.service"}
   - {src: templates/authentication-config.yaml.j2, dst: /var/lib/rancher/k3s/server/authentication-config.yaml, mode: "0600", activate: "manual:k3s.service"}
@@ -204,8 +201,8 @@ files:
   - {src: templates/kubepods-memory-low.conf.j2, dst: /usr/lib/systemd/system/kubepods.slice.d/60-homelab-memory-low.conf}
   - {src: units/homelab-kubepods-memory-low.path, dst: /usr/lib/systemd/system/homelab-kubepods-memory-low.path}
   - {src: units/homelab-kubepods-memory-low.service, dst: /usr/lib/systemd/system/homelab-kubepods-memory-low.service}
-  # kubelet reads its config only at start, so the first shutdown it governs is the one after the
-  # restart homelab-k3s-restart makes in its next window.
+  # kubelet reads its config only at start, so the first shutdown it governs follows the next
+  # window's restart.
   - {src: templates/kubelet-graceful-shutdown.conf.j2, dst: /var/lib/rancher/k3s/agent/etc/kubelet.conf.d/50-homelab-graceful-shutdown.conf, mode: "0644", activate: "manual:k3s.service"}
   # Without this file kubelet's shutdown manager never starts: logind keeps the 30 s that
   # unattended-upgrades sets, and kubelet logs `Failed to start node shutdown manager` once at
@@ -216,36 +213,34 @@ files:
   - {src: files/kubelet-shutdown-lock-check.sh, dst: /usr/lib/homelab/kubelet-shutdown-lock-check, mode: "0755"}
   - {src: units/homelab-kubelet-shutdown-lock.service, dst: /usr/lib/systemd/system/homelab-kubelet-shutdown-lock.service}
   - {src: units/homelab-kubelet-shutdown-lock.timer, dst: /usr/lib/systemd/system/homelab-kubelet-shutdown-lock.timer}
-  # The gateway check pings lan_router_ip bound to the static link, so a link that keeps carrier
-  # while the gateway stops answering on it still pages (WiredGatewayUnreachable).
+  # The gateway check pings lan_router_ip bound to the static link, so a link with carrier but a
+  # silent gateway still pages.
   - {src: files/wired-gateway-check.sh, dst: /usr/lib/homelab/wired-gateway-check, mode: "0755", when: "k3s_node_static_link | length > 0"}
   - {src: units/homelab-wired-gateway.service.j2, dst: /usr/lib/systemd/system/homelab-wired-gateway.service, when: "k3s_node_static_link | length > 0"}
   - {src: units/homelab-wired-gateway.timer, dst: /usr/lib/systemd/system/homelab-wired-gateway.timer, when: "k3s_node_static_link | length > 0"}
   - {src: templates/logrotate-k3s.j2, dst: /etc/logrotate.d/k3s}
   - {src: templates/tmpfiles-k3s.conf.j2, dst: /usr/lib/tmpfiles.d/homelab-k3s-server.conf}
-  # An empty marker: the deploy controller skips an addon file whose name ends `.skip`, which
-  # releases k3s's bundled CoreDNS to Flux's `coredns` tag. k3s reads it live.
+  # An empty marker: the deploy controller skips an addon file ending `.skip`, which releases
+  # bundled CoreDNS to Flux's `coredns` tag.
   - {src: templates/coredns.yaml.skip, dst: /var/lib/rancher/k3s/server/manifests/coredns.yaml.skip}
-  # Longhorn's devices must stay out of multipathd's reach, or mounts fail: multipathd claims freshly
-  # attached /dev/longhorn devices and every mount reads "already in use". The older block in the
-  # owned /etc/multipath.conf stays as a harmless duplicate.
+  # multipathd claims freshly attached /dev/longhorn devices and every mount reads "already in use".
   - {src: templates/multipath-longhorn.conf, dst: /etc/multipath/conf.d/50-homelab-longhorn.conf, activate: "reload:multipathd.service"}
   - {src: templates/k3s-readonly-kubeconfig.j2, dst: /usr/lib/homelab/k3s-readonly-kubeconfig, mode: "0755", activate: "try-restart:homelab-k3s-kubeconfig.service"}
   - {src: units/homelab-k3s-kubeconfig.service.j2, dst: /usr/lib/systemd/system/homelab-k3s-kubeconfig.service}
-  # `k3s kubectl` hardcodes /etc/rancher/k3s/k3s.yaml and fails when it is unreadable rather than
-  # falling back to ~/.kube/config, so the shells name the fallback. Guarded on the file existing,
-  # which root has none of, so root keeps the admin config.
+  # `k3s kubectl` hardcodes /etc/rancher/k3s/k3s.yaml and fails when unreadable, so shells name the
+  # fallback.
+  # Guarded on the file existing, which root has none of, so root keeps the admin config.
   - {src: templates/k3s-kubeconfig-profile, dst: /etc/profile.d/k3s-kubeconfig.sh}
   - {src: templates/netplan-static-address.yaml.j2, dst: /etc/netplan/90-homelab-static-address.yaml, mode: "0600", activate: "manual:systemd-networkd.service", when: "k3s_node_static_link | length > 0"}
   - {src: templates/static-link-sysctl.conf.j2, dst: /etc/sysctl.d/90-homelab-static-link.conf, activate: sysctl, when: "k3s_node_static_link | length > 0"}
-  # kubelet's log watchers and every root-uid container share the per-uid default of 128 inotify
-  # instances, and the crowdsec agent is the kind of process that exhausts it.
+  # kubelet log watchers and root-uid containers share the per-uid default of 128 inotify instances;
+  # the crowdsec agent exhausts it.
   - {src: templates/90-homelab-k3s-node.conf, dst: /etc/sysctl.d/90-homelab-k3s-node.conf, activate: sysctl}
   - {src: files/homelab-netplan-wifi, dst: /usr/lib/homelab/homelab-netplan-wifi, mode: "0755", when: "k3s_node_wifi_link | length > 0"}
   - {src: units/homelab-netplan-wifi.service, dst: /usr/lib/systemd/system/homelab-netplan-wifi.service, when: "k3s_node_wifi_link | length > 0"}
 outputs:
-  # An output rather than the /run/credstore credential, because only an output has dependents: a
-  # rotated token has to reach ~/.kube/config without waiting for a boot.
+  # An output, not the /run/credstore credential: only an output has dependents, so a rotated token
+  # reaches ~/.kube/config without a boot.
   - src: templates/k3s-readonly-token.j2
     path: /etc/rancher/k3s/readonly-token
     destination: k3s/readonly-token
@@ -275,28 +270,25 @@ enable:
   homelab-wired-gateway.timer: {target: timers.target, when: "k3s_node_static_link | length > 0"}
   homelab-netplan-wifi.service: {target: multi-user.target, when: "k3s_node_wifi_link | length > 0"}
 legacy:
-  # Emptying a link is the way back from the pin or the fallback: the next package drops the file
-  # and this retires any copy left in place. The link's live value stays until the next reboot.
+  # Emptying a link is the way back from the pin or fallback: the next package drops the file and
+  # this retires any left copy.
   - {path: /etc/netplan/90-homelab-static-address.yaml, when: "k3s_node_static_link | length == 0"}
   - {path: /etc/sysctl.d/90-homelab-static-link.conf, when: "k3s_node_static_link | length == 0"}
   # Both copies of the wifi credentials.
   - {path: /etc/netplan/80-homelab-wifi-fallback.yaml, when: "k3s_node_wifi_link | length == 0"}
   - {path: /var/lib/homelab-secrets/netplan/80-homelab-wifi-fallback.yaml, when: "k3s_node_wifi_link | length == 0"}
 lines:
-  # zsh does not read /etc/profile.d, and zshenv is the one startup file every invocation reads.
-  # `depends: zsh` installs the file first. The arm would create a missing /etc/zsh 0700, which
-  # hides the file from every user.
+  # zsh does not read /etc/profile.d; zshenv is the one file every invocation reads.
+  # `depends: zsh` installs it first, since the arm would create a missing /etc/zsh 0700.
   - path: /etc/zsh/zshenv
     marker: "# {mark} ANSIBLE MANAGED — k3s kubeconfig"
     block: |
       if [ -r /etc/profile.d/k3s-kubeconfig.sh ]; then
         . /etc/profile.d/k3s-kubeconfig.sh
       fi
-# The inter-node join rules, allowed FROM each agent ON this server. Each spec is the rule as `ufw
-# show added` prints it. `keep`: no revert and no floor ever deletes one, because the node leaves the
-# cluster without them. The live rules carry no comment, so the arm adopts each by appending it again,
-# which relabels it in place. hosts/lib/tests/test_box_k3s_host_half.py holds the ports equal to
-# k3s_join_server_ports.
+# Join rules from each agent. `keep`: no revert or floor deletes one, as the node leaves the cluster
+# without them.
+# The live rules carry no comment, so the arm adopts each by appending it again.
 ufw:
   rules:
     - {id: k3s-join-apiserver, spec: "allow from {{ k3s_agent_node_ips[0] }} to any port 6443 proto tcp", keep: true}

@@ -9,10 +9,8 @@ files:
   - {src: templates/longhorn-backup-health.sh.j2, dst: /usr/lib/homelab/longhorn-backup-health.sh, mode: "0755"}
   - {src: templates/disk-health.sh.j2, dst: /usr/lib/homelab/disk-health.sh, mode: "0755"}
   - {src: templates/etcd-token-drift.sh.j2, dst: /usr/lib/homelab/etcd-token-drift.sh, mode: "0755"}
-  # The reader and its libraries. No cron window here: dpkg unpacks the whole set before the next
-  # timer can fire, and the timer's unit waits for no file of its own. The libraries sit under
-  # `lib/` as they do under `scripts/`, so `lib.k8s_objects`, `lib.k8s_conditions` and
-  # `lib.longhorn_lib` import by the same dotted names on the host and in the checkout.
+  # Libraries sit under `lib/` as under `scripts/`, so `lib.k8s_objects` etc. import by the same
+  # names on host and checkout.
   - {src: files/longhorn_backup_health.py, dst: /usr/lib/homelab/longhorn-backup-health/longhorn_backup_health.py, mode: "0755"}
   - {lib: host_lib.py, dst: /usr/lib/homelab/longhorn-backup-health/host_lib.py, mode: "0755"}
   - {shared: k8s_conditions.py, dst: /usr/lib/homelab/longhorn-backup-health/lib/k8s_conditions.py, mode: "0755"}
@@ -40,9 +38,8 @@ files:
   - {shared: etcd_restore_drill.sh, dst: /usr/lib/homelab/etcd-restore-drill, mode: "0755", when: k3s_etcd_restore_drill_armed}
   - {src: units/homelab-etcd-restore-drill.service.j2, dst: /usr/lib/systemd/system/homelab-etcd-restore-drill.service, when: k3s_etcd_restore_drill_armed}
   - {src: units/homelab-etcd-restore-drill.timer.j2, dst: /usr/lib/systemd/system/homelab-etcd-restore-drill.timer, when: k3s_etcd_restore_drill_armed}
-# What the restore runbook and the drill source. 0600 root: these are the R2 write credentials for
-# the bucket that also holds every Longhorn backup. k3s's own schedule uploads with the Secret
-# `longhorn-backup` renders, which a restore cannot use because the API may be gone.
+# 0600 root: R2 write credentials for the bucket that also holds every Longhorn backup.
+# A restore cannot use the Secret k3s's schedule uploads with, because the API may be gone.
 outputs:
   - src: templates/etcd-s3.env.j2
     path: /etc/rancher/k3s/etcd-s3.env

@@ -77,8 +77,6 @@ def test_non_remux_quality_is_never_evidence_even_with_long_gop():
 
 
 def test_2160p_reencode_labeled_remux_is_still_caught():
-    # generalization win over a codec heuristic: UHD isn't excluded — a real 2160p remux has a
-    # short GOP + no re-encoder tag, so only a genuine re-encode trips regardless of resolution
     ev = frl.reencode_evidence("Bluray-2160p Remux", "x265", [0.0], 40, 5, MARKERS)
     assert ev is not None
 
@@ -239,9 +237,7 @@ def test_host_path_handles_the_download_tree_too():
 
 
 def test_host_path_without_a_root_is_unchanged_so_the_probe_fails_safe():
-    # An unmapped path opens nothing, ffprobe returns "", and the file is SKIPPED. A path-mapping
-    # mistake must never manufacture a fake — false negatives cost a missed fake, false positives
-    # cost a real file, and the reconciler downstream is live.
+    # An unmapped path is skipped, never a fake: false positives cost a real file.
     assert frl.host_path("/data/media/tv/E.mkv", "") == "/data/media/tv/E.mkv"
 
 

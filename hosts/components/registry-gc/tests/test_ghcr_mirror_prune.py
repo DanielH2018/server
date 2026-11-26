@@ -101,8 +101,8 @@ def test_a_digest_in_the_keep_set_survives_below_the_rank_cut(tmp_path):
 
 def test_a_kept_index_keeps_its_children_and_a_pruned_one_loses_them(tmp_path):
     store = _store(tmp_path)
-    # Children are cached at the same time as their index; they are older here on purpose, so
-    # only membership in a kept index can save them from the rank cut.
+    # Children are older on purpose, so only membership in a kept index saves them from the rank
+    # cut.
     kept_child, gone_child = store.cache(30), store.cache(40)
     kept_index = store.cache(1, children=(kept_child,))
     gone_index = store.cache(9, children=(gone_child,))

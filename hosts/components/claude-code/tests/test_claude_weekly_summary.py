@@ -12,7 +12,6 @@ import claude_weekly_summary as summary
 from _setup_render import COMPONENTS, render_component_text
 from agent_logic import Delta, Outcome, run_record
 
-# Monday 2026-11-16 09:00 UTC: the run covers 2026-11-09 00:00 to 2026-11-15 23:59.
 NOW = dt.datetime(2026, 11, 16, 9, 0, tzinfo=dt.UTC).timestamp()
 
 

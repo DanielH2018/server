@@ -155,9 +155,7 @@ def test_no_endpoints_at_all_disables_the_gate(tmp_path):
     assert _wan_probe(tmp_path, [], []) == ("rc=0", 0, [])
 
 
-# The host crons that fetch from the internet. A frozen list rather than a glob: a cron renamed or
-# a call silently dropped is the regression this names, and the 2026-09-18 WAN outage paged each
-# of them beside the WAN alert.
+# A frozen list, not a glob: a renamed cron or a silently dropped call is the regression this names.
 WAN_GATED_CRONS = [
     ("components", "github-checks", "github-ruleset-drift.sh.j2"),
     ("components", "docs-refresh", "docs-refresh.sh.j2"),
@@ -178,8 +176,8 @@ def _probes_only_the_shared_list(script):
 
 @pytest.mark.parametrize("cron", WAN_GATED_CRONS, ids=lambda cron: cron[2])
 def test_every_internet_fetching_cron_probes_the_shared_endpoint_list(cron):
-    # The URLs are arguments, so a cron that hardcoded its own pair would probe something the
-    # bridge's WAN check never agreed to. The sentinel shows the call renders `wan_probe_urls`.
+    # The URLs are arguments: a cron hardcoding its own pair would probe something the bridge's WAN
+    # check never agreed to.
     script = render_shell_script(*cron, {"wan_probe_urls": [SENTINEL_URL]})
     assert _probes_only_the_shared_list(script)
 

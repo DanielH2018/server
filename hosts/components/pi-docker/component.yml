@@ -48,9 +48,6 @@ defaults:
   docker_engine_compose_plugin_version: "5.5.1"
   # renovate: datasource=deb depName=docker-buildx-plugin versioning=semver extractVersion=^(?:\d+:)?(?<version>[\d.]+)- registryUrl=https://download.docker.com/linux/ubuntu?suite=resolute&components=stable&binaryArch=arm64
   docker_engine_buildx_plugin_version: "0.37.1"
-  # GOMEMLIMIT for each Go daemon, paired with GOGC=off. docs/docker-engine-pins-and-runtime.md
-  # has the measurements; hosts/tests/test_docker_daemons_gomemlimit_headroom.py holds
-  # each above its floor.
   docker_engine_gomemlimit_dockerd: 64MiB
   docker_engine_gomemlimit_containerd: 64MiB
 units:

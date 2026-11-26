@@ -13,9 +13,8 @@ from _host_packages import HOSTS, package
 from renderer.renderer_lib import host as host_mode
 
 SYSCTL_D = re.compile(r"/etc/sysctl\.d/(?P<name>[^/]+\.conf)")
-# The last name in /usr/lib/sysctl.d on all three 26.04 hosts. systemd-sysctl applies files in
-# name order across every sysctl.d directory, so a homelab file sorting before it loses each key
-# the two share: 55-magic-sysrq.conf sets kernel.sysrq=176, for one.
+# systemd-sysctl applies files in name order across all sysctl.d directories, so a homelab file
+# sorting before this loses each shared key.
 LAST_DISTRO_FILE = "55-zeropage.conf"
 INOTIFY = {"fs.inotify.max_user_instances": "1024"}
 

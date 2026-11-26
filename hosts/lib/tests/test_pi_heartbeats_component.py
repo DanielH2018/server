@@ -140,8 +140,8 @@ def test_the_check_library_is_a_byte_copy_of_initial_setups(package):
 
 
 def test_the_integrity_timer_primes_its_verdict_on_start(package):
-    # The SD-health heartbeat reads a missing verdict as a down, so the sweep runs a minute
-    # after its timer starts rather than first at 01:40.
+    # The SD-health heartbeat reads a missing verdict as down, so the sweep runs a minute after its
+    # timer starts.
     assert "OnActiveSec=1min\n" in _text(
         package, f"{UNITS}/homelab-pi-gz-integrity.timer"
     )
@@ -181,8 +181,8 @@ def test_the_journal_warnings_land_in_a_file_alloy_ships(package):
 
 
 def test_the_journal_warnings_unit_fails_when_the_system_journal_is_unreadable(package):
-    # journalctl -q falls back to the user's own journal and exits 0, so only a pre-check
-    # that opens the system journal turns lost access into a failed unit.
+    # journalctl -q falls back to the user's own journal and exits 0, so only a pre-check opening
+    # the system journal fails the unit.
     unit = _directives(_text(package, f"{UNITS}/homelab-pi-journal-warnings.service"))
     assert unit["ExecStartPre"].split() == [
         "/usr/bin/head",

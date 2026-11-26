@@ -44,16 +44,12 @@ COMPOSE_UNIT = "/usr/lib/systemd/system/homelab-compose.service"
 ENGINE_UNIT = "/usr/lib/systemd/system/homelab-docker-engine.service"
 ENGINE_TIMER = "/usr/lib/systemd/system/homelab-docker-engine.timer"
 UPDATER_DROPIN = "/usr/lib/systemd/system/homelab-updater.timer.d/50-homelab.conf"
-# The Pi's quiet window, in UTC (the Pi's clock). It opens after the midnight cluster (23:55 to
-# 00:10) and closes before man-db starts at 01:00; the updater's daily fire is 03:05. The 04:00 to
-# 05:59 gap is out: pi-peer-backup pulls at 04:00 or 05:00 UTC and the apt timers run at 04:20
-# and 05:20. The DECIDED comment in units/homelab-docker-engine.timer has the full reasoning.
+# Quiet window (UTC): after the midnight cluster (23:55-00:10), before man-db at 01:00; the
+# 04:00-05:59 gap is out (pi-peer-backup pulls, apt timers run).
 QUIET_WINDOW = (15 * 60, 59 * 60 + 59)
 _DAY = date(2026, 11, 3)
 CONTAINERD_CONFIG = "/etc/containerd/config.toml"
 SUFFIX = "~ubuntu.26.04~resolute"
-# `grep -v '^#' /etc/containerd/config.toml` on daniel-pi, with the
-# markers the Ansible task wrote around its block.
 LIVE_CONTAINERD = """disabled_plugins = ["cri"]
 
 # BEGIN ANSIBLE MANAGED BLOCK (roles/setup/docker_install)
@@ -533,8 +529,7 @@ def test_an_updater_that_fires_in_the_quiet_window_is_flagged(package):
     assert problems and all("the updater fires" in p for p in problems)
 
 
-# What a nightly run may do. Anything here that a run at the pins performs is a change the timer
-# would make on every night, not only after a pin moved.
+# Anything here that a run at the pins performs would be a change the timer makes every night.
 _ACTING_SYSTEMCTL = {"mask", "unmask", "start", "stop", "restart"}
 
 

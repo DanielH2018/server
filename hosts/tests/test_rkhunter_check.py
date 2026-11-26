@@ -32,11 +32,10 @@ from test_aide_check import _textfile
 SCRIPT = ("components", "integrity-scans", "rkhunter-check.sh.j2")
 TIMER = "/usr/lib/systemd/system/homelab-rkhunter-check.timer"
 WEEK_S = 7 * 24 * 3600
-# 2026-09-30 02:02:01 UTC, the run the stale log below records.
 LAST_WEEK = 1790733721
 
-# The real library, so the scan writes its textfile under TEXTFILE_DIR rather than the host's
-# own directory, which node_exporter scrapes.
+# The real library, so the scan writes its textfile under TEXTFILE_DIR, not the directory
+# node_exporter scrapes.
 REAL_CHECK_LIB = "/usr/lib/homelab/homelab-check-lib.sh"
 CHECK_LIB = (
     REPO / "hosts" / "components" / "check-lib" / "files" / "homelab-check-lib.sh"

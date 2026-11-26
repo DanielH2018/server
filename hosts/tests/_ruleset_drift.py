@@ -18,14 +18,13 @@ from lib.repo_paths import REPO as REPO_ROOT
 
 TEMPLATE = ("components", "github-checks", "github-ruleset-drift.sh.j2")
 CHECK_LIB = "/usr/lib/homelab/homelab-check-lib.sh"
-# The role's copy of the check library, so a runner that never ran initial_setup still sources it
-# and the textfile the script writes lands in TEXTFILE_DIR under tmp_path, never on the host.
+# Sources the role's copy of the check library so the textfile lands in TEXTFILE_DIR under tmp_path,
+# never on the host.
 REAL_CHECK_LIB = REPO_ROOT / "hosts/components/check-lib/files/homelab-check-lib.sh"
 CRON_PATH_LINE = "export PATH=/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
 
-# The declared set the script bakes in. Kept here as a literal rather than read from defaults:
-# the point of these tests is the comparison, and a fixture that moves with the thing under test
-# would pass no matter what the comparison did.
+# A literal, not read from defaults: a fixture that moves with the thing under test would pass
+# whatever the comparison did.
 DECLARED = [
     "prek (lint + validate + tests + secrets)",
     "pull + boot changed images",
@@ -33,10 +32,8 @@ DECLARED = [
     "flux-deletion-drill",
 ]
 
-# The check library the script sources, with `reachout_verdict` stubbed to the WAN-reachable
-# answer — which is what every case here means: the source refused, so the tile must page. The
-# stub follows the real library because that library defines the function too. The skip path is
-# covered by hosts/tests/test_homelab_check_lib.py against the real function.
+# `reachout_verdict` is stubbed to the WAN-reachable answer: every case means the source refused, so
+# the tile must page.
 CHECK_LIB_STUB = f"""\
 . {REAL_CHECK_LIB}
 reachout_verdict() {{ REACHOUT_STATUS=down; REACHOUT_NOTE=""; }}
@@ -166,8 +163,7 @@ FORK_APPROVAL = "all_external_contributors"
 FORK_APPROVAL_BODY = json.dumps({"approval_policy": FORK_APPROVAL})
 
 
-# The update restrictions as the live endpoint returned them on 2026-11-13, by id. A bypass
-# actor is `<actor_type>:<actor_id>:<bypass_mode>`, as the role defaults name it.
+# A bypass actor is `<actor_type>:<actor_id>:<bypass_mode>`, as the role defaults name it.
 RESTRICTIONS = {
     27167149: {
         "repo": REPO,
@@ -273,9 +269,8 @@ def run(
 
     script = write_exec(tmp_path / "github-ruleset-drift.sh", body)
 
-    # curl stub: exits curl_rc, prints the body for whichever ruleset the URL names. `-sf` means
-    # the real one exits non-zero on an HTTP error, so a transport failure and a 404 both arrive
-    # here as a non-zero rc. The URL is the last argument the script passes.
+    # `-sf` makes the real curl exit non-zero on an HTTP error, so a transport failure and a 404
+    # both arrive as a non-zero rc.
     fake_bin(
         binstub,
         curl=(
@@ -296,16 +291,10 @@ def run(
         ),
     )
 
-    # sudo stub: the script's token lookup is `sudo -n -u <user> -H gh auth token`, and on the
-    # box these tests run on the real sudo is passwordless and the real gh is logged in — so
-    # without this stub a unit test reaches out to a live credential. The stub fails the way
-    # a host with no gh login does, which is the anonymous path every case here exercises.
+    # Without this stub a unit test reaches a live credential: the real sudo is passwordless and gh
+    # is logged in here.
     fake_bin(binstub, sudo="#!/usr/bin/env bash\nexit 1\n")
 
-    # logger stub: the script's journal line. Recorded rather than sent, so a case can assert the
-    # verdict reached the journal without reading the host's own. The real logger is what a
-    # `journalctl -t github-ruleset-drift` on daniel-box reads, which is how a verify-by
-    # confirms this producer ran.
     fake_bin(
         binstub,
         logger=(

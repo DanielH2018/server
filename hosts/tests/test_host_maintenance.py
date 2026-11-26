@@ -40,7 +40,6 @@ HISTORY = re.compile(r"present_over_time\([^)]*\[(\d+)s\]\)")
 WINDOW = re.compile(r"absent_over_time\([^)]*\[(\d+)s\]\)")
 
 EVERY_HOST = {"daniel-box", "daniel-server", "daniel-pi"}
-# Check -> (the retired cron it replaced, the alert prefix, the hosts whose rules read it).
 # daniel-box is the one host with fwupd, so it alone ships the firmware-update unit.
 JOBS = {
     "apt-autoremove": ("Weekly apt autoremove", "AptAutoremove", EVERY_HOST),

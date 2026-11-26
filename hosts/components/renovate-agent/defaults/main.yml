@@ -17,29 +17,20 @@ renovate_agent_home: /var/lib/renovate-agent
 # The primary checkout, where the lander runs land.sh as sys_user.
 renovate_agent_repo_dir: "/home/{{ sys_user }}/server"
 
-# PRs per tick. The ceiling exists because the wall-clock budget below has to cover every
-# landing the session starts: each one is a CI wait plus a tick plus a deploy plus a health
-# gate. Three fits when Ansible deploys them. A landing of a tag Flux applies waits on the soak
-# and can use most of the budget alone, so the wrapper's timeout may stop the run before the
-# third; the rest wait for tomorrow's tick.
+# The wall-clock budget below must cover every landing; a tag Flux applies waits on the soak and can
+# use most of it, so the wrapper may stop the run early and the rest wait for the next tick.
 renovate_agent_max_prs: 3
 
 # `opus` rather than a pinned id so a model rename does not silently strand the timer.
 renovate_agent_model: opus
 renovate_agent_permission_mode: auto
 
-# A runaway backstop, NOT a planned stop. Stopping a session mid-landing leaves a
-# merged-but-undeployed change, which is exactly what CLAUDE.md's post-merge section forbids —
-# so this is set well above what three landings cost (a two-turn session with this repo's
-# CLAUDE.md is $0.32 before it does any work), and the PR cap is what actually bounds the run.
+# A runaway backstop, not a planned stop: stopping mid-landing leaves a merged-but-undeployed
+# change. The PR cap is what bounds the run.
 renovate_agent_budget_usd: 25
 
-# Wall clock for the session itself. It must outlast one landing of a tag Flux applies, which
-# waits on the soak and can take the lander's whole TimeoutStartSec (1071min). A landing
-# Ansible deploys is a ~15min CI wait plus a ~20min deploy, so several of those still fit, and
-# the unit's TimeoutStartSec sits above this as the backstop. The wrapper kills the
-# session at this figure and still posts a digest saying so; systemd's ceiling posts nothing but
-# the OnFailure alert, so this one should always trip first.
+# Must outlast one landing of a tag Flux applies (the lander's whole TimeoutStartSec). The wrapper
+# trips before systemd's ceiling, which posts no digest.
 renovate_agent_run_timeout_s: 67260
 renovate_agent_unit_timeout: 1131min
 

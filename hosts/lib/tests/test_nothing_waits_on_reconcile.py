@@ -24,8 +24,8 @@ RECONCILE = "homelab-reconcile.service"
 SECRETS = "homelab-secrets.service"
 UNIT_DIR = PurePosixPath("/usr/lib/systemd/system")
 NUT_DROPIN = str(UNIT_DIR / "nut-monitor.service.d" / "50-homelab.conf")
-# A directive that orders or requires another unit. Reconcile may start or order itself around
-# the units it restarts, but a unit that reaches back to it closes the loop.
+# A unit that reaches back to reconcile closes the loop; reconcile may order itself around the units
+# it restarts.
 EDGES = frozenset(
     {
         "After",

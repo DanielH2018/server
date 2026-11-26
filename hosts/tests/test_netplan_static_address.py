@@ -43,8 +43,8 @@ def static_address_problems(
         for r in iface.get("routes", [])
     ):
         problems.append(f"no default route via {router}")
-    # netplan emits the `[DHCP] RouteMetric` that networkd also gives RA routes only with a DHCP
-    # client on, so the metric without `dhcp6: true` renders nothing.
+    # netplan emits the `[DHCP] RouteMetric` for RA routes only with a DHCP client on, so the metric
+    # without `dhcp6: true` renders nothing.
     if (
         iface.get("dhcp6") is not True
         or (iface.get("dhcp6-overrides") or {}).get("route-metric") != 100

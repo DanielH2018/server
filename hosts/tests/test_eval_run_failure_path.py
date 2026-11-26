@@ -26,8 +26,8 @@ from lib.proc_testing import run
 SCRIPT = rendered_shell_text("components", "eval-sweep", "eval-run.sh.j2")
 DOCS_REFRESH = rendered_shell_text("components", "docs-refresh", "docs-refresh.sh.j2")
 
-# The functions this module sources. Named rather than globbed: a rename would otherwise leave
-# every test below sourcing an empty string and passing on nothing at all.
+# Named, not globbed: a rename would otherwise leave every test sourcing an empty string and passing
+# on nothing.
 SOURCED = (
     "say_failure",
     "keep_failure_log",
@@ -43,8 +43,8 @@ def _function(name: str) -> str:
     a source-text match looking for `{{ ... }}` matching nothing, and sourcing the render means a
     stray Jinja expression would arrive substituted rather than literal.
     """
-    # One-liner form first: a `{.*?^}` pattern tried first would run past a one-line function's
-    # own closing brace and swallow the next multi-line function whole.
+    # One-liner form first: a `{.*?^}` pattern tried first would swallow the next multi-line
+    # function whole.
     match = re.search(rf"^{name}\(\) \{{[^\n]*\}}$", SCRIPT, re.M) or re.search(
         rf"^{name}\(\) \{{\n.*?^\}}$", SCRIPT, re.M | re.S
     )
@@ -195,8 +195,8 @@ def _alert(log_text: str, tmp_path: Path) -> str:
     """The message say_failure would pass to logger for a run that wrote `log_text`."""
     log = tmp_path / "commit.log"
     log.write_text(log_text)
-    # Single quotes are literal to bash and a pytest tmp_path holds none, so the path needs no
-    # other escaping.
+    # Single quotes are literal to bash and a pytest tmp_path holds none, so the path needs no other
+    # escaping.
     run = _bash(
         f"alert() {{ printf '%s' \"$1\"; }}; say_failure 'commit failed' '{log}'",
         tmp_path,
@@ -236,9 +236,8 @@ def test_the_alert_falls_back_to_the_plain_tail_when_no_hook_failed(tmp_path):
         '  File "evals/trend.py", line 91, in record_run\n'
         "KeyError: 'cases'\n"
     )
-    # Non-vacuity: the fixture must take the FALLBACK path, not the filter. `Failed` is
-    # unanchored, so a reworded traceback carrying it anywhere would quietly test the other
-    # branch while still reading green.
+    # Non-vacuity: the fixture must take the FALLBACK path; `Failed` is unanchored, so a reworded
+    # traceback could test the other branch green.
     for token in ("Failed", "- hook id:", "files were modified by this hook"):
         assert token not in log, f"the fallback fixture matches the filter on {token!r}"
     alert = _alert(log, tmp_path)
@@ -293,8 +292,9 @@ def test_neither_cron_reads_the_exit_code_through_a_negation():
     that names no cause leaves the failure undiagnosed.
     """
     for name, text in (("eval-run", SCRIPT), ("docs-refresh", DOCS_REFRESH)):
-        # Anchored to a statement, not a substring: both scripts name the rejected form in the
-        # comment above the code that replaced it, and a bare `in` check would match that.
+        # Anchored to a statement: both scripts name the rejected form in a comment, which a bare
+        # `in`
+        # check would match.
         assert not re.search(r"^\s*if ! git commit", text, re.M), (
             f"{name}.sh.j2 reads git commit's status through a negation; $? is 0 there"
         )

@@ -36,14 +36,12 @@ outputs:
 enable:
   homelab-compose.service: multi-user.target
 defaults:
-  # The unit's wait timeout reads the Pi's healthcheck variables (inventory/host_vars/daniel-pi.yml),
-  # which beat these. A shared-package render, which has no host, uses the values below, the
-  # docker-proxy template's own.
+  # The unit's wait timeout uses the Pi's healthcheck variables from host_vars; these are the
+  # docker-proxy template's own defaults for a host-less render.
   container_healthcheck_interval: 10s
   container_healthcheck_timeout: 5s
   container_healthcheck_retries: 3
-  # The largest start_period any service in the project declares. docker-proxy's is 10s. A service
-  # that adds a larger one raises this value, and the unit's wait grows with it.
+  # The largest start_period any service declares; a larger one raises it and the unit's wait grows.
   compose_start_period: 10s
 files:
   - {src: tmpfiles.d/homelab-compose.conf, dst: /usr/lib/tmpfiles.d/homelab-compose.conf}

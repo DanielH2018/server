@@ -125,8 +125,8 @@ def test_the_packaged_socket_makes_its_group_before_systemd_binds(package):
 
 
 def test_the_packaged_root_map_names_the_operator_and_the_package_agents(package):
-    # Each host's map matches its package's `users:` entry. The map is where the service
-    # looks a caller up, so an agent missing from it is refused every scan.
+    # The map is where the service looks a caller up, so an agent missing from it is refused every
+    # scan.
     host, rendered = package
     packaged = json.loads(_text(rendered, WORKTREE_HOLDER_ROOTS))
 

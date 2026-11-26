@@ -37,9 +37,7 @@ PS = """\
  4321     1   125 /x/python3 scripts/deploy_tools/land.py --pr 1543 --since 72c1a41
  5000     1    30 /x/python3 /opt/homelab/other_holder.py
 """
-# fuser with stderr merged: `<path>: <pids>` for each OPEN file. The queued process (5000)
-# has the tree lock open too. The argv names the lock path, so the prefix is the command
-# alone; the path is filled in by the fixture, which knows the tmp dir.
+# The queued process (5000) has the tree lock open too.
 FUSER = """\
 {d}/{name}: 4321 5000
 """

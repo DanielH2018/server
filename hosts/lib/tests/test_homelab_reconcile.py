@@ -274,8 +274,8 @@ def test_a_legacy_cron_line_is_removed_and_the_rest_of_the_crontab_kept(node):
 
 
 def test_a_legacy_cron_on_a_host_without_crontab_counts_as_retired(node):
-    # The container test image installs no cron package. PATH holds only the stubs, so
-    # this box's own /usr/bin/crontab cannot stand in for the missing one.
+    # PATH holds only the stubs, so this box's own /usr/bin/crontab cannot stand in for the missing
+    # one.
     (node.bin / "crontab").unlink()
     node.path = str(node.bin)
     node.manifest["legacy"].append({"cron": "pi-sd-health", "user": "ubuntu"})

@@ -176,8 +176,6 @@ def test_a_unit_that_never_reads_active_is_not_a_success(box):
 
 
 def test_a_failed_restart_line_carries_err_on_the_journal(box, tmp_path, monkeypatch):
-    # `journalctl -p err` finds a failed attempt, and a progress line keeps the unit's default
-    # notice. reconcile_lib's own test shows a non-journal stream never sees `<3>`.
     changed(box)
     box.active = "activating"
     journal = tmp_path / "journal"

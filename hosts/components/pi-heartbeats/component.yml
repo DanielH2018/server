@@ -19,38 +19,18 @@
 # new warning-and-above lines to /var/log/pi-health/journal.log, which the Pi's Alloy ships to
 # Loki. The journal sits on log2ram's tmpfs, so a hard reboot erases it and Loki keeps the copy.
 defaults:
-  # The daily rotated-log integrity sweep (templates/pi-gz-integrity.sh.j2). It `gzip -t`s every
-  # rotated log and writes a verdict the 5-minute SD-health heartbeat folds into its own.
-  #
-  # BOTH roots, and /var/hdd.log is the load-bearing one: /var/log is log2ram's RAM tmpfs, while
-  # /var/hdd.log is the copy on the SD card and the destination of the log2ram sync that
-  # corrupts rotated logs, so corruption shows there and not under /var/log.
+  # Both roots: log2ram sync corruption shows in /var/hdd.log (SD copy), not /var/log (RAM tmpfs).
   optimize_pi_gz_integrity_roots:
     - /var/log
     - /var/hdd.log
-  # Non-vacuity floor: a glob that matches nothing passes `gzip -t` trivially, so a logrotate
-  # config change or a moved root would turn the sweep green forever. /var/log alone swings
-  # 35-72 files over a logrotate cycle, so 40 sits below the trough of either root and well
-  # above zero.
+  # A glob matching nothing passes gzip -t, so the sweep needs a minimum file count.
   optimize_pi_gz_integrity_min_files: 40
-  # /var/lib, NOT /var/log: a verdict written into log2ram's tmpfs is gone after a reboot, and
-  # the heartbeat would then read "no verdict" (a down) until the next daily sweep. Both
-  # services' StateDirectory= creates /var/lib/pi-health, so the path must stay under it.
+  # Under /var/lib, not /var/log: log2ram's tmpfs loses the verdict on reboot.
   optimize_pi_gz_integrity_state_file: /var/lib/pi-health/gz-integrity.state
-  # How old a verdict the heartbeat still trusts. Longer than the sweep's daily period so one
-  # missed run is tolerated; shorter than two, so a sweep that stops running goes down rather
-  # than reporting yesterday's verdict forever.
+  # Longer than the daily period (tolerates one missed run), shorter than two.
   optimize_pi_gz_integrity_max_age_h: 26
-  # Arms the container-recovery timer: true ships its enable link, false drops it. Set it per
-  # host in inventory/host_vars/daniel-pi.yml, which beats this default, so the intent lives in
-  # the inventory rather than in a working tree.
-  #
-  # It ships TRUE: the timer is the only thing that restarts a container whose create failed
-  # at the OCI runtime, which `restart: unless-stopped` does not.
-  #
-  # Detection and remediation share one script, so disarming ends the heartbeat too: the
-  # recovery verdict goes stale and PiRecoveryNotReporting fires once its 900s deadline passes.
-  # That is the intended signal, not a second fault.
+  # Ships true: restart: unless-stopped does not restart a container whose create failed. Disarming
+  # ends the heartbeat too: the verdict goes stale and PiRecoveryNotReporting fires.
   optimize_pi_recovery_restart_enabled: true
 files:
   - {src: templates/pi-sd-health.sh.j2, dst: /usr/lib/homelab/pi-sd-health, mode: "0755"}
@@ -58,9 +38,6 @@ files:
   - {src: templates/pi-recovery-health.sh.j2, dst: /usr/lib/homelab/pi-recovery-health, mode: "0755"}
   - {src: templates/pi-watchdog-health.sh.j2, dst: /usr/lib/homelab/pi-watchdog-health, mode: "0755"}
   - {src: templates/pi-audit-health.sh.j2, dst: /usr/lib/homelab/pi-audit-health, mode: "0755"}
-  # A package-owned copy of initial_setup's textfile writer, which stays the single
-  # source: the two scripts call its write_check_textfile, so Prometheus reads each cycle's
-  # verdict.
   - {shared: homelab-check-lib.sh, dst: /usr/lib/homelab/homelab-check-lib.sh}
   # A plain file at the path optimize_pi wrote, so dpkg takes it over on unpack.
   - {src: templates/pi-health.logrotate.j2, dst: /etc/logrotate.d/pi-health}

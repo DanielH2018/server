@@ -72,7 +72,6 @@ def test_the_package_ships_the_committed_keyring_unchanged(package):
 
 
 def test_the_package_ships_no_enable_link(package):
-    # A host arms its updater by shipping the link in its own package (H3, *Shared names*).
     assert package.links == {}
 
 

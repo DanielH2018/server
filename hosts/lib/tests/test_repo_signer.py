@@ -59,8 +59,8 @@ class Lab:
         self.staged.mkdir(parents=True)
         self.signer_dir = root / "signer"
         (self.signer_dir / "repo").mkdir(parents=True)
-        # Without /run/user/<uid>, gpg-agent puts its sockets in the home, and a socket
-        # cannot be copied.
+        # Without /run/user/<uid>, gpg-agent puts its sockets in the home, and a socket cannot be
+        # copied.
         shutil.copytree(
             home, self.signer_dir / "gnupg", ignore=shutil.ignore_patterns("S.*")
         )
@@ -92,8 +92,8 @@ class Lab:
             "Maintainer: t <t@example.invalid>\nDescription: fixture\n"
         )
         target = self.staged / (name or f"{package}_{version}_{arch}.deb")
-        # --nocheck: dpkg-deb otherwise refuses a control directory outside 0755..0775,
-        # which the session umask decides.
+        # --nocheck: dpkg-deb otherwise refuses a control directory outside 0755..0775, which the
+        # session umask decides.
         run(
             "dpkg-deb",
             "--nocheck",
@@ -277,8 +277,8 @@ def test_a_hold_leaves_staged_alone_and_publishes_nothing(lab):
 
 
 def test_a_release_25_hours_old_is_re_signed_and_one_an_hour_old_is_not(lab):
-    # apt-ftparchive dates the Release from the real clock, and the signer's staleness check
-    # reads the test's, so each run's clock is set relative to that Date.
+    # apt-ftparchive dates the Release from the real clock and the signer reads the test's, so each
+    # clock is set relative to that Date.
     lab.stage("homelab-daniel-pi")
     assert lab.signer().main() == 0
     first = os.readlink(lab.signer_dir / "repo" / "dists")
@@ -295,8 +295,7 @@ def test_a_release_25_hours_old_is_re_signed_and_one_an_hour_old_is_not(lab):
 
 
 def test_a_hold_still_re_signs_a_stale_release(lab):
-    # The hold stops publishing, never the re-sign: Valid-Until would otherwise lapse on
-    # every host a week into a hold.
+    # The hold stops publishing, never the re-sign: Valid-Until would otherwise lapse on every host.
     lab.stage("homelab-daniel-pi")
     assert lab.signer().main() == 0
     first = os.readlink(lab.signer_dir / "repo" / "dists")
@@ -350,8 +349,6 @@ def test_a_missing_fingerprint_pages_once_then_stays_quiet(lab):
 
 
 def test_a_failure_reaches_the_journal_at_err_priority(lab, tmp_path, monkeypatch):
-    # The signer logs through host_lib, so `journalctl -p err` finds its failures.
-    # Its info lines keep the unit's default priority.
     journal = tmp_path / "journal"
     journal.touch()
     st = journal.stat()
@@ -366,8 +363,6 @@ def test_a_failure_reaches_the_journal_at_err_priority(lab, tmp_path, monkeypatc
 
 
 def test_a_tool_that_will_not_run_pages_once_and_leaves_the_pool_as_it_was(lab):
-    # Every successful builder run starts the signer, so an error that escaped as a
-    # traceback would page every 2 minutes.
     lab.stage("homelab-daniel-pi")
     signer = lab.signer()
     signer.apt_ftparchive = str(lab.root / "absent-apt-ftparchive")
@@ -406,8 +401,8 @@ def test_a_failed_publish_never_rides_along_on_a_later_held_re_sign(lab):
 
 @pytest.mark.parametrize("target", ["gnupg", "repo", "."])
 def test_a_staged_directory_replaced_by_a_symlink_touches_nothing(lab, target):
-    # The builder owns staged/'s parent, so it can swap staged/ for a link into the
-    # signer's tree. Followed, a refusal would empty whatever the link names.
+    # The builder owns staged/'s parent, so it can swap staged/ for a link into the signer's tree;
+    # followed, a refusal would empty what it names.
     lab.stage("homelab-daniel-pi")
     assert lab.signer().main() == 0
     linked = lab.signer_dir / target

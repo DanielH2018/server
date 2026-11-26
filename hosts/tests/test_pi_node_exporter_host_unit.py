@@ -24,8 +24,6 @@ from _helpers import K8S_ROLES
 UNIT = "/usr/lib/systemd/system/node_exporter.service"
 TMPFILES = "/usr/lib/tmpfiles.d/homelab-node-exporter.conf"
 TOOLS = REPO / "hosts/packages/homelab-tools/package.yml"
-# The container's collector flags, minus its `--path.*` remaps, as `collector_flags` parsed them
-# from the retired compose template.
 CONTAINER_FLAGS = frozenset(
     {
         "--collector.filesystem.mount-points-exclude=^/(dev|proc|sys|run|var/lib/docker/.+)($|/)",
@@ -46,8 +44,6 @@ UNIT_FLAGS = (
 }
 CLUSTER_DEFAULTS = K8S_ROLES / "node-exporter" / "defaults" / "main.yml"
 
-# Flags that only make sense on one side: the container remapped the host's trees, the
-# unit picks its own listen address.
 CONTAINER_ONLY = re.compile(r"^--path\.")
 UNIT_ONLY = re.compile(r"^--web\.listen-address=")
 
@@ -71,9 +67,8 @@ def _shipped(path: str) -> str:
 
 
 def test_the_unit_runs_the_collector_set_the_container_ran() -> None:
-    # The RENDERED unit: the listen address interpolates the Pi's LAN IP, so a source read
-    # already had to be told to drop a `--web.listen-address={{ ... }}` rather than an
-    # address, and any collector flag that moves into a variable goes the same way.
+    # The RENDERED unit: the listen address interpolates the Pi's LAN IP, and any collector flag
+    # moved into a variable goes the same way.
     unit_flags = collector_flags(_shipped(UNIT), UNIT_ONLY)
     assert unit_flags == UNIT_FLAGS, (
         f"unit-only: {sorted(unit_flags - UNIT_FLAGS)}; "

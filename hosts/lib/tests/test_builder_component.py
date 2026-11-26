@@ -143,8 +143,8 @@ def test_every_successful_builder_run_starts_the_signer_and_waits_for_a_running_
     assert builder["OnSuccess"] == ["homelab-repo-sign.service"]
     assert "homelab-repo-sign.service" in builder["After"]
     signer = text(package, SIGNER)
-    # The reverse After= would be an ordering cycle, and a timer of its own would sign
-    # between a builder run's writes.
+    # The reverse After= would be an ordering cycle, and a timer of its own would sign between a
+    # builder run's writes.
     assert "homelab-builder.service" not in " ".join(
         directives(signer).get("After", [])
     )

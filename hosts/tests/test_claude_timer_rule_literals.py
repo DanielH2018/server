@@ -121,8 +121,6 @@ def test_the_deadlines_are_two_periods_plus_the_run_timeout_plus_300s():
     }
 
 
-# Alert -> the flags that must all be true, on a host whose package lists claude-code, for it to
-# run the timer. Each is the `when:` its unit's install task reads.
 ARMED_BY = {
     "ClaudeCloneSyncNotReporting": ("claude_code_agent_user_enabled",),
     "ClaudeDotfilesSyncNotReporting": (

@@ -19,8 +19,7 @@ TEMPLATE = (
     "cd /home/ubuntu/server && sudo k3s kubectl auth can-i {verb} {what} "
     "--as=system:serviceaccount:system-upgrade:k3s-plan{ns}"
 )
-# path constant -> (verb, resource, namespace), or None for a read only the `host` mode makes,
-# as the read-only account (`homelab-readonly`).
+# None marks a read only the `host` mode makes, as the read-only account.
 READS: dict[str, tuple[str, str, str] | None] = {
     "VOLUMES_PATH": ("list", "volumes.longhorn.io", ""),
     "BACKUPS_PATH": ("list", "backups.longhorn.io", ""),

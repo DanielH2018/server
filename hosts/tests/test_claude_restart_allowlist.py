@@ -21,8 +21,8 @@ from lib import yaml_fast
 from lib.guard_jinja_env import template_env
 from validate.alert_conventions import RULES_CONFIGMAP, _alerts, expression_jobs
 
-# The alert plane no rendered file states. Every pod resolves names through coredns,
-# Alertmanager's receivers included, so a failed coredns restart silences every page.
+# Every pod resolves names through coredns, Alertmanager's receivers included, so a failed coredns
+# restart silences every page.
 UNSTATED_ALERT_PLANE = frozenset({"coredns"})
 # A host Alertmanager notifies: a URL's host, or the SMTP smarthost's.
 RECEIVER_HOST = re.compile(r"(?:https?://|smarthost:\s*)([\w.-]+)")
