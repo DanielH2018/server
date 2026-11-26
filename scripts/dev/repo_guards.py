@@ -77,7 +77,7 @@ LISTED = (
     "scripts/docs/tests",
     "scripts/lib/tests/script_census/test_entry_points_answer_help.py",
     "scripts/lib/tests/script_census/test_script_classify_package_imports.py",
-    "scripts/validate/tests/test_render_shell.py",
+    "scripts/validate/tests/renders/test_render_shell.py",
     "hosts/lib/tests/test_k3s_restart_window.py",
     "scripts/renderer/tests/manifests/test_renderer_task_inputs.py",
     "scripts/deploy_tools/tests/land/test_land_imports.py",

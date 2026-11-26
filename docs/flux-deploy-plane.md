@@ -2088,7 +2088,7 @@ A flux-owned service retires through its own render, in this order:
    names an emptied workload goes too, because the renderer refuses a restart target with no
    workload in the render. `promote` must move `prod` to a commit
    that holds this PR, and the objects must read `NotFound`, before the next step.
-   `scripts/validate/tests/test_validate_cross_plane_retirement.py` renders both forms.
+   `scripts/validate/tests/renders/test_validate_cross_plane_retirement.py` renders both forms.
 1. **The retiring PR removes the `containers_list` entry and the role.** It carries a
    `Removes-Object:` line for each object with no prune exemption in every directory the tag
    still renders: `cluster/<tag>/` and each suffixed kind, whose objects arm 3 counts for

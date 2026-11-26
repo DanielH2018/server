@@ -146,7 +146,7 @@ _BOUNDABLE_LAUNCHES = frozenset({"run", "check_output", "check_call", "call"})
 # And the spelling it would demand is not safe by itself. `communicate(timeout=...)` raises
 # `TimeoutExpired` and leaves the child RUNNING, so a rule satisfied by adding the keyword
 # would bless a site that still leaks a process into `filterwarnings = ["error"]`. The one
-# real hazard the census found — `scripts/validate/tests/test_vale_sync_guard.py`'s
+# real hazard the census found — `scripts/validate/tests/repo_checks/test_vale_sync_guard.py`'s
 # `run_concurrently` — needed the deadline AND a `finally` that reaps the batch, and only the
 # second half is what actually keeps a wedged guard from parking CI.
 #

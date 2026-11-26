@@ -50,7 +50,7 @@ reads as `/app/config` (`k8s/roles/homepage/templates/deployment.yaml.j2`):
   `custom.css.j2` — every app config file, one level down because
   `scripts/validate/render_lib/k8s.py` parses every `templates/*.j2` as a manifest and fails a
   `lookup('template')` that names one outside `config/`
-  (`scripts/validate/tests/test_skip_roles_classes_hold.py::test_a_lookup_into_templates_top_level_is_flagged`).
+  (`scripts/validate/tests/renders/test_skip_roles_classes_hold.py::test_a_lookup_into_templates_top_level_is_flagged`).
   `services.yaml` is the tile list; edit it here and nowhere else.
 - `k8s/roles/homepage/templates/icons-configmap.yaml.j2` — base64s the PNGs in `files/` into a
   ConfigMap.

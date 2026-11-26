@@ -162,7 +162,7 @@ ROWS = (
                 "hosts/tests/test_github_ruleset_drift.py",
                 "tests/staging/_fence_probe.py",
                 "scripts/deploy_tools/tests/land_merge/test_land_detach.py",
-                "scripts/validate/tests/test_vale_sync_guard.py",
+                "scripts/validate/tests/repo_checks/test_vale_sync_guard.py",
             }
         ),
         allow={

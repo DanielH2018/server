@@ -43,7 +43,7 @@ states how to split a refused PR. The plan is docs/archive/deploy/d4-ordering.md
 Exit codes: 0 clean; 1 refused; 2 a render failed, so the gate could not judge.
 
 Run: uv run python scripts/validate/render_diff_gates.py --base origin/master
-     uv run pytest scripts/validate/tests/test_validate_render_diff_gates.py
+     uv run pytest scripts/validate/tests/renders/test_validate_render_diff_gates.py
 """
 
 import hashlib

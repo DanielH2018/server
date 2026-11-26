@@ -159,9 +159,9 @@ firing alert to Alertmanager in the observability namespace, on its Service at p
 - **A new rule file joins the list in the same commit.** The template names each file rather
   than globbing, so a file the list omits never reaches the ruler. The `validate-alert-rules`
   hook fails when the files, the list and the rendered keys disagree
-  (`scripts/validate/tests/test_validate_alert_rules.py::test_a_loki_rule_file_the_list_does_not_name_is_flagged`),
+  (`scripts/validate/tests/alerts/test_validate_alert_rules.py::test_a_loki_rule_file_the_list_does_not_name_is_flagged`),
   and it parses every expression with `lokitool`
-  (`scripts/validate/tests/test_validate_alert_rules.py::test_a_lokitool_rejection_of_a_loki_rule_file_is_flagged`).
+  (`scripts/validate/tests/alerts/test_validate_alert_rules.py::test_a_lokitool_rejection_of_a_loki_rule_file_is_flagged`).
 - **The group interval sets the query load.** `homelab-logs` evaluates every 5m
   (`k8s/roles/loki-homelab/files/rules/homelab-logs.yaml`), the
   monitor-bridge `INTERVAL`, rather than Loki's 1m default. Each evaluation is a range query

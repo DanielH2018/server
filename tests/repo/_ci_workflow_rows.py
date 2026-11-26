@@ -297,7 +297,7 @@ CI_ROWS = (
             reason=(
                 "A PR that changes only the container cases' inputs runs those cases on both "
                 "legs. `host_packages.py cases-changed` decides whether the PR changes an input "
-                "of the cases, and `scripts/validate/tests/test_validate_host_packages.py` "
+                "of the cases, and `scripts/validate/tests/host_cases/test_validate_host_packages.py` "
                 "tests that decision. The render step writes the verdict to `cases`, and every "
                 "gate between it and the cases reads that output. The image and cases steps "
                 "carry no `if:` of their own, so the job's `run-cases` gate decides them."

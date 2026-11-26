@@ -119,7 +119,7 @@ SUBPROCESS_DRIVEN: frozenset[str] = frozenset(
     {
         # Its Valid-Until tests use the live clock: the judge is a real `apt-get update`, which
         # takes no `now`.
-        "scripts/validate/tests/test_validate_host_package_cases.py",
+        "scripts/validate/tests/host_cases/test_validate_host_package_cases.py",
     }
 )
 
