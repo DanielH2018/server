@@ -47,7 +47,7 @@ def transient(err: OSError) -> bool:
 
 
 def parse_time(text: str) -> float:
-    return datetime.fromisoformat(text.replace("Z", "+00:00")).timestamp()
+    return datetime.fromisoformat(text).timestamp()
 
 
 @dataclass

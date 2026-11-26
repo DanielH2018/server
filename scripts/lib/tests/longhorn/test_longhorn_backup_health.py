@@ -471,3 +471,8 @@ def test_build_verdict_flattens_a_multi_line_problem_onto_one_line():
         "was refused - did you specify the right host or port? "
         "(+1 more: see journalctl -t longhorn-backup-health)"
     )
+
+
+def test_rfc3339_to_epoch_rejects_a_stamp_with_no_offset():
+    assert logic.rfc3339_to_epoch("2027-01-15") is None
+    assert logic.rfc3339_to_epoch("2027-01-15T08:00:00") is None
