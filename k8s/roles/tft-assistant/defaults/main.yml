@@ -7,6 +7,9 @@ tft_assistant_k8s_image: ghcr.io/danielh2018/tft-assistant:0.2.1@sha256:48e23070
 # Renovate stance: whether an image bump here may automerge. `promote` deploys what merges.
 k8s_autodeploy: true
 k8s_autodeploy_reason: "the volume holds matches the crawl can fetch again and a page the pod rebuilds at start, so a bad release costs a stale page until the next one"
+# Every auto-deployed role with a Recreate strategy and an RWO claim snapshots it before a
+# revision. A revert here saves a re-crawl, not data.
+k8s_autodeploy_snapshot_pvcs: [tft-assistant-data]
 
 # The web container: python's http.server over one static page.
 tft_assistant_k8s_cpu_limit: "200m"
