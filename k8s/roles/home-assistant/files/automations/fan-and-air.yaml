@@ -101,12 +101,7 @@
               target:
                 entity_id: switch.air_purifier
 
-# Temperature → fan: drive fan.tower_fan from the AirGradient temperature via script.bedroom_apply_fan.
-# The curve, the deadband and the caps all live in fan_target_level (custom_templates/fan.jinja) —
-# TUNE THEM THERE, not here. (The curve is continuous, (t-71)/1.3, with a ±0.7-level deadband, an L4
-# night cap and the sleep-mode seasonal floor / L5 ceiling.)
-# Re-evaluates on every temperature change and at the night-cap boundaries (22:00 / 06:00) so the cap
-# engages/releases even when the temperature is steady. Skipped while the manual override is on.
+# Curve, deadband and caps live in fan_target_level (custom_templates/fan.jinja); tune them there.
 - id: bedroom_fan_temperature
   alias: Bedroom fan temperature control
   description: Set the tower fan speed from the AirGradient temperature (night-capped); skipped when the fan override is on.
@@ -122,17 +117,11 @@
     - condition: state
       entity_id: input_boolean.bedroom_fan_manual
       state: "off"
-    # Don't drive the fan when nobody's home — else it would re-run seconds after the away-sweep
-    # turns it off. The arrive nudge (bedroom_arrive_home) resumes it on return.
     - condition: state
       entity_id: person.daniel
       state: "home"
-    # Ignore the boot-time temperature re-report: at HA start the AirGradient sensor comes up
-    # unavailable/unknown then its first reading fires this state trigger, which would re-apply the auto
-    # level while the manual override is still STALE-restored off (HA's unclean shutdown can drop a fan
-    # speed you set in the ~15 min before a deploy — see bedroom_fan_startup_reconcile). Time triggers
-    # (22:00/06:00) have no from_state and always pass. This first-reading skip also gives the reconcile
-    # automation a clean window to rebuild the override before the second reading can drive the fan.
+    # Skip the first reading after boot: the manual override may still be restored stale (see
+    # bedroom_fan_startup_reconcile). Time triggers have no from_state and always pass.
     - condition: template
       value_template: >-
         {{ trigger.platform != 'state'
@@ -141,14 +130,7 @@
   action:
     - service: script.bedroom_apply_fan
 
-# Manual-fan detector: when the fan's speed / preset / on-off changes and it was NOT our own
-# command, engage the override so the temperature automation backs off. The DREO push integration
-# echoes our OWN commands back parent-less, so context alone can't tell them apart — we ALSO compare
-# the new fan LEVEL to input_number.bedroom_fan_expected_level (what bedroom_apply_fan last
-# commanded): a match = our echo (ignore), a mismatch = a real manual/remote change (flag). A preset
-# change is always manual (the automation never sets preset). Triggers on the controllable
-# attributes only (NOT a bare state trigger) — the fan's onboard `temperature` attribute drifts and
-# would false-fire. Ignores unavailable<->state reconnect noise.
+# A level matching bedroom_fan_expected_level is our own parent-less DREO echo.
 - id: bedroom_fan_manual_detect
   alias: Bedroom fan manual override detect
   description: Set the fan manual override when the fan is changed by hand (level differs from what the automation commanded).
@@ -185,18 +167,7 @@
       target:
         entity_id: input_boolean.bedroom_fan_manual
 
-# Fan override RECONCILE on restart. HA's unclean shutdown (SIGKILL on every deploy) can drop the
-# input_boolean.bedroom_fan_manual + input_number.bedroom_fan_expected_level helpers when they changed
-# within ~15 min of the restart (the restore_state dump cycle) — so a fan speed you just dialed by hand
-# is restored STALE (override off, old expected level) and bedroom_fan_temperature re-applies the auto
-# level on the first post-boot temp report.
-# This rebuilds the override from the PHYSICAL fan, whose speed the DREO cloud keeps across an HA
-# restart. It captures the restored level BEFORE the temp sensor reports (so the capture can't be
-# polluted by an auto re-apply racing in), then once temp is known compares it to the hysteresis-free
-# auto ideal (fan_target_level with cur_level=0): under auto control the fan always tracks within ~1
-# level of ideal, so a fan running MORE than 1 level off was hand-set — re-engage the override, re-arm
-# expected_level, and re-assert the level (undoing any auto nudge that slipped in). Pairs with the
-# from_state guard on bedroom_fan_temperature, which skips the first reading so this wins the race.
+# Rebuild the override from the physical fan: an unclean shutdown restores the helpers stale.
 - id: bedroom_fan_startup_reconcile
   alias: Bedroom fan startup reconcile
   description: After an HA restart, rebuild the fan manual override from the physical fan so a hand-set speed survives the unclean-shutdown loss of the override helpers.
@@ -205,8 +176,8 @@
     - platform: homeassistant
       event: start
   action:
-    # Capture the device's restored level FIRST — the DREO cloud holds the physical speed across the
-    # restart, and the fan reconnects well before the AirGradient temp sensor's first poll.
+    # Capture the restored level before the AirGradient sensor's first poll; the fan reconnects
+    # earlier.
     - wait_template: "{{ states('fan.tower_fan') in ['on', 'off'] }}"
       timeout: "00:01:30"
       continue_on_timeout: true
@@ -220,14 +191,12 @@
         t: "{{ states('sensor.bedroom_airgradient_one_temperature') | float(-1) }}"
         is_night: "{{ now().hour >= 22 or now().hour < 6 }}"
         sleep: "{{ is_state('input_boolean.bedroom_sleep_mode', 'on') }}"
-        # Outdoor temp (°F) — MUST match bedroom_apply_fan's read so this reconcile's "what auto would
-        # pick" reference uses the same sleep-mode seasonal floor/ceiling the live control applies.
+        # Must match bedroom_apply_fan's read so the same sleep-mode seasonal floor/ceiling applies.
         outdoor_t: "{{ state_attr('weather.forecast_home', 'temperature') | float(-999) }}"
         # Hysteresis-free auto ideal — cur_level=0 bypasses fan_target_level's ±0.7-level deadband.
         ideal: "{% from 'fan.jinja' import fan_target_level %}{{ fan_target_level(t, 0, is_night, sleep, outdoor_t) | int }}"
-    # Hand-set fan? Home, fan on, temp known, running >1 level from auto's pick, and the override wasn't
-    # restored (still off). The >1 tolerance absorbs the curve's hysteresis so a legit auto level never
-    # trips this — only a deliberate manual speed sits that far from ideal.
+    # The >1 level tolerance absorbs the curve's hysteresis, so only a deliberate manual speed trips
+    # this.
     - condition: template
       value_template: >-
         {{ is_state('person.daniel', 'home')
@@ -238,15 +207,13 @@
     - service: input_boolean.turn_on
       target:
         entity_id: input_boolean.bedroom_fan_manual
-    # Arm expected_level BEFORE re-asserting, so our own cloud echo matches and bedroom_fan_manual_detect
-    # doesn't re-flag it.
+    # Arm expected_level before re-asserting so our cloud echo does not re-flag
+    # bedroom_fan_manual_detect.
     - service: input_number.set_value
       target:
         entity_id: input_number.bedroom_fan_expected_level
       data:
         value: "{{ boot_level | int }}"
-    # Re-assert the hand-set level last (level -> midpoint % via the shared macro, same DREO ceil
-    # handling as bedroom_apply_fan), undoing any auto nudge that slipped in during boot.
     - service: fan.turn_on
       target:
         entity_id: fan.tower_fan
@@ -256,15 +223,7 @@
       data:
         percentage: "{% from 'fan.jinja' import level_to_pct %}{{ level_to_pct(boot_level | int) | int }}"
 
-# Window advisor: suggest opening a window when it's worth it AND safe. Two paths, both gated on
-# OUTDOOR air being safe + no dirtier than indoors (the smoke guard lives in ventilation.jinja, so
-# this can never advise ventilating into bad air): (a) STALE — indoor CO2/VOC crossed high while it's
-# clean + comfortable outside; (b) COOL — the room is warm and it's meaningfully cooler + clean
-# outside (free cooling vs. running the fan). The decision is the tested ventilation_advice macro;
-# this automation only reads entities + notifies. Routine via bedroom_notify (silent while DND/sleep,
-# phone-only, away-hold-aware), coalescing tag so a persistent condition refreshes in place. The
-# cooling 'above: 78' trigger must track the macro's comfort_hi default (78). No cooldown initially —
-# the routine channel updates the same tag silently; add a debounce only if it proves chatty.
+# The cooling 'above: 78' trigger must track the macro's comfort_hi default (78).
 - id: bedroom_window_advisor
   alias: Bedroom window advisor
   description: Suggest opening a window for stale air or free cooling when outdoor air is safe.
@@ -277,9 +236,7 @@
         - binary_sensor.bedroom_voc_high
       from: "off"
       to: "on"
-    # Free-cooling: the room crosses into "warm" (edge, 5-min stable — NOT a `for:` on a noisy temp
-    # value, which would never settle). Re-checked when outdoor PM updates (~every 30 min) so a
-    # clearing-outside while already warm still nudges. A time-pattern is intentionally avoided.
+    # Edge trigger with a 5-min hold; a `for:` on a noisy temperature would never settle.
     - platform: numeric_state
       entity_id: sensor.bedroom_airgradient_one_temperature
       above: 78
@@ -293,23 +250,17 @@
     - condition: state
       entity_id: input_boolean.bedroom_sleep_mode
       state: "off"
-    # Don't tell me to open a window that is already open. Written as "not confirmed open" rather
-    # than `state: "off"` so a dead battery or a Z2M outage (unknown/unavailable) leaves the advisor
-    # working as it did before the sensor existed, instead of silently switching it off.
+    # Written as 'not confirmed open', so a dead battery or Z2M outage leaves the advisor working.
     - condition: template
       value_template: "{{ not is_state('binary_sensor.window_sensor_contact', 'on') }}"
   action:
-    # The macro is evaluated ONCE here (DRY — no duplicate call in a condition gate). When the
-    # verdict is 'none' (e.g. an outdoor-PM poll fired but nothing's actionable) the choose below
-    # matches no branch and the automation no-ops. Single-line {% from %}{{ }} (no surrounding
-    # whitespace) so verdict is exactly 'stale'/'cool'/'none' — same single-line import pattern as
-    # the fan.jinja use elsewhere in this file.
+    # Evaluate the macro once; single-line {% from %}{{ }} keeps verdict exactly
+    # 'stale'/'cool'/'none'.
     - variables:
         verdict: "{% from 'ventilation.jinja' import ventilation_advice %}{{ ventilation_advice(states('sensor.bedroom_airgradient_one_temperature'), state_attr('weather.forecast_home', 'temperature'), states('sensor.bedroom_airgradient_one_pm2_5'), states('sensor.outdoor_pm2_5'), is_state('binary_sensor.bedroom_co2_high', 'on') or is_state('binary_sensor.bedroom_voc_high', 'on'), states('sensor.outdoor_pm10')) }}"
         out_temp: "{{ state_attr('weather.forecast_home', 'temperature') | float(0) | round }}"
         in_temp: "{{ states('sensor.bedroom_airgradient_one_temperature') | round }}"
-        # Delta from the UNROUNDED temps (rounded once) so the displayed "N° cooler" can't drift
-        # ±1° from the raw ≥5°F cool trigger the way separately-rounded in_temp − out_temp did.
+        # Delta from unrounded temps so the displayed N° cooler matches the raw >=5°F trigger.
         temp_delta: "{{ (states('sensor.bedroom_airgradient_one_temperature') | float(0) - (state_attr('weather.forecast_home', 'temperature') | float(0))) | round }}"
         co2: "{{ states('sensor.bedroom_airgradient_one_carbon_dioxide') }}"
     - choose:
@@ -330,11 +281,8 @@
                 tag: window_advice
                 alert_class: comfort
 
-# Close-the-window advisor — the mirror of bedroom_window_advisor above, possible only because the
-# SNZB-04 contact sensor makes "is it actually open?" knowable. Every branch is gated on
-# the window being CONFIRMED open, so it can never tell you to close a window that is already shut.
-# The verdict math (which reason wins, and the PM caps) lives in close_window_advice
-# (custom_templates/ventilation.jinja) — TUNE IT THERE, not here.
+# Mirror of bedroom_window_advisor; every branch needs the window confirmed open.
+# Verdict logic lives in close_window_advice (custom_templates/ventilation.jinja); tune it there.
 - id: bedroom_window_close_advisor
   alias: Bedroom window close advisor
   description: Suggest closing an open window when the weather turns, the air goes bad, or the room is being chilled.
@@ -348,8 +296,6 @@
     # The weather turned (rain/snow/hail — the macro takes the boolean, not the condition string).
     - platform: state
       entity_id: weather.forecast_home
-    # The room has actually been chilled, not just "it's cold out" — 5 min stable, same edge-not-noise
-    # shape as the free-cooling trigger in bedroom_window_advisor.
     - platform: numeric_state
       entity_id: sensor.bedroom_airgradient_one_temperature
       below: 68
@@ -367,9 +313,8 @@
       entity_id: binary_sensor.window_sensor_contact
       state: "on"
   action:
-    # Evaluated ONCE (DRY), same shape as the open advisor: single-line {% from %}{{ }} with no
-    # surrounding whitespace so verdict is exactly 'smoke'/'rain'/'cold'/'none'. A 'none' verdict
-    # matches no branch below and the automation no-ops.
+    # Single-line {% from %}{{ }} keeps verdict exactly 'smoke'/'rain'/'cold'/'none'; 'none' matches
+    # no branch.
     - variables:
         verdict: "{% from 'ventilation.jinja' import close_window_advice %}{{ close_window_advice(states('sensor.bedroom_airgradient_one_temperature'), state_attr('weather.forecast_home', 'temperature'), states('sensor.outdoor_pm2_5'), states('weather.forecast_home') in ['rainy', 'pouring', 'lightning-rainy', 'snowy', 'snowy-rainy', 'hail'], states('sensor.outdoor_pm10')) }}"
         out_temp: "{{ state_attr('weather.forecast_home', 'temperature') | float(0) | round }}"
@@ -384,8 +329,6 @@
                 message: "Outdoor air went bad (PM2.5 {{ outdoor_pm }}) — shut the window, the purifier can't keep up with it open."
                 tag: window_close_advice
                 alert_class: safety
-                # The only branch that pierces: bringing smoke indoors is the damage-class one, and
-                # it stays actionable at 3am. Rain and cold wait for you to look at your phone.
                 pierce: true
         - conditions: "{{ verdict == 'rain' }}"
           sequence:
@@ -411,10 +354,7 @@
 - id: bedroom_window_left_open
   alias: Bedroom window left open reminder
   description: Remind me 15 minutes after the window is opened, and dismiss the reminder when it's closed.
-  # queued, not single: two triggers feed one choose, and the close branch is the way OUT of the
-  # state the open branch creates. Under `single` a close arriving while the reminder's notify is
-  # still running is DROPPED with a warning, and the dismissal never happens. Same shape and same
-  # reason as bedroom_fan_manual_detect above.
+  # queued, not single: under single a close arriving while the reminder's notify runs is dropped.
   mode: queued
   max: 5
   trigger:

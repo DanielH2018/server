@@ -10,12 +10,8 @@ views:
   - title: Bedroom
     path: bedroom
     icon: mdi:bed
-    # No view theme. With `theme: nest_dark` pinned here, the cast receiver throws
-    # `Cannot read properties of null (reading 'themes')` on every connect-back cycle,
-    # because it builds each `hass` with null themes. Unpinned, the phone and
-    # browser keep their per-user theme, and the Nest Hub renders light: the receiver has no
-    # logged-in user, so it ignores dark mode. To re-pin, add `theme: nest_dark` on this view;
-    # the theme is still defined in configuration.yaml.
+    # No view theme: pinning `theme: nest_dark` makes the cast receiver throw on null `themes` at
+    # every connect-back.
     cards:
       # ── APC UPS ──────────────────────────────────────────────────────────
       - type: vertical-stack
@@ -120,8 +116,6 @@ views:
             entities:
               - entity: sensor.tower_fan_temperature
                 name: Temperature
-              # Template switch (files/templates.yaml) — DREO exposes oscillation only as the
-              # fan.tower_fan `oscillating` attribute, not a native switch entity.
               - entity: switch.tower_fan_oscillation
                 name: Oscillation
               - entity: switch.tower_fan_display_auto_off

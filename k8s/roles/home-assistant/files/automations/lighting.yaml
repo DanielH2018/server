@@ -1,10 +1,7 @@
 ---
 # Bedroom light control: the Tap Dial, presence on/off, manual-override detection, colour tracking. Conventions: see README.md in this directory.
 
-# Trigger topic is the Hue Tap Dial's Z2M friendly_name — Z2M publishes one JSON blob per device on
-# zigbee2mqtt/<friendly_name> (default output: json), so we read .action from the payload. The dial's
-# Z2M name is "Tap Dial", so the topic has a space; update the topic here if it is renamed. Its HA
-# entity_ids are IEEE-based and sticky, so battery refs survive a rename.
+# Topic is the Tap Dial's Z2M friendly_name ("Tap Dial", with a space); update it if renamed.
 - id: bedroom_tap_dial_control
   alias: Bedroom Tap Dial control
   description: Hue Tap Dial (RDM002, Z2M name "Tap Dial") controls the Bedroom Lights group.
@@ -13,13 +10,8 @@
   trigger:
     - platform: mqtt
       topic: zigbee2mqtt/Tap Dial
-  # Z2M publishes the FULL device state to this topic on every report (battery, link quality, …),
-  # plus actions no branch handles: brightness_step_* (about one per dial_rotate_*) and the
-  # non-release button_N_press / button_N_hold. The condition runs before a run takes a queue slot,
-  # so it admits only the actions a branch below handles; anything else would hold one of the 10
-  # slots and push real dial steps into "Maximum number of runs exceeded". Keep this list in step
-  # with the branches (tests/test_tap_dial_condition_matches_branches.py).
-  # `payload_json is defined` first guards a non-JSON retain.
+  # Admit only handled actions: others hold one of the 10 queue slots ("Maximum number of runs
+  # exceeded").
   condition:
     - condition: template
       value_template: >-
@@ -52,8 +44,6 @@
                 - service: input_boolean.turn_off
                   target:
                     entity_id: input_boolean.bedroom_manual_off
-        # Button 1 HOLD = reset to auto: clear the light + fan overrides, re-sync lights to their
-        # natural state HONORING the lux gate (bright room -> off), and re-apply the fan if home.
         - conditions: "{{ act == 'button_1_hold_release' }}"
           sequence:
             - service: script.turn_off
@@ -71,28 +61,18 @@
             - variables:
                 was_off: "{{ is_state('light.bedroom_lights', 'off') }}"
             - service: script.bedroom_apply_natural_gated
-            # Too-bright acknowledgement: if the reset left the lights off (room genuinely bright by
-            # DAY: lux gate blocked AND the sun is up) and the lights were already off, soft-flash to
-            # confirm the reset registered, exactly like bedroom_presence_blip does on a too-bright
-            # arrival. The `sun above_horizon` term makes this the EXACT complement of the sun-aware gate
-            # in bedroom_apply_natural_gated — at night the reset lights the room (sun term), so we must
-            # NOT also blip. The blip needs the lights already off (it takes no snapshot); the blocked
-            # daytime gate guarantees that. No feedback loop: button-driven, so the ~1s flash can't retrigger.
+            # Blip when the lux gate blocks by day and the lights were already off; the sun term is
+            # the exact complement of bedroom_apply_natural_gated's gate (at night the reset lights
+            # the room).
             - if: "{{ was_off and is_state('binary_sensor.bedroom_auto_light_allowed', 'off') and is_state('sun.sun', 'above_horizon') }}"
               then:
                 - service: script.bedroom_blip
             - if: "{{ is_state('person.daniel', 'home') }}"
               then:
                 - service: script.bedroom_apply_fan
-        # Button 2 = SLEEP. HOLD = bedtime / sleep routine (30-min fade).
-        # PRESS = sleep TOGGLE: while in sleep mode WITH the lights on (you've wound down and want the
-        # room fully dark to sleep) -> lights OFF, staying in sleep mode so the fan stays quiet AND
-        # presence can't relight you (bedroom_presence_on is gated on sleep_mode below). Otherwise
-        # (daytime, or lights already off) -> the warm nightlight, clearing manual-off. So at night a
-        # tap toggles dark <-> nightlight, and a daytime tap is a quick nightlight. The auto "got up
-        # overnight" nightlight is absent by design (see the sleep_mode gate on bedroom_presence_on) —
-        # get light back with a tap. B2 is not a light button, so (unlike B1) it does NOT exit
-        # sleep mode.
+        # In sleep mode with lights on: lights off, staying in sleep mode (presence_on is gated on
+        # it).
+        # Otherwise: nightlight. Unlike B1, B2 does not exit sleep mode.
         - conditions: "{{ act == 'button_2_press_release' }}"
           sequence:
             - if: "{{ is_state('input_boolean.bedroom_sleep_mode', 'on') and is_state('light.bedroom_lights', 'on') }}"
@@ -110,15 +90,8 @@
         - conditions: "{{ act == 'button_2_hold_release' }}"
           sequence:
             - service: script.bedroom_bedtime
-        # Button 3 = FAN CHARACTER (fan only). PRESS = toggle oscillation (sweep <->
-        # fixed): the DREO exposes the OSCILLATE feature; reverse/DIRECTION is NOT supported, so this is
-        # sweep on/off only. Oscillation is orthogonal to speed, so it deliberately does NOT touch the
-        # fan_manual override or the temp curve (bedroom_fan_manual_detect flags a level/preset change,
-        # not an oscillation change). HOLD = stop the fan: engage fan_manual FIRST (so
-        # bedroom_fan_temperature won't re-enable it on the next temp report), then fan off via the
-        # mediator; also exits fan-dial mode. This is the only dial gesture that force-stops the fan
-        # (B4 tap only turns off when the temp band wants level 0). Writing fan.oscillate directly makes
-        # this automation a fan.tower_fan writer -> declared in state/sanctioned_writers.yml exemptions.
+        # Hold: engage fan_manual FIRST so bedroom_fan_temperature cannot re-enable the fan, then
+        # turn it off.
         - conditions: "{{ act == 'button_3_press_release' }}"
           sequence:
             - service: fan.oscillate
@@ -149,12 +122,8 @@
             - service: script.turn_off
               target:
                 entity_id: script.bedroom_fan_nudge
-            # Fan ONLY. Clear the fan's sleep cap (the sleep_mode flag) + the fan override, then apply the
-            # temp band. Deliberately does NOT touch the lights or AL sleep mode: clearing AL sleep makes
-            # Adaptive Lighting self-on the lights, and the FP300 illuminance is dominated by the bedroom
-            # lights THEMSELVES (~640 lux on / ~48 off) — so any light the fan button left on would just be
-            # re-lit by presence (off-state reads "dark"). Light + AL-sleep state is owned by B1/B2 + presence.
-            # Tapping "fan back to auto" also exits fan-dial mode (the dial returns to lights). No-op if idle.
+            # Fan only: clearing AL sleep would make AL self-on the lights, and presence would
+            # re-light them.
             - service: timer.cancel
               target:
                 entity_id: timer.bedroom_fan_dial
@@ -165,11 +134,8 @@
               target:
                 entity_id: input_boolean.bedroom_fan_manual
             - service: script.bedroom_apply_fan
-        # Button 4 HOLD = toggle "fan-dial mode": while timer.bedroom_fan_dial is active the dial
-        # controls the FAN level (see the dial_rotate branches); hold again to cancel. It auto-reverts
-        # to light control when the 5-min timer expires (SLIDING — each dial turn restarts it). The
-        # timer's `active` state IS the mode (no separate boolean) so it's off after any HA restart.
-        # Max fan is reachable by dialing to L9, and the notification "Boost fan" action works.
+        # The timer's `active` state is the mode, so it is off after any HA restart; each dial turn
+        # restarts it.
         - conditions: "{{ act == 'button_4_hold_release' }}"
           sequence:
             - if: "{{ is_state('timer.bedroom_fan_dial', 'active') }}"
@@ -181,18 +147,13 @@
                 - service: timer.start
                   target:
                     entity_id: timer.bedroom_fan_dial
-                # Seed the accumulator from the fan's ACTUAL level so the first dial step is relative
-                # to reality (a prior remote change may have left expected_level stale).
                 - service: input_number.set_value
                   target:
                     entity_id: input_number.bedroom_fan_expected_level
                   data:
                     value: "{% from 'fan.jinja' import pct_to_level %}{{ pct_to_level(state_attr('fan.tower_fan', 'percentage') | float(0) if is_state('fan.tower_fan', 'on') else 0) | int }}"
-        # Dial rotate = brightness +/- 12% NORMALLY; in fan-dial mode (timer active) = fan +/-1 level.
-        # (Substring match catches the *_step variants.) The nudge is STARTED with script.turn_on, not
-        # called: a call waits on the DREO cloud ack (up to ~6 s with retries), which held this
-        # queue's slots. The nudge's own queue keeps the steps in order, and can still be draining
-        # when a button runs, so every button branch that sets the fan stops the nudge first.
+        # Start the nudge with script.turn_on, not a call: a call waits on the DREO ack (~6 s) and
+        # held slots.
         - conditions: "{{ 'dial_rotate_right' in act }}"
           sequence:
             - if: "{{ is_state('timer.bedroom_fan_dial', 'active') }}"
@@ -235,23 +196,15 @@
                     brightness_step_pct: -12
                     transition: 0.2
 
-# Presence ON: occupied + not overridden → set the lights to their NATURAL state via the
-# dispatcher (morning ramp in-window, else full Adaptive Lighting). The lux gate applies OUTSIDE
-# the morning wake window only: during the window (45 min — alarm-15 to alarm+30) we wake regardless
-# of ambient light; afterwards we only turn on when the room is dim. The
-# window is binary_sensor.bedroom_in_wake_window (alarm or 06:00 fallback), read through the lux gate.
+# The lux gate applies outside the 45-min wake window (binary_sensor.bedroom_in_wake_window)
+# only.
 - id: bedroom_presence_on
   alias: Bedroom presence on
   description: Set the lights to their natural state when the room becomes occupied OR when it darkens past the lux gate while you're already present (unless overridden); gated on darkness outside the morning wake window.
   mode: single
   trigger:
-    # Two ways in: you arrive (presence off->on), OR the room dims past the gate while you're
-    # already here (T1 illuminance crossing below 90). The latter closes an edge-vs-level gap —
-    # with only the arrival edge, entering while it was still bright would leave you in the dark
-    # as dusk fell. The `for:` rides out transient lux dips (a passing shadow).
-    # Keep this `below:` in sync with the auto_light_allowed gate threshold (lighting.jinja's
-    # `lux < N`) — test_lux_gate_sync.py asserts they stay equal, and the entity must match the one
-    # the gate reads (sensor.aqara_t1_illuminance) or the trigger fires on a different scale.
+    # Keep `below:` equal to lighting.jinja's `lux < N`, on sensor.aqara_t1_illuminance
+    # (test_lux_gate_sync.py).
     - platform: state
       entity_id: binary_sensor.aqara_fp300_presence
       to: "on"
@@ -267,12 +220,8 @@
       data:
         reason: "presence"
 
-# Presence BLIP: you arrived but the room is too bright for auto-on (the lux gate is OFF), so the
-# lights won't come on. Flash them softly to acknowledge the detection. Sibling of bedroom_presence_on,
-# sharing ONLY the arrival edge (not the dusk lux-crossing — that path is when lights DO come on), with
-# the lux gate INVERTED. Mutually exclusive with presence_on per arrival: auto_light_allowed is either
-# on (presence_on lights up) or off (this blips). Won't loop the lux trigger: a ~1s blip can't satisfy
-# presence_on's `below: 90 for: 30s`, and it only fires when T1 illuminance is already >= 90 (bright ambient).
+# Mutually exclusive with presence_on (lux gate inverted); a ~1s blip cannot satisfy its `below:
+# 90 for: 30s`.
 - id: bedroom_presence_blip
   alias: Bedroom presence blip too bright
   description: Soft acknowledgement flash when presence is detected on arrival but the lux gate blocks auto-on.
@@ -305,12 +254,7 @@
   action:
     - service: script.bedroom_blip
 
-# Absence OFF: room empty for 5 minutes → lights off (ignores the override — leaving always allows off).
-# EXCEPT during the morning wake ramp: the FP300 drops a motionless sleeper (same reason the air
-# purifier has bedroom_purifier_hold), so a 5-min "empty" mid-ramp is a false absence that would cut
-# the wake lights out from under you. Guarded on the wake window ONLY (not sleep_mode) so overnight
-# nightlight behaviour is untouched; a genuine leave-during-window is still caught by bedroom_away
-# (person not-home) or the next real presence off-edge once you're up.
+# Not during the wake ramp: the FP300 drops a motionless sleeper, so a 5-min 'empty' is false.
 - id: bedroom_absence_off
   alias: Bedroom absence off
   description: Turn off the bedroom lights after the room has been empty for 5 minutes, except during the morning wake ramp (the FP300 can drop a motionless sleeper).
@@ -321,8 +265,6 @@
       to: "off"
       for: "00:05:00"
   condition:
-    # Not inside the wake window, on the alarm or the 06:00 fallback. An unavailable sensor reads
-    # as outside, so leaving still turns the lights off.
     - condition: template
       value_template: "{{ not is_state('binary_sensor.bedroom_in_wake_window', 'on') }}"
   action:
@@ -330,21 +272,8 @@
       data:
         reason: "off"
 
-# Manual light DETECT: make a hand/voice/dashboard light change set the SAME manual-off override the
-# Tap Dial's power button does — so an external "off" STICKS instead of being re-lit by
-# bedroom_presence_on's dusk-lux trigger or by the next presence edge.
-# The gate reads the T1, which the bulbs move only ~30 lx, so a lights-off rarely crosses the
-# 90-lux trigger at all. (A gate reading the FP300 would feed back: the bulbs drive it ~550 on /
-# ~48 off, so turning them off would re-fire presence_on ~30s later.) The override is what makes a
-# deliberate "off" survive the NEXT arrival edge.
-# The Tap Dial already engaged manual-off on its off-press; voice (Google Assistant), the dashboard
-# tile, and the companion app did not — this closes that gap for every control surface at once.
-# A change counts as manual only when its context carries a user_id: Google Assistant, the dashboard
-# and the companion app set one, and none of our automations do. parent_id cannot discriminate: an
-# automation started by an MQTT, time or time_pattern trigger runs in a root context, so the Tap Dial
-# and both wake ramps write with parent_id none too. Known miss: a change made outside HA (the
-# Z2M frontend, a direct Zigbee bind) has no user_id either. Symmetric with button 1: OFF -> engage
-# manual-off; ON -> clear it (a deliberate turn-on resumes presence auto).
+# Manual = a user_id in the context; parent_id cannot discriminate. The gate reads T1, not the FP300
+# the bulbs drive.
 - id: bedroom_manual_light_detect
   alias: Bedroom manual light detect
   description: A hand/voice/dashboard turn-off of the bedroom lights engages the manual-off override (so presence won't re-light it); a manual turn-on clears it.
@@ -358,8 +287,8 @@
       entity_id: light.bedroom_lights
       to: "off"
   condition:
-    # Act ONLY on a change a person made through HA (user_id set; see the header above). Guarding from_state against unavailable/unknown stops an HA restart / deploy recreate (the group
-    # comes back unknown->on) from clearing the override.
+    # Act only on a change with a user_id; the from_state guard stops an HA restart (group
+    # unknown->on) clearing the override.
     - condition: template
       value_template: >-
         {% set ts = trigger.to_state %}
@@ -379,13 +308,7 @@
           target:
             entity_id: input_boolean.bedroom_manual_off
 
-# Slow color tracking: while the lights are in AUTO mode, drift their color every 5 min toward
-# Adaptive Lighting's CURRENT sun-curve color (read off the AL switch attribute — AL computes it even
-# while taken over). Color only (no brightness arg), so the one-shot ambient brightness is untouched
-# and there's no lux feedback loop. "Auto" = the live color is still within ~150K of what the auto
-# path last set (input_number.bedroom_light_expected_color_temp); a manual scene/slider/RGB pick fails
-# that and pauses tracking until a reset/fresh turn-on re-arms it. Gated off during the wake ramp
-# (fixed warm), sleep/00:00-05:00 (night warmth), away, and lights-off.
+# Color only, so no lux feedback loop; 'auto' = live color within ~150K of the expected_color_temp.
 - id: bedroom_color_track
   alias: Bedroom color tracking
   description: While in auto, slowly follow Adaptive Lighting's sun-curve color without touching brightness.
@@ -438,12 +361,8 @@
       data:
         value: "{{ al_ct }}"
 
-# AL self-on suppression: Adaptive Lighting re-applies its managed state on every HA start and turns
-# light.bedroom_lights ON by itself (AL's own log flags this; it happens on every deploy, ~120s). Cancel
-# it — but ONLY when the room is empty AND it's not the morning wake window, so it never fights a
-# legitimate on-state (worst case it leaves the lights on = status quo, never off-when-you-want-on). The
-# 20s delay must outlast AL's startup apply; if a restart shows AL re-on the lights AFTER this fires,
-# bump the delay (watch `custom_components.adaptive_lighting` in the log for the apply timing).
+# Cancel AL's self-on only when the room is empty and outside the wake window; 20s must outlast AL's
+# startup apply.
 - id: bedroom_al_startup_suppress
   alias: Bedroom suppress AL self-on at startup
   description: AL turns the bedroom lights on by itself after every HA restart; turn them back off unless the room is occupied or it's the wake window.

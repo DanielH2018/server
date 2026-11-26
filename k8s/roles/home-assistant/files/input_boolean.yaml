@@ -4,13 +4,9 @@
 bedroom_manual_off:
   name: Bedroom manual off override
   icon: mdi:lightbulb-off
-# Manual-fan override. When on, the temperature automation will NOT drive the fan. Set when the
-# fan is changed by hand; cleared by Tap Dial button 3 or the morning reset.
 bedroom_fan_manual:
   name: Bedroom fan manual override
   icon: mdi:fan-off
-# Sleep mode. Set by the bedtime routine (script.bedroom_bedtime); caps bedroom_apply_fan to Low
-# for a quiet night (still temperature-responsive, NOT frozen). Cleared by the morning reset.
 bedroom_sleep_mode:
   name: Bedroom sleep mode
   icon: mdi:power-sleep

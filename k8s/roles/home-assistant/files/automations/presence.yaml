@@ -1,15 +1,8 @@
 ---
 # Away and arrive-home transitions. Conventions: see README.md in this directory.
 
-# Home/away: turn the bedroom off when you leave the HOUSE (person.daniel) — a different layer than
-# the FP300's ROOM presence. Two stages absorb GPS jitter: 'leave' at 10 min away, a 'failsafe'
-# re-sweep at 30 min. Triggering on from:"home" catches leaving to any away state (not_home or a
-# named zone); the `for:` cancels on an early return (mailbox/jitter bounce). Turn-off is
-# unconditional (leaving always allows off) and the override booleans are left UNTOUCHED (respecting
-# them = never writing them here). The fan/light on-paths are separately gated on person.daniel ==
-# home (bedroom_fan_temperature, bedroom_presence_on, the morning reset's fan apply) so nothing
-# turns back on while away. Known gap: an HA restart while already away misses these (from:"home"
-# needs a live transition) — the gates still prevent away-on, so it self-corrects.
+# Leaving the house (person.daniel), not room presence. Known gap: a restart while away misses the
+# transition.
 - id: bedroom_away
   alias: Bedroom away
   description: When you leave home (10 min) and as a 30-min failsafe, turn off the bedroom lights + fan and notify what was on.
@@ -30,8 +23,6 @@
         on_label: >-
           {% from 'lighting.jinja' import away_items_label %}{{ away_items_label(is_state('light.bedroom_lights', 'on'), is_state('fan.tower_fan', 'on')) }}
     - choose:
-        # Only act + notify when something is actually on — so the 30-min failsafe stays silent
-        # unless it caught something the 10-min leave missed (or that came on since).
         - conditions: "{{ on_label != '' }}"
           sequence:
             - service: script.bedroom_lights_set
@@ -46,19 +37,13 @@
                 title: "🏠 Left on"
                 message: "Turned off bedroom {{ on_label }} (you're away)"
                 tag: bedroom_away
-                # bedroom_away fires only while away, and the arrival digest drops action buttons,
-                # so a held "Left on" could never offer its "Turn back on" undo.
                 alert_class: away_only
                 # One-tap undo for a false-away (GPS jitter while you're actually home).
                 actions:
                   - action: BEDROOM_AWAY_TURN_ON
                     title: Turn back on
 
-# Arrive home nudge: resume the gated automations promptly on return (person.daniel -> home). NOT a
-# welcome-home — never forces lights on. The fan resumes per the temperature band (unless the fan
-# override is on); lights only re-check if you're actually standing in the bedroom (FP300 present)
-# and haven't engaged the manual-off override — so arriving mid-day elsewhere in the house lights
-# nothing. Both routes go through the apply_* scripts, which honor the overrides internally.
+# Never forces lights on: they re-check only if the FP300 shows presence and manual-off is clear.
 - id: bedroom_arrive_home
   alias: Bedroom arrive home
   description: On returning home, resume the fan per temperature and re-check lights if already in the bedroom.
@@ -75,13 +60,8 @@
     - service: persistent_notification.dismiss
       data:
         notification_id: bedroom_away
-    # ...and clear the DELIVERED phone push too. bedroom_away pushes via notify.mobile_app_pixel_9_pro
-    # with tag: bedroom_away, and its away_only class is never held, so it lands as a real Android
-    # push that the dismiss above can't touch. On a genuine away you (correctly) never tap "Turn back
-    # on", so this arrival clear is the tag's own recovery path — closing the "the bedroom_away tag has
-    # no recovery path of its own" gap noted at the BEDROOM_AWAY_TURN_ON handler. clear_notification is
-    # a no-op when nothing's showing. It runs LAST: a renamed notify slug raises ServiceNotFound, which
-    # aborts the automation even under continue_on_error, so the fan/light resume must come first.
+    # Also clear the delivered phone push (tag: bedroom_away); its away_only class is never held.
+    # Run LAST: a renamed notify slug raises ServiceNotFound, which aborts the automation.
     - if: "{{ is_state('input_boolean.bedroom_fan_manual', 'off') }}"
       then:
         - service: script.bedroom_apply_fan

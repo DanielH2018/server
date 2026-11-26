@@ -8,9 +8,7 @@ metadata:
   name: zigbee2mqtt
   namespace: {{ k8s_namespace }}
 spec:
-  # Recreate is load-bearing twice over: the PVC is ReadWriteOnce on single-replica Longhorn,
-  # and the SLZB coordinator accepts ONE client, so a rolling update would have two z2m fighting
-  # for the radio.
+  # Recreate: the RWO PVC deadlocks a rolling update, and the SLZB coordinator accepts ONE client.
 {{ spec_shell('Recreate') }}
   replicas: 1
   selector:
@@ -22,14 +20,12 @@ spec:
         app: zigbee2mqtt
         netpol-baseline: enforced
     spec:
-      # Pinned with the rest of the home-critical chain to the node announcing its VIPs; the
-      # DECIDED marker in k8s/roles/home-assistant/templates/deployment.yaml.j2 has why.
+      # Pinned with the home-critical chain to the VIP node; see home-assistant's DECIDED marker.
       nodeSelector:
         kubernetes.io/hostname: {{ k8s_primary_node }}
 {{ pod_shell(services | tier_priority_class('zigbee2mqtt'), run_as_user=puid, run_as_group=pgid, fs_group=pgid) }}
-      # Re-installs the rendered configuration.yaml into the data volume on every start (see the
-      # Secret's comment). The rest of the data dir (database.db, devices.yaml,
-      # coordinator_backup.json) is z2m's own and is never touched here.
+      # Reinstalls the rendered configuration.yaml on every start; the rest of the data dir is z2m's
+      # own.
       initContainers:
         - name: config-install
           image: {{ zigbee2mqtt_k8s_init_image }}

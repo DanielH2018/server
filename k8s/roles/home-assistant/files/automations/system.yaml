@@ -20,15 +20,8 @@
       value_template: "{{ states.update | selectattr('state', 'eq', 'on') | list | count > 0 }}"
   action:
     - variables:
-        # One bullet per pending update: "• <name> (<installed> → <latest>)". Zigbee versions are
-        # opaque build integers / IEEE names until devices are renamed in Z2M — still informative.
-        #
-        # The selectattr runs INSIDE each expression rather than being hoisted into its own
-        # `pending` variable. A State object does not survive being stored in one `variables:` entry
-        # and read from the next — it arrives as a plain string, so `u.name` / `u.entity_id` raise
-        # "'str object' has no attribute 'entity_id'" and the automation aborts during variable
-        # rendering, BEFORE the notify step, failing silently. Read the versions off
-        # `u.attributes` for the same reason — no second lookup by entity_id.
+        # Keep selectattr inside each expression: a State stored in a `variables:` entry arrives as
+        # a string.
         count: "{{ states.update | selectattr('state', 'eq', 'on') | list | count }}"
         lines: >-
           {% for u in states.update | selectattr('state', 'eq', 'on') %}{{ '\n• ' ~ u.name ~ ' (' ~ (u.attributes.installed_version | string) ~ ' → ' ~ (u.attributes.latest_version | string) ~ ')' }}{% endfor %}
@@ -39,15 +32,8 @@
         tag: update_digest
         alert_class: upkeep
 
-# UPS power-event alert: nothing else watches the UPS. Driven off the RAW NUT status flags
-# (sensor.apc_ups_status_data: "OL"=online, "OB"=on battery, "LB"=low battery, "CHRG"=charging) —
-# more reliable than the friendly status string. Triggers on every status_data change and derives the
-# edge from from_state/to_state, requiring BOTH sides valid (not unavailable) so the unavailable->OL
-# reconnect on every HA restart can't fire a spurious "Power restored" (the same startup-spam trap the
-# sensor-offline recovery hit). Three edges: newly on battery (outage), newly low battery (server may
-# shut down — pierce DND), and recovered (was on battery, mains back). One coalescing tag so the
-# lifecycle outage -> low battery -> restored replaces in place. Homelab-wide (no bedroom_ prefix) but
-# routes through the shared bedroom_notify layer, like the update digest.
+# Driven off raw NUT flags, requiring both sides valid, so the HA-restart reconnect cannot fire
+# 'restored'.
 - id: ups_power_event
   alias: UPS power event
   description: Notify when the UPS goes on battery (outage), warn on low battery, and recover when mains returns.
@@ -75,11 +61,8 @@
         charge: "{{ states('sensor.apc_ups_battery_charge') }}"
         runtime_min: "{{ (states('sensor.apc_ups_battery_runtime') | float(0) / 60) | round }}"
     - choose:
-        # Newly low battery FIRST — the can't-miss tier. `choose:` is first-match-wins, so a sudden
-        # OL->"OB LB" transition (battery already weak when mains drops, both flags set in one step)
-        # must hit this pierce branch and not be shadowed by the routine outage branch below. The
-        # normal OL->OB->"OB LB" sequence is unaffected: on the OL->OB step is_lb is false, so the
-        # outage branch still fires, then this one fires on the later OB->"OB LB" step.
+        # Low battery FIRST: choose is first-match-wins, so a sudden OL->"OB LB" must hit this
+        # pierce branch, not the outage branch.
         - conditions: "{{ is_lb and not was_lb }}"
           sequence:
             - service: script.bedroom_notify
@@ -90,8 +73,8 @@
                 alert_class: power
                 watch: true
                 pierce: true
-        # Newly on battery — a routine outage. Watch buzz; routine for DND (a brief blip shouldn't wake
-        # you; the low-battery escalation above is the can't-miss one).
+        # Routine: a brief blip should not wake you; the low-battery branch above is the can't-miss
+        # one.
         - conditions: "{{ is_ob and not was_ob }}"
           sequence:
             - service: script.bedroom_notify
@@ -101,10 +84,8 @@
                 tag: ups_power
                 alert_class: power
                 watch: true
-        # Newly Replace-Battery — the UPS's own periodic self-test failed (NUT set RB). Independent of
-        # the mains/charge state (RB can trip while OL and charge/runtime still read fine), so it's the
-        # earliest replace-the-battery signal. Maintenance-class: watch buzz, but NOT pierce (not an
-        # imminent power cut). Same coalescing ups_power tag.
+        # Maintenance-class: watch buzz, not pierce. RB can trip while OL, so it is the earliest
+        # replace-battery signal.
         - conditions: "{{ is_rb and not was_rb }}"
           sequence:
             - service: script.bedroom_notify
@@ -114,8 +95,6 @@
                 tag: ups_power
                 alert_class: power
                 watch: true
-        # Recovered — was on battery, mains is back (can only be a genuine OB->OL runtime transition,
-        # never the startup reconnect, because from_state must be a valid OB flag, not unavailable).
         - conditions: "{{ was_ob and not is_ob }}"
           sequence:
             - service: script.bedroom_notify
@@ -125,8 +104,6 @@
                 tag: ups_power
                 alert_class: power
                 recovery: true
-        # Replace-Battery cleared — the RB flag dropped (battery replaced or a later self-test passed).
-        # Routine recovery, same convention as the UPS-restored recovery above (recovery: true).
         - conditions: "{{ was_rb and not is_rb }}"
           sequence:
             - service: script.bedroom_notify
@@ -137,15 +114,8 @@
                 alert_class: power
                 recovery: true
 
-# Zigbee bridge offline alert: binary_sensor.zigbee2mqtt_bridge_connection_state (HA auto-discovers it
-# from Z2M; on=online / off=offline, fed by the zigbee2mqtt/bridge/state topic) going `off` means the
-# WHOLE Zigbee mesh is down — coordinator unreachable, Z2M crashed, or MQTT dropped. Because Mosquitto
-# publishes Z2M's MQTT Last-Will 'offline' if Z2M disconnects, this fires even on a hard Z2M crash as
-# long as Mosquitto + HA are up — ONE fast root-cause signal vs. waiting on the per-device
-# bedroom_sensor_offline_alert (5 min × each device). The 2-min `for:` rides out the brief
-# offline/online flap on a Z2M restart/redeploy (and HA's own restart, where the sensor is briefly
-# unknown). Routine + watch — same severity model as the per-device offline alert (glanceable, silent
-# in DND/sleep, and a mesh outage often self-heals). Homelab-wide (no bedroom_ prefix), shared notify.
+# Z2M's MQTT Last-Will 'offline' makes this fire even on a hard Z2M crash.
+# The 2-min `for:` rides out the Z2M restart flap and HA's own restart.
 - id: zigbee_bridge_offline
   alias: Zigbee bridge offline alert
   description: Notify when the Zigbee2MQTT bridge goes offline (whole mesh down); recovery when it returns.
@@ -187,12 +157,8 @@
                 alert_class: alert_chain
                 recovery: true
 
-# HA automation-engine heartbeat: stamp input_datetime.ha_heartbeat with now() every minute so its
-# last_changed stays fresh ONLY while the automation scheduler is executing. monitor-bridge polls it
-# (check_ha_heartbeat) over the apps net and exports a failing verdict
-# when it goes stale — detecting a wedged-but-running HA the container healthcheck (HTTP :8123) can't
-# see. No conditions (must tick unconditionally); homelab-wide (no bedroom_ prefix); does NOT route
-# through bedroom_notify. Excluded from the recorder (see configuration.yaml).
+# Stamped every minute so last_changed stays fresh only while the scheduler runs; monitor-bridge
+# polls it.
 - id: ha_heartbeat
   alias: HA heartbeat
   description: Stamp input_datetime.ha_heartbeat every minute so monitor-bridge can detect a wedged automation engine.

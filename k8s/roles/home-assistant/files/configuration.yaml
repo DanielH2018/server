@@ -36,11 +36,8 @@ frontend:
       state-icon-color: "#c4c8cc"
       paper-item-icon-color: "#c4c8cc"
 
-# Automations + scenes are git-managed static files (role files/automations/*.yaml,
-# files/scenes.yaml), copied to ./config and version-controlled. Automations are one file per
-# topic, merged into a single list by the directory include; the HA UI shows them read-only
-# (a directory include has no file for the editor to write to). Scenes still open in the UI
-# editor, but edits are NOT persistent — git is the source of truth; redeploy to change.
+# Automations and scenes are git-managed; edits in the UI are not persistent (directory include is
+# read-only there).
 automation: !include_dir_merge_list automations/
 scene: !include scenes.yaml
 # Reusable scripts, one file per topic under scripts/ (same read-only-in-the-UI contract as
@@ -63,12 +60,8 @@ input_datetime: !include input_datetime.yaml
 # Timers: fan-dial mode.
 timer: !include timer.yaml
 
-# Adaptive Lighting (HACS integration) — sun-tracking color temp + brightness for the bedroom
-# group while it is on. Installed via HACS into custom_components/ (on the backed-up volume, like dreo).
-# A full HA restart (this deploy recreates the container) loads the integration; a YAML
-# "Quick Reload" is NOT enough for a newly added custom component. Creates the master switch
-# switch.bedroom_adaptive_lighting_bedroom (AL device-prefixes the name "Adaptive Lighting:
-# Bedroom"); the bedtime script and the wake automations target that exact entity_id.
+# A full HA restart loads the integration; scripts target the exact entity_id
+# switch.bedroom_adaptive_lighting_bedroom.
 adaptive_lighting:
   - name: "Bedroom"
     lights:
@@ -86,19 +79,11 @@ adaptive_lighting:
 # The 16 `threshold` binary sensors the bedroom_threshold_alert automation consumes.
 binary_sensor: !include thresholds.yaml
 
-# Template sensors live in files/templates.yaml: HA Jinja stays out of configuration.yaml, whose
-# validator rejects a Jinja marker.
+# HA Jinja stays out of configuration.yaml, whose validator rejects a Jinja marker.
 template: !include templates.yaml
 
-# UPS energy (kWh) for the Energy dashboard. The dashboard only accepts energy sensors
-# (device_class: energy, state_class: total/total_increasing) — the NUT integration gives load %
-# only. sensor.ups_power (files/templates.yaml) converts that to watts; this Riemann-sum
-# `integration` sensor accumulates it into kWh and auto-stamps device_class: energy + state_class:
-# total, making it eligible. method: left because the UPS load is a step function (holds a value
-# until it changes); max_sub_interval keeps the integral accruing while the load sits steady (else
-# it only re-integrates on a source change and a constant load would under-count). No HA Jinja
-# expressions here, so it can live inline in this verbatim-copied file. Add it to the Energy dashboard via the UI
-# (Settings → Dashboards → Energy → Individual devices → UPS Energy) — that step is .storage-only.
+# Integrates sensor.ups_power into kWh for the Energy dashboard; method left because load is a step
+# function.
 sensor:
   - platform: integration
     source: sensor.ups_power
@@ -110,9 +95,7 @@ sensor:
     max_sub_interval: "00:05:00"
     round: 3
 
-# Outdoor air quality (Open-Meteo, no key) — git-managed REST sensor. Copy'd (files/rest.yaml),
-# not inline, because HA Jinja stays out of configuration.yaml.
-# Feeds the outdoor PM2.5 threshold alerts (below) and the window advisor (files/automations/fan-and-air.yaml).
+# Copied (files/rest.yaml), not inline, because HA Jinja stays out of configuration.yaml.
 rest: !include rest.yaml
 
 # Quits the HA dashboard on the bedroom Hub over a Cast connection of its own, for
@@ -158,19 +141,16 @@ recorder:
       # which is independent of the recorder (the manual-fan-survives-restart logic is unaffected).
       - input_number.bedroom_fan_expected_level
       - input_number.bedroom_light_expected_color_temp
-      # High-frequency UPS diagnostics (voltage jitter, load bounce) — pure churn. The derived
-      # sensor.ups_power/_energy chain reads LIVE state and stays recorded (Energy dashboard
-      # long-term statistics come from those, not from these raw NUT sensors).
+      # High-frequency UPS diagnostics are churn; sensor.ups_power/_energy read live state and stay
+      # recorded.
       - sensor.apc_ups_load
       - sensor.apc_ups_input_voltage
     entity_globs:
       - sensor.*_linkquality
       - sensor.*_last_seen
 
-# Fire `system_log_event` on the event bus for every WARNING+ log record. default_config enables
-# system_log WITHOUT this, so the event never fires by default — and `automation.ha_runtime_error_alert`
-# (files/automations/system.yaml) triggers on system_log_event, so without fire_event it is silently DEAD
-# (trigger never matches). Required for that automation.
+# default_config enables system_log without fire_event, so automation.ha_runtime_error_alert would
+# never trigger. Required.
 system_log:
   fire_event: true
 
@@ -244,24 +224,13 @@ http:
     - 2405:8100::/32
     - 2a06:98c0::/29
     - 2c0f:f248::/32
-  # Brute-force defense for the internet-facing login. Authelia is intentionally OFF on this route
-  # (it breaks the companion app), so HA's own login is the last gate — CrowdSec + per-router
-  # rate-limit front it, this hardens the gate itself. Auto-bans an IP after 5 failed logins (writes
-  # config/ip_bans.yaml; delete a line to unban). The banned IP is the client the XFF walk above
-  # resolves: the real client on both routes, not a Cloudflare edge and not Traefik. Only a
-  # Cloudflare edge's CF-Connecting-IP decides the public route's client, so a client cannot
-  # choose it. An in-cluster caller with no XFF is banned by its pod IP (see docs/platform.md).
-  # Only FAILED password logins count — valid long-lived tokens, the companion app, and webhooks are
-  # unaffected. NOT a substitute for MFA: enrol TOTP in HA (Profile → Multi-factor Authentication).
+  # Auto-ban after 5 failed logins (delete a line in config/ip_bans.yaml to unban); Authelia is off
+  # here.
   ip_ban_enabled: true
   login_attempts_threshold: 5
 
-# Lovelace dashboard defined from YAML (ui-lovelace.yaml), shown in the sidebar as "Bedroom".
-# Uses the `dashboards:` form, NOT the legacy top-level `mode: yaml` (deprecated, removed in
-# HA 2026.8). Built-in cards only, so no `resource_mode: yaml` is needed.
-# NOTE: HA has no config option for the *landing* dashboard — to open straight to this one,
-# set it as default in the UI: Settings → Dashboards → (Bedroom) ⋮ → "Set as default for
-# everyone" (persists in HA's .storage). Without that, HA opens its auto-generated areas view.
+# Uses `dashboards:`, not the deprecated top-level `mode: yaml` (removed in HA 2026.8).
+# The landing dashboard has no config option: set it as default in the UI (persists in .storage).
 lovelace:
   dashboards:
     lovelace:
@@ -271,17 +240,7 @@ lovelace:
       icon: mdi:bed
       show_in_sidebar: true
 
-# Google Assistant (smart-home / cloud-to-cloud) — "Hey Google" voice control of HA entities via a
-# self-hosted Google Cloud project (NOT Nabu Casa). Google reaches HA at the public fulfillment URL
-# https://home-assistant.<domain>/api/google_assistant (Authelia is off on this route, so no bypass
-# needed). report_state pushes live state to Google's HomeGraph, signed by the service account;
-# re-sync exposed devices with the google_assistant.request_sync service (no api_key needed).
-# project_id comes from HA's secrets.yaml (rendered from SOPS). service_account is the
-# whole downloaded JSON key, which the init container installs as google_service_account.json from
-# the home-assistant-google-sa Secret; the integration reads client_email and private_key from it
-# and allows the JSON's other fields. Exposure is CURATED —
-# expose_by_default is off, so ONLY the entities flagged `expose: true` below are visible to Google.
-# Add a device = another entity_config entry with `expose: true`, then say "Hey Google, sync my devices".
+# Exposure is curated: expose_by_default is off, so only entities with `expose: true` reach Google.
 google_assistant:
   project_id: !secret google_assistant_project_id
   service_account: !include google_service_account.json
@@ -305,50 +264,14 @@ google_assistant:
       name: Bedroom Nightlight
       expose: true
 
-# Google Cast (Nest Hub Max) is intentionally NOT configured here. The `cast` integration is
-# config-entry / UI-only in modern HA — a YAML `cast:` block is rejected ("does not support YAML
-# setup"). Because HA is bridge-networked and can't discover Cast devices over mDNS, the Hub is added
-# by IP in the integration's options: Settings -> Devices & Services -> Google Cast -> Configure ->
-# Known hosts = 10.0.0.137 (the Hub's reserved lease). This is a one-time .storage step, like the
-# Energy dashboard. external_url/internal_url (in the homeassistant: block above) let the cast
-# receiver reach HA. Full runbook: SETUP.md §11.
+# Cast is config-entry/UI-only (a YAML `cast:` is rejected); add the Hub by IP under Known hosts.
+# Runbook: SETUP.md §11.
 
-# Log levels. `default: info` restates HA's own out-of-box level, so this block changes nothing
-# except the one override below.
 logger:
   default: info
   logs:
-    # SILENCED on purpose. Every line monitor-bridge's log-burst arm matches in this container
-    # comes from this logger: its pattern `(?i)(panic:|fatal|traceback|out of memory)` hits the
-    # bare `Traceback (most recent call last):` of each `Exception thrown when calling cast
-    # status listener` record. The bursts reach 21-30 lines/hour against a threshold of 20 per
-    # hour (the `WorkloadLogErrors` rule in loki-homelab's homelab-logs.yaml keeps it), which
-    # holds the composite `k8s_workloads` tile red, and a tile already red reports no new DOWN
-    # transition for a real replica, crashloop or DaemonSet failure.
-    #
-    # The fault is EPISODIC, not per-callback, and the receiver does reach HA. pychromecast's
-    # homeassistant controller hands the Nest Hub Max HA's external_url, sends a `connect`
-    # message, and waits DEFAULT_HASS_CONNECT_TIMEOUT = 30s for the receiver's `receiver_status`
-    # to flip it to connected. When that ack does not arrive it logs `_connect_hass failed for
-    # https://home-assistant.<the public domain>` and raises PyChromecastError at the
-    # cast-status listener. Consecutive warnings sit 30.05s apart, which is that timeout rather
-    # than a poll interval. Silencing this logger drops the ERROR record and its traceback
-    # together, because the traceback is that record's exc_info rather than a line of its own.
-    #
-    # The receiver's own JS exceptions ("Uncaught error from Chrome ... on unknown OS") reach
-    # HA's log in the same bursts, so the receiver reaches HA, and the LAN hairpin through
-    # Cloudflare, the served certificate and CrowdSec are refuted: each would fail on every
-    # cast rather than in bursts. Casting a dashboard still works.
-    #
-    # The cost is that a genuine cast-controller failure is silenced too, and BOTH records the
-    # fault emits sit on this logger, so no query for `_connect_hass failed` can tell "not
-    # firing" from "silenced". The fault can run for hours, and HA's turn_off cannot quit the
-    # dashboard while it runs; the shell_command below quits it over a second connection, which
-    # ends the loop. A failed cast's `_handle_signal_show_view` record is dropped by the
-    # `refresh_token` filter below, so it leaves no record either. An ignore list in the
-    # log-error check is the rejected alternative, because a growing ignore list means the
-    # check is decaying. `pychromecast.socket_client` keeps its default level: its
-    # connect-retry lines carry no traceback, so the pattern never matches them.
+    # Silenced on purpose: its bare Tracebacks trip monitor-bridge's log-burst arm; a real
+    # cast-controller failure is silenced too.
     pychromecast.controllers: critical
   # HA drops a record whose message matches one of these regexes before any handler sees it, so
   # it reaches neither stdout (`kubectl logs`) nor system_log. A failed cast logs its
