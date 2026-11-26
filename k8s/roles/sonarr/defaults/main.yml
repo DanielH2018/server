@@ -54,7 +54,7 @@ sonarr_k8s_log_rotate: "10"
 # `k8s/roles/*/defaults` and `_image:` keys only, so a shared var one directory up is invisible
 # to it and to the coverage test — the escape `crowdsec_k8s_image` made from group_vars.
 # radarr and prowlarr carry the same pin for the same reason, and
-# tests/services/test_exportarr_sidecars.py::test_the_image_pins_stay_in_lockstep
+# tests/services/scraping/test_exportarr_sidecars.py::test_the_image_pins_stay_in_lockstep
 # fails if the three drift apart.
 sonarr_k8s_exportarr_image: ghcr.io/onedr0p/exportarr:v2.3.0@sha256:af535d94061cf97a52e1661945ffba78c03f9443eae7c0da1a80a5a4be56b520
 
