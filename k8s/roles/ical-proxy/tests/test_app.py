@@ -129,8 +129,8 @@ def test_strips_trailing_time_of_day_tag_without_leaving_whitespace():
 
 
 def test_uid_is_stable_when_time_of_day_tag_changes():
-    # Retagging a task must not mint a new UID — Homepage merges refetched events
-    # without clearing state, so a changed UID leaves the old row behind as a duplicate.
+    # Retagging must not mint a new UID: Homepage merges refetched events without clearing state, so
+    # a changed UID leaves a duplicate.
     morning = app.process_obsidian_ics(
         _calendar(_todo("🔲 Clean Retainer #tod/morning", OBS))
     )

@@ -61,18 +61,13 @@ ALLOWLIST = "remote-ips"
 HOME_ALLOWLIST = "home-ips"
 AUTH_MIDDLEWARE = "authelia"
 NAMESPACE = "homelab"
-# Sighting window. The cron runs every 5 min; 6 min overlaps the previous run so a request on
-# the boundary is seen once by each rather than by neither.
+# The cron runs every 5 min; 6 min overlaps the previous run so a boundary request is seen by each.
 LOG_WINDOW = "6m"
-# An exit is exempt for a week after its last authenticated request. The refresh threshold is
-# half the TTL so a daily-used exit costs one rewrite every 3.5 days, not one per run.
+# The refresh threshold is half the TTL so a daily-used exit costs one rewrite every 3.5 days.
 TTL = timedelta(hours=168)
 REFRESH_BELOW = TTL / 2
-# The cap is the bound on the trade-off named in the module docstring. Hitting it means the
-# list needs reading, and the DOWN message lists the entries so that can be done.
+# Hitting the cap means the list needs reading; the DOWN message lists the entries.
 CAP = 16
-# The sidecar's initContainers copy both binaries into the shared `tools` emptyDir
-# (`templates/deployment.yaml.j2`).
 CSCLI = "/tools/cscli"
 KUBECTL = "/tools/kubectl"
 OK_STATUSES = frozenset(range(200, 300)) | {304}
@@ -121,12 +116,10 @@ def authenticated_clients(lines, routers):
             continue
         if entry.get("DownstreamStatus") not in OK_STATUSES:
             continue
-        # ClientHost is Traefik's whole X-Forwarded-For header, recorded before any entrypoint
-        # middleware runs. From a Cloudflare source it reads `<client-sent>, <client>`:
-        # Cloudflare appends the address it saw, so only the RIGHTMOST entry is not client-chosen.
-        # From any other source forwardedHeaders has already dropped the header, leaving the
-        # connection address. The crowdsecurity/traefik-logs parser takes the same entry, so
-        # this list holds the address CrowdSec bans.
+        # ClientHost is Traefik's whole X-Forwarded-For; from Cloudflare only the RIGHTMOST entry is
+        # not client-chosen.
+        # The crowdsecurity/traefik-logs parser takes the same entry, so this list holds the address
+        # CrowdSec bans.
         host = (entry.get("ClientHost") or "").rsplit(",", 1)[-1].strip()
         if is_remote_client(host):
             seen.add(host)
@@ -302,8 +295,8 @@ if __name__ == "__main__":
         sys.exit(main())
     except subprocess.CalledProcessError as exc:
         tail = (exc.stderr or exc.stdout or "").strip().splitlines()
-        # Name the verb that failed (`cscli allowlists add`, `kubectl logs`), never the
-        # address it was given — the summary line lands in the pod log and Loki.
+        # Name the verb that failed, never the address: the summary line lands in the pod log and
+        # Loki.
         words = [Path(exc.cmd[0]).name, *exc.cmd[1:]]
         verb = " ".join([w for w in words if not w.startswith("-")][:3])
         print(

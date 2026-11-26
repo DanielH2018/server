@@ -1,7 +1,4 @@
 ---
-# Acquisition for the node-agent DaemonSet: each node's own auth.log, the SSH brute-force
-# signal. The engine pod parses only AppSec events, so nothing else covers the host auth.log.
-# Plain ConfigMap: paths, not secrets.
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -9,9 +6,8 @@ metadata:
   namespace: {{ k8s_namespace }}
 data:
   acquis.yaml: |
-    # The DIRECTORY /var/log is the hostPath mount, not the file: a single-file
-    # hostPath pins the inode, and logrotate's weekly `create` swaps it — the Docker
-    # agent's file-bind had exactly that silent post-rotation gap.
+    # The DIRECTORY /var/log is the hostPath mount, not the file: a single-file hostPath pins the
+    # inode, and logrotate's `create` swaps it.
     filenames:
       - /var/log/auth.log
     labels:

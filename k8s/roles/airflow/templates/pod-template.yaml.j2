@@ -2,8 +2,7 @@
 {% from 'security-context.yml.j2' import hardened_security_context with context %}
 {% from 'airflow-env.yaml.j2' import airflow_env with context %}
 ---
-# The pod the KubernetesExecutor starts for each task. The executor fills in the container's
-# args and its own labels; the container must be named `base`.
+# The container must be named `base`.
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -41,9 +40,9 @@ data:
         - name: base
           image: {{ airflow_k8s_task_image }}
           imagePullPolicy: IfNotPresent
-{# The executor sets only `args`, so this replaces the image's ENTRYPOINT and keeps its two
-   parts. The sleep keeps the pod's log file on disk past Alloy's 5 s discovery throttle and
-   its 10 s file_match sync, or a pod the scheduler deletes sooner never reaches Loki. #}
+{# The executor sets only `args`, so this replaces the ENTRYPOINT and keeps its two parts. The sleep
+   keeps the pod's log on disk past Alloy's discovery throttle, or a fast-deleted pod never reaches
+   Loki. #}
           command:
             - /usr/bin/dumb-init
             - --

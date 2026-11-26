@@ -82,8 +82,7 @@ JOBS_IMAGE = _image("crowdsec_k8s_jobs_image", K8S_ROLES / "crowdsec/defaults/ma
 CROWDSEC_IMAGE = shared_vars()["crowdsec_k8s_image"]
 
 
-# The ConfigMap the stub kubectl returns. The leg cannot set the container's clock, so it
-# passes a stale-after far past the age of this fixed stamp.
+# The leg cannot set the container's clock, so it passes a stale-after far past this fixed stamp.
 _STUB_KUBECTL = """#!/bin/sh
 echo '{"data": {"looked_up_at": "2026-10-18T13:05:00Z", "ipv4": "98.42.7.9", "ipv6_prefix": "2601:600:a:b::/64"}}'
 """
@@ -237,8 +236,8 @@ def _seed_etc(etc) -> None:
     ]
     enrich = etc / "parsers" / "s02-enrich"
     enrich.mkdir(parents=True)
-    # config-install's modes, set rather than left to the runner's umask: root with every
-    # capability dropped reads these through their `other` bits.
+    # Modes set rather than left to the umask: root with every capability dropped reads these
+    # through `other` bits.
     for directory in (etc, etc / "parsers", enrich):
         directory.chmod(0o755)
     for name, directory in (
@@ -306,8 +305,8 @@ def test_the_lapi_register_init_runs_against_a_fresh_database_with_no_lapi(
     docker, tmp_path, record_property
 ):
     # fact: k8s/roles/crowdsec/CLAUDE.md#The `lapi-register` initContainer holds the LAPI down if it fails
-    # The pod's /etc/crowdsec holds config-install's seed and no config.yaml when
-    # lapi-register runs. cscli opens profiles.yaml from it before any `machines` command.
+    # The pod's /etc/crowdsec holds the seed and no config.yaml when lapi-register runs; cscli opens
+    # profiles.yaml before any `machines` command.
     etc = tmp_path / "etc"
     etc.mkdir()
     _seed_etc(etc)
@@ -315,8 +314,8 @@ def test_the_lapi_register_init_runs_against_a_fresh_database_with_no_lapi(
     data = tmp_path / "data"
     data.mkdir()
     data.chmod(0o777)
-    # The live claim's shape: the entrypoint has linked every staged data entry but the database
-    # into it, so cscli reaches `trace` through a link into the read-only root filesystem.
+    # The live claim's shape: the entrypoint has linked every staged data entry but the database, so
+    # cscli reaches `trace` through a link into the read-only root.
     linked = _run_in_engine_image(docker, data, etc, "/bin/sh", "-c", _ENTRYPOINT_LINKS)
     assert linked.returncode == 0, linked.stderr
     command = _lapi_register_command()
@@ -334,8 +333,8 @@ def test_the_lapi_register_init_runs_against_a_fresh_database_with_no_lapi(
     assert listed.returncode == 0, listed.stderr
     machines = {line.split(",")[0] for line in listed.stdout.splitlines()[1:]}
     assert machines == _lapi_machines()
-    # cscli lists allowlists only through the LAPI, so the database is read here instead. Its
-    # file is root's at 0640, which a non-root runner cannot open until it is opened up.
+    # cscli lists allowlists only through the LAPI, so the database is read here; its file is root's
+    # at 0640.
     subprocess.run(
         [docker, "run", "--rm", "-v", f"{data}:/data", "--entrypoint=chmod"]
         + [CROWDSEC_IMAGE, "-R", "a+rX", "/data"],
@@ -343,9 +342,8 @@ def test_the_lapi_register_init_runs_against_a_fresh_database_with_no_lapi(
         timeout=_DOCKER_TIMEOUT_S,
         check=True,
     )
-    # Closed by hand: a connection's `with` block commits but never closes, and the open
-    # connection's ResourceWarning then fires at garbage collection inside whichever test is
-    # running, failing that one instead.
+    # Closed by hand: a connection's `with` commits but never closes, and its ResourceWarning fires
+    # inside a later test.
     db = sqlite3.connect(data / "crowdsec.db")
     try:
         allowlists = {name for (name,) in db.execute("select name from allow_lists")}

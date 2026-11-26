@@ -102,8 +102,8 @@ JOBS = (
         timeout_s=300,
         exports=True,
     ),
-    # No verdict export: a failed run only lets bouncer rows accumulate until the next run
-    # succeeds. Its log line is the evidence (the role's CLAUDE.md).
+    # No verdict export: a failed run only lets bouncer rows accumulate; its log line is the
+    # evidence.
     Job(
         "crowdsec-bouncer-prune",
         "bouncer_prune.py",
@@ -112,8 +112,7 @@ JOBS = (
         timeout_s=600,
         exports=False,
     ),
-    # One minute after each crowdsec-home-ips CronJob slot, so each run reads the lookup that
-    # slot wrote rather than the one before it.
+    # One minute after each crowdsec-home-ips slot, so each run reads that slot's lookup.
     Job(
         "crowdsec-home-allowlist",
         "home_allowlist.py",
@@ -124,8 +123,6 @@ JOBS = (
     ),
 )
 
-# The verdicts of the jobs that export, served on /metrics by the `__main__` block. A job's
-# timestamp may age DEADLINE_PERIODS periods before the rule that reads it calls the job stale.
 EXPOSITION = jobs_metrics.Exposition(
     {
         job.tag: job.period * 60 * jobs_metrics.DEADLINE_PERIODS
@@ -195,8 +192,8 @@ def run_job(
         )
     status, summary = outcome(job, returncode, output)
     if returncode != 0:
-        # The summary is the last line. The lines above it, a traceback or a cscli error, are
-        # the evidence for the failure, and a pod log is the only place they survive.
+        # The summary is the last line; the lines above are the failure's evidence and a pod log is
+        # the only place they survive.
         for line in output.splitlines()[:-1]:
             out(f"{job.tag}: {line}")
     out(f"{job.tag}: status={status} {summary}")
@@ -273,8 +270,8 @@ if __name__ == "__main__":
             print(f"--run takes one of: {', '.join(by_tag)}", file=sys.stderr)
             sys.exit(2)
         sys.exit(run_job(by_tag[sys.argv[2]]))
-    # PID 1 in a container ignores a signal it installs no handler for, so without this the
-    # kubelet waits out the grace period on every engine restart before it kills the pod.
+    # PID 1 ignores a signal with no handler, so without this the kubelet waits out the grace period
+    # on every restart.
     signal.signal(signal.SIGTERM, lambda *_: sys.exit(0))
     if os.environ.get("JOBS_METRICS_PORT"):
         EXPOSITION.serve(int(os.environ["JOBS_METRICS_PORT"]))

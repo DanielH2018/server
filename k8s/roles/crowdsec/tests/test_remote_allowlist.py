@@ -67,8 +67,6 @@ def test_a_2xx_on_an_authelia_router_from_a_public_address_is_clean():
 
 
 def test_a_cloudflare_chain_counts_its_rightmost_entry_and_never_the_client_sent_one():
-    # The measured shape: the client sent XFF, Cloudflare appended the address it saw, and
-    # Traefik logged the whole header.
     lines = [_line(AUTH_ROUTER, 200, "8.8.8.8, 9.9.9.9,1.1.1.1")]
     assert ra.authenticated_clients(lines, {AUTH_ROUTER}) == {"1.1.1.1"}
 

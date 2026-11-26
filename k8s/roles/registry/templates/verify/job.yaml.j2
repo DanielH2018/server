@@ -98,12 +98,7 @@
     },
   },
 ] %}
-{#
-  The agent node's pull path: its containerd resolves the mirror to the pinned ClusterIP and
-  is admitted by the fence's flannel.1 ipBlock, the grant this leg fails on if that SNAT
-  assumption breaks. Rendered only where `k3s_agent_node_ips` names an agent, as
-  the deleted Ansible agent half was: a single-node cluster could never schedule it.
-#}
+{# Admitted by the flannel.1 ipBlock; rendered only where k3s_agent_node_ips names an agent. #}
 {% if k3s_agent_node_ips | length > 0 %}
 {% set checks = checks + [{
     'name': 'pull-agent',
@@ -154,8 +149,7 @@ template:
       - name: verify
 {% if check.image is defined %}
         image: {{ check.image }}
-        # A cached copy would let the pod start with the registry down, the one thing it
-        # must not do.
+        # A cached copy would let the pod start with the registry down.
         imagePullPolicy: Always
 {% else %}
         image: {{ flux_job_image }}

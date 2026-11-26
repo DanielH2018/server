@@ -3,9 +3,7 @@
    reads the version it bumps. #}
 FROM apache/airflow:slim-3.3.2-python3.12@sha256:a54e7bd6c4d7a17e55cd14b0ead257877b8f8111680d2692cbdba2ff32bd3ff3
 
-{# The three providers slim lacks, at the versions Airflow's own constraints file for 3.3.2
-   pins. Pinning apache-airflow beside them stops pip from moving the core to satisfy one.
-   A base bump moves all four to the new constraints file's versions in the same PR. #}
+{# Pinned to Airflow's constraints file; pinning apache-airflow stops pip moving the core. #}
 RUN pip install --no-cache-dir \
       "apache-airflow==3.3.2" \
       "apache-airflow-providers-cncf-kubernetes==10.22.0" \
@@ -13,9 +11,8 @@ RUN pip install --no-cache-dir \
       "apache-airflow-providers-standard==1.19.0" \
       --constraint "https://raw.githubusercontent.com/apache/airflow/constraints-3.3.2/constraints-3.12.txt"
 
-{# The context is a ConfigMap mount whose files are symlinks into ..data/, and a multi-file
-   COPY drops all but the first symlinked file (homelab-mcp's Dockerfile has the detail). So
-   COPY the whole snapshot and place each file with `cp -L`, which follows the link. #}
+{# The context's files are symlinks and a multi-file COPY drops all but the first, so COPY the whole
+   snapshot and place each file with `cp -L`. #}
 USER root
 COPY . /opt/build-context/
 RUN mkdir -p /opt/dags/homelab_warehouse \
@@ -27,8 +24,7 @@ RUN mkdir -p /opt/dags/homelab_warehouse \
     && chmod -R a+rX /opt/dags /opt/check_dags.py
 USER airflow
 
-{# Airflow 3 does not put the DAG folder on sys.path, so the DAGs' own `homelab_warehouse`
-   package resolves through PYTHONPATH, in every container and task pod this image runs. #}
+{# Airflow 3 does not put the DAG folder on sys.path, so PYTHONPATH resolves `homelab_warehouse`. #}
 ENV AIRFLOW__CORE__DAGS_FOLDER=/opt/dags \
     PYTHONPATH=/opt/dags \
     AIRFLOW__CORE__LOAD_EXAMPLES=False

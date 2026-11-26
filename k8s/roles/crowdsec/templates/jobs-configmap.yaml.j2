@@ -21,8 +21,6 @@ metadata:
   name: crowdsec-jobs
   namespace: {{ k8s_namespace }}
 data:
-  # kubectl's credential for the remote allowlist: the projected token and CA the sidecar alone
-  # mounts at /var/run/crowdsec-jobs (deployment.yaml.j2). Paths only; no secret value.
   kubeconfig: |
     apiVersion: v1
     kind: Config

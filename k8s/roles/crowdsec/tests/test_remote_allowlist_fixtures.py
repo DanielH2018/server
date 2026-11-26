@@ -47,8 +47,6 @@ DOCUMENTATION_NETWORKS = tuple(
 REFUSED_CLASS_NETWORKS = tuple(
     ipaddress.ip_network(network) for network in ("10.0.0.0/8", "100.64.0.0/10")
 )
-# Permitted addresses the fixture file holds in each shape the scanner handles. A scan that
-# misses one of them has stopped reading that shape.
 REQUIRED_MEMBERS = frozenset(
     ipaddress.ip_address(address)
     for address in ("9.9.9.9", "10.0.0.50", "203.0.113.0", "2001:db8:1:2:aaaa::1")

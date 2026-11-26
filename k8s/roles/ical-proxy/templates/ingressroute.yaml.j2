@@ -1,9 +1,7 @@
 {% from 'ingressroute.yml.j2' import monitoring_route with context %}
 ---
-{# monitoring_route, not ingressroute(): the ClientIP(daniel-server) guard is what lets ONLY
-   homepage, which runs there, read the unauthenticated private feeds — nothing else on the
-   LAN can fetch the calendars. LAN-only by construction (the macro ignores
-   k8s_public_route). #}
+{# monitoring_route: the ClientIP(daniel-server) guard lets only homepage read the unauthenticated
+   private feeds; LAN-only by construction. #}
 {{ monitoring_route(
     container_item.name,
     container_item.hostname | default(container_item.name),

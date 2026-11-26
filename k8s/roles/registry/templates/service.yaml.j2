@@ -5,9 +5,8 @@ metadata:
   name: registry
   namespace: {{ k8s_namespace }}
 spec:
-  # Pinned so agents' /etc/rancher/k3s/registries.yaml can name it as the mirror endpoint:
-  # containerd is a host process that resolves no cluster DNS, and an auto-assigned
-  # ClusterIP would silently change on Service recreate, stranding every agent-side pull.
+  # Pinned: registries.yaml names it, and containerd resolves no cluster DNS; a changed IP strands
+  # pulls.
   clusterIP: {{ k8s_registry_cluster_ip }}
   # DECIDED: one Service fronting two mirrors and the push store, so each mirror keeps the pinned
   # ClusterIP agents' registries.yaml names. A Service of its own would need a second pinned

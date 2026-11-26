@@ -66,9 +66,9 @@
 {% set spec_text %}
 # A retry would ban the Pi a second time, and a flaky check must fail rather than pass on it.
 backoffLimit: 0
-# The login, the ban and its read-back at 10s each plus 60s of connect retries on the first,
-# the 300s window, the 180s outage grace and the last reads and the lift, with slack. The
-# renderer raises `crowdsec-verify`'s Kustomization timeout above it (`ordering.verify_timeout`).
+# Login, ban and read-back at 10s each plus 60s of connect retries, the 300s window, the 180s outage
+# grace, the last reads and the lift, with slack; the renderer raises the `crowdsec-verify` timeout
+# above it (`ordering.verify_timeout`).
 activeDeadlineSeconds: 660
 template:
   metadata:

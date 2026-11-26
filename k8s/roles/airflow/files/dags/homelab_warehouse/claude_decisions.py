@@ -40,11 +40,10 @@ LOKI_KEEP_DAYS = 31
 PAGE_LIMIT = 5000
 # A page still full at this width is refused rather than halved again.
 MIN_PAGE = timedelta(minutes=1)
-# Over 2026-11-06 to 11-19, 851 of 1080 dialogs were answered in under 300 ms, none between
-# 300 ms and 1.17 s, and the rest after; the threshold sits in that gap.
+# The threshold sits in the gap between automatic answers (under 300 ms) and human ones (over 1.17
+# s).
 HUMAN_ANSWER_MS = 1000
-# Over the same days, a dialogless user_temporary decision came 0.93 s or 1.43 s after the
-# session's previous decision, or 8.6 s and more.
+# Above a remembered grant's lag (0.93 s or 1.43 s) after the session's previous decision.
 REMEMBERED_GRANT_MS = 3000
 
 STREAM = '{service_name="claude-code"}'

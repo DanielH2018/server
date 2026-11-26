@@ -5,16 +5,13 @@
 {% from 'airflow-env.yaml.j2' import airflow_env, airflow_mounts, airflow_volumes with context %}
 {% set health = container_item.netpol_fences | selectattr('app', 'equalto', 'airflow-scheduler') | first %}
 ---
-# The scheduler, which launches one KubernetesExecutor pod per task. Its init container runs
-# `airflow db migrate`; every other Airflow pod waits for that migration before it starts.
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: airflow-scheduler
   namespace: {{ k8s_namespace }}
 spec:
-{# One scheduler, and one migrator: a rolling update would run the old scheduler beside a
-     new one whose init container is migrating the schema under it. #}
+{# One scheduler and one migrator: a rolling update would run two against one schema. #}
 {{ spec_shell('Recreate') }}
   replicas: 1
   selector:
@@ -49,8 +46,6 @@ spec:
 {{ hardened_security_context(read_only=true, non_root=true) }}
           env:
 {{ airflow_env(true) }}
-{# The scheduler's own health server: 200 while its job is RUNNING with a fresh heartbeat,
-   else 503. monitor-bridge's airflow_scheduler row reads it. #}
             - name: AIRFLOW__SCHEDULER__ENABLE_HEALTH_CHECK
               value: "True"
             - name: AIRFLOW__SCHEDULER__SCHEDULER_HEALTH_CHECK_SERVER_PORT

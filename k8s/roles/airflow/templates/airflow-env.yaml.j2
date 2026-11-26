@@ -1,16 +1,7 @@
 {% from 'container-resources.yml.j2' import container_resources with context %}
 {% from 'security-context.yml.j2' import hardened_security_context with context %}
-{#
-  The env every Airflow container shares, as macros the four workload templates import. It
-  renders no document, and `manifests_exclude_files` keeps it out of the file list.
-
-  airflow_env(platform)  The env list at container depth (10 spaces). `platform=true` adds the
-                         metadata database, as the `airflow` superuser, and the JWT secret,
-                         which the api-server, scheduler and dag-processor need. `false` adds
-                         the `warehouse` connection, as `warehouse_writer`, and each source's
-                         credential, for a task pod, which holds neither of the platform's:
-                         Airflow 3 runs a task through the execution API.
-#}
+{# airflow_env(platform): true adds the metadata DB and JWT secret; false adds the warehouse
+   connection and source credentials, for task pods. #}
 {% macro airflow_env(platform) %}
             - name: AIRFLOW__CORE__EXECUTOR
               value: KubernetesExecutor
@@ -25,12 +16,10 @@
               value: utc
             - name: AIRFLOW__CORE__PARALLELISM
               value: "{{ airflow_k8s_parallelism }}"
-{# Unset, Airflow derives it from AIRFLOW__API__BASE_URL, the public name behind Authelia,
-   which no task pod can pass. #}
+{# Unset, Airflow derives it from the public base URL behind Authelia, which no task pod can pass. #}
             - name: AIRFLOW__CORE__EXECUTION_API_SERVER_URL
               value: "http://airflow.{{ k8s_namespace }}.svc.cluster.local:{{ container_item.port }}/execution/"
-{# Authelia two_factor is the login; Airflow's own simple auth manager makes every
-               user that reaches it an admin, so there is no second password to hold. #}
+{# Authelia two_factor is the login; the simple auth manager makes every user an admin. #}
             - name: AIRFLOW__CORE__SIMPLE_AUTH_MANAGER_ALL_ADMINS
               value: "True"
             - name: AIRFLOW__API__EXPOSE_CONFIG
@@ -41,8 +30,7 @@
               value: {{ k8s_namespace }}
             - name: AIRFLOW__KUBERNETES_EXECUTOR__POD_TEMPLATE_FILE
               value: /opt/airflow-pod-template/pod-template.yaml
-{# The provider's default is False, which keeps a pod whose container crashed, such as an
-   OOM kill. Its log is in loki-homelab, so nothing needs the pod. #}
+{# The provider's default False keeps crashed pods; their logs are in Loki, so delete them. #}
             - name: AIRFLOW__KUBERNETES_EXECUTOR__DELETE_WORKER_PODS_ON_FAILURE
               value: "True"
 {% if platform %}
@@ -74,11 +62,6 @@
 {% endif %}
 {%- endmacro %}
 
-{#
-  The volumes every Airflow platform container mounts: AIRFLOW_HOME, where Airflow writes its
-  generated airflow.cfg and log files, kept off the read-only root, and the pod template the
-  KubernetesExecutor reads.
-#}
 {% macro airflow_mounts() %}
             - name: airflow-home
               mountPath: /opt/airflow
@@ -99,8 +82,7 @@
             name: airflow-pod-template
 {%- endmacro %}
 
-{# The wait every platform container but the scheduler runs first: the scheduler's init
-   container owns `airflow db migrate`, and the others start only on a migrated schema. #}
+{# Only the scheduler's init container runs `airflow db migrate`; the others wait for it. #}
 {% macro wait_for_migrations() %}
         - name: airflow-wait-for-migrations
           image: {{ airflow_k8s_image }}

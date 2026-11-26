@@ -43,8 +43,6 @@ def day_rows(**totals: float) -> list[dict]:
 
 
 def test_a_counter_that_resets_with_its_pod_counts_each_climb_again():
-    # Rises 3439 -> 3491, then resets three times, peaking at 10241 and 589 between, and
-    # ends the day at 44611.
     assert rows_for("entrypoint_requests") == {
         ("https", "200"): (3491 - 3439) + 10241 + 589 + 44611
     }

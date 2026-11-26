@@ -1,7 +1,4 @@
 ---
-# The restore drill's own Flux tag. It renders the stamp ConfigMap, the drill's script ConfigMap,
-# its CronJob, its ServiceAccount and its RBAC. The drill's objects live in `homelab`, so they
-# cannot go in the `longhorn` tag, which the DR order waits on before anything creates `homelab`.
 
 # Auto-deploy stance. Flux applies the tag, so this gates no apply; the stance decides whether
 # Renovate automerges a bump of the runner image below.
@@ -19,37 +16,23 @@ k8s_autodeploy_reason: "the drill restores a real Volume, PV and PVC under a fix
 # sides in one PR.
 longhorn_drill_namespace: homelab
 
-# The image the CronJob runs. The drill is a shell job that needs bash, jq, curl and kubectl, and
-# `alpine/k8s` carries all four. It is BusyBox over musl for `mktemp`, `date`, `sort` and `stat`,
-# so tests/longhorn/_restore_drill.py runs the script inside this digest as well. The same
-# digest as janitorr's and crowdsec's kubectl images. The probe pod runs
-# `k3s_longhorn_restore_drill_image` below.
+# Needs bash, jq, curl and kubectl. BusyBox over musl, so tests/longhorn/_restore_drill.py runs the
+# script in this digest.
 longhorn_restore_drill_runner_image: alpine/k8s:1.37.2@sha256:7a82aeefea3d554a43a8676b137f2b88bae6c1fe11c13862b191b3a086cc28c0
 
-# The Job's deadline: the restore timeout (`k3s_longhorn_restore_drill_timeout_s`, 2700) plus the
-# probe pod's 300-second bound plus a 600-second margin for the candidate query, the restore's
-# setup and `cleanup`. Far below the daily period.
-# tests/longhorn/test_longhorn_restore_drill_deadline.py holds it above the timeout plus
-# the probe bound.
+# Restore timeout plus the probe pod's 300s bound plus a 600s margin; a test holds it above the
+# first two.
 longhorn_restore_drill_deadline_seconds: 3600
-# How long a finished drill's Job, and its pod, stays visible: two schedule periods, the window
-# `probe.py health`'s schedule gate allows the newest firing, so a failed drill clears instead
-# of reading Failed until three more fail (test_rendered_properties.py, row
-# cronjob-finished-jobs-age-out). Older runs' output is in Loki.
+# Two schedule periods, the window `probe.py health` allows the newest firing, so a failed drill
+# clears.
 longhorn_restore_drill_job_ttl_seconds: 172800
-# What the kubelet allows between SIGTERM at the deadline and SIGKILL. It covers one 10-second
-# poll and the four `--ignore-not-found` deletes in `cleanup`, each of which waits up to
-# `longhorn_restore_drill_delete_timeout_seconds` for its object to go. The script's TERM trap runs `cleanup` through the exit, so a Job killed at the deadline
-# leaves no `restore-drill-<pvc>` Volume, PV, PVC or probe pod behind. The exception is a TERM
-# pending while bash parses a `$(`, which runs no trap, and no grace value changes that. The next
-# run sweeps a Volume older than this grace plus the deadline above.
+# The SIGTERM-to-SIGKILL window covers one poll and the four deletes in `cleanup`; a TERM pending
+# while bash parses `$(` runs no trap.
+# The next run sweeps a Volume older than grace plus deadline.
 longhorn_restore_drill_grace_seconds: 300
-# How long one delete waits for its object to go. Four of them and a poll must fit in the grace
-# period above, and test_longhorn_restore_drill_deadline.py holds that. A timed-out delete has
-# still asked the API server to delete the object.
+# Four deletes and a poll must fit in the grace period; test_longhorn_restore_drill_deadline.py
+# holds that.
 longhorn_restore_drill_delete_timeout_seconds: 60
-# A run missed by more than an hour is not made up: the next night's rotation picks another
-# volume, and the attempt stamps are what the rotation reads.
 longhorn_restore_drill_starting_deadline_seconds: 3600
 # nobody. The script writes only /tmp, which the image leaves writable, and needs no home.
 longhorn_restore_drill_uid: 65534
@@ -58,26 +41,11 @@ longhorn_restore_drill_mem_limit: 256Mi
 longhorn_restore_drill_cpu_request: 10m
 longhorn_restore_drill_mem_request: 64Mi
 
-# Restore drill — proves the backups come BACK, which nothing else here checks. The heartbeat
-# watches Longhorn's own objects, and none of them can tell you whether the bytes in B2 restore.
-#
-# ROTATES over every volume declared for backup — one per night, least-recently-attempted first,
-# which is a full cycle in as many days as there are candidates. Empty means
-# rotate; setting this to a PVC name pins the drill to that one volume, which is a debugging
-# lever and not the normal mode. To drill one volume ONCE, do not set this: create a Job from
-# the CronJob with RESTORE_DRILL_PIN=<pvc> in its container environment (this role's CLAUDE.md
-# gives the commands), which overrides this value for that run only.
-#
-# Rotation is affordable because of the block size (`k3s_longhorn_backup_block_size`, in the `longhorn`
-# role's defaults): the whole B2
-# candidate set is ~250 blocks, so one night's drill costs 4-85 Class B (a GET per block) against
-# the 2,500/day cap, and a 25-day cycle costs less than a single day's measured baseline of
-# 253-363.
-#
-# R2 volumes are IN the rotation. Drilling an R2 volume proves Cloudflare and says nothing about
-# B2, the store under a transaction cap, but each target is proven on the nights its own volumes
-# come up. R2 restores are free (10M Class B/month, zero egress), so those four volumes cost
-# nothing on the axis that is scarce.
+# Empty rotates one volume per night, least-recently-attempted first; a PVC name pins the drill, for
+# debugging only.
+# To drill one volume once, create a Job from the CronJob with RESTORE_DRILL_PIN=<pvc> (the role's
+# CLAUDE.md has the commands).
+# R2 volumes are in the rotation: each target is proven on the nights its own volumes come up.
 k3s_longhorn_restore_drill_pvc: ""
 # Skip a candidate whose actualSize exceeds this. Bounds one night's egress and wall-clock so a
 # slow restore cannot read as a failed one. A backed-up volume excluded here is undrilled, and the
@@ -89,40 +57,20 @@ k3s_longhorn_restore_drill_pvc: ""
 # never the stored-block total from `probe.py b2-longhorn`. The cost of 4 GiB is ~100 Class B
 # GETs and ~1.34 GB egress once per 25-night rotation.
 k3s_longhorn_restore_drill_max_actual_bytes: 4294967296
-# A restored volume that mounts but is EMPTY is the failure mode this floor catches: an empty
-# filesystem passes every check that only asks whether the mount succeeded. Deliberately low —
-# this asserts "real data came back", not any particular size, so it does not need revisiting
-# when the service grows or shrinks. tdarr-configs holds five JSON files, 1007 bytes in total,
-# the whole of Tdarr's /app/configs, and must pass. The drill's `files > 0`
-# check is what rejects an empty mount; this floor only has to reject files that hold nothing.
+# Catches a mounted but EMPTY restore; deliberately low, since `files > 0` rejects empty mounts and
+# this only rejects files holding nothing.
 k3s_longhorn_restore_drill_min_bytes: 1
-# PVCs whose restore legitimately comes back with no files, so the two content assertions above
-# are waived for them and nothing else is. Everything the drill can still prove for such a volume
-# it does prove: the restore completes, the probe pod mounts it and reports. n8n-files is here
-# because n8n writes to /files only when a workflow does and none has — its actualSize has stayed
-# within 51.05-51.77 MB (bare ext4 metadata on a 1 GiB volume), and the drill restores it to
-# files=0. vaultwarden-data is here because vaultwarden runs at zero replicas, so nothing has
-# written to its volume. A small vault can stay under the ceiling below, so drop the name in the
-# PR that raises the replicas.
-# A volume that starts holding data DOES leave the waiver behind, but the drill no longer depends
-# on anyone noticing: the ceiling below withdraws it. Remove the name anyway once that happens —
-# the list is a claim about the volume, and the waiver is dead weight once the content assertions
-# can pass.
+# Waives the two content assertions for restores that legitimately come back with no files, and
+# nothing else.
+# Drop a name once its volume holds data; the ceiling below also withdraws the waiver.
 k3s_longhorn_restore_drill_empty_ok_pvcs:
   - n8n-files
   - vaultwarden-data
-# The waiver above applies only while the SOURCE volume's actualSize stays under this. Without
-# the ceiling the waiver applies by name alone, whatever the volume held, so an empty restore of
-# a volume that had filled up would still stamp success and check 8 would read it as
-# restore-proven.
-# 60 MiB: the recorded bare-ext4 band for the one declared volume is 51.05-51.77 MB, so this
-# clears the observed noise by ~11 MB while withdrawing the waiver
-# from anything that could plausibly be real data. Raising it widens the band of real content a
-# `files=0` restore would still be waived for, which is the whole thing this bounds.
+# The waiver applies only while the source volume's actualSize stays under this, else an empty
+# restore of a filled volume stamps success.
+# 60 MiB sits ~11 MB above the 51 MB bare-ext4 band; raising it widens what a `files=0` restore is
+# waived for.
 k3s_longhorn_restore_drill_empty_ok_max_actual_bytes: 62914560
-# The probe pod's image. It needs BusyBox's `find`, `wc` and `cat` for the content counts and
-# Python's `sqlite3` module for the integrity check, and `python:3.15-alpine` carries both. The
-# same digest as monitor-bridge's and longhorn-reconcile's.
 k3s_longhorn_restore_drill_image: python:3.15-alpine@sha256:0f9552bb28711333da16915ec146f5e6bb44a7fdac9ced15dc17c2e0206346dd
 # A drill restores 51 MB in ~21s and the rotation admits volumes 25x that size: a slow restore
 # is not itself a failure, but a hung one must not leave a
@@ -131,8 +79,6 @@ k3s_longhorn_restore_drill_image: python:3.15-alpine@sha256:0f9552bb28711333da16
 # DECIDED: 2700s, raised from 1800s with the cap on 2026-08-24. To raise it further, raise
 # longhorn_restore_drill_deadline_seconds with it, or the Job dies before the restore times out.
 k3s_longhorn_restore_drill_timeout_s: 2700
-# 04:10 nightly: after the daily tier's 03:30 run and clear of every weekly shard's 04:30, so the
-# drill never contends with a backup in flight.
 k3s_longhorn_restore_drill_cron: "10 4 * * *"
 
 manifests_rollout: ''

@@ -67,8 +67,6 @@ def request(
 ) -> http.client.HTTPResponse:
     """Send one request without following a redirect; the caller closes the response."""
     conn, target = _connect(url, timeout)
-    # One connection per request. The socket is handed to the response, as http.client does
-    # for a response that closes its connection, so closing the response closes the socket.
     conn.request(method, target, headers={**headers, "Connection": "close"})
     resp = conn.getresponse()
     if conn.sock is not None:
@@ -134,8 +132,7 @@ class Upstream:
             return resp
         location = urljoin(self.base + self.path, resp.getheader("Location", ""))
         resp.close()
-        # The signed URL carries its own credential, and a second one is refused by some
-        # blob stores, so the redirect hop sends no Authorization.
+        # The signed URL carries its own credential; some blob stores refuse a second one.
         hop = {k: v for k, v in self.headers.items() if k != "Authorization"}
         if offset:
             hop["Range"] = f"bytes={offset}-"
