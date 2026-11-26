@@ -19,10 +19,14 @@ See repo-root `CLAUDE.md` for shared conventions.
   `k8s/roles/vaultwarden/defaults/main.yml:vaultwarden_k8s_allowed_sources`, matched on the
   remote address. ENFORCED:
   `tests/services/apps/test_vaultwarden_gate.py::test_every_vault_router_but_the_probes_carries_the_allowlist`.
-- **Never put a pod or service CIDR in the allowlist.** It admits every pod in the cluster.
-  WireGuard peers arrive as the wg-easy pod's IP, which changes on every restart, so remote
-  access waits on giving wg-easy a stable source address. ENFORCED:
-  `tests/services/apps/test_vaultwarden_gate.py::test_the_rendered_allowlist_admits_no_cluster_range_is_clean`.
+- **WireGuard peers come in through the primary node's pod subnet.** wg-easy masquerades
+  peers, so they reach Traefik as the wg-easy pod's IP, which changes on every restart. The
+  allowlist therefore admits
+  `k8s/roles/vaultwarden/defaults/main.yml:vaultwarden_k8s_primary_node_pod_cidr`, the /24
+  where wg-easy and Traefik are pinned. Every other pod on that node is admitted too. Never
+  widen it to another node's subnet or the whole pod CIDR. If wg-easy moves node, move this
+  value with it. ENFORCED:
+  `tests/services/apps/test_vaultwarden_gate.py::test_the_rendered_allowlist_admits_only_the_primary_nodes_pods_is_clean`.
 - **The ingress probe has its own route.** The blackbox prober is a pod, outside the
   allowlist, and it probes the bare host. The `vaultwarden-probe` router admits the pod CIDR to
   exactly `Path(/)`, the static web-vault page. `monitoring_route()` cannot do this, because it

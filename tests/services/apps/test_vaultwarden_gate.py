@@ -1,7 +1,9 @@
-"""Vaultwarden's route and signup gate stay closed to everything but the LAN.
+"""Vaultwarden's route and signup gate stay closed to everything but the LAN and WireGuard.
 
 The Bitwarden clients cannot pass Authelia, so the role's `vaultwarden-lan-only` ipAllowList is
-the gate on the vault's API. A pod or service CIDR in it would admit every pod in the cluster.
+the gate on the vault's API. WireGuard peers arrive as the wg-easy pod's IP, so the list admits
+the primary node's pod subnet, where wg-easy is pinned. Any wider cluster range would admit the
+other node's pods or the whole cluster.
 `SIGNUPS_ALLOWED` renders from a bool, because Vaultwarden reads an unparsable value as unset,
 and unset means signups open.
 """
@@ -14,17 +16,27 @@ from lib import yaml_fast
 _HOST = "vaultwarden.local."
 
 
-def admits_a_cluster_range(sources: list[str], cluster_cidrs: list[str]) -> bool:
-    """True when any allowlist source overlaps a pod or service range."""
-    nets = [ipaddress.ip_network(c) for c in cluster_cidrs]
-    return any(
-        ipaddress.ip_network(s, strict=False).overlaps(n) for s in sources for n in nets
-    )
+def admits_more_of_the_cluster(
+    sources: list[str], cluster_cidrs: list[str], node_subnet: str
+) -> bool:
+    """True when a source reaches a pod or service range beyond `node_subnet`."""
+    nets = [ipaddress.IPv4Network(c) for c in cluster_cidrs]
+    node = ipaddress.IPv4Network(node_subnet)
+    for source in (ipaddress.IPv4Network(s, strict=False) for s in sources):
+        if any(source.overlaps(n) for n in nets) and not source.subnet_of(node):
+            return True
+    return False
 
 
 def _cluster_cidrs() -> list[str]:
     ctx = host_context()
     return [ctx["k3s_pod_cidr"], ctx["k3s_service_cidr"]]
+
+
+def _primary_node_subnet() -> str:
+    """daniel-box's /24 pod subnet, the one holding its cni0 gateway (`k3s_cni0_gateways[0]`)."""
+    gateway = host_context()["k3s_cni0_gateways"][0].split("/")[0]
+    return str(ipaddress.ip_network(f"{gateway}/24", strict=False))
 
 
 def _vaultwarden_docs() -> list[dict]:
@@ -42,14 +54,17 @@ def _allowlist() -> list[str]:
     return mw["spec"]["ipAllowList"]["sourceRange"]
 
 
-def test_a_pod_cidr_source_is_flagged():
-    assert admits_a_cluster_range(["10.0.0.0/24", "10.42.0.0/16"], _cluster_cidrs())
+def test_a_wider_cluster_range_is_flagged():
+    node = _primary_node_subnet()
+    assert admits_more_of_the_cluster(["10.42.0.0/16"], _cluster_cidrs(), node)
+    assert admits_more_of_the_cluster(["10.42.1.0/24"], _cluster_cidrs(), node)
 
 
-def test_the_rendered_allowlist_admits_no_cluster_range_is_clean():
+def test_the_rendered_allowlist_admits_only_the_primary_nodes_pods_is_clean():
     sources = _allowlist()
-    assert sources, "vaultwarden-lan-only admits nothing"
-    assert not admits_a_cluster_range(sources, _cluster_cidrs()), sources
+    node = _primary_node_subnet()
+    assert node in sources, f"WireGuard peers' source {node} is not admitted: {sources}"
+    assert not admits_more_of_the_cluster(sources, _cluster_cidrs(), node), sources
 
 
 def test_every_vault_router_but_the_probes_carries_the_allowlist():
