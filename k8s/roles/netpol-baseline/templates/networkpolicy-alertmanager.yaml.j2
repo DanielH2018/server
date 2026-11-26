@@ -5,27 +5,9 @@
    peers, and its header rules out growing it to absorb another shape.
 #}
 ---
-# Alertmanager has two cross-namespace, in-cluster callers. loki-homelab's ruler sends each
-# firing LogQL alert to `alertmanager_url` (loki-homelab/templates/configmap.yaml.j2). Karma,
-# the alert UI, reads alerts and silences and proxies the silence writes its UI makes.
-#
-# The loki-homelab pod runs one container and no sidecar, so `app: loki-homelab` admits the
-# ruler and nothing else. Alloy, the other workload in that role, is `app: alloy` and is not
-# admitted.
-#
-# Every other caller is already admitted by networkpolicy-observability.yaml.j2, which still
-# selects alertmanager; NetworkPolicies add up, so this file only widens it:
-#   - prometheus, and its own scrape of the `alertmanager` job: the intra-namespace
-#     `podSelector: {}`.
-#   - traefik, for the GET-only read door on alertmanager.local
-#     (observability/templates/alertmanager-read-ingressroute.yaml.j2). The baseline's
-#     homelab-namespace traefik peer admits it.
-#
-# 9093 is the containerPort AND the Service targetPort (observability/templates/alertmanager.yaml.j2).
-#
-# INGRESS ONLY, same as the rest of this role: an Egress policy selects pods correctly on this
-# cluster and blocks nothing. Writing one would read like a control in the repo and do nothing in
-# the cluster.
+# INGRESS ONLY: an Egress policy selects pods but blocks nothing on this cluster.
+# `app: loki-homelab` admits the ruler and nothing else (one container, no sidecar); other callers
+# come from the observability baseline.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -38,14 +20,10 @@ spec:
   policyTypes:
     - Ingress
   ingress:
-{# `| bool`, matching `netpol_baseline_probe_active` in defaults/main.yml, for the string trap
-   networkpolicy-prometheus.yaml.j2 explains in full. #}
 {% if netpol_baseline_obs_enforced | bool %}
     - from:
-        # namespaceSelector and podSelector are SIBLING KEYS in ONE list item, so they AND
-        # together: loki-homelab and karma, but only inside {{ k8s_namespace }}. As two
-        # separate list items they would OR, admitting the entire {{ k8s_namespace }}
-        # namespace, which the probe's refused alertmanager row would then reach.
+        # namespaceSelector and podSelector are siblings in ONE item, so they AND; as two items they
+        # would OR.
         - namespaceSelector:
             matchLabels:
               kubernetes.io/metadata.name: {{ k8s_namespace }}

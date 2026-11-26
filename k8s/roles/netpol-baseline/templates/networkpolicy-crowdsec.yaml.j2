@@ -17,10 +17,8 @@ spec:
   policyTypes:
     - Ingress
   ingress:
-{# Renders allow-all when the flag is false, so `netpol_baseline_enforced` is a real rollback
-   lever. `| bool` for the string trap. Both explained in full in
-   networkpolicy-traefik.yaml.j2. All THREE rules below sit inside this conditional -- leaving
-   any of them outside it would keep crowdsec fenced through a rollback. #}
+{# Allow-all when the flag is false, the rollback lever. `| bool`: a string 'false' is truthy to
+   Jinja. #}
 {% if netpol_baseline_enforced | bool %}
     # LAPI (8080) and AppSec (7422): the Traefik bouncer plugin.
     - from:
@@ -32,47 +30,31 @@ spec:
           protocol: TCP
         - port: 7422
           protocol: TCP
-    # The node agents only ever dial the LAPI (node-agent-daemonset.yaml.j2:68,
-    # LOCAL_API_URL="http://crowdsec:8080") -- never AppSec. Kept as its own from item rather
-    # than folded into traefik's rule above: sibling `from` peers share the whole rule's ports
-    # list, so grouping them would hand the node agents AppSec for free.
+    # Own `from` item: sibling peers share the rule's ports list, which would hand node agents
+    # AppSec.
     - from:
         - podSelector:
             matchLabels:
               app: crowdsec-node-agent
-        # authelia runs a crowdsec-agent SIDECAR that ships its auth logs to this LAPI. A sidecar
-        # has no identity of its own on the network -- it inherits its POD's labels, so this
-        # traffic arrives as `app: authelia`, not as anything crowdsec-shaped. Omitting it
-        # crash-loops the sidecar on "connection refused" (kube-router REJECTs rather than drops),
-        # which makes the whole POD unready, pulls authelia out of its Service endpoints and
-        # breaks SSO on every protected route.
-        # The three pods running this sidecar are traefik, authelia and the node-agent DaemonSet
-        # (`grep -rl crowdsec-agent k8s/roles --include='*.j2'`); all three are admitted here.
+        # A crowdsec-agent SIDECAR inherits its pod's labels, so authelia's traffic arrives as `app:
+        # authelia`.
+        # Omitting it crash-loops the sidecar, unreadies authelia and breaks SSO.
         - podSelector:
             matchLabels:
               app: authelia
-        # crowdsec-verify is crowdsec's verify Job (crowdsec/templates/verify/job.yaml.j2),
-        # which logs in to the LAPI as a machine and bans daniel-pi. It sits here rather than
-        # in traefik's rule because it never dials AppSec.
+        # crowdsec-verify never dials AppSec, so it sits outside traefik's rule.
         - podSelector:
             matchLabels:
               app: crowdsec-verify
-        # traefik-precheck is traefik's bouncer-key precheck
-        # (traefik/templates/precheck/bouncer-key.yaml.j2), which sends one HEAD to the LAPI
-        # with the bouncer key before `traefik` applies. Like crowdsec-verify it never dials
-        # AppSec, so it sits here rather than in traefik's rule. This peer must be live before
-        # the Job is switched on (`traefik_k8s_bouncer_key_precheck`), because a refused
-        # precheck holds `traefik`, and this policy applies only after `traefik` does. To
-        # remove or rename it, switch the Job off in an earlier revision.
+        # traefik-precheck never dials AppSec. It must be live before the Job is switched on
+        # (`traefik_k8s_bouncer_key_precheck`): a refused precheck holds `traefik`.
         - podSelector:
             matchLabels:
               app: traefik-precheck
       ports:
         - port: 8080
           protocol: TCP
-    # Metrics, cross-namespace to observability -- siblings in one from item, see the traefik
-    # policy's comment for why that distinction is load-bearing. The port is the `crowdsec`
-    # metrics item on crowdsec's containers_list entry, the one Prometheus scrapes.
+    # Cross-namespace: namespaceSelector and podSelector are siblings in ONE item, so they AND.
     - from:
         - namespaceSelector:
             matchLabels:
@@ -83,8 +65,7 @@ spec:
       ports:
         - port: {{ services | metrics_port('crowdsec') }}
           protocol: TCP
-        # The crowdsec-jobs sidecar's check exporter, the `crowdsec-jobs` metrics item. The
-        # sidecar shares the pod's network identity, so its port needs its own entry here.
+        # The sidecar shares the pod's network identity, so its port needs its own entry.
         - port: {{ services | metrics_port('crowdsec-jobs') }}
           protocol: TCP
 {% else %}

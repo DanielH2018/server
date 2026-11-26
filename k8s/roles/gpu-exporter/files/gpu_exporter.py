@@ -42,9 +42,8 @@ from pathlib import Path
 
 DEFAULT_SYSFS = "/host/sys"
 
-# `homelab_` rather than `node_` or `drm_`: node_exporter's own (disabled) drm collector emits
-# `node_drm_*` from the same amdgpu files, and a name collision between two exporters scraped
-# into one Prometheus is a silently merged series.
+# `homelab_` prefix: node_exporter's disabled drm collector emits `node_drm_*` from the same amdgpu
+# files, and a name collision merges series silently.
 _INFO = "homelab_gpu_info"
 _BUSY = "homelab_gpu_busy_percent"
 _RC6 = "homelab_gpu_rc6_residency_seconds_total"
@@ -124,8 +123,8 @@ def card_samples(
     if rc6_ms is not None:
         out.append((_RC6, labels, rc6_ms / 1000.0))
 
-    # i915 reports MHz directly at the card; amdgpu reports Hz through hwmon. Normalised to MHz
-    # so one panel plots both, rather than a per-driver unit the reader has to remember.
+    # i915 reports MHz at the card; amdgpu reports Hz through hwmon. Normalised to MHz so one panel
+    # plots both.
     freq_mhz = _read_int(base / "gt_act_freq_mhz")
     if freq_mhz is None:
         for hwmon in sorted((base / "device" / "hwmon").glob("hwmon*")):

@@ -52,9 +52,8 @@ TOKEN_FILE = "/var/run/secrets/kubernetes.io/serviceaccount/token"
 API_TIMEOUT = 10
 # The label a workload with its own, tighter policy carries to leave a namespace-scoped baseline.
 EXEMPT_LABEL = "netpol-baseline-exempt"
-# The `Accept` of the exempt read: a `pods` list otherwise returns every pod's whole spec, env
-# values included, and RBAC cannot narrow a `list` to metadata. This asks the API server for
-# the metadata alone.
+# A `pods` list returns every pod's whole spec, env included, and RBAC cannot narrow it; ask for
+# metadata only.
 METADATA_ONLY = "application/json;as=PartialObjectMetadataList;g=meta.k8s.io;v=v1"
 # The socket timeout of each leg's connect, in seconds.
 TIMEOUT = 5
@@ -62,12 +61,9 @@ TIMEOUT = 5
 LIVENESS_TIMEOUT = 10
 # How long the control retries a refused connect, in seconds: the helper's own default.
 CONTROL_RETRY_SECONDS = 60
-# How long the sentinel retries, in seconds. It is the one leg whose admission needs kube-router
-# to know this pod's labels, and a pod seconds old can fail one immediate attempt with the
-# policy, the labels and the target all correct.
+# The sentinel needs kube-router to know this pod's labels; a seconds-old pod can fail one attempt.
 SENTINEL_RETRY_SECONDS = 120
-# The port the DNS leg dials once a name resolves. Only the resolution is the test, so any
-# port serves; a test passes a closed local one.
+# Only the resolution is the test, so any port serves.
 DNS_DIAL_PORT = 53
 
 
@@ -269,9 +265,8 @@ def isolated(row: Mapping) -> str:
             is no refusal, such as a DNS error.
     """
     url = row["url"]
-    # OPTIONS, because urllib follows a redirect only for GET, HEAD and POST and raises
-    # `HTTPError` for any other method. A target that accepts and redirects to an address that
-    # refuses would otherwise read as refused.
+    # OPTIONS: urllib follows redirects only for GET, HEAD and POST, so a redirect to a refusing
+    # address would read as refused.
     err = _dial(url, TIMEOUT, 0, method="OPTIONS")
     if err is not None and refused(err):
         return f"isolated: {url} unreachable from an unlisted caller"

@@ -19,14 +19,11 @@ spec:
   policyTypes:
     - Ingress
   ingress:
-{# Renders allow-all when the flag is false, so `netpol_baseline_enforced` is a real rollback
-   lever. `| bool` for the string trap. Both explained in full in
-   networkpolicy-traefik.yaml.j2. #}
+{# Allow-all when the flag is false, the rollback lever. `| bool`: a string 'false' is truthy to
+   Jinja. #}
 {% if netpol_baseline_enforced | bool %}
-    # :8096 stays open to all sources. LAN clients (TVs, phones) reach the jellyfin-lan VIP
-    # 10.0.0.241 directly rather than through Traefik, and with ETP=Local they arrive as their
-    # own 10.0.0.x address -- enumerable only as "the LAN", which buys nothing over leaving it
-    # open. traefik, homepage and janitorr all reach the same port and are covered by this.
+    # :8096 stays open: LAN clients reach the jellyfin-lan VIP directly and arrive as their own
+    # addresses.
     - ports:
         - port: 8096
           protocol: TCP
