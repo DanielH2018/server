@@ -283,10 +283,11 @@ The caps themselves, set when the tmpfs was 81% full on 2026-06-11:
   (about 28 MB/day of healthcheck exec churn) to 3: `pacct.0`, `pacct.1.gz` and
   `pacct.2.gz`. The stanza's `start 0` and `delaycompress` leave `pacct.0` uncompressed,
   so pacct holds about 62 MB at its daily peak. Ubuntu 26.04's acct 6.6.4 rotates pacct
-  only through that logrotate stanza. It ships no `/etc/cron.daily/acct`, and it reads
-  nothing from `/etc/default/acct`, so the `ACCT_LOGGING="3"` line left there by older
-  packages does nothing. A scratch logrotate run on daniel-pi on 2026-11-26 confirmed the
-  generation count `rotate 3` keeps.
+  only through that logrotate stanza. A scratch logrotate run on daniel-pi on 2026-11-26
+  confirmed the generation count `rotate 3` keeps.
+  **HISTORY —** On 24.04, savelog in `/etc/cron.daily/acct` rotated pacct and read
+  `ACCT_LOGGING="3"` from `/etc/default/acct`. 26.04's acct ships no cron script and reads
+  nothing from that file, so the line left there does nothing.
 - auditd is capped to a 12 MB ceiling. Its free-space thresholds have their own section below.
 - `HISTORY=2` cuts sysstat's shipped 7 days — 18 sa/sar files, 9.9 MB — to 2.
 
