@@ -1,4 +1,4 @@
-"""Ablate a CLAUDE.md doc's sections against the homelab eval cases (#4259).
+"""Ablate a CLAUDE.md doc's sections, or each skill's body, against the homelab eval cases.
 
 A hermetic eval run loads no CLAUDE.md at all: the engine passes `--bare` and
 `--setting-sources project`, so an agent under test sees its own body and the case input
@@ -7,7 +7,7 @@ doc there itself. For every arm it writes a copy of each case's agent (or skill)
 temp directory outside the checkout, with the doc appended to the body, and points the
 chezmoi engine at that directory through EVAL_AGENT_DIRS. The engine is unchanged.
 
-Arms, run in this order:
+`run` arms, in this order:
   baseline   the agent body plus the whole doc
   -doc       the agent body alone, which ablates the whole doc
   -<heading> the agent body plus the doc with that one `## ` section removed
@@ -15,6 +15,14 @@ Arms, run in this order:
 Every arm uses the same framing around the doc, so the removed text is the only difference
 between an ablated arm and the baseline. The engine's rules loader (load-rules.mjs) holds
 its A/B arms to the same rule.
+
+`skill` arms, in this order:
+  baseline   the agent or skill file unchanged, as the weekly sweep grades it
+  -skill     the file's frontmatter alone, its body removed
+
+No doc goes into either arm: CLAUDE.md restates rules some cases grade, so with it a case
+could pass on the doc and read as not needing its skill. The frontmatter stays because the
+engine needs it to load the file, so its `description:` still reaches the model.
 
 THE BUDGET IS CHECKED BETWEEN RUNS, because that is the finest point an outside caller has:
 run-evals.mjs writes its --json report only when its invocation ends. So each invocation is
@@ -51,13 +59,8 @@ from ablate_budget import (
     ABLATION_DIR,
     CAP_USD,
     SWEEP_ARCHIVE,
-    UNPRICED_RUN_USD,
-    WORST_RUN_USD,
     Budget,
-    complete_arms,
-    fitting_selection,
-    report_entries,
-    run_costs,
+    plan_fits,
     selection_flags,
 )
 from ranking import default_transcripts, rank_docs, section_reads
@@ -79,6 +82,7 @@ SWEEP_WEEKDAY = 6
 
 BASELINE = "baseline"
 WHOLE_DOC = "-doc"
+NO_SKILL = "-skill"
 
 EXIT_DONE = 0
 EXIT_REFUSED = 2
@@ -127,6 +131,14 @@ def agent_source(name: str, repo: Path = REPO) -> Path:
     raise FileNotFoundError(f"no agent or skill named {name!r} under {repo}/.claude")
 
 
+def without_body(agent_md: str) -> str:
+    """The agent file's frontmatter alone, which the engine still loads as the agent."""
+    m = _FRONTMATTER.match(agent_md)
+    if not m:
+        raise ValueError("agent file has no YAML frontmatter")
+    return m.group(1)
+
+
 def with_doc(agent_md: str, doc_label: str, doc_text: str | None) -> str:
     """The agent file with the doc appended to its body; unchanged when doc_text is None.
 
@@ -135,10 +147,8 @@ def with_doc(agent_md: str, doc_label: str, doc_text: str | None) -> str:
     """
     if doc_text is None:
         return agent_md
-    m = _FRONTMATTER.match(agent_md)
-    if not m:
-        raise ValueError("agent file has no YAML frontmatter")
-    head, body = m.groups()
+    head = without_body(agent_md)
+    body = agent_md[len(head) :]
     return (
         f"{head}{body.rstrip()}\n\n"
         f"Contents of {doc_label} (project instructions, checked into the codebase):\n\n"
@@ -347,6 +357,14 @@ def build_arms(
     return arms
 
 
+def build_skill_arms(agent_names: list[str]) -> list[tuple[str, dict[str, str]]]:
+    originals = {n: agent_source(n).read_text() for n in agent_names}
+    return [
+        (BASELINE, originals),
+        (NO_SKILL, {n: without_body(md) for n, md in originals.items()}),
+    ]
+
+
 def primary_root() -> Path:
     """The primary checkout, which a worktree's REPO is not."""
     common = subprocess.run(
@@ -406,33 +424,23 @@ def main(argv=None) -> int:
         default=[],
         help="a transcript directory (repeatable); default this repo's sessions",
     )
-    a = sub.add_parser("run", help="ablate a doc's sections against the eval cases")
-    a.add_argument("--doc", default="CLAUDE.md", help="repo-relative doc to ablate")
-    a.add_argument(
-        "--section",
-        action="append",
-        default=[],
-        help="a `## ` heading to ablate (repeatable); default every section, in doc order",
+    opts = argparse.ArgumentParser(add_help=False)
+    opts.add_argument(
+        "--case", action="append", default=[], help="case id (repeatable)"
     )
-    a.add_argument("--case", action="append", default=[], help="case id (repeatable)")
-    a.add_argument("--agent", action="append", default=[], help="agent (repeatable)")
-    a.add_argument(
-        "--by-reads",
-        action="store_true",
-        help="ablate sections most-read first, as `rank --sections` orders them",
-    )
-    a.add_argument(
+    opts.add_argument("--agent", action="append", default=[], help="agent (repeatable)")
+    opts.add_argument(
         "--k",
         type=int,
         default=3,
         help="runs per case per arm; the case thresholds assume 3",
     )
-    a.add_argument("--cap-usd", type=float, default=CAP_USD)
-    a.add_argument("--out", type=Path, default=None)
-    a.add_argument("--engine", type=Path, default=ENGINE)
-    a.add_argument("--node", default="node")
-    a.add_argument("--history", type=Path, default=HISTORY)
-    a.add_argument(
+    opts.add_argument("--cap-usd", type=float, default=CAP_USD)
+    opts.add_argument("--out", type=Path, default=None)
+    opts.add_argument("--engine", type=Path, default=ENGINE)
+    opts.add_argument("--node", default="node")
+    opts.add_argument("--history", type=Path, default=HISTORY)
+    opts.add_argument(
         "--cost-reports",
         type=Path,
         action="append",
@@ -440,8 +448,28 @@ def main(argv=None) -> int:
         help="a directory of past engine reports to price cases from (repeatable); "
         "default the ablation cache and the sweep archive",
     )
-    a.add_argument(
+    opts.add_argument(
         "--dry-run", action="store_true", help="print the plan, spend nothing"
+    )
+    a = sub.add_parser(
+        "run", parents=[opts], help="ablate a doc's sections against the eval cases"
+    )
+    a.add_argument("--doc", default="CLAUDE.md", help="repo-relative doc to ablate")
+    a.add_argument(
+        "--section",
+        action="append",
+        default=[],
+        help="a `## ` heading to ablate (repeatable); default every section, in doc order",
+    )
+    a.add_argument(
+        "--by-reads",
+        action="store_true",
+        help="ablate sections most-read first, as `rank --sections` orders them",
+    )
+    sub.add_parser(
+        "skill",
+        parents=[opts],
+        help="run each case with its agent or skill file, then with the body removed",
     )
     args = p.parse_args(argv)
 
@@ -481,16 +509,6 @@ def main(argv=None) -> int:
             file=sys.stderr,
         )
         return EXIT_REFUSED
-    doc = (REPO / args.doc).read_text()
-    headings = [h for h, _ in split_sections(doc)[1]]
-    sections = args.section or headings
-    if args.by_reads:
-        reads = dict(section_reads(sections, transcripts()))
-        sections = sorted(sections, key=lambda h: -reads[h])
-    unknown = [h for h in sections if h not in headings]
-    if unknown:
-        print(f"no such section in {args.doc}: {unknown}", file=sys.stderr)
-        return EXIT_REFUSED
     cases = load_cases(args.case, args.agent)
     agent_names = sorted({c["agent"] for c in cases})
     clashes = [n for n in agent_names if (CHEZMOI_AGENTS / f"{n}.md").exists()]
@@ -500,46 +518,43 @@ def main(argv=None) -> int:
         )
         return EXIT_REFUSED
 
-    runs = (2 + len(sections)) * len(cases) * args.k
+    if args.cmd == "run":
+        doc = (REPO / args.doc).read_text()
+        headings = [h for h, _ in split_sections(doc)[1]]
+        sections = args.section or headings
+        if args.by_reads:
+            reads = dict(section_reads(sections, transcripts()))
+            sections = sorted(sections, key=lambda h: -reads[h])
+        unknown = [h for h in sections if h not in headings]
+        if unknown:
+            print(f"no such section in {args.doc}: {unknown}", file=sys.stderr)
+            return EXIT_REFUSED
+        arms = build_arms(args.doc, doc, sections, agent_names)
+        subject = f"{args.doc}: baseline, -doc and {len(sections)} section arm(s)"
+    else:
+        sections = []
+        arms = build_skill_arms(agent_names)
+        subject = f"agent and skill bodies: {BASELINE} and {NO_SKILL}"
     print(
-        f"{args.doc}: baseline, -doc and {len(sections)} section arm(s) x "
-        f"{len(cases)} case(s) x k={args.k} = {runs} runs, capped at ${args.cap_usd:.2f}"
+        f"{subject} x {len(cases)} case(s) x k={args.k} = "
+        f"{len(arms) * len(cases) * args.k} runs, capped at ${args.cap_usd:.2f}"
     )
-    priced = run_costs(
-        report_entries(args.cost_reports or [ABLATION_DIR, SWEEP_ARCHIVE])
-    )
-    per_run = {c["id"]: priced.get(c["id"], UNPRICED_RUN_USD) for c in cases}
-    arm_usd = args.k * sum(per_run.values())
-    finished = complete_arms(
-        list(per_run.values()), args.k, 2 + len(sections), args.cap_usd
-    )
-    print(
-        f"estimate: {sum(c in priced for c in per_run)} of {len(cases)} case(s) priced from "
-        f"past reports, the rest at ${UNPRICED_RUN_USD:.2f} a run; ${arm_usd:.2f} an arm; "
-        f"{max(finished - 2, 0)} of {len(sections)} section arm(s) expected to finish"
-    )
-    if finished < 3:
-        print(
-            f"refusing: the baseline, -doc and one section arm need "
-            f"${3 * arm_usd:.2f}, and the cap leaves ${args.cap_usd - WORST_RUN_USD:.2f} "
-            f"once a run's ${WORST_RUN_USD:.2f} worst case is held back",
-            file=sys.stderr,
-        )
-        fit_cases, fit_sections = fitting_selection(
-            list(per_run), per_run, args.k, sections, args.cap_usd
-        )
-        plan = {n: getattr(args, n) for n in ("doc", "k", "cap_usd")}
-        defaults = {n: a.get_default(n) for n in plan}
-        flags = selection_flags(plan, defaults, fit_cases, fit_sections)
-        print(
-            f"largest selection that fits: {flags}"
-            if fit_cases
-            else "no selection fits: one case's three arms exceed the cap",
-            file=sys.stderr,
-        )
+
+    def rerun_flags(fit_cases: list[str], fit_sections: list[str]) -> str:
+        plan = {
+            n: getattr(args, n) for n in ("doc", "k", "cap_usd") if hasattr(args, n)
+        }
+        defaults = {n: sub.choices[args.cmd].get_default(n) for n in plan}
+        return f"{args.cmd} {selection_flags(plan, defaults, fit_cases, fit_sections)}"
+
+    reports = args.cost_reports or [ABLATION_DIR, SWEEP_ARCHIVE]
+    case_ids = [c["id"] for c in cases]
+    if not plan_fits(
+        case_ids, args.k, len(arms), sections, args.cap_usd, reports, rerun_flags
+    ):
         return EXIT_REFUSED
     if args.dry_run:
-        sizes = dict(split_sections(doc)[1])
+        sizes = dict(split_sections(doc)[1]) if args.cmd == "run" else {}
         for h in sections:
             print(f"  {len(sizes[h]):6d} bytes  ## {h}")
         return EXIT_DONE
@@ -565,7 +580,6 @@ def main(argv=None) -> int:
     # Outside the checkout: an untracked file there parks `homelab-checkout-sync`.
     out = args.out or Path.home() / ".cache" / "homelab-evals" / "ablation" / stamp
     (out / "runs").mkdir(parents=True, exist_ok=True)
-    arms = build_arms(args.doc, doc, sections, agent_names)
     budget = Budget(args.cap_usd)
     with tempfile.TemporaryDirectory(prefix="ablate-") as tmp:
         run = ablate(
@@ -581,7 +595,8 @@ def main(argv=None) -> int:
     summary = summarize(run, [name for name, _ in arms], cases, args.k)
     report = {
         "ts": int(time.time()),
-        "doc": args.doc,
+        "mode": args.cmd,
+        "doc": args.doc if args.cmd == "run" else None,
         "cap_usd": args.cap_usd,
         "spent_usd": round(budget.spent, 4),
         "stopped": run["stopped"],
