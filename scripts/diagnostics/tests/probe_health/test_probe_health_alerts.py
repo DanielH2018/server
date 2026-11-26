@@ -190,7 +190,7 @@ def test_an_alert_activated_long_after_prometheus_start_is_not_called_age_unknow
 
 def test_a_flux_tag_alert_before_its_kustomization_revision_is_clean():
     fake = FakeProm(flux_first_report=APPLIED)
-    reference = health_alerts.alert_reference("peanut", fake.query)
+    reference = health_alerts.flux_reference("peanut", fake.query)
     assert reference == APPLIED
     fake.series = alert(APPLIED - 60, service="peanut") + START
     gate = health_alerts.gate("peanut", reference, APPLIED, False, fake.tools())
@@ -199,7 +199,7 @@ def test_a_flux_tag_alert_before_its_kustomization_revision_is_clean():
 
 def test_a_flux_tag_alert_after_its_kustomization_revision_is_flagged():
     fake = FakeProm(flux_first_report=APPLIED)
-    reference = health_alerts.alert_reference("peanut", fake.query)
+    reference = health_alerts.flux_reference("peanut", fake.query)
     fake.series = alert(APPLIED + 60, service="peanut") + START
     gate = health_alerts.gate("peanut", reference, APPLIED, False, fake.tools())
     assert gate[0] == 1

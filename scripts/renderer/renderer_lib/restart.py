@@ -56,7 +56,7 @@ from lib.render_guard import StrictChainableUndefined
 from lib.repo_paths import K8S_ROLES
 from renderer.renderer_lib.environment import RenderError, evaluate, renderer_env
 from renderer.renderer_lib.placeholders import Sentinels, references
-from renderer.renderer_lib.task_inputs import include_vars
+from renderer.renderer_lib.task_inputs import render_defaults
 from secrets_mgmt.cluster_vars_check import parse_source
 
 RESTART_ANNOTATION = "checksum/restart"
@@ -104,7 +104,7 @@ def restart_targets(
         RenderError: A target value does not resolve, or is not a name or a list of
             `{name: ...}` entries.
     """
-    raw = include_vars(roles / tag)
+    raw = render_defaults(roles / tag)
     read = {k: raw[k] for k in TARGET_KEYS if k in raw}
     try:
         values = resolve_vars(
@@ -137,7 +137,7 @@ def self_rollouts(tag: str, context: Mapping, roles: Path = K8S_ROLES) -> list[s
     Raises:
         RenderError: The value does not resolve, is not a list, or an entry has no name.
     """
-    value = include_vars(roles / tag).get(SELF_KEY)
+    value = render_defaults(roles / tag).get(SELF_KEY)
     if isinstance(value, str):
         # observability builds its list with `combine`, an Ansible filter `resolve_vars`
         # lacks, so the value is evaluated in the template environment.
@@ -161,7 +161,7 @@ def outside_secrets(tag: str, roles: Path = K8S_ROLES) -> dict[str, frozenset[st
     """
     if not (roles / tag).is_dir():
         return {}
-    values = {OUTSIDE_KEY: include_vars(roles / tag).get(OUTSIDE_KEY)}
+    values = {OUTSIDE_KEY: render_defaults(roles / tag).get(OUTSIDE_KEY)}
     found = {}
     for entry in _entries(tag, OUTSIDE_KEY, values):
         keys = entry.get("keys")

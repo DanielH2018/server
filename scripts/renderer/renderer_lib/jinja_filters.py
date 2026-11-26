@@ -128,7 +128,8 @@ def mandatory(value, _msg: str | None = None) -> object:
     """`value` unchanged.
 
     A render guard's tracking Undefined judges an undefined name by itself, and the strict
-    Undefined raises where a template uses the value. `_msg` is for Ansible's own run.
+    Undefined raises where a template uses the value. A template's message lands in `_msg`
+    and is not shown: the Undefined's own error names the variable.
     """
     return value
 

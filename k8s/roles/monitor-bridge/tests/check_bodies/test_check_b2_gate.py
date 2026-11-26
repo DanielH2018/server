@@ -68,7 +68,7 @@ def _cap_denial(cfg):
 
 def test_b2_reachable_disabled_without_credentials(cfg):
     cfg = _arm_b2(cfg, key_id="", app_key="")
-    ok, msg = checks.b2.b2_reachable(cfg, FakeSources(), now=10_000)
+    ok, msg = checks.b2.check_b2_reachable(cfg, FakeSources(), now=10_000)
     assert ok is True and "disabled" in msg
 
 
@@ -114,7 +114,7 @@ def test_b2_reachable_surfaces_the_cap_error_text(cfg):
         raise _cap_denial(cfg)
 
     src = FakeSources(get_json=_boom)
-    ok, msg = checks.b2.b2_reachable(cfg, src, now=10_000)
+    ok, msg = checks.b2.check_b2_reachable(cfg, src, now=10_000)
     assert ok is False and "transaction_cap_exceeded" in msg
 
 
@@ -129,10 +129,10 @@ def test_b2_reachable_caches_failure_and_does_not_reprobe(cfg):
         raise _cap_denial(cfg)
 
     src = FakeSources(get_json=_boom)
-    first_ok, _ = checks.b2.b2_reachable(cfg, src, now=10_000)
+    first_ok, _ = checks.b2.check_b2_reachable(cfg, src, now=10_000)
     # five more cycles inside the interval (INTERVAL=300 -> 25 min of cycles)
     for offset in (300, 600, 900, 1200, 1500):
-        ok, msg = checks.b2.b2_reachable(cfg, src, now=10_000 + offset)
+        ok, msg = checks.b2.check_b2_reachable(cfg, src, now=10_000 + offset)
         assert ok is False
         assert (
             "transaction_cap_exceeded" in msg
@@ -158,11 +158,11 @@ def test_b2_reachable_reprobes_a_transport_failure_next_cycle(cfg):
         return _AUTH
 
     src = FakeSources(get_json=_flaky, get_bytes=_not_found)
-    ok, msg = checks.b2.b2_reachable(cfg, src, now=10_000)
+    ok, msg = checks.b2.check_b2_reachable(cfg, src, now=10_000)
     assert ok is False and "name resolution" in msg
     # One cycle later the transport TTL has expired, so the gate re-probes and recovers — where a
     # cap denial would still be reporting its cached verdict for another 25 minutes.
-    ok, msg = checks.b2.b2_reachable(cfg, src, now=10_300)
+    ok, msg = checks.b2.check_b2_reachable(cfg, src, now=10_300)
     assert ok is True, "a transport failure must re-probe next cycle, got: %s" % msg
     assert len(calls) == 2, "expected a re-probe, got %d calls" % len(calls)
 
@@ -182,10 +182,10 @@ def test_b2_reachable_reprobes_after_the_interval(cfg):
         return _AUTH
 
     src = FakeSources(get_json=_ok, get_bytes=_not_found)
-    checks.b2.b2_reachable(cfg, src, now=10_000)
-    checks.b2.b2_reachable(cfg, src, now=10_000 + 1799)  # still cached
+    checks.b2.check_b2_reachable(cfg, src, now=10_000)
+    checks.b2.check_b2_reachable(cfg, src, now=10_000 + 1799)  # still cached
     assert len(calls) == 1
-    checks.b2.b2_reachable(cfg, src, now=10_000 + 1801)  # interval elapsed
+    checks.b2.check_b2_reachable(cfg, src, now=10_000 + 1801)  # interval elapsed
     assert len(calls) == 2
 
 
@@ -200,11 +200,11 @@ def test_b2_reachable_reads_a_spent_class_b_cap_as_down(cfg):
     src = FakeSources(
         get_json=lambda url, headers=None: _AUTH, get_bytes=_class_b_capped
     )
-    ok, msg = checks.b2.b2_reachable(cfg, src, now=10_000)
+    ok, msg = checks.b2.check_b2_reachable(cfg, src, now=10_000)
     assert ok is False
     assert "Class B probe" in msg and "transaction_cap_exceeded" in msg
     # Billed, so it holds the full interval like a Class C denial.
-    checks.b2.b2_reachable(cfg, src, now=10_000 + 1500)
+    checks.b2.check_b2_reachable(cfg, src, now=10_000 + 1500)
     assert len(src.queries("get_bytes")) == 1
     assert src.queries("get_bytes") == [
         "https://f000.example/file/bkt/%s" % checks.b2.B2_CLASS_B_PROBE_FILE

@@ -216,6 +216,9 @@ CONTENT_LABEL = "content_digest"
 def flux_reference(tag, query):
     """When `tag`'s Kustomization first reported its current content, or None with no series.
 
+    It is the time after which a firing alert of `tag` counts against this deploy (C7). With
+    None, every gated alert fails.
+
     `gotk_resource_info` (C6) is one series per label set, so the earliest sample agreeing
     with the newest one on `content_digest` is the first report of the content now applied.
     A newest sample without the label, from a bundle or a kube-state-metrics older than it,
@@ -432,22 +435,13 @@ def has_ingress_route(entry):
     return bool(ingress_probe_targets([entry]))
 
 
-def alert_reference(tag, query):
-    """The time after which a firing alert of `tag` counts against this deploy (C7).
-
-    When `tag`'s Kustomization first reported its current revision. None when that is
-    unreadable or `tag` has no Kustomization, and then every gated alert fails.
-    """
-    return flux_reference(tag, query)
-
-
 def check(tag, ready_at, entry, tools=DEFAULT_PROM):
     """`gate` for `tag`, with both reference times derived from its Kustomization and rollout.
 
     The probe reference is the later of the alert reference and the newest pod Ready
     transition: a sample before it may be the old pod's 1 or a mid-rollout 0.
     """
-    reference = alert_reference(tag, tools.query)
+    reference = flux_reference(tag, tools.query)
     rolled = [t for t in (reference, ready_at) if t is not None]
     probe_reference = max(rolled) if rolled else tools.clock()
     return gate(tag, reference, probe_reference, has_ingress_route(entry), tools)

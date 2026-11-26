@@ -15,7 +15,7 @@ from lib import yaml_fast
 from renderer import shadow_diff
 from renderer.renderer_lib import cluster
 from renderer.renderer_lib.context import load_stubs
-from renderer.renderer_lib.task_inputs import include_vars
+from renderer.renderer_lib.task_inputs import render_defaults
 
 ROLE_LABEL = "homelab/role"
 
@@ -55,7 +55,7 @@ def test_an_armed_role_takes_the_shared_defaults_and_labels_every_document(stubs
 
 
 def test_an_unarmed_role_renders_without_the_label(stubs):
-    assert include_vars(cluster.K8S_ROLES / "authelia")["manifests_prune"] is False
+    assert render_defaults(cluster.K8S_ROLES / "authelia")["manifests_prune"] is False
     rendered = cluster.render_tag("authelia", stubs)
     manifests = {n: t for n, t in rendered.files.items() if n != cluster.KUSTOMIZATION}
     assert manifests
@@ -65,7 +65,9 @@ def test_an_unarmed_role_renders_without_the_label(stubs):
 
 
 def test_a_deferred_file_renders_unlabelled_into_its_own_directory(stubs):
-    deferred = include_vars(cluster.K8S_ROLES / "headlamp")["manifests_deferred_files"]
+    deferred = render_defaults(cluster.K8S_ROLES / "headlamp")[
+        "manifests_deferred_files"
+    ]
     rendered = cluster.render_tag("headlamp", stubs)
     assert sorted(rendered.deferred) == sorted([*deferred, cluster.KUSTOMIZATION])
     assert not set(deferred) & set(rendered.files)
