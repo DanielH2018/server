@@ -15,7 +15,7 @@ import pytest
 
 from bridge.sources import Sources
 
-FILES = Path(__file__).resolve().parents[1] / "files"
+FILES = Path(__file__).resolve().parents[2] / "files"
 
 # The transport functions `Sources` wraps. The selector builders read
 # no network, so neither is listed.

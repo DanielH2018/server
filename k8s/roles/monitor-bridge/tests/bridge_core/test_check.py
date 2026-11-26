@@ -144,7 +144,7 @@ def test_a_narrowed_run_still_logs_each_up_verdict(cfg, capsys):
 def test_every_dashboard_parsed_check_is_logged_when_up(cfg, capsys, name, needle, msg):
     """The Longhorn Storage B2 and R2 panels regex each check's up line out of this pod's log."""
     board = (
-        Path(__file__).resolve().parents[2]
+        Path(__file__).resolve().parents[3]
         / "observability/files/dashboards/Infrastructure/longhorn-storage.json"
     ).read_text()
     assert f'{{container=\\"monitor-bridge\\"}} |= \\"{needle}\\"' in board

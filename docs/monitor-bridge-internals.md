@@ -53,10 +53,10 @@ The rules below shaped those memberships.
   `templates/deployment.yaml.j2` fails past ~3×INTERVAL, so the kubelet restarts a hung loop.
 - **The table:** `files/check_table.py` holds one `PushCheck` row per check and gate (#3659,
   #3788). `registry.build_checks` reads it in Python. `scripts/renderer/template_filters/py_table.py`
-  parses it without importing it for the docs fragments. `tests/test_check_table.py` pins the
+  parses it without importing it for the docs fragments. `tests/check_bodies/test_check_table.py` pins the
   table to the registry, the gates, the env and that parse. A row carries `name`, `fn`, `gate`,
   `is_gate`, `critical` and `runbook`: A6-8 deleted `token`, `kuma_id`, `display`, `description`
-  and `status_group` with the tiles they fed. `tests/test_bridge_size_cap.py` holds the bridge's
+  and `status_group` with the tiles they fed. `tests/bridge_core/test_bridge_size_cap.py` holds the bridge's
   `files/` under 8,000 lines.
 - **A table change deploys monitor-bridge alone.** `scripts/lib/k8s_lookups.py:k8s_lookup_map` finds
   every k8s role that `lookup()`s another role's file, and uptime-kuma stopped being one for the
@@ -176,7 +176,7 @@ The role `CLAUDE.md` keeps the rules; this is the wiring.
 | `bridge/config.py` + `config_{host,service,io}.py` | the `_env`/`_int`/`_num`/`_env_file` parsers, `class Config(HostConfig, ServiceConfig, IoConfig)`, `load_config(env)`; one builder per domain |
 | `bridge/net.py` | the transport: `_get_json`, `_get_json_conditional` (a GET answered from an `ETag` cache on a 304), `_get_bytes`, `_post_json`, `_request` (any method, raw body), `prom_scalar`, `prom_vector`, and `loki_count`. Every helper that reads a URL takes `cfg` FIRST. No check body calls its fetchers; they go through `bridge/sources.py` |
 | `bridge/sources.py` | `Sources(cfg)`, every query a gate or check body sends (`prom_scalar`, `prom_vector`, `loki_count`, `get_json`, `get_json_cached`, `get_bytes`, `post_json`, `send`). `cli.main()` builds one; `run_once` hands it to every body as `src`. |
-| `bridge/sigv4.py` | `sign()`, the AWS SigV4 headers for an S3 request, which the `r2_etcd_lock` row signs its R2 requests with. `tests/test_sigv4.py` holds it to signatures `curl --aws-sigv4` produced |
+| `bridge/sigv4.py` | `sign()`, the AWS SigV4 headers for an S3 request, which the `r2_etcd_lock` row signs its R2 requests with. `tests/check_bodies/test_sigv4.py` holds it to signatures `curl --aws-sigv4` produced |
 | `bridge/streaks.py` | `State` (every streak counter and probe cache, carried as `src.state`), and `down_streak` (the consecutive-down step) |
 | `bridge/common.py` | `_env`, `sanitize` and `clamp_discord` (`DISCORD_MAX`) — the helpers shared verbatim with autofix-bridge's `autofix.py`; its header records what was considered and rejected |
 | `bridge/parsing.py` | duration/timestamp parsing, `endpoint_label`, `describe_fetch_failure` |

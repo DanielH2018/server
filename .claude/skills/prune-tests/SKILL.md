@@ -86,7 +86,7 @@ Each rule below overrides step 2. Move the candidate off the list and note which
   `scripts/deploy_tools/tests/land_deploy/test_land_host_wait_wiring.py` asserts that nothing renders
   before the CI verdict.
 - **An identity assertion that prevents a second copy of logic.**
-  `k8s/roles/monitor-bridge/tests/test_longhorn_robustness.py` holds one.
+  `k8s/roles/monitor-bridge/tests/check_bodies/test_longhorn_robustness.py` holds one.
 - **Copies that each read their own module's subject.** They guard different things. They
   stay, or step 6 rewrites them as one parametrised test with every subject named.
 

@@ -29,9 +29,9 @@ credential reaches the pod only after `cluster_vars.py write`
 ## Gates and hysteresis
 
 Two reachability gate rows run first each cycle and skip their dependents, so one outage pages
-once (`k8s/roles/monitor-bridge/tests/test_check_table.py::test_the_gate_rows_are_the_two_gates_the_run_loop_skips_by`).
+once (`k8s/roles/monitor-bridge/tests/check_bodies/test_check_table.py::test_the_gate_rows_are_the_two_gates_the_run_loop_skips_by`).
 A skipped check exports 0 and its body is not called
-(`k8s/roles/monitor-bridge/tests/test_check.py::test_a_down_gate_skips_its_dependents_and_exports_zero_for_both`),
+(`k8s/roles/monitor-bridge/tests/bridge_core/test_check.py::test_a_down_gate_skips_its_dependents_and_exports_zero_for_both`),
 and Alertmanager's inhibit rules hold its page behind the gate's. A row names its gate in the
 `gate` column (`k8s/roles/monitor-bridge/files/bridge/types.py:PushCheck`).
 
@@ -40,12 +40,12 @@ and Alertmanager's inhibit rules hold its page behind the gate's. A row names it
 - **`EXPORTER_DEPENDENT`** suppresses a dead node-exporter's dependents, keyed by scrape job
   (`k8s/roles/monitor-bridge/files/check.py:DECIDED: suppression stays keyed`). A new
   node-exporter scrape job fails
-  `k8s/roles/monitor-bridge/tests/test_check_exporters.py::test_every_node_exporter_job_is_mapped_in_exporter_dependent`.
+  `k8s/roles/monitor-bridge/tests/check_bodies/test_check_exporters.py::test_every_node_exporter_job_is_mapped_in_exporter_dependent`.
 - **The `*_CONSECUTIVE` streaks** (`k8s/roles/monitor-bridge/files/bridge/streaks.py:down_streak`)
   are the per-check hysteresis: a held cycle exports 1 with a `down streak n/N` note, so a
   streak delays a page, never suppresses one. The `startup_grace` rows' rules carry `for: 10m`
   instead, which rides out the weekly reboot
-  (`k8s/roles/monitor-bridge/tests/test_bridge_row_rules.py::test_every_rows_rule_follows_its_row`).
+  (`k8s/roles/monitor-bridge/tests/bridge_core/test_bridge_row_rules.py::test_every_rows_rule_follows_its_row`).
 
 ## Checks
 
@@ -54,12 +54,12 @@ Three conventions hold across all of them:
 
 - An empty credential or URL disables a check, which stays `up` rather than paging about its
   own configuration
-  (`k8s/roles/monitor-bridge/tests/test_check_domain_registration.py::test_an_empty_url_disables_the_check_without_a_read`).
+  (`k8s/roles/monitor-bridge/tests/check_bodies/test_check_domain_registration.py::test_an_empty_url_disables_the_check_without_a_read`).
 - An unreachable source pages through `k8s/roles/monitor-bridge/files/check.py:_evaluate` unless
   the check names a streak.
 - Every threshold, window and streak is an env var in `templates/config/env.yaml.j2`; read the
   template, not the constant
-  (`k8s/roles/monitor-bridge/tests/test_config_reads_the_rendered_env.py::test_no_rendered_key_carries_a_second_default_in_python`).
+  (`k8s/roles/monitor-bridge/tests/bridge_core/test_config_reads_the_rendered_env.py::test_no_rendered_key_carries_a_second_default_in_python`).
   The `monitor-bridge-env` Secret
   (`k8s/roles/monitor-bridge/defaults/main.yml:render_secrets`) holds only credentials, because Flux's typed patch reads a
   Secret's quoted `"300"` back as a number and refuses it (#5574;
@@ -70,7 +70,7 @@ first. **A new check is one `check_table.py` row and one `check_*` body, plus a 
 observability's `bridge-exporter.yaml`** for it to page
 (`k8s/roles/monitor-bridge/files/check_table.py:CHECKS`). The rule's labels, `for:` and
 `runbook_url` follow the row's columns
-(`k8s/roles/monitor-bridge/tests/test_bridge_row_rules.py::test_every_rows_rule_follows_its_row`).
+(`k8s/roles/monitor-bridge/tests/bridge_core/test_bridge_row_rules.py::test_every_rows_rule_follows_its_row`).
 
 ## Autonomous-role contract (the one row that writes)
 
@@ -80,7 +80,7 @@ The `r2_etcd_lock` row is the bridge's only write. Every other row reads.
   bucket, and deletes only keys under that prefix
   (`k8s/roles/monitor-bridge/files/checks/r2.py:check_r2_etcd_lock`). A non-empty canary would
   read to k3s as a ready snapshot
-  (`k8s/roles/monitor-bridge/tests/test_check_bucket_locks.py::test_a_refused_delete_of_yesterdays_canary_is_clean`).
+  (`k8s/roles/monitor-bridge/tests/check_bodies/test_check_bucket_locks.py::test_a_refused_delete_of_yesterdays_canary_is_clean`).
 - **Abort valve.** Empty `R2_S3_KEY_ID` or `R2_S3_SECRET_KEY` disables the row. Each verdict
   holds for `R2_LOCK_PROBE_INTERVAL_S`, so a missing lock never churns canaries per cycle.
 - **Required evidence.** The row's verdict, and `R2EtcdLockNotHolding` while it is down.
@@ -93,20 +93,20 @@ domain registration's days left
 (`k8s/roles/monitor-bridge/files/verdict_export.py:CheckExposition`), and
 `files/deploy_pipeline.py` serves five `homelab_deploy_*` gauges from the `promote` workflow's
 state
-(`k8s/roles/monitor-bridge/tests/test_deploy_pipeline.py::test_the_endpoint_serves_the_five_gauges_and_nothing_else`).
+(`k8s/roles/monitor-bridge/tests/check_bodies/test_deploy_pipeline.py::test_the_endpoint_serves_the_five_gauges_and_nothing_else`).
 Each has its own port and scrape job (`k8s/roles/monitor-bridge/files/cli.py:main`). The
 internals page has their series and wiring.
 
 - **The check value is the verdict before suppression.** A body that raises exports 0
-  (`k8s/roles/monitor-bridge/tests/test_verdict_export.py::test_a_raising_body_exports_zero_and_the_next_row_still_runs`).
+  (`k8s/roles/monitor-bridge/tests/bridge_core/test_verdict_export.py::test_a_raising_body_exports_zero_and_the_next_row_still_runs`).
   A row with no rule in `bridge-exporter.yaml` never pages.
 - **A failed deploy-pipeline read exports no series, never a 0**
-  (`k8s/roles/monitor-bridge/tests/test_deploy_pipeline.py::test_a_failed_read_drops_only_the_gauges_it_feeds`).
+  (`k8s/roles/monitor-bridge/tests/check_bodies/test_deploy_pipeline.py::test_a_failed_read_drops_only_the_gauges_it_feeds`).
   Its token (`DEPLOY_PIPELINE_GITHUB_TOKEN`) is read-only on Actions and Variables, so the
   family can neither clear a hold nor move a tag.
 - **`--once` and `--check` serve nothing**, so a hand-run beside the pod never contends for a
   port
-  (`k8s/roles/monitor-bridge/tests/test_check_cli.py::test_once_publishes_nothing_and_reads_no_github`).
+  (`k8s/roles/monitor-bridge/tests/check_bodies/test_check_cli.py::test_once_publishes_nothing_and_reads_no_github`).
 
 ## Module layout
 
@@ -128,9 +128,9 @@ The internals page says why it is one ConfigMap per module and which module stay
 URL (`k8s/roles/monitor-bridge/files/cli.py:main`,
 `k8s/roles/monitor-bridge/files/check.py:run_once`). Building the config MUST NOT raise:
 `_int`/`_num` record a bad value in `CONFIG_PROBLEMS`, and `main()` exits 2
-(`k8s/roles/monitor-bridge/tests/test_check_cli.py::test_main_reports_config_problems_and_exits_two`).
+(`k8s/roles/monitor-bridge/tests/check_bodies/test_check_cli.py::test_main_reports_config_problems_and_exits_two`).
 **A key the pod's environment renders has no Python default**
-(`k8s/roles/monitor-bridge/tests/test_check_cli.py::test_a_rendered_key_missing_from_the_env_is_recorded_rather_than_defaulted`);
+(`k8s/roles/monitor-bridge/tests/check_bodies/test_check_cli.py::test_a_rendered_key_missing_from_the_env_is_recorded_rather_than_defaulted`);
 the `cfg` fixture is that render (`k8s/roles/monitor-bridge/tests/conftest.py:cfg`). A
 `verdicts/` module reads no `cfg` at all.
 
@@ -141,7 +141,7 @@ production code to `tests/services/monitor_bridge/test_monitor_bridge_modules.py
 one pass with
 `sudo k3s kubectl -n homelab exec deploy/monitor-bridge -- python /app/cli.py --once`
 (**operator-only**); `--check <name>` runs a gated check without its gate, which reads as up
-(`k8s/roles/monitor-bridge/tests/test_check_cli.py::test_check_flag_names_one_row_without_its_gate`).
+(`k8s/roles/monitor-bridge/tests/check_bodies/test_check_cli.py::test_check_flag_names_one_row_without_its_gate`).
 A session's `kubectl` cannot exec, so it reads the live pass's result with `probe.py monitors`.
 `probe.py monitors --checks [name]` prints each row's value, last-run age and note: a held
 streak, a skip behind a down gate, staleness, or a missing rule. A down row names each alert
@@ -154,7 +154,7 @@ because that checkout's rules file predates the row
 - **The Alloy k8s pod streams have no `app` label**, so a selector written from the `-l app=`
   habit matches nothing and a fail-open arm reads that as health.
   `tests/_loki_streams.py:LOKI_STREAM_LABELS` and
-  `k8s/roles/monitor-bridge/tests/test_check_loki.py::test_loki_selectors_use_real_stream_labels`
+  `k8s/roles/monitor-bridge/tests/check_bodies/test_check_loki.py::test_loki_selectors_use_real_stream_labels`
   pin the vocabulary.
 - **The runtime stamps the log lines, not `bridge.common.log`**
   (`k8s/roles/monitor-bridge/files/bridge/common.py:log`) — read a `kubectl logs
