@@ -9,7 +9,6 @@
 | `etcd_restore_drill` | none |  | `k3s-etcd-restore` |
 | `scrutiny` | `startup_grace` | yes | `alert-runbooks` |
 | `ha_heartbeat` | none |  |  |
-| `airflow_scheduler` | `startup_grace` |  |  |
 | `speedtest` | `startup_grace` |  |  |
 | `discord` | `wan_reachable` | yes | `alert-runbooks` |
 | `r2_usage` | `wan_reachable` | yes | `longhorn-backup-tiering` |

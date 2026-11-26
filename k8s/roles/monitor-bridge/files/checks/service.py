@@ -12,7 +12,6 @@ and enforcement: bridge/config.py's header.
 
 import os
 import time
-import urllib.error
 from datetime import datetime, timezone
 
 from bridge.config import Config
@@ -419,28 +418,3 @@ def check_ha_heartbeat(
         "deploy/restart grace",
     )
     return with_ha_ban(cfg, src, ok, msg)
-
-
-def check_airflow_scheduler(cfg: Config, src: Sources) -> tuple[bool, str]:
-    """Is Airflow's scheduler alive? It launches every DAG run, so nothing else fails when it dies.
-
-    Reads the scheduler's own health server, which answers 200 while its scheduler job is RUNNING
-    and sent a heartbeat within `scheduler_health_check_threshold`, and 503 otherwise, including
-    when its database read fails. That status is the verdict, so the check keeps no age bound of
-    its own: a cleanly stopped scheduler leaves a fresh heartbeat on a job that is no longer
-    RUNNING. Empty AIRFLOW_SCHEDULER_URL -> disabled (stays up), like check_n8n. Any other error,
-    such as a refused connection while the pod is gone, bubbles up and _evaluate renders it
-    `down`, the check_bazarr convention.
-    """
-    if not cfg.AIRFLOW_SCHEDULER_URL:
-        return True, "airflow scheduler monitoring disabled (no URL)"
-    try:
-        src.get_bytes(cfg.AIRFLOW_SCHEDULER_URL + "/health")
-    except urllib.error.HTTPError as e:
-        if e.code != 503:
-            raise
-        return False, (
-            "scheduler unhealthy: no RUNNING scheduler job with a recent heartbeat, or its "
-            "database read failed"
-        )
-    return True, "scheduler healthy"
