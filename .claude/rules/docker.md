@@ -21,18 +21,18 @@ package version overwrites an edit, so always modify `hosts/components/pi-compos
 instead. The directories under
 `/home/<user>/server/containers/<svc>/` that some services bind-mount are created by the
 component's `tmpfiles.d/homelab-compose.conf`
-(`hosts/lib/tests/test_pi_compose_census.py::test_a_relative_bind_source_with_no_tmpfiles_line_is_flagged`).
+(`hosts/lib/tests/pi_compose/test_pi_compose_census.py::test_a_relative_bind_source_with_no_tmpfiles_line_is_flagged`).
 
 ## Conventions
 
 - The Pi is LAN-only, so no service carries Traefik labels. A UI that needs reaching binds the
   Pi's LAN IP on the `port` its `compose_services` entry names, as wg-easy does
-  (`hosts/lib/tests/test_pi_compose_wg_easy.py::test_the_admin_ui_is_bound_to_the_lan_address_only`).
+  (`hosts/lib/tests/pi_compose/test_pi_compose_wg_easy.py::test_the_admin_ui_is_bound_to_the_lan_address_only`).
 - A service joins only the networks its `compose_services` entry lists. Most join `proxy`, which
   reaches the read-only docker-proxy; autoheal joins only `lifecycle`, which reaches the
   restart-only docker-proxy-lifecycle. The docker-proxy file names the sub-proxies' networks
   itself, since they have no entry
-  (`hosts/lib/tests/test_pi_compose_docker_proxy.py::test_the_proxies_join_the_networks_the_ansible_era_containers_use`).
+  (`hosts/lib/tests/pi_compose/test_pi_compose_docker_proxy.py::test_the_proxies_join_the_networks_the_ansible_era_containers_use`).
 - PUID/PGID: `1000`/`1000`, user: `ubuntu`
 - Timezone: `America/Chicago`
 - Containers should have healthchecks defined where possible
@@ -45,7 +45,7 @@ component's `tmpfiles.d/homelab-compose.conf`
   service's state is regenerable.
 - Pin image tags or use a stable channel. `latest` is acceptable for the homelab tier, but note when
   a specific version is preferred. Every image carries a digest either way
-  (`hosts/lib/tests/test_pi_compose_census.py::test_an_image_without_a_digest_is_flagged`).
+  (`hosts/lib/tests/pi_compose/test_pi_compose_census.py::test_an_image_without_a_digest_is_flagged`).
 - **`read_only: true` + `tmpfs:` — the `noexec` residual is an ACCEPTED trade-off, do not re-flag.**
   Services with an immutable rootfs still get writable `tmpfs:` scratch mounts (`/run` on
   docker-proxy and docker-proxy-lifecycle, `/tmp` on alloy), and Compose's `tmpfs` long-form only exposes

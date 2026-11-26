@@ -21,7 +21,7 @@ It reads the filesystem, reports, and advances its own baseline.
   package the file is named after: on Ubuntu 26.04 `login.defs` owns `/etc/login.defs`, not
   `login`. While the file is missing, the lines arm refuses to edit it rather than create a
   file holding only its managed lines
-  (`hosts/lib/tests/test_reconcile_lines_arm.py::test_a_missing_package_owned_conffile_is_refused_and_not_created`).
+  (`hosts/lib/tests/reconcile/test_reconcile_lines_arm.py::test_a_missing_package_owned_conffile_is_refused_and_not_created`).
 - **Mode (explicit and reversible):** the timer's enable link arms it. Dropping the component from a
   host package stops the timer on the install that drops it. A DOWN on an unexplained change
   stays DOWN until an operator reviews it and runs `/usr/lib/homelab/aide-check --accept`.

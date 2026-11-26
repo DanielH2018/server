@@ -75,7 +75,7 @@ goes in the group for its subject. Four rules keep a group collectable:
 - A group takes no name that a `pythonpath` root holds, such as `lib`, `bridge` or `checks`.
 
 The `test-modules-are-grouped-by-subject` row of `tests/repo/census_rows/test_census_rows_layout.py` enforces
-the cap and the grouping. Its `allow` names each suite that is still flat.
+the cap and the grouping, with no suite exempt.
 
 A role test imports its own role's `files/` modules by bare name: `k8s/conftest.py`
 puts that one directory on `sys.path`. A module shared across roles goes on `pythonpath`. A

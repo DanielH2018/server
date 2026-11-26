@@ -1,6 +1,6 @@
 """The render metadata and image builds a role's `defaults/main.yml` gives the renderer.
 
-`include_vars` reads a role's render metadata, and `image_builder_sites` reads its builds. No
+`render_defaults` reads a role's render metadata, and `image_builder_sites` reads its builds. No
 value comes from a role's `tasks/`.
 
 `derived_facts` computes the one value a template reads that no file states,
@@ -63,12 +63,7 @@ def _defaults(role_dir: Path) -> dict:
 
 
 def render_defaults(role_dir: Path) -> dict:
-    """The `RENDER_KEYS` that `role_dir`'s `defaults/main.yml` sets, unresolved."""
-    return {k: v for k, v in _defaults(role_dir).items() if k in RENDER_KEYS}
-
-
-def include_vars(role_dir: Path) -> dict:
-    """`role_dir`'s render metadata, as `render_defaults` reads it.
+    """The `RENDER_KEYS` that `role_dir`'s `defaults/main.yml` sets, unresolved.
 
     The values are read as written, so a Jinja value is still a string for the caller to
     resolve.
@@ -76,7 +71,7 @@ def include_vars(role_dir: Path) -> dict:
     Raises:
         ValueError: The role has no `defaults/main.yml`.
     """
-    return render_defaults(role_dir)
+    return {k: v for k, v in _defaults(role_dir).items() if k in RENDER_KEYS}
 
 
 @dataclass(frozen=True)

@@ -14,13 +14,13 @@
       POSTs {"<WEBHOOK_JSON_KEY>": "<message>"} and defaults the key to `text`. Discord reads
       `content` and rejects `text` with a 400. Nothing else sees that failure: autoheal discards
       the response, the container stays healthy and the deploy reads green. ENFORCED by
-      hosts/lib/tests/test_pi_compose_autoheal.py. The channel is the shared
+      hosts/lib/tests/pi_compose/test_pi_compose_autoheal.py. The channel is the shared
       `monitor_discord_webhook_url`. It reaches this file as a `${monitor_discord_webhook_url}`
       reference, which Compose fills from the project's env file (the pi-compose component's
       `outputs:` entry). The Pi's SOPS file must hold that key (`host_secrets.py sync
       daniel-pi`, operator-only).
     - autoheal carries no healthcheck of its own, on purpose. The DECIDED marker below has the
-      evidence. ENFORCED by hosts/lib/tests/test_pi_compose_autoheal.py.
+      evidence. ENFORCED by hosts/lib/tests/pi_compose/test_pi_compose_autoheal.py.
     - AUTOHEAL_START_PERIOD is a startup sleep, not a per-container grace period. Docker
       already suppresses `unhealthy` during a container's own `healthcheck.start_period`. The
       sleep covers the Pi rebooting, when autoheal and everything it watches start together. It
@@ -78,7 +78,7 @@ services:
       # `docker start` arm runs. Nothing is lost by dropping the probe: `pgrep` only ever
       # detected a dead process, which `restart: unless-stopped` and the cron's `docker start`
       # both already cover, and a wedged-but-running shell loop passed it anyway. ENFORCED by
-      # hosts/lib/tests/test_pi_compose_autoheal.py.
+      # hosts/lib/tests/pi_compose/test_pi_compose_autoheal.py.
       disable: true
     depends_on:
       - docker-proxy-lifecycle

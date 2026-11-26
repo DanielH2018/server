@@ -39,7 +39,7 @@
 #   version, so it moves the package on the next apt run once the two drift, or blocks every
 #   version, which refuses bootstrap's install. The hold unit below holds it instead.
 # - A check that log2ram.conf's JOURNALD_AWARE lines agree: a test in
-#   hosts/lib/tests/test_pi_tuning_component.py keeps the packaged log2ram copy honest instead.
+#   hosts/lib/tests/host_baselines/test_pi_tuning_component.py keeps the packaged log2ram copy honest instead.
 depends:
   - zram-tools
   - watchdog

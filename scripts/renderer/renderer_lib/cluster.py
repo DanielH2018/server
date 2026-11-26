@@ -83,7 +83,7 @@ from renderer.renderer_lib.ordering import (
     verify_files,
 )
 from renderer.renderer_lib.suspension import SYNC_SUSPEND_KEY, sync_suspend_refusal
-from renderer.renderer_lib.task_inputs import derived_facts, include_vars
+from renderer.renderer_lib.task_inputs import derived_facts, render_defaults
 
 
 from renderer.template_filters.toposort import K8S_APPLIES_LAST, build_k8s_dep_map
@@ -318,7 +318,7 @@ def role_context(
         raise RenderError(f"{tag}: {exc}") from exc
     # The strict context leaves a value that will not resolve undefined, which a render key
     # must not be: an undefined file list would fall back to the derived one unseen.
-    unresolved = sorted((INCLUDE_KEYS & include_vars(role_dir).keys()) - ctx.keys())
+    unresolved = sorted((INCLUDE_KEYS & render_defaults(role_dir).keys()) - ctx.keys())
     if unresolved:
         raise RenderError(f"{tag}: its render keys {unresolved} do not resolve")
     include = {k: ctx[k] for k in INCLUDE_KEYS if k in ctx}

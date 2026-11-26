@@ -38,7 +38,7 @@ class StampedCache(TypedDict):
 class B2ProbeCache(TypedDict):
     """The B2 gate's last verdict and how long to hold it.
 
-    `ttl` is chosen per outcome by `checks.b2.b2_reachable`: a billed answer from B2 holds
+    `ttl` is chosen per outcome by `checks.b2.check_b2_reachable`: a billed answer from B2 holds
     B2_PROBE_INTERVAL_S, a transport failure holds B2_TRANSPORT_RETRY_S. It seeds at 0, meaning
     "nothing is cached yet, probe now": the first cycle probes regardless, because `ts` is 0 and
     every real clock is further from it than any interval.
@@ -75,9 +75,9 @@ class State:
       down_streaks: Consecutive-down count per check name, advanced through `down_streak()` and
         reset to 0 by each check on an `ok` result.
       n8n_streaks: Per-workflow consecutive-failure streaks (`checks.service.check_n8n`).
-      b2_probe: The B2 gate's cache (`checks.b2.b2_reachable`).
-      b2_storage: The B2 storage-usage cache (`checks.b2.b2_storage_usage`).
-      r2_probe: The R2 usage cache (`checks.r2.r2_usage`).
+      b2_probe: The B2 gate's cache (`checks.b2.check_b2_reachable`).
+      b2_storage: The B2 storage-usage cache (`checks.b2.check_b2_storage`).
+      r2_probe: The R2 usage cache (`checks.r2.check_r2_usage`).
       b2_lock_probe: The B2 Object Lock cache (`checks.b2.check_b2_object_lock`).
       r2_lock_probe: The R2 etcd lock canary cache (`checks.r2.check_r2_etcd_lock`).
       email_probe: The SMTP backstop cache (`checks.notify.email_backstop`).

@@ -1,7 +1,7 @@
 """The host-package checks CI's `host_packages` job runs: render, diff, lints and triggers.
 
 The maintainer-script lint's line cases live beside the scripts it reads, in
-`hosts/lib/tests/test_maintainer_scripts.py`. The `.deb` cases here build their packages with
+`hosts/lib/tests/host_lib/test_maintainer_scripts.py`. The `.deb` cases here build their packages with
 `dpkg-deb --build`, because the pinned nfpm exists only inside the CI job, whose red-proof step
 builds `fixtures/host_packages/red/` with it.
 

@@ -1,17 +1,11 @@
 name: CI
 
 on:
-  # A draft PR runs no job; `ready_for_review` starts its first real run. A fan-out batch opens
-  # its PR as a draft and pushes again while its review runs, and a push before the review ends
-  # cancels or wastes the run. Setting `types` replaces GitHub's default list, so the first
-  # three are that default restated. Every job below carries
-  # `github.event.pull_request.draft != true`, which is true on a push, a dispatch and a
-  # merge_group run, where the field is unset.
+  # Setting `types` replaces GitHub's default list, so the first three restate it.
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
-  # Inert. Merge queues are not offered on user-owned repositories, so the push run below
-  # stays the only full sweep a merge commit gets. The trigger is harmless: every job treats a
-  # merge_group event like a push, no PR scoping.
+  # Inert: merge queues are not offered on user-owned repositories, so the push run stays the only
+  # full sweep.
   merge_group:
   # An on-demand full sweep, for a PR whose own diff scopes out every hook that matters. The
   # runner-image bump is the case it exists for: a workflow-only diff matches no hook's `files`
@@ -153,8 +147,7 @@ jobs:
       contents: read
       pull-requests: read
       statuses: read
-    # `base` is the newest ancestor whose gate passed, for a push whose tree is not proven:
-    # the `pytest` legs select against it. It is empty on every other answer.
+    # `base` is the newest ancestor whose gate passed; the `pytest` legs select against it.
     outputs:
       proven: ${{ steps.prove.outputs.proven }}
       base: ${{ steps.prove.outputs.base }}
@@ -177,20 +170,8 @@ jobs:
             python3 scripts/dev/tested_tree.py prove-head --repo "$GITHUB_REPOSITORY" --head "$PR_HEAD"
           fi
 
-  # The hook sweep is split two ways — `pytest`, and this job for everything else. Neither
-  # carries the branch-protection required context; the `prek` gate job at the bottom does,
-  # under the name "prek (lint + validate + tests + secrets)".
-  #
-  # The cross-plane order gate (the render-diff gates) runs in the `pr_gates` job beside this
-  # one, so it stays off this job's wall.
-  #
-  # `mkdocs build --strict` is NOT worth a job (4s): the `mkdocs-strict` hook in the full sweep
-  # is this job's only docs build.
-  #
-  # The FIRST run on any given branch is slower, once: a branch restores its hook-env cache via
-  # restore-keys from an older entry and rebuilds the rest in-step, saving the union key at the
-  # end. Caches are scoped per branch, so each open PR branch pays it once. Don't read it as the
-  # steady state.
+  # The `prek` gate job at the bottom carries the required context, under "prek (lint + validate +
+  # tests + secrets)".
   hooks:
     needs: prove
     if: ${{ (needs.prove.result == 'cancelled' || needs.prove.result == 'failure' || (!cancelled() && needs.prove.outputs.proven != 'true')) && github.event.pull_request.draft != true }}
@@ -219,15 +200,12 @@ jobs:
           fetch-depth: 0  # the merge-base diff below needs history
           persist-credentials: false  # nothing here pushes; the merge-base fetch carries its own token
 
-      # Python, uv and prek, with their caches. The pins and the reasoning behind each cache
-      # live in the action.
       - uses: $/.github/actions/setup
         with:
           prek-cache-key: prek
 
-      # validate-render-templates is `language = "system"`, so it runs whatever `systemd-analyze`
-      # is on PATH. This step exists so a runner image change that drops the binary fails loud
-      # here rather than as an opaque "command not found" inside the hook.
+      # A runner image change that drops systemd-analyze fails loud here rather than as "command not
+      # found" in the hook.
       - name: Check systemd-analyze is available
         run: systemd-analyze --version
 
@@ -286,11 +264,8 @@ jobs:
       - name: Provision promtool, amtool, pint and lokitool
         run: scripts/validate/alert_tools.sh
 
-      # The tools' red proof. Each one must accept its good fixture and reject its bad one
-      # with the expected message under scripts/validate/tests/fixtures/alert_rules/. The
-      # pytest shards install none of the binaries, so without this step nothing shows the hook's
-      # tool phase can fail. ALERT_TOOLS_ARCHIVES keeps Alloy's verified zip and SHA256SUMS in a
-      # directory cached under the Alloy image pin, so the 167 MB download runs once per bump.
+      # The pytest shards install none of the binaries, so this step shows the hook's tool phase can
+      # fail.
       - name: Read the Alloy pin
         id: alloy
         run: |
@@ -311,13 +286,8 @@ jobs:
           ALERT_TOOLS_ARCHIVES: ${{ runner.temp }}/pinned/alloy
         run: uv run python scripts/validate/alert_rules.py --prove-red
 
-      # A PR run sweeps every hook over the whole tree. This is what lets the push run skip when
-      # it merges a tree that a PR run already tested (the `prove` job below): the PR run is the
-      # sweep, so the green it records covers everything the push run would check. A changed-file
-      # scope on the PR run would leave the scoped-out files unchecked, and the skipped push run
-      # would be the only place they ever got checked.
-      #
-      # scripts/dev/pr_changed_files.sh owns the fetch and the merge-base diff.
+      # A PR run is the full sweep, so its green covers what the push run would check; a
+      # changed-file scope would leave files unchecked.
       - name: Reject a PR whose merge changes no files
         id: changed
         if: github.event_name == 'pull_request'
@@ -376,9 +346,8 @@ jobs:
           err="$RUNNER_TEMP/notice.err"
           code="$RUNNER_TEMP/notice-code"
           exec 2> >(tee -a "$err" >&2)
-          # The later steps expect one worktree. A step timeout still runs this trap, but a
-          # kill that ends the script before the trap runs leaves the copy registered, so the
-          # failure step below removes it too.
+          # A kill that ends the script before the trap leaves the copy registered, so the failure
+          # step removes it too.
           trap 'git worktree remove --force "$code" || true' EXIT
 
           echo "stage: setup" >> "$err"
@@ -397,10 +366,8 @@ jobs:
           "${notice[@]}" --format markdown >> "$GITHUB_STEP_SUMMARY"
           echo "notice stage took ${SECONDS}s"
 
-      # The two steps below run only when the notice step did not succeed. The test reads
-      # `!= 'success'` so that it holds for a timeout whether GitHub records the outcome as
-      # `failure` or as `cancelled`. The warning is a step of its own because a timeout kills
-      # the notice script before it could print one.
+      # Tested as `!= 'success'` so it holds for a timeout whether GitHub records `failure` or
+      # `cancelled`.
       - name: Notice step failed
         if: github.event_name == 'pull_request' && steps.notice.outcome != 'success'
         continue-on-error: true
@@ -413,10 +380,8 @@ jobs:
           cat "$RUNNER_TEMP/notice.err" || true
           git worktree remove --force "$RUNNER_TEMP/notice-code" || true
 
-      # The failure leaves an artifact because nothing else can find it later. With
-      # `continue-on-error`, the jobs API reports the failed step's conclusion as `success`, and
-      # listing runs to read their steps is capped and costly. One name-filtered call to the
-      # artifacts endpoint lists every `notice-step-failed` artifact in the repository.
+      # With `continue-on-error` the jobs API reports the failed step as `success`, so an artifact
+      # is the only findable record.
       - name: Upload notice failure
         if: github.event_name == 'pull_request' && steps.notice.outcome != 'success'
         continue-on-error: true
@@ -427,14 +392,8 @@ jobs:
           path: ${{ runner.temp }}/notice.err
           if-no-files-found: warn
 
-      # The full sweep, on every event: a PR run, a dispatch and a push that the `prove` job did not
-      # skip. There is no scoped arm, so a hook's `files` regex no longer decides what a PR run
-      # leaves unchecked.
-      #
-      # The sweep builds the docs site through the `mkdocs-strict` hook, and that is this job's
-      # only build. The build matters here because the twice-daily docs-refresh cron is the only
-      # other place it runs, and a broken internal link found there leaves the PREVIOUS site
-      # serving with nothing saying why.
+      # The sweep's docs build is the only one besides the docs-refresh cron, where a broken link
+      # leaves the previous site serving silently.
       - name: Run hooks (full sweep)
         # --skip static-ratchet-tests*: the `pytest` job runs those hooks' test files already, and
         # test_static_ratchet_hook.py holds this list equal to prek.toml's ratchet hook ids.
@@ -452,16 +411,8 @@ jobs:
         continue-on-error: true
         run: uv run python scripts/dev/prek_durations.py "$RUNNER_TEMP/prek.log" >> "$GITHUB_STEP_SUMMARY"
 
-  # The two PR-only refusals, the render-diff gates and the cluster pin checks, in a job of
-  # their own. They run beside the `hooks` sweep, so the run wall is the slower of the two jobs
-  # instead of their sum.
-  #
-  # The job-level `if:` is the same prove condition every gated job carries, and the PR-only
-  # test sits on each step instead. A job-level `pull_request` condition would make the job
-  # `skipped` on a push or a dispatch, and the `prek` gate and `ci_verdict.jobs_verdict` both
-  # read a skipped job as a failure there unless the pushed tree was proven
-  # (test_ci_jobs_verdict_matches_gate.py pins the condition). Off a pull request every step
-  # skips, so the job costs a runner and no checkout.
+  # The job-level `if:` is the prove condition; PR-only tests sit on each step, since a job-level
+  # one would make the job `skipped` on a push, which the gate reads as failure.
   pr_gates:
     needs: prove
     if: ${{ (needs.prove.result == 'cancelled' || needs.prove.result == 'failure' || (!cancelled() && needs.prove.outputs.proven != 'true')) && github.event.pull_request.draft != true }}
@@ -485,56 +436,35 @@ jobs:
       - uses: $/.github/actions/setup
         if: github.event_name == 'pull_request'
 
-      # The editable install's `.pth` is the import root in project mode (docs/adr/0039). `-P`
-      # keeps the cwd off sys.path, so only the `.pth` can supply `scripts/`.
+      # `-P` keeps the cwd off sys.path, so only the editable install's `.pth` can supply
+      # `scripts/`.
       - name: scripts/ is installed as the import root
         if: github.event_name == 'pull_request'
         run: .venv/bin/python -P -c "import lib.repo_paths"
 
-      # The render-diff gates. They refuse an edge added beside a change to its dependent.
-      # docs/landing.md says how to split a refused PR, and there is no bypass. Their removal
-      # arms refuse an object a flux-owned tag drops without a `Removes-Object:` line in the
-      # PR's commits (docs/flux-deploy-plane.md). They run on a pull request only, because a push
-      # or a dispatch has no diff to judge and no PR commits to read. The checkout is the merge
-      # commit, so its first parent is the base it merges onto, and each side renders with its
-      # own tree's renderer.
+      # They refuse an edge added beside a change to its dependent, and an object a flux-owned tag
+      # drops without a `Removes-Object:` line.
       - name: Render-diff gates
         if: github.event_name == 'pull_request'
         timeout-minutes: 8
         run: uv run python scripts/validate/render_diff_gates.py --base HEAD^1
 
-      # The cluster pin checks. Merging a Longhorn or MetalLB pin is the upgrade, so it
-      # refuses a pin that decreases, a Longhorn bump that skips a minor release, and a bump
-      # whose PR changes anything besides the pin's role directory and docs. `land.sh`'s land
-      # gate relies on that last refusal to gate one bump per PR. docs/landing.md says what to
-      # do with a refused PR, and there is no bypass. Pull requests only, for the reason above.
+      # Refuses a pin that decreases, a Longhorn bump that skips a minor release, or a bump touching
+      # more than the pin's role directory and docs.
       - name: Cluster pin checks
         if: github.event_name == 'pull_request'
         timeout-minutes: 2
         run: uv run python scripts/validate/cluster_pins.py --base HEAD^1
 
-      # The k3s version and its binary sum move together. The `binary` gate mode
-      # compares each node's binary with the sum, so a bump that keeps the old one is refused.
+      # The `binary` gate mode compares each node's binary with the sum, so a bump keeping the old
+      # sum is refused.
       - name: k3s binary sum co-change
         if: github.event_name == 'pull_request'
         timeout-minutes: 2
         run: uv run python scripts/validate/k3s_binary_sum.py --base HEAD^1
 
-  # Plans the `pytest` legs. GitHub fixes a matrix before any of its legs runs, so the legs a
-  # selection does not need can be left unstarted only by a job ahead of them.
-  # `pytest_shard.py --plan` runs the legs' own selection once and publishes the numbers of the
-  # legs it fills as `legs`, and the `pytest` matrix starts those. A pull request diffs its
-  # merge commit against `HEAD^1`, and an unproven push against the green base `prove` names.
-  # Every other run has no plan step, so `legs` is empty and the matrix starts every leg, as it
-  # does when this job fails. The step's `if:` and its base are the select step's rule, which
-  # `test_ci_pytest_selects_affected_modules.py` holds equal for every event `on:` names. A
-  # failed plan still fails the gate, although the fallback legs ran.
-  #
-  # Only `pytest` waits for this job. On the 20 pull-request runs measured on 2026-11-20, the
-  # legs a selection left empty held 1046 slot-seconds, about twice what this job costs. The
-  # wait it adds ahead of the legs, about 28s, is off the run's critical path: `hooks` and the
-  # host packages finish minutes after a selected leg. The planner packs nothing, so it runs
-  # on the runner's own `python3` with no setup step.
+  # GitHub fixes a matrix before any leg runs, so only a job ahead of it can leave unneeded legs
+  # unstarted.
   pytest_plan:
     needs: prove
     if: ${{ (needs.prove.result == 'cancelled' || needs.prove.result == 'failure' || (!cancelled() && needs.prove.outputs.proven != 'true')) && github.event.pull_request.draft != true }}
@@ -544,8 +474,8 @@ jobs:
     outputs:
       legs: ${{ steps.plan.outputs.legs }}
     steps:
-      # A pull request diffs against the merge commit's first parent; a push's green base can
-      # be any ancestor.
+      # A pull request diffs against the merge commit's first parent; a push's green base can be any
+      # ancestor.
       - uses: actions/checkout@v7.0.1
         with:
           fetch-depth: ${{ github.event_name == 'pull_request' && 2 || 0 }}
@@ -611,39 +541,13 @@ jobs:
     name: pytest (shard ${{ matrix.shard }})
     runs-on: ubuntu-26.04
     timeout-minutes: 20
-    # `full` when the legs ran the whole census, `selected` when they ran a pull request's
-    # selection. Every leg computes it from the same diff and the same table, so whichever
-    # leg writes last writes the same word. The `prek` gate records a tree for either word,
-    # on the head and on a landing batch's members.
+    # Every leg computes `scope` from the same diff and table, so whichever writes last writes the
+    # same word.
     outputs:
       scope: ${{ steps.select.outputs.scope }}
     strategy:
       fail-fast: false
-      # `pytest_shard.CI_LEGS` legs. A run starts the legs `pytest_plan` published, and a run
-      # with no plan starts all of them through the fallback list, which must name
-      # 1..CI_LEGS (`test_pytest_shards_partition_the_suite.py`). The select step passes no
-      # `--of`, so each leg splits by `CI_LEGS` too. Changing the count means editing the
-      # constant, this list, and `hosts/lib/ci_verdict.py:CI_GATE_NEEDS_JOBS`.
-      #
-      # The count is chosen on two numbers, not on one run's unloaded wall: the slot-seconds a
-      # landing's CI uses, and the p90 queue wait under normal load. The account runs at most 20
-      # hosted jobs at once and a full sweep asks for 20, so every leg's fixed cost also
-      # lengthens the queue every other run waits in. `scripts/dev/ci_slot_cost.py --recent 20`
-      # prints both, per job family. Re-decide the count from its output, never from a projection.
-      #
-      # The count stayed at six on the reading of 2026-11-20, taken after the `named_files`
-      # plugin landed. The pool is pull-request runs, because a master push run skips pytest
-      # when a pull-request run tested its tree: 5 of the newest 200 green master runs ran it.
-      # `--recent 20 --pull-requests` read the pytest family at 704 slot-seconds per run, a
-      # median 29.0s per leg outside `Run the test suite` over 83 legs, and a p90 queue wait of
-      # 89s. The one full-census master run among the five, 44658813772, held 843 slot-seconds
-      # of pytest, against about 1,020 before the plugin. Fewer legs would save about 29s of
-      # setup each and lengthen every landing's pole.
-      #
-      # A shard can never finish faster than its largest `--dist loadscope` group, a module or
-      # a class within one, so the floor rises as the matrix grows. Each leg's `phase timing`
-      # section prints every worker's finish time, which shows when one group sets the leg's
-      # wall.
+      # The fallback list must name 1..CI_LEGS.
       matrix:
         shard: "${{ fromJSON(needs.pytest_plan.outputs.legs || '[1, 2, 3, 4, 5, 6]') }}"
     env:
@@ -655,27 +559,8 @@ jobs:
           fetch-depth: 0  # several tests read git history and worktree state
           persist-credentials: false
       - uses: $/.github/actions/setup
-      # The helper splits by `pytest_shard.CI_LEGS`, whatever the matrix started. It assigns
-      # whole test modules by greedy bin packing over recorded per-file durations — never part of
-      # a module, or `--dist loadscope`'s module-scoped fixtures would rebuild per shard.
-      #
-      # On a pull request the checkout is the merge commit, so `HEAD^1` is the base and the
-      # diff from it is the pull request's own change. `--changed-since` packs only the modules
-      # that diff can affect, into as few legs as keep each no heavier than a full sweep's leg
-      # (`scripts/dev/affected_lib/table.py` has the rule). `pytest_plan` starts exactly those
-      # legs. A leg the selection does not need gets an empty list, writes `count=0`, and every
-      # later step skips on it: the leg ends green after the checkout and the setup. That leg
-      # is the one a plan starts for a selection of no modules, or a spare leg of a run whose
-      # plan failed. Each leg passes the plan back as `--planned` and fails when its own
-      # selection fills more legs than the plan started.
-      #
-      # A push diffs against the base the `prove` job names: the newest ancestor whose gate
-      # passed, which is not always the parent (`scripts/dev/tested_tree.py:green_base`). A
-      # push with no such base and a dispatch run the whole census, where an empty list is
-      # still an error, because a shard that has silently stopped covering anything must not
-      # read as green.
-      #
-      # The step sits ahead of the tool installs so an empty leg pays for none of them.
+      # Whole modules are packed, never part of one, or loadscope's module-scoped fixtures would
+      # rebuild per shard.
       - name: Select this shard's test files
         id: select
         env:
@@ -693,8 +578,6 @@ jobs:
           if [ -n "${PLANNED:-}" ]; then planned=(--planned "$PLANNED"); fi
           uv run python scripts/dev/pytest_shard.py --shard "$SHARD" \
             "${since[@]}" "${planned[@]}" --out "$RUNNER_TEMP/shard.txt"
-      # sops, age, apt-utils and the dotfiles packages, from the action the nightly sweep in
-      # pytest-sweep.yml shares.
       - name: Install the tools the tests run
         if: steps.select.outputs.count != '0'
         uses: $/.github/actions/pytest-tools
@@ -727,26 +610,7 @@ jobs:
           key: pytest-rewrite-${{ runner.os }}-${{ github.sha }}
           restore-keys: pytest-rewrite-${{ runner.os }}-
 
-      # --durations because this job is the pole of the whole landing, and a landing waits on CI
-      # twice. The runner is slower per test than the workstation, so a local `--durations` run does
-      # not tell you which tests dominate HERE. Printing it on every run means the next person to
-      # attack this reads the answer off a green build instead of guessing at the shape. It is
-      # also the signal that the shards have gone lopsided: `pytest_shard.py --leg-spread` reads
-      # these per-shard times off a run.
-      #
-      # `=0` rather than `=15`, and the log is teed because the next step reads it.
-      # A per-file total cannot be summed out of the top 15 lines: a module costing 30s across
-      # 200 sub-second tests contributes nothing to them. `=0` prints every duration above
-      # pytest's own 0.005s floor, and the
-      # report is still sorted descending, so the top-15 reading above
-      # survives as its first fifteen lines. The `failure_report` plugin prints FAILURES after
-      # it, so a red shard's log still ends on the traceback and the short summary.
-      #
-      # `--github-report` prints one `::error` annotation per failed test and leads the job
-      # summary with a count line. No `--color`: escape codes split tokens inside assertion text.
-      #
-      # pipefail is what makes the tee safe: without it the pipeline reports tee's exit status
-      # and a failing suite would read green.
+      # `=0` prints every duration: a per-file total cannot be summed from the top 15 lines.
       - name: Run the test suite
         if: steps.select.outputs.count != '0'
         env:
@@ -757,8 +621,6 @@ jobs:
           uv run python -m pytest --github-report --durations=0 "${files[@]}" \
             | tee "$RUNNER_TEMP/durations.log"
 
-      # The determinism modules' digest lines, one per rendered role, for `gh run download`.
-      # The log carries only their count; docs/homelab-render.md has the recipe that reads them.
       - name: Upload the render digest lines
         if: always() && steps.select.outputs.count != '0'
         uses: actions/upload-artifact@v7.0.2
@@ -782,10 +644,7 @@ jobs:
         if: steps.select.outputs.count != '0'
         run: uv run python scripts/dev/pytest_shard.py --check-durations "$RUNNER_TEMP/durations.log"
 
-  # Workflows name actions by version tag, and `.github/workflows/actions.lock` pins each tag to
-  # a commit. `--verify` fails when the lockfile is out of step with the workflows, or
-  # when a locked commit no longer verifies upstream, such as a moved tag. After changing a
-  # `uses:` line, run `gh actions-lock` and commit the lockfile it rewrites.
+  # After changing a `uses:` line, run `gh actions-lock` and commit the lockfile it rewrites.
   lockfile:
     needs: prove
     if: ${{ (needs.prove.result == 'cancelled' || needs.prove.result == 'failure' || (!cancelled() && needs.prove.outputs.proven != 'true')) && github.event.pull_request.draft != true }}
@@ -805,13 +664,6 @@ jobs:
           gh extension install github/gh-actions-lock --pin v0.5.0
           gh actions-lock --verify
 
-  # Target slice R2's round trip (docs/homelab-render.md, *The round trip*). It needs the flux
-  # CLI, which the `pytest` job does not install, so it runs here. The probe step proves on
-  # fixtures that the pinned CLI returns each escape placeholder mode writes as the round trip
-  # relies on. The round-trip step then builds each directory of the placeholder render and of
-  # the stub render with `flux build` and compares the two byte for byte. Each check runs once
-  # more with `--red-proof`, which must make it exit 1, so this log shows both halves going red
-  # on the pinned binary as well as green.
   flux_roundtrip:
     needs: prove
     if: ${{ (needs.prove.result == 'cancelled' || needs.prove.result == 'failure' || (!cancelled() && needs.prove.outputs.proven != 'true')) && github.event.pull_request.draft != true }}
@@ -823,8 +675,8 @@ jobs:
       UV_NO_GROUP: lint
       # Its scripts import only [project] dependencies (test_promote_runtime_imports.py).
       UV_NO_DEV: "1"
-      # The flux CLI this job's flux steps fetch, equal to flux_version in k8s/roles/flux and to
-      # the amd64 flux pin in hosts/packages/homelab-tools/package.yml. Env, so the cache key reads it.
+      # Equal to flux_version in k8s/roles/flux and the amd64 pin in homelab-tools/package.yml; env
+      # so the cache key reads it.
       # renovate: datasource=github-release-attachments depName=fluxcd/flux2
       FLUX_VERSION: v2.9.6
       FLUX_SHA256: b4d22673e9246cbd628881f1a9ef3b090085dced291e42d804555cee8e8d42c5
@@ -856,11 +708,7 @@ jobs:
           echo "fluxprobe --red-proof exited $rc"
           [ "$rc" = 1 ]
 
-      # The green run builds every tag in both passes, since placeholder mode skips none
-      # It covers home-assistant, pi-peer-backup, qbittorrent and authelia, which
-      # carry the render_sops_manifests entries: each pass also asserts it dropped exactly one
-      # document for each. The red half stays on three tags: it only has to show that one
-      # changed byte is seen.
+      # The red half stays on three tags: it only has to show one changed byte is seen.
       - name: Round-trip every tag through flux build
         run: |
           set -euo pipefail
@@ -871,11 +719,8 @@ jobs:
           echo "roundtrip --red-proof exited $rc"
           [ "$rc" = 1 ]
 
-      # The second pass keeps a key's R1 stub only where the standalone-value guard's map
-      # covers it. With `email` dropped from the committed map under every tag, the `${email}`
-      # in traefik's CF_API_EMAIL env value takes `0123` and loses its string type, so the
-      # narrowed pass must still see that standalone use. Every other key keeps the committed
-      # map's cover, so the step holds whether or not `domain` is a placeholder.
+      # With `email` dropped from the committed map, `${email}` in CF_API_EMAIL takes `0123` and
+      # loses its string type, so the narrowed pass must still see that use.
       - name: Red-proof the round trip's second pass with email dropped from the guard's map
         run: |
           set -euo pipefail
@@ -891,23 +736,7 @@ jobs:
           [ "$rc" = 1 ]
           grep -qx 'traefik: Deployment/homelab/traefik differs' "$RUNNER_TEMP/rt-map.log"
 
-  # Target slice D3's in-cluster proof (docs/archive/deploy/d3-secrets.md).
-  # `mullvad_account`, whose value is all digits, lives in a SOPS manifest that
-  # kustomize-controller decrypts and applies. This job measures what the controller and
-  # the API server do with such a value in a quoted `stringData` field, in a throwaway kind
-  # cluster running the controller images the cluster runs: the vendored gotk-components.yaml.
-  # scripts/secrets_mgmt/tests/_sops_type_proof.py builds both halves with a key it generates.
-  #
-  # - Green: `cluster_vars.py write`'s manifest holding `0123` and 2**53 + 1. Its Kustomization
-  #   must reach Ready, and each value must decode to exactly its digits.
-  # - Red: the same Secret encrypted from ints, so SOPS records `type:int`. It must fail to
-  #   apply or come back changed. If it applies unchanged, this job cannot see the failure it
-  #   exists to catch, and it fails.
-  #
-  # It runs on a PR that touches the flux pin, the sops pin, the registry image pin,
-  # `cluster_vars.py`, its fixture, the pinned-tool action or this file, and on a dispatch. On a push to master its steps skip and it passes:
-  # the PR run already measured it. The scope step is step-level, never a job-level `if:`,
-  # because the `prek` gate requires `success` and a skipped job reports `skipped`.
+  # On a push to master its steps skip: the PR run already measured it.
   sops_manifest_type_proof:
     needs: prove
     if: ${{ (needs.prove.result == 'cancelled' || needs.prove.result == 'failure' || (!cancelled() && needs.prove.outputs.proven != 'true')) && github.event.pull_request.draft != true }}
@@ -923,8 +752,8 @@ jobs:
       # renovate: datasource=github-release-attachments depName=kubernetes-sigs/kind
       KIND_VERSION: v0.33.0
       KIND_SHA256: aee6151561422756b764a4ae28e7f44cda5af5a9eead3cc9985112b1de8d8e0d
-      # The flux CLI this job's flux steps fetch, equal to flux_version in k8s/roles/flux and to
-      # the amd64 flux pin in hosts/packages/homelab-tools/package.yml. Env, so the cache key reads it.
+      # Equal to flux_version in k8s/roles/flux and the amd64 pin in homelab-tools/package.yml; env
+      # so the cache key reads it.
       # renovate: datasource=github-release-attachments depName=fluxcd/flux2
       FLUX_VERSION: v2.9.6
       FLUX_SHA256: b4d22673e9246cbd628881f1a9ef3b090085dced291e42d804555cee8e8d42c5
@@ -972,8 +801,8 @@ jobs:
           version: ${{ env.FLUX_VERSION }}
           sha256: ${{ env.FLUX_SHA256 }}
 
-      # sops comes from the hosts' pin itself, read out of homelab-tools' package.yml, so this job
-      # holds no copy that could drift. age comes from apt, as the hosts install it.
+      # sops comes from the hosts' pin in homelab-tools' package.yml, so this job holds no drifting
+      # copy.
       - name: Read the sops pin
         id: sops
         if: github.event_name == 'workflow_dispatch' || steps.scope.outputs.changed == 'true'
@@ -1045,8 +874,8 @@ jobs:
             --source=sops-manifest-type-proof --revision="proof@sha1:$GITHUB_SHA" --insecure-registry
           kubectl apply -f "$out/flux-objects.yaml"
 
-      # Each outcome prints its own line. "GREEN CHANGED" is the result the plan's `data:` remedy
-      # answers; a timeout before it is the cluster or the source, not the question.
+      # "GREEN CHANGED" is the result the plan's `data:` remedy answers; a timeout before it is the
+      # cluster or the source.
       - name: Green half — the all-digit values reach the cluster as their digits
         if: github.event_name == 'workflow_dispatch' || steps.scope.outputs.changed == 'true'
         run: |
@@ -1070,8 +899,8 @@ jobs:
           done
           exit "$rc"
 
-      # Red is judged only against the artifact green just applied, so a failure from a source
-      # that is not ready yet cannot pass for the type failure.
+      # Red is judged only against the artifact green just applied, so a not-ready source cannot
+      # pass for the type failure.
       - name: Red half — values encrypted from an int fail to apply or come back changed
         if: github.event_name == 'workflow_dispatch' || steps.scope.outputs.changed == 'true'
         run: |
@@ -1092,8 +921,8 @@ jobs:
           case "$status" in
             False)
               echo "Ready=False at $revision: $message"
-              # The measured refusal names the Secret and its `stringData` fields. A decryption
-              # failure names the Secret too, so the field name is required as well.
+              # A decryption failure names the Secret too, so the `stringData` field name is
+              # required as well.
               if printf '%s' "$message" | grep -q 'proof-red' \
                   && printf '%s' "$message" | grep -q 'stringData'; then
                 echo "RED: the int-encrypted Secret failed to apply"
@@ -1152,9 +981,8 @@ jobs:
     name: build the host packages (render, nfpm, lint)
     runs-on: ubuntu-26.04
     timeout-minutes: 15
-    # What the jobs that read this build run on. `run-cases` is the one answer to "does a cases
-    # job have anything to run": the cases legs and `k3s_download` skip on it, and the `prek`
-    # gate reads it to pass a job that skipped for that reason.
+    # `run-cases` is the one answer to whether a cases job has anything to run; the `prek` gate
+    # reads it to pass a job that skipped for that.
     outputs:
       run-cases: ${{ github.event_name == 'workflow_dispatch' || steps.render.outputs.changed == 'true' || steps.render.outputs.cases == 'true' }}
       upgrade: ${{ steps.render.outputs.upgrade }}
@@ -1249,8 +1077,8 @@ jobs:
             "$RUNNER_TEMP/render/base" "$RUNNER_TEMP/render/head" \
             --summary "$GITHUB_STEP_SUMMARY" >> "$GITHUB_OUTPUT"
           echo "base=$base" >> "$GITHUB_OUTPUT"
-          # A dispatch of master has its merge base at HEAD, so both builds carry one version
-          # and no case can upgrade. The container steps read this and stand down.
+          # A dispatch of master has its merge base at HEAD, so no case can upgrade; the container
+          # steps stand down.
           if [ "$base" = "$(git rev-parse HEAD)" ]; then
             echo "upgrade=false" >> "$GITHUB_OUTPUT"
           else
@@ -1378,14 +1206,7 @@ jobs:
           uv run python scripts/validate/host_packages.py fetch-tools \
             "$RUNNER_TEMP/render" --cache "$RUNNER_TEMP/tools-cache"
 
-      # The version is H3's *Package rules* shape, `0.<first-parent count>+g<12 hex>`, taken
-      # from each side's own commit, as the builder takes it from the commit it builds.
-      #
-      # Every package of both sides packs at once, each in a background subshell with its own
-      # TMPDIR and log, and the step prints every log before it fails on any. nfpm packs on one
-      # core, and the four homelab-tools debs take 21-24s each, so packing them one after another
-      # set the step's wall. The base debs are not only diff input: the upgrade cases
-      # install them.
+      # Each side's version comes from its own commit.
       - name: Build both renders with the pinned nfpm
         if: >-
           github.event_name == 'workflow_dispatch' || steps.render.outputs.changed == 'true'
@@ -1437,8 +1258,8 @@ jobs:
               dpkg-deb --contents "$deb"
             done
 
-      # `host_tools_arm64` downloads only when this says a build exists, so a failed download
-      # fails that job instead of reading as "nothing was built".
+      # `host_tools_arm64` downloads only when this says a build exists, so a failed download fails
+      # that job.
       - name: Say whether an arm64 homelab-tools build exists
         id: arm64
         run: |
@@ -1465,8 +1286,6 @@ jobs:
           uv run python scripts/validate/host_packages.py lint \
             "$RUNNER_TEMP/render" "$RUNNER_TEMP/debs"
 
-      # The lints' red proof on the pinned nfpm: a package built from the red fixture carries a
-      # conffile and a postinst line outside the whitelist, and the lint must flag both.
       - name: Red-proof the lints on a package built from the red fixture
         if: >-
           github.event_name == 'workflow_dispatch' || steps.render.outputs.changed == 'true'
@@ -1485,12 +1304,8 @@ jobs:
           grep -q 'conffiles lists /etc/homelab-red.conf' "$RUNNER_TEMP/red.log"
           grep -qF "postinst:2: 'rm -rf /etc/foo'" "$RUNNER_TEMP/red.log"
 
-      # The `host_packages` legs read the render and the debs, and build their fixture packages
-      # with the same nfpm. One tarball carries all three, because an artifact's zip does not
-      # keep a file's mode and the render ships executable maintainer scripts. The tools cache
-      # stays out of it: the legs restore it from actions/cache under the `tools-key` output.
-      # The excludes drop the homelab-tools binaries the cases never read, about 1.9 of 2.0 GB:
-      # the cases install only the head amd64 .deb, and `host_tools_arm64` has its own artifact.
+      # One tarball carries all three because an artifact zip drops file modes and the render ships
+      # executable maintainer scripts.
       - name: Hand the render, the debs and nfpm to the cases legs
         if: >-
           github.event_name == 'workflow_dispatch' || steps.render.outputs.changed == 'true'
@@ -1514,26 +1329,14 @@ jobs:
           # The debs and the tool binaries inside are compressed already.
           compression-level: 0
 
-  # Steps 4 and 5 of the host packages, one leg per release. The header above
-  # `host_packages_build` says what each job does. A leg skips when the build has no cases for
-  # it (`run-cases`), so it takes no runner on a PR that touches no host input
-  # (docs/ci-throughput.md). The `prek` gate passes that skip from the same output, and
-  # `ci_verdict.jobs_verdict` from the build's check-run, so the condition below must skip a
-  # leg for no other reason; `test_ci_skip_proven_master.py` pins it.
-  #
-  # `cancelled()` in the proof arm removes GitHub's implicit `success()`, so the condition names
-  # the build's result. Without it a failed build runs each leg into `Artifact not found`.
-  # The `prek` gate needs the build too, so it stays red.
+  # A leg skips when `run-cases` says no cases; the condition must skip for no other reason, pinned
+  # by `test_ci_skip_proven_master.py`.
   host_packages:
     needs: [prove, host_packages_build]
     if: ${{ (needs.prove.result == 'cancelled' || needs.prove.result == 'failure' || (!cancelled() && needs.prove.outputs.proven != 'true')) && github.event.pull_request.draft != true && needs.host_packages_build.result == 'success' && needs.host_packages_build.outputs.run-cases == 'true' }}
     runs-on: ubuntu-26.04
-    # Each leg boots a container per case. The bootstrap cases run in `host_packages_bootstrap`.
-    # The image step pulls the pinned image, but a PR that
-    # changes the Dockerfile builds it from snapshot.ubuntu.com, so the budget stays sized to
-    # the build: with a slow mirror the image build takes over half an hour and the cases 20
-    # minutes more.
-    # scripts/deploy_tools/land_lib/options.py:CI_TIMEOUT_S moves with this value.
+    # A PR changing the Dockerfile builds the image from snapshot.ubuntu.com, so the budget covers a
+    # slow mirror; `CI_TIMEOUT_S` in `land_lib/options.py` moves with it.
     timeout-minutes: 60
     permissions:
       contents: read
@@ -1542,9 +1345,8 @@ jobs:
       # Each leg reports its own conclusion, so one release's failure does not hide another's.
       fail-fast: false
       matrix:
-        # The releases the fleet runs or is moving to (C5), each with the python3 minor it
-        # carries, which reconcile runs under. A leg's name is a check-run name that
-        # `hosts/lib/ci_verdict.py` lists, so the job stays a matrix with one release.
+        # A leg's name is a check-run name `hosts/lib/ci_verdict.py` lists, so the job stays a
+        # matrix with one release.
         include:
           - {release: "26.04", python: "3.14"}
     env:
@@ -1563,14 +1365,8 @@ jobs:
         with:
           tools-key: ${{ needs.host_packages_build.outputs.tools-key }}
 
-      # Step 4. The Dockerfile pins the release by digest and the packages by snapshot.
-      # build-image.sh pulls the image hosts/lib/tests/container/image.pins names by digest,
-      # which host-test-image.yml publishes, or this Dockerfile's published tag when the pin is
-      # stale. A Dockerfile PR has no published image, so it builds. A build reaches the
-      # runner's CA bundle, for the snapshot archive's https redirect.
-      # The early exit is in the script, not the `if:`, because a dispatch must reach this
-      # step (the ci-dispatch-takes-the-full-sweep-not-the-scoped-path row) and a dispatch of
-      # master must stay green.
+      # The early exit is in the script, not the `if:`, because a dispatch must reach this step and
+      # a dispatch of master must stay green.
       - name: Build the test image for this release
         env:
           RELEASE: ${{ matrix.release }}
@@ -1613,31 +1409,8 @@ jobs:
             --python "$PYTHON" --render "$RUNNER_TEMP/render" --debs "$RUNNER_TEMP/debs" \
             --work "$RUNNER_TEMP/cases" "${seed[@]}"
 
-  # The bootstrap cases (`validate_lib/bootstrap_case.py`), one leg per release, beside the
-  # `host_packages` legs rather than inside them, where they were the longest group. Each
-  # release runs two shards. Six of the eight items build the three packages, each in about
-  # 60 s, and `shard` deals three builds and one short red to each shard, so a 4-CPU runner
-  # starts all four at once. Keep the count the smallest that fits every shard's items on a
-  # runner's CPUs; `test_bootstrap_case.py` holds it.
-  #
-  # Each item prints each phase of the script's local build under its `[DONE]` line. An offline
-  # build spends most of its time in `apt-get update`: the image's `Acquire::Retries "10"` backs
-  # off 1+2+4+8+16+5x30 s on fetches a container with no network cannot make, so the offline
-  # item sets no retries.
-  #
-  # The count meets the criterion the pytest matrix is chosen on: slot-seconds per landing and
-  # the p90 queue wait, as `scripts/dev/ci_slot_cost.py --recent 20` prints them. These legs
-  # wait for runners because they become ready while the planned pytest legs still hold
-  # slots. One shard per release would run six builds on four CPUs in two waves, which ends
-  # the bootstrap legs too close to the `host_packages` legs.
-  #
-  # The `name:` leaves the shard out, so a release's shards share the check-run name
-  # `hosts/lib/ci_verdict.py` lists. An installed host package holds that list, and a renamed
-  # leg would read as pending to every copy installed before the rename.
-  #
-  # The steps and the job's `if:` are the legs', and the job gates like them. The id starts with
-  # `host_packages`, so the prefix filter in docs/archive/host/h3-pi-pilot.md selects
-  # these legs too. The budget matches the legs', because a Dockerfile PR builds the image here too.
+  # The `name:` leaves the shard out, so a release's shards share the check-run name `ci_verdict.py`
+  # lists; a renamed leg would read as pending to installed copies.
   host_packages_bootstrap:
     name: host_packages_bootstrap (${{ matrix.release }}, ${{ matrix.python }})
     needs: [prove, host_packages_build]
@@ -1780,29 +1553,13 @@ jobs:
             --python "$PYTHON" --render "$RUNNER_TEMP/render" --debs "$RUNNER_TEMP/debs" \
             --work "$RUNNER_TEMP/cases-k3s-download" "${seed[@]}" --k3s-download
 
-  # Target slice H3.11, the `arm64` half of homelab-tools (docs/archive/host/
-  # h3-pi-pilot.md, *`homelab-tools`* and *Open questions* 9). The `host_packages_build` job builds
-  # both architectures with the pinned nfpm and uploads the `arm64` .deb. This job installs it
-  # in the test image, built here for `arm64`, and runs each tool's `--version`, so a binary
-  # that does not execute on `arm64` fails before the Pi installs it.
-  #
-  # RUNNER LABEL: GitHub's hosted `arm64` Linux runner. If GitHub refuses the label for this
-  # repository, the job falls back to QEMU on `ubuntu-26.04`, and the PR that does so records the
-  # run time (Open question 9). A run that leaves this job queued is that refusal.
-  #
-  # It waits for `host_packages_build` alone, not for the cases legs.
-  #
-  # When `host_packages_build` built no homelab-tools, because no render changed, there is no
-  # artifact and the job skips, so it takes no runner (docs/ci-throughput.md). The `prek` gate
-  # passes that skip from `arm64-tools`. A dispatch runs the job whatever was built, and with no
-  # build it ends green with a notice. When the build failed the job skips, and the build's own
-  # result reds the gate.
+  # RUNNER LABEL: GitHub's hosted `arm64` Linux runner; if GitHub refuses the label the job falls
+  # back to QEMU on `ubuntu-26.04`, and a run left queued is that refusal.
   host_tools_arm64:
     needs: [prove, host_packages_build]
     if: ${{ (needs.prove.result == 'cancelled' || needs.prove.result == 'failure' || (!cancelled() && needs.prove.outputs.proven != 'true')) && github.event.pull_request.draft != true && needs.host_packages_build.result == 'success' && (github.event_name == 'workflow_dispatch' || needs.host_packages_build.outputs.arm64-tools == 'true') }}
     runs-on: ubuntu-24.04-arm
-    # Pulls the pinned test image as host_packages does, and builds it from the same mirror on a
-    # Dockerfile change. A slow mirror makes the build take about half an hour.
+    # A slow mirror makes the image build take about half an hour.
     timeout-minutes: 45
     permissions:
       contents: read
@@ -1848,47 +1605,25 @@ jobs:
             test -z "$(dpkg --verify homelab-tools)"
           '
 
-  # The required status context. Branch protection, checkout-sync's CI_CONTEXTS, await_ci.py
-  # and the ruleset-drift cron all name "prek (lint + validate + tests + secrets)", so that name
-  # lives on this gate rather than on either half above. `if: always()` because a job with
-  # `needs` is otherwise SKIPPED when a dependency fails, and GitHub counts a skipped required
-  # check as passing — the gate has to run and fail explicitly. A cancelled run cancels this job
-  # too, which is the "no verdict" every reader already handles.
+  # `if: always()` because a job with `needs` is SKIPPED when a dependency fails, and GitHub counts
+  # a skipped required check as passing.
   prek:
     name: prek (lint + validate + tests + secrets)
     runs-on: ubuntu-26.04
     needs: [prove, hooks, pr_gates, pytest_plan, pytest, lockfile, flux_roundtrip, sops_manifest_type_proof, host_packages_build, host_packages, host_packages_bootstrap, host_tools_arm64]
-    # On a draft the gate skips with its dependents. A red gate there would pin the head red
-    # for every reader that takes the worst check run per name (`ci_verdict.ci_verdict`), even
-    # after the ready run passes. The skipped gate is not a pass: GitHub refuses to merge a
-    # draft, `ci_verdict.ci_verdict` (which `land.sh` reads) leaves a skipped gate out, and
-    # `review_ci.ready_for_ci` waits for the ready run and turns the PR back into a draft if
-    # none starts.
+    # A red gate on a draft would pin the head red for every reader that takes the worst check run
+    # per name; the skipped gate is not a pass, since GitHub refuses to merge a draft.
     if: ${{ always() && github.event.pull_request.draft != true }}
-    # land.sh's CI budget sums this chain's timeouts (test_land_ci_budget.py), so the gate
-    # names its own rather than inheriting GitHub's 360 minutes.
+    # `land.sh`'s CI budget sums this chain's timeouts, so the gate names its own.
     timeout-minutes: 5
-    # `statuses: write` is for the record steps below, on a pull request only. The job runs
-    # no checkout and no repository code, except on a landing batch, whose last two steps
-    # check the batch out and run `tested_tree.py` from it. A batch is a `queue/` branch of
-    # this repository, which only a collaborator can push, and the landing that pushes one
-    # stacks no fork's head.
+    # The job runs no repository code except on a landing batch, a `queue/` branch only a
+    # collaborator can push.
     permissions:
       contents: read
       statuses: write
     steps:
-      # Every dependency must be named in an expression here, not merely in `needs` above: a
-      # `needs` entry this step does not read is WAITED for and never CHECKED, so the required
-      # context would pass green with that job red. `test_every_ci_job_is_gated.py` enforces it.
-      #
-      # A dependency passes when it succeeded. It also passes when it was skipped AND the `prove`
-      # job succeeded with `proven=true`: that is the proven path, where the pushed tree is one a
-      # green PR run swept. A job that reads the build's artifacts also passes when it was skipped
-      # AND the build succeeded AND said it had no work for that job: `run-cases` for the cases
-      # legs, `arm64-tools` for the arm64 job. An output the build never wrote is not `false`,
-      # so it passes nothing. A skip on any other path is a failure, because a skipped job
-      # otherwise reads as a pass to GitHub. `hosts/lib/ci_verdict.py:jobs_verdict` applies the
-      # same rule to the check-runs, and `test_ci_jobs_verdict_matches_gate.py` holds them equal.
+      # Every dependency must be named in an expression here: a `needs` entry this step does not
+      # read is waited for and never checked.
       - name: Require every half to have succeeded
         env:
           RUN_CASES: ${{ needs.host_packages_build.outputs.run-cases }}
@@ -1913,9 +1648,8 @@ jobs:
             "host-packages-build=$HOST_PACKAGES_BUILD host-packages=$HOST_PACKAGES" \
             "host-packages-bootstrap=$HOST_PACKAGES_BOOTSTRAP" \
             "host-tools-arm64=$HOST_TOOLS_ARM64 run-cases=${RUN_CASES:-} arm64-tools=${ARM64_TOOLS:-}"
-          # `prove` runs on a push and on a labelled PR, so it is `skipped` on every other run. A `cancelled`
-          # or `failure` `prove` broke on the runner, so whatever it said is unproven and every
-          # dependent ran.
+          # `prove` is `skipped` on every run but a push or labelled PR; `cancelled` or `failure`
+          # means unproven and every dependent ran.
           case "$PROVE" in
             success | skipped | cancelled | failure) ;;
             *) echo "::error title=gate::prove's result is '$PROVE', not success, skipped, cancelled or failure"; exit 1 ;;
@@ -1923,11 +1657,8 @@ jobs:
           proven=false
           if [ "$PROVE" = success ] && [ "${PROVEN:-}" = true ]; then proven=true; fi
           ok() { [ "$1" = success ] || { [ "$proven" = true ] && [ "$1" = skipped ]; }; }
-          # $1 a build reader's result, $2 the build's answer to whether it had work for it. The
-          # build's own result is required below, so a build that failed passes nothing here.
+          # The build's own result is required below, so a failed build passes nothing here.
           ok_or_idle() { ok "$1" || { [ "$1" = skipped ] && [ "$2" = false ]; }; }
-          # `need <half> <check> <result> [<build's answer>]` records the half as `<half>=<result>`
-          # when the check refuses its result.
           failed=()
           need() { local half=$1; shift; "$@" || failed+=("$half=$2"); }
           need hooks ok "$HOOKS"
@@ -1946,25 +1677,8 @@ jobs:
             exit 1
           fi
 
-      # Records what this green run tested, for the push run's `prove` job. On a pull
-      # request GITHUB_SHA is the merge commit of refs/pull/N/merge, and its tree is the tree
-      # every job above checked out. The status goes on the PR head commit, which is the commit
-      # the squash merge's PR lookup returns.
-      #
-      # A fork's PR gets a read-only token, so this step cannot write there and does not try. The
-      # squash commit of a fork PR then finds no status, `prove` answers false, and the push run
-      # sweeps in full. `continue-on-error` keeps a failed write from turning the gate red: the
-      # cost of a missing status is one full master run, never a wrong skip.
-      #
-      # A proven run records nothing. It ran no job on GITHUB_SHA's tree, and that tree is the
-      # merge GitHub built at the PR's last push, which no run tested. Proven is the gate's
-      # own reading: `prove` succeeded and said `true`. A `prove` that set `true` and was then
-      # cancelled ran the sweep, and that run records.
-      #
-      # A run whose pytest legs ran a selection records too: the push run of the same tree
-      # would select the same modules. `needs.pytest.outputs.scope` is `full` or `selected`
-      # once the legs chose what to run; a leg that never reached its select step leaves it
-      # empty, and that run records nothing.
+      # On a PR GITHUB_SHA is the merge commit whose tree every job checked out; the status goes on
+      # the PR head.
       - name: Record the tested tree on the PR head
         if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && !(needs.prove.result == 'success' && needs.prove.outputs.proven == 'true') && (needs.pytest.outputs.scope == 'full' || needs.pytest.outputs.scope == 'selected')
         continue-on-error: true
@@ -2067,9 +1781,8 @@ jobs:
           if grep -qFx renovate.json "$RUNNER_TEMP/changed.txt" "$RUNNER_TEMP/deleted.txt"; then
             checks="validate"
           fi
-          # Assigned first so `set -e` fails the step when the script errors; inside the `if`
-          # test an error would read as "skip the extract" and leave the required job green.
-          # The files the PR adds: no rule can tell which new file a manager's pattern reaches.
+          # Assigned first so `set -e` fails the step when the script errors; inside the `if` test
+          # an error would read as skip and leave the required job green.
           git diff --name-only --no-renames --diff-filter=A "origin/$BASE_REF...HEAD" > "$RUNNER_TEMP/added.txt"
           scope=$(python3 scripts/validate/renovate_extract.py scope "$RUNNER_TEMP/changed.txt" "$RUNNER_TEMP/deleted.txt" --added "$RUNNER_TEMP/added.txt")
           case "$scope" in

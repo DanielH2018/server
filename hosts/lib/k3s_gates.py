@@ -16,7 +16,7 @@ thing a check treats as clean is a document that parsed and met its rule.
 
 The checks mirror the runbook's own predicates in `scripts/deploy_tools/runbook_gates_lib/`
 (`unsafe_volumes`, `in_flight_backups`, `nodes_not_ready`), which cannot ship to a
-host because they import repo code. `hosts/lib/tests/test_k3s_gates_parity.py` feeds both the
+host because they import repo code. `hosts/lib/tests/k3s/test_k3s_gates_parity.py` feeds both the
 same fixtures and fails when they disagree.
 
 Exit codes: 0 every check passed; 1 a check refused (single pass) or refused until `--max-wait`

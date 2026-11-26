@@ -131,7 +131,9 @@ def r2_query_usage(
     return storage_bytes, uploads, class_a, class_b, unknown
 
 
-def r2_usage(cfg: Config, src: Sources, now: float | None = None) -> tuple[bool, str]:
+def check_r2_usage(
+    cfg: Config, src: Sources, now: float | None = None
+) -> tuple[bool, str]:
     """Throttled R2 free-tier headroom check. (ok, msg).
 
     SUCCESSES are cached for R2_PROBE_INTERVAL_S — month-to-date aggregates do not move on a 300s
@@ -168,10 +170,6 @@ def r2_usage(cfg: Config, src: Sources, now: float | None = None) -> tuple[bool,
     src.state.r2_probe["ts"] = now
     src.state.r2_probe["ok"], src.state.r2_probe["msg"] = result
     return result
-
-
-def check_r2_usage(cfg: Config, src: Sources) -> tuple[bool, str]:
-    return r2_usage(cfg, src)
 
 
 def _r2_send(cfg: Config, src: Sources, method: str, path: str, now: float) -> bytes:

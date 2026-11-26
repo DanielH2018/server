@@ -2,7 +2,7 @@
 
 M6 batch B6a replaced the `k3s Telemetry OTLP Door` Kuma tile with `OtlpDoorClosed` and
 `OtlpDoorNotReporting` (observability's host-checks.yaml), and its Cutover-2 dropped the Kuma push.
-`hosts/lib/tests/test_claude_artifacts_node_timers.py` holds that the script pushes nothing.
+`hosts/lib/tests/host_baselines/test_claude_artifacts_node_timers.py` holds that the script pushes nothing.
 
 The rendered script runs under bash with the real check library sourced from the tree, `logger`
 stubbed to record the journal line, and `timeout` stubbed on PATH to answer the TCP probe, so

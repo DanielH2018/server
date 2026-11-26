@@ -273,7 +273,9 @@ ROWS = (
             Subject("d.py", '"""See docs/python-design.md."""\n'),
         ),
         min_matches=MODULE_FLOOR,
-        must_find=frozenset({"hosts/lib/tests/test_host_package_builder_refusals.py"}),
+        must_find=frozenset(
+            {"hosts/lib/tests/package_builder/test_host_package_builder_refusals.py"}
+        ),
         allow={
             SELF: "the row's own pattern and subjects name the directory",
             "tests/repo/_archived_plan_citations_row.py": (
@@ -358,7 +360,7 @@ ROWS = (
             ),
             **dict.fromkeys(
                 (
-                    "hosts/lib/tests/test_bootstrap_host_pins.py",
+                    "hosts/lib/tests/bootstrap/test_bootstrap_host_pins.py",
                     "hosts/tests/k3s/test_etcd_metrics_single_switch.py",
                     "hosts/tests/host_config/test_unattended_origins_pattern.py",
                     "tests/deploy/test_renovate_automerge_follows_the_autodeploy_denylist.py",

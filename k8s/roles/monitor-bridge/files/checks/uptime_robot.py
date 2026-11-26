@@ -87,7 +87,7 @@ def uptime_robot_verdict(
     )
 
 
-def uptime_robot_monitors(
+def check_uptime_robot_monitors(
     cfg: Config,
     src: Sources,
     now: float | None = None,
@@ -124,7 +124,3 @@ def uptime_robot_monitors(
     probe["ts"] = now
     probe["ok"], probe["msg"] = result
     return result
-
-
-def check_uptime_robot_monitors(cfg: Config, src: Sources) -> tuple[bool, str]:
-    return uptime_robot_monitors(cfg, src)

@@ -99,7 +99,7 @@ ssh daniel-server 'systemctl show k3s-agent -p ExecMainStartTimestamp; sha256sum
 
 SUC's `prepare` container reads the API as the `k3s-plan` ServiceAccount. Impersonating it needs
 more than the read-only account holds, so no agent runs these. Each must print `yes`.
-`hosts/lib/tests/test_k3s_gates_operator_reads.py` derives the list from `k3s_gates.py`'s API
+`hosts/lib/tests/k3s/test_k3s_gates_operator_reads.py` derives the list from `k3s_gates.py`'s API
 paths and fails when this page omits one.
 
 ```bash

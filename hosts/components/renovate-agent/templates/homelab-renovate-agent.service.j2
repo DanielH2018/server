@@ -15,11 +15,8 @@ Type=oneshot
 # into the exchange directory.
 User={{ pins.ctl_user }}
 SupplementaryGroups={{ pins.user }}
-# The runner's own RUN_TIMEOUT_S ({{ pins.run_timeout_s }}s), its deadline for the session and the
-# landings after it, should always trip first: the runner stops waiting and still posts a
-# digest naming why, where this ceiling kills the whole cgroup and posts only the OnFailure
-# alert. Keep this strictly above RUN_TIMEOUT_S plus the two `gh pr list` censuses either side of
-# it. A landing in flight runs in the lander's own unit, so this kill does not reach it.
+# Keep strictly above RUN_TIMEOUT_S plus the two `gh pr list` censuses: the runner's own timeout
+# should trip first, since this ceiling kills the cgroup and posts only the OnFailure alert.
 TimeoutStartSec={{ pins.unit_timeout }}
 # `gh` and `git` are in /usr/bin; the controller has no ~/.local/bin.
 Environment=PATH=/usr/bin:/bin
@@ -28,29 +25,20 @@ Environment=PYTHONDONTWRITEBYTECODE=1
 # The controller's own interpreter under its home, as the dotfiles mirror keeps one.
 Environment=UV_CACHE_DIR={{ pins.ctl_home }}/uv-cache
 Environment=UV_PYTHON_INSTALL_DIR={{ pins.ctl_home }}/python
-# The controller's write token. Read by systemd as root, so the file is root 0600 and the value
-# appears in no unit line `systemctl show` publishes.
+# Read by systemd as root: the file is root 0600 and the value stays out of `systemctl show`.
 EnvironmentFile=/etc/renovate-agent/ctl.env
-# journald stores only notice+ on these hosts, and a unit's stdout logs at info by default —
-# so without this every runner line is discarded at the source and a post-mortem has nothing
-# to read. Same reasoning as gitops-deploy.service.
+# journald stores notice+ and stdout logs at info, so without this every runner line is discarded.
 SyslogLevel=notice
 NoNewPrivileges=yes
 ProtectHome=yes
 ProtectProc=invisible
 PrivateTmp=yes
-#
-# The agent's home and tooling, the controller's home and the exchange directory, before each
-# run, so a pin bump or a rebuilt host converges on the next tick. `+` runs it as root outside the
-# sandbox, because it reads the operator's copies under ProtectHome's /home. `env -i` drops the
-# unit's Environment= and the token.
+# `+` runs as root outside the sandbox, because it reads the operator's copies under ProtectHome.
+# `env -i` drops the unit's Environment= and the token.
 ExecStartPre=+/usr/bin/env -i PATH=/usr/bin:/bin:/usr/sbin:/sbin /usr/lib/homelab/renovate-agent-setup
 ExecStartPre=/usr/lib/homelab/bin/uv python install --no-bin {{ host_python_version }}
-#
-# `-n`: never queue. Two of these overlapping would fight over the same worktree, and the timer
-# is daily, so a run still going when the next one fires means something is wrong and the second
-# should say so rather than wait. The lock sits in the controller's own home:
-# fs.protected_regular=2 refuses an O_CREAT open of another user's file in sticky /run/lock.
+# -n: never queue; a run still going when the next one fires means something is wrong. Lock in the
+# controller's home: fs.protected_regular=2 blocks creating it in sticky /run/lock.
 ExecStart=/usr/bin/flock -n {{ pins.ctl_home }}/run.lock \
   /usr/lib/homelab/bin/uv run --no-project --no-python-downloads --python {{ host_python_version }} \
   /usr/lib/homelab/renovate-agent/renovate_agent.py

@@ -94,7 +94,7 @@ commit signature and no landing tag. Every host takes its packages on that ancho
   `keyring`, `ci`, `no-green`, `token`, `build`, `tools` and `canary`. `token` is a
   missing token, or a 401 or 403 from the check-runs read, so a revoked token never reads
   as `no-green`. `build` is a render or `nfpm` run that failed at the chosen commit.
-  `hosts/lib/tests/test_host_package_builder_refusals.py` holds this list equal to the
+  `hosts/lib/tests/package_builder/test_host_package_builder_refusals.py` holds this list equal to the
   builder's `REASONS`.
 - **Option (c) stays available at no design cost.** H3.9b's enable link for
   `homelab-updater.timer` is the switch. Dropping that link moves the Pi to (c), and the

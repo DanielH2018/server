@@ -345,7 +345,7 @@ claude_code_pipeline_timeline_server_host: daniel-server
 # DECIDED: a key pair held equal by a test, not one key in a shared vars file. A shared
 # key routes as a deploy-plane change only (docs/archive/host/h2-shrink-host-plane.md).
 # Each name below that has a twin in a k8s role is held equal to it by
-# hosts/lib/tests/test_claude_artifacts_node_timers.py, so a change edits both.
+# hosts/lib/tests/host_baselines/test_claude_artifacts_node_timers.py, so a change edits both.
 #
 # The node the artifacts pod pins, which holds the tree the sync fills and the loopback OTLP
 # door the heartbeat probes. Twin of artifacts_k8s_node. No other host's package ships either.
