@@ -1,0 +1,343 @@
+"""Reconcile's activation step: what runs when a packaged file's hash changes.
+
+Each test is one of H7's *Red proofs for the checks this slice adds*, activation entries. The
+fake host is `_reconcile_host.py`; `_reconcile_arms.py` ships files and builds the red fixtures.
+The clause "homelab-reboot then refuses" belongs to the reboot timer: the flag file
+this suite asserts is the interface the timer reads.
+
+Run: uv run pytest hosts/lib/tests/reconcile/test_reconcile_activation.py
+"""
+
+import os
+
+import pytest
+from _reconcile_arms import PROM, base, live_unit, metrics, red, ship, verbs
+from _reconcile_host import Node
+
+SYSCTL_FILE = "/etc/sysctl.d/50-homelab.conf"
+SSHD_FILE = "/etc/ssh/sshd_config.d/50-homelab.conf"
+TMPFILES_FILE = "/usr/lib/tmpfiles.d/homelab-media-volume.conf"
+PATHS = {
+    "sysctl": SYSCTL_FILE,
+    "tmpfiles": TMPFILES_FILE,
+    "locale-gen": "/etc/locale.gen",
+}
+FLAG = "run/homelab/validate-failed"
+
+
+@pytest.fixture
+def node(tmp_path) -> Node:
+    node = Node(tmp_path)
+    return base(node)
+
+
+def settled(node: Node) -> None:
+    result = node.run()
+    assert result.returncode == 0, result.stderr
+
+
+@pytest.mark.parametrize(
+    ("action", "calls"),
+    [
+        pytest.param("none", [], id="none"),
+        pytest.param("sysctl", [["sysctl", "--system"]], id="sysctl"),
+        pytest.param(
+            "tmpfiles",
+            [["systemd-tmpfiles", "--create", TMPFILES_FILE]],
+            id="tmpfiles",
+        ),
+        pytest.param("locale-gen", [["locale-gen"]], id="locale-gen"),
+        pytest.param(
+            "try-restart:fail2ban.service",
+            [
+                ["fail2ban-client", "-t"],
+                ["systemctl", "try-restart", "fail2ban.service"],
+            ],
+            id="try-restart",
+        ),
+        pytest.param(
+            "try-restart:rsyslog.service",
+            [
+                ["rsyslogd", "-N1"],
+                ["systemctl", "try-restart", "rsyslog.service"],
+            ],
+            id="try-restart-rsyslog",
+        ),
+        pytest.param(
+            "try-restart:squid.service",
+            [
+                [
+                    "squid",
+                    "-k",
+                    "parse",
+                    "-f",
+                    "/usr/lib/homelab/t2-egress/t2-squid.conf",
+                ],
+                ["systemctl", "try-restart", "squid.service"],
+            ],
+            id="try-restart-squid",
+        ),
+        pytest.param(
+            "reload:ssh.service",
+            [["sshd", "-t"], ["systemctl", "reload", "ssh.service"]],
+            id="reload",
+        ),
+        pytest.param(
+            "modules-load",
+            [["systemctl", "restart", "systemd-modules-load.service"]],
+            id="modules-load",
+        ),
+    ],
+)
+def test_a_changed_file_runs_its_action_and_an_unchanged_one_runs_nothing(
+    node, action, calls
+):
+    live_unit(node, "ssh.service")
+    live_unit(node, "fail2ban.service")
+    live_unit(node, "rsyslog.service")
+    live_unit(node, "squid.service")
+    live_unit(node, "systemd-modules-load.service")
+    path = PATHS.get(action, SSHD_FILE)
+    ship(node, path, "kernel.sysrq = 0\n", action)
+
+    settled(node)
+
+    assert verbs(node) == calls
+    assert set(node.applied()["files"]) == {path}
+
+    settled(node)
+    assert verbs(node) == [], "an unchanged file must run nothing"
+
+    ship(node, path, "kernel.sysrq = 1\n", action)
+    settled(node)
+    assert verbs(node) == calls, "a changed file runs its action again"
+
+
+def test_a_reboot_action_marks_the_host_reboot_pending_and_the_metric_says_so(node):
+    ship(node, "/etc/modprobe.d/50-homelab.conf", "options x y=1\n", "reboot")
+
+    settled(node)
+
+    assert (node.root / "run/homelab/reboot-pending").exists()
+    assert verbs(node) == [], "a reboot-class change changes nothing live"
+    assert 'homelab_host_reboot_pending{host="daniel-pi"} 1' in metrics(node)
+
+
+def test_a_later_reboot_class_change_keeps_the_time_the_reboot_was_first_owed(node):
+    """HostRebootOverdue ages the owed reboot from this series, so a second change must not
+    reset it."""
+    ship(node, "/etc/modprobe.d/50-homelab.conf", "options x y=1\n", "reboot")
+    settled(node)
+    flag = node.root / "run/homelab/reboot-pending"
+    os.utime(flag, (1_000_000, 1_000_000))
+
+    ship(node, "/etc/modprobe.d/50-homelab.conf", "options x y=2\n", "reboot")
+    settled(node)
+
+    assert (
+        'homelab_host_reboot_pending_since_seconds{host="daniel-pi"} 1000000'
+        in metrics(node)
+    )
+
+
+def test_the_boot_metrics_run_reads_zero_once_the_boot_cleared_the_flag_and_acts_on_nothing(
+    node,
+):
+    """`homelab-reconcile-metrics.service` runs `--metrics` at boot, so the 1 does not outlive
+    the reboot that applied it."""
+    ship(node, "/etc/modprobe.d/50-homelab.conf", "options x y=1\n", "reboot")
+    live_unit(node, "docker.service")
+    ship(node, "/etc/docker/daemon.json", "{}\n", "manual:docker.service")
+    settled(node)
+    record = node.applied_path.read_text()
+    (node.root / "run/homelab/reboot-pending").unlink()  # /run is a tmpfs
+    node.state["units"]["docker.service"]["invocation"] = (
+        "inv1"  # the boot started it anew
+    )
+
+    result = node.run("--metrics")
+
+    assert result.returncode == 0, result.stderr
+    assert metrics(node) == ('homelab_host_reboot_pending{host="daniel-pi"} 0\n')
+    assert node.applied_path.read_text() == record
+    assert verbs(node) == []
+
+
+def test_a_host_with_nothing_pending_reads_reboot_pending_zero_not_absent(node):
+    settled(node)
+
+    assert 'homelab_host_reboot_pending{host="daniel-pi"} 0' in metrics(node)
+    assert "activation_pending" not in metrics(node)
+
+
+def test_a_manual_action_marks_the_unit_pending_until_it_restarts(node):
+    live_unit(node, "docker.service")
+    ship(node, "/etc/docker/daemon.json", "{}\n", "manual:docker.service")
+
+    settled(node)
+
+    assert verbs(node) == []
+    assert node.applied()["pending"] == {"docker.service": "inv0"}
+    assert (
+        'homelab_host_activation_pending{host="daniel-pi",unit="docker.service"} 1'
+        in metrics(node)
+    )
+
+    node.state["units"]["docker.service"]["invocation"] = (
+        "inv1"  # the operator restarts it
+    )
+    settled(node)
+
+    assert node.applied()["pending"] == {}
+    assert "activation_pending" not in metrics(node)
+
+
+def test_an_action_on_a_unit_the_manifest_marks_manual_changes_nothing_live(node):
+    live_unit(node, "ssh.service")
+    node.manifest["units"]["ssh.service"] = {"policy": "manual"}
+    ship(node, SSHD_FILE, "MaxAuthTries 3\n", "reload:ssh.service")
+
+    settled(node)
+
+    assert [v for v in verbs(node) if v[0] == "systemctl"] == []
+    assert "ssh.service" in node.applied()["pending"]
+
+
+def test_a_unit_reconcile_restarted_this_run_gets_no_second_call(node):
+    live_unit(node, "fail2ban.service")
+    node.manifest["units"]["fail2ban.service"] = {}
+    node.write_unit("fail2ban.service", "[Service]\nExecStart=/bin/true\n")
+    settled(node)
+    node.write_unit("fail2ban.service", "[Service]\nExecStart=/bin/false\n")
+    ship(
+        node,
+        "/etc/fail2ban/jail.d/50-homelab.conf",
+        "[sshd]\n",
+        "try-restart:fail2ban.service",
+    )
+
+    settled(node)
+
+    restarts = [v for v in verbs(node) if v[:2] == ["systemctl", "restart"]]
+    assert restarts == [["systemctl", "restart", "fail2ban.service"]]
+    assert ["systemctl", "try-restart", "fail2ban.service"] not in verbs(node)
+
+
+def test_a_failed_tmpfiles_create_fails_the_run_and_the_next_run_retries_it(node):
+    node.state["commands"]["systemd-tmpfiles"] = "Failed to create directory"
+    ship(node, TMPFILES_FILE, "d /srv/media/media/music - 1000 1000 -\n", "tmpfiles")
+
+    assert node.run().returncode == 1
+    assert TMPFILES_FILE not in node.applied()["files"]
+
+    del node.state["commands"]["systemd-tmpfiles"]
+    settled(node)
+
+    assert verbs(node) == [["systemd-tmpfiles", "--create", TMPFILES_FILE]]
+    assert TMPFILES_FILE in node.applied()["files"]
+
+
+# Validation failures.
+
+
+def sshd_refuses(node: Node) -> None:
+    live_unit(node, "ssh.service")
+    node.state["commands"]["sshd"] = "line 3: Bad configuration option: MaxAuthTrys"
+    ship(node, SSHD_FILE, "MaxAuthTrys 3\n", "reload:ssh.service")
+
+    result = node.run()
+
+    assert result.returncode == 1, result.stderr
+    assert ["systemctl", "reload", "ssh.service"] not in verbs(node)
+    assert (node.root / FLAG).exists()
+    applied = node.applied()
+    assert applied["result"]["ok"] is False
+    assert SSHD_FILE not in applied["files"], "a failed entry must not advance"
+
+
+def test_a_failed_sshd_check_leaves_sshd_untouched_flags_the_host_and_fails_the_run(
+    node,
+):
+    sshd_refuses(node)
+
+
+def test_red_a_reconcile_that_skips_the_validation_is_caught(tmp_path):
+    red(
+        tmp_path,
+        sshd_refuses,
+        "reconcile_lib/activate.py",
+        "    command = COMMANDS.get(unit) if kind in",
+        "    command = None if kind in",
+    )
+
+
+def test_the_next_run_retries_a_failed_entry_and_clears_the_flag_once_it_passes(node):
+    sshd_refuses(node)
+    del node.state["commands"]["sshd"]
+
+    settled(node)
+
+    assert not (node.root / FLAG).exists()
+    assert ["systemctl", "reload", "ssh.service"] in verbs(node)
+    assert SSHD_FILE in node.applied()["files"]
+
+
+def test_a_revert_that_drops_the_failing_entry_clears_the_flag(node):
+    sshd_refuses(node)
+    node.manifest["activations"] = {}
+
+    settled(node)
+
+    assert not (node.root / FLAG).exists()
+
+
+@pytest.mark.parametrize(
+    ("action", "path", "text"),
+    [
+        pytest.param("sysctl", SYSCTL_FILE, "kernel.sysrq 0\n", id="sysctl"),
+        pytest.param(
+            "try-restart:systemd-journald.service",
+            "/etc/systemd/journald.conf.d/50-homelab.conf",
+            "SystemMaxUse 1G\n",
+            id="journald",
+        ),
+    ],
+)
+def test_a_file_reconcile_parses_itself_is_refused_when_a_line_does_not_parse(
+    node, action, path, text
+):
+    live_unit(node, "systemd-journald.service")
+    ship(node, path, text, action)
+
+    result = node.run()
+
+    assert result.returncode == 1
+    assert verbs(node) == []
+    assert (node.root / FLAG).exists()
+
+
+def test_a_shipped_file_that_is_missing_fails_the_run(node):
+    ship(node, SSHD_FILE, "x\n", "none")
+    (node.root / SSHD_FILE.lstrip("/")).unlink()
+
+    assert node.run().returncode == 1
+
+
+def test_a_manifest_with_an_action_reconcile_does_not_know_acts_on_nothing(node):
+    node.manifest["activations"] = {SSHD_FILE: "restart-everything"}
+
+    assert node.run().returncode == 1
+    assert node.calls("systemctl") == []
+
+
+def test_the_metrics_file_is_not_written_when_the_exporters_directory_is_missing(
+    tmp_path,
+):
+    node = Node(tmp_path)  # no textfile directory: the updater is what reports that
+    node.unit("homelab-updater.service", policy="manual")
+    node.unit("homelab-reconcile.service", policy="manual")
+
+    settled(node)
+
+    assert not (node.root / PROM).exists()
+    assert not (node.root / PROM).parent.exists()

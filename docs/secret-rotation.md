@@ -352,7 +352,7 @@ before deciding what is due. Examples:
 - `pi_peer_backup_ssh_key`: generate a new ed25519 keypair, store the private half with
   `sops set`, and commit the public half over
   `hosts/components/pi-peer-backup-target/pi-peer-backup.pub` and into the `line:` of that
-  component's `component.yml`, which `hosts/lib/tests/test_pi_tuning_component.py` and
+  component's `component.yml`, which `hosts/lib/tests/host_baselines/test_pi_tuning_component.py` and
   `tests/services/pi_peer_backup/test_pi_peer_backup_forced_command.py` hold equal. The private key is
   multi-line, so it has a Secret of its own, `pi-peer-backup-ssh-key`, rendered from
   `k8s/roles/pi-peer-backup/templates/ssh-key-secret.yaml.j2`. Flux owns pi-peer-backup,

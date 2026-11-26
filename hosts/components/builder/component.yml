@@ -5,7 +5,7 @@
 # dependency too, and has `server_ip`, `host_python_version`, `ci_required_contexts` and
 # `ci_ancestor_walk_max` in its inventory.
 #
-# ENFORCED: hosts/lib/tests/test_builder_component.py.
+# ENFORCED: hosts/lib/tests/package_builder/test_builder_component.py.
 users:
   # The ids sit in the homelab band 900-949, below the ones Ubuntu hands out from 999 down.
   - {name: homelab-builder, uid: 902, gid: 902, home: /var/lib/homelab-builder, shell: /usr/sbin/nologin, comment: Homelab package builder}

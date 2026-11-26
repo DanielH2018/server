@@ -77,5 +77,5 @@ what is specific to the host timers: the schedule, the lock, and the contract be
   the `-k8s` ingress name mis-resolves on this node. A package cannot read the cluster when it
   renders, so `sonarr_k8s_cluster_ip` in `k8s/roles/sonarr/defaults/main.yml` and
   `fake_remux_sonarr_cluster_ip` in `defaults/main.yml` hold the same address, and
-  `hosts/lib/tests/test_h737_box_components.py` holds the two equal.
+  `hosts/lib/tests/host_baselines/test_h737_box_components.py` holds the two equal.
 - Tests: `uv run pytest hosts/components/fake-remux/tests` runs the pure-logic suites.

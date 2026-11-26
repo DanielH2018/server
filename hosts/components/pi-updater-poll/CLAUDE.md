@@ -32,5 +32,5 @@
   `journalctl -u homelab-updater-poll.service` and /var/lib/homelab-updater-poll/triggered on
   the Pi before starting the updater by hand.
 
-ENFORCED: hosts/lib/tests/test_pi_updater_poll_component.py, which renders the package and holds
+ENFORCED: hosts/lib/tests/components/test_pi_updater_poll_component.py, which renders the package and holds
 the paths, the enable link and the schedule, and runs the script against stubs.

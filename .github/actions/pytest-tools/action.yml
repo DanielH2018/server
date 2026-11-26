@@ -18,7 +18,7 @@ runs:
     # sops_manifest_type_proof job does, so a sops bump has no CI copy to move. Renovate moves
     # the version and the digest together there. age comes from apt, as the hosts install it.
     # apt-utils is for the repository signer's tests, which drive apt-ftparchive as the
-    # signer does on daniel-box (hosts/lib/tests/test_repo_signer.py).
+    # signer does on daniel-box (hosts/lib/tests/package_builder/test_repo_signer.py).
     #
     # Nothing here needs root. pinned-tool puts sops in $RUNNER_TEMP/bin. The two packages'
     # /usr/bin binaries go to ~/.local/bin, which the runner image has on PATH and the step

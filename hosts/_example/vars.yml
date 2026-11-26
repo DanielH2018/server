@@ -34,6 +34,6 @@ has_repo_checkout: true
 
 # Disk-backed swap, for a host with too little RAM for a heavy apt run (the 512 MB Pi Zero 2 W).
 # bootstrap-host.sh step 4 creates it ahead of its apt steps, and its PI_SWAPFILE and
-# PI_SWAPFILE_SIZE pins equal these values (hosts/lib/tests/test_bootstrap_host_pins.py).
+# PI_SWAPFILE_SIZE pins equal these values (hosts/lib/tests/bootstrap/test_bootstrap_host_pins.py).
 # pi_swapfile_path: /swapfile
 # pi_swapfile_size: 1G

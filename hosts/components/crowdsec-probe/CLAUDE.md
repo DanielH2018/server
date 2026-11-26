@@ -21,5 +21,5 @@
   run or Alloy did not count it. Read the status file's tail and
   `systemctl status homelab-crowdsec-probe.timer` on the Pi before changing the Job.
 
-ENFORCED: hosts/lib/tests/test_crowdsec_probe_component.py, which renders the package and holds
+ENFORCED: hosts/lib/tests/components/test_crowdsec_probe_component.py, which renders the package and holds
 the units, the script path, the status path and the shared User=.

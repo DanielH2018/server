@@ -1,0 +1,198 @@
+"""The rendered `pi-heartbeats` component: the Pi's heartbeats as packaged timers.
+
+The scripts' own behaviour is run against stubs in `hosts/tests/test_pi_*.py`. These
+tests hold what the move added: the units that run the scripts, the absence of any credential
+or push in the two token heartbeats, the copied push helper the Pi's scans still source, and the
+Autonomous-role contract in the component's `CLAUDE.md`.
+
+Run: uv run pytest hosts/lib/tests/components/test_pi_heartbeats_component.py
+"""
+
+import fnmatch
+import re
+
+import pytest
+
+from _component_contract import component_contract
+from lib.estate import REPO_INVENTORY
+from lib.render_context import render_context
+from lib.repo_paths import REPO
+from renderer.renderer_lib import host as host_mode
+
+UNITS = "/usr/lib/systemd/system"
+LIB = "/usr/lib/homelab"
+# The parts of the contract a reader acts on.
+CONTRACT_PARTS = (
+    "Scope / exclusions:",
+    "Mode (explicit and reversible):",
+    "Required evidence, every cycle:",
+    "Next-run review:",
+)
+# The two units whose scripts pushed to Kuma until M6 batch B5's Cutover-2, and their scripts.
+TOKEN_SERVICES = {
+    "homelab-pi-sd-health.service": "pi-sd-health",
+    "homelab-pi-recovery.service": "pi-recovery-health",
+}
+
+
+@pytest.fixture(scope="module")
+def package() -> host_mode.Package:
+    return host_mode.render_host("daniel-pi")
+
+
+def _text(package: host_mode.Package, dst: str) -> str:
+    return package.files[dst][0].decode()
+
+
+def test_the_claude_md_carries_the_contract():
+    contract = component_contract("pi-heartbeats")
+    assert [part for part in CONTRACT_PARTS if part not in contract] == []
+
+
+def test_the_component_ships_its_units_and_links_its_timers(package):
+    names = ("sd-health", "gz-integrity", "recovery", "watchdog-health", "audit-health")
+    units = {
+        f"homelab-pi-{name}.{kind}" for name in names for kind in ("service", "timer")
+    }
+    assert units <= set(package.units())
+    assert set(package.enable_links()) >= {f"homelab-pi-{name}.timer" for name in names}
+
+
+def test_each_service_runs_its_script_as_sys_user(package):
+    user = render_context(None, "daniel-pi", inventory=REPO_INVENTORY)["sys_user"]
+    for service, script in (
+        ("homelab-pi-sd-health.service", "pi-sd-health"),
+        ("homelab-pi-gz-integrity.service", "pi-gz-integrity"),
+        ("homelab-pi-recovery.service", "pi-recovery-health"),
+        ("homelab-pi-watchdog-health.service", "pi-watchdog-health"),
+        ("homelab-pi-audit-health.service", "pi-audit-health"),
+    ):
+        unit = _text(package, f"{UNITS}/{service}")
+        assert f"User={user}\n" in unit, service
+        assert f"ExecStart={LIB}/{script}\n" in unit, service
+        assert "LogsDirectory=pi-health\n" in unit, service
+        assert package.files[f"{LIB}/{script}"][1] == 0o755
+
+
+def _runs_docker(script: str) -> bool:
+    """Whether a script invokes the docker CLI, ignoring comments."""
+    return any(
+        re.search(r"(^|[\s(\"`$])docker\s", line.split("#", 1)[0])
+        for line in script.splitlines()
+    )
+
+
+def test_each_service_that_runs_docker_grants_the_docker_group(package):
+    # No task adds sys_user to `docker`, so each unit that needs the group grants it.
+    runs_docker = []
+    for name in package.units():
+        if not name.startswith("homelab-pi-") or not name.endswith(".service"):
+            continue
+        unit = _text(package, f"{UNITS}/{name}")
+        program = unit.split("ExecStart=", 1)[1].split()[0]
+        if program not in package.files:
+            continue
+        if _runs_docker(_text(package, program)):
+            runs_docker.append(name)
+            assert "SupplementaryGroups=docker\n" in unit, name
+    assert "homelab-pi-recovery.service" in runs_docker
+
+
+def credential_problems(unit: str, script: str) -> list[str]:
+    """Why a heartbeat unit and its script still depend on a push credential, or nothing."""
+    problems = []
+    if "LoadCredential=" in unit:
+        problems.append("the unit loads a credential")
+    if "homelab-secrets.service" in unit:
+        problems.append("the unit waits for homelab-secrets.service")
+    if "CREDENTIALS_DIRECTORY" in script:
+        problems.append("the script reads $CREDENTIALS_DIRECTORY")
+    return problems
+
+
+@pytest.mark.parametrize("service", sorted(TOKEN_SERVICES))
+def test_a_heartbeat_unit_loads_no_credential_and_its_script_reads_none(
+    package, service
+):
+    unit = _text(package, f"{UNITS}/{service}")
+    script = _text(package, f"{LIB}/{TOKEN_SERVICES[service]}")
+    assert credential_problems(unit, script) == []
+    assert "/etc/homelab/interim" not in unit
+
+
+def test_credential_problems_is_flagged_on_a_unit_that_still_loads_one():
+    unit = (
+        "After=homelab-secrets.service\nLoadCredential=pi_sd_health_push_token:/run/x\n"
+    )
+    assert credential_problems(unit, '"${CREDENTIALS_DIRECTORY:-}/x"') == [
+        "the unit loads a credential",
+        "the unit waits for homelab-secrets.service",
+        "the script reads $CREDENTIALS_DIRECTORY",
+    ]
+
+
+def test_the_check_library_is_a_byte_copy_of_initial_setups(package):
+    # M6 B5: the two token scripts write their textfile verdict through it.
+    source = REPO / host_mode.SHARED_FILES["homelab-check-lib.sh"]
+    assert package.files[f"{LIB}/homelab-check-lib.sh"] == (source.read_bytes(), 0o644)
+    for script in ("pi-sd-health", "pi-recovery-health"):
+        assert f"source {LIB}/homelab-check-lib.sh" in _text(package, f"{LIB}/{script}")
+
+
+def test_the_integrity_timer_primes_its_verdict_on_start(package):
+    # The SD-health heartbeat reads a missing verdict as down, so the sweep runs a minute after its
+    # timer starts.
+    assert "OnActiveSec=1min\n" in _text(
+        package, f"{UNITS}/homelab-pi-gz-integrity.timer"
+    )
+
+
+def test_the_logrotate_file_ships_at_optimize_pis_path(package):
+    text, mode = package.files["/etc/logrotate.d/pi-health"]
+    assert mode == 0o644
+    assert b"/var/log/pi-health/*.log {" in text
+    assert b"create 0644" in text and b"copytruncate" not in text.split(b"{", 1)[1]
+
+
+def _directives(unit: str) -> dict[str, str]:
+    return dict(
+        line.split("=", 1)
+        for line in unit.splitlines()
+        if "=" in line and not line.startswith("#")
+    )
+
+
+def test_the_journal_warnings_land_in_a_file_alloy_ships(package):
+    unit = _directives(_text(package, f"{UNITS}/homelab-pi-journal-warnings.service"))
+    argv = unit["ExecStart"].split()
+    assert argv[0] == "/usr/bin/journalctl"
+    assert {"-b", "-o", "short-iso"} <= set(argv)
+    assert argv[argv.index("-p") + 1] == "warning"
+    runtime = unit["RuntimeDirectory"]
+    assert f"--cursor-file=/run/{runtime}/cursor" in argv
+    assert unit["RuntimeDirectoryPreserve"] == "yes"
+
+    target = unit["StandardOutput"].removeprefix("append:")
+    alloy = _text(package, "/usr/lib/homelab/compose/alloy/config.alloy")
+    glob = re.search(
+        r'local\.file_match "pi_health".*?"__path__" = "([^"]+)"', alloy, re.S
+    )
+    assert glob and fnmatch.fnmatch(target, glob[1]), target
+
+
+def test_the_journal_warnings_unit_fails_when_the_system_journal_is_unreadable(package):
+    # journalctl -q falls back to the user's own journal and exits 0, so only a pre-check opening
+    # the system journal fails the unit.
+    unit = _directives(_text(package, f"{UNITS}/homelab-pi-journal-warnings.service"))
+    assert unit["ExecStartPre"].split() == [
+        "/usr/bin/head",
+        "-c0",
+        "/var/log/journal/%m/system.journal",
+    ]
+
+
+def test_the_journal_warnings_timer_runs_every_minute(package):
+    timer = _directives(_text(package, f"{UNITS}/homelab-pi-journal-warnings.timer"))
+    assert timer["OnCalendar"] == "*:*:00"
+    assert timer["AccuracySec"] == "10s"
+    assert "homelab-pi-journal-warnings.timer" in package.enable_links()

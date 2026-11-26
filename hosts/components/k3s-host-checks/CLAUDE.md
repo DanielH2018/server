@@ -25,4 +25,4 @@
   docs/k3s-node-plane-crons-and-incidents.md names the regex and the file to edit together.
 - **Next-run review:** read the B2 ledger before widening scope.
 
-ENFORCED: hosts/lib/tests/test_box_k3s_host_half.py, and the tests in this component's `tests/`.
+ENFORCED: hosts/lib/tests/host_baselines/test_box_k3s_host_half.py, and the tests in this component's `tests/`.

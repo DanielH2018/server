@@ -51,7 +51,7 @@ generated_sha: f2e8e29f8
 | [adr/0031-each-kind-of-fact-has-one-stateless-detector.md](../adr/0031-each-kind-of-fact-has-one-stateless-detector.md) | 2026-11-14 | 4 | 3 | `CLAUDE.md` (2026-11-26) |
 | [email-to-rss.md](../email-to-rss.md) | 2026-11-14 | 3 | 3 | `.github/workflows/ci.yml` (2026-11-26) |
 | [pihole-dns-continuity-record.md](../pihole-dns-continuity-record.md) | 2026-11-14 | 3 | 3 | `k8s/roles/pihole/CLAUDE.md` (2026-11-26) |
-| [adr/0021-the-host-package-builder-trusts-master-plus-green-ci.md](../adr/0021-the-host-package-builder-trusts-master-plus-green-ci.md) | 2026-11-19 | 5 | 3 | `hosts/lib/tests/test_host_package_builder_refusals.py` (2026-11-26) |
+| [adr/0021-the-host-package-builder-trusts-master-plus-green-ci.md](../adr/0021-the-host-package-builder-trusts-master-plus-green-ci.md) | 2026-11-19 | 5 | 3 | `hosts/lib/tests/package_builder/test_host_package_builder_refusals.py` (2026-11-26) |
 | [adr/0037-the-renderer-keeps-jinja-after-ansible.md](../adr/0037-the-renderer-keeps-jinja-after-ansible.md) | 2026-11-19 | 3 | 3 | `docs/homelab-render.md` (2026-11-26) |
 | [adr/0007-backup-tiering-r2-daily-b2-weekly.md](../adr/0007-backup-tiering-r2-daily-b2-weekly.md) | 2026-11-21 | 3 | 3 | `docs/break-glass.md` (2026-11-26) |
 | [jellyfin-plugins.md](../jellyfin-plugins.md) | 2026-11-23 | 4 | 3 | `k8s/roles/jellyfin/CLAUDE.md` (2026-11-26) |

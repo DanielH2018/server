@@ -45,7 +45,7 @@
       (`wg show | grep -q interface`), which verifies the WireGuard interface and not only the
       UI. autoheal relies on that status. The block below carries `interval`,
       `timeout` and `retries` from the Pi's `container_healthcheck_*` variables, and dockerd
-      fills `Test` from the image. ENFORCED by hosts/lib/tests/test_pi_compose_wg_easy.py.
+      fills `Test` from the image. ENFORCED by hosts/lib/tests/pi_compose/test_pi_compose_wg_easy.py.
       `docs/wireguard-private-homelab-access.md` has the derivation and the runc-exec
       timing measurement behind the 60s timeout.
     - **Reads no SOPS key.** The only value it takes from inventory is the plain variable

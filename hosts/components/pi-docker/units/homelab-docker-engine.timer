@@ -23,7 +23,7 @@
 # drift the start toward the 01:00 man-db run.
 #
 # To pause it: `sudo systemctl mask --now homelab-docker-engine.timer`. To resume it: `unmask`,
-# then `start`. hosts/lib/tests/test_pi_docker_component.py holds the slot and the no-op.
+# then `start`. hosts/lib/tests/host_lib/test_pi_docker_component.py holds the slot and the no-op.
 [Unit]
 Description=Apply the Pi's pinned Docker engine in the quiet window
 
