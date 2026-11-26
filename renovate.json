@@ -149,7 +149,7 @@
     },
     {
       "customType": "regex",
-      "description": "The nfpm binary CI's `host_packages` job builds with (H3.3a), pinned by version and sha256 in ONE matchString. The builder on daniel-box uses the nfpm in `hosts/packages/homelab-tools/package.yml`, and `hosts/lib/tests/test_builder_component.py` holds the two equal.",
+      "description": "The nfpm binary CI's `host_packages` job builds with (H3.3a), pinned by version and sha256 in ONE matchString. The builder on daniel-box uses the nfpm in `hosts/packages/homelab-tools/package.yml`, and `hosts/lib/tests/package_builder/test_builder_component.py` holds the two equal.",
       "managerFilePatterns": [
         "/(^|/)\\.github/workflows/ci\\.yml$/"
       ],
@@ -173,7 +173,7 @@
     },
     {
       "customType": "regex",
-      "description": "The k3s version `hosts/bootstrap-host.sh` embeds (H7.42), the second copy of `k3s_version`. hosts/lib/tests/test_bootstrap_host_pins.py holds all three k3s values equal, and the `k3s-io/k3s` packageRule groups this bump with the defaults file's.",
+      "description": "The k3s version `hosts/bootstrap-host.sh` embeds (H7.42), the second copy of `k3s_version`. hosts/lib/tests/bootstrap/test_bootstrap_host_pins.py holds all three k3s values equal, and the `k3s-io/k3s` packageRule groups this bump with the defaults file's.",
       "managerFilePatterns": [
         "/(^|/)hosts/bootstrap-host\\.sh$/"
       ],

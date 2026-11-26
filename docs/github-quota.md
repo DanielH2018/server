@@ -328,7 +328,7 @@ because a component's copy sits beside its own script, where a bare import canno
 module. A host without the gh-quota component therefore records nothing.
 `homelab-builder.service` and `homelab-renovate-notify.service` list `/var/lib/gh-quota` in
 their `ReadWritePaths=`, because their sandboxes would otherwise refuse the write
-(`hosts/lib/tests/test_github_rest.py::test_every_sandboxed_unit_that_reads_through_github_rest_can_write_the_ledger`).
+(`hosts/lib/tests/host_lib/test_github_rest.py::test_every_sandboxed_unit_that_reads_through_github_rest_can_write_the_ledger`).
 
 **The mode** is `off` or `record`, and slice 2 adds `enforce`. The component's
 `gh_quota_mode` default renders it into `/etc/gh-quota.conf`, and a host's host_vars can

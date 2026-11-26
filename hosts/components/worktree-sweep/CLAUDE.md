@@ -34,5 +34,5 @@
 - **Next-run review:** a non-zero exit pages through Healthchecks.io. Read
   `journalctl -t worktree-sweep` for the removal or branch deletion that failed.
 
-ENFORCED: hosts/lib/tests/test_worktree_sweep_component.py, and
+ENFORCED: hosts/lib/tests/components/test_worktree_sweep_component.py, and
 hosts/tests/repo_crons/test_worktree_sweep_cron_reports_its_exit.py, which runs the rendered script.

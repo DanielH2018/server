@@ -79,5 +79,5 @@ t2_egress_enabled: true
 t2_egress_proxy: "127.0.0.2:3128"
 
 # Avoids the 11:30-11:45 cron fires, the hourly :23 timer and the 1st of the month (drill at 11:20).
-# hosts/lib/tests/test_k3s_restart_window.py derives and re-checks it.
+# hosts/lib/tests/k3s/test_k3s_restart_window.py derives and re-checks it.
 k3s_restart_window: "Mon..Fri *-*-02..31 11:32:00"

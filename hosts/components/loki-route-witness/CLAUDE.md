@@ -27,5 +27,5 @@ It changes no cluster state: it reads the route and reports. Its only host state
   runs.
 
 ENFORCED: hosts/tests/repo_crons/test_loki_route_witness.py (the script's behaviour against
-stubs), hosts/lib/tests/test_loki_route_witness_component.py (the units and legacy entries)
+stubs), hosts/lib/tests/components/test_loki_route_witness_component.py (the units and legacy entries)
 and hosts/lib/tests/test_component_retired_stamp_fragments.py (the manifest fragment names).

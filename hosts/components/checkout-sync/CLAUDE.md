@@ -25,8 +25,8 @@
 - **Next-run review:** before widening scope, read `journalctl -t homelab-checkout-sync` for the
   last week's refusals. A `dirty` refusal parks the checkout until the stray file moves.
 
-ENFORCED: hosts/lib/tests/test_checkout_sync.py (the sync over a fixture repository) and
-hosts/lib/tests/test_checkout_sync_component.py (the units), and
+ENFORCED: hosts/lib/tests/host_lib/test_checkout_sync.py (the sync over a fixture repository) and
+hosts/lib/tests/components/test_checkout_sync_component.py (the units), and
 tests/services/alert_rules/test_b6a_rule_literals.py (the rules' deadline on every host).
 
 The contract is per host. daniel-box and daniel-server list the component, and each host's

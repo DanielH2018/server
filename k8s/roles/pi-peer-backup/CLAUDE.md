@@ -29,7 +29,7 @@ weekly shard (weekly-backup-d6) carries it to B2; the pi-peer-backup entry's
   public key are installed on daniel-pi by the `pi-peer-backup-target` component of
   `homelab-daniel-pi` (`hosts/components/pi-peer-backup-target/`). The component's
   authorized-key line holds a copy of `pi_peer_backup_src_dir`, which
-  `hosts/lib/tests/test_pi_tuning_component.py` holds equal to this role's default.
+  `hosts/lib/tests/host_baselines/test_pi_tuning_component.py` holds equal to this role's default.
 - **Auth:** dedicated ed25519 key (`pi_peer_backup_ssh_key` in SOPS; public half
   authorized on the Pi by the `pi-peer-backup-target` component). The private key has a Secret of its own,
   `pi-peer-backup-ssh-key`, rendered from `templates/ssh-key-secret.yaml.j2`, because Flux

@@ -16,5 +16,5 @@
   not run or the run failed. Read `journalctl -u homelab-infra-map.service` before changing
   the generator.
 
-ENFORCED: hosts/lib/tests/test_infra_map_component.py, which renders the package and holds the
+ENFORCED: hosts/lib/tests/components/test_infra_map_component.py, which renders the package and holds the
 unit, the timer, the PATH and KUBECONFIG environment and the discarded stdout.

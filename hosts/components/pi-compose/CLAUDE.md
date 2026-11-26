@@ -19,5 +19,5 @@
 - **Next-run review:** a removal line after the first run that moved a service means a container
   keeps returning under another project. Find the starter before widening anything here.
 
-ENFORCED: hosts/lib/tests/test_pi_compose_scripts.py (the stub-docker cases for compose-run and
-compose-adopt), hosts/lib/tests/test_pi_compose_unit.py (the unit's timeout and restart contract).
+ENFORCED: hosts/lib/tests/pi_compose/test_pi_compose_scripts.py (the stub-docker cases for compose-run and
+compose-adopt), hosts/lib/tests/pi_compose/test_pi_compose_unit.py (the unit's timeout and restart contract).

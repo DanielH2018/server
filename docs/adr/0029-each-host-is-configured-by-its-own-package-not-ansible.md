@@ -4,7 +4,7 @@ title: Each host is configured by its own package, and Ansible is gone
 status: Accepted
 date: 2026-11-12
 governs:
-  - "hosts/lib/tests/test_reconcile_size_census.py#raising CEILING is an operator ruling"
+  - "hosts/lib/tests/reconcile/test_reconcile_size_census.py#raising CEILING is an operator ruling"
 ---
 
 # ADR-0029: Each host is configured by its own package, and Ansible is gone
@@ -96,7 +96,7 @@ trigger. The ceiling is (B + 720) × 1.3, rounded up to the next 50:
   H7.2d in H7;
 - the 30% is headroom for fixes inside that stated scope, not room for another arm.
 
-`hosts/lib/tests/test_reconcile_size_census.py` holds B, the stated growth and the
+`hosts/lib/tests/reconcile/test_reconcile_size_census.py` holds B, the stated growth and the
 constant, and checks that the constant equals the formula. A PR that crosses the ceiling
 fails the census. Raising the constant is an operator ruling. In the crossing PR, the
 operator rules whether to cut reconcile, to raise the ceiling here with a reason, or to
@@ -242,6 +242,6 @@ No ADR uses a "Retired" status, so this record supersedes it.
 
 ## Governs
 
-The census marker in `hosts/lib/tests/test_reconcile_size_census.py` opens "raising CEILING
+The census marker in `hosts/lib/tests/reconcile/test_reconcile_size_census.py` opens "raising CEILING
 is an operator ruling" and cites this record. `governs:` names it by that text, so an edit
 above it moves nothing.

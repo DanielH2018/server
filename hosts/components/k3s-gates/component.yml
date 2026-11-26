@@ -18,7 +18,7 @@
 # imports the script from its own directory. The renderer refuses a package in which two
 # components install the same path, so no other component ships it.
 #
-# ENFORCED: hosts/lib/tests/test_k3s_gates_component.py.
+# ENFORCED: hosts/lib/tests/k3s/test_k3s_gates_component.py.
 files:
   - {lib: k3s_gates.py, dst: /usr/lib/homelab/k3s_gates.py, mode: "0755"}
   - {shared: k8s_conditions.py, dst: /usr/lib/homelab/lib/k8s_conditions.py, mode: "0755"}
