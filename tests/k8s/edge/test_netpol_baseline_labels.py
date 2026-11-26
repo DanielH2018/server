@@ -56,6 +56,8 @@ BORN_FENCED_ROLES = {
     "lidarr",
     "slskd",
     "vaultwarden",
+    # Mirrors the vault from livesync's CouchDB, which is egress; nothing calls it yet.
+    "vault-mcp",
 }
 
 LABEL = ("netpol-baseline", "enforced")

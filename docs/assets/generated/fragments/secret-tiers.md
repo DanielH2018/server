@@ -4,7 +4,7 @@
 | `assisted` | 365 d | 95 |
 | `external` | 365 d | 15 |
 | `external-90d` | 90 d | 1 |
-| `pinned` | 730 d | 2 |
+| `pinned` | 730 d | 3 |
 | `ignore` | — | 11 |
 
 124 secrets are registered.

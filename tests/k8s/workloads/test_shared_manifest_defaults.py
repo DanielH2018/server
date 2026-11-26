@@ -65,6 +65,7 @@ ROLES_WITH_A_DEFAULT_SERVICE = frozenset(
         "slskd",
         "speedtest",
         "texbrain",
+        "vault-mcp",
         "vaultwarden",
         "zigbee2mqtt",
     }

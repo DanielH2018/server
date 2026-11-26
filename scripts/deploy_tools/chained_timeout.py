@@ -33,7 +33,7 @@ CONCURRENT = 5
 # (the `promote-verify-timeout-holds-the-capped-derived-timeout` row of
 # tests/repo/census_rows/test_census_rows_workflows.py).
 # DECIDED: the clamp stands although the published bundle's all-changed chain is past it
-# (#5868: 38412s with 130 Kustomizations, soak included, against 19800s). `verify`'s own wait is the same
+# (#5868: 38532s with 130 Kustomizations, soak included, against 19800s). `verify`'s own wait is the same
 # `promote_timeout`, so it stops at this cap too. Lifting only the soak's rendered wait would
 # let the soak outlast a `verify` that has already written `failed=<names>`, and would pass no
 # promotion. The soak's wait cannot shrink to the chain of what changed either: the render
