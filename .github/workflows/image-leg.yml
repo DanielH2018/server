@@ -74,6 +74,7 @@ on:
       - "scripts/lib/plain_scalar.py"
       - "scripts/lib/proc_testing.py"
       - "scripts/lib/progress.py"
+      - "scripts/lib/prom_duration.py"
       - "scripts/lib/render_context.py"
       - "scripts/lib/render_guard.py"
       - "scripts/lib/repo_paths.py"

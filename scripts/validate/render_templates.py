@@ -67,7 +67,7 @@ _SHARED = (
     r"|(hosts/[^/]+/vars|hosts/vars|estate/vars|k8s/vars)\.yml"
     r"|scripts/lib/(container_entry|inventory_lists|guard_jinja_env|cli_help|exit_codes|estate"
     r"|git|jinja_comments|k8s_conditions|k8s_context|k8s_lookups|k8s_objects|k8s_role_callers|k8s_roles|k8s_yaml"
-    r"|host_modules|render_context|render_guard|repo_paths|role_files|yaml_fast)\.py"
+    r"|host_modules|prom_duration|render_context|render_guard|repo_paths|role_files|yaml_fast)\.py"
 )
 
 # A k8s role's defaults, which a render of any of the role's templates layers in.
