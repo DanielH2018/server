@@ -4,7 +4,7 @@
 ``role_dirs`` is the one census of a role tree for code under ``scripts/``: every reader
 that lists the roles calls it and passes the names it skips as ``exclude``. The two
 exemption sets and ``is_manifest_template`` are the half other guards ask about
-(``scripts/validate/tests/test_skip_roles_classes_hold.py``,
+(``scripts/validate/tests/renders/test_skip_roles_classes_hold.py``,
 ``scripts/diagnostics/probe_lib/health.py``), which is why they are their own module rather
 than private to the validator.
 

@@ -256,7 +256,6 @@ UNGROUPED_SUITES = dict.fromkeys(
         "hosts/lib/tests",
         "hosts/tests",
         "k8s/roles/monitor-bridge/tests",
-        "scripts/validate/tests",
         "tests/services",
     ),
     _TO_GROUP,

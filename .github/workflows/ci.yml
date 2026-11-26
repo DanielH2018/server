@@ -440,7 +440,7 @@ jobs:
         # test_static_ratchet_hook.py holds this list equal to prek.toml's ratchet hook ids.
         # RENDER_TEMPLATES_SKIP=k8s: the `pytest` job runs the k8s family of
         # validate-render-templates over the real tree and asserts it reports no failure
-        # (scripts/validate/tests/test_render_k8s.py, `real_tree`), so the family here would be
+        # (scripts/validate/tests/renders/test_render_k8s.py, `real_tree`), so the family here would be
         # a second render of every k8s role. The hook's other families run.
         # --log-file: prek's trace log holds each hook's duration, which the next step tabulates.
         # Without --verbose the job log holds only a failing hook's output.

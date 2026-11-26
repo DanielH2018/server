@@ -51,8 +51,8 @@ scripts/infra_map/tests/test_gen_infra_map.py 1
 scripts/infra_map/tests/test_infra_map_live.py 1
 scripts/lib/tests/git_and_gh/test_gh.py 4
 scripts/lib/tests/git_and_gh/test_worktrees.py 4
-scripts/validate/tests/test_bootstrap_case_concurrent.py 6
-scripts/validate/tests/test_host_package_cases_concurrent.py 3
-scripts/validate/tests/test_render_k8s.py 1
-scripts/validate/tests/test_render_shell.py 2
-scripts/validate/tests/test_render_units.py 5
+scripts/validate/tests/host_cases/test_bootstrap_case_concurrent.py 6
+scripts/validate/tests/host_cases/test_host_package_cases_concurrent.py 3
+scripts/validate/tests/renders/test_render_k8s.py 1
+scripts/validate/tests/renders/test_render_shell.py 2
+scripts/validate/tests/renders/test_render_units.py 5

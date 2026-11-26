@@ -11,7 +11,7 @@ A malformed sum is refused too: it must be 64 lowercase hex digits.
 Exit codes: 0 clean; 1 refused; 2 a key could not be read, so the check could not judge.
 
 Run: uv run python scripts/validate/k3s_binary_sum.py --base origin/master
-     uv run pytest scripts/validate/tests/test_validate_k3s_binary_sum.py
+     uv run pytest scripts/validate/tests/pins/test_validate_k3s_binary_sum.py
 """
 
 import re

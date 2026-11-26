@@ -215,10 +215,10 @@ pass_filenames = false
 [[repos.hooks]]
 id = "actionlint-red-proof"
 name = "The actionlint wrapper still flags an undefined input on a $/ caller"
-entry = "uv run --frozen pytest -q -n0 -p no:cacheprovider scripts/validate/tests/test_validate_actionlint_dollar_refs.py"
+entry = "uv run --frozen pytest -q -n0 -p no:cacheprovider scripts/validate/tests/repo_checks/test_validate_actionlint_dollar_refs.py"
 language = "system"
 pass_filenames = false
-files = "^(\\.github/actions/.*|scripts/validate/(tests/test_validate_)?actionlint_dollar_refs\\.py|scripts/lib/(cli_help|exit_codes|git|repo_paths)\\.py|uv\\.lock)$"
+files = "^(\\.github/actions/.*|scripts/validate/(tests/repo_checks/test_validate_)?actionlint_dollar_refs\\.py|scripts/lib/(cli_help|exit_codes|git|repo_paths)\\.py|uv\\.lock)$"
 
 # The security half of workflow linting, which actionlint does not do: a checkout that leaves
 # the token on disk, a `${{ }}` expression injected into a `run:` shell, an unpinned action, a
@@ -583,19 +583,19 @@ files = "^(k8s/roles/observability/files/dashboards/Infrastructure/landings\\.js
 [[repos.hooks]]
 id = "static-ratchet-tests-alerts"
 name = "Alert rules meet the alert conventions"
-entry = "uv run --frozen pytest -q -n0 -p no:cacheprovider scripts/validate/tests/test_validate_alert_rules.py::test_the_tree_rules_meet_every_convention_is_clean"
+entry = "uv run --frozen pytest -q -n0 -p no:cacheprovider scripts/validate/tests/alerts/test_validate_alert_rules.py::test_the_tree_rules_meet_every_convention_is_clean"
 language = "system"
 pass_filenames = false
-files = "^(hosts/lib/host_lib\\.py|scripts/lib/longhorn_lib/longhorn_backups\\.py|k8s/services\\.yml|scripts/renderer/(renderer_lib/[^/]+|shadow_diff)\\.py|scripts/deploy_tools/(chained_timeout|changed_set|kustomizations)\\.py|scripts/lib/plain_scalar\\.py|k8s/roles/observability/(files/rules|tests/rules|files/alertmanager|tests/alertmanager)/.*|k8s/roles/loki-homelab/(files/rules/.*|templates/(rules-)?configmap\\.yaml\\.j2|templates/config/config\\.alloy\\.j2|defaults/main\\.yml)|k8s/roles/observability/templates/(prometheus|prometheus-rules|alertmanager|alertmanager-secret)\\.yaml\\.j2|k8s/roles/observability/defaults/main\\.yml|(hosts/([^/]+/)?vars|estate/vars|k8s/vars)\\.yml|scripts/renderer/template_filters/[^/]+\\.py|scripts/validate/alert_.*|scripts/validate/notification_renders\\.py|scripts/validate/render_lib/k8s\\.py|scripts/validate/validate_lib/[^/]+\\.py|scripts/validate/tests/test_validate_alert_rules\\.py|scripts/lib/[^/]+\\.py|pyproject\\.toml|uv\\.lock)$"
+files = "^(hosts/lib/host_lib\\.py|scripts/lib/longhorn_lib/longhorn_backups\\.py|k8s/services\\.yml|scripts/renderer/(renderer_lib/[^/]+|shadow_diff)\\.py|scripts/deploy_tools/(chained_timeout|changed_set|kustomizations)\\.py|scripts/lib/plain_scalar\\.py|k8s/roles/observability/(files/rules|tests/rules|files/alertmanager|tests/alertmanager)/.*|k8s/roles/loki-homelab/(files/rules/.*|templates/(rules-)?configmap\\.yaml\\.j2|templates/config/config\\.alloy\\.j2|defaults/main\\.yml)|k8s/roles/observability/templates/(prometheus|prometheus-rules|alertmanager|alertmanager-secret)\\.yaml\\.j2|k8s/roles/observability/defaults/main\\.yml|(hosts/([^/]+/)?vars|estate/vars|k8s/vars)\\.yml|scripts/renderer/template_filters/[^/]+\\.py|scripts/validate/alert_.*|scripts/validate/notification_renders\\.py|scripts/validate/render_lib/k8s\\.py|scripts/validate/validate_lib/[^/]+\\.py|scripts/validate/tests/alerts/test_validate_alert_rules\\.py|scripts/lib/[^/]+\\.py|pyproject\\.toml|uv\\.lock)$"
 
 # The unit-template census: every unit template the validator must find still exists.
 [[repos.hooks]]
 id = "static-ratchet-tests-units"
 name = "Every known unit template is still discovered"
-entry = "uv run --frozen pytest -q -n0 -p no:cacheprovider scripts/validate/tests/test_render_units.py::test_discover_templates_finds_the_known_set"
+entry = "uv run --frozen pytest -q -n0 -p no:cacheprovider scripts/validate/tests/renders/test_render_units.py::test_discover_templates_finds_the_known_set"
 language = "system"
 pass_filenames = false
-files = "^(hosts/lib/host_lib\\.py|scripts/lib/longhorn_lib/longhorn_backups\\.py|(k8s/roles|hosts/components)/.*\\.(service|timer|socket|rules)\\.j2|scripts/validate/(render_lib/units|tests/test_render_units)\\.py|scripts/validate/validate_lib/[^/]+\\.py|scripts/renderer/renderer_lib/[^/]+\\.py|scripts/deploy_tools/(chained_timeout|changed_set|kustomizations)\\.py|scripts/lib/[^/]+\\.py|scripts/renderer/template_filters/[^/]+\\.py|pyproject\\.toml|uv\\.lock)$"
+files = "^(hosts/lib/host_lib\\.py|scripts/lib/longhorn_lib/longhorn_backups\\.py|(k8s/roles|hosts/components)/.*\\.(service|timer|socket|rules)\\.j2|scripts/validate/(render_lib/units|tests/renders/test_render_units)\\.py|scripts/validate/validate_lib/[^/]+\\.py|scripts/renderer/renderer_lib/[^/]+\\.py|scripts/deploy_tools/(chained_timeout|changed_set|kustomizations)\\.py|scripts/lib/[^/]+\\.py|scripts/renderer/template_filters/[^/]+\\.py|pyproject\\.toml|uv\\.lock)$"
 
 
 # The `hooks` key of .claude/settings.json is rendered from the `# gen-hooks:` block each file
@@ -706,7 +706,7 @@ types = ["shell"]
 # Vale. It is a script rather than a `bash -c` entry because prek splits the file list across
 # several CONCURRENT invocations, and an inline guard on the directory raced itself in a fresh
 # worktree — read that script's header for the failure and the lock that fixes it.
-# ENFORCED by scripts/validate/tests/test_vale_sync_guard.py.
+# ENFORCED by scripts/validate/tests/repo_checks/test_vale_sync_guard.py.
 [[repos.hooks]]
 id = "vale"
 name = "Prose style (Vale, scoped to ADRs, top-level docs pages and generated fragments)"

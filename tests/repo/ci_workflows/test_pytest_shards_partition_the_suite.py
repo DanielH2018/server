@@ -34,7 +34,7 @@ KNOWN_TEST_FILES = frozenset(
     {
         "tests/repo/ci_workflows/test_pytest_shards_partition_the_suite.py",
         "tests/repo/ci_workflows/test_every_ci_job_is_gated.py",
-        "scripts/validate/tests/test_render_k8s.py",
+        "scripts/validate/tests/renders/test_render_k8s.py",
         "scripts/dev/tests/fanout/test_held_branches.py",
         ".claude/hooks/tests/bash_guards/test_block_protected_bash.py",
     }
