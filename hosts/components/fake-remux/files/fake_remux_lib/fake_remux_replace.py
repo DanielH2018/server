@@ -35,9 +35,11 @@ import urllib.error
 
 # files/ (the install dir on the host): fake_remux_lib's parent, and where host_lib.py sits.
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from fake_remux_lib import fake_remux_ledger as frl_ledger
 from fake_remux_lib import fake_remux_logic as frl
 from fake_remux_lib import fake_remux_replace_logic as frl_replace
 from fake_remux_lib import fake_remux_scan as scan
+from fake_remux_lib.fake_remux_ledger import IN_FLIGHT, State
 from host_lib import atomic_write, discord_post, log
 
 CONFIG_PATH = os.environ.get(
@@ -230,7 +232,7 @@ def _probe_completed(cfg, ledger, q_by_episode, policy):
     timeout = int(cfg.get("PROBE_TIMEOUT_S", "60"))
     probes = {}
     for rec in ledger.values():
-        if rec["state"] not in ("grabbed", "verifying"):
+        if rec["state"] not in (State.GRABBED, State.VERIFYING):
             continue
         epk = str(rec["episodeId"])
         chosen = rec.get("chosen") or {}
@@ -298,9 +300,7 @@ def _files_for_ledger(sonarr, ledger):
     importing at the same tick.
     """
     series_ids = {
-        rec["seriesId"]
-        for rec in ledger.values()
-        if rec["state"] in ("grabbed", "verifying", "importing")
+        rec["seriesId"] for rec in ledger.values() if rec["state"] in IN_FLIGHT
     }
     files = {}
     for series_id in series_ids:
@@ -382,13 +382,13 @@ def _alert_transitions(cfg, before_states, ledger):
     """
     webhook = cfg.get("ARR_DISCORD_WEBHOOK_URL", "")
     for ep, rec in ledger.items():
-        state = rec.get("state")
-        if state not in ("held", "replaced"):
+        state = rec["state"]
+        if state not in (State.HELD, State.REPLACED):
             continue
         if before_states.get(ep) == state:
             continue  # already alerted on a prior tick
         line = "%s [Sonarr] %s %s -> %s (%s)" % (
-            "HELD" if state == "held" else "Replaced",
+            "HELD" if state == State.HELD else "Replaced",
             frl.sanitize(rec.get("series")),
             frl.sanitize(rec.get("epLabel")),
             state,
@@ -406,8 +406,8 @@ def _alert_transitions(cfg, before_states, ledger):
 
 
 def _summarize(ledger):
-    replaced = sum(1 for r in ledger.values() if r["state"] == "replaced")
-    held = sum(1 for r in ledger.values() if r["state"] == "held")
+    replaced = sum(1 for r in ledger.values() if r["state"] == State.REPLACED)
+    held = sum(1 for r in ledger.values() if r["state"] == State.HELD)
     in_flight = len(ledger) - replaced - held
     msg = "%d replaced / %d in-flight / %d held" % (replaced, in_flight, held)
     return held == 0, msg
@@ -427,8 +427,8 @@ def reconcile_once(cfg, sonarr=None):
         return True, "disabled (no SONARR_URL)"
 
     policy = _load_policy(cfg)
-    ledger = _load_json(cfg["LEDGER_FILE"], default={})
-    before_states = {ep: rec.get("state") for ep, rec in ledger.items()}
+    ledger = frl_ledger.parse(_load_json(cfg["LEDGER_FILE"], default={}))
+    before_states = {ep: rec["state"] for ep, rec in ledger.items()}
     sonarr = sonarr or _make_sonarr(cfg)
 
     # Adopt a 'detected' entry already downloading in Sonarr, so a lost ledger write never re-grabs.
@@ -447,7 +447,9 @@ def reconcile_once(cfg, sonarr=None):
         rec = ledger[str(act["episodeId"])]
         time.sleep(int(policy.get("search_spacing_s", 20)))
         if rel is None:
-            ledger[str(act["episodeId"])] = {**rec, "state": "held", "reason": reason}
+            ledger = frl_ledger.move(
+                ledger, act["episodeId"], State.HELD, reason=reason
+            )
             _outcome(cfg, "no-candidate", rec, reason)
             _save_json(
                 cfg["LEDGER_FILE"], ledger
@@ -458,17 +460,18 @@ def reconcile_once(cfg, sonarr=None):
             for cand in _mirrors(cands, rel):  # retry the same release across indexers
                 resp = _try_grab(sonarr, cand)
                 if resp is not None:
-                    ledger[str(act["episodeId"])] = {
-                        **rec,
-                        "state": "grabbed",
-                        "chosen": {
+                    ledger = frl_ledger.move(
+                        ledger,
+                        act["episodeId"],
+                        State.GRABBED,
+                        chosen={
                             "guid": cand["guid"],
                             "indexerId": cand["indexerId"],
                             "title": cand["title"],
                             "quality": frl.Quality.of(cand).name,
                         },
-                        "lastAction": int(time.time()),
-                    }
+                        lastAction=int(time.time()),
+                    )
                     # Persist the grab now: if a later search in this tick raises, the next tick
                     # must not re-grab.
                     _save_json(cfg["LEDGER_FILE"], ledger)
