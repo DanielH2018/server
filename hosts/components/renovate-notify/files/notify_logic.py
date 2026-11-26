@@ -176,9 +176,7 @@ def dashboard_stale(
     if not updated_at:
         return True
     now = now or datetime.now(timezone.utc)
-    age_days = (
-        now - datetime.fromisoformat(updated_at.replace("Z", "+00:00"))
-    ).total_seconds() / 86400
+    age_days = (now - datetime.fromisoformat(updated_at)).total_seconds() / 86400
     return age_days > max_age_days
 
 
@@ -254,7 +252,7 @@ def _stuck_age_bucket(pr: PR, now: datetime) -> int:
     if not pr.created_at:
         return 0
     try:
-        created = datetime.fromisoformat(pr.created_at.replace("Z", "+00:00"))
+        created = datetime.fromisoformat(pr.created_at)
     except ValueError:
         return 0
     age_days = (now - created).total_seconds() / 86400
@@ -461,7 +459,7 @@ def find_autoclosed(
             or head.head_ref in open_branches
         ):
             continue
-        closed = datetime.fromisoformat(closed_at.replace("Z", "+00:00"))
+        closed = datetime.fromisoformat(closed_at)
         if (now - closed).total_seconds() > lookback_days * 86400:
             continue
         out.append(
