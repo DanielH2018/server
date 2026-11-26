@@ -30,7 +30,7 @@ THE BACKSTOP. (`prod`, T] holds no more than one change to each pin, and
 merge that bypassed `land.sh`'s land rule.
 
 Every read is a `promote.Reads` field, so this module reaches GitHub only through `forge.py`
-(scripts/deploy_tools/tests/test_promote_forge_boundary.py).
+(scripts/deploy_tools/tests/promote/test_promote_forge_boundary.py).
 """
 
 from collections.abc import Callable, Mapping

@@ -331,7 +331,7 @@ context with the map as an override, the precedence `set_fact` has over every fi
 
 Tests hold each content tag equal to image-builder's expression evaluated with the same
 variables, which `tests/_image_builder_tag.py` holds as a literal.
-`scripts/deploy_tools/tests/test_ci_images.py` also holds one tag as the literal ansible-core
+`scripts/deploy_tools/tests/release/test_ci_images.py` also holds one tag as the literal ansible-core
 2.22 computed.
 
 `lookup('template')` keeps the render's trailing newlines. The content tag hashes those bytes,

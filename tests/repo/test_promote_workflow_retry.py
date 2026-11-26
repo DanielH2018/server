@@ -1,7 +1,7 @@
 """Every `gh` call and GHCR login in the `promote` workflow runs inside its `retry` helper.
 
 One transient 502, 503 or EOF on such a call failed three promote runs between 2026-10-30 and
-2026-11-06. `scripts/deploy_tools/tests/test_promote_settle_retry.py` runs the helper itself.
+2026-11-06. `scripts/deploy_tools/tests/promote/test_promote_settle_retry.py` runs the helper itself.
 
 Run: uv run pytest tests/repo/test_promote_workflow_retry.py
 """

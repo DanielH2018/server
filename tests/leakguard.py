@@ -160,7 +160,7 @@ SHIMMED_BINARIES = (
 # Run with the real PATH: a stub would leave them green while checking nothing.
 _LIVE_API_TESTS = frozenset(
     {
-        "scripts/deploy_tools/tests/test_land_detach.py::test_stopping_the_callers_unit_leaves_the_landing_running_to_its_verdict",
+        "scripts/deploy_tools/tests/land_merge/test_land_detach.py::test_stopping_the_callers_unit_leaves_the_landing_running_to_its_verdict",
         # Restarts, stops and kills stand-in systemd user units.
         "hosts/lib/tests/test_pi_watchdog_dropin.py::test_a_restart_leaves_the_watchdog_daemon_running_and_a_stop_or_a_crash_starts_the_keepalive",
     }

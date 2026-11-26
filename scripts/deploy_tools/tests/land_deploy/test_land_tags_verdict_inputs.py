@@ -1,0 +1,163 @@
+#!/usr/bin/env python3
+"""What `land.sh` asks `land_tags` BEYOND the tag list, to reach a verdict.
+
+Two questions:
+
+* `service_tags_at` -- which tags exist AT A REF. Asked of a checkout, a role the
+  PR itself registers reads as UNREGISTERED, which is what a role nobody registered reads as
+  too, so the landing prints the expensive remedy for work one `--tags` run does.
+* `plane_note` on a rotation -- where every k8s reader of a changed key gets the new value.
+
+Its own module rather than test_land_tags.py: that file pins the DERIVATION against a fixture
+and patches `declared_tags` away, while these read real git and the real remediation text.
+
+Run: uv run pytest scripts/deploy_tools/tests/land_deploy/test_land_tags_verdict_inputs.py
+"""
+
+import subprocess
+
+import pytest
+
+
+from deploy_tools.land_lib import land_tags
+from lib.git_testing import git_out, init_repo
+from lib.repo_paths import REPO
+from deploy_tools.land_lib import tools
+
+# A retired role is DELETED and the same PR names its tag here, as a RENAME does for its old tag; an
+# entry lasts one PR.
+# Keep it hand-written: deriving it as `at_head - in_tree` would make the census assert `lost <=
+# lost`.
+RETIRED_TAGS: frozenset[str] = frozenset()
+
+
+# ── service_tags_at: which tags exist AT A REF, not in the working tree ──
+
+
+@pytest.fixture
+def two_commit_repo(tmp_path):
+    """A repo whose SECOND commit registers `pihole-exporter`; yields (repo, first, second).
+
+    The role and its inventory entry arrive together, so the entry exists at the merge
+    commit and in no checkout until checkout-sync fast-forwards.
+    """
+    repo = tmp_path / "repo"
+    inventory = repo / "inventory" / "host_vars"
+    inventory.mkdir(parents=True)
+    (repo / "k8s").mkdir()
+    box = repo / "k8s" / "services.yml"
+    (inventory / "daniel-pi.yml").write_text("containers_list:\n  - name: not-a-host\n")
+    init_repo(repo)
+    box.write_text("containers_list:\n  - name: sonarr\n")
+    git_out(repo, "add", "-A")
+    git_out(repo, "commit", "-q", "-m", "before", "--no-gpg-sign")
+    first = git_out(repo, "rev-parse", "HEAD")
+    box.write_text("containers_list:\n  - name: sonarr\n  - name: pihole-exporter\n")
+    git_out(repo, "add", "-A")
+    git_out(repo, "commit", "-q", "-m", "register it", "--no-gpg-sign")
+    return repo, first, git_out(repo, "rev-parse", "HEAD")
+
+
+def test_a_tag_registered_at_the_ref_is_declared_there(two_commit_repo):
+    repo, _first, second = two_commit_repo
+    assert land_tags.service_tags_at(second, repo) == {"sonarr", "pihole-exporter"}
+
+
+def test_the_same_tag_is_not_declared_at_the_earlier_ref(two_commit_repo):
+    """The must-not-fire half: read a commit before the entry and it is genuinely absent."""
+    repo, first, _second = two_commit_repo
+    assert land_tags.service_tags_at(first, repo) == {"sonarr"}
+
+
+def test_a_host_vars_file_is_not_a_source_of_tags_at_a_ref(two_commit_repo):
+    """Only `k8s/services.yml` declares tags; a service list in a host file declares none."""
+    repo, _first, second = two_commit_repo
+    assert "not-a-host" not in land_tags.service_tags_at(second, repo)
+
+
+def test_an_unreadable_ref_raises_rather_than_reading_as_no_services(two_commit_repo):
+    """An empty answer here would make every changed role read as unregistered fleet-wide.
+
+    `declared_tags_at` turns this into None, and pins the same thing at its own seam."""
+    repo, _first, _second = two_commit_repo
+    with pytest.raises(subprocess.CalledProcessError):
+        land_tags.service_tags_at("deadbeefdeadbeef", repo)
+
+
+def test_an_empty_read_reaches_the_landing_as_none_not_as_an_empty_set(tmp_path):
+    """The seam `land_lib` actually reads. `set()` says no service exists anywhere."""
+    empty = tmp_path / "empty"
+    empty.mkdir()
+    init_repo(empty)
+    git_out(empty, "commit", "-q", "--allow-empty", "-m", "nothing", "--no-gpg-sign")
+    assert tools.declared_tags_at("HEAD", empty) is None
+
+
+def test_this_repo_at_head_agrees_with_its_own_working_tree():
+    """Non-vacuity. A reader that found no inventory file at all returns an empty set, which
+    satisfies every assertion above about a tag being absent.
+
+    SUBSET, NOT EQUALITY, and the difference is what makes a new service committable. The suite
+    often runs before the commit exists (docs-refresh runs it between `git add` and `git commit`,
+    and an author runs `uv run pytest` on uncommitted work), so `HEAD` is the commit BEFORE the
+    one being made: a commit that adds a role has that role in the working tree and never at
+    HEAD. Equality would therefore fail every new-service commit.
+
+    The direction still catches what the assertion is for: a working tree that has LOST a tag
+    HEAD declares means the reader is dropping entries, and `traefik` plus the floor below
+    keep an empty or near-empty read from passing.
+
+    A RETIREMENT is the one honest way to lose a tag, and it too is committed against a HEAD
+    that still declares it. It is told apart by `RETIRED_TAGS` above: a lost tag named there
+    is a retirement, and any other lost tag is still the reader dropping an entry.
+    """
+    at_head = land_tags.service_tags_at("HEAD", REPO)
+    in_tree = land_tags.declared_tags()
+    assert "traefik" in at_head
+    assert len(at_head) >= 50, sorted(at_head)
+    lost = at_head - in_tree
+    assert lost <= RETIRED_TAGS, sorted(lost - RETIRED_TAGS)
+
+
+@pytest.mark.parametrize(
+    "files",
+    [
+        ["secrets/secrets.yml"],
+        [
+            "secrets/secrets.yml",
+            "k8s/roles/authelia/templates/config-secret.yaml.j2",
+        ],
+        ["secrets/secrets.yml", "hosts/components/checkout-sync/component.yml"],
+    ],
+    ids=["secrets-only", "beside-a-k8s-role", "beside-a-host-package"],
+)
+def test_a_secrets_rotation_sends_every_k8s_reader_through_cluster_vars(files):
+    """Whatever else the range carries, every k8s reader gets the value through cluster-vars."""
+    note = land_tags.plane_note(files)
+    assert "cluster_vars.py write" in note
+    assert "secret-readers:" not in note
+    assert "this landing waits on that apply" not in note
+
+
+# ── plane_note with the PR's range: only the keys the landing leaves stale ──
+
+
+def test_a_rotation_that_refreshed_every_copy_owes_no_hand():
+    note = land_tags.plane_note(
+        ["secrets/secrets.yml"], "a1..b2", read_stale=lambda old, new, deployed: {}
+    )
+    assert note == ""
+
+
+def test_a_rotation_names_only_the_keys_left_stale():
+    stale = {"sonarr_api_key": "Bazarr's config holds a copy no deploy reaches"}
+    note = land_tags.plane_note(
+        ["secrets/secrets.yml"], "a1..b2", read_stale=lambda old, new, deployed: stale
+    )
+    assert "`sonarr_api_key`: Bazarr's config holds a copy" in note
+    assert "regenerate it with `cluster_vars.py write`" not in note
+
+
+def test_a_range_git_cannot_read_keeps_the_blanket_note():
+    note = land_tags.plane_note(["secrets/secrets.yml"], "0000000..1111111")
+    assert note == land_tags.plane_note(["secrets/secrets.yml"])

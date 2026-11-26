@@ -75,14 +75,14 @@ blocks.
 
 - Master CI is red. Pending is not a reason to stop, because `land.sh` waits on it.
 - The change is docs- or tests-only: `land.sh` ends `nothing-to-deploy`
-  (`scripts/deploy_tools/tests/test_land_pipeline.py::test_the_real_classifier_derives_nothing_from_a_docs_only_path`).
+  (`scripts/deploy_tools/tests/land/test_land_pipeline.py::test_the_real_classifier_derives_nothing_from_a_docs_only_path`).
 - The `DEPLOY_HOLD` repository variable reads anything but `none`. Clearing the hold is the
   operator's decision.
 - A classifier denial. Report the denied command; do not reach for a bypass flag.
 
 A live serial landing is not a reason to stop. The probe names it but does not count it.
 `land.sh` waits in line for it while the landing's merge budgets last
-(`scripts/deploy_tools/tests/test_land_slots.py::test_a_landing_waits_for_the_serial_landing_past_drain_s_while_its_budgets_last`),
+(`scripts/deploy_tools/tests/land_merge/test_land_slots.py::test_a_landing_waits_for_the_serial_landing_past_drain_s_while_its_budgets_last`),
 so run `land.sh` and let it wait. A `refused` verdict that names a live serial landing means
 the budgets ran out: re-run `land.sh`, which waits in line again. Inside the weekly reboot's
 no-promotion window a k8s PR is refused at once instead

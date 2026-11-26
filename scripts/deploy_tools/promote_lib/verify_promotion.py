@@ -64,7 +64,7 @@ THE OTHER TWO HALVES `decide` calls:
   - `revertible` and `footprints_match`, the revert rule, which `promote.REVERT_RULE` keeps off.
 
 Like `promote.py`, this module reaches GitHub only through `forge.py`
-(scripts/deploy_tools/tests/test_promote_forge_boundary.py).
+(scripts/deploy_tools/tests/promote/test_promote_forge_boundary.py).
 
 Run: uv run python scripts/deploy_tools/promote.py verify <sha> --bundle-dir <dir> --prior <sha>
 """

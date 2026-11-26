@@ -338,7 +338,7 @@ prompt says, because its own token cannot merge
 (`hosts/tests/test_renovate_agent_identity.py::test_the_runner_lands_through_the_lander_the_polkit_rule_admits`).
 
 **Serialize.** One landing at a time holds the landing turn, and the others wait for it
-(`scripts/deploy_tools/tests/test_land_turn.py::test_a_landing_waits_while_another_holds_the_turn`);
+(`scripts/deploy_tools/tests/land_merge/test_land_turn.py::test_a_landing_waits_while_another_holds_the_turn`);
 the skill's verdict table says what to do with the line each prints.
 
 ## 7. Verify the bump, not the rollout

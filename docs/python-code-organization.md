@@ -374,7 +374,7 @@ behind them.
 
 - `scripts/deploy_tools/land_lib/tools.py`: one dataclass holding every process
   boundary with real implementations as defaults.
-- `scripts/deploy_tools/tests/test_land_imports.py`: an explicit `ALLOWED`
+- `scripts/deploy_tools/tests/land/test_land_imports.py`: an explicit `ALLOWED`
   dependency map plus a reject-half test proving the parser sees both import forms.
 - `scripts/deploy_tools/tests/conftest.py`: an autouse fixture that turns a
   `sys.path` leak into a test failure.

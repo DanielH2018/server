@@ -132,7 +132,7 @@ Kustomization's status, but it builds nothing and applies nothing. The deepest c
 requeue most, and a Kustomization with no `dependsOn` never requeues. The requeues are
 accepted too. A longer `--requeue-dependency` would cut them, but each `dependsOn` hop of
 every rollout could then wait up to that longer interval. `chained_timeout.py` also sizes `verify`'s wait from
-the default, and `scripts/deploy_tools/tests/test_chained_timeout.py` fails a vendored install
+the default, and `scripts/deploy_tools/tests/promote/test_chained_timeout.py` fails a vendored install
 or role default that sets the flag.
 
 The rate follows the merge rate on master, so it has no fixed value. One hour of
@@ -1099,7 +1099,7 @@ read: `none`, or the `failed=` hold the revert rule passed. A superseding `tag` 
 nothing once `last-good` has moved since `decide` read it (D7.7). A run is superseded only
 while `SUPERSEDE` is on (`docs/archive/deploy/d7-superseding-promotions.md`),
 and otherwise both reads are inert
-until then. `scripts/deploy_tools/tests/test_promote_settle_owner.py` runs both steps against fake
+until then. `scripts/deploy_tools/tests/promote/test_promote_settle_owner.py` runs both steps against fake
 binaries.
 
 `verify` and `settle` join no concurrency group: GitHub keeps one pending job per group and a
@@ -1308,7 +1308,7 @@ promotion verifying across the reboot would therefore hold.
 - **The scheduled run.** `promote.yml`'s `schedule:` cron fires at the window's end and
   promotes master's tip. It skips render, images and publish, because every commit merged
   in the window was published by its own run. GitHub reads the cron as a literal, so
-  `scripts/deploy_tools/tests/test_promote_reboot_window.py` derives it from the same
+  `scripts/deploy_tools/tests/promote/test_promote_reboot_window.py` derives it from the same
   variables and fails when the two differ. GitHub can start a scheduled run late or skip it.
   A skipped run leaves the window's commits for the run the next merge starts.
 - **`land-wait`.** Each poll inside the window moves the give-up deadline to the window's end
@@ -1349,7 +1349,7 @@ only after its dependencies finish, so the wait sums four terms, with the soak b
 
 The root `homelab`'s 5-minute `timeout` is the floor of the first two terms. The flux role
 leaves `--requeue-dependency` at its default, and
-`scripts/deploy_tools/tests/test_chained_timeout.py` fails a vendored install or role default
+`scripts/deploy_tools/tests/promote/test_chained_timeout.py` fails a vendored install or role default
 that sets it. `tests/k8s/test_flux_role.py` holds `chained_timeout.CONCURRENT` equal to
 the `--concurrent` the role renders, less the soak's worker.
 A `dependsOn` naming a Kustomization the bundle does not hold, or a cycle, fails `verify`
