@@ -110,11 +110,12 @@ journald could see the real size of its archives and vacuumed them to `SystemMax
 
 The journal cap had assumed the other half of `SIZE` held everything else. On 2026-11-14 the
 SD copy was 99 MB: 45 MB of journal and 37 MB of pacct, mostly the uncompressed 22 MB
-`pacct.0`. With 2 MiB archives the worst case was about 154 MB. 1 MiB archives bring it to
-about 120 MB, which leaves about 8 MB of headroom, most of it set by the 28 MB/day pacct
-estimate. `test_the_whole_sd_copy_fits_under_the_log2ram_boot_guard` in
-`hosts/lib/tests/host_baselines/test_pi_log_tmpfs.py` sums the journal, pacct, auditd and sysstat caps
-and the measured rest of the tree against `SIZE`.
+`pacct.0`. With 2 MiB archives the worst case was about 154 MB, and 1 MiB archives brought
+it to about 120 MB. Rotating pacct at `size 10M` (below) brings it to about 80 MB, which
+leaves about 48 MB of headroom.
+`test_the_whole_sd_copy_fits_under_the_log2ram_boot_guard` in
+`hosts/lib/tests/host_baselines/test_pi_log_tmpfs.py` sums the journal, pacct, auditd and
+sysstat caps and the measured rest of the tree against `SIZE`.
 
 **A smaller archive size needs a one-time vacuum by hand.** journald never resizes an archive
 it has written. It deletes the oldest only once `SystemMaxFiles` newer ones exist, so the
