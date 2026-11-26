@@ -126,7 +126,7 @@ def corefile_written_at(cm):
     touch only `NodeHosts` (k3s's node controller) are ignored: they change no Corefile.
     """
     stamps = [
-        datetime.fromisoformat(m["time"].replace("Z", "+00:00")).timestamp()
+        datetime.fromisoformat(m["time"]).timestamp()
         for m in ((cm or {}).get("metadata") or {}).get("managedFields") or []
         if isinstance(m, dict)
         and m.get("time")

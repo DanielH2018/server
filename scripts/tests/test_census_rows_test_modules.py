@@ -47,6 +47,7 @@ PLAN_CITATION = re.compile(
     r"target-architecture"
     r"|(?<![\w-])(?:[dhmrg]\d-[a-z0-9-]+|contracts|design|alertmanager-ui-and-readers)\.md\b"
 )
+DERANDOMIZE = re.compile(r"\bderandomize\s*=")
 
 ROWS = (
     Census(
@@ -368,6 +369,30 @@ ROWS = (
                 "it reads the file's text or asserts which file declares a key, which "
                 "ADR-0042 step 6 decides per key",
             ),
+        },
+    ),
+    Census(
+        name="property-tests-take-their-settings-from-the-profile",
+        reason=(
+            "`tests/hypothesis_profiles.py` owns the seed policy: `ci` replays fixed inputs "
+            "and the nightly sweep's `sweep` profile draws fresh ones. A test module that "
+            "sets `derandomize=` itself pins its inputs under the sweep too, so the one run "
+            "meant to explore never explores it. Drop the argument and let the profile decide."
+        ),
+        files=pytest_only_modules,
+        offence=lines_matching(DERANDOMIZE),
+        red=(
+            Subject("a.py", "FIXED = settings(derandomize=True, database=None)\n"),
+            Subject("b.py", "@settings(max_examples=50, derandomize = True)\n"),
+        ),
+        green=(
+            Subject("a.py", "@settings(max_examples=50)\n"),
+            Subject("b.py", '"""The ci profile derandomizes every property test."""\n'),
+        ),
+        min_matches=MODULE_FLOOR,
+        allow={
+            SELF: "the red fixtures above hold the offending spelling as text",
+            "tests/hypothesis_profiles.py": "the module that owns the profiles",
         },
     ),
 )

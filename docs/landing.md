@@ -243,7 +243,12 @@ is waited out first, as the bullets below say. A refused landing exits 75 with
   the serial landing. Inside the no-promotion window the serial landing cannot reach its
   verdict, so a k8s PR there is still refused at once. On 2026-11-20, 20 of the day's 28
   `refused` verdicts came from landing under a live serial landing
-  ([#10010](https://github.com/DanielH2018/server/issues/10010)).
+  ([#10010](https://github.com/DanielH2018/server/issues/10010)). No holder of the turn reads
+  the head of a landing that waits for the serial landing, so the wait reads its own PR's
+  `mergeable` every `slots.CONFLICT_READ_S`, and two CONFLICTING reads in a row end it
+  `merge-conflict` (`slots._conflict_reads`). On 2026-11-26, 6 of the 15 landings that waited
+  behind a serial landing ended `merge-conflict`, each only once it took the turn again
+  ([#10281](https://github.com/DanielH2018/server/issues/10281)).
 - A PR that changes a k8s role is refused inside the no-promotion window around the weekly
   reboot while another landing holds a slot, so one landing at a time waits out the window.
 
@@ -876,11 +881,10 @@ YAML file holds the key at the base and at the merge commit, and refuses five sh
 - **A pin set outside the role file that holds it.** Inventory, play vars, `include_role`
   vars and `set_fact` override a role default, so a pin there would move the deployed version
   while the role file stays put. The check matches the key at any indent, as YAML `key:` or
-  INI `key=`, in every YAML file under `k8s/` and `estate/`, in `hosts/vars.yml` and in each
-  `hosts/<host>/vars.yml`. It skips a comment, which starts at a `#` that opens the line
-  or follows whitespace outside a quoted value, or at a `;` that opens the line. A quoted
-  `#`, as in `note="a #b"`, is part of the value. A `-e` passed at run time is outside
-  its reach.
+  flow `{key: v}`, in every YAML file under `k8s/` and `estate/`, in `hosts/vars.yml` and in
+  each `hosts/<host>/vars.yml`. It skips a comment, which starts at a `#` that opens the line
+  or follows whitespace outside a quoted value. A quoted `#`, as in `{note: "a #b"}`, is part
+  of the value. A `-e` passed at run time is outside its reach.
 
 A PR that moves a key into another role at the same version is no bump, so none of the first
 four applies to it. A key set in two role files at one commit, or a value that is not `vX.Y.Z`,

@@ -2,7 +2,7 @@
 # Renovate's k8s-defaults manager tracks this pin. The tag stays beside the digest
 # (`repo:tag@sha256:...`): a bare `repo@sha256:...` freezes the image with no update signal.
 # The image's repository publishes a version tag per release, not per merge.
-tft_assistant_k8s_image: ghcr.io/danielh2018/tft-assistant:0.2.1@sha256:48e230700dd2eb95bc933fef2fabc3ee4f44be9a1445bb461af48861504e3374
+tft_assistant_k8s_image: ghcr.io/danielh2018/tft-assistant:0.2.2@sha256:6b645c7bec115af21e903e620315a87ed4fb204a1ef9c5abfb024b71b3f9c581
 
 # Renovate stance: whether an image bump here may automerge. `promote` deploys what merges.
 k8s_autodeploy: true

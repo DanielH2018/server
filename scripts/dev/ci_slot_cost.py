@@ -67,9 +67,7 @@ _ACTION_SHA = re.compile(r"@[0-9a-f]{40}\b")
 
 
 def _epoch(iso: str | None) -> float | None:
-    return (
-        datetime.fromisoformat(iso.replace("Z", "+00:00")).timestamp() if iso else None
-    )
+    return datetime.fromisoformat(iso).timestamp() if iso else None
 
 
 def job_spans(jobs: list[dict]) -> list[dict]:
