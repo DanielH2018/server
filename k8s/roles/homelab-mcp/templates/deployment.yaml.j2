@@ -20,18 +20,16 @@ spec:
         app: homelab-mcp
         netpol-baseline: enforced
     spec:
-      # uid 1000, read-only root, all caps dropped, /tmp the only writable path.
-      # The pod's own read-only cluster identity (rbac.yaml) — get/list on workload
-      # shapes + pods/log, the exact surface of the cluster-API tools.
+      # The pod's read-only cluster identity (rbac.yaml) is the exact surface of the cluster-API
+      # tools.
 {{ pod_shell('homelab-best-effort', service_account='homelab-mcp', run_as_user=1000, run_as_group=1000, non_root=true) }}
-      # Pinned, not preferred: the source mounts below read the node's checkout, and only the
-      # primary node's checkout has a timer (checkout-sync) keeping it at origin/master.
+      # Pinned: the source mounts read the node's checkout, and only the primary node's has the
+      # checkout-sync timer.
 {{ node_affinity_required(k8s_primary_node) }}
       containers:
         - name: homelab-mcp
           image: {{ homelab_mcp_k8s_image }}
-          # Rolling tier: the registry tag is rebuilt in place by image-builder, so pod
-          # creation must re-pull (see n8n's defaults for the full note).
+          # Rolling tier: image-builder rebuilds the tag in place, so pod creation must re-pull.
           imagePullPolicy: Always
           ports:
             - containerPort: {{ container_item.port }}
@@ -55,9 +53,8 @@ spec:
               value: http://prometheus.observability.svc.cluster.local:9090
             - name: LOKI_URL
               value: http://loki-homelab.{{ k8s_namespace }}.svc.cluster.local:3100
-            # The observability Loki — verbatim prompt/response content. Only
-            # claude_code_events reads it, and only through the metadata whitelist
-            # (k8s_reads.claude_event_rows); the raw store stays without a LAN route.
+            # Only claude_code_events reads it, through the metadata whitelist; the raw store has no
+            # LAN route.
             - name: CLAUDE_LOKI_URL
               value: http://loki.{{ k8s_observability_namespace }}.svc.cluster.local:3100
             - name: SCRUTINY_URL
@@ -69,8 +66,8 @@ spec:
             # Trusted host for the MCP transport's DNS-rebinding guard (else 421).
             - name: MCP_PUBLIC_HOST
               value: mcp.local.{{ domain }}
-            # The only destinations cert_expiry may dial: hostnames under the routed zone, on
-            # Traefik's HTTPS port. Unset, the tool refuses every target.
+            # Only hostnames under the routed zone on Traefik's HTTPS port; unset, the tool refuses
+            # every target.
             - name: CERT_EXPIRY_DOMAINS
               value: "{{ domain }}"
             - name: CERT_EXPIRY_PORTS
@@ -82,10 +79,9 @@ spec:
             - name: TZ
               value: "{{ tz }}"
           volumeMounts:
-            # The checkout's k8s/, inventory/ and tests/, READ-ONLY, under the read_file/list_files
-            # jail root. secrets/ is not mounted, secret names are denied in-app
-            # (safe_reads.path_is_denied), and the age key isn't under here. hostPath rather than
-            # a git-clone sidecar: the pinned node already holds a synced checkout.
+            # secrets/ is not mounted and secret names are denied in-app
+            # (safe_reads.path_is_denied).
+            # hostPath because the pinned node already holds a synced checkout.
 {% for dir in homelab_mcp_source_dirs %}
             - name: homelab-mcp-src-{{ dir }}
               mountPath: /srv/homelab-src/{{ dir }}
