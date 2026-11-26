@@ -452,11 +452,9 @@ ROWS = (
         must_find=frozenset({"k8s/roles/autofix-bridge/files/autofix.py"}),
         allow={
             "hosts/lib/bootstrap_anchor.py": "tracked in #10240",
-            "scripts/backup/longhorn_reap_lib/snapshots.py": "tracked in #10240",
             "scripts/dev/fanout_lib/review/batch_run.py": "tracked in #10240",
             "scripts/dev/fanout_lib/review/held_hooks.py": "tracked in #10240",
             "scripts/dev/k8s_autodeploy_counts.py": "tracked in #10240",
-            "scripts/dev/renovate_rebase.py": "tracked in #10240",
             "scripts/diagnostics/probe.py": "tracked in #10240",
             "scripts/lib/cli_help.py": "tracked in #10240",
         },
