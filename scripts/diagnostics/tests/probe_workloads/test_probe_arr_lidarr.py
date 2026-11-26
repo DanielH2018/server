@@ -3,10 +3,13 @@
 Lidarr listens on 8686 and speaks /api/v1; its key is SOPS `lidarr_api_key`. The run_arr
 tests put fake `kubectl`, `sops` and `curl` executables first on PATH and patch no module.
 The fake curl answers like Lidarr only at Lidarr's URL with Lidarr's key, so what reaches
-stdout depends on the probe routing the request correctly.
+stdout depends on the probe routing the request correctly. It also refuses to connect unless it
+runs on the node holding Lidarr's pod, as the NetworkPolicy refuses a host process on the other
+node. The fake ssh runs its command as if on the named host.
 """
 
 import json
+import socket
 import sys
 
 import pytest
@@ -18,6 +21,7 @@ from lib.proc_testing import fake_bin, path_with
 LIDARR_IP = "10.43.0.86"
 LIDARR_KEY = "lidarr-key-sentinel"
 WEBHOOK_SECRET = "LIDARR-WEBHOOK-TOKEN"
+HERE = socket.gethostname().split(".")[0]
 
 QUALITY_PROFILES = [
     {
@@ -66,6 +70,10 @@ FAKE_KUBECTL = """
 args = sys.argv[1:]
 if "nodes" in args:
     print(json.dumps({"items": [{"metadata": {"name": "daniel-box"}}]}))
+elif "endpointslices" in args and "kubernetes.io/service-name=lidarr" in args:
+    endpoint = {"nodeName": os.environ["LIDARR_NODE"], "conditions": {"ready": True}}
+    labels = {"kubernetes.io/service-name": "lidarr"}
+    print(json.dumps({"items": [{"metadata": {"labels": labels}, "endpoints": [endpoint]}]}))
 elif "service" in args and "lidarr" in args:
     print(LIDARR_IP, end="")
 else:
@@ -80,6 +88,8 @@ print(LIDARR_KEY)
 
 FAKE_CURL = """
 url, config = sys.argv[-1], sys.stdin.read()
+if os.environ.get("FAKE_RUNS_ON", HERE) != os.environ["LIDARR_NODE"]:
+    sys.exit("curl: (7) Failed to connect")
 prefix = f"http://{LIDARR_IP}:8686/api/v1/"
 if not url.startswith(prefix) or LIDARR_KEY not in config:
     print("<html>401 Unauthorized</html>")
@@ -90,23 +100,40 @@ else:
 """
 
 
+FAKE_SSH = """
+args = sys.argv[1:]
+while args[0] == "-o":
+    args = args[2:]
+host, remote = args
+env = {**os.environ, "FAKE_RUNS_ON": host}
+sys.exit(subprocess.run(shlex.split(remote), env=env).returncode)
+"""
+
+
 @pytest.fixture
 def fake_lidarr(tmp_path, monkeypatch):
-    """Fake kubectl, sops and curl that together answer like the cluster's Lidarr."""
+    """Fake kubectl, sops, curl and ssh that together answer like the cluster's Lidarr.
+
+    Lidarr's pod sits on this host (`HERE`) until a test sets `LIDARR_NODE`.
+    """
     prelude = (
-        f"#!{sys.executable}\nimport json, sys\n"
+        f"#!{sys.executable}\nimport json, os, shlex, subprocess, sys\n"
         f"LIDARR_IP = {LIDARR_IP!r}\nLIDARR_KEY = {LIDARR_KEY!r}\nROUTES = {ROUTES!r}\n"
+        f"HERE = {HERE!r}\n"
     )
     bin_dir = fake_bin(
         tmp_path / "bin",
         kubectl=prelude + FAKE_KUBECTL,
         sops=prelude + FAKE_SOPS,
         curl=prelude + FAKE_CURL,
+        ssh=prelude + FAKE_SSH,
     )
     kubeconfig = tmp_path / "kubeconfig"
     kubeconfig.write_text("apiVersion: v1\n")
     monkeypatch.setenv("PATH", path_with(bin_dir))
     monkeypatch.setenv("KUBECONFIG", str(kubeconfig))
+    monkeypatch.setenv("LIDARR_NODE", HERE)
+    monkeypatch.delenv("FAKE_RUNS_ON", raising=False)
 
 
 def _parse(argv):
@@ -151,3 +178,14 @@ def test_lidarr_output_is_redacted(capsys, extra):
     assert rc == 0
     assert WEBHOOK_SECRET not in out
     assert arr.REDACTED in out
+
+
+@pytest.mark.usefixtures("fake_lidarr")
+def test_a_pod_on_the_other_node_is_read_from_that_node(capsys, monkeypatch):
+    monkeypatch.setenv("LIDARR_NODE", f"not-{HERE}")
+    rc = arr.run_arr(_parse(["arr", "lidarr", "qualityprofile", "--json"]))
+    assert rc == 0
+    assert {p["name"] for p in json.loads(capsys.readouterr().out)} == {
+        "Standard",
+        "Lossless",
+    }

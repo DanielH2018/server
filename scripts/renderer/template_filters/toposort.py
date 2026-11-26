@@ -7,6 +7,7 @@ each role's templates and entry. Every entry is a k8s service; the Pi's services
 
 import heapq
 import os
+from graphlib import CycleError, TopologicalSorter
 
 
 class DependencyCycle(ValueError):
@@ -20,32 +21,27 @@ def toposort_containers(containers_list, deps_map):
     Deps not present in containers_list are silently ignored.
     Raises DependencyCycle if a dependency cycle is detected.
     """
-    name_to_idx = {c["name"]: i for i, c in enumerate(containers_list)}
-    name_to_obj = {c["name"]: c for c in containers_list}
-    names = list(name_to_idx)
-
-    in_degree = {n: 0 for n in names}
-    graph = {n: [] for n in names}
-    for name in names:
-        for dep in deps_map.get(name, []):
-            if dep in name_to_idx:
-                graph[dep].append(name)
-                in_degree[name] += 1
-
-    heap = [(name_to_idx[n], n) for n in names if in_degree[n] == 0]
+    position = {c["name"]: i for i, c in enumerate(containers_list)}
+    sorter = TopologicalSorter(
+        {
+            name: sorted(dep for dep in deps_map.get(name, []) if dep in position)
+            for name in position
+        }
+    )
+    try:
+        sorter.prepare()
+    except CycleError as error:
+        cycle = " -> ".join(error.args[1][::-1])
+        raise DependencyCycle(f"Dependency cycle in containers: {cycle}") from error
+    heap = [position[name] for name in sorter.get_ready()]
     heapq.heapify(heap)
     result = []
     while heap:
-        _, node = heapq.heappop(heap)
-        result.append(name_to_obj[node])
-        for neighbor in graph[node]:
-            in_degree[neighbor] -= 1
-            if in_degree[neighbor] == 0:
-                heapq.heappush(heap, (name_to_idx[neighbor], neighbor))
-
-    if len(result) != len(names):
-        cycled = [n for n in names if name_to_obj[n] not in result]
-        raise DependencyCycle(f"Dependency cycle detected in containers: {cycled}")
+        entry = containers_list[heapq.heappop(heap)]
+        result.append(entry)
+        sorter.done(entry["name"])
+        for name in sorter.get_ready():
+            heapq.heappush(heap, position[name])
     return result
 
 

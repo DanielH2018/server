@@ -98,6 +98,20 @@ IMAGE_ROWS = [
         )
     ),
     *(
+        Row(f"pi-autoheal-digest-{field}", AUTOHEAL, "digest", field, value)
+        for field, value in (
+            ("schedule", ["before 6am on the first day of the month"]),
+            ("updateNotScheduled", False),
+        )
+    ),
+    Row(
+        "pi-proxy-digest-schedule",
+        PROXY,
+        "digest",
+        "schedule",
+        None,
+    ),
+    *(
         Row(f"pi-wg-easy-{u}-{field}", WG_EASY, u, field, value)
         for u in ("digest", "major")
         for field, value in (("automerge", False), ("groupName", Has("(manual")))
