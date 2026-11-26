@@ -14,13 +14,13 @@ behaviour the fakes already record breaks on a rewording and proves nothing extr
 Run: uv run pytest scripts/deploy_tools/tests/land_merge/test_land_merge.py
 """
 
-import subprocess
+import re
 from pathlib import Path
 
 import pytest
 
 from _land_fakes import Fakes
-from deploy_tools.land_lib import closing_refs, merge
+from deploy_tools.land_lib import closing_refs, merge, stall
 from deploy_tools.land_lib.outcome import Outcome
 
 _OPEN = {"state": "OPEN", "title": "Bump vale to 3.19.0", "body": "Closes #12\n"}
@@ -328,177 +328,15 @@ def test_a_merged_pr_leaves_the_wait(landing, capsys):
     assert "merged after 0s" in capsys.readouterr().out
 
 
-def test_the_merge_wait_never_hand_polls_ci():
-    """merge.py is where someone would "improve" the wait by adding a `gh pr checks --watch`
-    or a `gh run watch`. await_ci owns the CI verdict:
-    it is one shot per poll, derived from the required checks, and its `pending` IS the
-    grace period. A textual guard because the failure is a command that never appears in
-    any test's call log until it is already in production."""
-    text = Path(merge.__file__).read_text()
+@pytest.mark.parametrize("module", [merge, stall], ids=["merge", "stall"])
+def test_the_merge_wait_never_hand_polls_ci(module):
+    """merge.py, and stall.py where the wait acts on a stalled head, are where someone would
+    "improve" the wait by adding a `gh pr checks --watch` or a `gh run watch`. await_ci owns
+    the CI verdict: it is one shot per poll, derived from the required checks, and its
+    `pending` IS the grace period. A textual guard because the failure is a command that
+    never appears in any test's call log until it is already in production. `gh run rerun`
+    starts a run and reads none, so it is the one `gh run` verb allowed."""
+    text = Path(module.__file__).read_text()
     assert "gh pr checks" not in text
-    assert '"run"' not in text
+    assert not re.search(r'"run",\s*"(?!rerun")', text)
     assert "await_ci" in text
-
-
-_SKIPPED = f"dead1234: no verdict after 0s — {merge.await_ci.DRAFT_SKIPPED}"
-
-
-def _skipped_landing(landing, graces=3, is_draft=False, **fakes):
-    """A landing whose head's CI reads skipped as a draft, polled thrice per grace."""
-    fakes.setdefault("await_ci", [(75, _SKIPPED)])
-    views = {"state,mergeable,headRefOid": _wait(["OPEN MERGEABLE dead"])}
-    views.update(fakes.pop("gh_views", {}))
-    return landing(
-        Fakes(gh_views={**views, "isDraft": {"isDraft": is_draft}}, **fakes),
-        merge_timeout=merge.DRAFT_SKIPPED_GRACE_S * graces,
-        merge_poll=merge.DRAFT_SKIPPED_GRACE_S // 3,
-    )
-
-
-@pytest.mark.parametrize("is_draft, ends_early", [(False, True), (True, False)])
-def test_a_head_ci_skipped_as_a_draft_ends_the_wait_once_the_pr_is_ready(
-    landing, capsys, is_draft, ends_early
-):
-    """A ready PR whose head's only run had skipped as a draft waited out
-    its whole budget. A PR still a draft gets its run once it is marked ready, so it waits.
-    The ending's message is what tells the two apart, so it is asserted."""
-    ln, _ = _skipped_landing(landing, is_draft=is_draft)
-    with pytest.raises(Outcome) as exc:
-        merge.await_merge(ln)
-    assert (exc.value.rc, exc.value.verdict) == (75, "merge-timeout")
-    assert ("gh pr ready --undo 999" in exc.value.error) is ends_early
-    assert ("still OPEN after" in exc.value.error) is not ends_early
-    assert capsys.readouterr().out.count(merge.await_ci.DRAFT_SKIPPED) == 1
-
-
-def _ready_toggles(calls):
-    return [c[1] for c in calls if c[0] == "gh" and c[1][:2] == ("pr", "ready")]
-
-
-_DRAFT_RUN = {"id": 1, "status": "completed", "conclusion": "skipped"}
-
-
-@pytest.mark.parametrize(
-    "head_runs",
-    [
-        [_DRAFT_RUN],
-        [_DRAFT_RUN, {"id": 2, "status": "completed", "conclusion": "cancelled"}],
-    ],
-    ids=["draft-run", "cancelled-ready-run"],
-)
-def test_a_ready_pr_whose_head_skipped_as_a_draft_is_converted_once_and_the_wait_goes_on(
-    landing, capsys, head_runs
-):
-    """GitHub starts no run on the ready flip, so the landing converts the PR to draft
-    and back itself. The second poll after the toggle reads a run, so the wait proceeds to the
-    merge instead of ending merge-timeout. A ready run the draft run cancelled is past
-    cancelling, so it does not stop the conversion."""
-    states = ["OPEN MERGEABLE dead"] * 5 + ["MERGED MERGEABLE dead"]
-    # One skipped poll per third of the grace, then the run the toggle started goes green.
-    ln, calls = _skipped_landing(
-        landing,
-        gh_views={"state,mergeable,headRefOid": _wait(states)},
-        await_ci=[(75, _SKIPPED)] * 4 + [(0, "dead1234: green")],
-        head_runs=head_runs,
-    )
-    merge.await_merge(ln)
-    assert _ready_toggles(calls) == [
-        ("pr", "ready", "--undo", "999"),
-        ("pr", "ready", "999"),
-    ]
-    assert "converting it to draft and back" in capsys.readouterr().out
-
-
-def test_a_second_draft_skip_on_the_same_head_after_the_toggle_ends_merge_timeout(
-    landing,
-):
-    """No loop: the toggle is once per head, and the dead end after it says it already ran."""
-    ln, calls = _skipped_landing(landing, graces=10)
-    with pytest.raises(Outcome) as exc:
-        merge.await_merge(ln)
-    assert (exc.value.rc, exc.value.verdict) == (75, "merge-timeout")
-    assert len(_ready_toggles(calls)) == 2
-    assert "already converted it to draft and back" in exc.value.error
-
-
-@pytest.mark.parametrize(
-    "gh_rc, left_draft", [([1], False), ([0, 1], True)], ids=["to-draft", "back"]
-)
-def test_a_toggle_a_secondary_limit_refuses_says_to_wait_not_to_toggle_by_hand(
-    landing, gh_rc, left_draft
-):
-    refused = "GraphQL: API rate limit already exceeded for user ID 41801780."
-    ln, _calls = _skipped_landing(landing, gh_merge_rc=gh_rc, gh_stderr=refused)
-    with pytest.raises(Outcome) as exc:
-        merge.await_merge(ln)
-    assert (exc.value.rc, exc.value.verdict) == (75, "merge-timeout")
-    assert "GitHub's secondary rate limit refused it" in exc.value.error
-    assert exc.value.error.endswith("wait a few minutes, then re-run this")
-    assert "gh pr ready" not in exc.value.error
-    assert ("is left as a draft" in exc.value.error) is left_draft
-
-
-@pytest.mark.parametrize(
-    "head_runs",
-    [
-        [_DRAFT_RUN, {"id": 2, "status": "queued", "conclusion": None}],
-        [_DRAFT_RUN, {"id": 2, "status": "in_progress", "conclusion": None}],
-        [_DRAFT_RUN, {"id": 2, "status": "completed", "conclusion": "failure"}],
-        [{"id": 2, "status": "completed", "conclusion": "cancelled"}],
-        subprocess.CalledProcessError(1, "gh", stderr="HTTP 404: Not Found"),
-        {"workflow_runs": []},
-        ["not a run"],
-    ],
-    ids=[
-        "queued",
-        "in-progress",
-        "failed",
-        "cancelled-alone",
-        "gh-fails",
-        "not-a-list",
-        "not-a-run",
-    ],
-)
-def test_a_ready_run_or_an_unreadable_run_list_stops_the_conversion(landing, head_runs):
-    """The ready run's gate has no check run until its jobs finish, so await_ci reads
-    only the draft run's skipped gate, and converting cancelled the ready run on 6443 and 6531.
-    The conversion is what cancels, so a runs read that fails or parses wrong also stops it."""
-    skipped = f"dead1234: no verdict after 0s — {merge.await_ci.DRAFT_SKIPPED}"
-    grace = merge.DRAFT_SKIPPED_GRACE_S
-    ln, calls = landing(
-        Fakes(
-            gh_views={
-                "state,mergeable,headRefOid": _wait(["OPEN MERGEABLE dead"]),
-                "isDraft": {"isDraft": False},
-            },
-            await_ci=[(75, skipped)],
-            head_runs=head_runs,
-        ),
-        merge_timeout=grace * 3,
-        merge_poll=grace // 3,
-    )
-    with pytest.raises(Outcome) as exc:
-        merge.await_merge(ln)
-    assert (exc.value.rc, exc.value.verdict) == (75, "merge-timeout")
-    assert _ready_toggles(calls) == []
-
-
-def test_a_failed_conversion_ends_merge_timeout_and_names_a_draft_left_behind(landing):
-    skipped = f"dead1234: no verdict after 0s — {merge.await_ci.DRAFT_SKIPPED}"
-    grace = merge.DRAFT_SKIPPED_GRACE_S
-    ln, _calls = landing(
-        Fakes(
-            gh_views={
-                "state,mergeable,headRefOid": _wait(["OPEN MERGEABLE dead"]),
-                "isDraft": {"isDraft": False},
-            },
-            await_ci=[(75, skipped)],
-            gh_merge_rc=[0, 1],
-        ),
-        merge_timeout=grace * 10,
-        merge_poll=grace // 3,
-    )
-    with pytest.raises(Outcome) as exc:
-        merge.await_merge(ln)
-    assert (exc.value.rc, exc.value.verdict) == (75, "merge-timeout")
-    assert "left as a draft" in exc.value.error
