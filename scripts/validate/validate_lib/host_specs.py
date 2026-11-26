@@ -22,7 +22,7 @@ from types import MappingProxyType
 
 from lib import yaml_fast
 from renderer.renderer_lib.cluster import RenderRefused
-from renderer.renderer_lib.host import COMPONENT_KEYS, PACKAGE_KEYS, load_spec
+from renderer.renderer_lib.host_spec import ComponentFile, PackageFile, load_spec
 
 
 @dataclass(frozen=True)
@@ -86,7 +86,7 @@ def load_package(path: Path) -> PackageSpec:
         RenderRefused: The file is not a mapping, carries a key the renderer does not know,
             or its `components` is not a list of names.
     """
-    raw = load_spec(path, PACKAGE_KEYS)
+    raw = load_spec(path, PackageFile)
     return PackageSpec(
         name=path.parent.name,
         components=_string_list(raw.get("components"), path, "components"),
@@ -102,7 +102,7 @@ def load_component(path: Path) -> ComponentSpec:
             its `component` is not a name, its `defaults` is not a mapping, or an `outputs`
             entry is not a mapping whose `keys` is a list of names.
     """
-    raw = load_spec(path, COMPONENT_KEYS)
+    raw = load_spec(path, ComponentFile)
     borrows = raw.get("component")
     if borrows is not None and not isinstance(borrows, str):
         raise RenderRefused(f"{path}: `component` must be a component name")

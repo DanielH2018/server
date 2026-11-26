@@ -55,7 +55,6 @@ from pathlib import Path, PurePosixPath
 
 import jinja2
 
-from lib import yaml_fast
 from lib.container_entry import ContainerEntryError
 from lib.estate import REPO_INVENTORY, Inventory
 from lib.render_context import UnresolvedVarsError, render_context
@@ -81,6 +80,7 @@ from renderer.renderer_lib.host_outputs import (
     compose_file,
     finish,
 )
+from renderer.renderer_lib.host_spec import ComponentFile, PackageFile, load_spec
 from renderer.renderer_lib.host_package import (
     MAINTAINER_SCRIPTS,
     VERSION_FIELD as VERSION_FIELD,
@@ -108,41 +108,6 @@ HOST_SOPS = SECRETS_DIR / "hosts"
 
 # Every host package runs reconcile under /usr/bin/python3 (H3, *Package rules*).
 HOST_DEPENDS = ("python3 (>= 3.14)",)
-PACKAGE_KEYS = frozenset(
-    {
-        "component",
-        "components",
-        "credentials",
-        "defaults",
-        "depends",
-        "description",
-        "enable",
-        "files",
-        "legacy",
-        "maintainer_scripts",
-        "outputs",
-        "tools",
-        "tools_on",
-        "units",
-        *ARM_KEYS,
-    }
-)
-COMPONENT_KEYS = frozenset(
-    {
-        "component",
-        "compose",
-        "credentials",
-        "defaults",
-        "depends",
-        "enable",
-        "files",
-        "legacy",
-        "outputs",
-        "units",
-        *ARM_KEYS,
-    }
-)
-
 # A host, package or component name becomes a directory under `hosts/`, so it is one plain
 # path piece: no `/`, no `..`, no leading dot or dash.
 _PLAIN_NAME = re.compile(r"[a-z0-9][a-z0-9-]*")
@@ -223,7 +188,7 @@ def _render(
         raise RenderRefused(
             f"{spec_path.relative_to(hosts_root.parent)} does not exist"
         )
-    spec = load_spec(spec_path, PACKAGE_KEYS)
+    spec = load_spec(spec_path, PackageFile)
     package.description = str(spec.get("description", ""))
     package.depends.extend(str(entry) for entry in spec.get("depends") or [])
     if "tools" in spec or "tools_on" in spec:
@@ -240,7 +205,7 @@ def _render(
         component = directory / "component.yml"
         if not component.is_file():
             raise RenderRefused(f"{spec_path} lists component {name!r}, which has none")
-        unit = load_spec(component, COMPONENT_KEYS)
+        unit = load_spec(component, ComponentFile)
         package.depends.extend(
             str(dep) for dep in unit.get("depends") or [] if dep not in package.depends
         )
@@ -300,21 +265,6 @@ def _plain_name(name: object, kind: str) -> str:
             f"{kind} name {name!r} is not a plain name (lowercase letters, digits, hyphens)"
         )
     return name
-
-
-def load_spec(path: Path, allowed: frozenset[str]) -> dict:
-    """`path`'s YAML mapping, refused unless every top-level key is in `allowed`.
-
-    Raises:
-        RenderRefused: The file is not a mapping, or carries a key outside `allowed`.
-    """
-    spec = yaml_fast.safe_load(path.read_text()) or {}
-    if not isinstance(spec, dict):
-        raise RenderRefused(f"{path} is not a mapping")
-    unknown = sorted(set(spec) - allowed)
-    if unknown:
-        raise RenderRefused(f"{path} has unknown keys {unknown}")
-    return spec
 
 
 def _render_unit(
