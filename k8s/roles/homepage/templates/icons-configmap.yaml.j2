@@ -1,22 +1,14 @@
 ---
-# The bookmark icons; without them the bookmark tiles render broken images. ~160KB total, well
-# under the 1MiB object limit.
 apiVersion: v1
 kind: ConfigMap
 metadata:
   name: homepage-icons
   namespace: {{ k8s_namespace }}
 binaryData:
-{# ONLY the icons a tile actually references — every name here is base64'd into the object,
-   so an unused one is dead weight. limitless, LoLalytics, metatft, opgg and tftacademy stay
-   in files/ unreferenced; reviving one is adding its name back to this list. A name listed
-   here and missing from files/ fails the RENDER, not the deploy.
-
-   These four are here because dashboard-icons has no icon for them: anilist, karma, monarch and
-   tacticstools answer 404 at the CDN under every name tried. metatft's logo in files/ came
-   from a 256x256 PNG embedded in its /myicon3.ico, since that site serves its SPA shell at
-   every ordinary icon path. Anything the CDN does serve (github, google-maps, gmail, …) is
-   referenced by bare name in services.yaml.j2 and must NOT be added here. #}
+{# Only referenced icons: each is base64'd into the object. These four have no dashboard-icons entry
+   (404 at the CDN);
+   CDN-served icons are referenced by bare name and must NOT be added. A listed name missing from
+   files/ fails the RENDER. #}
 {% for icon in ['anilist.png', 'karma.png', 'monarch.png', 'tacticstools.png'] %}
   {{ icon }}: {{ lookup('b64file', role_file('files/' ~ icon)) }}
 {% endfor %}

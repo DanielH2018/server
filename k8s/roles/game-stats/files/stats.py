@@ -55,8 +55,8 @@ LOKI_QUERY = _env("LOKI_QUERY", '{container="terraria"}')
 POLL_INTERVAL = int(_env("POLL_INTERVAL", "20"))
 HTTP_TIMEOUT = int(_env("HTTP_TIMEOUT", "10"))
 DB_PATH = _env("DB_PATH", "/data/stats.db")
-# 28d (672h) stays well under Loki's max_query_length (~721h/30d1h) — the first-run/backfill
-# query spans this whole window, so keep headroom below that limit (else HTTP 400).
+# 28d stays under Loki's max_query_length (~30d1h); the backfill query spans this whole window (else
+# HTTP 400).
 BACKFILL_DAYS = float(_env("BACKFILL_DAYS", "28"))
 LOKI_PAGE_LIMIT = int(_env("LOKI_PAGE_LIMIT", "5000"))
 HEALTH_MAX_AGE = int(_env("HEALTH_MAX_AGE", str(3 * POLL_INTERVAL + 30)))
@@ -266,10 +266,8 @@ class Store(stats_lib.SqliteStore):
                 "last_seen": ls,
                 "open_start": css,
             }
-            # NOTE: last_event_ts is approximated from player last_seen on reload. It can
-            # lag the true last-event time if the last event was a server restart with no
-            # one online. Only the observability gauge is affected; the cursor drives all
-            # correctness decisions.
+            # last_event_ts is approximated from last_seen on reload and can lag; only the gauge is
+            # affected, the cursor drives correctness.
             if ls:
                 st.last_event_ts = max(st.last_event_ts, ls)
         return st
@@ -330,7 +328,7 @@ def main():
             page_limit=LOKI_PAGE_LIMIT,
             poll_interval=POLL_INTERVAL,
             # No default: the port is the `terraria-stats` metrics item on the containers_list
-            # entry, and the Deployment passes it in. A default here would be a second copy.
+            # entry; a default would be a second copy.
             metrics_port=int(os.environ["METRICS_PORT"]),
             health_max_age=HEALTH_MAX_AGE,
         ),
