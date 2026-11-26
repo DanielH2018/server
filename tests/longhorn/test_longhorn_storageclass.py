@@ -151,8 +151,7 @@ def test_role_still_renders_the_default_replica_count_setting():
 
 
 def test_the_patch_targets_the_configmap_the_upstream_file_declares():
-    # Kustomize refuses a build whose patch matches nothing, so a refresh that renames the
-    # ConfigMap fails here before it fails the render. A patch has no order to get wrong.
+    # Kustomize refuses a build whose patch matches nothing.
     patch, upstream = _patched_configmap(), _upstream_configmap()
     assert patch["kind"] == "ConfigMap"
     assert patch["metadata"]["name"] == upstream["metadata"]["name"]
@@ -161,8 +160,7 @@ def test_the_patch_targets_the_configmap_the_upstream_file_declares():
 
 
 def test_the_class_differs_from_upstreams_only_by_the_replica_count():
-    # Step 2 of the per-hop procedure (docs/longhorn-upgrade.md): a release that adds a
-    # parameter fails here until the patch carries it.
+    # A release that adds a parameter fails here until the patch carries it.
     # fact: k8s/roles/longhorn/CLAUDE.md#At a glance
     drift = _drift_from_upstream(
         _class_in(_upstream_configmap()), _class_in(_patched_configmap())
@@ -185,11 +183,7 @@ def test_a_class_that_drops_a_parameter_or_keeps_the_replica_count_is_flagged():
     assert _drift_from_upstream(upstream, pinned) == ["parameters"]
 
 
-# ── backup routing lists ────────────────────────────────────────────────────────────────────
-# Three hand-maintained lists of `namespace/pvcName` decide where every volume's backups go and
-# how often: r2 (daily, Cloudflare), weekly (sharded across weekdays, B2), nobackup (neither).
-# They have no schema and no cross-check, and a typo is silent: a misspelt weekly entry leaves
-# that volume in the daily group, paying daily B2 transactions the weekday sharding exists to cut.
+# A typo in these hand-maintained lists is silent.
 
 _ROUTING_LISTS = (
     "k3s_longhorn_r2_volumes",
@@ -218,10 +212,7 @@ def _declared_pvcs() -> set[str]:
     }
 
 
-# Members `_declared_pvcs` must find, so a render that stops producing claims fails by name
-# rather than by a count. pihole-etc is a `longhorn-nobackup` claim from a literal
-# `k8s_claims` list; traefik-acme comes from an expression-valued `k8s_claims`; grafana-data is
-# observability's own template, in its own namespace.
+# Named so a render that stops producing claims fails by name.
 _KNOWN_DECLARED_PVCS = frozenset(
     {
         "homelab/pihole-etc",
@@ -263,8 +254,8 @@ def test_backup_routing_lists_have_no_duplicates():
 
 
 def test_every_routed_volume_is_a_real_pvc():
-    # A typo here does not fail anything at deploy — the label reconcile simply matches no
-    # volume and moves on, leaving the PVC on whatever tier it was already in.
+    # A typo here fails nothing at deploy: the label reconcile matches no volume and leaves the PVC
+    # on its previous tier.
     defaults = resolved_tier_lists(load_defaults(LONGHORN_RECONCILE_ROLE))
     declared = _declared_pvcs()
     assert len(declared) > 20, (

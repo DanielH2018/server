@@ -32,8 +32,6 @@ _spec.loader.exec_module(_mod)
 from hooklib import read_only_commands  # noqa: E402  (after the path insert)
 from hooklib.read_only_agents import read_only_agents, read_only_reason  # noqa: E402
 
-# The agents the census must find. The issue named these six; security-review carries the key
-# too, so the key and the "Read-only" description stay one-to-one.
 MUST_BE_READ_ONLY = {
     "homelab-backup-observability-reviewer",
     "homelab-cicd-reviewer",

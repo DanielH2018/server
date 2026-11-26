@@ -56,8 +56,6 @@ def test_the_down_alert_holds_no_other_alert_of_the_job():
 
 
 def test_a_shadow_source_would_mute_the_page_and_page_nobody():
-    # With `shadow` back on the source, the inhibitor still holds the target, and the walk sends
-    # the source to the blackhole.
     shadowed = {**down_labels(), "shadow": "true"}
     assert inhibited(target_alert(JOB, "autofix-bridge:9182"), [shadowed])
     assert [r["receiver"] for r in reached(route_tree(), shadowed)] == [BLACKHOLE]

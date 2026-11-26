@@ -49,8 +49,7 @@ from _helpers import REPO
 SCRIPT_ROOTS = (REPO / "scripts", REPO / "k8s/roles", REPO / "evals")
 _SUBPROCESS_CALLS = frozenset({"run", "call", "check_call", "check_output", "Popen"})
 
-# Every first-party script that runs the suite as a subprocess, against the reason it cannot
-# deadlock. The docstring above carries the full ruling for each.
+# The module docstring carries the full ruling for each.
 RULINGS: dict[str, str] = {}
 # One script under each of two roots, which a walk that reads the tree must reach.
 KNOWN_SCRIPTS = frozenset({"scripts/dev/pytest_shard.py", "evals/ablate.py"})

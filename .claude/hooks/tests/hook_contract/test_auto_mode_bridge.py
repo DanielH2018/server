@@ -47,8 +47,7 @@ def test_main_says_nothing_on_an_unrelated_event(capsys, monkeypatch):
     assert capsys.readouterr().out == ""
 
 
-# GitHub's output for a ruleset refusal and for a bypass, as a push prints them. The bypass shape
-# is copied from a session transcript; both print the same `- Cannot update this protected ref.`.
+# The bypass shape is copied from a session transcript.
 REFUSED_PUSH = (
     "Exit code 1\n"
     "remote: error: GH013: Repository rule violations found for refs/heads/master.\n"

@@ -148,8 +148,6 @@ def all_namespace_peers(docs: list[dict], namespace: str) -> list[str]:
     return found
 
 
-# The two upstream policies the vendoring filter drops, as `flux install --network-policy=true`
-# emits them at v2.9.6.
 _UPSTREAM_DROPPED = """
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy

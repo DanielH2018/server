@@ -32,11 +32,11 @@ def test_the_init_container_encodes_through_vaapi_with_tdarrs_image_and_device()
     script = init["command"][-1]
     assert "-c:v h264_vaapi" in script and "/dev/dri/renderD128" in script, script
     dri = defaults["tdarr_k8s_dri_resource"]
-    # Without the device request the render node is absent from the container, and the
-    # encode fails on a node whose GPU is fine.
+    # Without the device request the render node is absent from the container and encode fails on a
+    # node whose GPU is fine.
     assert init["resources"]["requests"][dri] == init["resources"]["limits"][dri] == 1
-    # tdarr's own transcodes run as PUID with the pod's render group; root would pass a
-    # render node tdarr's process cannot open.
+    # tdarr's transcodes run as PUID with the pod's render group; root would pass a render node
+    # tdarr cannot open.
     ctx = host_context()
     assert init["securityContext"]["runAsUser"] == ctx["puid"]
     render_gid = ctx["hosts"][ctx["k8s_primary_node"]]["render_gid"]

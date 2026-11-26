@@ -77,8 +77,6 @@ def _fixture(tmp_path: Path) -> tuple[Path, Path]:
 
 
 def test_the_real_roles_are_clean():
-    # Non-vacuity: the copy holds upstream's ten kinds, and traefik renders at least the
-    # IngressRoute, Middleware and TLSOption kinds from it.
     assert {
         "ingressroutes.traefik.io",
         "middlewares.traefik.io",

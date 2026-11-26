@@ -52,8 +52,7 @@ def test_the_hook_runs_the_generator_in_fix_mode():
         "inventory/host_vars/daniel-box.yml",
         "inventory/host_vars/daniel-pi.yml",
         "inventory/group_vars/all.yml",
-        # Where the libraries the generator imports live now, read from the modules
-        # themselves, so a move to a directory outside the gate goes red here.
+        # Read from the modules themselves, so a move to a directory outside the gate goes red.
         *(
             Path(m.__file__).resolve().relative_to(REPO).as_posix()
             for m in (catalog_backup, catalog_facts, catalog_model)

@@ -66,8 +66,6 @@ def test_a_short_pointer_is_not_graded():
     assert copied_paragraphs(pointer, {"docs/x.md": pointer}) == []
 
 
-# A census that finds its subject by pattern must know it found something, or a changed split
-# leaves it green over nothing.
 MIN_GRADED_PARAGRAPHS = 12
 
 

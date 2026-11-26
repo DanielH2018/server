@@ -47,9 +47,7 @@ FLAGGED_WRITES = [
     "perl -pi -e s/a/b/ secrets/secrets.yml",
 ]
 
-# Near misses. Each is one token from a case above and must keep working: host_vars and
-# group_vars carry the substring "vars/" but are PLAINTEXT, docs/reference/topology.md is the
-# one hand-written page in a generated tree, and a read is not a write.
+# Near misses, each one token from a case above: host_vars and group_vars are plaintext.
 CLEAN_WRITES = [
     "echo x > /tmp/scratch.txt",
     "sed -i s/a/b/ README.md",

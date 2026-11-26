@@ -44,12 +44,10 @@ from _k8s_render import rendered_docs
 from lib.render_context import render_context
 from lib.repo_paths import REPO
 
-# The sidecar whose stdout carries the access log. CrowdSec tails the FILE instead, so this
-# label is what keeps the drop away from the WAF's input — see the config's own comment.
+# CrowdSec tails the file instead, so this label keeps the drop away from the WAF's input.
 _SCOPED_CONTAINER = "access-log-rotate"
 
-# One `stage.match { selector = "…" stage.drop { … } }` block of the River config. The
-# selector and the drop's attributes are River strings, so their inner quotes are `\"`.
+# The selector and the drop's attributes are River strings, so their inner quotes are `\"`.
 _MATCH_BLOCK = re.compile(
     r'stage\.match\s*\{\s*selector\s*=\s*"(?P<selector>(?:\\.|[^"\\])*)"'
     r"(?P<body>.*?)\n  \}",
@@ -210,9 +208,7 @@ def test_the_drop_is_scoped_to_the_access_log_sidecar_only(alloy_config):
     The selector is also what keeps this away from CrowdSec: the agent reads the access-log
     FILE directly, and only the sidecar's stdout copy passes through this pipeline.
     """
-    # Every stage.drop must sit inside a stage.match: a drop at the loki.process level
-    # applies to every pod log the pipeline carries. Indentation is the nesting here — a
-    # top-level stage is indented two spaces, one inside stage.match four.
+    # A drop at the loki.process level applies to every pod log; indentation is the nesting here.
     for line in alloy_config.splitlines():
         if line.lstrip().startswith("stage.drop"):
             assert line.startswith("    stage.drop"), (

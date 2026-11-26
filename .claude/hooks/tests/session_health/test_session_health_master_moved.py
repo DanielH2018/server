@@ -76,8 +76,8 @@ def test_master_moved_silent_when_a_diff_read_fails():
 
 
 def test_master_moved_reads_this_checkout_without_fetching():
-    # Two properties off one call: the hook reads the local object store, never the network,
-    # and `cwd` names this checkout (which is load-bearing — `lib.git.git` strips `GIT_*`, so `cwd` alone decides the tree it reads).
+    # The hook reads the local object store, never the network, and `cwd` alone decides the tree
+    # (`lib.git.git` strips `GIT_*`).
     seen = []
     _mod.master_moved_problems(lambda *a, **k: seen.append((a, k)) or _result("0\n"))
     assert seen and "fetch" not in seen[0][0]
@@ -85,8 +85,8 @@ def test_master_moved_reads_this_checkout_without_fetching():
 
 
 def test_master_moved_silent_on_nonzero_git_exit():
-    # No origin/master ref in this checkout at all, say — not this hook's job to diagnose.
-    # `check=False` is what makes this reachable: `lib.git.git` raises on a non-zero exit.
+    # No origin/master ref is not this hook's job to diagnose; `check=False` makes that reachable,
+    # because `lib.git.git` raises on a non-zero exit.
     assert _mod.master_moved_problems(lambda *a, **k: _result("", returncode=128)) == []
 
 

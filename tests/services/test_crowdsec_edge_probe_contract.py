@@ -26,13 +26,12 @@ from _helpers import REPO
 from lib.proc_testing import write_exec
 from renderer.renderer_lib import host as host_mode
 
-# crowdsec's verify module ships from its role's files/, which `pythonpath` in pyproject.toml
-# puts on sys.path (autofix-bridge's ConfigMap carries crowdsec's jobs_metrics.py).
+# `pythonpath` puts the role's files/ on sys.path.
 import crowdsec_verify
 
 PROBE = REPO / "hosts" / "components" / "crowdsec-probe" / "crowdsec-edge-probe.sh"
-# Alloy's `loki.process` prefixes every `stage.metrics` name with this (its `metrics_prefix`
-# default), which is what Prometheus scrapes off `alloy-pi`.
+# Alloy's `loki.process` prefixes every `stage.metrics` name with this, which Prometheus scrapes off
+# `alloy-pi`.
 ALLOY_METRICS_PREFIX = "loki_process_custom_"
 
 

@@ -38,8 +38,7 @@ GITLEAKS = (
 FLUX = "fluxcd/flux2"
 COSIGN = "sigstore/cosign"
 GITLEAKS_REPO = "gitleaks/gitleaks"
-# (file, job, release repo) -> why that inline fetch stays. `test_every_exemption_still_fetches`
-# fails on a row whose job no longer fetches that repo.
+# `test_every_exemption_still_fetches` fails on a row whose job no longer fetches that repo.
 EXEMPT = {
     ("promote.yml", "publish", FLUX): NO_CHECKOUT,
     ("promote.yml", "publish", COSIGN): NO_CHECKOUT,

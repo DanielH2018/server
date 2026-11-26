@@ -37,12 +37,9 @@ from _manifest_guards import (
     _route_template,
 )
 
-# `scripts` is on pythonpath and `scripts/diagnostics` deliberately is not, so postflight is
-# reached as a module of the `diagnostics` namespace package rather than by a sys.path insert.
+# `scripts/diagnostics` is deliberately not on pythonpath.
 from diagnostics import postflight
 
-# The census this guard is about. Named rather than derived: a glob over the *arr roles would
-# return an empty set the moment one is renamed, and `all(...)` over nothing passes.
 ARR_APPS = frozenset({"sonarr", "radarr", "prowlarr"})
 
 
@@ -84,8 +81,6 @@ def _cidr_mismatches(cidrs: list[str]) -> list[str]:
 
 
 def test_the_census_reaches_all_three_arr_monitoring_routes():
-    # Without this every assertion below passes vacuously if a role is renamed or its
-    # monitoring template moves — which is the failure mode this whole file exists to catch.
     missing = ARR_APPS - set(_monitoring_matches())
     assert not missing, (
         f"no rendered `-monitoring` route found for {sorted(missing)}; the guard below would "
@@ -187,12 +182,9 @@ def test_the_app_route_itself_is_not_widened(app):
     assert "ClientIP" not in rendered
 
 
-# ── monitoring_route(include_bridge_ip=...) ─────────────────────────────────────────────────
-#
-# The parameter that lets a call site drop the macro's default `k8s_bridge_client_ip` grant
-# With it false and no `extra_client_cidrs`, the match would render `&& ()` — a rule
-# Traefik rejects, and one that reads as "no client restriction" to anyone skimming the
-# template. The macro fails at render instead; these are the accept/reject pair for that.
+# With the bridge grant dropped and no `extra_client_cidrs`, the match would render `&& ()`, which
+# Traefik rejects;
+# the macro fails at render instead.
 
 _MACRO_IMPORT = (
     "{% from 'ingressroute.yml.j2' import monitoring_route with context %}\n"

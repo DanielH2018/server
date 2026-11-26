@@ -25,16 +25,9 @@ from _helpers import REPO
 from lib import yaml_fast
 from lib.repo_paths import HOST_VARS
 
-# --- the four LAN-fact literal shapes -----------------------------------------------------
-#
-# Deliberately narrower than a `10.0.0.`/`10.42.`/`10.43.` prefix sweep; the module docstring says
-# why the pod/Service CIDRs and per-service ClusterIPs are out of scope. A LAN octet followed by
-# `/` is a CIDR mention (the `lan_subnet` definition or a supernet comment), not a duplicated
-# address, so it is excluded.
-#
-# `lan_octet` is a CLOSED set of the seven values group_vars/host_vars assign as a host address
-# or MetalLB VIP. A bare digit pattern would also match every unrelated LAN device the repo
-# mentions (a smart display, a Zigbee coordinator).
+# Narrower than a prefix sweep: a LAN octet followed by `/` is a CIDR mention, not a duplicated
+# address;
+# `lan_octet` is a closed set of the seven values assigned as a host address or MetalLB VIP.
 _LAN_OCTETS = ("139", "161", "215", "240", "241", "242", "243")
 PATTERNS = {
     "staging_subnet": re.compile(r"192\.168\.140\.\d+"),
@@ -46,8 +39,7 @@ PATTERNS = {
 SCAN_ROOTS = ("k8s", "inventory", "tests", "scripts", "docs", "hosts")
 SCAN_SUFFIXES = (".yml", ".yaml", ".j2", ".py", ".md", ".sh")
 
-# (path-prefix-or-exact-match regex, reason). A path matching ANY entry is exempt. Ordered
-# roughly by how many files a rule covers, broadest first.
+# A path matching any entry is exempt.
 ALLOWLIST: list[tuple[str, str]] = [
     (r"docs/archive/", "superseded planning docs; excluded from the census itself too"),
     (r"(^|/)tests?/", "fixture/assertion value, not a source"),

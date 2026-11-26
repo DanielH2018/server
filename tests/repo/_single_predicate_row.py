@@ -12,26 +12,19 @@ from _row_table import REPO, Census, Subject, tracked
 
 SUITE = "tests/repo/test_census_rows_suite.py"
 
-# A module that reads tracked content: a walk a Census selector stands in for, or one file
-# read by its path, which a selector naming that file stands in for.
 READS_THE_TREE = re.compile(
     r"\.r?glob\(|\bls-files\b|\btracked\(|\bos\.walk\(|\brole_dirs\("
     r"|\.read_text\(|\.read_bytes\(|\bopen\(|\bsafe_load\(|\bload_\w+\(|\b_load\("
     r"|^from test_\w+ import",
     re.MULTILINE,
 )
-# A module that runs code rather than reading text: a subprocess other than `git ls-files`,
-# a render, a scratch tree or a patched callable. A row holds none of these.
 RUNS_CODE = re.compile(
     r"\bsubprocess\b|\brun\(\[(?!\"git\", \"ls-files\")|\brender\w*\("
     r"|\btmp_path(?:_factory)?\b|\bmonkeypatch\b|\burlopen\("
 )
-# A helper function that renders. Its `subprocess` stays out of this: `git_out` shells out
-# to `git ls-files`, which a row may do.
+# `git_out` shells out to `git ls-files`, which a row may do.
 RENDERS = re.compile(r"\brender\w*\(")
 BUILDS_A_ROW = re.compile(r"\b(?:Census|RunbookRule|Property)\(")
-# Imported modules every call into renders: the renderer package, and the property table
-# whose `check` runs a row over its rendered source.
 RENDERING_MODULES = re.compile(r"renderer(?:\.|$)|_property_table$")
 
 

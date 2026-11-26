@@ -28,12 +28,8 @@ from lib import yaml_fast
 
 STRIP = {"X-Forwarded-Host": "", "X-Forwarded-Uri": "", "X-Forwarded-Method": ""}
 
-# Namespaces whose `authelia` chain the census must find guarded. Subset, not equality: a
-# fourth namespace must not fail this, a dropped one must.
+# Subset, not equality: a fourth namespace must not fail, a dropped one must.
 REQUIRED_NAMESPACES = frozenset({"homelab", "longhorn-system", "observability"})
-# Routers the walker must resolve to a guarded forwardAuth: a macro route and its public
-# twin, the hand-rolled Traefik dashboard, the longhorn and observability routes, and both
-# livesync file-provider routers.
 REQUIRED_ROUTERS = frozenset(
     {
         "homelab/homepage",
@@ -81,8 +77,7 @@ def _routers(docs: list[dict], index: dict):
                 yield f"{ns}/{d['metadata']['name']}", refs
         elif d.get("kind") == "Secret":
             for text in (d.get("stringData") or {}).values():
-                # Only a Traefik dynamic-config document declares routers; other Secrets carry
-                # INI and app config that is not worth parsing.
+                # Only a Traefik dynamic-config document declares routers.
                 if "routers:" not in text:
                     continue
                 parsed = yaml_fast.safe_load(text)

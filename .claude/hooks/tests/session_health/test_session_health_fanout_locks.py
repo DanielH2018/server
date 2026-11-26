@@ -32,8 +32,7 @@ case "$*" in
   *) echo inactive ;;
 esac
 """
-# `other_live_sessions` takes no `now=`, so the lock is dated far enough back to stay past
-# `lib.fanout_lock.GRACE_S` whenever the suite runs.
+# `other_live_sessions` takes no `now=`, so the lock is dated far back to stay past `GRACE_S`.
 _LOCKED_AT = datetime(2026, 1, 1, tzinfo=UTC).timestamp()
 
 

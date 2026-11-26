@@ -16,8 +16,6 @@ Run: uv run pytest tests/k8s/test_secret_consumer_census.py
 from secrets_mgmt.consumers import consumer_commands, tree_consumers
 
 
-# The incident this file exists for, kept as the accept case: each of these renders or reads
-# sonarr_api_key.
 SONARR_KEY_CONSUMERS = {
     "autofix-bridge": "k8s",
     "configarr": "k8s",

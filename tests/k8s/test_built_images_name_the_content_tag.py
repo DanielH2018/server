@@ -30,17 +30,11 @@ from renderer.renderer_lib.task_inputs import image_builder_sites
 
 _POD_KINDS = frozenset({"Deployment", "StatefulSet", "DaemonSet", "Job", "CronJob"})
 
-# k8s_registry_pull_host is `localhost:<port>` — see the built-images-pull-always row of
-# _workload_property_rows.py.
 _BUILT_PREFIX = "localhost:"
 
-# `sha-` + 12 hex, the shape image-builder's content tag fact produces
-# (tests/deploy/test_image_builder_content_tag.py pins it at the producer).
 _CONTENT_TAG_RE = re.compile(r"^sha-[0-9a-f]{12}$")
 
 
-# The fleet this guard has to see. A census that finds its subjects by pattern returns an empty
-# set the moment those files move, and an `all()` over nothing passes — so the members are named.
 KNOWN_BUILT_IMAGES = frozenset(
     {
         "airflow",
@@ -80,8 +74,8 @@ def built_image_refs(docs) -> list[tuple[str, str, str]]:
                 image = str(container.get("image", ""))
                 if not image.startswith(_BUILT_PREFIX):
                     continue
-                # `localhost:5000/registry-selftest:probe` is pushed by the registry role's own
-                # selftest Job, not by image-builder, and has no content tag to name.
+                # Pushed by the registry role's selftest Job, not image-builder, so it has no
+                # content tag.
                 if image.rsplit("/", 1)[-1].rsplit(":", 1)[0] not in names:
                     continue
                 found.append((role, tpl, image))

@@ -124,28 +124,8 @@ def test_the_census_sees_a_module_inside_a_package(tmp_path):
     assert imported_module_ids(tree, {"bridge.config", "check"}) == {"bridge.config"}
 
 
-# --- The second invariant: every patched name is bound in the module the test patches it on ---
-#
-# No test patches a runtime module: each one hands its I/O, clock and sink in as a
-# parameter, and tests/repo/monkeypatch_allowlist.txt carries no monitor-bridge row. This
-# guard stays for the next test that does patch one. A function reads its
-# globals from the module it is DEFINED in, so a patch lands only if the module named in the
-# test is the module whose code reads the name. Patching `check.PROM_URL` when PROM_URL lives in
-# bridge.config and the setattr still SUCCEEDS — it creates a new attribute on `check` that
-# nothing reads — and the test passes against unpatched production code.
-#
-# That is a silent loss of coverage, which no amount of green runs will surface. Hence a guard:
-# every `(module, name)` pair the suite patches must be bound at that module's top level, by a
-# `def`, an assignment, or an import. The companion rule — a module must not from-import a name
-# some test patches on its source module — is tests/services/test_bridge_patch_boundary.py.
-#
-# The census must be an AST walk, not a grep. A line-oriented regex over
-# `monkeypatch.setattr(check, "X"` misses the wrapped form ruff format produces and misses plain
-# `check.X = ...` assignment entirely.
-#
-# The test's local name for a module is resolved through its own imports, so `from bridge import
-# config as cfg` followed by `monkeypatch.setattr(cfg, "X", 1)` is a patch on `bridge.config`,
-# and `bridge.config.X = 1` after `import bridge.config` is the same patch spelled longhand.
+# Patching `check.PROM_URL` when PROM_URL lives in bridge.config succeeds silently, so the test
+# passes against unpatched code.
 
 
 def _runtime_module_names():

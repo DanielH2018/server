@@ -26,14 +26,9 @@ _REPO = REPO
 _ROLE = _REPO / "k8s/roles/observability"
 _GRAFANA = "grafana.yaml.j2"
 _DASHBOARDS = "grafana-dashboards.yaml.j2"
-# A Flux promotion that land.sh waited on: `land-wait` builds the line, and `FluxHost.log`
-# runs `logger`, because promote_lib/wait.py starts no subprocess itself.
 _PROMOTE = _REPO / "scripts/deploy_tools/promote_lib/wait.py"
 _FLUX_HOST = _REPO / "scripts/deploy_tools/flux_host.py"
 _EMITTERS = (_PROMOTE,)
-# The host emitter builds the line with `host_lib.deploy_event`, so the literal the
-# query filters on is that function's, and the emitter must call it.
-# The soak Job prints the cluster's line, which a second query reads from its pod log.
 _SOAK = _REPO / "scripts/renderer/job_files/flux_soak.py"
 
 
@@ -103,8 +98,7 @@ def test_the_datasource_uid_matches_the_provisioned_one():
         for role, name, text in rendered_texts()
         if (role, name) == ("observability", _GRAFANA)
     )
-    # The datasources are a string value of a ConfigMap, which the render may hold on one
-    # escaped line.
+    # The datasources are a string value of a ConfigMap.
     block = "\n".join(
         str(value)
         for doc in yaml_fast.safe_load_all(grafana)

@@ -35,9 +35,6 @@ CI_WORKFLOW = REPO / ".github" / "workflows" / "ci.yml"
 
 STEP_ID = "changed"
 
-# A literal the extracted script must carry, so a step that stopped being the empty-merge step
-# (or an extractor that returned some other step's script) fails here rather than passing on
-# whatever `bash` made of the wrong text.
 SCRIPT_MARKER = "would change no files"
 
 

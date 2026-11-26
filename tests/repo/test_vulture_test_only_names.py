@@ -38,7 +38,6 @@ TEST_ONLY_NAMES = (
     ("scripts/secrets_mgmt/git_dates.py", "historical_names"),
     ("scripts/secrets_mgmt/git_dates.py", "undeclared_departures"),
     ("scripts/secrets_mgmt/git_dates.py", "revived_departures"),
-    # The guard libraries the issue names by module: vulture's report for each on 2026-11-14.
     ("scripts/lib/facts/citations.py", "FORMS"),
     ("scripts/lib/facts/citations.py", "node_citations"),
     ("scripts/lib/facts/citations.py", "line_numbered_citations"),

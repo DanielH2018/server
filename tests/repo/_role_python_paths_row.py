@@ -8,9 +8,7 @@ from _row_table import Census, Subject, tracked
 _PY_PATH = re.compile(r"(?<![\w/.-])((?:[A-Za-z0-9_-]+/)+[A-Za-z0-9_-]+\.py)\b")
 
 
-# First directories of paths that name another repository's files: upstream Home Assistant's
-# `homeassistant/components/...`. A directory name leaves the tracked tree when it is renamed,
-# so a path is skipped only for a name listed here, never for a name the tree lacks.
+# A path is skipped only for a name listed here, never for a name the tree lacks.
 _FOREIGN_ROOTS = frozenset({"homeassistant"})
 
 

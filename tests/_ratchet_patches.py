@@ -50,8 +50,7 @@ What the heuristic counts, and what it misses:
 import ast
 from collections.abc import Collection, Iterable
 
-# `mod = importlib.util.module_from_spec(spec)` and `mod = importlib.import_module("x")` both
-# bind a module to a plain name, which no import statement records.
+# Both bind a module to a plain name, which no import statement records.
 DYNAMIC_IMPORTS = frozenset({"module_from_spec", "import_module"})
 
 

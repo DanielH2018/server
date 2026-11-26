@@ -57,8 +57,7 @@ from _k8s_render import rendered_texts as _rendered_k8s_texts
 from _setup_render import rendered_setup_texts as _rendered_setup_texts
 from _shell_render import rendered_shell_texts as _rendered_shell_texts
 
-# The two capabilities that give root back its permission-bit override. DAC_OVERRIDE is the
-# read+write form; DAC_READ_SEARCH is the read-only form, which is enough for a log tailer.
+# DAC_OVERRIDE is the read+write form; DAC_READ_SEARCH is read-only, enough for a log tailer.
 _DAC_CAPS = ("DAC_OVERRIDE", "DAC_READ_SEARCH")
 
 _ROOT = re.compile(r"^\s*runAsUser:\s*0\s*$")
@@ -67,11 +66,9 @@ _ADD = re.compile(r"^\s*add:\s*$")
 _DROP = re.compile(r"^\s*drop:\s*$")
 
 
-# The role templates no render reaches. `_k8s_render` skips `k8s/image-builder`, an
-# `include_role` helper with no `containers_list` entry, so its image and tag arrive on the
-# calling role's include task. pihole's and airflow's `airflow-env` hold only macros their Deployments import. Their
-# source is read instead, and `test_the_render_reaches_every_role_template` fails if the set
-# grows.
+# The role templates no render reaches: `k8s/image-builder` is an include helper with no
+# `containers_list` entry, and pihole's and airflow's `airflow-env` hold only macros. Their source
+# is read instead.
 FALLBACK_TEMPLATES = frozenset(
     {
         "k8s/roles/image-builder/templates/build-job.yaml.j2",

@@ -134,10 +134,8 @@ def plugins(tmp_path):
         "configurations",
         "Ani-Sync_4.4.0.0",
         "Media Cleaner_3.7.0.101109",
-        # Jellyfin's own Update Plugins task writes a newer version between restarts. This
-        # sweep keeps both on purpose — it matches the NAME — and the installer's own
-        # superseded sweep removes the version the pin does not name
-        # (test_jellyfin_plugin_pins_hold_across_a_restart.py).
+        # Jellyfin's Update Plugins task writes a newer version between restarts; this sweep matches
+        # the NAME and keeps both on purpose.
         "Media Cleaner_99.0.0.0",
         "Trakt_30.0.0.0",
         "SSO Authentication_4.0.0.4",

@@ -46,8 +46,7 @@ def _parse(subject: Subject) -> ast.AST | None:
 
 # ── "<host>" in x ─────────────────────────────────────────────────────────────────────
 
-# Dot-separated labels ending in a known TLD: close to what CodeQL matches, not to what a valid
-# hostname is.
+# Close to what CodeQL matches, not to what a valid hostname is.
 HOST_SHAPED = re.compile(
     r"^[A-Za-z0-9_-]+(\.[A-Za-z0-9_-]+)*\.(io|com|net|org|local|dev|lan)$"
 )
@@ -99,8 +98,7 @@ def _pyyaml_offence(subject: Subject) -> list[str]:
 
 # ── Path(__file__).resolve().parents[N] ───────────────────────────────────────────────
 
-# `parents[0]` is the file's own directory, a local fact, so the pattern starts at 1. The
-# chained `.parent.parent` is the same anchor spelled the way the `parents[N]` rule missed.
+# `parents[0]` is the file's own directory, a local fact, so the pattern starts at 1.
 _ANCHOR = re.compile(
     r"(?:_?Path|pathlib\.Path)\(__file__\)\.resolve\(\)(?:\.parents\[[1-9]\d*\]|(?:\.parent){2,})"
 )
@@ -109,8 +107,8 @@ _ANCHOR = re.compile(
 # ── subprocess.run(["git", ...]) or subprocess.Popen(["git", ...]) under scripts/ ─────
 
 _ROUTED = frozenset({"git", "gh", "kubectl"})
-# A long-lived `git cat-file --batch` needs the same GIT_*-free environment as a one-shot
-# call; `lib.git.git_process` is its routed form.
+# A long-lived `git cat-file --batch` needs the same GIT_*-free environment as a one-shot call;
+# `lib.git.git_process` is its routed form.
 _RAW_CALLS = frozenset({"run", "Popen"})
 
 
@@ -327,10 +325,6 @@ ROWS = (
         ),
         green=(Subject("scripts/lib/no_other_root_holds_this_name.py", ""),),
         min_matches=100,
-        # One per root shape: a cross-role host module, a retired deployer module,
-        # a monitor-bridge module reached bare inside its image, a k8s role's `files/`
-        # reached only through a role test's insert, two `scripts/` modules, and one from each
-        # `scripts/<dir>` a test inserts itself.
         must_find=frozenset(
             {
                 "hosts/lib/host_lib.py",

@@ -20,10 +20,7 @@ import pytest
 from _helpers import REPO
 
 
-# A bare ini so the repo's own addopts (`-n auto`, `filterwarnings = error`) do not reach the
-# child run. The child needs only the plugin under test.
-# `markers` registers the one the `ui` exemption keys on, so the child does not emit an
-# unknown-mark warning that reads like the marker not having applied.
+# A bare ini so the repo's `addopts` and `filterwarnings = error` do not reach the child.
 _CHILD_INI = "[pytest]\nmarkers =\n    ui: stands in for the live-browser suite\n"
 
 _LEAKS = """
@@ -39,9 +36,7 @@ def test_it_touches_nothing():
     assert 1 + 1 == 2
 """
 
-# One child module carrying both halves of the `ui` exemption, so a single run shows the
-# marker deciding rather than the guard having been switched off. `curl` here resolves
-# `example.invalid`, which is NXDOMAIN by RFC 6761 — nothing leaves the host either way.
+# One child module carries both halves of the `ui` exemption.
 _UI_MARKED_AND_PLAIN = """
 import subprocess
 
@@ -59,9 +54,8 @@ def test_a_plain_test_shells_out():
     subprocess.run(["curl", "-sS", "https://example.invalid"], check=False)
 """
 
-# A skipped test never reaches `pytest_runtest_setup`, but its teardown still runs. Ordered
-# so that the skip follows the leak: the guard must blame the test that shelled out and leave
-# the skip alone.
+# A skipped test never reaches setup but its teardown runs: the skip follows the leak, and the guard
+# must blame the leaking test.
 _LEAKS_THEN_SKIPS = """
 import subprocess
 
@@ -140,8 +134,7 @@ def _run_child(
             "-q",
         ],
         cwd=tmp_path,
-        # `tests` is on pythonpath for the parent through pyproject.toml; the child
-        # runs under its own bare ini, so it needs the path spelled out.
+        # The child runs under its own bare ini, so it needs `tests` on the path spelled out.
         env={
             "PATH": "/usr/bin:/bin",
             "PYTHONPATH": str(REPO / "tests"),
@@ -213,8 +206,7 @@ def test_a_ui_marked_test_is_clean_when_it_shells_out(tmp_path: Path) -> None:
     setup instead of catching a leak.
     """
     proc = _run_child(tmp_path, _UI_MARKED_AND_PLAIN)
-    # The guard fails a leaking test from teardown, which pytest reports as an error rather
-    # than a failure — so the passing count is what says the `ui` test came through.
+    # The guard fails a leaking test from teardown, reported as an error.
     assert "2 passed" in proc.stdout, (
         "the guard failed a `ui`-marked test for shelling out:\n" + proc.stdout
     )
@@ -304,9 +296,8 @@ def test_every_deselected_marker_in_addopts_is_one_the_guard_exempts(
     Set EQUALITY, not containment: it doubles as the non-vacuity assertion, so a parse that
     finds no markers fails instead of passing over an empty set.
     """
-    # `getini` returns the ini value shell-split, so the expression after `-m` arrives as one
-    # element with its quoting already resolved — and it stays the ini's own value even when
-    # the run overrode `-m` on the command line.
+    # `getini` returns the ini value shell-split, so the `-m` expression arrives as one element,
+    # even when the run overrode `-m`.
     addopts = list(pytestconfig.getini("addopts"))
     deselected = set()
     for flag, expression in zip(addopts, addopts[1:], strict=False):
@@ -378,9 +369,7 @@ def test_the_shim_set_still_covers_the_core_egress_binaries(binary: str) -> None
     assert binary in leakguard.SHIMMED_BINARIES
 
 
-# What `git commit` hands its hooks. The child asserts the plugin took them away before its
-# body ran; the same child WITHOUT the plugin proves the assertion can fail, so a plugin that
-# stopped stripping is caught rather than passing on an environment that never had them.
+# The same child without the plugin proves the assertion can fail.
 _HOOK_ENV = {
     "GIT_DIR": "/nonexistent/.git",
     "GIT_INDEX_FILE": "/nonexistent/.git/index",
@@ -422,10 +411,8 @@ def test_strip_env_removes_only_the_hook_variables() -> None:
     assert leakguard.strip_env(environ, leakguard.GIT_HOOK_VARS) == []
 
 
-# The host path node_exporter scrapes, exported to the child as a careless caller would. The
-# child runs the real check library's writer and asserts the file landed anywhere but there.
-# A child without the plugin is the red half: the exported path reaches it, and the
-# child's first assert fails before the writer runs, so the red half writes nothing there.
+# The host path node_exporter scrapes, exported to the child as a careless caller would.
+# The child without the plugin is the red half: its first assert fails before the writer runs.
 _REAL_TEXTFILE_DIR = "/var/lib/node-exporter-textfile"
 _CHECK_LIB = REPO / "hosts/components/check-lib/files/homelab-check-lib.sh"
 
@@ -469,10 +456,7 @@ def test_without_the_plugin_the_exported_textfile_dir_reaches_the_test(
     )
 
 
-# The agent user's profile value, which `fanout_lib.target` reads into SERVER_CHECKOUT.
-# Not the agent's real clone, /var/lib/claude/server: run as `claude`, PRIMARY_CHECKOUT is that
-# clone already, so the profile would move nothing and the red half below would pass.
-# The plugin strips the variable by name, so any value no checkout has does.
+# Not the agent's real clone: run as `claude`, PRIMARY_CHECKOUT is already that clone.
 _PROFILE_ENV = {"RUN_HOOK_PROJECT_DIR": "/nonexistent/agent-profile-checkout"}
 
 _READS_SERVER_CHECKOUT = f"""

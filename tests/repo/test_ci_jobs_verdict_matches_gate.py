@@ -91,8 +91,7 @@ def test_the_readers_job_list_equals_the_gates_needs():
 
 
 def test_the_expansion_finds_the_matrix_legs_it_must():
-    # The two matrix shapes ci.yml uses: a `name:` template over an axis, and an `include`
-    # list on a job with no `name:`. A parse that dropped either would let the list shrink.
+    # A parse that dropped either matrix shape would let the list shrink.
     assert "pytest (shard 6)" in _gate_dependencies()
     assert "host_packages (26.04, 3.14)" in _gate_dependencies()
 
@@ -119,8 +118,7 @@ def test_a_skipped_dependent_can_only_mean_the_tree_was_proven():
             continue
         condition = str(job["if"]).strip().removeprefix("${{").removesuffix("}}")
         condition = condition.strip()
-        # The draft arm adds no skip `jobs_verdict` can see: a draft PR's head is never a
-        # master commit, and the gate skips with its dependents there.
+        # The draft arm adds no skip `jobs_verdict` can see.
         assert condition == (
             "(needs.prove.result == 'cancelled' || needs.prove.result == 'failure'"
             " || (!cancelled() && needs.prove.outputs.proven != 'true'))"

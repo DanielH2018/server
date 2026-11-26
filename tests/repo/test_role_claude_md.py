@@ -37,9 +37,7 @@ class Plane:
 
 
 PLANES = [
-    # `manifests` is a member rather than an exclusion: the shared render role every other k8s
-    # role includes still needs a doc. It meets the deploy-tag arm the way the other
-    # tagless shared roles do, by saying in its doc that there is nothing to type.
+    # `manifests` is a member, not an exclusion: the shared render role needs a doc.
     Plane(
         "k8s",
         K8S_ROLES,

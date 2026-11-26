@@ -39,8 +39,6 @@ CI_WORKFLOW = REPO / ".github" / "workflows" / "ci.yml"
 # The job that re-reports the required context for the halves it depends on.
 GATE_JOB = "prek"
 
-# Jobs ci.yml is known to declare. A parser that returned an empty mapping would make the subset
-# check below vacuously true, so a rename fails here rather than silently shrinking coverage.
 KNOWN_JOBS = frozenset(
     {
         "hooks",

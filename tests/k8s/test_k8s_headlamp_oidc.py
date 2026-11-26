@@ -35,13 +35,9 @@ def _headlamp_pod_spec(**overrides) -> dict:
     return doc["spec"]["template"]["spec"]
 
 
-# The flags an OIDC-enabled Headlamp must carry. Named, because the failure mode of a missing
-# one is never an error: no `-oidc-scopes=...groups` and the RBAC group subject matches
-# nothing, no `-oidc-use-pkce` and the exchange fails against a client that requires PKCE.
-# `-oidc-callback-url` is deliberately NOT here. It renders only when
-# `headlamp_k8s_oidc_callback_url` is set, and the default leaves it empty so Headlamp derives
-# the callback from each incoming request — which is what lets one instance serve both the LAN
-# and the public hostname. See test_headlamp_leaves_the_oidc_callback_to_the_request_host.
+# Named, because a missing flag never errors: without `-oidc-scopes=...groups` the RBAC group
+# subject matches nothing, without `-oidc-use-pkce` the exchange fails. `-oidc-callback-url` is
+# deliberately absent so Headlamp derives it per request.
 OIDC_ARG_NAMES = frozenset(
     {
         "-oidc-client-id",

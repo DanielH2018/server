@@ -29,9 +29,7 @@ BLACKBOX = K8S_ROLES / "blackbox-exporter"
 PI_PORTS_JOB = "blackbox-pi-ports"
 EXTRA_JOB = "blackbox-extra"
 
-# service -> (module, a substring of the target address) for the 12 tiles that became a probe. The
-# substring is the port or path the deleted tile named. Loki's /ready has no probe (M5's
-# `ScrapeTargetDown` covers job loki-homelab) and the Pi ping is `PiHostDown`.
+# The substring is the port or path the deleted tile named.
 PROBES = {
     "wg-easy": ("http_2xx", ":51821"),
     "email-to-rss": ("http_2xx", "/admin/login"),
@@ -46,8 +44,6 @@ PROBES = {
     "zigbee2mqtt": ("tcp_connect", ":6638"),
     "nut": ("tcp_connect", ":3493"),
 }
-# The services whose tile took `severity: critical` from the home-critical tier, plus the edge
-# all-clear, which was always critical.
 TIERED_PROBES = {"mosquitto", "pihole"}
 EDGE_SELFCHECK_PATH = "/.well-known/traefik-edge-selfcheck"
 KEYWORDS = {"http_body_ok": "ok", "http_body_OK": "OK"}
@@ -129,8 +125,8 @@ def test_the_home_critical_tiles_are_the_critical_tier():
 
 
 def test_an_untiered_service_probe_leaves_the_critical_tier():
-    # The two tiered probes take their tier from the service entry's `tier`, not from a literal.
-    # Untier mosquitto and its target must drop to the warning tier.
+    # The tiered probes take their tier from the service entry's `tier`, not a literal;
+    # untiering mosquitto must drop its target to the warning tier.
     box = host_context()["services"]
     untiered = [
         {k: v for k, v in entry.items() if k != "tier"}
@@ -242,8 +238,8 @@ def pi_port_dead_rule() -> dict:
 
 
 def test_pi_port_dead_holds_the_retired_rows_down_streak():
-    # The deleted pi_pressure row held a dead port for PI_PORTS_CONSECUTIVE (2) bridge cycles of
-    # INTERVAL (300s), so a Pi deploy that recreates a container for a few seconds pages nobody.
+    # The rule holds a dead port for PI_PORTS_CONSECUTIVE (2) bridge cycles of INTERVAL (300s), so a
+    # seconds-long container recreate during a Pi deploy pages nobody.
     assert pi_port_dead_rule()["for"] == f"{2 * 300 // 60}m"
 
 
@@ -262,8 +258,9 @@ def recreate_hint_problems(rule: dict) -> list[str]:
 
 
 def test_pi_port_dead_fires_on_a_refused_connect_and_names_the_recreate_hint():
-    # Failure class 6 ("restart is not recreate"): a Pi container that comes back attached to no
-    # network keeps `Up (healthy)` while its port is closed, and only a recreate restores it.
+    # A Pi container that comes back attached to no network keeps `Up (healthy)` while its port is
+    # closed;
+    # only a recreate restores it.
     assert recreate_hint_problems(pi_port_dead_rule()) == []
 
 

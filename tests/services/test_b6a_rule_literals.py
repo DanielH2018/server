@@ -111,8 +111,8 @@ def test_literal_problems_is_flagged_when_the_cron_moves_without_the_rule(alert)
 
 @pytest.mark.parametrize("alert", sorted(PRODUCERS))
 def test_a_cron_minute_that_is_not_every_n_is_refused_not_rendered_with_a_guess(alert):
-    # The shared harness renders an undefined name as STUB, so the refusal only shows under
-    # StrictUndefined, which is how Ansible renders.
+    # The shared harness renders an undefined name as STUB; the refusal shows only under
+    # StrictUndefined, as Ansible renders.
     template, _name, var = PRODUCERS[alert]
     path = shell_template_path("components", "claude-code", template)
     env = template_env(path.parent, undefined_cls=StrictUndefined)

@@ -46,8 +46,6 @@ CLAUDE_BOARDS = frozenset(
     }
 )
 
-# Named rather than counted: a census that globs for its own subject returns an empty set the
-# moment the tree moves, and every assertion below then passes on nothing.
 KNOWN_CROWDSEC_BOARDS = frozenset(
     {
         "crowdsec-overview.json",
@@ -57,9 +55,7 @@ KNOWN_CROWDSEC_BOARDS = frozenset(
     }
 )
 
-# Acquisition counters this deployment cannot emit, whatever its activity. Distinct from the
-# bucket counters (cs_buckets, cs_bucket_created_total, ...), which are absent only while nothing
-# has overflowed — those panels are correct and stay.
+# Acquisition counters this deployment cannot emit.
 UNEMITTED_METRICS = frozenset(
     {
         "cs_journalctlsource_hits_total",
@@ -77,18 +73,12 @@ NODE_AGENT_JOB = 'job="crowdsec-node-agents"'
 # A `{...}` selector naming the node variable.
 NODE_SELECTOR = re.compile(r"\{[^{}]*node=\"\$node\"[^{}]*\}")
 
-# Metrics only the central LAPI pod emits. Prometheus scrapes it as `job: crowdsec` with no
-# `node` label at all (observability/templates/prometheus.yaml.j2), so a per-node selector on any
-# of these matches nothing however the rename went.
+# Prometheus scrapes the central LAPI as `job: crowdsec` with no `node` label.
 LAPI_ONLY_METRICS = frozenset(
     {"cs_alerts", "cs_active_decisions", "cs_lapi_request_duration_seconds_bucket"}
 )
 
-# Metrics the node agents cannot emit, so pinning one to their job is the same dead panel with
-# the selector written the other way round. `cs_bucket_pour_seconds_bucket` comes from
-# the central pod's AppSec datasource and from the traefik sidecar (`crowdsec-traefik-agent`);
-# the node agents read auth.log and pour into no bucket, which is why `Bucket pour
-# time` matched nothing while carrying `job="crowdsec-node-agents"` alongside `node="$node"`.
+# Metrics the node agents cannot emit, so pinning one to their job is a dead panel.
 NOT_ON_THE_NODE_AGENTS = frozenset(
     {"cs_bucket_pour_seconds_bucket"} | LAPI_ONLY_METRICS
 )
@@ -244,8 +234,7 @@ def test_the_deploys_annotation_still_reads_the_homelab_loki():
 
 
 # A raw sum of the per-session cost counter drops each session once its series goes stale, and
-# `increase()` misses each series' first sample, so both read a fraction of the range's spend.
-# Every api_request event carries its own `cost_usd`, and Loki keeps them all.
+# `increase()` misses each series' first sample.
 COST_PANELS = frozenset(
     {
         "Cost estimate (USD)",
@@ -381,22 +370,11 @@ def test_a_board_that_broke_each_rule_would_be_reported(tmp_path):
     assert engine_metrics_pinned_to_the_node_agents(pour) == [pour_expr]
 
 
-# --- a stat panel whose green threshold the fleet can never reach -------------------------
-#
-# A DIFFERENT failure from the ones above: the query returns data, so no dead-panel audit sees
-# it. `Running Crowdsec` plots `sum(up{job=~"crowdsec.*"})` against a green step at 10, sized
-# by the upstream for a fleet of ten machines. This cluster runs four scraped CrowdSec targets,
-# so a raw-count tile reads red on a fully healthy fleet and stays red however many agents come
-# up — no signal in either direction, the inverse of the dead panels above.
-#
-# The rule that survives the next agent: a panel COUNTING `up` targets must express itself as a
-# ratio, so 1 means "every agent reports" whatever the fleet size, and no threshold may sit
-# above 1. A raw count with a fleet-size constant is the shape being banned.
+# A panel counting `up` targets must be a ratio with no threshold above 1: a raw count against a
+# fleet-size constant reads red on a healthy fleet.
 
 
-# Deliberately narrow: the panel's VALUE must be the target count. `Total raw lines` on the
-# insight board carries `... or up{...} * 0` purely to zero-fill an idle series, and its
-# thresholds colour a line RATE — a wider `up{` match flags it, and that is a false positive.
+# Deliberately narrow: `Total raw lines` carries `... or up{...} * 0` only to zero-fill.
 UP_COUNT = re.compile(r"\b(?:sum|count)\s*\(\s*up\{")
 
 
@@ -477,8 +455,7 @@ def test_the_boards_the_rules_read_are_all_still_there():
         for b in SECURITY.glob("*.json")
     )
     assert total >= 40, total
-    # And the per-node boards genuinely carry node selectors, so the job-scoping rule above
-    # is not passing on a board that stopped using the variable.
+    # The per-node boards must carry node selectors.
     scoped = sum(
         len(NODE_SELECTOR.findall(e))
         for b in SECURITY.glob("*.json")

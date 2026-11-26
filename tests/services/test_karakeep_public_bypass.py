@@ -35,9 +35,6 @@ from _k8s_render import rendered_docs
 
 # What next-auth answers on in the pinned image (apps/web/app/api/auth/[...nextauth]).
 NEXT_AUTH_PATH = "/api/auth/csrf"
-# One request path per session-less caller, from the 0.34.0 sources: the extension's tRPC
-# batch URL, the mobile upload POST (no trailing slash, no subpath), a mobile asset read, a
-# REST call, and the mobile connection test.
 CLIENT_PATHS = (
     "/api/trpc/bookmarks.getBookmarks?batch=1",
     "/api/assets",
@@ -70,8 +67,8 @@ def test_the_issue_prescribed_narrowing_loses_the_clients():
     assert not any(prefix_covers("/api/v1/", p) for p in CLIENT_PATHS[:3])
 
 
-# The names the app reads, from packages/shared/config.ts upstream. RATE_LIMITING_ENABLED
-# defaults to false there, which switches off apiKeys.exchange's own 10-per-15-minutes limit.
+# RATE_LIMITING_ENABLED defaults to false upstream, which switches off `apiKeys.exchange`'s own rate
+# limit.
 REQUIRED_ENV = {"DISABLE_SIGNUPS": "true", "RATE_LIMITING_ENABLED": "true"}
 
 
@@ -94,8 +91,6 @@ def test_both_controls_set_is_clean():
 # --- applied to the tree ------------------------------------------------------------
 
 
-# The ClientIP-gated .local route the third invariant must find. A rename or a template move
-# would otherwise leave that fixture empty, and `not covering` over nothing passes.
 MONITORING_ROUTE = "karakeep-monitoring"
 
 

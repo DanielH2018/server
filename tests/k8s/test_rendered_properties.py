@@ -260,9 +260,8 @@ PROPERTIES = (
             red=("prowlarr", {}),
             green=("prowlarr", {"progressDeadlineSeconds": 780}),
             min_matches=55,
-            # The Deployments whose budget exceeds the default deadline: they carry the whole
-            # census, since every role at the default budget passes on the default deadline.
-            # Re-derive the set if `_DEFAULT_DEADLINE_S` or a role's budget moves.
+            # The Deployments whose budget exceeds the default deadline carry the whole census;
+            # re-derive the set if `_DEFAULT_DEADLINE_S` or a role's budget moves.
             must_find=frozenset(
                 {
                     "prowlarr",

@@ -12,8 +12,8 @@ import pytest
 
 import xdist_width
 
-# A literal rather than `xdist_width.WEIGHTS_TABLE`, so these tests run against a module that
-# never read the table and fail on its behaviour rather than on a missing name.
+# A literal, not `xdist_width.WEIGHTS_TABLE`, so these tests fail on behaviour rather than a missing
+# name.
 WEIGHTS_TABLE = "scripts/dev/pytest_shard_runner_weights.json"
 
 

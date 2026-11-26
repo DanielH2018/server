@@ -24,9 +24,8 @@ EXPECTED_IGNORED = frozenset(
         ".pytest_cache",
         ".ruff_cache",
         ".ansible",  # ansible's own tmp/collections cache when it runs from the root
-        # A checkout that ran ansible with a `log_path` in ansible.cfg keeps its
-        # file until initial_setup's `ansible-log` tasks delete it, and a run that sets
-        # ANSIBLE_LOG_PATH to this name writes one again.
+        # A checkout that ran ansible with a `log_path` keeps its file until the `ansible-log` tasks
+        # delete it.
         "ansible.log",
         "site",  # a bare `mkdocs build` (the cron builds to a temp dir)
         # the prek `mkdocs-strict` hook builds here and leaves it, on purpose (prek.toml)

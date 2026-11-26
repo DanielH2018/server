@@ -15,10 +15,8 @@ from renderer.renderer_lib import host as host_mode
 from _helpers import HOST_VARS
 
 
-# The Pi's package runs `compose_services` as one Compose project (H5) through
-# homelab-compose.service. Each pair is (upstream, downstream): autoheal restarts containers
-# through docker-proxy-lifecycle, and alloy discovers logs through docker-proxy. Both ends must
-# be packaged, and the downstream carries `depends_on` on the service it reaches.
+# Each pair is (upstream, downstream): both ends must be packaged, and the downstream carries
+# `depends_on` on the service it reaches.
 PI_ORDERING = [("docker-proxy", "autoheal"), ("docker-proxy", "alloy")]
 # What a packaged downstream's `depends_on` must name.
 PI_DEPENDS_ON = {"autoheal": "docker-proxy-lifecycle", "alloy": "docker-proxy"}

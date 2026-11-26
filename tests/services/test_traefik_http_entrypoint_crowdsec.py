@@ -24,18 +24,15 @@ import pytest
 
 from _k8s_render import host_context, traefik_static_config
 
-# daniel-box runs the bouncer plugin. A cluster with traefik_k8s_manage_crowdsec false renders
-# no chain at all on either entrypoint — covered by its own test below. That case is an
-# override rather than a host.
+# A cluster with the flag false renders no chain on either entrypoint.
 _WITHOUT_CROWDSEC = {"traefik_k8s_manage_crowdsec": False}
 
 
 def _chains(overrides: dict | None = None) -> dict[str, list[str]]:
     config = traefik_static_config(overrides)
     return {
-        # `or []`, not a default: dropping the last entry leaves a bare `middlewares:` key,
-        # which parses to None. `.get(..., [])` returns that None and the comparison below
-        # raises a TypeError instead of reporting the gap.
+        # `or []`, not a default: a bare `middlewares:` key parses to None and `.get(..., [])`
+        # returns it, so the comparison below raises TypeError instead of reporting the gap.
         name: (spec.get("http") or {}).get("middlewares") or []
         for name, spec in config["entryPoints"].items()
     }

@@ -152,9 +152,7 @@ def test_each_broken_drill_property_is_named(workflow, case):
     assert any(expected in line for line in found), found
 
 
-# A fake curl answers by the path it is asked for. FAKE_<KEY>_STATUS and FAKE_<KEY>_BODY set
-# the answer, and a key left unset answers 404 with no body. The pull-token call runs with -f
-# and no -w, so it gets the body on stdout.
+# A key left unset answers 404 with no body; the pull-token call runs with -f and no -w.
 FAKE_CURL = r"""#!/usr/bin/env bash
 cat > /dev/null
 out= fmt= url=
@@ -187,7 +185,6 @@ echo 'Error: no signatures found' >&2
 exit "${FAKE_COSIGN_RC:-1}"
 """
 
-# The index prod's referrers tag held on 2026-10-13.
 SIGNED_INDEX = (
     '{"schemaVersion":2,"mediaType":"application/vnd.oci.image.index.v1+json","manifests":'
     '[{"mediaType":"application/vnd.oci.image.manifest.v1+json","size":879,"digest":'

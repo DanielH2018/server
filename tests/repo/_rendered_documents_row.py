@@ -8,8 +8,7 @@ import ast
 
 from _row_table import Census, Subject, tracked
 
-# Each function still allowed its own `safe_load_all` walk, keyed by module and function, so an
-# exemption for one function never covers a sibling in the same module.
+# Keyed by module and function so an exemption for one never covers a sibling.
 OWN_WALKS = {
     ("scripts/renderer/renderer_lib/documents.py", "parse_documents"): (
         "the walk every other reader calls"

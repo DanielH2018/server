@@ -35,14 +35,10 @@ SENTINEL_NODE = "sentinel-vip-node"
 _HOSTNAME = "kubernetes.io/hostname"
 _WORKLOAD_KINDS = {"Deployment", "StatefulSet", "DaemonSet"}
 
-# jellyfin is pinned by storage, not by its own nodeSelector: the media-volume `local` PV
-# declares a required nodeAffinity on the node it lives on, which the scheduler enforces
-# just as hard. Listed explicitly rather than special-cased in the logic so that moving the
-# media volume off node-local storage forces someone to revisit this line.
+# jellyfin is pinned by storage: the media-volume `local` PV declares a required nodeAffinity.
 PINNED_BY_VOLUME = {"jellyfin"}
 
-# Roles the census must find, so a matcher that stopped matching names the member it lost
-# instead of passing over an empty list.
+# A matcher that stopped matching names the member it lost.
 KNOWN_VIP_ROLES = frozenset(
     {"jellyfin", "mosquitto", "pihole", "terraria", "traefik", "valheim", "wg-easy"}
 )

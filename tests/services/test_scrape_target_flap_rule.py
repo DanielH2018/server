@@ -163,9 +163,8 @@ def test_a_promtool_case_keeps_the_flap_arm_quiet_on_one_rollout_gap():
     cases = yaml_fast.safe_load(TESTS.read_text())["tests"]
 
     def quiet_after_gap(case: dict) -> bool:
-        # A hard-down case has one zero run too, but one that never ends, and a check inside
-        # an outage is quiet by construction. The run must recover and the check follow it.
-        # An outage as long as the hold is the next test's case, so this one must be shorter.
+        # A hard-down case has one zero run that never ends, and a check inside an outage is quiet
+        # by construction.
         ups = [
             expand(s["values"])
             for s in case.get("input_series") or []

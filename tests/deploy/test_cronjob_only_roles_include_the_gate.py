@@ -21,10 +21,7 @@ from diagnostics.probe_lib.health_render import rendered_docs
 
 _DEFAULT_NS = "homelab"
 
-# The exact CronJob-only population (test_probe_health_resolver.py, under
-# scripts/diagnostics/tests/, pins the matching set from the health-gate side). Equality rather
-# than a lower bound: a THIRD role gaining a CronJob without a gate include must fail this test
-# with a clear reason, not pass it silently because the assertion below only checked >= 2.
+# Equality, not a lower bound: a third CronJob-only role without a gate include must fail.
 _KNOWN_CRONJOB_ONLY_ROLES = frozenset(
     {"configarr", "longhorn-reconcile", "pi-peer-backup", "longhorn-restore-drill"}
 )

@@ -82,8 +82,7 @@ def _target(patch: dict) -> tuple:
 
 
 def test_manager_patch_targets_the_daemonset_the_upstream_file_declares():
-    # Kustomize refuses a build whose patch matches nothing, so a refresh that renames the
-    # DaemonSet fails here before it fails the render.
+    # Kustomize refuses a build whose patch matches nothing.
     assert _target(_manager_patch()) in _upstream_targets()
 
 
@@ -93,8 +92,8 @@ def test_manager_patch_sets_a_request_and_no_limit():
 
 
 def test_manager_patch_holds_the_value_of_the_defaults_key():
-    # A kustomize patch is copied verbatim and cannot read a variable, so the key in the
-    # role's defaults is only as true as this test makes it.
+    # A kustomize patch is copied verbatim and cannot read a variable, so the key in the role's
+    # defaults is only as true as this test makes it.
     # fact: k8s/roles/longhorn/CLAUDE.md#At a glance
     resources = _container_resources(_manager_patch())
     assert resources["requests"]["memory"] == str(
@@ -144,8 +143,7 @@ def test_global_manager_patch_names_the_global_manager_container():
 
 def test_global_manager_patch_requests_the_defaults_value_and_no_limit():
     # fact: k8s/roles/longhorn/CLAUDE.md#At a glance
-    # Upstream v1.13.0 ships the Deployment with no `resources`, so without the patch its
-    # three pods run BestEffort.
+    # Upstream ships the Deployment with no `resources`.
     resources = _container_resources(_global_manager_patch())
     _assert_request_only(resources)
     assert resources["requests"]["memory"] == str(
@@ -188,16 +186,15 @@ def _docs(path) -> list[dict]:
 
 def test_the_manager_daemonset_rolls_one_pod_at_a_time():
     # fact: k8s/roles/longhorn/CLAUDE.md#At a glance
-    # The manager pods serve the admission webhook every claim's dry run calls. Upstream's
-    # `maxUnavailable: 100%` replaces both at once, so a claim-holding tag reconciling then
-    # fails and pages. One pod down at a time keeps the other serving.
+    # The manager pods serve the admission webhook; upstream's `maxUnavailable: 100%` replaces both
+    # at once, failing claim dry runs. One pod down at a time keeps the other serving.
     patches = [d for path in sorted(PATCHES.glob("*.y*ml")) for d in _docs(path)]
     assert _manager_max_unavailable(_docs(UPSTREAM), patches) == 1
 
 
 def test_upstream_alone_replaces_every_manager_pod_at_once():
-    # The member the check must find: upstream's own strategy, which the patch overrides.
-    # A refresh that changes it upstream fails here, and the patch may then be redundant.
+    # Upstream's own strategy, which the patch overrides; a refresh that changes it fails here and
+    # the patch may be redundant.
     assert _manager_max_unavailable(_docs(UPSTREAM), []) == "100%"
 
 
@@ -226,10 +223,8 @@ def _request(key: str) -> dict:
 
 def test_the_csi_setting_requests_the_defaults_values_for_every_csi_component():
     # fact: k8s/roles/longhorn/CLAUDE.md#At a glance
-    # Exact equality, not a subset: longhorn-manager compares each entry with the live
-    # container's `resources`, so an extra `limits: {}` never matches and rolls the object on
-    # every tick. The keys are every component the v1.13.0 manager reads from the Setting; one
-    # it omits runs BestEffort.
+    # Exact equality: longhorn-manager compares each entry with the live `resources`, so an extra
+    # `limits: {}` rolls the object every tick.
     sidecar = _request("k3s_longhorn_csi_sidecar_memory_request")
     node_sidecar = _request("k3s_longhorn_csi_node_sidecar_memory_request")
     assert _csi_setting_value() == {
@@ -303,9 +298,8 @@ def test_unsized_upstream_containers_get_the_defaults_requests_and_limits(
     patch, kind, name, section, container, key
 ):
     # fact: k8s/roles/longhorn/CLAUDE.md#At a glance
-    # Upstream ships each container with no `resources`, so the patch's block is what Flux
-    # applies. A refresh that adds upstream resources fails the first assertion, and the
-    # patch then needs re-reading against them.
+    # Upstream ships no `resources`, so the patch's block is what Flux applies; a refresh that adds
+    # some fails the first assertion.
     assert "resources" not in _workload_container(
         UPSTREAM, kind, name, section, container
     )

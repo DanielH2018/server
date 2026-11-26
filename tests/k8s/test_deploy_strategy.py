@@ -24,8 +24,7 @@ cannot drift from what that validator considers a renderable manifest.
 
 from _k8s_render import rendered_docs
 
-# (role, deployment name) -> why this workload must stop before it starts.
-# Adding an entry is a deliberate act: it means a deploy of this service has a downtime gap.
+# Adding an entry means a deploy of this service has a downtime gap.
 _RECREATE = {
     # ── sqlite / embedded DB / local config store ──
     (

@@ -22,8 +22,6 @@ from lib.repo_paths import K8S_ROLES
 
 READ_VERBS = {"get", "list", "watch"}
 
-# The identity's objects are the cluster-base role's since H1.2, so its defaults (the mirrored
-# `cluster_base_readonly_sa_*` pair and the CRD groups) are the values the template renders with.
 CLUSTER_BASE_ROLE = K8S_ROLES / "cluster-base"
 CLUSTER_BASE_DEFAULTS = yaml_fast.safe_load(
     (CLUSTER_BASE_ROLE / "defaults" / "main.yml").read_text()
@@ -56,11 +54,8 @@ def _readonly_rules() -> list[dict]:
     ]
 
 
-# Resources that turn cluster read access into cluster compromise. `secrets` is every
-# credential the cluster holds — the built-in `view` role excludes it deliberately and the
-# additive role must not put it back. `pods/exec` and its siblings are arbitrary code
-# execution inside a running workload, which RBAC models as a subresource `create` but which
-# reads, in a list of get/list/watch, like just more access.
+# `secrets` is every credential: the built-in `view` role excludes it and the additive role must not
+# put it back.
 FORBIDDEN_RESOURCES = {"secrets", "pods/exec", "pods/attach", "pods/portforward"}
 
 
@@ -78,9 +73,8 @@ def _grant_violations(rules: list[dict]) -> list[str]:
         # A bare wildcard over the core group sweeps secrets back in without naming them.
         if "*" in named and ("" in groups or "*" in groups):
             problems.append(f"wildcard resources over apiGroups {sorted(groups)}")
-        # A proxy subresource is an HTTP request to whatever a Service or pod serves, made as
-        # the API server. Unpinned, `get` on services/proxy reaches every Service in the
-        # namespace, so a proxy grant must name its target (Headlamp: `prometheus:9090`).
+        # A proxy subresource makes an HTTP request as the API server: a proxy grant must name its
+        # target (Headlamp: `prometheus:9090`).
         proxied = {r for r in named if r.endswith("/proxy")}
         if proxied and not rule.get("resourceNames"):
             problems.append(f"unpinned proxy grant on {sorted(proxied)}")
@@ -238,10 +232,8 @@ def test_headlamp_prometheus_proxy_grant_names_the_labelled_service():
     assert rule["resourceNames"] == [expected]
 
 
-# The three bindings the OIDC identity has to join. Named rather than counted: the whole
-# failure mode this guards is a binding that keeps the ServiceAccount and quietly loses the
-# Group, and a count moves for a dozen innocent reasons while a name only goes missing when
-# that happens.
+# Named, not counted: the failure is a binding that keeps the ServiceAccount and loses the Group,
+# which a count would not show.
 HEADLAMP_BINDINGS = frozenset(
     {"headlamp-view", "headlamp-cluster-read", "headlamp-prometheus-proxy"}
 )
@@ -344,8 +336,7 @@ def test_homepage_kubernetes_widget_wiring_holds_together():
     a read-only identity lists an empty set forever.
     """
     role = K8S / "homepage"
-    # The file as the pod reads it: config-secret.yaml.j2 embeds config/kubernetes.yaml.j2
-    # through lookup('template'), so the Secret's key is the render, not the source.
+    # `config-secret.yaml.j2` embeds `config/kubernetes.yaml.j2` through lookup('template').
     config_secret = next(
         doc
         for r, _tpl, doc in rendered_docs()
@@ -398,8 +389,7 @@ def test_readonly_role_covers_the_crd_groups_this_homelab_deploys():
     list degrades silently: the kubeconfig still works, that one `kubectl get` says
     Forbidden, and the caller falls back to sudo."""
     groups = set(CLUSTER_BASE_DEFAULTS["k3s_readonly_crd_api_groups"])
-    # The group every rendered IngressRoute and Middleware is actually applied under, read off
-    # the parsed apiVersion rather than off the macro's text, where `traefik.io` also appears
+    # Read off the parsed apiVersion rather than the macro's text, where `traefik.io` also appears
     # in comments and annotation keys.
     traefik_groups = {
         doc["apiVersion"].split("/", 1)[0]
@@ -412,9 +402,7 @@ def test_readonly_role_covers_the_crd_groups_this_homelab_deploys():
     assert unreadable == [], (
         f"IngressRoute/Middleware under {unreadable} unreadable without sudo"
     )
-    # Both sides, so dropping the group OR dropping the gate that needs it breaks this. The
-    # group is derived from the gate script's own resource argument rather than restated
-    # here, and the argument is pinned: a rename has to move the defaults with it.
+    # Both sides: the group is derived from the gate script's own resource argument.
     dotted = [a for a in etcd_restore.SNAPSHOT_FILES_ARGS if "." in a]
     assert dotted == ["etcdsnapshotfiles.k3s.cattle.io"], (
         "the etcd restore gate no longer reads one fully-qualified CRD — re-derive its group"

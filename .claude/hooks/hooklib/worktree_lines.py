@@ -15,9 +15,6 @@ from collections import Counter
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
-# A batch launched longer ago than this is past any run's working life: an agent lands or
-# stops within hours. What remains is a worktree `clean` was never run on, so the banner
-# counts those rather than naming each one in every session's context.
 FANOUT_LIVE_FOR = timedelta(hours=24)
 
 
@@ -145,15 +142,13 @@ def pruner_path() -> Path:
     return Path(config) / "hooks" / "prune-worktrees.py"
 
 
-# How old the cached survey may be before a session start refreshes it. The pruner's
-# `--brief` took 131s on daniel-box over 325 worktrees, so no session start can wait for it.
+# A session start cannot wait for the pruner's `--brief`, so the survey is cached.
 SURVEY_TTL_S = 15 * 60
 # The refresh's own bound, so a hung pruner cannot hold the refresh lock for good.
 SURVEY_TIMEOUT_S = 600
 
-# Run by `sh -c` with the cache path as `$0` and the pruner's argv as `$@`. The rename is
-# atomic, so a reader sees the previous survey or the whole new one, and the last line
-# records the pruner's exit status.
+# Run by `sh -c` with the cache path as `$0` and the pruner's argv as `$@`.
+# The rename is atomic, so a reader never sees a partial survey.
 _REFRESH_SCRIPT = (
     '"$@" > "$0.tmp" 2>&1; echo "exit $?" >> "$0.tmp"; mv -f "$0.tmp" "$0"'
 )

@@ -108,9 +108,7 @@ _VALUE_FLAGS = frozenset(
         "--from",
     }
 )
-# What ends the kubectl command on its line: a redirect with its descriptor (`2>`), a pipe, a
-# list operator or a parenthesis. Otherwise a shell word, its quoted and bare pieces joined, so
-# `jsonpath='{.a}'` stays one word.
+# A shell word joins its quoted and bare pieces, so `jsonpath='{.a}'` stays one word.
 _END = re.compile(r"\d*[<>]|[|;&()]")
 _WORD = re.compile(r"""\d*[<>]|[|;&()]|(?:'[^']*'|"(?:\\.|[^"\\])*"|[^\s'"|;&<>()])+""")
 _KUBECTL = re.compile(r"\$\{?KUBECTL\}?")
@@ -217,8 +215,8 @@ def argv_needs(
         if verb in ("label", "annotate"):
             # The `key=value` and `key-` words after the objects name no object.
             rest = [w for w in rest if "=" not in w and not w.endswith("-")]
-        # Every object the call names is a need of its own: the API server authorizes each
-        # against `resourceNames` separately, so a second name the rule omits is Forbidden.
+        # Every object the call names is a need of its own: the API server authorizes each against
+        # `resourceNames`, so a name the rule omits is Forbidden.
         if "/" in rest[0]:
             objects = [(_resource(w)[0], w.split("/", 1)[1]) for w in rest]
         else:
@@ -229,8 +227,8 @@ def argv_needs(
             if verb == "get":
                 found |= need(resource, "get" if name else "list", name=name)
             elif verb == "delete":
-                # The wait lists and watches with a `metadata.name` field selector, which
-                # RBAC authorizes against `resourceNames` like a get.
+                # The wait lists and watches with a `metadata.name` field selector, which RBAC
+                # authorizes against `resourceNames` like a get.
                 found |= need(resource, "delete", "list", "watch", name=name)
             else:
                 # `kubectl patch`, `label` and `annotate` GET the object first, then send the

@@ -38,8 +38,7 @@ from secrets_mgmt.cluster_vars import ARGON2_DIGEST, ARGON2_PARAMETERS
 
 ROTATION_DOC = REPO / "docs" / "secret-rotation.md"
 
-# The CLI flag each config key is spelled as. Pinned, because the mapping is not identity and
-# a reader who assumed it is would accept `--salt-size 32` against `key_length: 32`.
+# The mapping is not identity: a reader could accept `--salt-size 32` against `key_length: 32`.
 FLAG_TO_CONFIG_KEY = {
     "--iterations": "iterations",
     "--memory": "memory",
@@ -48,23 +47,14 @@ FLAG_TO_CONFIG_KEY = {
     "--key-size": "key_length",
 }
 
-# `--password` carries the input, not a parameter, so it has no config counterpart. Every OTHER
-# flag on the generate command is a parameter this guard must compare — including a `--variant`
-# nobody has added yet. Rather than enumerate CLI defaults that cannot be read off the tree,
-# the flag set is held to exactly the table above and an unrecognised flag fails naming itself.
-#
-# On the command as written today the regex already excludes it: the value is `"$pw"`, and the
-# value class below cannot match a leading quote. This set is what covers an unquoted
-# `--password=<value>` form, which the regex WOULD match — `test_an_unquoted_password_flag_is_ignored`
-# is its red proof, because the quoted case passes with or without this filter.
+# `--password` carries the input, not a parameter; every other flag must be in the table above, so
+# an unrecognised flag such as a new `--variant` fails naming itself.
 IGNORED_FLAGS = frozenset({"--password"})
 
 # The PHC fields the digest pattern spells, and the config key each one encodes.
 PHC_TO_CONFIG_KEY = {"m": "memory", "t": "iterations", "p": "parallelism"}
 
-# There is no `--variant` flag on either command, so there is nothing to compare it against.
-# It is pinned to a literal instead: `argon2id`, the long spelling the published v4.39 schema's
-# enum carries and the value the template's own comment settles on.
+# There is no `--variant` flag, so it is pinned to the literal `argon2id`.
 EXPECTED_VARIANT = "argon2id"
 
 _MARKER = "crypto hash generate argon2"

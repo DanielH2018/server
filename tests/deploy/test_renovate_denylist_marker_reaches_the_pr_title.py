@@ -41,8 +41,6 @@ _RENOVATE = REPO / "renovate.json"
 TITLE_MARKER_FIELD = "groupSingleUpdates"
 MARKER = "k8s_autodeploy: false"
 
-# The rules the census must find, by groupName head, so a rule renamed or stripped of its
-# marker fails as a missing member rather than passing over a smaller set.
 KNOWN_MARKER_RULE_PREFIXES = frozenset(
     {
         MANUAL_GROUP_PREFIX,

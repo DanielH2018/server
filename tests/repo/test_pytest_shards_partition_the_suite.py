@@ -30,10 +30,6 @@ from lib import yaml_fast
 
 CI_WORKFLOW = REPO / ".github" / "workflows" / "ci.yml"
 
-# Non-vacuity, per the repo rule that a check finding its own subject by pattern ships with a
-# named member it must find. `census()` globs `git ls-files` under `testpaths`; a rename, a moved
-# directory or a broken glob would return an EMPTY set, and every `all(...)` below would pass
-# over nothing. These five span four different testpath roots on purpose.
 KNOWN_TEST_FILES = frozenset(
     {
         "tests/repo/test_pytest_shards_partition_the_suite.py",

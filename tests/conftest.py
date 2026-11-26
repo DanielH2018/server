@@ -22,16 +22,16 @@ def widget_role(tmp_path: Path):
         defaults: str | None = None,
         name: str | None = None,
     ) -> Path:
-        # Each call gets its own directory. Several tests build two or three roles to compare
-        # them, and a shared path would let the last one silently stand in for all of them.
+        # Each call gets its own directory, or a shared path would let the last role stand in for
+        # all.
         built.append(None)
         role = tmp_path / (
             name or ("widget" if len(built) == 1 else f"widget-{len(built)}")
         )
         role.mkdir(parents=True, exist_ok=True)
         if templates is not None:
-            # An EMPTY templates dir is its own case: a role that renders no manifest at all
-            # must read as ungated, not as gated-with-nothing-to-gate. Pass `templates={}`.
+            # An EMPTY templates dir is its own case: a role rendering no manifest must read as
+            # ungated. Pass `templates={}`.
             (role / "templates").mkdir(exist_ok=True)
             for filename, body in templates.items():
                 (role / "templates" / filename).write_text(body)

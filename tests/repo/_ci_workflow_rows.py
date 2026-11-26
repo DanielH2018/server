@@ -30,8 +30,6 @@ CASE_JOBS = (LEGS_JOB, BOOTSTRAP_JOB, "k3s_download")
 HANDOFF = ".github/actions/host-packages-handoff/action.yml"
 HANDOFF_USES = "$/.github/actions/host-packages-handoff"
 CASES_STEP = "Run the updater cases in systemd containers"
-# The cases glob each side's updater .deb out of the build step's output and boot the image the
-# image step tags, so a run that skips either fails the cases rather than running them.
 BUILD_STEP = "Build both renders with the pinned nfpm"
 IMAGE_STEP = "Build the test image for this release"
 CASES_READ = "steps.render.outputs.cases == 'true'"

@@ -80,8 +80,8 @@ def test_no_forward_hands_the_lan_tld_to_the_router() -> None:
     `host-record=` lines answer for.
     """
     conf = _dnsmasq_conf()
-    # Directives only. The comment above the `server=` line names `rev-server=` to say why it
-    # was not used, and a whole-file substring check would fire on that explanation.
+    # Directives only: a comment above `server=` names `rev-server=`, so a whole-file substring
+    # check would fire.
     directives = "\n".join(
         line for line in conf.splitlines() if not line.strip().startswith("#")
     )

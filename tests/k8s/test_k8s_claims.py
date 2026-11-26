@@ -15,8 +15,7 @@ from _k8s_render import rendered_docs
 from lib.k8s_roles import CLAIM_TEMPLATE
 
 
-# Named members, with the live spec each must keep: a claim's storage class is immutable and
-# its size can only grow, so a converted claim that renders differently fails its next apply.
+# A claim's storage class is immutable and its size can only grow.
 _KNOWN_CLAIMS = {
     ("homelab", "freshrss-config"): ("longhorn", "2Gi"),
     ("homelab", "zigbee2mqtt-data"): ("longhorn", "2Gi"),
@@ -51,15 +50,14 @@ _KNOWN_CLAIMS = {
     ("homelab", "traefik-acme"): ("longhorn", "128Mi"),
     ("homelab", "wg-easy-config"): ("longhorn", "1Gi"),
     ("homelab", "media-data"): ("media-local", "400Gi"),
-    # The entries that set `namespace`: a render that dropped it would create four empty
-    # claims in homelab beside the live ones.
+    # A render that dropped `namespace` would create empty claims in homelab beside the live ones.
     ("observability", "loki-data"): ("longhorn-nobackup", "10Gi"),
     ("observability", "prometheus-data"): ("longhorn-nobackup", "12Gi"),
     ("observability", "grafana-data"): ("longhorn-nobackup", "1Gi"),
     ("observability", "tempo-data"): ("longhorn-nobackup", "5Gi"),
 }
-# The one claim whose `k8s_claims` entry sets `access_modes`. Access modes are immutable, and
-# the size/class pair above would pass a render that dropped the entry's modes for the default.
+# Access modes are immutable, and the size/class pair above would pass a render that dropped the
+# entry's modes.
 _RWX_CLAIMS = {("homelab", "media-data")}
 
 

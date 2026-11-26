@@ -26,13 +26,10 @@ from _helpers import REPO
 from lib.proc_testing import run
 
 
-# `[text](target)`, with the fragment stripped — an anchor is a heading, which this guard does
-# not resolve. `!` before the bracket is allowed so an image counts too.
+# The fragment is stripped: an anchor is a heading, which this guard does not resolve.
 _LINK = re.compile(r"!?\[[^\]]*\]\(([^)\s]*?)(?:#[^)]*)?\)")
 
-# A target this guard has no business resolving: an external URL, a mail link, a bare fragment,
-# a template placeholder, or an absolute path (which mkdocs resolves against the docs root, not
-# the filesystem, so `base / target` would be the wrong question).
+# An absolute path is resolved by mkdocs against the docs root, not the filesystem.
 _NOT_A_RELATIVE_PATH = re.compile(r"^(?:[a-z][a-z0-9+.-]*:|/|<|\{|$)", re.IGNORECASE)
 
 

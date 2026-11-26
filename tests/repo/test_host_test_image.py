@@ -176,8 +176,7 @@ def test_a_publish_that_cannot_tell_whether_the_tag_exists_pushes_nothing(
 
 
 _ARCH = {"ubuntu-26.04": "amd64", "ubuntu-24.04-arm": "arm64"}
-# The sites whose image the publisher has pushed. A site joins in the PR that copies its first
-# digest into image.pins; until then the matrix PR pins it `-`.
+# A site joins in the PR that copies its first digest into image.pins.
 PUBLISHED = frozenset({"26.04-amd64", "26.04-arm64"})
 
 

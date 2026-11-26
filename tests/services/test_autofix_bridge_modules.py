@@ -65,8 +65,7 @@ def test_autofix_py_cross_role_imports_are_shipped():
     Scoped to names known to be cross-role (bridge.common, jobs_metrics) rather than every ImportFrom target,
     since a stdlib import (json, sys, ...) has no place in this ship list.
     """
-    # `path` is where the module lands under /app, so it is the import id (`bridge/common.py`
-    # -> `bridge.common`); `name` is the flat ConfigMap key and says nothing about imports.
+    # `path` is where the module lands under /app and is the import id.
     shipped = {
         item.get("path", item["name"])[:-3].replace("/", ".")
         for item in _ship_list()

@@ -276,7 +276,6 @@ UNITS_REACHING_THE_CLUSTER_SET_KUBECONFIG = Census(
         _stripped_as(_B2_BUDGET, "User=root\n"),
         _stripped_as(_B2_BUDGET, ""),
     ),
-    # 79 units and templates when the row landed (2026-11-12).
     min_matches=60,
     must_find=frozenset(
         {

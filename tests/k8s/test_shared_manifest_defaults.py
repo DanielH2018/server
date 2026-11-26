@@ -36,9 +36,7 @@ from _k8s_render import render_role_template
 from _role_census import role_dirs
 
 
-# The roles whose Service the shared default renders. A census the tests below size themselves
-# against, so a fallback that silently stopped resolving fails by name rather than by an
-# `all(...)` over an empty set. Members, not just a count.
+# Members, not just a count, so a fallback that stopped resolving fails by name.
 ROLES_WITH_A_DEFAULT_SERVICE = frozenset(
     {
         "airflow",
@@ -73,9 +71,7 @@ ROLES_WITH_A_DEFAULT_SERVICE = frozenset(
 )
 
 
-# The roles whose IngressRoute the shared default renders — the IngressRoute half of the census above.
-# Every one of them is routed (its entry carries a `hostname`), which is also what
-# `scripts/renderer/template_filters/toposort.py` now derives their traefik ordering edge from.
+# Every one is routed (its entry carries a `hostname`).
 ROLES_WITH_A_DEFAULT_INGRESSROUTE = frozenset(
     {
         "airflow",
@@ -100,9 +96,6 @@ ROLES_WITH_A_DEFAULT_INGRESSROUTE = frozenset(
     }
 )
 
-# Each shared default's template, the census of roles taking it, and the basename the caller
-# names in `manifests_files`. The tests below parametrise over this rather than carrying one
-# copy per basename.
 SHARED_DEFAULT_CENSUS = {
     "service.yaml": ("service-default.yaml.j2", ROLES_WITH_A_DEFAULT_SERVICE),
     "ingressroute.yaml": (

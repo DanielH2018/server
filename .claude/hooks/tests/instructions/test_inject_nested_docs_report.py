@@ -24,8 +24,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 import _inline_budget as budget
 
-# Reached through the hook module, which imported it from `_inline_budget`: the base module
-# puts `.claude/hooks` on `sys.path` before it loads the hook.
+# The base module puts `.claude/hooks` on `sys.path` before it loads the hook.
 _mod = base._mod
 inline_margins = _mod.inline_margins
 MAX_CHARS = _mod.INLINE_MAX_CHARS - len(_mod._PREAMBLE)
@@ -109,8 +108,7 @@ def test_doc_over_the_char_limit_reports_head_and_sorts_first(tmp_path):
 
 
 def test_rows_sort_by_the_tighter_margin_as_a_fraction_of_its_limit(tmp_path):
-    # `z/` has 9 of 188 newlines left (5%) and thousands of chars. `m/` has 1,000 of 7,272
-    # chars left (14%). A sort on chars alone puts `z/` last.
+    # `z/` has 5% of lines left but thousands of chars; `m/` has 14% of chars left.
     rows = _rows(
         _checkout(
             tmp_path,
@@ -126,10 +124,7 @@ def test_rows_sort_by_the_tighter_margin_as_a_fraction_of_its_limit(tmp_path):
 
 
 def test_a_doc_tight_on_chars_sorts_before_one_with_fewer_lines_left(tmp_path):
-    # `b/` has 500 of 7,272 chars left (7%) and nearly every line. `a/` has 100 of 188
-    # newlines left (53%) and thousands of chars. The raw line margin is nearly always the
-    # smaller count, so a sort on raw counts, or on lines alone, puts `a/` first; so does no
-    # sort, because `git ls-files` lists `a/` first.
+    # A sort on raw counts, or on lines alone, puts `a/` first; so does no sort.
     rows = _rows(
         _checkout(
             tmp_path,

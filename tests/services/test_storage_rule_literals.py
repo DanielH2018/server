@@ -52,10 +52,7 @@ def test_a_state_dropped_from_the_allow_list_is_flagged():
     ]
 
 
-# Claims nothing reclaims, so the fullness page is their only bound. registry's push store has
-# has no garbage collection, and its verify Job's seed adds one python image
-# per `flux_job_image` pin. The exclusion is read off `PVCFull` itself, the rule that
-# pages on a full claim.
+# Nothing reclaims these claims, so the fullness page is their only bound.
 UNCOLLECTED_CLAIMS = frozenset({"registry-data"})
 
 
@@ -143,9 +140,7 @@ def roles_that_cap_a_volume() -> dict[str, str]:
     payload-shaped pattern would miss it and pass. The claim comes from the role's own
     `<role>_k8s_claim` default, which is the variable the write resolves its volume through.
     """
-    # The known readers. volume-snapshot reads the cap to gate its pre-deploy snapshot and never
-    # writes one; volume-revert reads the same volumes. A role added here needs the reason in
-    # writing, because every entry narrows what this guard can see.
+    # A role added here needs the reason in writing.
     readers = {"volume-snapshot", "volume-revert"}
     census = {}
     writers = sorted(K8S_ROLES.glob("*/templates/verify/*.j2"))
@@ -160,8 +155,7 @@ def roles_that_cap_a_volume() -> dict[str, str]:
 
 def snapshot_cap_problems(text: str) -> list[str]:
     capped = roles_that_cap_a_volume()
-    # Non-vacuity by NAME, not by count: a census that matched nothing would otherwise pass the
-    # checks below against an empty set. jellyfin is the one role that caps a volume.
+    # By name, not count: jellyfin is the one role that caps a volume.
     assert capped.get("jellyfin") == "jellyfin-config", capped
     problems = [
         f'{alert}: expr lacks `pvc="{claim}"`'
@@ -169,9 +163,7 @@ def snapshot_cap_problems(text: str) -> list[str]:
         for claim in capped.values()
         if f'pvc="{claim}"' not in rule_expr(alert, text)
     ]
-    # The cap VALUE, derived the way the jellyfin role derives it: 2 x the PVC size, the
-    # smallest cap Longhorn accepts. A PVC resize that moves the cap fails here rather than
-    # leaving the rule measuring against a stale number.
+    # The cap is 2 x the PVC size, the smallest Longhorn accepts.
     size = re.fullmatch(r"(\d+)Gi", role_default("jellyfin", "jellyfin_k8s_size"))
     assert size, "jellyfin_k8s_size is no longer a plain Gi value"
     cap = int(size.group(1)) * 2 * GIB

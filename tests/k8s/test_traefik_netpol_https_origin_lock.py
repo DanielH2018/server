@@ -39,8 +39,7 @@ HTTP_POD_PORT = 8000
 
 CTX = render_context(K8S_ROLES / ROLE, strict=True)
 
-# The four sources by the inventory name each comes from, so a failure says which caller
-# the policy would drop rather than which index moved.
+# Named by inventory source so a failure says which caller the policy would drop.
 EXPECTED = {
     "cloudflare_ips": frozenset(
         c for c in CTX["cloudflare_ips"] if ipaddress.ip_network(c).version == 4

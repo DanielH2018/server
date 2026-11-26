@@ -82,10 +82,8 @@ def test_gate_serves_every_token_router():
         "homelab-mcp-local lost the bearer predicate — the gate would forward ungated"
     )
     assert f"Host(`mcp.{DOMAIN}`)" not in mcp_rule
-    # The mcp probe router is the ONE ungated path through this gate, so the two things that
-    # keep it harmless are asserted rather than assumed: an exact Path (not a PathPrefix, which
-    # would open /health-anything) and LAN-only. It exists because a tile probing
-    # /mcp would accept the edge's own 404 as health and so could not see a total-404 edge.
+    # The mcp probe router is the one ungated path: asserted exact Path (not a PathPrefix, which
+    # would open /health-anything) and LAN-only.
     probe_rule = routers["homelab-mcp-probe"]["rule"]
     assert "Path(`/health`)" in probe_rule
     assert "PathPrefix" not in probe_rule, (

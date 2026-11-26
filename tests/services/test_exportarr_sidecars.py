@@ -155,8 +155,7 @@ def test_every_arr_service_exposes_the_metrics_port():
         assert any(p["port"] == METRICS_PORT for p in ports), (
             f"{role}'s Service does not expose {METRICS_PORT}"
         )
-        # Kubernetes rejects a mix of named and unnamed ports on a multi-port Service, and the
-        # rejection lands at apply time — after every repo-side check has read green.
+        # Kubernetes rejects a mix of named and unnamed ports on a multi-port Service at apply time.
         assert all("name" in p for p in ports), (
             f"{role}'s Service mixes named and unnamed ports, which the API server rejects"
         )
@@ -321,8 +320,7 @@ def test_a_job_that_keeps_on_the_app_label_is_flagged():
                             "action": "keep",
                             "regex": "sonarr|radarr|prowlarr",
                         },
-                        # Present, but as a rename rather than a filter — a text scan
-                        # could not tell this from a keep rule.
+                        # Present, but as a rename rather than a filter.
                         {
                             "source_labels": [
                                 "__meta_kubernetes_pod_container_port_number"

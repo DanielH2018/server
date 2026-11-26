@@ -44,27 +44,11 @@ def test_the_build_job_mounts_nothing_over_the_serviceaccount_token():
     assert bad == [], bad
 
 
-# The service-link env var guard is the `pods-disable-service-link-env-vars` row of
-# _workload_property_rows.py. It reads the whole rendered corpus.
+# A binding that grants too much does not error or change any output, so the identity's ceiling
+# needs a test.
 
 
-# The public-route and bouncer pairing guard is test_the_public_route_and_the_bouncer_move_together
-# in test_crowdsec_optional.py: per host, on RENDERED output, not on template text.
-
-
-#
-# This one exists because the failure is invisible in exactly the wrong direction. A binding
-# that grants too much does not error, does not warn, and does not change any output — the
-# kubeconfig keeps working, it just quietly carries more authority than the comment above it
-# claims. The whole reason this identity exists instead of copying the admin kubeconfig is
-# that its ceiling is enforced, so the ceiling needs a test.
-
-
-# A `jsonpath` that indexes `.data` with an escaped dot, quoted or bare:
-# `-o jsonpath='{.data.users_database\\.yml}'`.
 _DOTTED_DATA_JSONPATH = re.compile(r"jsonpath=['\"]?\{\.data\.[^}]*\\\.")
-# Where a script that calls kubectl can live: a role's templates and shipped files, and a host
-# component's.
 _SCRIPT_GLOBS = (
     (K8S_ROLES, "*/templates/**/*"),
     (K8S_ROLES, "*/files/**/*"),

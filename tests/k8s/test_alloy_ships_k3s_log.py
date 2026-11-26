@@ -23,8 +23,6 @@ from _k8s_render import rendered_docs
 from lib import yaml_fast
 from lib.repo_paths import REPO
 
-# Real line shapes from daniel-box's /var/log/k3s.log.1, 2026-10-28, trimmed. The Go runtime
-# lines are the shape a crash prints, written by hand because no crash fell in the sample.
 KEPT = (
     'W1028 00:41:00.791109 3683576 dispatcher.go:225] Failed calling webhook, failing closed mutator.longhorn.io: failed calling webhook "mutator.longhorn.io"',
     'E1028 00:00:07.507158 3683576 cronjob_controllerv2.go:202] "Unhandled Error" err="error syncing CronJobController homelab/configarr-health"',
@@ -84,8 +82,8 @@ def _ships(k3s_block: str, line: str) -> bool:
         if kind == "match":
             selector = _river_attr(body, "selector")
             assert re.search(r'action\s*=\s*"drop"', body), body
-            # Alloy's match-stage parser rejects a backtick LogQL string, and a quote or
-            # backslash inside the double-quoted one would need a LogQL escape.
+            # Alloy's match-stage parser rejects a backtick LogQL string, and a quote or backslash
+            # in the double-quoted one needs a LogQL escape.
             m = re.fullmatch(r'\{job="k3s"\} (!~|\|~) "([^"\\`]*)"', selector)
             assert m, f"unexpected selector shape: {selector}"
             hit = re.search(m[2], line) is not None

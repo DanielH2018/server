@@ -59,9 +59,7 @@ import sys
 
 REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-# Its own try, so a failure names the package that broke. `SyntaxError` is caught too: these
-# modules use PEP 758 syntax, stderr goes to /dev/null, and nothing at module scope may stop
-# the banner.
+# `SyntaxError` is caught too: these modules use PEP 758 syntax.
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 try:
     from _hook_common import primary_checkout, read_payload, tagged
@@ -70,13 +68,10 @@ except ImportError, SyntaxError:
     def tagged(hook, text):
         return f"[{hook}] {text}"
 
-    # Without the payload the banner cannot tell a compaction from an open, so it prints on
-    # both. One repeat banner is the cost; a hook that printed none would hide this failure.
+    # Without the payload the banner prints on both open and compaction.
     def read_payload():
         return None
 
-    # Without the primary checkout the dirty-primary line has no tree to read, so it is
-    # skipped.
     def primary_checkout():
         return None
 
@@ -112,13 +107,10 @@ except (ImportError, SyntaxError) as exc:
         return [item for item in items if check(item)]
 
 
-# How many dirty paths the banner names before it summarises the rest. Enough to recognise whose
-# work it is; short enough to stay one line.
 PRIMARY_DIRTY_LIMIT = 8
 
-# `--no-optional-locks` is load-bearing: a plain `git status` writes `.git/index`, which would
-# write the shared primary checkout from a worktree and race homelab-checkout-sync on
-# `index.lock`. It is a global flag, so it precedes the subcommand.
+# `--no-optional-locks` is load-bearing: a plain `git status` writes `.git/index` and races
+# homelab-checkout-sync on `index.lock`. It is a global flag, so it precedes the subcommand.
 PRIMARY_STATUS_ARGV = ("--no-optional-locks", "status", "--porcelain")
 
 
@@ -172,9 +164,7 @@ def dirty_primary_problems(primary=None, status=None):
     except ImportError as exc:
         return [f"  ⚠ dirty-primary detection is broken: {exc}"]
 
-    # `lib.git.git` strips every `GIT_*` variable, so `cwd` alone decides which tree is read —
-    # neither `git -C` nor a `cwd=` overrides an inherited `GIT_DIR`.
-    # The primary checkout is `_hook_common`'s one answer, shared with the instructions log.
+    # `lib.git.git` strips every `GIT_*` variable, so `cwd` alone decides which tree is read.
     if primary is None:
         primary = primary_checkout
 
@@ -295,8 +285,7 @@ def _changed_files(git, revisions):
 # `git worktree list`. Under TOTAL_DEADLINE_S, so a slow tree is named on its own line before
 # the outer deadline gives up on the whole session list.
 SESSION_SCAN_DEADLINE_S = 6
-# How long judging every worktree lock may take, before those reads. With the scan's
-# deadline it stays under TOTAL_DEADLINE_S; a lock not judged in time counts as live.
+# A lock not judged in time counts as live.
 LOCK_CHECK_DEADLINE_S = 2
 
 
@@ -343,9 +332,7 @@ def other_live_sessions(
     `deadline` bounds the per-worktree reads together; a test passes a short one.
     """
     run = run or _run
-    # scripts/, which holds `lib/`. A stale insert would fail silently: the except below
-    # returns an empty list, and an empty list is indistinguishable from "no other sessions
-    # are running".
+    # A stale insert fails silently: the except below returns an empty list.
     sys.path.insert(0, os.path.join(REPO, "scripts"))
     try:
         from lib.worktree_label import with_label
@@ -355,17 +342,12 @@ def other_live_sessions(
         if git_dirty is None:
             from lib.git import git_dirty
     except ImportError as exc:
-        # Fail open, because a SessionStart banner must never block a session from starting —
-        # but say so. The silence is what let the path bug live for a month.
+        # Fail open: a SessionStart banner must never block a session from starting.
         return [f"  ⚠ other-session detection is broken: {exc}"]
 
     def describe(tree):
         paths = sorted(changed_paths(tree.path, run))
-        # Untracked counted: an unlanded scratch file in another live session's worktree is
-        # exactly the "+ uncommitted" this banner exists to surface. check=False here (not
-        # git_dirty's own check=True default) because a tree that vanished mid-scan must read
-        # as "not dirty", the same silent-degrade `_run(check=False)` gave before this routed
-        # through lib.git.
+        # `check=False` so a tree that vanished mid-scan reads as not dirty; untracked files count.
         try:
             dirty = git_dirty(tree.path, include_untracked=True)
         except subprocess.CalledProcessError:
@@ -391,12 +373,8 @@ def other_live_sessions(
         )[1:]
         if os.path.realpath(tree.path) != os.path.realpath(cwd) and tree.locked
     ]
-    # One `systemctl --user show` per fan-out tree: 1.5s in turn over 177 trees on
-    # daniel-server. A tree another user owns, as `ubuntu` fan-out trees are to a `claude`
-    # session, is judged from /proc, because that user's manager answers only its owner.
-    # A lock naming no session pid and no batch, such as a coordinator project's, outlives
-    # its holder, so that tree is judged by the processes inside it; `dead_project_lines`
-    # names the coordinator projects this drops.
+    # A tree another user owns is judged from /proc, because that user's manager answers only its
+    # owner.
     live = keep_where(
         locked,
         functools.partial(has_live_session, foreign=process_unit_state()),
@@ -406,9 +384,7 @@ def other_live_sessions(
         mine = set() if show_all else changed_paths(cwd, run)
     except Exception:
         mine = set()
-    # One thread per live worktree, each with its own diff and dirty read: run in turn, a
-    # handful of sessions on a loaded box passed the banner's deadline and lost the whole
-    # list. A tree that does not finish costs its own line, never its siblings'.
+    # One thread per live worktree: a tree that does not finish costs its own line.
     sections = run_sections(
         [
             (f"the scan of {name_of(tree)}", functools.partial(describe, tree))
@@ -450,11 +426,8 @@ def unlabelled_worktree_lines(cwd, *, run=None):
     ]
 
 
-# How long every probe together may take, from when they start. The 15s hook budget less
-# the `uv run` interpreter start that comes before `main`, with room left to print. One
-# probe can still chain past it: the scrape-target probe runs `probe.py targets` (6s) and then
-# one 5s `kubectl` read per down target. That probe then prints the `did not finish` line,
-# and every other probe's lines still print.
+# The 15s hook budget less the `uv run` start; a probe that chains past it prints `did not finish`
+# and the others still print.
 TOTAL_DEADLINE_S = 10
 
 
@@ -487,8 +460,7 @@ def format_banner(targets=(), parked=(), master_moved=()):
     return out
 
 
-# Claude Code persists a longer SessionStart output to a file and shows the session only a
-# 2 KB preview of it, so a line past this budget is a line the session never reads.
+# Claude Code shows the session only a 2 KB preview of a longer SessionStart output.
 BANNER_BUDGET_BYTES = 2000
 
 
@@ -544,8 +516,7 @@ def main(
     event = read_payload()
     compact = event is not None and event.raw.get("source") == "compact"
     try:
-        # Imported here so a broken module costs these rows, never the banner. A compaction
-        # reloads MEMORY.md with no InstructionsLoaded event, so it rows that too.
+        # Imported here so a broken module costs these rows, never the banner.
         from hooklib.instruction_rows import log_unevented_loads
 
         if event is not None:
@@ -556,8 +527,8 @@ def main(
     if compact:
         return 0
 
-    # Every probe at once, under one deadline: run in turn, their caps summed to more
-    # than the hook's budget, and the harness's kill took the whole banner with it.
+    # Every probe at once under one deadline: run in turn, their caps summed past the hook's budget
+    # and the harness's kill took the whole banner.
     cwd = os.getcwd()
     (
         targets,

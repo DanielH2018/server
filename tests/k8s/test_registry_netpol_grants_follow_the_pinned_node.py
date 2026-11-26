@@ -23,9 +23,8 @@ from lib import yaml_fast
 from _manifest_guards import ALL_VARS_VALUES, K8S, _render, _role_context
 
 ROLE = "registry"
-# The order both address lists are written in, stated here so an inventory reordering fails a
-# test rather than silently inverting which node each grant belongs to. The /24 agreement
-# asserted below is what actually ties an index to a node.
+# Stated here so an inventory reordering fails a test rather than inverting which node each grant
+# belongs to.
 PROD_NODES = ("daniel-box", "daniel-server")
 
 DEFAULTS = _role_context(ROLE)

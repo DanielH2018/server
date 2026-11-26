@@ -135,8 +135,8 @@ def test_a_call_outside_retry_is_flagged(workflow, case):
     ), retry_problems(broken)
 
 
-# GitHub prints every workflow-level env value in each step's header, so a literal command
-# there shows as a false hit to every grep for `::error` over the run's log.
+# GitHub prints workflow-level env values in each step's header, so a literal command there
+# false-hits greps for `::error`.
 WORKFLOW_COMMAND = re.compile(r"::(?:error|warning|notice|debug)\b")
 ENV_HOLDERS = (PROMOTE, ".github/workflows/prune-artifacts.yml")
 
@@ -190,8 +190,8 @@ def test_a_bare_call_in_a_step_with_a_colliding_name_is_flagged(workflow, added)
     ), retry_problems(broken)
 
 
-# GHCR refused a second signature on an already-signed digest with `write_package` (run
-# 42710237024), so a second publish of one commit must find the signature and not sign again.
+# GHCR refuses a second signature on an already-signed digest, so a second publish must find the
+# signature.
 SIGN = "retry sign_unless_signed"
 PUBLISH_GROUP = "publish-${{ needs.render.outputs.sha }}"
 
@@ -322,8 +322,8 @@ def test_the_push_signs_only_a_digest_that_does_not_verify(
     assert len(calls) == signs, calls
 
 
-# `decide` verifies the newest `sha-<C>` it reads, so a tag ahead of its signature fails a
-# concurrent run's Decide with `no signatures found`.
+# `decide` verifies the newest `sha-<C>`, so a tag ahead of its signature fails with `no signatures
+# found`.
 SHA_TAG = f"--tag sha-{'ab' * 20}"
 
 

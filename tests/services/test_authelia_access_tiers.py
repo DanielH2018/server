@@ -24,9 +24,7 @@ from renderer.template_filters.authelia_access import AUTH_TIERS, authelia_servi
 DOMAIN = "example.com"
 RFC1918 = ["10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16"]
 
-# Non-vacuity: entries the real inventory must still carry with `use_authelia: true`. deploy,
-# longhorn, code-server and n8n are the four two_factor services; the rest are one_factor
-# members from across the list.
+# deploy, longhorn, code-server and n8n are the four two_factor services.
 KNOWN_SSO = frozenset(
     {
         "deploy-ui",

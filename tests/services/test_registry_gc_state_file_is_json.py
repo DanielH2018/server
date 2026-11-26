@@ -39,8 +39,8 @@ kuma_push() {{ :; }}
 {FINISH}
 finish
 """
-    # MSG travels in the environment rather than in the script text, so the newline and the
-    # quotes reach bash exactly as crane or kubectl would have produced them.
+    # MSG travels in the environment, not the script text, so newline and quotes reach bash as crane
+    # or kubectl produced them.
     run(["bash", "-c", script], env={**os.environ, "MSG": msg}, check=True)
     return json.loads(state.read_text())
 

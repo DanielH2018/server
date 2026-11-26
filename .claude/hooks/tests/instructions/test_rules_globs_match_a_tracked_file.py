@@ -36,8 +36,6 @@ def _load(name):
 _mod = _load("inject-nested-docs")
 RULES_DIR = os.path.join(os.path.dirname(_HERE), "rules")
 
-# The rules this tree carries. A census that globs for its own subject must know what it
-# expects to find, or a renamed directory leaves it green over an empty set.
 KNOWN_RULES = frozenset(
     {
         "docker.md",

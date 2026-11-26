@@ -29,8 +29,7 @@ from _restore_drill import DRILL_DEFAULTS, DRILL_TEMPLATE
 
 DRILL = DRILL_TEMPLATE
 
-# Starts at EMPTY_OK rather than at the first `[[`, so the waiver's own derivation runs here
-# instead of being restated by this file.
+# Starts at EMPTY_OK so the waiver's own derivation runs here instead of being restated.
 _FLOOR_GUARD = re.compile(
     r'^EMPTY_OK=.*?\n.*?^\[\[ -n "\$FILES".*?\n.*?MIN_BYTES=.*?\n.*?\n\s*\|\| fail .*?$',
     re.M | re.S,
@@ -53,9 +52,8 @@ def _run_floor_guard(
     match = _FLOOR_GUARD.search(rendered_shell_text(*DRILL))
     assert match, "the drill's files/bytes guard moved — update _FLOOR_GUARD"
     guard = match.group(0)
-    # Non-vacuity for the lift: a
-    # regex that matched a slice missing one of the three tunables would run a guard the host
-    # does not have, and `"{{" not in guard` cannot see that on a rendered script.
+    # A regex that matched a slice missing one of the three tunables would run a guard the host does
+    # not have, and `"{{" not in guard` cannot see that on a rendered script.
     defaults = load_yaml(DRILL_DEFAULTS)
     for key in (
         "k3s_longhorn_restore_drill_min_bytes",
@@ -104,9 +102,8 @@ def test_a_declared_volume_over_the_size_gate_fails_with_no_files() -> None:
     )
     assert result.returncode == 1
     assert "has no files" in result.stderr
-    # The message has to name the SIZE gate, not just the empty restore: withholding the waiver
-    # and never having declared the volume produce the same `files=0` failure otherwise, and they
-    # need different fixes.
+    # The message has to name the SIZE gate: withholding the waiver and never declaring the volume
+    # give the same `files=0` failure and need different fixes.
     assert "the waiver does not apply" in result.stderr, result.stderr
     assert str(ceiling) in result.stderr, result.stderr
 

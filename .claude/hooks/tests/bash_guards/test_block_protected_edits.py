@@ -35,10 +35,8 @@ classify = _mod.classify
 is_sops_encrypted = _mod.is_sops_encrypted
 find_repo_root = _mod.find_repo_root
 
-# The checkout this file lives in, NOT hardcoded — the test must work in any checkout, incl.
-# CI's /home/runner/work/... A hardcoded /home/ubuntu/server made classify() read a nonexistent
-# secrets.yml in CI -> None -> a false `test_blocks_the_real_secrets_file` failure. A str,
-# because the hook's classify() joins paths with os.path.
+# Not hardcoded: the test must work in any checkout; a hardcoded path made `classify()` read a
+# nonexistent secrets.yml in CI.
 REPO = str(REPO_PATH)
 
 
@@ -57,10 +55,8 @@ def test_allows_writes_elsewhere():
         assert classify(path, REPO) is None, f"should ALLOW: {label} ({path!r})"
 
 
-# Fixtures are built by concatenation so a SOPS signature never appears as a
-# contiguous string in THIS source file — otherwise the guard would block editing
-# this very test. _ENC keeps "ENC[" + "AES256_GCM" split across the +; the encrypted
-# fixture carries a `mac:` metadata line (the structural signal the guard keys off).
+# Built by concatenation so a SOPS signature never appears contiguously in this source; otherwise
+# the guard would block editing it.
 _ENC = "ENC[" + "AES256_GCM,data:Zz==,iv:Yy=,tag:Xx==,type:str]"
 SOPS_TEXT = (
     "db_password: " + _ENC + "\n"
@@ -70,8 +66,7 @@ SOPS_TEXT = (
     "    version: 3.9.2\n"
 )
 PLAINTEXT_HOST_VARS = "server_ip: 10.0.0.161\ncontainers_list:\n  - name: jellyfin\n"
-# A doc/log that merely *mentions* the marker in prose — must NOT be flagged. This is
-# a bare-substring check would wrongly block such files.
+# Prose that merely mentions the marker must not be flagged.
 PROSE_MENTIONING_MARKER = (
     "Detection keys off the file's " + "ENC[" + "AES256_GCM markers.\n"
 )
@@ -86,8 +81,6 @@ def test_is_sops_encrypted_false_on_plaintext():
     assert is_sops_encrypted("") is False
 
 
-# The dotenv form: SOPS writes its metadata as plain `sops_*=` lines, so the MAC opens a line
-# with `sops_mac=`. The plaintext half is the same file before encryption.
 SOPS_DOTENV = (
     "peanut_password=" + _ENC + "\n"
     "sops_lastmodified=2026-10-15T18:11:03Z\n"
@@ -135,9 +128,8 @@ def test_blocks_the_real_secrets_file():
     assert classify("secrets/secrets.yml", REPO) is not None
 
 
-# settings.json always invokes the PRIMARY checkout's copy of the hook, so repo_root
-# must come from the edited file, not from __file__ — otherwise the path-prefix guard
-# stays aimed at the primary checkout and a worktree edit sidesteps it entirely.
+# settings.json invokes the primary checkout's copy of the hook, so repo_root must come from the
+# edited file, not `__file__`.
 
 
 def _make_checkout(root, git_is_file):

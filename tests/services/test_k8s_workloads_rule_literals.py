@@ -27,17 +27,14 @@ RESTART_INCREASE = re.compile(
 # 15-19 minutes, and a recency window inside it goes up in the gaps and flaps.
 RECENCY_FLOOR_S = 30 * 60
 
-# The DaemonSets the setup/k3s role's add-ons bring, which no role in containers_list renders.
-# Longhorn names its engine-image DaemonSet after the image's hash (engine-image-ei-<hash>), so
-# it is listed by that prefix.
+# Longhorn names its engine-image DaemonSet after the image's hash, so it is listed by prefix.
 ADDON_DAEMONSETS = (
     "longhorn-manager",
     "longhorn-csi-plugin",
     "engine-image-ei-",
     "speaker",
 )
-# A rendered DaemonSet the count must find. dri-device-plugin is also the extended-resource
-# alert's subject, so a render that lost it would hide two things.
+# dri-device-plugin is also the extended-resource alert's subject.
 MUST_RENDER = "dri-device-plugin"
 
 DURATION = re.compile(r"(\d+)([smhd])")

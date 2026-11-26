@@ -117,8 +117,7 @@ def _ungated_deployments(role: Path) -> list[str]:
     out = []
     for template in _deployment_templates(role):
         docs = _deployment_docs(texts[template])
-        # No doc parsed means `_deployment_templates` saw a quoted or commented `kind:` this
-        # strict pattern cannot pair with a name, so nothing proves it gated.
+        # No doc parsed means a quoted or commented `kind:` the pattern cannot pair with a name.
         if not docs or any(name not in gated for _, name in docs):
             out.append(template)
     return out

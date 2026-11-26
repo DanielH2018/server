@@ -61,8 +61,8 @@ def test_an_int_account_renders_as_a_string():
 
 def test_a_to_json_account_renders_as_an_int():
     source = ACCOUNT_TEMPLATE.read_text()
-    # Without the quoted line the replace below is a no-op, and this test would render the
-    # template unchanged rather than the variant it exists to reject.
+    # Without the quoted line the replace below is a no-op and the test renders the template
+    # unchanged.
     assert QUOTED in source
     variant = source.replace(QUOTED, "account: {{ mullvad_account | to_json }}")
     assert _account_as_sops_types_it(variant) == 123456

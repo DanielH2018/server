@@ -141,8 +141,8 @@ def rendered_shell_function(plane: str, role: str, template: str, name: str) -> 
     """
     script = rendered_shell_text(plane, role, template)
     match = re.search(rf"^{name}\(\) \{{[^\n]*\}}$", script, re.M) or re.search(
-        # `[^\n]*` after the opening brace tolerates a trailing `# arg names` comment on the
-        # same line (`push() { # up|down msg`); without it the multi-line form never matches.
+        # `[^\n]*` tolerates a trailing `# arg names` comment on the opening line; without it the
+        # multi-line form never matches.
         rf"^{name}\(\) \{{[^\n]*\n.*?^\}}$",
         script,
         re.M | re.S,

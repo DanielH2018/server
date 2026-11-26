@@ -30,8 +30,6 @@ from types import MappingProxyType
 from _k8s_render import rendered_docs
 from _row_table import verdict
 
-# (role, template, doc) -> the (key, subject) pairs this document contributes. A key names the
-# subject in reports, `must_find` and `allow`; it need only be unique within the row.
 Selector = Callable[[str, str, dict], Iterable[tuple[str, dict]]]
 
 # (role, subject) -> None when the property holds, a reason when it does not.
@@ -52,8 +50,6 @@ class Property:
     min_matches: int = 1
     must_find: frozenset[str] = frozenset()
     allow: Mapping[str, str] = field(default_factory=lambda: MappingProxyType({}))
-    # The (role, template, doc) stream the selector reads. A row over another render passes
-    # its own, as `_prepull_property_rows.py` does with its Flux cluster render.
     source: Callable[[], Iterable[tuple[str, str, dict]]] = rendered_docs
 
 

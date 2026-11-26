@@ -31,8 +31,7 @@ from lib import yaml_fast
 from _k8s_render import render_role_template
 
 _ROLE = "traefik"
-# A cluster that watches a narrower set, as an override rather than a host. The pair below
-# shows both readings follow the variable rather than the template text.
+# The pair below shows both readings follow the variable rather than the template text.
 _NARROWED = {"traefik_k8s_watched_namespaces": ["homelab", "longhorn-system"]}
 
 
@@ -194,8 +193,6 @@ def test_empty_services_dropping_their_router_is_flagged(provider: dict) -> None
 
 
 _PRUNE_LABEL = "kustomize.toolkit.fluxcd.io/prune"
-# Each RBAC kind traefik's flip moves into its bundle, and how many of it prod renders: one
-# cluster-scoped object, or one per watched namespace.
 _PER_NAMESPACE = len(["homelab", "observability", "longhorn-system"])
 
 

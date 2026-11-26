@@ -192,8 +192,6 @@ def test_identity_admits_is_flagged_on_another_signer(subject):
     assert not identity_admits(_sync_docs(), subject, forge.SIGNER_ISSUER)
 
 
-# --- The break-glass source form (D6.11) --------------------------------------------------
-
 _PRODUCTION_HOMELAB = {
     "interval": "1m",
     "url": "oci://ghcr.io/danielh2018/homelab-manifests",

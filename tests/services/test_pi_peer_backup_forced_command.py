@@ -25,10 +25,7 @@ WRAPPER = COMPONENT / "pi-peer-backup-shell.sh"
 KEY_FILE = "/home/ubuntu/.ssh/authorized_" + "keys"
 SRC = "/home/ubuntu/server/containers/wg-easy/config/"
 
-# The request rsync 3.2.7 sends for the CronJob's exact client invocation
-# (`rsync -a --chmod=D700 --timeout=120 --rsync-path='sudo rsync'`), captured by
-# pointing `-e` at a script that printed its argv. `--chmod` is client-side and never reaches
-# the server; `--timeout` does, and the short-option blob after `e` is version-negotiated.
+# `--chmod` is client-side and never reaches the server; `--timeout` does.
 CAPTURED = f"sudo rsync --server --sender -logDtpre.iLsfxCIvu --timeout=120 . {SRC}"
 
 
@@ -70,9 +67,8 @@ def test_the_captured_nightly_request_is_executed_as_sudo_rsync(fake_sudo):
         "sudo rsync --server --sender -logDtpre.iLsfxCIvu . /etc/wireguard/",
         f"sudo rsync --server --sender -logDtpre.iLsfxCIvu --remove-source-files . {SRC}",
         f"sudo rsync --server --sender -logDtpre.iLsfxCIvu --timeout=120; id . {SRC}",
-        # `-s` (--secluded-args) makes rsync read the path off the protocol stream instead
-        # of argv, so the pinned SRC would be bypassed. Both spellings: its own word,
-        # and folded into the blob BEFORE the `e` that starts the capability list.
+        # `-s` (--secluded-args) makes rsync read the path off the protocol stream, bypassing the
+        # pinned SRC.
         f"sudo rsync --server --sender -s -logDtpre.iLsfxCIvu . {SRC}",
         f"sudo rsync --server --sender -slogDtpre.iLsfxCIvu . {SRC}",
         f"sudo rsync --server --sender - . {SRC}",
@@ -98,8 +94,8 @@ def test_anything_but_a_sender_of_the_pinned_directory_is_refused(fake_sudo, req
 
 
 def test_a_rejection_is_logged_through_the_stub(fake_sudo, logger_calls):
-    # Non-vacuity for the logger stub: a wrapper that called `logger` by absolute path would
-    # escape it and write fixture rejections to the Pi's syslog.
+    # A wrapper that called `logger` by absolute path would escape the stub and write fixture
+    # rejections to the Pi's syslog.
     _run(fake_sudo, "bash -i")
     assert (
         "pi-peer-backup-shell rejected: not an rsync request"
@@ -112,8 +108,7 @@ def test_the_key_is_pinned_to_the_wrapper_the_package_installs():
     (edit,) = [e for e in package.lines if e["path"] == KEY_FILE]
     dest = "/usr/local/bin/pi-peer-backup-shell"
     assert package.files[dest] == (WRAPPER.read_bytes(), 0o755)
-    # The line is the tracked public half behind the pinned options, and a rotated key
-    # replaces it, because the anchor is the key comment and not the key.
+    # A rotated key replaces the line, because the anchor is the key comment and not the key.
     options, _, key = edit["line"].partition(" ssh-ed25519 ")
     public = (COMPONENT / "pi-peer-backup.pub").read_text().strip()
     assert f"ssh-ed25519 {key}" == public
@@ -122,8 +117,7 @@ def test_the_key_is_pinned_to_the_wrapper_the_package_installs():
     assert options.startswith("restrict,")
     pinned = re.fullmatch(rf'restrict,command="{re.escape(dest)} (\S+)"', options)
     assert pinned, options
-    # The CronJob pulls the same directory the key is pinned to, and the wrapper tests above
-    # exercise it: all three agree at the value a deploy renders, not at a variable name.
+    # All three agree at the value a deploy renders, not at a variable name.
     env = next(
         container["env"]
         for role, _tpl, doc in rendered_docs()

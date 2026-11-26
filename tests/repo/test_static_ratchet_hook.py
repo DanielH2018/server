@@ -22,8 +22,7 @@ from _helpers import REPO
 HOOK_ID = "static-ratchet-tests"
 CI_WORKFLOW = REPO / ".github" / "workflows" / "ci.yml"
 
-# The static modules that turned PRs red. A module
-# dropped from the entry fails here by name.
+# A module dropped from the entry fails here by name.
 EXPECTED_MODULES = {
     "tests/repo/test_module_length_ratchet.py",
     "tests/repo/test_every_section_lints_clean.py",
@@ -56,9 +55,6 @@ ADDED_BY_5481 = {
     "tests/deploy/test_renovate_denylist_marker_reaches_the_pr_title.py": "renovate.json",
 }
 
-# Six more that failed 2 to 4 PR branches each between 2026-10-18 and 2026-10-25, with the edit
-# that turned a branch red. Two run a single node: the module's other cases cost 5-11s.
-# `test_cluster_vars_tree.py` failed four branches too and stays out (prek.toml says why).
 ADDED_2026_10_25 = {
     "evals/tests/test_eval_cases.py": "CLAUDE.md",
     "tests/deploy/test_landing_annotations.py": "scripts/deploy_tools/land_lib/ledger.py",
@@ -288,8 +284,7 @@ def test_the_lander_gate_skips_a_k8s_role_doc():
 # The session ceiling `PYTEST_XDIST_AUTO_NUM_WORKERS` sets for every Claude session.
 SESSION_CEILING = 4
 
-# A multi-module pytest hook that `-n auto` still runs on one worker, with the PR that pins it.
-# `static-ratchet-tests` is not here: its width comes from recorded seconds, which gives it 4.
+# `static-ratchet-tests` is not here: its width comes from recorded seconds.
 UNPINNED: dict[str, str] = {}
 
 

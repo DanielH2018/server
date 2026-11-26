@@ -10,8 +10,8 @@ from lib import yaml_fast
 
 _COMPONENT = K3S_SERVER / "component.yml"
 
-# The command and its arguments, across a `\` continuation or a prose wrap onto an indented line.
-# A closing backtick, a pipe or a closing parenthesis ends the call.
+# Spans a `\` continuation or a prose wrap onto an indented line; a closing backtick, pipe or
+# parenthesis ends the call.
 _CALL = re.compile(r"k3s\s+etcd-snapshot\b((?:(?:[ \t]*\\?\n[ \t]+|[ \t]+)[^\s`|)]+)*)")
 _ARRAY_USE = re.compile(r"\$\{(\w+)\[@\]\}")
 _FLAG = re.compile(r"(?<![\w-])--[a-z0-9-]+")
@@ -31,8 +31,8 @@ def _short_forms_of_the_drop_in() -> frozenset[str]:
 
 
 def _is_short(flag: str) -> bool:
-    # `--s3-*` and `--dir` conflict only once the drop-in sets their key. Refusing them regardless
-    # means adding such a key cannot break a call site.
+    # `--s3-*` and `--dir` conflict only once the drop-in sets their key; refusing them regardless
+    # means adding a key cannot break a call site.
     return (
         flag in _short_forms_of_the_drop_in()
         or flag.startswith("--s3-")

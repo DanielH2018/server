@@ -55,9 +55,8 @@ SCHEMA_PATH = (
 )
 AUTHELIA_DEFAULTS = REPO / "k8s/roles/authelia/defaults/main.yml"
 
-# Named members the vendored schema must define. A schema that downloaded as an error page, or
-# whose `$defs` were restructured upstream, would otherwise leave every check below validating
-# against nothing and passing.
+# A schema that downloaded as an error page, or lost its `$defs`, would leave every check passing on
+# nothing.
 REQUIRED_DEFS = frozenset(
     {"Configuration", "WebAuthn", "NotifierSMTP", "Session", "SessionRedis"}
 )
@@ -205,17 +204,12 @@ def test_the_flat_legacy_parameters_are_flagged(rendered_config, validator):
     )
 
 
-# --- the notifier block, where values are asserted too -----------------------------
-#
-# No boot-level rehearsal covers the SMTP branch. With the startup check off, nothing at boot
-# touches SMTP, so the half that bites is the parse. This value check covers that half without a
-# cluster. It cannot prove the pod boots; nothing in the repo does.
+# No boot-level rehearsal covers the SMTP branch; with the startup check off only the parse bites,
+# so this value check covers it without a cluster.
 
 NOTIFIER_PATH = ("notifier",)
-# The one value complaint the real render carries under `notifier`. The schema's `oneOf` for a
-# sender admits `Name <addr>` under BOTH its branches, which `oneOf` counts as a failure; the
-# parser accepts it. Excused by path, validator and message together, so any other complaint
-# about the sender still fails.
+# The schema's `oneOf` admits `Name <addr>` under both branches and counts that a failure; the
+# parser accepts it.
 _SENDER_ONEOF = ("notifier/smtp/sender", "oneOf", "is valid under each of")
 
 
@@ -324,15 +318,8 @@ def test_the_vendored_schema_matches_the_pinned_image():
     )
 
 
-# --- the OIDC signing key, read through Authelia's template filter ------------------------
-#
-# The key lives in Secret authelia-oidc-jwk, and `jwks[].key` reads it
-# with `{{- secret "<path>" | nindent 10 }}` inside its block scalar. Authelia's `template`
-# filter runs Go templating over the whole file, so the expression's path, the Deployment's
-# mount and the filter variable must agree, and the file must hold no other action. The two
-# functions below restate `FuncSecret` and `FuncNewlineIndent` from
-# internal/templates/funcs.go at the pinned v4.39.28: `secret` returns the file with its
-# trailing newlines trimmed, and `nindent n` returns a newline then each line indented n.
+# The key's path in the expression, the Deployment's mount and the filter variable must agree, and
+# the file must hold no other template action.
 
 _JWK_EXPRESSION = re.compile(
     r'(?P<lead>[ \t\n]*)\{\{- secret "(?P<path>[^"]+)" \| nindent (?P<n>\d+) \}\}'

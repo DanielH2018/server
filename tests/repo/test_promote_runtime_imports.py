@@ -25,8 +25,7 @@ from _workflow_rows import PROMOTE, load, steps
 
 PYPROJECT = REPO / "pyproject.toml"
 CI_WORKFLOW = REPO / ".github" / "workflows" / "ci.yml"
-# The scripts that must appear among those the UV_NO_DEV jobs run, so a reshaped regex or a
-# dropped UV_NO_DEV cannot pass empty.
+# A reshaped regex or a dropped UV_NO_DEV cannot pass empty.
 KNOWN_ENTRIES = {
     "scripts/deploy_tools/promote.py",
     "scripts/renderer/homelab_render.py",

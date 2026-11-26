@@ -181,10 +181,8 @@ def _unqualified_binds(patched, modules):
 
 
 def test_the_census_reads_the_real_suites():
-    # Without this every assertion over `_patched_names_by_module()` passes vacuously if the
-    # census stops reading the real suites. monitor-bridge's tests patch no runtime module,
-    # so the member is autofix-bridge's `autofix`, which its test loads by path with
-    # `importlib.util.module_from_spec` and patches through that binding.
+    # monitor-bridge's tests patch no runtime module, so the member is autofix-bridge's `autofix`,
+    # which its test loads by path and patches through that binding.
     patched = _patched_names_by_module()
     assert {"autofix"} <= patched.keys(), sorted(patched)
     assert {"_request", "post_discord"} <= patched["autofix"], sorted(
@@ -207,16 +205,13 @@ def test_the_census_binds_a_module_loaded_by_path(tmp_path):
 
 
 def test_the_suite_census_sees_shared_helper_modules():
-    # Non-vacuity for the `*.py` glob above, naming members rather than counting.
-    # `_fake_sources.py` is not named `test_*`, and the narrower glob that missed such a helper
-    # reads exactly as green as one that sees it. `test_helper_patch_extraction_can_go_red` proves a helper's patches are read out of it.
+    # `_fake_sources.py` is not named `test_*`; a narrower glob that missed such a helper reads as
+    # green.
     names = {p.name for p in _suite_files()}
     assert {"_fake_sources.py", "conftest.py"} <= names, sorted(names)
 
 
 def test_there_are_consumer_modules():
-    # Naming the pair as well as counting: an empty census reads the same as a full one to
-    # `assert modules`, and this rule exists for these two roles first.
     roots = {r.parent.name for r in _consumer_roots()}
     assert {"monitor-bridge", "autofix-bridge"} <= roots, sorted(roots)
     assert _runtime_modules()
@@ -243,9 +238,7 @@ def _top_level_bindings(path):
 
 
 def test_every_patched_name_exists_on_its_module():
-    # A rename that leaves a stale patched name would quietly stop guarding it. Checked by AST
-    # rather than by importing: autofix-bridge's files/ is not on pytest's pythonpath, and an
-    # import would also run each module's env reads for nothing.
+    # Checked by AST: autofix-bridge's files/ is not on pytest's pythonpath.
     by_id = _runtime_modules()
     missing = []
     for module, names in sorted(_patched_names_by_module().items()):
@@ -271,8 +264,7 @@ def test_checker_fires_on_a_synthesized_bad_sample(tmp_path):
     assert "bad_consumer.py" in problems[0] and "log" in problems[0]
     assert "PROM_URL" in problems[1]
 
-    # A qualified import of the same name must NOT be flagged — the checker fires on the
-    # binding form, not on merely mentioning the name.
+    # A qualified import of the same name must not be flagged.
     good = tmp_path / "good_consumer.py"
     good.write_text(
         "import bridge.common\nimport bridge.config as cfg\n\n"
@@ -322,8 +314,7 @@ def test_checker_sees_a_packaged_module_in_every_spelling(tmp_path):
         "bridge.io": {"TIMEOUT"},
     }
 
-    # A nested consumer tree is censused, and a role that only mentions the shared module in
-    # a comment is not a consumer.
+    # A role that only mentions the shared module in a comment is not a consumer.
     k8s = tmp_path / "k8s"
     for rel, source in {
         "alpha/files/bridge/common.py": "def log(): pass\n",
@@ -363,8 +354,8 @@ def test_helper_patch_extraction_can_go_red(tmp_path):
         "bridge.common": {"log"},
     }
 
-    # The regression this exists to catch: the helper reaches the module through a name
-    # the census cannot resolve to a module id, so every patch it makes drops out silently.
+    # The helper reaches the module through a name the census cannot resolve, so its patches drop
+    # out silently.
     blind = tmp_path / "_wire_blind.py"
     blind.write_text(
         "def wire(monkeypatch, mod):\n"
@@ -375,9 +366,7 @@ def test_helper_patch_extraction_can_go_red(tmp_path):
 
 
 def test_the_census_survives_an_undecodable_module(tmp_path):
-    # A stray non-UTF-8 byte under a consumer's tests/ must still leave a verdict, not raise a
-    # UnicodeDecodeError that pytest reports as a collection error. `_consumer_roots` reads
-    # with errors="ignore", and so does this reader.
+    # A stray non-UTF-8 byte must leave a verdict, not a collection error.
     junk = tmp_path / "_wire_latin1.py"
     junk.write_bytes(
         b"import bridge.net\n# \xff\xfe caf\xe9\ndef wire(m):\n"

@@ -28,10 +28,7 @@ import pytest
 
 from _helpers import REPO
 
-# The directories whose modules a deploy copies beside a consumer in another role.
-# `scripts/deploy_tools` holds `changed_set.py`, which the soak Job's ConfigMap carries
-# beside `flux_soak.py`. `scripts/renderer/job_files` holds `flux_job_connect.py`, which a verify
-# Job's ConfigMap carries beside its role's script, such as sonarr's `sonarr_verify.py`.
+# `changed_set.py` rides in the soak Job's ConfigMap beside `flux_soak.py`.
 SHIPPED_BESIDE = (
     REPO / "hosts/lib",
     REPO / "k8s/roles/monitor-bridge/files",
@@ -41,9 +38,6 @@ SHIPPED_BESIDE = (
     REPO / "scripts/deploy_tools",
 )
 
-# Non-vacuity: one of each shape the census must keep. A hook, a role script that takes
-# positional arguments, a cluster daemon, a host cron, and the Flask app that served instead
-# of answering.
 MUST_FIND = frozenset(
     {
         ".claude/hooks/block-footguns.py",
@@ -57,11 +51,7 @@ HELP_TIMEOUT_S = 30
 
 # Entry points that answer `--help` where they run but cannot here, each with the reason.
 EXEMPT = {
-    # Vendored byte-for-byte from upstream and pinned by sha256 in
-    # the `karakeep-time-tagger-script-matches-its-pinned-sha256` row in tests/repo/_config_rows.py,
-    # so a guard would break the pin.
-    # It ends in `fire.Fire(main)`, which answers --help in the tagger image; the repo env has
-    # no `fire`, so the import fails here first.
+    # Vendored byte-for-byte and pinned by sha256, so a guard would break the pin.
     "k8s/roles/karakeep/files/karakeep-time-tagger.py",
 }
 
@@ -95,9 +85,7 @@ def _help_failure(path: Path) -> str | None:
     """Why `path --help` is not a usable answer, or None when it is one."""
     text = path.read_text(encoding="utf-8")
     if "--help" not in text and "argparse" not in text:
-        # A script with no help path would do its real work under this run: the host crons
-        # here call cscli, read their config and write their state. argparse answers --help
-        # without the file spelling the flag out.
+        # A script with no help path would do its real work under this run.
         return "has no --help path; not run, because it would do its real work"
     pythonpath = os.pathsep.join(str(p) for p in (path.parent, *SHIPPED_BESIDE))
     try:
@@ -171,10 +159,8 @@ def test_a_script_that_checks_argv_first_is_clean(tmp_path):
     assert _help_failure(script) is None
 
 
-# The role scripts that exit 64 rather than argparse's 2 for a usage error. A role ships only its own
-# `files/`, so none can import `scripts/lib/cli_help.ArgumentParser`, and each holds a local
-# `USAGE_ERROR = 64` instead. Named rather than derived, because a script that takes no
-# flags at all has no usage error to report.
+# Role scripts that exit 64 rather than argparse's 2 for a usage error: a role ships only its own
+# `files/`, so each holds a local `USAGE_ERROR = 64`.
 EXIT_64_ON_A_BAD_FLAG = (
     "k8s/roles/monitor-bridge/files/check.py",
     "k8s/roles/monitor-bridge/files/cli.py",

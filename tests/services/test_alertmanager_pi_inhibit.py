@@ -94,6 +94,6 @@ def test_the_pi_host_alert_holds_no_other_alert():
 
 
 def test_the_rule_names_no_equal_label_the_two_alerts_disagree_on():
-    # `instance` differs between PiHostDown (9100) and PiPortDead (the port), and `job` too, so
-    # any `equal` entry naming either would never match.
+    # `instance` and `job` differ between PiHostDown and PiPortDead, so an `equal` naming either
+    # never matches.
     assert port_inhibit().get("equal", []) == []

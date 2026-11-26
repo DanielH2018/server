@@ -21,8 +21,6 @@ from _k8s_render import render_role_template, rendered_docs
 from backup.longhorn_reap_lib import logic
 
 
-# The classes this sweep must find. Named rather than counted: the sweep reads empty the day the
-# StorageClasses move role, and an `all(...)` over nothing passes.
 EXPECTED_STORAGECLASSES = frozenset({"longhorn-nobackup"})
 
 RECURRING_JOB_TEMPLATE = (

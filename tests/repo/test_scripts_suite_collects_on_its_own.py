@@ -18,8 +18,7 @@ def test_scripts_testpath_collects_in_a_fresh_interpreter():
     result = run(
         ["uv", "run", "pytest", "--collect-only", "-n0", "-q", "scripts"],
         cwd=REPO,
-        # A nested `uv run` resolves the dev group before the child starts, which a cold
-        # cache makes minutes rather than seconds — longer than `DEFAULT_TIMEOUT` allows.
+        # A nested `uv run` resolves the dev group first, which a cold cache makes minutes.
         timeout=300,
     )
     assert result.returncode == 0, (

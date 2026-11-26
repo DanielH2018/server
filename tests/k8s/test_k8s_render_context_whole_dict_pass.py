@@ -49,8 +49,7 @@ def spied() -> Spied:
 
 
 def test_k8s_render_resolves_each_clean_context_in_the_whole_dict_pass(spied):
-    # A context that drops a key outside ALWAYS_UNDEFINED (a role's built-image tag in stub
-    # mode) may still take the per-key fallback, two rounds over its keys; any other gets 2.
+    # A context that drops a key outside ALWAYS_UNDEFINED may take the per-key fallback.
     budget = sum(
         2 * size + 2 if set(dropped) - ALWAYS_UNDEFINED else 2
         for size, dropped in spied.resolves

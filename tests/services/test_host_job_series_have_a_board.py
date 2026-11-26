@@ -19,8 +19,6 @@ from _helpers import load_yaml
 ROLE = K8S_ROLES / "observability"
 DASHBOARDS_DIR = ROLE / "files" / "dashboards"
 
-# The textfile checks' contract (homelab-check-lib.sh), the builder's signer
-# (hosts/lib/homelab_repo_sign.py) and the updater (hosts/lib/homelab-updater).
 HOST_JOB_SERIES = frozenset(
     {
         "homelab_check_success",

@@ -38,8 +38,7 @@ _FILE_PROVIDER_REF = re.compile(
     r"^(?P<namespace>[a-z0-9-]+?)-(?P<name>rate-limit[a-z0-9-]*)@kubernetescrd$"
 )
 
-# Rendered Middlewares the census must find. Subset, not equality: a new limiter must not
-# fail this, a renamed one must.
+# Subset, not equality: a new limiter must not fail, a renamed one must.
 REQUIRED_LIMITERS = frozenset(
     {
         "traefik/rate-limit",
@@ -51,8 +50,6 @@ REQUIRED_LIMITERS = frozenset(
         "longhorn-ui/rate-limit",
     }
 )
-# Routers matching a public Host the census must find: the macro's route, its bypass twin,
-# a hand-rolled ping route, the observability-namespace route, and the file-provider pair.
 REQUIRED_PUBLIC_ROUTERS = frozenset(
     {
         "karakeep-public",
@@ -124,8 +121,7 @@ def _keying_problem(
 def _file_provider_routers(doc: dict):
     """(router name, rule, middlewares) for each router in a Traefik file-provider Secret."""
     for text in (doc.get("stringData") or {}).values():
-        # Other Secrets carry INI, multi-document YAML and app config; only a Traefik
-        # dynamic-config document declares routers, so nothing else is parsed.
+        # Only a Traefik dynamic-config document declares routers.
         if "routers:" not in text:
             continue
         parsed = yaml_fast.safe_load(text)

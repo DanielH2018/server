@@ -32,22 +32,16 @@ import pytest
 
 from _autodeploy import _denylist, _roles
 
-# `<anything>:<channel tag>@sha256:<digest>` on an `_image:` var. The channel tags are the
-# mutable ones: a bump against them can only ever be a digest, never a version.
+# Channel tags are mutable: a bump against them can only be a digest, never a version.
 _PIN = re.compile(
     r"^\s*\w+_image:\s*[\"']?[^:\"'\s]+:(?:stable|latest|main|edge|nightly|develop)@sha256:[0-9a-f]{64}",
     re.MULTILINE,
 )
 
-# The roles that are the expensive subset: a torrent client mid-transfer. Named rather than
-# derived — "expensive" is a judgement about what a regression costs, which no file states.
-# tdarr left the set when its pin moved to a version tag, the second remedy the
-# parametrized test below names.
+# The expensive subset: a torrent client mid-transfer. Named, not derived: what a regression costs
+# is a judgement no file states.
 _EXPENSIVE = frozenset({"qbittorrent"})
 
-# The floor the census must clear. Below it the regex has stopped matching and every assertion
-# built on it passes over an empty set (CLAUDE.md: a check that finds its own subject by
-# pattern ships with a named member it must find).
 _CENSUS_FLOOR = 10
 
 

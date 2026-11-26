@@ -25,17 +25,14 @@ JOBS = ("host_packages_build", "host_packages")
 CASES_SCRIPT = "scripts/validate/host_package_cases.py"
 DOCKERFILE = "hosts/lib/tests/container/Dockerfile"
 IMAGE_STEP = "Build the test image for this release"
-# The script `validate_lib/bootstrap_case.py` runs in the containers. No package renders it, so a
-# PR that changes only the script changes no render (H7.15a).
+# No package renders it, so a PR that changes only the script changes no render.
 BOOTSTRAP_SCRIPT = "hosts/bootstrap-host.sh"
-# What `validate_lib/fixture_host_case.py` edits or reads to make its host. No real render reads
-# the walkthrough or the example, and a moved line in the inventory can leave every render unchanged.
+# No real render reads the walkthrough or the example.
 FIXTURE_HOST_FILES = (
     "docs/host-packages.md",
     "inventory/host_vars/_example.yml",
 )
-# The package whose modules are inputs of the cases alone. The renderer is a render input, which
-# the render diff already sees, and `lib` is shared by every script in the repository.
+# The renderer is a render input the render diff already sees.
 _CASE_PACKAGES = ("validate",)
 
 

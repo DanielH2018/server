@@ -31,11 +31,7 @@ _K8S_ROLES = _REPO / "k8s/roles"
 # neither pins one — that's the supporting fact, not the rule.
 _SHARED = {"manifests"}
 
-# Shared roles other roles rely on to block until a batch workload is terminal. Membership
-# exempts nobody from the batch guard below; `test_gating_shared_roles_actually_wait` proves each
-# role named here holds a completion gate backed by a failure escalation. A role belongs here
-# when it makes a caller's batch workload observable at deploy time (image-builder waits on its
-# own build Job).
+# Membership exempts nobody from the batch guard below.
 _GATING_SHARED_ROLES = {"image-builder"}
 
 
@@ -57,11 +53,8 @@ def _roles() -> list[Path]:
     )
 
 
-# kubectl accepts 'ds', 'daemonsets' and any casing of 'DaemonSet' as the same resource; this
-# repo's convention is the exact lowercase singular 'daemonset'. Anchored on the kubectl verbs
-# that take a resource-type argument, plus the `<kind>/<name>` shorthand `rollout status` and
-# `rollout restart` use — neither of which ever appears in a manifest's `kind:` field, so
-# `kind: DaemonSet` in a rendered manifest template is correctly never matched.
+# kubectl accepts `ds`, `daemonsets` and any casing; the repo convention is the exact lowercase
+# singular `daemonset`.
 _KUBECTL_RESOURCE_ARG_RE = re.compile(
     r"\b(?:get|describe|delete|rollout\s+status|rollout\s+restart)\s+([A-Za-z]+)(?=/|\s|$)"
 )
@@ -215,11 +208,8 @@ def _auto_deployable(role: Path) -> bool:
     return bool(data.get("k8s_autodeploy"))
 
 
-# A test inferring a denylist entry's justification from the role's rendered shape (gated
-# extras => the "ungated sub-deployment" reason is stale) can't tell that reason apart from a
-# different one that happens to leave the same shape — prowlarr and freshrss are gated AND
-# still denylisted, for migrating-state reasons this file's shape-only helpers can't see. A
-# reason-aware version of this check lands with the per-role k8s_autodeploy_reason declaration.
+# Shape alone cannot tell the denylist reasons apart: prowlarr and freshrss are gated and still
+# denylisted for migrating-state reasons.
 
 
 def _declares_autodeploy(role: Path) -> bool:
@@ -232,14 +222,8 @@ def _declares_autodeploy(role: Path) -> bool:
     )
 
 
-# ── k8s_autodeploy_snapshot_pvcs ─────────────────────────────────────────────────────────────
-#
-# The renderer writes a pre-apply Longhorn snapshot Job for a role's `k8s_autodeploy_snapshot_pvcs`
-# claims, and a typo'd claim name surfaces only on a real deploy, so the claim-name test below is
-# the only pre-deploy catch. Most roles declare claims as `k8s_claims` entries in defaults/main.yml
-# (`name: "{{ <role>_k8s_claim }}"`) and render no PVC template; the rest write
-# `metadata.name: {{ <role>_k8s_claim }}`, a Jinja reference. `_rendered_pvc_claims` reads both
-# sources and resolves that single-var reference through the role's own defaults/main.yml.
+# A typo'd claim name surfaces only on a real deploy, so the claim-name test below is the only
+# pre-deploy catch.
 
 
 def _role_defaults(role: Path) -> dict:

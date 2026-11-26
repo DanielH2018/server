@@ -28,8 +28,7 @@ RECORDS = {
     "homelab:daemonset_service:info": "daemonset",
 }
 
-# One override entry, in the form the rule file writes each one. The workload label must name
-# the kind its metric does, so `kube_deployment_...{daemonset="x"}` is not an entry.
+# The workload label must name the kind its metric does.
 OVERRIDE = re.compile(
     r"label_replace\(kube_(deployment|daemonset)_status_\w+"
     r'\{namespace="([^"]+)", \1="([^"]+)"\}, '
@@ -43,8 +42,6 @@ STEP_SEPARATOR = re.compile(r"\bor\s+on\s*\(\s*namespace\s*,\s*\w+\s*\)")
 FALLBACK = re.compile(r'"service", "(k3s|unmapped)"')
 PROMQL_COMMENT = re.compile(r"#.*")
 
-# authelia and nut are unarmed by operator decision; pihole-2 is pihole's deferred file. Each
-# reaches the table by a different path, so a derivation that lost one would drop its member.
 MUST_FIND = frozenset(
     {
         ("deployment", "homelab", "authelia"),

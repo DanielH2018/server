@@ -315,8 +315,7 @@ def test_the_bump_is_never_automerged():
         f"the {DEP} packageRule no longer sets automerge: false"
     )
 
-    # Only a later rule that sets automerge or groupName can override this rule's. A k8s-path rule
-    # setting neither (the pinDigests rule, which must sit last) is no threat to it.
+    # Only a later rule that sets automerge or groupName can override this rule's.
     k8s_plane = [
         i
         for i, r in enumerate(rules)

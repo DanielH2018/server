@@ -22,8 +22,6 @@ HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 REPO = os.path.dirname(os.path.dirname(os.path.dirname(HERE)))
 CLAUDE = os.path.join(REPO, ".claude")
 
-# Matches a repo-relative .claude/... script path inside a hook command string,
-# regardless of the absolute prefix (~/server/..., /home/ubuntu/server/..., bash <path>).
 _SCRIPT_RE = re.compile(r"\.claude/[\w./-]+\.(?:sh|py)")
 
 
@@ -63,9 +61,7 @@ _PRUNE = {".git", ".venv", "node_modules", "__pycache__", "collections"}
 
 
 def _probe_subcommands():
-    # probe.py's argparse surface lives in probe_lib/: cli_parser.py, and the modules whose own
-    # add_parser() cli_parser.py calls (lander.py adds `lander`). probe.py itself
-    # holds only main() and its dispatch table, so scanning it returns an empty set.
+    # probe.py holds only main() and its dispatch table.
     lib = os.path.join(REPO, "scripts", "diagnostics", "probe_lib")
     body = "\n".join(
         _read(os.path.join(lib, name))

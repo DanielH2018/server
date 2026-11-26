@@ -137,8 +137,7 @@ def _family_offence(subject: Subject) -> list[str]:
     assert isinstance(subject, Family), subject.rel
     stems = {PurePosixPath(m.rel).stem: m for m in subject.members}
     targets = {m.rel: _forwarded_module(m) for m in subject.members}
-    # A shim counts out only when it forwards to a real entrypoint in its own family. One that
-    # forwards to a guard-less sibling is the family's entrypoint, however thin.
+    # A shim counts out only when it forwards to a real entrypoint in its own family.
     real = {
         stem
         for stem, m in stems.items()
@@ -334,9 +333,7 @@ ROWS = (
                 foo_cli="def main():\n    return 0\n",
                 foo_util="X = 1\n",
             ),
-            # Logic under the guard that calls an imported name, a second top-level `if`, or a
-            # forwarding call whose argument calls something is not forwarding. Each of the last
-            # two fixtures breaks one rule only, so either rule regressing turns its proof red.
+            # Each of the last two fixtures breaks one rule only.
             _fixture("scripts/x/foo_*.py", foo=_MAIN, foo_a=_IMPORTED_LOGIC, foo_b=""),
             _fixture("scripts/x/foo_*.py", foo=_MAIN, foo_a=_TYPE_CHECKING, foo_b=""),
             _fixture("scripts/x/foo_*.py", foo=_MAIN, foo_a=_ARG_CALLS, foo_b=""),

@@ -14,10 +14,8 @@ from lib.repo_paths import REPO
 
 LOKI_STREAMS = load_yaml(ALL_VARS)["loki_streams"]
 
-# The k8s pod stream vocabulary, read off a live Loki stream. `app` is NOT in it: a selector with
-# app="home-assistant" matches no stream, and a fail-open arm reads that as "nothing to report".
-# A FLOOR, not the whole answer: `filename`, `stream` and `service_name` come from Alloy/Loki
-# itself and appear in no config, so deriving alone would reject a valid selector.
+# The k8s pod stream vocabulary. `app` is NOT in it: a selector with app="home-assistant" matches no
+# stream, and a fail-open arm reads that as nothing to report.
 _LOKI_STREAM_LABELS_OBSERVED = frozenset(
     {
         "container",
@@ -49,8 +47,6 @@ def _alloy_relabel_targets():
 
 LOKI_STREAM_LABELS = _LOKI_STREAM_LABELS_OBSERVED | _alloy_relabel_targets()
 
-# daniel-pi's streams, by `loki_streams` role. The container stream carries a `container`
-# label on top of the owner's, so it gets one of the Pi's real container names.
 _PI_STREAMS = {
     role: {**labels, "container": "wg-easy"} if role == "pi_containers" else labels
     for role, labels in LOKI_STREAMS.items()

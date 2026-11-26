@@ -23,8 +23,7 @@ from lib.guard_jinja_env import make_env, register_ansible_filters
 from lib.repo_paths import SHARED_TPL
 from _helpers import ALL_VARS
 
-# Imported through the loader rather than pasted in as text, so the call renders the macro the
-# way a role's template does — `with context`, from k8s/templates/.
+# Imported through the loader so the call renders the macro as a role's template does.
 _IMPORT = "{% from 'ingressroute.yml.j2' import ingressroute, monitoring_route with context %}\n"
 RESOLVER_VAR = "k8s_tls_cert_resolver"
 
