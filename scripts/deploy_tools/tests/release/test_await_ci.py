@@ -8,7 +8,7 @@ proceeds -- so each case that must pass has a sibling that must fail.
 Run: uv run pytest scripts/deploy_tools/tests/release/test_await_ci.py
 """
 
-from deploy_tools import await_ci
+from deploy_tools import await_ci, ci_stall
 import pytest
 from ci_verdict import CheckRun, CheckSuite
 
@@ -574,4 +574,4 @@ def test_a_head_whose_only_ci_skipped_as_a_draft_says_so(ready_gate, names_the_d
         fetch_suites=lambda _s: [],
     )
     assert code == 75
-    assert (await_ci.DRAFT_SKIPPED in msg) is names_the_draft
+    assert (ci_stall.DRAFT_SKIPPED in msg) is names_the_draft
