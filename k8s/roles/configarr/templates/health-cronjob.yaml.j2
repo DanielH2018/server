@@ -1,26 +1,11 @@
 {% from 'container-resources.yml.j2' import job_container_resources with context %}
 {% from 'security-context.yml.j2' import job_hardened_security_context with context %}
-{#
-  The configarr sync health reader, every 10 minutes: read the newest finished configarr Job
-  and its log, then record the verdict as a log line and on the verdict ConfigMap's
-  annotations (health-verdict-configmap.yaml.j2). It replaced the
-  daniel-box host cron `configarr sync health` at H2.5b
-  (docs/archive/host/h2-shrink-host-plane.md, Steps item 13).
-
-  Two containers, because the reader is Python and kubectl ships in neither image alone. The
-  init container copies kubectl out of alpine/k8s into an emptyDir, and the reader runs it from
-  there with the pod's own ServiceAccount (health-rbac.yaml.j2) as its credential. That is why
-  this pod mounts its ServiceAccount token, where the configarr pod does not.
-
-  The labels are `app: configarr-health`, never `app: configarr`. The reader selects the Jobs
-  it judges by `app=configarr`, so that label here would make it judge its own runs as syncs.
-
-  Flux runs this CronJob once per role revision, as the gate Job
-  `configarr-health-deploy-gate-<spec digest8>` in `configarr-verify`. An extra run re-reads
-  the same Job and records the same verdict, so it is idempotent. It starts together with
-  configarr's own gate, so it can record the previous sync's verdict; defaults/main.yml's
-  DECIDED marker at `flux_cronjob_gates` says why that is accepted.
-#}
+{# The labels are `app: configarr-health`, never `app: configarr`: the reader selects the Jobs it
+   judges by `app=configarr`.
+   The init container copies kubectl into an emptyDir; the pod mounts its ServiceAccount token as its
+   credential.
+   Flux runs it once per revision beside configarr's own gate, so it can record the previous sync's
+   verdict (DECIDED at `flux_cronjob_gates`). #}
 ---
 apiVersion: batch/v1
 kind: CronJob
@@ -84,8 +69,7 @@ spec:
                 # The ConfigMap the verdict is also written to (health-verdict-configmap.yaml.j2).
                 - name: CONFIGARR_VERDICT_CONFIGMAP
                   value: "{{ configarr_k8s_health_verdict_configmap }}"
-                # kubectl's discovery cache goes under $HOME, and the root filesystem is
-                # read-only.
+                # kubectl's discovery cache goes under $HOME, and the root filesystem is read-only.
                 - name: HOME
                   value: /tmp
                 # The ConfigMap mount is read-only, so Python cannot write __pycache__ there.

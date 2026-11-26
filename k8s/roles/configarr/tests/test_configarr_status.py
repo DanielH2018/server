@@ -43,7 +43,5 @@ def test_empty_output_summarizes_to_placeholder():
 
 
 def test_summarize_reports_the_last_line_verbatim_whatever_its_vocabulary():
-    # The CronJob's log is configarr's output alone. A final line that happens to read like a
-    # docker-compose status line is still configarr's, and is what the monitor must report.
     out = "INFO  [09:30:16.778]: Execution Summary: SONARR (1/0/0)\nImage ghcr.io/x:1 Pulled"
     assert summarize(out) == "Image ghcr.io/x:1 Pulled"

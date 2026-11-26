@@ -30,15 +30,12 @@ flux_cronjob_gates:
   configarr-health:
     kind: verify
 
-# The health reader below reads whatever the last run produced,
-# so the two schedules are independent — this one can move without touching monitoring.
+# Independent of the health reader's schedule, which reads whatever the last run produced.
 configarr_k8s_schedule: "30 4 * * *"
 
 configarr_k8s_timeout: 300
-# How long a finished configarr Job, and its pod, stays visible: two schedule periods, so a
-# failed run clears instead of reading Failed until two more runs fail. It must exceed one
-# period, because configarr-health judges the newest finished Job (test_rendered_properties.py,
-# row cronjob-finished-jobs-age-out). The gate Job drops it (cronjob_gate.py).
+# Two schedule periods, so a failed run clears; it must exceed one period because configarr-health
+# judges the newest finished Job.
 configarr_k8s_job_ttl_seconds: 172800
 
 # Deliberately kept: `kubectl logs job/<n>` is the only record of what a run did, and the health
@@ -50,28 +47,22 @@ configarr_k8s_failed_history: 3
 # 26 h ceiling, so a daily 04:30 sync that skips one night goes red rather than coasting on yesterday's log.
 configarr_k8s_max_age_hours: 26
 
-# */10 like the other k8s-side health readers. The rules read the verdict ConfigMap and the
-# CronJob's last successful time, so the reader runs far more often than the sync. Each run
-# re-reads the same Job and re-records it; the age gate above is what turns a stale one red.
+# */10: the rules read the verdict ConfigMap and the CronJob's last success; the age gate above
+# turns a stale run red.
 configarr_k8s_health_schedule: "*/10 * * * *"
 
-# The ConfigMap the health reader writes its verdict to as annotations, which kube-state-metrics
-# exports. The shadow rule ConfigarrHealthNotReporting holds the CronJob's last
-# successful run to three periods of the schedule above, 1800s.
+# Written as annotations, which kube-state-metrics exports; ConfigarrHealthNotReporting holds the
+# last success to three periods (1800s).
 configarr_k8s_health_verdict_configmap: configarr-health-verdict
 
-# The health reader runs in the repo's pinned python image and gets kubectl from an init
-# container of alpine/k8s, which keeps the binary at /usr/bin/kubectl (its upstream Dockerfile,
-# and the layer listing of this digest's linux/amd64 manifest). Its kubectl minor
-# matches the server's v1.37.
+# kubectl comes from an init container of alpine/k8s at /usr/bin/kubectl; its minor matches the
+# server's.
 configarr_k8s_health_image: python:3.15-alpine@sha256:0f9552bb28711333da16915ec146f5e6bb44a7fdac9ced15dc17c2e0206346dd
 configarr_k8s_health_kubectl_image: alpine/k8s:1.37.2@sha256:7a82aeefea3d554a43a8676b137f2b88bae6c1fe11c13862b191b3a086cc28c0
 
-# Above the reader's worst case; the gate Job copies it, and `bundle.flux_files` raises the
-# `configarr-verify` timeout above it. The worst case is two 30 s
-# kubectl calls (CONFIGARR_KUBECTL_TIMEOUT_S). The rest is the cold pull of both images, which
-# counts against the deadline too. A deadline that fires before the
-# container starts fails the deploy.
+# Above the reader's worst case: two 30 s kubectl calls plus the cold pull of both images. A
+# deadline firing before the container starts fails the deploy.
+# The gate Job copies it, and `bundle.flux_files` raises the `configarr-verify` timeout above it.
 configarr_k8s_health_deadline_seconds: 420
 # How long a finished configarr-health Job, and so its pod, stays visible. A run the weekly reboot
 # interrupts fails, and without a TTL it reads Failed until two later runs fail.
@@ -90,6 +81,5 @@ configarr_k8s_mem_limit: 256Mi
 configarr_k8s_cpu_request: "50m"
 configarr_k8s_mem_request: 16Mi
 
-# No Deployment to wait on. The manifests role treats '' as "skip the rollout entirely",
-# which is the whole reason that option exists.
+# '' means skip the rollout entirely: there is no Deployment to wait on.
 manifests_rollout: ""
