@@ -131,6 +131,31 @@ def test_land_runs_a_handed_over_turn_from_a_fresh_checkout_and_annotates_nothin
     assert turn.try_take(tmp_path / "turn.lock") is not None
 
 
+def test_a_handed_over_turn_whose_checkout_failed_ends_refused_and_frees_the_turn(
+    tmp_path, capsys, verdict_record
+):
+    from deploy_tools import land
+    from deploy_tools.land_lib import turn
+
+    held = turn.try_take(tmp_path / "turn.lock")
+    assert held is not None
+
+    def hand_over(*args, **kwargs):
+        raise turn.HandOver(held.fd, "its code lags master")
+
+    tools, calls = build_tools(Fakes(fresh_fails="git fetch: offline"))
+    tools = dataclasses.replace(tools, gh_json=hand_over)
+    opts = Options(pr="999", primary=PRIMARY, arm_merge=True, await_merge=True)
+    assert land._land(opts, tools, None, ["--pr", "999", "--arm-merge"]) == 1
+    out = capsys.readouterr().out
+    assert "VERDICT: refused" in out
+    assert "git fetch: offline; nothing is merged" in out
+    [(logline,)] = [c[1] for c in calls if c[0] == "logger"]
+    assert "verdict=refused" in logline
+    assert "refused" in verdict_record.read_text()
+    assert turn.try_take(tmp_path / "turn.lock") is not None
+
+
 def test_the_lander_unit_refuses_fresh():
     assert "--fresh" in handoff.refused_flags(Options(pr="7", fresh=True))
 
