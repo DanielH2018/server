@@ -27,13 +27,13 @@ k8s_default_limitrange in group_vars/all.yml for why the ceiling is set where it
 
 import re
 
+from lib.estate import shared_vars
 from lib.proc_testing import run
 
 from lib import yaml_fast
 from _k8s_render import pod_spec, rendered_build_job_text, rendered_docs
 from _role_census import role_dirs
 from _helpers import REPO as _REPO
-from _helpers import ALL_VARS, load_yaml
 from renderer.renderer_lib.bundle import homelab_namespace_files
 from renderer.renderer_lib.cluster import vendored_files
 from renderer.renderer_lib.namespace import HOMELAB_NAMESPACE
@@ -45,7 +45,7 @@ _LIMITRANGE_NAME = "default-container-limits"
 
 
 def _all_vars() -> dict:
-    return load_yaml(ALL_VARS)
+    return shared_vars()
 
 
 _RESOURCE_KEYS = ("requests.cpu", "requests.memory", "limits.cpu", "limits.memory")

@@ -15,7 +15,7 @@ Two properties, because either one alone passes while the change is wrong:
 
 import ipaddress
 
-from _helpers import ALL_VARS, load_yaml
+from lib.estate import shared_vars
 from _k8s_render import rendered_texts
 from lib import yaml_fast
 
@@ -52,7 +52,7 @@ def _expected_reverse_zone() -> str:
     ipaddress derives it from the network object rather than by slicing octets, so this is a
     real oracle for the template's own slicing and not a copy of it.
     """
-    group_vars = load_yaml(ALL_VARS)
+    group_vars = shared_vars()
     net = ipaddress.ip_network(group_vars["lan_subnet"])
     assert net.prefixlen % 8 == 0, (
         "lan_subnet is no longer a whole-octet prefix — the template's octet slicing cannot "
@@ -64,7 +64,7 @@ def _expected_reverse_zone() -> str:
 
 
 def test_lan_reverse_zone_is_forwarded_to_the_router() -> None:
-    group_vars = load_yaml(ALL_VARS)
+    group_vars = shared_vars()
     expected = f"/{_expected_reverse_zone()}/{group_vars['lan_router_ip']}"
     assert expected in _server_directives(_dnsmasq_conf()), (
         f"pihole's dnsmasq config has no `server={expected}` line, so PTR lookups for LAN "

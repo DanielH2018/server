@@ -32,10 +32,11 @@ Run: uv run pytest tests/services/test_alert_runbook_urls.py
 
 import re
 
+from lib.estate import shared_vars
 from _helpers import K8S_ROLES
 from lib import yaml_fast
 from lib.inventory_lists import host_names
-from lib.repo_paths import ALL_VARS, REPO
+from lib.repo_paths import REPO
 
 # The shipped rules of every role, Prometheus' and loki-homelab's ruler alike.
 RULE_FILES = sorted(K8S_ROLES.glob("*/files/rules/*.yaml"))
@@ -60,7 +61,7 @@ SUBJECT = re.compile(rf"(?:(?P<name>[\w.-]+)|{_LABEL}(?:/{_LABEL})*): \S")
 
 
 def _base_url() -> str:
-    return f"https://docs.local.{yaml_fast.safe_load(ALL_VARS.read_text())['domain']}/"
+    return f"https://docs.local.{shared_vars()['domain']}/"
 
 
 def anchors(page: str) -> set[str]:

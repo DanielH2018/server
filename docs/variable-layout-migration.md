@@ -25,21 +25,31 @@ deleted instead of moved.
 
 ## Steps
 
-### Step 1: one module knows the paths
+### Step 1: one module reads the files
 
 ```diff
-  scripts/lib/estate.py          Inventory, Estate: every layer and path
-- readers that name inventory/   most of the 126 code, config and test files
-+ readers that call lib.estate  a listed few cannot
+  scripts/lib/estate.py           shared_vars(), host_vars(host), Estate
+- Python that opens inventory/    85 modules, 125 calls
++ Python that calls lib.estate    a listed few keep the path
 ```
 
-Every checkout reader of `inventory/` goes through `lib.estate`. The readers that cannot import
-it are listed in one census row: shell scripts (`ui_mcp.sh`, `set_device_option.sh`,
-`bootstrap-host.sh`), workflow and `renovate.json` path matchers, the prek `files` regexes, and
-the installed readers of step 3. The row refuses a new one. `render_diff_gates.py` and
-`cluster_pins.py` read paths at a commit, so they take the path list from the module.
+Every Python read of an inventory file goes through `lib.estate`. The
+`inventory-files-are-read-through-lib-estate` row of
+`scripts/tests/test_census_rows_test_modules.py` refuses a call that takes an inventory path,
+and a function whose parameter defaults to one. Its allow list names the modules that keep a
+path, each with its reason:
 
-**Done when** the row is red on a planted reader and every render is byte-identical.
+- the readers themselves: `lib/estate.py`, `lib/render_guard.py`, `lib/inventory_lists.py`;
+- the two shipped readers, which cannot import `lib.estate` and move in step 3;
+- the tests that read a file's text or assert which file declares a key, which step 6 decides
+  per key.
+
+The row reads Python only. Path matchers that name `inventory/` as a string, the shell scripts,
+the workflows, `renovate.json` and the prek `files` regexes move with the files in steps 3
+and 6.
+
+**Done when** the row is red on a planted reader, every render is byte-identical, and the
+docs generators write no change.
 
 ### Step 2: a k8s role names the host it reads
 

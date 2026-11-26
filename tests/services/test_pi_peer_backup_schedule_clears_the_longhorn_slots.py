@@ -15,7 +15,8 @@ clear in December unless both are.
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
-from lib.repo_paths import ALL_VARS, K8S_ROLES, LONGHORN_BACKUP_ROLE
+from lib.estate import shared_vars
+from lib.repo_paths import K8S_ROLES, LONGHORN_BACKUP_ROLE
 from _helpers import load_yaml
 
 PI_PEER_DEFAULTS = K8S_ROLES / "pi-peer-backup/defaults/main.yml"
@@ -55,7 +56,7 @@ def _longhorn_slots() -> dict[str, tuple[int, int]]:
 
 
 def _collisions(local_cron: str) -> dict[str, tuple[int, int]]:
-    tz = load_yaml(ALL_VARS)["tz"]
+    tz = shared_vars()["tz"]
     landed = _utc_minutes(local_cron, tz)
     return {name: slot for name, slot in _longhorn_slots().items() if slot in landed}
 

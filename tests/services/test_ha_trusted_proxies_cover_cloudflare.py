@@ -17,14 +17,15 @@ malformed entry can crash-loop HA.
 import ipaddress
 
 import yaml
-from _helpers import ALL_VARS, REPO, load_yaml
+from lib.estate import shared_vars
+from _helpers import REPO
 
 HA_CONFIG = REPO / "k8s/roles/home-assistant/files/configuration.yaml"
 
 # The k3s pod CIDR, read from group_vars so a CIDR change turns this test red until HA's list
 # follows. Traefik reaches HA from a pod IP in it; see the `DECIDED: the whole pod CIDR` comment
 # in configuration.yaml for why it is not narrowed to Traefik.
-POD_CIDR = load_yaml(ALL_VARS)["k3s_pod_cidr"]
+POD_CIDR = shared_vars()["k3s_pod_cidr"]
 
 
 def _ha_trusted_proxies() -> list[str]:
@@ -92,7 +93,7 @@ def test_a_non_strict_network_is_flagged():
 
 
 def test_shipped_trusted_proxies_match_cloudflare_ips():
-    cloudflare = load_yaml(ALL_VARS)["cloudflare_ips"]
+    cloudflare = shared_vars()["cloudflare_ips"]
     trusted = _ha_trusted_proxies()
     # Non-vacuity: an empty or renamed variable would make the equality trivially about nothing.
     assert "173.245.48.0/20" in cloudflare

@@ -35,8 +35,10 @@ __all__ = [
     "REPO_INVENTORY",
     "Estate",
     "Inventory",
+    "host_vars",
     "inventory_layers",
     "role_defaults",
+    "shared_vars",
 ]
 
 
@@ -54,8 +56,22 @@ class Inventory:
     host_vars: Path = HOST_VARS
     services: Path = K8S_SERVICES
 
+    def var_files(self) -> list[Path]:
+        """Every vars file, sorted: the shared one and each host's, `_example.yml` included."""
+        return sorted([self.all_vars, *self.host_vars.glob("*.yml")])
+
 
 REPO_INVENTORY = Inventory()
+
+
+def shared_vars() -> dict:
+    """The repo's layer every host shares, raw: what ``group_vars/all.yml`` declares."""
+    return load_yaml(REPO_INVENTORY.all_vars)
+
+
+def host_vars(host: str) -> dict:
+    """What `host`'s own file in the repo declares, raw, or ``{}`` for a host without one."""
+    return host_layer(REPO_INVENTORY.host_vars, host)
 
 
 def inventory_layers(defaults: dict, group: dict, host: dict) -> dict:

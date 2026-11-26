@@ -20,9 +20,9 @@ from pathlib import Path
 from lib.cli_help import ArgumentParser
 
 from lib import yaml_fast
-from lib.estate import Estate, Inventory
+from lib.estate import REPO_INVENTORY, Estate, Inventory
 from lib.inventory_lists import K8S_HOST
-from lib.repo_paths import HOST_VARS, K8S_SERVICES, REPO
+from lib.repo_paths import REPO
 
 UNKNOWN = "unknown"
 HOSTS = REPO / "hosts"
@@ -60,24 +60,21 @@ def _docker(name: str, components: list[str] | None) -> str:
 
 
 def build_rows(
-    host_vars: Path = HOST_VARS,
-    hosts_root: Path = HOSTS,
-    services: Path = K8S_SERVICES,
+    inventory: Inventory = REPO_INVENTORY, hosts_root: Path = HOSTS
 ) -> list[dict[str, str]]:
-    """Collect every host, one per `host_vars` file, into one row of inventory facts each.
+    """Collect every host in `inventory` into one row of inventory facts each.
 
     A host's services are the k8s services on the k8s host and its `compose_services` on any
     other.
 
     Args:
-        host_vars: Directory holding each host's `host_vars` file.
-        services: The k8s service list.
+        inventory: The inventory: each host's `host_vars` file and the k8s service list.
         hosts_root: The `hosts/` tree, read for each host's package.
 
     Returns:
         One dict per host, keyed by the columns rendered in `render_markdown`.
     """
-    estate = Estate(Inventory(host_vars=host_vars, services=services))
+    estate = Estate(inventory)
     rows = []
     for name in estate.hosts():
         data = estate.own_vars(name)
@@ -134,12 +131,11 @@ def main(argv: list[str] | None = None) -> int:
     """
     parser = ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--out", type=Path, required=True, help="output file path")
-    parser.add_argument("--host-vars", type=Path, default=HOST_VARS)
     args = parser.parse_args(argv)
 
     from lib.docs_provenance import finish_generator
 
-    rows = build_rows(args.host_vars)
+    rows = build_rows()
     return finish_generator(
         "docs.reference.hosts", args.out, rows, render_markdown, "host"
     )

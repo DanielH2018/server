@@ -10,7 +10,7 @@ from urllib.parse import urlsplit
 
 from lib import yaml_fast
 
-from _helpers import HOST_VARS, load_yaml
+from lib.estate import host_vars
 from _k8s_render import pod_spec
 from _property_table import Property
 
@@ -91,7 +91,7 @@ def _seconds(duration: str) -> float:
 @cache
 def pi_ip() -> str:
     # The Pi's own literal: reading the derived value would compare the render against itself.
-    return load_yaml(HOST_VARS / "daniel-pi.yml")["server_ip"]
+    return host_vars("daniel-pi")["server_ip"]
 
 
 def _scrape_jobs(role: str, tpl: str, doc: dict):

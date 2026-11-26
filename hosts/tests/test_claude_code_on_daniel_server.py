@@ -8,15 +8,16 @@ Run: uv run pytest hosts/tests/test_claude_code_on_daniel_server.py
 """
 
 from _agent_package import agent_setup_script
-from _helpers import HOST_VARS, load_yaml
+from _helpers import load_yaml
+from lib.estate import host_vars
 from _setup_render import CLAUDE_CODE, render_component_text
 from docs.fragment_readers import hosts_listing_component
 from test_claude_fleet_slice_cap import SUB_BOUNDS, to_bytes
 
 ROLE = CLAUDE_CODE
 DEFAULTS = load_yaml(ROLE / "defaults" / "main.yml")
-SERVER = load_yaml(HOST_VARS / "daniel-server.yml")
-BOX = load_yaml(HOST_VARS / "daniel-box.yml")
+SERVER = host_vars("daniel-server")
+BOX = host_vars("daniel-box")
 
 
 def _violating_planes(merged_vars: dict) -> list[str]:

@@ -9,8 +9,7 @@ Run: uv run pytest scripts/validate/tests/test_render_shell.py
 
 import shutil
 
-from lib import yaml_fast
-from lib.repo_paths import HOST_VARS
+from lib.estate import host_vars
 from validate.render_lib import shell as v
 from validate.validate_lib import shell_lint as sl
 from validate.validate_lib.shipped_render import render_shipped_text
@@ -199,10 +198,7 @@ def test_hostvars_carries_every_hosts_inventory_address():
     # go in the etcd drill's fence.
     path = v.COMPONENTS / "hypervisor" / "templates" / "etcd-restore-drill-vm.sh.j2"
     text = render_shipped_text(path, v.template_context(path))
-    box, pi = (
-        yaml_fast.safe_load((HOST_VARS / f"{h}.yml").read_text())["server_ip"]
-        for h in ("daniel-box", "daniel-pi")
-    )
+    box, pi = (host_vars(h)["server_ip"] for h in ("daniel-box", "daniel-pi"))
     assert f"https://{box}:6443/version" in text
     assert f"http://{pi}:51821" in text
 

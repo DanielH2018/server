@@ -23,7 +23,7 @@ from pathlib import Path
 
 from _helpers import REPO
 from lib import yaml_fast
-from lib.repo_paths import HOST_VARS
+from lib.estate import host_vars
 
 # Narrower than a prefix sweep: a LAN octet followed by `/` is a CIDR mention, not a duplicated
 # address;
@@ -230,7 +230,6 @@ def test_the_census_actually_scanned_the_files_this_change_touched():
 
 BOOTSTRAP = REPO / "hosts" / "bootstrap-host.sh"
 ARCHIVE_KEYRING = REPO / "hosts" / "keys" / "homelab-archive-keyring.gpg"
-DANIEL_BOX = HOST_VARS / "daniel-box.yml"
 BUILDER_COMPONENT = REPO / "hosts" / "components" / "builder" / "component.yml"
 
 
@@ -274,7 +273,7 @@ def pin_problem(script: str, fingerprints: list[str]) -> str | None:
 
 
 def test_the_bootstrap_url_is_daniel_boxs_repository():
-    server_ip = yaml_fast.safe_load(DANIEL_BOX.read_text())["server_ip"]
+    server_ip = host_vars("daniel-box")["server_ip"]
     port = yaml_fast.safe_load(BUILDER_COMPONENT.read_text())["defaults"][
         "builder_repo_port"
     ]

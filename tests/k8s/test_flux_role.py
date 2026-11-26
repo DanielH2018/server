@@ -26,9 +26,10 @@ import re
 
 from deploy_tools import chained_timeout
 import pytest
+from lib.estate import shared_vars
 from lib.guard_jinja_env import FilterError, repo_filters
 
-from _helpers import ALL_VARS, load_defaults, K8S_ROLES
+from _helpers import load_defaults, K8S_ROLES
 from lib import yaml_fast
 from _k8s_render import rendered_docs
 from test_volume_names_descriptive import volume_names
@@ -246,7 +247,7 @@ def _manager_args(docs: list[dict], deployment: str) -> list[str]:
 
 
 def test_kustomize_controller_runs_the_rollout_batch_plus_the_soaks_worker():
-    width = int(yaml_fast.safe_load(ALL_VARS.read_text())["k8s_rollout_batch_width"])
+    width = int(shared_vars()["k8s_rollout_batch_width"])
     args = _manager_args(_flux_docs(), "kustomize-controller")
     assert [a for a in args if a.startswith("--concurrent=")] == [
         f"--concurrent={width + 1}"

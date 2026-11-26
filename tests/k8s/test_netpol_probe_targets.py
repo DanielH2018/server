@@ -8,8 +8,9 @@ plane's rows, are pinned by
 
 from collections.abc import Sequence
 
+from lib.estate import shared_vars
 from lib import yaml_fast
-from _helpers import ALL_VARS, K8S_ROLES
+from _helpers import K8S_ROLES
 from lib.render_guard import k8s_services
 
 ROLE = K8S_ROLES / "netpol-baseline"
@@ -32,7 +33,7 @@ def test_terraria_is_absent_while_its_start_is_refused() -> None:
     dials :7777, which can crash a 1.4.5.7 server, so the row comes back with the image
     fix. defaults/main.yml records the decision.
     """
-    games = yaml_fast.safe_load(ALL_VARS.read_text())["game_servers"]
+    games = shared_vars()["game_servers"]
     [terraria] = [g for g in games if g["name"] == "terraria"]
     services = {r["service"] for r in TARGETS}
     if terraria.get("start_refused"):

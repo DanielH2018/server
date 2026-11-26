@@ -24,7 +24,8 @@ from _aide_check_run import LOGGER_STUB
 from _helpers import K8S_ROLES, REPO
 from _host_packages import HOSTS, package, shipped_text
 from lib import yaml_fast
-from lib.repo_paths import HOST_VARS, K3S_SERVER
+from lib.estate import Estate, host_vars
+from lib.repo_paths import K3S_SERVER
 from lib.proc_testing import fake_bin, run, write_exec
 
 SCRIPT = K3S_SERVER / "files" / "wired-gateway-check.sh"
@@ -91,10 +92,10 @@ def test_no_reply_writes_success_0_and_exits_0(tmp_path):
 def static_links() -> dict[str, str]:
     """host -> k3s_node_static_link, for every host whose host_vars set one."""
     links = {}
-    for path in sorted(HOST_VARS.glob("*.yml")):
-        link = (yaml_fast.safe_load(path.read_text()) or {}).get("k3s_node_static_link")
+    for host in Estate().hosts():
+        link = host_vars(host).get("k3s_node_static_link")
         if link:
-            links[path.stem] = link
+            links[host] = link
     return links
 
 

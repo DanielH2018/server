@@ -23,7 +23,8 @@ from _updater_host import reconcile_ok as _ok
 
 from lib import yaml_fast
 from lib.proc_testing import run, write_exec
-from lib.repo_paths import ALL_VARS, REPO
+from lib.estate import shared_vars
+from lib.repo_paths import REPO
 from reconcile_lib import lines
 from renderer.renderer_lib import host as host_mode
 
@@ -360,7 +361,7 @@ def test_a_wait_at_reconciles_thirty_minutes_is_flagged(package):
 
 def engine_moves(nfpm: dict, files: dict) -> list[str]:
     """What in a rendered package could move a held engine package without the engine unit."""
-    held = set(yaml_fast.safe_load(ALL_VARS.read_text())["docker_engine_packages"])
+    held = set(shared_vars()["docker_engine_packages"])
     depends = {re.split(r"[\s(]", d, maxsplit=1)[0] for d in nfpm.get("depends", [])}
     found = [f"Depends on {name}" for name in sorted(depends & held)]
     found += [dst for dst in files if dst.startswith("/etc/apt/preferences")]
@@ -370,9 +371,7 @@ def engine_moves(nfpm: dict, files: dict) -> list[str]:
 def test_the_package_cannot_move_the_engine_is_clean(package):
     nfpm = {"depends": package.depends}
     assert engine_moves(nfpm, package.files) == []
-    assert _pins(package).keys() == set(
-        yaml_fast.safe_load(ALL_VARS.read_text())["docker_engine_packages"]
-    )
+    assert _pins(package).keys() == set(shared_vars()["docker_engine_packages"])
 
 
 def test_a_versioned_depends_on_the_engine_is_flagged(package):

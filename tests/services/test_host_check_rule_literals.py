@@ -8,9 +8,9 @@ Run: uv run pytest tests/services/test_host_check_rule_literals.py
 
 import re
 
+from lib.estate import host_vars
 from _helpers import K8S_ROLES
 from lib import yaml_fast
-from lib.repo_paths import HOST_VARS
 from _setup_render import CLAUDE_CODE
 from docs.fragment_readers import hosts_listing_component
 
@@ -37,7 +37,7 @@ def test_the_cgroup_pairs_follow_the_inventory():
     )["claude_code_rc_enabled"]
     derived = set()
     for name in hosts_listing_component("claude-code"):
-        host = yaml_fast.safe_load((HOST_VARS / f"{name}.yml").read_text()) or {}
+        host = host_vars(name)
         derived.add((name, "fleet"))
         if host.get("claude_code_rc_enabled", rc_default):
             derived.add((name, "claude-rc"))

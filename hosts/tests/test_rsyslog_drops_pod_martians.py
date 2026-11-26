@@ -9,9 +9,8 @@ import ipaddress
 import re
 
 import pytest
-from _helpers import ALL_VARS
+from lib.estate import shared_vars
 from _host_packages import shipped_text
-from lib import yaml_fast
 
 FILTER_DEST = "/etc/rsyslog.d/49-homelab-info-filter.conf"
 # Both hosts ship the same untemplated file; test_journald_syslog_forwarding holds the listing.
@@ -64,9 +63,7 @@ def test_a_pod_martian_on_another_facility_is_clean():
 
 def test_the_pattern_names_the_inventorys_pod_cidr():
     """The pattern spells out the /16's first two octets, so a moved pod CIDR has to move it too."""
-    cidr = ipaddress.ip_network(
-        yaml_fast.safe_load(ALL_VARS.read_text())["k3s_pod_cidr"]
-    )
+    cidr = ipaddress.ip_network(shared_vars()["k3s_pod_cidr"])
     assert cidr.prefixlen == 16, cidr
     first, second = str(cidr.network_address).split(".")[:2]
     text = shipped_text(HOST, FILTER_DEST)

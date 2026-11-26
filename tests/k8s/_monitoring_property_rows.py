@@ -7,13 +7,13 @@ so these rows hold the shape that makes that exemption safe.
 
 import re
 
-from _helpers import ALL_VARS, load_yaml
+from lib.estate import shared_vars
 from _property_table import Property
 
 _CLIENT_IP = re.compile(r"ClientIP\(`([^`/]+)/(\d+)`\)")
 # The widest grant a monitoring route may carry; lan_subnet is a /24.
 _WIDEST_PREFIX = 16
-_LOCAL = f".local.{load_yaml(ALL_VARS)['domain']}"
+_LOCAL = f".local.{shared_vars()['domain']}"
 
 
 def _monitoring_routes(role: str, tpl: str, doc: dict):

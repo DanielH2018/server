@@ -14,7 +14,8 @@ import os
 import re
 import subprocess
 
-from _helpers import ALL_VARS, HOST_VARS, REPO
+from lib.estate import host_vars, shared_vars
+from _helpers import REPO
 from _shell_render import render_shell_script
 from lib import yaml_fast
 from lib.proc_testing import fake_bin
@@ -32,7 +33,7 @@ ENTRYPOINT = 'trap teardown EXIT\nmain "$@"'
 
 
 def _all_vars():
-    return yaml_fast.safe_load(ALL_VARS.read_text())
+    return shared_vars()
 
 
 def _hypervisor_defaults():
@@ -40,7 +41,7 @@ def _hypervisor_defaults():
 
 
 def _load_host_vars(host: str):
-    return yaml_fast.safe_load((HOST_VARS / f"{host}.yml").read_text()) or {}
+    return host_vars(host)
 
 
 # `$BASH` is an absolute path, so the guest's PATH can be narrowed to the stub directory.

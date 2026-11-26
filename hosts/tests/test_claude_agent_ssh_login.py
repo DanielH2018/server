@@ -12,7 +12,7 @@ Run: uv run pytest hosts/tests/test_claude_agent_ssh_login.py
 from _agent_package import SETUP, agent_setup_script, render_daniel_server_with
 from _setup_render import CLAUDE_CODE, render_component_text
 from lib import yaml_fast
-from lib.repo_paths import ALL_VARS, HOST_VARS
+from lib.estate import host_vars, shared_vars
 from renderer.renderer_lib import host as host_mode
 
 ROLE = CLAUDE_CODE
@@ -31,8 +31,8 @@ def test_the_key_half_runs_only_on_the_key_host_and_the_login_half_everywhere_el
     tmp_path,
 ) -> None:
     """On the key host `claude` holds the key, so it authorizes nothing there."""
-    assert vars_of(ALL_VARS)["claude_agent_ssh_key_host"] == "daniel-box"
-    key_path = vars_of(ALL_VARS)["claude_agent_ssh_key_path"]
+    assert shared_vars()["claude_agent_ssh_key_host"] == "daniel-box"
+    key_path = shared_vars()["claude_agent_ssh_key_path"]
     box = host_mode.render_host("daniel-box")
     server = render_daniel_server_with(
         tmp_path, claude_agent_ssh_login_enabled=True, claude_agent_peer_public_key=KEY
@@ -61,15 +61,15 @@ def test_the_agent_user_lingers_after_it_exists(tmp_path) -> None:
 
 
 def test_daniel_server_switches_the_agent_login_on_and_the_default_is_off() -> None:
-    server = vars_of(HOST_VARS / "daniel-server.yml")
+    server = host_vars("daniel-server")
     assert server["claude_agent_ssh_login_enabled"] is True
-    assert vars_of(ALL_VARS)["claude_agent_ssh_login_enabled"] is False
-    assert "claude_agent_ssh_login_enabled" not in vars_of(HOST_VARS / "daniel-box.yml")
+    assert shared_vars()["claude_agent_ssh_login_enabled"] is False
+    assert "claude_agent_ssh_login_enabled" not in host_vars("daniel-box")
 
 
 def test_the_key_path_is_under_the_agent_home_and_is_not_the_signing_key() -> None:
     defaults = vars_of(ROLE / "defaults" / "main.yml")
-    key = vars_of(ALL_VARS)["claude_agent_ssh_key_path"]
+    key = shared_vars()["claude_agent_ssh_key_path"]
     assert key.startswith(defaults["claude_code_agent_user_home"] + "/")
     assert key != defaults["claude_code_agent_signing_key"]
 

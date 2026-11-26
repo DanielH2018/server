@@ -4,7 +4,8 @@
 file under the test-module length cap; the rules for what makes a row are in its docstring.
 """
 
-from lib.repo_paths import ALL_VARS, K8S_ROLES
+from lib.estate import shared_vars
+from lib.repo_paths import K8S_ROLES
 
 from _helpers import load_yaml
 from _property_table import Property
@@ -77,7 +78,7 @@ def _identity_subject() -> dict:
     return {"kind": "ServiceAccount", "name": READONLY_SA, "namespace": READONLY_NS}
 
 
-_ALL_VARS = load_yaml(ALL_VARS)
+_ALL_VARS = shared_vars()
 GAMES_SA = load_yaml(K8S_ROLES / "deploy-ui" / "defaults" / "main.yml")[
     "deploy_ui_games_sa_name"
 ]

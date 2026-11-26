@@ -28,7 +28,8 @@ import re
 
 import pytest
 
-from _helpers import ALL_VARS, load_yaml
+from lib.estate import shared_vars
+from _helpers import load_yaml
 from _k8s_render import render_pod_env, render_role_template
 from _loki_streams import (
     LOKI_STREAM_LABELS,
@@ -40,7 +41,7 @@ from lib import yaml_fast
 from lib.repo_paths import REPO
 from renderer.renderer_lib import host as host_mode
 
-OWNER = load_yaml(ALL_VARS)["loki_streams"]
+OWNER = shared_vars()["loki_streams"]
 OWNER_JOBS = {labels["job"] for labels in OWNER.values()}
 
 OWNER_MACHINES = {labels["machine"] for labels in OWNER.values() if "machine" in labels}

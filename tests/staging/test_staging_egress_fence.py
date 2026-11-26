@@ -34,6 +34,7 @@ import xml.etree.ElementTree as ET
 
 import pytest
 
+from lib.estate import host_vars, shared_vars
 from lib import yaml_fast
 
 from _fence_probe import (
@@ -43,7 +44,7 @@ from _fence_probe import (
     dialled_addresses,
     rendered_orchestrator,
 )
-from _helpers import ALL_VARS, HOST_VARS, REPO
+from _helpers import REPO
 from lib.repo_paths import K8S_ROLES
 from renderer.renderer_lib import host as host_mode
 from _setup_render import rendered_component_text
@@ -64,11 +65,11 @@ FILTER_NAME_VAR = "hypervisor_staging_nwfilter_name"
 
 
 def _load_host_vars(host: str):
-    return yaml_fast.safe_load((HOST_VARS / f"{host}.yml").read_text()) or {}
+    return host_vars(host)
 
 
 def _all_vars():
-    return yaml_fast.safe_load(ALL_VARS.read_text())
+    return shared_vars()
 
 
 def _hypervisor_defaults():

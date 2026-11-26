@@ -44,7 +44,7 @@ import jinja2
 from renderer.renderer_lib.targets import render_targets, vendored_paths
 from lib import yaml_fast
 from lib.guard_jinja_env import ansible_bool
-from lib.estate import REPO_INVENTORY, Inventory
+from lib.estate import REPO_INVENTORY, Inventory, shared_vars
 from lib.k8s_roles import (
     CLAIM_TEMPLATE,
     MANIFESTS_PRUNE_DEFAULT,
@@ -56,7 +56,7 @@ from lib.k8s_roles import (
     role_defaults,
 )
 from lib.render_guard import SHARED_TPL, k8s_services
-from lib.repo_paths import JOB_FILES, K8S_ROLES, K8S_SERVICES, INVENTORY
+from lib.repo_paths import JOB_FILES, K8S_ROLES, K8S_SERVICES
 from renderer.renderer_lib.bundle import (
     KUSTOMIZATION,
     SHARED_KINDS,
@@ -92,7 +92,6 @@ LABEL_WRAPPER = SHARED_TPL / "role-labelled.yaml.j2"
 FLUX_DEFAULTS = K8S_ROLES / "flux" / "defaults" / "main.yml"
 FLUX_JOB_CONNECT = JOB_FILES / "flux_job_connect.py"
 FLUX_JOB_PARSE = JOB_FILES / "flux_job_parse.py"
-GROUP_VARS = INVENTORY / "group_vars" / "all.yml"
 # Each group variable naming a namespace that a role creates, mapped to that role. A deferred
 # document in that namespace gives `<tag>-deferred` an edge to the role (D4.2).
 NAMESPACE_ROLE_VARS = {"k8s_observability_namespace": "observability"}
@@ -208,7 +207,6 @@ def select_tags(
 
 def bundle_ordering(
     services: Path = K8S_SERVICES,
-    group_vars: Path = GROUP_VARS,
     roles: Path = K8S_ROLES,
 ) -> Ordering:
     """What the bundle generates `dependsOn` from: the full dependency map (D4.2).
@@ -227,7 +225,7 @@ def bundle_ordering(
     if problems:
         raise ValueError("; ".join(problems))
     k8s = k8s_services(services)
-    group = yaml_fast.safe_load(group_vars.read_text())
+    group = shared_vars()
     return Ordering(
         deps=build_k8s_dep_map(k8s, str(K8S_ROLES)),
         applies_last=frozenset(K8S_APPLIES_LAST),

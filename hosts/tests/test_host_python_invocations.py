@@ -20,7 +20,8 @@ from _helpers import REPO as _REPO
 
 from lib import role_installs
 from lib.k8s_roles import is_manifest_template
-from lib.repo_paths import ALL_VARS, K8S_ROLES
+from lib.estate import shared_vars
+from lib.repo_paths import K8S_ROLES
 
 
 _SEARCH_ROOTS = [
@@ -221,9 +222,7 @@ def test_hook_wrappers_pin_the_same_version_as_ansible():
     and cannot interpolate host_python_version. Nothing else couples the two, so a bump to the
     Ansible pin would leave the hooks silently requesting an interpreter the hosts no longer
     install — and these are the wrappers that route stderr to /dev/null."""
-    import yaml
-
-    pin = yaml.safe_load(ALL_VARS.read_text())["host_python_version"]
+    pin = shared_vars()["host_python_version"]
     offenders = []
     for path in sorted((_REPO / ".claude/hooks").glob("*.sh")):
         for n, line in enumerate(path.read_text().splitlines(), 1):

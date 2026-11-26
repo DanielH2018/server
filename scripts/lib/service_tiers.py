@@ -12,8 +12,7 @@ shed set ``probe.py shed-set`` prints, from the same module.
 """
 
 from lib.k8s_roles import k8s_entries
-from lib.render_guard import load_yaml
-from lib.repo_paths import ALL_VARS
+from lib.estate import shared_vars
 from renderer.template_filters.longhorn_groups import (
     longhorn_nobackup_claims,
     longhorn_r2_claims,
@@ -35,7 +34,7 @@ def r2_volumes(
     if entries is None:
         entries = list(k8s_entries().values())
     if namespace is None:
-        namespace = load_yaml(ALL_VARS)["k8s_namespace"]
+        namespace = shared_vars()["k8s_namespace"]
     return longhorn_r2_claims(entries, namespace)
 
 
@@ -87,7 +86,7 @@ def resolved_tier_lists(k3s_defaults: dict, entries: list[dict] | None = None) -
         entries = list(k8s_entries().values())
     namespace = k3s_defaults.get("k8s_namespace")
     if namespace is None:
-        namespace = load_yaml(ALL_VARS)["k8s_namespace"]
+        namespace = shared_vars()["k8s_namespace"]
     for key in pending:
         resolved[key] = _DERIVED[key](entries, namespace)
     return resolved

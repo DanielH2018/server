@@ -34,14 +34,14 @@ from diagnostics.probe_lib.host_reader import (
 )
 from lib import yaml_fast
 from lib.exit_codes import PROBE_FAILED, PROBE_OK
-from lib.repo_paths import REPO, INVENTORY
+from lib.estate import shared_vars
+from lib.repo_paths import REPO
 from lib.systemd_timer import span_s
 
 NAME = "claude-fanout-server-lander"
 # The claude-code host component ships its template under the packaged name.
 UNIT = f"homelab-{NAME}.service"
 ROLE = REPO / "hosts" / "components" / "claude-code"
-GROUP_VARS = INVENTORY / "group_vars" / "all.yml"
 SHOW = ["LoadState", "ActiveState", "Result", "ExecMainExitTimestamp"]
 # Both unread lines of `autoland.run` end with this; a prefix match missed the one naming the host
 # first, and that pass exits 0.
@@ -59,11 +59,11 @@ _PR = re.compile(r"^#(\d+) ")
 _LOG = re.compile(r"^land(\d+)-")
 
 
-def settings(role=ROLE, group_vars=GROUP_VARS) -> tuple[int, int, str]:
+def settings(role=ROLE) -> tuple[int, int, str]:
     """(timer period, run ceiling, landing log directory), read from the role and inventory."""
     defaults = yaml_fast.safe_load((role / "defaults" / "main.yml").read_text())
     unit = (role / "templates" / f"{NAME}.service.j2").read_text()
-    user = yaml_fast.safe_load(group_vars.read_text())["sys_user"]
+    user = shared_vars()["sys_user"]
     period = span_s(defaults["claude_code_fanout_server_lander_interval"])
     ceiling = unit_span_s(unit, "TimeoutStartSec")
     return period, ceiling, f"/home/{user}/.local/state/fanout-server-lander/logs"

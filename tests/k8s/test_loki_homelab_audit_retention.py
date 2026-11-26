@@ -2,11 +2,11 @@
 
 import pytest
 
-from _helpers import ALL_VARS, load_yaml
+from lib.estate import shared_vars
 from _k8s_render import rendered_docs
 from lib import yaml_fast
 
-JOB = load_yaml(ALL_VARS)["loki_streams"]["k8s_audit"]["job"]
+JOB = shared_vars()["loki_streams"]["k8s_audit"]["job"]
 
 
 @pytest.fixture(scope="module")
