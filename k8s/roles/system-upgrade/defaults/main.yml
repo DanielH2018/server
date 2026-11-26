@@ -62,7 +62,7 @@ system_upgrade_agent_deadline_secs: 5400
 system_upgrade_job_backoff_limit: 2
 
 # DECIDED: this tag renders prune: false. Its render holds the Plan CRD, and the CRD census
-# (scripts/renderer/tests/test_renderer_crd_census.py) refuses a CRD under prune: deleting the
+# (scripts/renderer/tests/bundle/test_renderer_crd_census.py) refuses a CRD under prune: deleting the
 # CRD deletes every Plan. The cost: a Plan removed from the render stays live and keeps
 # selecting its nodes until the operator deletes it (**operator-only**), so a revert of a PR
 # that added a Plan is followed by `kubectl -n system-upgrade delete plan <name>`.

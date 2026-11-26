@@ -171,5 +171,5 @@ this list names.
 
 - `scripts/renderer/renderer_lib/dialect.py#a closed list, read by the refusal and the census`:
   the literal sets.
-- `scripts/renderer/tests/test_renderer_dialect.py` holds the literals, the census and this
+- `scripts/renderer/tests/manifests/test_renderer_dialect.py` holds the literals, the census and this
   record's tables.

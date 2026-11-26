@@ -97,6 +97,6 @@ pass through Jinja themselves, so their `{…}` exposition strings need no escap
 
 Because the ConfigMap is part of the render, a script edit changes the render. The
 `checksum/restart` that the renderer stamps hashes each ConfigMap into the pod that mounts it.
-`scripts/renderer/tests/test_renderer_game_stats_restart.py` is the guard: each game's
+`scripts/renderer/tests/manifests/test_renderer_game_stats_restart.py` is the guard: each game's
 ConfigMap carries both keys its pod imports, the pod runs the entry script from the mount,
 and an edit to either file moves the `checksum/restart` of every pod that loads it.

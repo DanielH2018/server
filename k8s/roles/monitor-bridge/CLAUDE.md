@@ -63,7 +63,7 @@ Three conventions hold across all of them:
   The `monitor-bridge-env` Secret
   (`k8s/roles/monitor-bridge/defaults/main.yml:render_secrets`) holds only credentials, because Flux's typed patch reads a
   Secret's quoted `"300"` back as a number and refuses it (#5574;
-  `scripts/renderer/tests/test_renderer_string_values_census.py::test_no_substituting_directory_holds_a_value_that_unquotes_to_a_non_string`).
+  `scripts/renderer/tests/bundle/test_renderer_string_values_census.py::test_no_substituting_directory_holds_a_value_that_unquotes_to_a_non_string`).
 
 **A new arm folds into an existing check by default**; prove its selector against a live source
 first. **A new check is one `check_table.py` row and one `check_*` body, plus a rule in

@@ -118,7 +118,7 @@ The role `CLAUDE.md` keeps the rules; this is the wiring.
   layout misses.
 - **A module edit rolls the pod.** Under Flux the restart annotation that the renderer stamps
   (`RESTART_ANNOTATION` in `scripts/renderer/renderer_lib/restart.py`) hashes every ConfigMap
-  the volume names. `scripts/renderer/tests/test_renderer_monitor_bridge_script.py` holds the
+  the volume names. `scripts/renderer/tests/manifests/test_renderer_monitor_bridge_script.py` holds the
   embed, the size and the checksum.
 - **Flux applies the role** since #5594. Its `containers_list` entry is in `k8s/services.yml`, and the
   Kustomization's `wait` replaces the rollout wait.

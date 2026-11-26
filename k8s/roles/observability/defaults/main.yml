@@ -337,7 +337,7 @@ observability_rule_groups:
 # the host-checks and hosts rule groups from files/rule-tables/ over these hosts, one literal
 # copy per host a rule's selector takes, and refuses to render while an inventory host is
 # missing here.
-# scripts/renderer/tests/test_renderer_host_update_limits.py fails a limit shorter than the
+# scripts/renderer/tests/host/test_renderer_host_update_limits.py fails a limit shorter than the
 # longest gap between two of the host's updater fires plus the updater's TimeoutStartSec, read
 # from the rendered timer and its drop-in. A host that ships homelab-docker-engine.timer also
 # needs the gap that the engine run's mask opens: the run can hold the updater masked for its

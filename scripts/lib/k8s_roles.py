@@ -179,7 +179,7 @@ def k8s_autodeploy_denylist(roles_dir: Path | str = K8S_ROLES) -> list[str]:
 #
 # volume-snapshot applies one Longhorn Snapshot CR per claim, built inline and piped to `kubectl
 # apply -f -` — per-deploy state rather than part of a service's manifest set, and
-# `scripts/renderer/tests/test_renderer_snapshot.py` is what checks its shape instead.
+# `scripts/renderer/tests/bundle/test_renderer_snapshot.py` is what checks its shape instead.
 #
 # Split into the two classes the comment above already distinguishes, because they rot in
 # opposite directions and a single set cannot be checked either way. NO_MANIFEST_ROLES makes a

@@ -117,7 +117,7 @@ here must satisfy this summary.
   edit the owning role's. `templates/script-configmap.yaml.j2` embeds
   every module into the rendered ConfigMap `autofix-bridge-script`, so an edit to any of the
   three changes this role's render, and an edit to `jobs_metrics.py` rolls the crowdsec pod too. The renderer's restart annotation (`RESTART_ANNOTATION` in
-  `scripts/renderer/renderer_lib/restart.py`) hashes the ConfigMap into the pod template. `scripts/renderer/tests/test_renderer_autofix_bridge_script.py` holds both the
+  `scripts/renderer/renderer_lib/restart.py`) hashes the ConfigMap into the pod template. `scripts/renderer/tests/manifests/test_renderer_autofix_bridge_script.py` holds both the
   embed and the checksum.
 - Manifests: `templates/deployment.yaml.j2`, which carries every setting as an `env` value,
   the `autofix-bridge-env` Secret from

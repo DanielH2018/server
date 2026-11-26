@@ -129,7 +129,7 @@ Loki. A soak that passes prints it with `result=ok`. A soak that fails prints it
 prints it with `result=fail` and `services=flux`. Flux has applied the revision in every
 case, so the dashboards mark it, and the annotation's title tells a failure from a pass
 ([#6164](https://github.com/DanielH2018/server/issues/6164)).
-`scripts/renderer/tests/test_flux_soak.py` holds this paragraph to what the soak prints.
+`scripts/renderer/tests/flux_jobs/test_flux_soak.py` holds this paragraph to what the soak prints.
 
 **`land.sh` waits on the cluster, never on one `promote` run.** GitHub can evict a queued
 run, and a later run can promote a newer commit. After merging M, `promote.py land-wait M`

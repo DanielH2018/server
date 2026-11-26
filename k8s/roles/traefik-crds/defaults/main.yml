@@ -11,7 +11,7 @@ traefik_crds_vendored_manifests:
 # DECIDED: never pruned. A render that dropped a CRD would make Flux delete it, and the API
 # server then deletes every IngressRoute or Middleware of that kind: the whole edge goes down.
 # The cost is that a CRD a later upstream release retires stays live until the operator deletes
-# it. scripts/renderer/tests/test_renderer_crd_census.py fails a CRD in any tag that renders
+# it. scripts/renderer/tests/bundle/test_renderer_crd_census.py fails a CRD in any tag that renders
 # prune: true.
 flux_prune: false
 

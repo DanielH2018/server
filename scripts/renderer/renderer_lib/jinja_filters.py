@@ -5,7 +5,7 @@ environment and on the renderer's, so templates keep the names Ansible gives the
 
 DECIDED: reimplemented, not copied. ansible-core is GPL-3.0-or-later and this repo is MIT. Each
 filter covers what the tree's templates call, and refuses an argument they do not.
-`scripts/renderer/tests/test_renderer_filters.py` holds each to the value ansible-core 2.22
+`scripts/renderer/tests/manifests/test_renderer_filters.py` holds each to the value ansible-core 2.22
 returned for the same call, and ADR-0028's literals hold the cluster subset.
 
 Typical usage example:

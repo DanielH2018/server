@@ -55,20 +55,20 @@ A Snapshot CR carries a `longhorn.io` finalizer, so a delete sets `markRemoved: 
 the volume to coalesce. The CR persists afterwards and the name stays taken, so "the CR is gone" is
 never the success condition. `markRemoved` snapshots are dropped from the retention window rather
 than counted in it, because counting dead CRs as retained deletes live snapshots to make room
-(`scripts/renderer/tests/test_flux_snapshot.py::test_a_mark_removed_snapshot_does_not_count_toward_retention`).
+(`scripts/renderer/tests/flux_jobs/test_flux_snapshot.py::test_a_mark_removed_snapshot_does_not_count_toward_retention`).
 
 ## What fails the Job
 
 The Job runs **before** `<tag>` applies, because `<tag>` depends on `<tag>-snapshot`
-(`scripts/renderer/tests/test_renderer_bundle_ordering.py::test_a_snapshot_kind_inherits_its_tags_edges_and_the_tag_waits_on_it`),
+(`scripts/renderer/tests/bundle/test_renderer_bundle_ordering.py::test_a_snapshot_kind_inherits_its_tags_edges_and_the_tag_waits_on_it`),
 so a failure stops the revision without having changed the workload. Every claim is resolved,
 named and checked against its snapshot-space cap before any snapshot is created
-(`scripts/renderer/tests/test_flux_snapshot.py::test_a_reached_cap_fails_naming_the_cap_before_any_claim_is_snapshotted`).
+(`scripts/renderer/tests/flux_jobs/test_flux_snapshot.py::test_a_reached_cap_fails_naming_the_cap_before_any_claim_is_snapshotted`).
 A claim whose PVC is absent live and absent from `<tag>`'s inventory is new in this revision, and
 the Job skips it
-(`scripts/renderer/tests/test_flux_snapshot.py::test_a_new_claim_absent_live_and_from_the_inventory_is_skipped_and_logged`).
+(`scripts/renderer/tests/flux_jobs/test_flux_snapshot.py::test_a_new_claim_absent_live_and_from_the_inventory_is_skipped_and_logged`).
 A PVC the inventory lists and the cluster lacks fails the Job, naming it
-(`scripts/renderer/tests/test_flux_snapshot.py::test_a_claim_the_inventory_lists_and_the_cluster_lacks_fails_naming_the_pvc`).
+(`scripts/renderer/tests/flux_jobs/test_flux_snapshot.py::test_a_claim_the_inventory_lists_and_the_cluster_lacks_fails_naming_the_pvc`).
 
 Longhorn v1.12.1 snapshots a detached volume with healthy replicas, so a detached claim takes the
 ordinary path (#2740).

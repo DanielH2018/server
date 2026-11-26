@@ -161,7 +161,7 @@
     },
     {
       "customType": "regex",
-      "description": "The sops and chezmoi binaries the `homelab-tools` host package ships (H3.11), pinned by version and sha256 per architecture. The `{{depName}}` group puts both architectures in one PR. ENFORCED by scripts/renderer/tests/test_renderer_host_tools.py.",
+      "description": "The sops and chezmoi binaries the `homelab-tools` host package ships (H3.11), pinned by version and sha256 per architecture. The `{{depName}}` group puts both architectures in one PR. ENFORCED by scripts/renderer/tests/host/test_renderer_host_tools.py.",
       "managerFilePatterns": [
         "/(^|/)hosts/packages/homelab-tools/package\\.yml$/",
         "/(^|/)hosts/bootstrap-host\\.sh$/"
