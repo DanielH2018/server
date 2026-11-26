@@ -303,7 +303,10 @@ core windows from 00:00 UTC on 2026-11-23 to 21:12 UTC on 2026-11-26. The six qu
 2026-11-24 and 2026-11-25, counted between 4 and 42 calls each. Each left between -1 and 4
 calls beyond the ledgers. A ledger can record a call that GitHub did not count, such as a 304,
 so a window can read slightly negative. In the window that reset at 20:05 UTC on 2026-11-25,
-GitHub counted 4 calls, while the exporter's `up` series read 1 for the whole hour. Without
+GitHub counted 4 calls. Over the same hour the exporter served 60 samples each of
+`homelab_deploy_hold_active` and `homelab_deploy_unpromoted_age_seconds`. Those gauges exist
+only while the variables read and the runs read succeed, so the exporter was reading GitHub
+throughout, not disabled or failing. Without
 conditional reads the exporter alone spent about 24 an hour. The busy windows still leave
 the residual that rises with session activity. Across all 46 windows, GitHub counted 19,990
 calls, and 6,291 of them, or 31%, are attributed to no ledger. Thirteen identities with no
