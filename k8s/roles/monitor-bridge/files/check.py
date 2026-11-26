@@ -44,24 +44,17 @@ from bridge.types import Check, CheckFn, CheckResult, VerdictRecorder
 # ENFORCED: tests/bridge_core/test_check.py::test_every_dashboard_parsed_check_is_logged_when_up.
 LOGGED_WHEN_UP = frozenset({"b2_storage", "r2_usage"})
 
-# What a dependent row logs while its gate row reads down, keyed by the gate's name. A key is
-# also how `run_once` tells a gate row from any other. The dependent's body is not called and
-# its gauge reads 0, and Alertmanager's inhibit rules hold the dependent's page behind the
-# gate's own, so one outage pages once. The gate rows run first and have no gate of their own,
-# so a gate that cannot go red is not coverage. There is no `prometheus` key: the
-# Watchdog pages a dead Prometheus, which cannot evaluate a rule either.
+# A key is also how `run_once` tells a gate row from any other. A skipped dependent's body is not
+# called and its gauge reads 0.
+# No `prometheus` key: the Watchdog pages a dead Prometheus, which cannot evaluate a rule either.
 GATE_SKIP = {
     "b2_reachable": "skipped — B2 unreachable (see B2Unreachable)",
     "wan_reachable": "skipped — WAN unreachable (see WANUnreachable)",
 }
 
-# Prometheus `job` -> the checks a dead exporter of that job skips. Scrape Targets names the dead
-# exporter, so the row that reads the exporter's series pages once, not twice. host_packages
-# reads the series daniel-box's node exporter publishes from its textfile directory, so a dead
-# exporter makes them absent and the row would page on the absent series. M6 batch A1 moved
-# disk, memory and host_temp to the `hosts` rules and batch B8 moved pi_pressure, so the map has
-# no other member and no `node-pi` key. A MappingProxyType, so no test edits the one table every
-# other test reads. It goes with the host_packages row.
+# Prometheus `job` to the checks a dead exporter skips, so the row reading that exporter's series
+# pages once, not twice.
+# A MappingProxyType, so no test edits the table every other test reads.
 EXPORTER_DEPENDENT: Mapping[str, frozenset[str]] = MappingProxyType(
     {"node": frozenset({"host_packages"})}
 )
@@ -165,11 +158,8 @@ def run_once(
     """
     only = cfg.CHECKS_ONLY if only is None else only
     skip = cfg.CHECKS_SKIP
-    # A routine verdict is logged only on a narrowed run, where someone reads the output for
-    # it. ~50 OK lines every 300 s cycle would bury the DOWN ones, so the pod logs each
-    # DOWN line, each `up` that is holding a down streak (a page on its way), the LOGGED_WHEN_UP
-    # lines, and one CYCLE count. A SKIP line repeats what its gate's DOWN line already
-    # says, so it is counted rather than logged.
+    # A routine verdict is logged only on a narrowed run; ~50 OK lines per cycle would bury DOWN
+    # ones. A SKIP line is counted, not logged, since its gate's DOWN line says it.
     log_all = bool(only)
     counts = {"up": 0, "down": 0, "skipped": 0}
     down_gates: set[str] = set()
@@ -192,8 +182,6 @@ def run_once(
         name = entry.name
         if not check_enabled(name, only, skip):
             continue
-        # The verdict the exporter records: 0 for a row a gate or an exporter skips, else the
-        # body's own.
         exported = False
         details: tuple[str, ...] = ()
         # DECIDED: the gate skip stays in the bridge, ahead of the body, though Alertmanager
@@ -233,9 +221,8 @@ def run_once(
 
 
 if __name__ == "__main__":
-    # check.py was the entry point until this split, so `python check.py --once` is what a
-    # stale runbook (or muscle memory) still reaches for. Without this it exits 0 having
-    # printed nothing, which reads as a clean run rather than a no-op.
+    # `python check.py --once` is what stale runbooks still run; without this it exits 0 having
+    # printed nothing, which reads as a clean run.
     import sys
 
     if any(arg in ("-h", "--help") for arg in sys.argv[1:]):

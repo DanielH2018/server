@@ -28,8 +28,6 @@ from bridge.config import Config
 from bridge.parsing import FETCH_BODY_MAX, describe_fetch_failure, endpoint_label
 from bridge.types import JsonObject, JsonValue, as_list, as_object, as_object_list
 
-# `urllib.request.urlopen`'s shape: called with a Request and `timeout=`, it returns a response
-# usable as a context manager. Each request function takes one as `opener`; None is the real one.
 Opener = Callable[..., Any]
 # What `_get`'s `read` makes of the response: parsed JSON, or the raw bytes.
 _Body = TypeVar("_Body")
@@ -47,13 +45,11 @@ def _get_json(
 def _get_bytes(
     url: str, headers: dict[str, str] | None = None, opener: Opener | None = None
 ) -> bytes:
-    # The raw body, for a caller that hashes it: an OCI manifest's digest is the sha256 of the
-    # exact bytes the registry serves, which a JSON round trip does not preserve.
+    # A caller that hashes needs the raw bytes: an OCI manifest's digest covers the exact served
+    # bytes, which a JSON round trip does not preserve.
     return _request(url, headers, opener, lambda resp: resp.read())
 
 
-# URLs whose last answer `_get_json_conditional` keeps. The deploy-pipeline family reads three a
-# cycle; the compare's URL changes with each green commit, so older entries fall out.
 ETAG_CACHE_MAX = 8
 
 
@@ -107,12 +103,9 @@ def _request(
     method: str = "GET",
     data: bytes | None = None,
 ) -> _Body:
-    # The explicit User-Agent is REQUIRED, not decoration. Discord sits behind Cloudflare, which
-    # 403s the default python-urllib UA with error 1010 — so `check_discord`'s webhook GETs would
-    # read as revoked webhooks on every cycle without it. host_lib.discord_post carries the same
-    # rationale for the host plane's POSTs; the two programs cannot share a module (monitor-bridge
-    # ships only its own files/ into a ConfigMap), so the reason is written in both places rather
-    # than in neither.
+    # The explicit User-Agent is REQUIRED: Cloudflare 403s the default python-urllib UA (error
+    # 1010), so webhook GETs would read as revoked.
+    # host_lib.discord_post has the same reason; the two cannot share a module.
     hdrs = {"User-Agent": "monitor-bridge"}
     if headers is not None:
         hdrs.update(headers)
@@ -121,19 +114,16 @@ def _request(
         with (opener or urllib.request.urlopen)(req, timeout=HTTP_TIMEOUT) as resp:
             return read(resp)
     except urllib.error.HTTPError as e:
-        # Re-raise the SAME type: check_discord branches on `e.code`, so wrapping this would
-        # silently turn a decisive 404 (webhook revoked) into a generic "unreachable" that
-        # rides the retry streak instead of paging.
+        # Re-raise the SAME type: check_discord branches on `e.code`, so wrapping would turn a
+        # decisive 404 into a generic "unreachable".
         try:
             body = e.read().decode("utf-8", "replace")
         except Exception:
             body = ""
         finally:
-            # The consumer reads .code and .msg only; an HTTPError left open holds the
-            # response until GC and warns when it gets there.
+            # The consumer reads .code and .msg only; an unclosed HTTPError holds the response until
+            # GC.
             e.close()
-        # str(HTTPError) already leads with "HTTP Error <code>:", so this contributes the
-        # endpoint and the server's own explanation, not the status again.
         detail = " ".join((body or "").split())[:FETCH_BODY_MAX]
         e.msg = "%s: %s" % (endpoint_label(url), detail or e.msg)
         raise

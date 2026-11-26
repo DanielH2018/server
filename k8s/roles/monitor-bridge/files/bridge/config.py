@@ -173,24 +173,15 @@ def load_config(env: Mapping[str, str], problems: list[str] | None = None) -> Co
         **vars(service_config(_env, _int, _num, _env_file)),
         **vars(io_config(_env, _int, _num, _env_file, problems)),
         INTERVAL=INTERVAL,
-        # Touched after every completed cycle; the container healthcheck compares its mtime
-        # against ~3×INTERVAL. PID death already restarts the container, but a HANG only shows
-        # up as stale gauges (`BridgeCheckStale`) — the healthcheck lets autoheal restart on that too.
+        # Touched after every completed cycle; the healthcheck compares its mtime against
+        # ~3xINTERVAL, so autoheal restarts a hung bridge that shows only as stale gauges.
         HEARTBEAT_FILE=_env("HEARTBEAT_FILE", "/tmp/heartbeat"),
         PROM_URL=PROM_URL,
         LOKI_URL=_env("LOKI_URL").rstrip("/"),
-        # Which checks THIS instance runs. The cluster deployment is the ONLY bridge and runs
-        # every check. The CHECKS_ONLY/CHECKS_SKIP mechanism is how any split would be
-        # expressed, and check.py's guards keep it honest.
-        # CHECKS_ONLY (comma-separated names) enables exactly that set; CHECKS_SKIP drops names
-        # from whatever is otherwise enabled. The three reachability gates participate under the
-        # names their monitors push as (prometheus, b2_reachable, wan_reachable), and a gate row the filter
-        # leaves out reads as up. cli.py's main() refuses to start on a name no registry entry
-        # carries — a crash-looping bridge is loud, a mistyped filter lies quietly.
-        #
-        # They live here rather than in check.py because this module is monitor-bridge's one
-        # env-reading surface, and these were two of the three that had escaped it.
-        # `check.py --check <name>` overrides CHECKS_ONLY for a hand-run cycle.
+        # CHECKS_ONLY enables exactly that set and CHECKS_SKIP drops names; the three reachability
+        # gates take the names their monitors push as, and a gate the filter leaves out reads as up.
+        # cli.py's main() refuses to start on an unknown name, so a mistyped filter is loud.
+        # `check.py --check <name>` overrides CHECKS_ONLY for a hand run.
         CHECKS_ONLY=_name_set(_env("CHECKS_ONLY", "")),
         CHECKS_SKIP=_name_set(_env("CHECKS_SKIP", "")),
         CONFIG_PROBLEMS=tuple(problems),
