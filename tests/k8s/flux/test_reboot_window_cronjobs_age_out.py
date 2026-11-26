@@ -21,7 +21,7 @@ TTL_BUDGET = 2700
 # A CronJob with no `activeDeadlineSeconds` is assumed to run up to this long.
 DEFAULT_RUN_SECONDS = 600
 # The CronJobs the derivation must find at the reboot schedule this repo ships.
-KNOWN_IN_WINDOW = frozenset({"crowdsec-home-ips", "sonarr-air-date-guard"})
+KNOWN_IN_WINDOW = frozenset({"crowdsec-home-ips"})
 
 
 def _field_matches(field: str, value: int) -> bool:

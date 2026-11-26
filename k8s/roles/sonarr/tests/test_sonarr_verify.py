@@ -204,6 +204,8 @@ def test_the_flipped_job_passes_every_job_census_row(flipped):
     assert sorted(doc["kind"] for doc in flipped) == [
         "ConfigMap",
         "ConfigMap",
+        "ConfigMap",
+        "Job",
         "Job",
         "Job",
         "Secret",
@@ -318,6 +320,7 @@ def test_the_staged_job_reads_no_other_roles_file():
         "job.yaml.j2",
         "notification.yaml.j2",
         "rbac.yaml.j2",
+        "release-profile.yaml.j2",
     ]
     staged = [p for p in staged if p.name != "notification.yaml.j2"]
     assert [

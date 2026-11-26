@@ -196,7 +196,7 @@ PYTHON_CI = Dep("python", ".github/actions/setup/action.yml", "python-version")
 PYTHON_PYENV = Dep("python", ".python-version", "docker", manager="pyenv")
 PYTHON_K8S = [
     Dep("python", "k8s/roles/monitor-bridge/defaults/main.yml", "docker"),
-    Dep("python", "k8s/roles/sonarr/defaults/main.yml", "docker"),
+    Dep("python", "k8s/roles/prowlarr/defaults/main.yml", "docker"),
 ]
 PYTHON_SITES = [
     PYTHON_CI,

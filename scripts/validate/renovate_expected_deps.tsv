@@ -196,7 +196,6 @@ regex	k8s/roles/slskd/defaults/main.yml	lscr.io/linuxserver/wireguard	docker	dig
 regex	k8s/roles/slskd/defaults/main.yml	slskd/slskd	docker	digest	-
 regex	k8s/roles/sonarr/defaults/main.yml	ghcr.io/onedr0p/exportarr	docker	digest	-
 regex	k8s/roles/sonarr/defaults/main.yml	lscr.io/linuxserver/sonarr	docker	digest	-
-regex	k8s/roles/sonarr/defaults/main.yml	python	docker	digest	-
 regex	k8s/roles/speedtest/defaults/main.yml	lscr.io/linuxserver/speedtest-tracker	docker	digest	-
 regex	k8s/roles/system-upgrade/defaults/main.yml	k3s-io/k3s	github-releases	-	-
 regex	k8s/roles/system-upgrade/defaults/main.yml	python	docker	digest	-
