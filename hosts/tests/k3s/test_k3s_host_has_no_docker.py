@@ -11,7 +11,7 @@ the `pi-docker` component and its apt source in `apt-docker`, so a k3s host's pa
 either would install a second container runtime beside k3s on its next package version.
 
 THE INSTALL LAYER. hosts/bootstrap-host.sh refuses to install k3s on a host running Docker,
-server and agent alike, and hosts/lib/tests/test_bootstrap_host_k3s.py holds that half. A node
+server and agent alike, and hosts/lib/tests/bootstrap/test_bootstrap_host_k3s.py holds that half. A node
 without it can run a second container runtime next to k3s while every repo-side check reads
 green.
 

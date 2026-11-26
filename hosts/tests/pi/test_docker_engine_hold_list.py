@@ -7,7 +7,7 @@ recreates it. `live-restore` keeps containers up across a dockerd restart; it do
 nothing for a shim binary swapped under them.
 
 homelab-docker-engine.service installs, holds and moves the engine, and
-`hosts/lib/tests/test_pi_docker_component.py` holds its pins to the shared list. No setup apply
+`hosts/lib/tests/host_lib/test_pi_docker_component.py` holds its pins to the shared list. No setup apply
 upgrades a host's packages.
 
 Run: uv run pytest hosts/tests/pi/test_docker_engine_hold_list.py

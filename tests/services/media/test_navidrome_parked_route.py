@@ -14,7 +14,7 @@ from _helpers import K8S_ROLES
 from lib import yaml_fast
 from lib.k8s_roles import MANIFESTS_PRUNE_DEFAULT
 from lib.render_context import render_context
-from renderer.renderer_lib.task_inputs import include_vars
+from renderer.renderer_lib.task_inputs import render_defaults
 
 
 from lib.guard_jinja_env import register_ansible_filters
@@ -85,7 +85,7 @@ def test_external_services_send_no_telemetry_and_skip_last_fm():
 
 
 def _manifests_files(replicas: int) -> list[str]:
-    expr = include_vars(ROLE)["manifests_files"]
+    expr = render_defaults(ROLE)["manifests_files"]
     env = make_env([])
     return yaml_fast.safe_load(
         env.from_string(expr).render(navidrome_k8s_replicas=replicas).replace("'", '"')
@@ -102,4 +102,4 @@ def test_the_route_is_listed_only_while_navidrome_has_a_pod():
 
 def test_the_role_arms_the_prune_that_deletes_the_parked_route():
     """Dropping a name from manifests_files deletes nothing unless the prune is armed."""
-    assert include_vars(ROLE).get("manifests_prune", MANIFESTS_PRUNE_DEFAULT) is True
+    assert render_defaults(ROLE).get("manifests_prune", MANIFESTS_PRUNE_DEFAULT) is True

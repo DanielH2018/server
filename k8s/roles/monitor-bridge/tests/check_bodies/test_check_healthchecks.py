@@ -3,7 +3,7 @@
 `healthchecks_verdict` is pure. The flagged cases are two real drifts:
 `pi-peer-backup` carrying `30 23 * * *` after its CronJob moved to `0 23`, and
 `longhorn-backup-health` set up as a daily Cron check instead of Simple 10m/20m. The console
-is read through the `src` argument and the cache is a parameter of `healthchecks_drift`, so
+is read through the `src` argument and the cache is a parameter of `check_healthchecks_drift`, so
 nothing here patches the module.
 """
 
@@ -130,7 +130,7 @@ def test_an_undocumented_console_check_is_named_but_clean():
 
 
 def test_disabled_without_a_key(cfg):
-    ok, msg = hc.healthchecks_drift(
+    ok, msg = hc.check_healthchecks_drift(
         replace(cfg, HEALTHCHECKS_EXPECTED=EXPECTED),
         FakeSources(),
         probe=_fresh_probe(),
@@ -148,8 +148,8 @@ def test_a_success_is_cached_for_the_interval(cfg):
 
     src = FakeSources(get_json=get_json)
     probe = _fresh_probe()
-    assert hc.healthchecks_drift(cfg, src, now=1000.0, probe=probe)[0]
-    ok, msg = hc.healthchecks_drift(
+    assert hc.check_healthchecks_drift(cfg, src, now=1000.0, probe=probe)[0]
+    ok, msg = hc.check_healthchecks_drift(
         cfg,
         src,
         now=1000.0 + cfg.HEALTHCHECKS_PROBE_INTERVAL_S - 1,
@@ -169,9 +169,9 @@ def test_a_failed_read_is_down_and_reprobed_next_cycle(cfg):
 
     src = FakeSources(get_json=boom)
     probe = _fresh_probe()
-    ok, msg = hc.healthchecks_drift(cfg, src, now=1000.0, probe=probe)
+    ok, msg = hc.check_healthchecks_drift(cfg, src, now=1000.0, probe=probe)
     assert not ok and "unverified" in msg and "401" in msg
-    assert not hc.healthchecks_drift(cfg, src, now=1300.0, probe=probe)[0]
+    assert not hc.check_healthchecks_drift(cfg, src, now=1300.0, probe=probe)[0]
     assert len(calls) == 2
 
 

@@ -31,7 +31,7 @@ from renderer.renderer_lib.restart import (
     restart_values,
     self_rollouts,
 )
-from renderer.renderer_lib.task_inputs import include_vars
+from renderer.renderer_lib.task_inputs import render_defaults
 
 # Every role that passes `manifests_self_rollouts`, which the census renders as flux-owned
 # whatever `owner` its entry carries. pihole and observability are its named members. flux's
@@ -139,7 +139,7 @@ def test_every_role_that_rolls_its_own_workloads_is_a_named_member():
     passing = {
         tag
         for tag in select_tags(None)
-        if include_vars(K8S_ROLES / tag).get("manifests_self_rollouts")
+        if render_defaults(K8S_ROLES / tag).get("manifests_self_rollouts")
         not in (None, [], "")
     }
     assert passing == SELF_ROLLED

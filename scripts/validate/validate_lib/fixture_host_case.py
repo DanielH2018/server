@@ -8,7 +8,7 @@ that name, so the script itself renders and builds the three packages and apt si
 install. A walkthrough whose file list stops rendering or building fails that case.
 
 Steps 3 to 5 name the host in sets that nothing reads while a host builds.
-`hosts/lib/tests/test_host_census.py` holds those.
+`hosts/lib/tests/host_lib/test_host_census.py` holds those.
 """
 
 import re

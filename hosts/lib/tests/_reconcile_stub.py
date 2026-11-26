@@ -8,7 +8,7 @@ moment. `Node` in `_reconcile_host.py` owns both files' format.
 
 A reconcile run makes about 800 calls, so the module's top-level imports skip `json` and
 `fnmatch`, which pull in `re`, and `pathlib`. A handler that needs one imports it itself.
-`hosts/lib/tests/test_reconcile_stub_imports.py` holds this.
+`hosts/lib/tests/reconcile/test_reconcile_stub_imports.py` holds this.
 
 State keys:
     host: what `hostname` prints.

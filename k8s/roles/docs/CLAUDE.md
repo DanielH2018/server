@@ -74,7 +74,7 @@ with the right ownership first, through the daniel-box host package, because a F
 role runs no task. The docs-refresh service runs `systemd-tmpfiles --create` on the file in
 `ExecStartPre=`, and `systemd-tmpfiles-setup.service` applies it at boot. The file's path must
 equal this role's `docs_host_site_dir`, which
-`hosts/lib/tests/test_docs_refresh_component.py` holds.
+`hosts/lib/tests/components/test_docs_refresh_component.py` holds.
 
 ## `/healthz` is answered by nginx, not from the mounted tree
 

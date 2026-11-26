@@ -1,7 +1,7 @@
 """Which changed paths are documentation or test-suite material that no host receives.
 
-The landing's promotion wait and the cluster-pin gate both skip these paths, so they share
-one definition here.
+The landing's promotion wait, its serial-lock rule and the cluster-pin gate all skip these
+paths, so they share one definition here.
 """
 
 
@@ -31,3 +31,20 @@ def is_test_only_path(path: str) -> bool:
         return True
     name = parts[-1]
     return name == "conftest.py" or (name.startswith("test_") and name.endswith(".py"))
+
+
+def _reaches_no_render(path: str) -> bool:
+    """A document or a test, which no render reads; a `.md` a role ships under `files/` may."""
+    if is_test_only_path(path):
+        return True
+    return is_doc(path) and not (path.startswith("k8s/roles/") and "/files/" in path)
+
+
+def moves_the_bundle(paths) -> bool:
+    """Whether a changed path may move the bundle `promote` publishes (D6.12).
+
+    Every path but a document or a test may: the landing waits on land-wait, whose changed
+    set says what moved, and a PR that moved nothing waits on `homelab` alone. A prefix list
+    of render inputs would end a PR it missed at `nothing-to-deploy` unwaited.
+    """
+    return not all(_reaches_no_render(p) for p in paths)

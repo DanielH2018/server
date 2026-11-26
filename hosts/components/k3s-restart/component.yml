@@ -12,7 +12,7 @@
 # own directory. It imports `reconcile_lib.common.log` from there as well, which the `reconcile`
 # component ships in every host package.
 #
-# ENFORCED: hosts/lib/tests/test_k3s_restart.py, test_k3s_restart_component.py and
+# ENFORCED: hosts/lib/tests/k3s/test_k3s_restart.py, test_k3s_restart_component.py and
 # test_k3s_restart_window.py; the `k3s-gates` pairing by test_k3s_gates_component.py.
 defaults:
   # The unit this host restarts, and the API it asks. daniel-box hosts the only API server.

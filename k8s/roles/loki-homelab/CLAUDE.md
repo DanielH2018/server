@@ -105,7 +105,7 @@ verbatim-prompts store this role's LAN route
   `dropped_by` in `tests/k8s/alloy/_alloy_pods_pipeline.py`. blackbox-exporter, exportarr and
   karakeep run at warn in their own config instead. The Pi's Alloy drops docker-proxy's 2xx
   request lines and keeps its 403s and 503s
-  (`hosts/lib/tests/test_pi_compose_alloy.py::test_a_proxy_denial_or_dead_socket_line_still_ships`).
+  (`hosts/lib/tests/pi_compose/test_pi_compose_alloy.py::test_a_proxy_denial_or_dead_socket_line_still_ships`).
 - **Host lines carry a `program` label, and the line itself is untouched.** The
   `loki.process "host"` stage extracts the rsyslog tag from syslog and authlog lines (#6163).
   `HostLogErrors` counts syslog's fatal-pattern lines per machine and program over 6h, and

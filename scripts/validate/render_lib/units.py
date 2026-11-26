@@ -109,11 +109,6 @@ def discover_rules() -> list[Path]:
     )
 
 
-def unit_context(template: Path) -> dict:
-    """The context `template` renders with, from `lib.render_context`."""
-    return render_context(template)
-
-
 def systemd_verify(unit_path: Path, systemd_analyze_bin: str) -> str | None:
     """Run `systemd-analyze verify` on the rendered unit; return an error string, or None.
 
@@ -175,7 +170,7 @@ def check_polkit_rule(template: Path, out_dir: Path, node_bin: str) -> str | Non
     Uses the same StubUndefined + owning-role defaults context as the unit templates: a rule
     interpolates only a user name, which its role's own defaults carry.
     """
-    ctx = unit_context(template)
+    ctx = render_context(template)
     rendered, err = render_shipped(template, ctx)
     if rendered is None:
         return err
@@ -372,7 +367,7 @@ def run(ok: Callable[[str], None]) -> tuple[int, int]:
         out_dir = Path(tmp)
         for path in templates:
             rel = path.relative_to(REPO)
-            ctx = unit_context(path)
+            ctx = render_context(path)
             err = check_template(path, ctx, out_dir, systemd_analyze_bin)
             if err:
                 failures += 1

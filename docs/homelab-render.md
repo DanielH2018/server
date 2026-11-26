@@ -24,7 +24,7 @@ steps, and this page describes each piece once its PR has merged.
 - `scripts/lib/container_entry.py:parse_containers_list` parses `k8s/services.yml`'s
   entries once, before any template reads `services`. It refuses a malformed entry, so a
   template filter never sees one.
-- `scripts/renderer/renderer_lib/task_inputs.py:include_vars` reads each role's render
+- `scripts/renderer/renderer_lib/task_inputs.py:render_defaults` reads each role's render
   metadata from its `defaults/main.yml` (*Where render metadata lives*).
 - `scripts/renderer/renderer_lib/derived.py:content_tag` computes each built image's tag
   (*Derived values*), and `scripts/renderer/renderer_lib/targets.py:render_targets` lists the
@@ -256,7 +256,7 @@ The renderer writes a tag's files by these rules:
 ### Where render metadata lives
 
 A role sets the keys of `scripts/lib/k8s_roles.py:RENDER_KEYS` in its
-`defaults/main.yml`, and `image_builder_builds` lists the images it builds. `include_vars`, `image_builder_sites` and
+`defaults/main.yml`, and `image_builder_builds` lists the images it builds. `render_defaults`, `image_builder_sites` and
 `scripts/lib/k8s_roles.py:resolved_manifest_files` read `defaults/main.yml` only, and each raises
 on a role without that file.
 
@@ -866,7 +866,7 @@ Each renders from `hosts/lib/maintainer-scripts/<name>.j2` with the package's co
 `/usr/lib/systemd/system/`. The render writes it to `DIR/<package>/scripts/<name>`, mode 0755,
 outside `root/`, and `nfpm.yaml`'s `scripts:` names it. Only a host package may list
 `preinst`, because it refuses a hostname mismatch. The maintainer-script lint in
-`hosts/lib/tests/test_maintainer_scripts.py` holds each rendered script to the line shapes H3's
+`hosts/lib/tests/host_lib/test_maintainer_scripts.py` holds each rendered script to the line shapes H3's
 *Package rules* allow.
 
 A package spec or a component may also carry `units:`, `enable:` and `legacy:`, which feed

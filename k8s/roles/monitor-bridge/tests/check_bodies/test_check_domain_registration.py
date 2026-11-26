@@ -65,7 +65,9 @@ def test_a_record_without_an_expiration_event_is_malformed():
 def test_a_read_reports_the_days_left_and_caches_the_expiry(cfg):
     probe = _fresh()
     now = EXPIRY_TS - 30 * dr.DAY_S
-    ok, msg = dr.domain_registration(cfg, _answering(RECORD), now=now, probe=probe)
+    ok, msg = dr.check_domain_registration(
+        cfg, _answering(RECORD), now=now, probe=probe
+    )
     assert ok
     assert "expires in 30 days" in msg
     assert dr.days_remaining(probe, now) == 30.0
@@ -74,9 +76,9 @@ def test_a_read_reports_the_days_left_and_caches_the_expiry(cfg):
 def test_a_success_is_not_read_again_within_the_interval(cfg):
     probe = _fresh()
     src = _answering(RECORD)
-    dr.domain_registration(cfg, src, now=1000.0, probe=probe)
+    dr.check_domain_registration(cfg, src, now=1000.0, probe=probe)
     later = 1000.0 + cfg.DOMAIN_REGISTRATION_PROBE_INTERVAL_S - 1
-    ok, msg = dr.domain_registration(cfg, src, now=later, probe=probe)
+    ok, msg = dr.check_domain_registration(cfg, src, now=later, probe=probe)
     assert ok
     assert "read 24h ago" in msg
     assert len(src.calls) == 1
@@ -84,20 +86,20 @@ def test_a_success_is_not_read_again_within_the_interval(cfg):
 
 def test_a_failed_read_is_down_retried_and_keeps_the_last_expiry(cfg):
     probe = _fresh()
-    dr.domain_registration(cfg, _answering(RECORD), now=1000.0, probe=probe)
+    dr.check_domain_registration(cfg, _answering(RECORD), now=1000.0, probe=probe)
     stale = 1000.0 + cfg.DOMAIN_REGISTRATION_PROBE_INTERVAL_S
     src = _answering(RuntimeError("HTTP 503"), RECORD)
-    ok, msg = dr.domain_registration(cfg, src, now=stale, probe=probe)
+    ok, msg = dr.check_domain_registration(cfg, src, now=stale, probe=probe)
     assert not ok
     assert "HTTP 503" in msg
     assert probe["expiry"] == EXPIRY_TS
-    assert dr.domain_registration(cfg, src, now=stale + 300, probe=probe)[0]
+    assert dr.check_domain_registration(cfg, src, now=stale + 300, probe=probe)[0]
     assert len(src.calls) == 2
 
 
 def test_an_empty_url_disables_the_check_without_a_read(cfg):
     # fact: k8s/roles/monitor-bridge/CLAUDE.md#Checks
-    ok, msg = dr.domain_registration(
+    ok, msg = dr.check_domain_registration(
         replace(cfg, DOMAIN_RDAP_URL=""), FakeSources(), now=1000.0, probe=_fresh()
     )
     assert ok

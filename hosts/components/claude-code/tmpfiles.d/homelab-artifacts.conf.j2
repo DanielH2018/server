@@ -7,7 +7,7 @@
 # directory and the star list directory as hostPaths of `type: Directory`, so each must exist
 # before the pod starts on a rebuilt host. Their paths equal artifacts' artifacts_host_dir,
 # artifacts_peer_dir/<name> and artifacts_stars_dir, which
-# hosts/lib/tests/test_claude_artifacts_node_timers.py holds equal.
+# hosts/lib/tests/host_baselines/test_claude_artifacts_node_timers.py holds equal.
 #
 # The peer directories are 0750 because the sync's `--chmod=D0750` sets the same mode. The star
 # list directory is 0755: the agent user's prune reads the list as `claude`.

@@ -418,36 +418,12 @@ def _start_run(
         if draft:
             _mark_ready(ln)
         return "", in_turn, queued
-    try:
-        moved = stale_base.master_paths_since(ln, head)
-        if moved:
-            stale_base.update_branch(ln, head, moved)
-            if draft:
-                _await_new_head(ln, head)
-    except Outcome as exc:
-        say(f"{exc.error}; going on with the run the PR has")
-        moved = []
+    updated = stale_base.update_for_run(ln, head, draft)
     # Marked ready only after the update, so the one run starts on the updated head, not one the
     # update's push cancels.
     if draft:
         _mark_ready(ln)
-    return (head if moved else ""), in_turn, queued
-
-
-# GitHub applies a branch update asynchronously, usually within seconds; wait this long before
-# marking the PR ready anyway.
-NEW_HEAD_WAIT_S = 60
-NEW_HEAD_POLL_S = 3
-
-
-def _await_new_head(ln: Landing, head: str) -> None:
-    """Wait, up to `NEW_HEAD_WAIT_S`, for the PR's head to move off `head`."""
-    waited = 0
-    while waited < NEW_HEAD_WAIT_S:
-        if (ln.view("state,mergeable,headRefOid").get("headRefOid") or head) != head:
-            return
-        ln.tools.sleep(NEW_HEAD_POLL_S)
-        waited += NEW_HEAD_POLL_S
+    return (head if updated else ""), in_turn, queued
 
 
 def await_merge(ln: Landing, take_turn: TakeTurn = _no_turn) -> None:

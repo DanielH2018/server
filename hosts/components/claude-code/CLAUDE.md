@@ -76,7 +76,7 @@ The operator's own Claude Code install is the dotfiles repo's (H7.38).
   `claude-agent-setup` opens each directory first (`pin`) and refuses unless the opened directory
   is the one its path names. It creates, owns, modes and writes through that open handle, and a
   link on any of those paths fails the run. `install -T` places each file, which replaces a link
-  at the file rather than writing through it. `hosts/lib/tests/test_claude_agent_home.py` scans
+  at the file rather than writing through it. `hosts/lib/tests/host_baselines/test_claude_agent_home.py` scans
   both rendered scripts for a root command that names such a path, and runs the setup over
   planted links. The homelab-ui login is
   an output of the host's SOPS file that renders under `/run/homelab-secrets`, outside the
@@ -96,9 +96,9 @@ The operator's own Claude Code install is the dotfiles repo's (H7.38).
   pasted across `setup-token`'s line wrap still reaches the session whole.
 - **Not packaged:** the operator's own Claude Code install, which the dotfiles repo owns since
   H7.38.
-  ENFORCED: `hosts/lib/tests/test_claude_code_component.py`,
-  `hosts/lib/tests/test_claude_code_on_daniel_box.py`,
-  `hosts/lib/tests/test_claude_agent_browser.py`.
+  ENFORCED: `hosts/lib/tests/host_baselines/test_claude_code_component.py`,
+  `hosts/lib/tests/host_baselines/test_claude_code_on_daniel_box.py`,
+  `hosts/lib/tests/host_baselines/test_claude_agent_browser.py`.
 
 ## The two Remote Control modes are different features
 
@@ -283,7 +283,7 @@ template carries why it is a host timer at all.
   `claude_code_artifacts_peer_sources`, `claude_code_artifacts_host_dir`,
   `claude_code_artifacts_peer_dir`, `claude_code_artifacts_stars_file`,
   `claude_code_otlp_host_ip` and `claude_code_otlp_port` are each held equal to the k8s key by
-  `hosts/lib/tests/test_claude_artifacts_node_timers.py`. A change edits both roles. One key in
+  `hosts/lib/tests/host_baselines/test_claude_artifacts_node_timers.py`. A change edits both roles. One key in
   a shared vars file would route as a deploy-plane change only.
 - **The package creates the directories the artifacts pod mounts.**
   `hosts/components/claude-code/tmpfiles.d/homelab-artifacts.conf.j2` declares the local tree,
@@ -499,7 +499,7 @@ Applying it: a new version of daniel-box's host package, which its updater insta
   (`hosts/tests/repo_crons/test_artifacts_sync_alerts_once_per_outage.py::test_the_star_list_is_pushed_to_the_peer_after_the_pull`).
   It deletes on daniel-box only what the peer has already deleted.
 - **Mode:** always on where it is installed, which is `claude_code_artifacts_node` alone
-  (`hosts/lib/tests/test_claude_artifacts_node_timers.py::test_only_the_artifacts_node_ships_them`);
+  (`hosts/lib/tests/host_baselines/test_claude_artifacts_node_timers.py::test_only_the_artifacts_node_ships_them`);
   removing the entry from `claude_code_artifacts_peer_sources` (and its twin) stops that peer's
   sync.
 - **Abort valve:** a `flock` holds runs to one at a time, and ssh runs in `BatchMode` with a
@@ -557,11 +557,11 @@ Applying it: a new version of daniel-box's host package, which its updater insta
   `hosts/components/t2-egress/`, whose nftables fence refuses every other connection its uid
   opens, and whose squid admits only the hosts its config lists. Its kubeconfig names the API
   at the host's LAN address, so that request goes through the proxy too
-  (`hosts/lib/tests/test_t2_egress_component.py::test_the_triage_kubeconfig_names_the_api_by_the_hosts_lan_address`).
+  (`hosts/lib/tests/components/test_t2_egress_component.py::test_the_triage_kubeconfig_names_the_api_by_the_hosts_lan_address`).
   The session unit refuses to start unless the fence holds its uid's rules
-  (`hosts/lib/tests/test_t2_egress_component.py::test_each_session_unit_checks_its_own_uid_is_fenced_before_it_starts`).
+  (`hosts/lib/tests/components/test_t2_egress_component.py::test_each_session_unit_checks_its_own_uid_is_fenced_before_it_starts`).
   The fence's one other opening is the loopback OTLP collector
-  (`hosts/lib/tests/test_t2_egress_component.py::test_each_session_uid_reaches_the_otlp_collector_by_its_pre_dnat_address`).
+  (`hosts/lib/tests/components/test_t2_egress_component.py::test_each_session_uid_reaches_the_otlp_collector_by_its_pre_dnat_address`).
   The overlay's `env` sends the session's telemetry there with `session.kind=triage` and no
   prompt or tool content. Prometheus keeps only the `claude_code_*` names from the collector,
   so a session cannot forge a series a routed alert reads
@@ -687,7 +687,7 @@ Applying it: a new version of daniel-box's host package, which its updater insta
   (`hosts/tests/claude_code/test_agent_dotfiles.py::test_a_source_without_the_agent_variant_is_refused`).
 - **Evidence:** `journalctl -u homelab-claude-{clone,dotfiles}-sync`; a failure pages Discord, and
   `claude-{clone,dotfiles}-sync.prom` pages a timer that stopped
-  (`hosts/lib/tests/test_claude_code_component.py::test_each_packaged_unit_names_its_packaged_sibling`).
+  (`hosts/lib/tests/host_baselines/test_claude_code_component.py::test_each_packaged_unit_names_its_packaged_sibling`).
   A clone left dirty or off
   `master` skips with exit 0 and still writes its file, so the file says the timer runs, not
   that the clone is current.

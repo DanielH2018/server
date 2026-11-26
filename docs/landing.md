@@ -226,7 +226,12 @@ is waited out first, as the bullets below say. A refused landing exits 75 with
   four times each under the rule without the wait, each time after up to 82 minutes in line.
   Inside the no-promotion window, under `DEPLOY_HOLD`, and in a landing that went on without
   the turn, a serial PR is still refused at once.
-- Every PR waits in line while another landing holds the serial lock, instead of refusing.
+- A PR of documents and tests alone passes a live serial landing without waiting
+  (`live_limit.QUIET`). It moves no bundle, so it waits on no promotion
+  (`lib/path_kinds.py:moves_the_bundle`), and a promotion the serial landing fails cannot reach
+  it. On 2026-11-26, 2 of the 15 landings that waited behind a serial landing were such PRs,
+  and the waits behind serial landings that day totalled 6.3 hours.
+- Every other PR waits in line while another landing holds the serial lock, instead of refusing.
   It gives the landing turn back for the wait, because the serial landing may need the turn
   again before its merge, and its log prints `waiting in line for the serial landing to
   end`. It asks for the turn again once the lock is free, and reads the rules once more in
@@ -363,6 +368,13 @@ jobs. Every landing that merges its PR directly takes the turn.
   drafts wait in the line for the next holder to stack. Otherwise each of them prints `a
   batch that tested PR #N was not green; it lands alone`, leaves the line and gets a run of
   its own.
+- A holder tells a draft in the line that it conflicts with master. A draft that GitHub
+  reads as `CONFLICTING`, or that does not stack and then does not merge onto master by
+  itself on a throwaway branch, gets `conflict` in its place (`batch._stack`). Its landing
+  ends `merge-conflict` on its next poll, instead of waiting out the line to learn it at
+  its turn. On 2026-11-26 PR 10235 conflicted from 14:53, one minute before its landing
+  started, and waited until 17:23 to learn it. GitHub's `mergeable` alone did not read
+  `CONFLICTING` for it when a holder checked at 15:24, so the holder also tries the merge.
 - A holder whose landing code is older than master's, found when it forms its batch, hands
   the turn to a landing of its PR from a fresh checkout of origin/master (`turn.HandOver`).
   Its log prints `land: this landing holds the landing turn, and its landing code is older
@@ -392,7 +404,11 @@ jobs. Every landing that merges its PR directly takes the turn.
   names. It merges as it stands, except an approved head that master moved past on a path
   the PR changes, which is refused with a rebase remedy (`stale_base.refuse_stale_approved`). A refused update marks the PR ready again.
   An update in the turn that GitHub refuses does not stop the landing: the PR keeps the run
-  the ready flip started.
+  the ready flip started. The exception is a refusal that names a merge conflict, which ends
+  the landing `merge-conflict` at once, in the turn and when a ready head rejoins the line
+  (`stale_base.refuse_conflict`). GitHub's merge follows no rename, so a PR that edits a
+  file master moved conflicts here although a local `git merge` of the same commits is
+  clean.
 - The turn is a lock on one file on daniel-box. A landing there locks the file itself, and a
   landing on daniel-server holds the same lock through an ssh session that lasts as long as
   the landing.
@@ -686,7 +702,7 @@ set still names the k8s tags it gates. `--tags` overrides the scope entirely.
 
 **The changed set names the k8s tags, not the PR's paths.** `split_k8s` drops a path-derived
 k8s tag and keeps one `--tags` named. Every PR with a path other than a document or a test waits
-on the promotion (`land_lib/promotion.py:moves_the_bundle`), and land-wait's changed set, joined
+on the promotion (`lib/path_kinds.py:moves_the_bundle`), and land-wait's changed set, joined
 with any `--tags`, names the k8s tags the gate grades and the annotation names. A
 shared template, an inventory edit or a `manifests` change therefore gates exactly the tags whose
 render moved. A PR that moves no bundle file waits on `homelab` alone and gates nothing. The

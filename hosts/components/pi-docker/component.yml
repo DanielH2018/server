@@ -12,7 +12,7 @@
 # them. Reconcile never starts it (`policy: manual`, no enable link on the service). An operator
 # starts it from a LAN session, or homelab-docker-engine.timer starts it at 00:30 UTC, the Pi's
 # quiet window. The unit does nothing while every package sits at its
-# pin, so the timer acts only after a pin moved. hosts/lib/tests/test_pi_docker_component.py holds
+# pin, so the timer acts only after a pin moved. hosts/lib/tests/host_lib/test_pi_docker_component.py holds
 # these rules.
 #
 # Activation. daemon.json, the containerd block and both Go-runtime drop-ins declare
