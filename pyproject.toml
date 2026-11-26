@@ -507,3 +507,72 @@ include = [
 ]
 [tool.ty.overrides.rules]
 import-not-found = "ignore"
+
+# Pylance in VS Code reads this table; no gate runs pyright. typeCheckingMode stays unset so the
+# editor's own setting applies.
+[tool.pyright]
+pythonVersion = "3.15"
+venvPath = "."
+venv = ".venv"
+include = ["scripts", ".claude", "k8s", "tests", "evals", "hosts"]
+# An explicit exclude replaces pyright's defaults, whose `**/.*` would drop `.claude/hooks`.
+# `.claude/worktrees` holds a full copy of every module per live session.
+exclude = [".claude/worktrees", "**/__pycache__", "**/node_modules", ".venv", ".git", "site"]
+# Equal to [tool.ty.environment] extra-paths, held by test_ty_config_covers_the_repo.py.
+extraPaths = [
+  "tests",
+  "hosts/components/worktree-holders/files",
+  "hosts/components/gh-quota/files",
+  "hosts/components/aide-scan/files",
+  "hosts/lib",
+  "hosts/components/deploy-ui/files",
+  "k8s/roles/monitor-bridge/files",
+  "k8s/roles/game-stats/files",
+  "k8s/roles/gpu-exporter/files",
+  "k8s/roles/karakeep/files",
+  "k8s/roles/longhorn-reconcile/files",
+  "scripts",
+  ".claude/hooks",
+  "k8s/roles/autofix-bridge/files",
+  "k8s/roles/configarr/files",
+  "k8s/roles/janitorr/files",
+  "k8s/roles/qbittorrent/files",
+  "k8s/roles/pihole/files",
+  "k8s/roles/arr-notification/files",
+  "k8s/roles/lidarr/files",
+  "scripts/renderer/job_files",
+  "hosts/components/fake-remux/files",
+  "k8s/roles/ical-proxy/files",
+  "k8s/roles/homelab-mcp/files",
+  "k8s/roles/airflow/files",
+  "k8s/roles/crowdsec/files",
+  "k8s/roles/traefik/files",
+  "k8s/roles/artifacts/files",
+  "hosts/components/k3s-host-checks/files",
+  "hosts/components/hypervisor/files",
+  "hosts/components/renovate-notify/files",
+  "hosts/components/renovate-agent/files",
+  "hosts/components/claude-code/files",
+  "k8s/roles/home-assistant/files",
+  "k8s/roles/tdarr/files",
+  "k8s/roles/sonarr/files",
+  "k8s/roles/dri-device-plugin/files",
+  "k8s/roles/n8n/files",
+  "k8s/roles/prowlarr/files",
+  "k8s/roles/headlamp/files",
+  "k8s/roles/observability/files",
+  "k8s/roles/media-volume/files",
+  "k8s/roles/jellyfin/files",
+  "k8s/roles/registry/files",
+  "k8s/roles/netpol-baseline/files",
+  "k8s/roles/system-upgrade/files",
+  "scripts/backup/tests",
+  "scripts/deploy_tools/tests",
+  "scripts/dev/tests",
+  "scripts/diagnostics/tests",
+  "tests/k8s",
+  "tests/repo",
+  "scripts/renderer/tests",
+  "hosts/tests",
+  "scripts/docs/tests",
+]
