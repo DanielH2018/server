@@ -52,7 +52,7 @@ def test_the_rendered_allowlist_admits_no_cluster_range_is_clean():
     assert not admits_a_cluster_range(sources, _cluster_cidrs()), sources
 
 
-def test_every_vault_router_but_alive_carries_the_allowlist():
+def test_every_vault_router_but_the_probes_carries_the_allowlist():
     routes = [
         r
         for d in _vaultwarden_docs()
@@ -63,7 +63,9 @@ def test_every_vault_router_but_alive_carries_the_allowlist():
     assert routes, "no IngressRoute matches the vaultwarden .local. host"
     for route in routes:
         names = {m["name"] for m in route.get("middlewares", [])}
-        if "PathPrefix(`/alive`)" in route["match"]:
+        if "ClientIP(" in route["match"]:
+            assert "Path(`/`)" in route["match"], route["match"]
+            assert "PathPrefix(" not in route["match"], route["match"]
             continue
         assert "vaultwarden-lan-only" in names, route["match"]
 
