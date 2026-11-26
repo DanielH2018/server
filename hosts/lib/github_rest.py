@@ -114,7 +114,7 @@ def github_get(
 def count_github_call(method: str, path: str, token: str | None) -> None:
     """Count one REST request in the host's gh-quota ledger, under the token that sends it.
 
-    Call it just before sending. A GET records as `api rest`, any other method as `api write`.
+    Call it just before sending. A GET records as `api rest` plus the path's template, any other method as `api write`.
     An anonymous request spends the source IP's limit, not a token owner's, so it is not
     counted. A host without the gh-quota component counts nothing, and a ledger module that
     fails to load counts nothing too: the ledger must never be why a GitHub request fails.
