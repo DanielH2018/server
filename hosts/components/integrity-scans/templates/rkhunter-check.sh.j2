@@ -65,10 +65,11 @@ summary_count() {
 # all three hosts' journals and rotated logs, the warnings fell into three classes. Two hidden
 # files under /etc appeared on every host in every run, and daniel-pi reported PermitRootLogin
 # unset; both are allowlisted in /etc/rkhunter.conf.local (rkhunter.conf.local.j2), which leaves
-# a healthy week with no warnings at all. The third class is a passwd or group change, every one
-# a package or the operator adding an account. It pages, because a new account is what this scan
-# exists to catch. rkhunter stores its copy of passwd and group on every run, so running this
-# script again by hand acknowledges the change and clears the alert. Suspect files read 0
+# a healthy week with no warnings at all. The third class is a passwd or group change. On a host
+# that runs AIDE, the aide-scan component turns rkhunter's account tests off, because the AIDE
+# check judges each change against the accounts the host package declares. On daniel-pi, with no
+# AIDE, an account change pages here; rkhunter stores its copy of passwd and group on every run,
+# so running this script again by hand acknowledges it. Suspect files read 0
 # because a refresh after every dpkg run (homelab-rkhunter-propupd.service) rebaselines package
 # upgrades, so a suspect file is a binary that changed outside apt.
 if [[ -z "$SUMMARY" ]]; then
@@ -96,7 +97,7 @@ else
     MSG="suspect file found, a system binary changed outside apt: ${COUNTS}; grep Warning ${RKHUNTER_LOG} lists them"
   elif ((WARNINGS > 0)); then
     STATUS=down
-    MSG="rkhunter warned: ${COUNTS}; the first reads: ${FIRST_WARNING}. grep Warning ${RKHUNTER_LOG} lists them. An account change clears when this script is run again by hand; any other benign warning needs a line in /etc/rkhunter.conf.local"
+    MSG="rkhunter warned: ${COUNTS}; the first reads: ${FIRST_WARNING}. grep Warning ${RKHUNTER_LOG} lists them. An account change, which rkhunter reports only on a host without AIDE, clears when this script is run again by hand; any other benign warning needs a line in /etc/rkhunter.conf.local"
   else
     STATUS=up
     MSG="scan completed: ${COUNTS}"
