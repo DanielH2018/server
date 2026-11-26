@@ -28,6 +28,10 @@ from lib.json_types import as_object
 
 BRANCH = "master"
 
+# Seconds between attempts at fetching origin/master: three attempts in all. A fetch that fails
+# once has answered seconds later.
+FETCH_BACKOFF_S = (5, 15)
+
 
 @dataclass(frozen=True)
 class Classification:
@@ -252,5 +256,23 @@ class Landing:
         return self.tools.git(*args, cwd=self.opts.primary, check=False)
 
     def fetch_branch(self) -> None:
-        if self.git("fetch", "-q", "origin", BRANCH).returncode != 0:
-            self.die(f"could not fetch origin/{BRANCH}", 1)
+        """Fetch origin/master into the primary checkout, retried after each failed attempt.
+
+        Raises:
+            Outcome: `refused`, once every attempt failed. With `merge_sha` set the PR is
+              already merged, so the detail names the merge commit and the re-run that follows
+              it through; otherwise it says only that the fetch failed.
+        """
+        for wait in (*FETCH_BACKOFF_S, None):
+            if self.git("fetch", "-q", "origin", BRANCH).returncode == 0:
+                return
+            if wait is not None:
+                self.tools.sleep(wait)
+        why = f"could not fetch origin/{BRANCH} in {len(FETCH_BACKOFF_S) + 1} attempts"
+        if self.merge_sha:
+            self.die(
+                f"merged as {self.merge_sha[:8]}, deploy not followed: {why}; "
+                f"re-run land.sh --pr {self.opts.pr} to follow the merge through",
+                1,
+            )
+        self.die(why, 1)
