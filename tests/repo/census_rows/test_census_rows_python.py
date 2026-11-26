@@ -18,9 +18,9 @@ from functools import cache
 from pathlib import PurePosixPath
 
 import pytest
-from _helpers import REPO
 from _condition_status_row import CONDITION_STATUS_IS_PARSED
 from _future_annotations_row import NO_FUTURE_ANNOTATIONS
+from _helpers import REPO
 from _printed_json_row import PRINTED_JSON_IS_COMPACT
 from _rendered_documents_row import RENDERED_OBJECTS_ARE_PARSED
 from _row_table import (
@@ -202,6 +202,10 @@ def _shadowing_offence(subject: Subject) -> list[str]:
     ]
     return [f"also a top-level module at {rel}" for rel in others]
 
+
+# A quoted flag tested against `sys.argv` by membership. The `-h`/`--help` guard compares a bound
+# name, so it never matches.
+_ARGV_FLAG_TEST = re.compile(r"""["']-[\w-]+["']\s+(?:not\s+)?in\s+sys\.argv\b""")
 
 ROWS = (
     NO_FUTURE_ANNOTATIONS,
@@ -418,6 +422,34 @@ ROWS = (
     ),
     CONDITION_STATUS_IS_PARSED,
     RENDERED_OBJECTS_ARE_PARSED,
+    Census(
+        name="flags-are-parsed-not-tested-by-membership",
+        reason=(
+            'A flag tested with `"--once" in sys.argv` accepts every other argument and ignores '
+            "it, so a mistyped `--dryrun` runs the real action. Parse the arguments "
+            "with argparse (`allow_abbrev=False`) in a `parse_args(argv)` function, and pass "
+            "`sys.argv[1:]` to `main` from the `__main__` block."
+        ),
+        files=lambda: [
+            rel
+            for rel in tracked("hosts/*.py", "k8s/*.py", "scripts/*.py")
+            if "/tests/" not in rel
+        ],
+        offence=lines_matching(_ARGV_FLAG_TEST),
+        red=(
+            Subject("a.py", 'dry = "--dry-run" in sys.argv\n'),
+            Subject("b.py", "once = '--once' not in sys.argv\n"),
+            Subject("c.py", 'if "--once" in sys.argv[1:]:\n'),
+        ),
+        green=(
+            Subject("a.py", "once = parse_args(argv).once\n"),
+            Subject(
+                "b.py", 'if any(arg in ("-h", "--help") for arg in sys.argv[1:]):\n'
+            ),
+        ),
+        min_matches=100,
+        must_find=frozenset({"k8s/roles/autofix-bridge/files/autofix.py"}),
+    ),
 )
 _IDS = [row.name for row in ROWS]
 

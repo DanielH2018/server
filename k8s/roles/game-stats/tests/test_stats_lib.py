@@ -9,7 +9,6 @@ import threading
 from unittest import mock
 
 import pytest
-
 import stats_lib
 
 # The handler reads this instant on every request, so the /healthz verdict is a fixed distance from
@@ -399,9 +398,15 @@ def test_run_with_once_runs_a_single_cycle_and_starts_no_metrics_server():
             lambda state, entries: (list(entries), entries[-1][0]),
             lambda state, now: "x 1\n",
             lambda state: "0 players",
-            argv=["stats.py", "--once"],
+            argv=["--once"],
         )
 
     start_server.assert_not_called()
     assert fetches == [1_000]
     assert [c for c, _ in store.saved] == [2_000]
+
+
+def test_an_unknown_flag_exits_non_zero():
+    with pytest.raises(SystemExit) as stopped:
+        stats_lib.parse_args(["--backfil"])
+    assert stopped.value.code != 0

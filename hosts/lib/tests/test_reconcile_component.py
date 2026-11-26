@@ -7,10 +7,12 @@ container suite, which runs reconcile under each release's python3, covers the s
 Run: uv run pytest hosts/lib/tests/test_reconcile_component.py
 """
 
+import sys
+
 import pytest
 import yaml
 from _reconcile_component import render_reconcile
-
+from lib import proc_testing
 from lib.repo_paths import REPO
 from renderer.renderer_lib import host as host_mode
 
@@ -144,3 +146,9 @@ def test_every_host_package_with_the_secrets_unit_ships_reconcile():
         host for host, parts in with_secrets.items() if "reconcile" not in parts
     )
     assert not missing, f"{missing} ship homelab-secrets without reconcile_lib"
+
+
+def test_an_unknown_flag_exits_non_zero_without_reconciling():
+    done = proc_testing.run([sys.executable, str(RECONCILE), "--metrcs"])
+    assert done.returncode != 0
+    assert "unrecognized arguments" in done.stderr
