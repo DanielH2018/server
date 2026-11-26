@@ -62,8 +62,6 @@ tests:
         alertname: ProwlarrAppSyncFailing
         exp_alerts: []
 
-  # The long-term check fires after the hold and names the apps. The Prowlarr pod moves at 40m
-  # and Radarr recovers at 50m, which changes `instance` and `message`; the alert keeps firing.
   - interval: 1m
     input_series:
       - series: 'up{job="exportarr", arr="prowlarr", instance="10.42.1.154:9707"}'
@@ -159,8 +157,6 @@ tests:
         alertname: ProwlarrAppSyncFailing
         exp_alerts: []
 
-  # A failing notification fires after the hour, per app. Prowlarr's pod moves at 40m, which
-  # changes `instance`; the alert keeps firing. Sonarr's CustomScript warning fires on its own.
   - interval: 1m
     input_series:
       - series: 'prowlarr_system_health_issues{job="exportarr", arr="prowlarr", instance="10.42.1.104:9707", source="NotificationStatusCheck", type="error", message="All notifications are unavailable due to failures"}'
@@ -197,8 +193,6 @@ tests:
                 rewrites on the next rollout. A missing CustomScript needs its row fixed in
                 Settings, Connect.
 
-  # A 30-minute failure that clears, as during a Discord outage, stays quiet. So does an app
-  # whose health issues come from other checks.
   - interval: 1m
     input_series:
       - series: 'radarr_system_health_issues{job="exportarr", arr="radarr", instance="10.42.0.35:9707", source="NotificationStatusCheck", type="error", message="All notifications are unavailable due to failures"}'

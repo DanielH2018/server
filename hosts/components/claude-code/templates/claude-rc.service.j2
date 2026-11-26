@@ -147,7 +147,7 @@ Environment=PYTEST_XDIST_AUTO_NUM_WORKERS={{ claude_code_rc_pytest_workers }}
 # builds a readline interface on stdin to ask which spawn mode to use (it guards that on
 # process.stdin.isTTY). Under systemd there is no stdin to answer, so the host would sit
 # there having never connected — a hang, not an error. ENFORCED by
-# hosts/tests/test_claude_rc_unit.py.
+# hosts/tests/claude_code/test_claude_rc_unit.py.
 {% if claude_code_user != sys_user %}
 # DECIDED: --settings for a non-operator user only, naming a root-owned file the package ships
 # (templates/claude-rc-settings.json.j2), where no session can write it. Its env outranks the

@@ -151,11 +151,9 @@ groups:
             days-left gauge holds its last read, or is absent after a restart. The
             monitor-bridge log names the error.
             Its DOWN line: `kubectl -n homelab logs deploy/monitor-bridge | grep 'DOWN domain_registration '`.
-      # The registration's days left, which the domain_registration row exports as a gauge.
-      # A lapsed domain stops ACME renewal, every public route and the WireGuard
-      # endpoint name at once. The gauge keeps its last value through an RDAP failure, so no
-      # `requires` label: a WAN outage does not move it. The page fires beside the warning,
-      # since Alertmanager routes each on its own severity.
+      # No `requires` label: the gauge keeps its last value through an RDAP failure, so a WAN outage
+      # does not move it.
+      # A lapsed domain stops ACME renewal, every public route and the WireGuard endpoint name.
       - alert: DomainRegistrationExpiringSoon
         expr: homelab_domain_registration_expiry_days{job="monitor-bridge"} <= 45
         labels:
@@ -178,10 +176,8 @@ groups:
             days out. A lapse takes down ACME renewal, every public route, the WireGuard
             endpoint name and the alert plane's own notifications. Renew it at the registrar.
           runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#domainregistrationexpiring
-      # `ScrapeTargetDown` (service monitor-bridge, files/rules/
-      # scrape-targets.yaml) pages a failed scrape of this job, and M1 convention 5 allows one
-      # pager. The absent() arm is what that rule cannot see: a scrape job removed from
-      # prometheus.yml. This rule pages that case.
+      # The absent() arm covers what ScrapeTargetDown cannot see: a scrape job removed from
+      # prometheus.yml.
       - alert: MonitorBridgeDown
         expr: up{job="monitor-bridge"} == 0 or absent(up{job="monitor-bridge"})
         for: 10m
@@ -195,13 +191,10 @@ groups:
             monitor-bridge pod is down or the monitor-bridge scrape job is gone from
             prometheus.yml. Read the pod's events and log in the homelab namespace.
           runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#monitorbridgedown
-      # This rule is the class-3 guard of
-      # docs/failure-classes.md: a run loop that hangs behind a live HTTP thread keeps `up` at 1
-      # and serves stale gauges. It is one aggregate alert, so a hung loop pages once rather than
-      # once per row. The first arm finds any row whose timestamp is older than the row's own
-      # deadline. The second finds a row count below homelab_check_rows, which the exporter sets
-      # from the check table, so no literal here goes stale when a row is deleted. A dead
-      # exporter has neither series, and MonitorBridgeDown owns that case.
+      # Class-3 guard: a run loop hanging behind a live HTTP thread keeps `up` at 1 and serves stale
+      # gauges.
+      # One aggregate alert; the row-count arm reads homelab_check_rows, so no literal goes stale. A
+      # dead exporter is MonitorBridgeDown's.
       - alert: BridgeCheckStale
         expr: |
           count(
@@ -230,15 +223,11 @@ groups:
             minutes a row has aged past its deadline or fewer rows export homelab_check_success than
             homelab_check_rows counts, so the run loop is hung or skipping rows.
           runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#bridgecheckstale
-      # THE B2 FAMILY: the gate row and the two rows behind it. All three rules are `for: 10m`, so
-      # the two-minute gate dip of the weekly reboot does not page. The rules share one `for:`
-      # on purpose: the dependent must not page before its inhibit source exists, and both go
-      # to 0 in the same cycle.
-      # `B2Unreachable` sources the inhibit in alertmanager-secret.yaml.j2 for `requires: b2`.
-      # The gate row reports a cap denial as down, so a cap breach pages once, and the
-      # dependent's body is not called while the gate reads down, which keeps a billed listing
-      # off every 300s cycle. B2 is the WAN gate's peer, not behind it, so a WAN outage lights
-      # both. A row with no series stays quiet here: BridgeCheckStale owns a missing row.
+      # THE B2 FAMILY: the three rules share `for: 10m` so the weekly reboot's gate dip does not
+      # page, and the dependent must not page before its inhibit source exists.
+      # The gate row reports a cap denial as down, so a cap breach pages once, and the dependent's
+      # body is not called while the gate reads down, keeping a billed listing off every cycle.
+      # B2 is the WAN gate's peer, so a WAN outage lights both. BridgeCheckStale owns a missing row.
       - alert: B2Unreachable
         expr: homelab_check_success{job="monitor-bridge", check="b2_reachable"} == 0
         for: 10m
@@ -283,13 +272,9 @@ groups:
             makes B2 refuse every Longhorn upload, and a writer key without bypassGovernance. The
             monitor-bridge log names which failed: `kubectl -n homelab logs deploy/monitor-bridge | grep 'DOWN b2_object_lock '`.
           runbook_url: https://docs.local.daniel-hunter.com/longhorn-backup-tiering/
-      # THE UNGATED FAMILY: the three rows with no `gate` column value. None reads
-      # Prometheus, Loki or the WAN, and none is a `startup_grace` row, so no rule here carries
-      # a `requires` label or a `for:`. `arr_queue` and `ha_heartbeat` streak one arm inside the
-      # body (ARR_FETCH_CONSECUTIVE, HA_CONSECUTIVE) while their other arms page at once, and a
-      # `for:` would hold the whole row (m6-retire-kuma.md, "Gates and grace"). Each rule's
-      # `service` names the thing checked, per the DECIDED block above. A row with no series
-      # stays quiet here: BridgeCheckStale owns a missing row.
+      # THE UNGATED FAMILY: no `requires` label or `for:`, because `arr_queue` and `ha_heartbeat`
+      # streak one arm in the body while other arms page at once, and a `for:` would hold the whole
+      # row. A row with no series is BridgeCheckStale's.
       - alert: ArrQueueNeedsReview
         expr: homelab_check_success{job="monitor-bridge", check="arr_queue"} == 0
         labels:
@@ -334,18 +319,11 @@ groups:
             Either HA is up with its automations not running, or HA banned an IP in the last
             hour. A ban of a cluster gateway locks out everything behind it, so read
             /config/ip_bans.yaml on a ban.
-      # THE HOST-PACKAGES ROW: it sits in none of the four families. Its `gate` is `prometheus`
-      # and it sits under `EXPORTER_DEPENDENT["node"]`: its builder arms read series that
-      # daniel-box's node exporter publishes from its textfile directory, so a dead exporter
-      # makes them absent, and Scrape Targets already names the dead exporter.
-      # `unless on() (up{job="node"} == 0)` keeps the bridge's suppression: the rule is quiet
-      # while any `node` target is down, as the bridge skips the row estate-wide (the DECIDED
-      # block in monitor-bridge's check.py). The exclusion is in the expression, so the rule
-      # needs no `requires` label and no inhibit rule. The `prometheus` gate needs no
-      # counterpart, because Prometheus cannot evaluate this rule while it is down and the
-      # Watchdog pages that. `for: 10m`: the row's two arms hold their own windows
-      # (BUILDER_MAX_FETCH_AGE_S and BUILDER_MAX_LAG_S), and two bridge cycles of down keep the
-      # weekly reboot's two-minute dip from paging. The row is not `startup_grace`.
+      # HOST-PACKAGES ROW: `unless on() (up{job="node"} == 0)` keeps the bridge's suppression (its
+      # arms read series daniel-box's node exporter publishes), so no `requires` label or inhibit is
+      # needed.
+      # `for: 10m` keeps the weekly reboot's two-minute dip from paging; the row is not
+      # `startup_grace`.
       - alert: HostPackageBuilderStalled
         expr: |
           homelab_check_success{job="monitor-bridge", check="host_packages"} == 0
@@ -367,14 +345,10 @@ groups:
             docs/host-packages.md has the fix for each reason.
             Its DOWN line: `kubectl -n homelab logs deploy/monitor-bridge | grep 'DOWN host_packages '`.
           runbook_url: https://docs.local.daniel-hunter.com/host-packages/
-      # THE STARTUP-GRACE FAMILY: the rows whose `gate` column reads `startup_grace`. The bridge
-      # holds nothing for them, so each rule's `for: 10m` is the whole grace, and it rides out
-      # the weekly reboot. A gauge that reads 0 for one 300s cycle spans five or six 1-minute
-      # samples, so `for: 5m` fires on a one-cycle blip or not by scrape alignment. `for: 10m`
-      # needs two consecutive down cycles. `n8n` and `speedtest` keep their in-body streaks,
-      # on which the `for:` stacks. No row here has a gate, so no rule carries `requires` and
-      # no inhibit rule reaches them. A row with no series stays quiet here: BridgeCheckStale
-      # owns a missing row.
+      # `for: 10m` is the whole grace: a gauge at 0 for one 300s cycle spans 5-6 samples, so
+      # `for: 5m`
+      # fires on scrape alignment, while 10m needs two down cycles.
+      # `n8n` and `speedtest` keep in-body streaks, which the `for:` stacks on.
       - alert: N8nWorkflowsFailing
         expr: homelab_check_success{job="monitor-bridge", check="n8n"} == 0
         for: 10m

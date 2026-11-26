@@ -113,9 +113,9 @@ groups:
             minutes, so its exporter is down or unreachable from Prometheus and its series have
             gone stale. Read the exporter pod's events and log, or the host's unit for a static
             target.
-      # autofix-bridge's check exporter. It gets its own rule rather than the
-      # catch-all's `unmapped` service. AutofixBridgeDown reads the same series with an `absent()`
-      # arm and a critical severity; this rule keeps A3's one-rule-per-job census whole.
+      # Own rule rather than the catch-all's `unmapped` service, keeping the one-rule-per-job census
+      # whole;
+      # AutofixBridgeDown reads the same series with an absent() arm.
       - alert: ScrapeTargetDown
         expr: up{job="autofix-bridge"} == 0
         for: 10m
@@ -233,9 +233,8 @@ groups:
             minutes, so its exporter is down or unreachable from Prometheus and its series have
             gone stale. Read the exporter pod's events and log, or the host's unit for a static
             target.
-      # A parked game's exporter is scaled to 0 from deploy.local (ADR-0033), so its Service has no
-      # endpoint. The `unless` mutes a job while kube-state-metrics reads 0 replicas for the
-      # Deployment of the same name.
+      # A parked game's exporter is scaled to 0, so its Service has no endpoint; `unless` mutes a
+      # job while kube-state-metrics reads 0 replicas for the same-named Deployment.
       - alert: ScrapeTargetDown
         expr: >-
           up{job=~"valheim-stats|terraria-stats"} == 0

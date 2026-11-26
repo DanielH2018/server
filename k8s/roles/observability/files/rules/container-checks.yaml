@@ -24,9 +24,8 @@
 groups:
   - name: container-checks
     rules:
-      # More than RESTART_MAX (3) container starts within RESTART_WINDOW (15m), summed over a
-      # pod's containers. K8sContainerCrashLooping counts the kubelet's restart counter; this
-      # arm counts container_start_time_seconds changing, which also sees a recreated container.
+      # K8sContainerCrashLooping counts the kubelet's restart counter; this arm counts
+      # container_start_time_seconds changing, which also sees a recreated container.
       - alert: ContainerRestartLoop
         expr: |
           (
@@ -58,8 +57,7 @@ groups:
           description: >-
             {{ $labels.pod }} had {{ $value | printf "%.0f" }} container starts in the last 15
             minutes. Read `kubectl -n {{ $labels.namespace }} describe pod {{ $labels.pod }}` for the last state.
-      # Any OOM kill within OOM_WINDOW (1h). The alert resolves one hour after the kill, so read
-      # the notification rather than the resolved state for the evidence.
+      # Resolves one hour after the kill, so read the notification for the evidence.
       - alert: ContainerOOMKilled
         expr: |
           (
@@ -90,16 +88,11 @@ groups:
           description: >-
             {{ $labels.pod }} had an OOM kill within the last hour. Raise the container's memory
             limit in its role, or find the leak.
-      # BOTH gates: more than CPU_THROTTLE_PCT (25%) of the pod's CFS periods throttled, and
-      # more than CPU_MIN_THROTTLED_CORES (0.05) cores lost to throttling, over CPU_WINDOW
-      # (15m). The cores floor keeps a 0.1-cpu sidecar that bursts over its period slice from
-      # paging. A container with no cpu limit gives 0/0 = NaN, which no comparison matches.
-      # `for: 15m` is CPU_CONSECUTIVE (3) x 300s. max_over_time(...[5m:1m]) holds the condition
-      # through a dip shorter than one bridge cycle: a controller that throttles in bursts
-      # drops under the floor for a minute in every few, and each dip resets a bare `for:`
-      # while the bridge, sampling every 300s, still pages. The smoothing also holds the alert
-      # up to 5m after the condition clears. The alert stays per pod, where the bridge's streak
-      # counted any offender, so a streak that hops from one pod to another does not page here.
+      # BOTH gates: the cores floor keeps a 0.1-cpu sidecar that bursts over its period slice from
+      # paging; no cpu limit gives 0/0 = NaN, which no comparison matches.
+      # max_over_time(...[5m:1m]) holds the condition through dips that would reset a bare `for:`,
+      # and keeps the alert up to 5m after it clears.
+      # The alert stays per pod, so a streak hopping between pods does not page.
       - alert: ContainerCPUThrottled
         expr: |
           (

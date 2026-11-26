@@ -7,14 +7,10 @@
 groups:
   - name: k3s-upgrade
     rules:
-      # The alert reads the Job's `Failed` condition, not the failed-pod count. SUC sets
-      # BackoffLimit on a Job, so a pod can fail inside a Job that then succeeds, and a pod
-      # count with `for: 0m` would page on it. `keep_firing_for` outlasts the 900-second TTL
-      # after which SUC deletes a failed Job, and the next Job's deadline of up to 90 minutes.
-      # Without it the alert would resolve when SUC deletes the failed Job, then fire again
-      # when the re-created Job fails. It is the only page for a selector-only change, which
-      # promotes before any Job exists, for the operator removing a pause label, and for a Job
-      # SUC re-creates after its TTL.
+      # Reads the Job's `Failed` condition, not the failed-pod count: SUC sets BackoffLimit, so a
+      # pod can fail inside a Job that succeeds.
+      # `keep_firing_for` outlasts the 900s TTL after which SUC deletes a failed Job plus the next
+      # Job's deadline, so the alert does not resolve and re-fire.
       - alert: K3sUpgradeJobFailed
         expr: kube_job_failed{namespace="system-upgrade", condition="true"} == 1
         for: 0m
@@ -30,13 +26,9 @@ groups:
             outlasts the Job deadline ends here too. docs/k3s-upgrade.md says how to clear the hold
             and retry.
           runbook_url: https://docs.local.daniel-hunter.com/k3s-upgrade/
-      # The nodes run one kubelet version except while SUC upgrades them, server first. The
-      # server Plan finishes, Longhorn recovers and the agent waits 15 minutes after the
-      # server's start, so a healthy bump holds two versions for well under the 2-hour hold.
-      # The `absent()` arm pages the gap in the other direction: without kube_node_info the
-      # skew cannot be judged, and a rule that reads clean when its series vanish would hide a
-      # node left on the old version behind a lost scrape. It carries the family's zero-series
-      # case, because kube_job_failed is absent whenever no upgrade Job exists.
+      # A healthy bump holds two kubelet versions for well under the 2-hour hold. The `absent()` arm
+      # covers a lost scrape hiding a node left on the old version, and kube_job_failed being absent
+      # when no upgrade Job exists.
       - alert: K3sNodeVersionSkew
         expr: >-
           count(count by (kubelet_version) (kube_node_info)) > 1
@@ -57,16 +49,11 @@ groups:
             `kubectl get nodes`, then `kubectl -n system-upgrade get plans`. docs/k3s-upgrade.md says how to
             finish or retry the upgrade.
           runbook_url: https://docs.local.daniel-hunter.com/k3s-upgrade/
-      # homelab-k3s-restart (hosts/components/k3s-restart) writes these two series on every
-      # run, so a clean host reads 0 and an absent series is not a pass. Each rule names its host
-      # as a literal `service`, the way host-checks.yaml does. daniel-box ships the unit first, and
-      # daniel-server's two rules join when its package lists the component.
-      # K3sConfigRestartMetricsAbsent pages a host whose textfile stops reaching Prometheus.
-      #
-      # `failed` is 1 after an attempt that did not bring k3s back, and after an attempt a kill
-      # interrupted. The unit makes one attempt per hash, so this page stands until the operator
-      # recovers the node and removes failed.sha256 (docs/archive/host/h6-k3s-suc.md,
-      # *Rollback*).
+      # homelab-k3s-restart writes these series every run, so a clean host reads 0 and an absent
+      # series is not a pass.
+      # `failed` is 1 after an attempt that did not bring k3s back or was killed; the unit makes one
+      # attempt per hash, so the page stands until the operator recovers the node and removes
+      # failed.sha256.
       - alert: K3sConfigRestartFailed
         expr: homelab_k3s_restart_failed{host="daniel-box"} == 1
         for: 0m
@@ -96,10 +83,9 @@ groups:
             for 72 hours. Read `journalctl -u homelab-k3s-restart -p notice` for the refusing
             gate, which is a Longhorn volume, a node, CoreDNS, a SUC run, a Flux promotion, or an
             unreadable API.
-      # An absent series reads as clean on the two rules above, so this one pages it. daniel-box
-      # alone has a term: daniel-server ships no k3s-restart component, and a term for it would
-      # fire at once. Adding the component for daniel-server adds its term here. `absent()` keeps the equality matcher's label, so
-      # the alert carries `host`.
+      # daniel-box alone has a term: daniel-server ships no k3s-restart component, and a term for it
+      # would fire at once.
+      # `absent()` keeps the equality matcher's label, so the alert carries `host`.
       - alert: K3sConfigRestartMetricsAbsent
         expr: absent(homelab_k3s_restart_failed{host="daniel-box"})
         for: 1h

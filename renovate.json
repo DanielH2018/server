@@ -843,7 +843,7 @@
       "automerge": false
     },
     {
-      "description": "node_exporter is pinned twice (#3893): the cluster DaemonSet image and the Pi's host binary in `hosts/packages/homelab-tools/package.yml`, which hosts/tests/test_pi_node_exporter_host_unit.py holds equal. One group means one PR, and it must stay AFTER the annotated-pin and homelab-tools rules. NO automerge, because the Pi's updater installs the host binary. ENFORCED: the `node-exporter-` rows of scripts/tests/_renovate_rule_rows.py.",
+      "description": "node_exporter is pinned twice (#3893): the cluster DaemonSet image and the Pi's host binary in `hosts/packages/homelab-tools/package.yml`, which hosts/tests/pi/test_pi_node_exporter_host_unit.py holds equal. One group means one PR, and it must stay AFTER the annotated-pin and homelab-tools rules. NO automerge, because the Pi's updater installs the host binary. ENFORCED: the `node-exporter-` rows of scripts/tests/_renovate_rule_rows.py.",
       "matchPackageNames": [
         "prom/node-exporter",
         "prometheus/node_exporter"
@@ -1389,14 +1389,19 @@
       "rebaseWhen": "conflicted"
     },
     {
-      "description": "The renderer's dependency closure (jinja2, pyyaml, markupsafe) never automerges (R4 Open question 12), because a bump that moves rendered output needs a human to read the render-diff job's diff. It sits after every automerge rule. ENFORCED: scripts/tests/test_renovate_renderer_closure_no_automerge.py.",
+      "description": "The renderer's dependency closure (jinja2, pyyaml, markupsafe, and pydantic with its four dependencies) never automerges (R4 Open question 12), because a bump that moves rendered output needs a human to read the render-diff job's diff. It sits after every automerge rule. ENFORCED: scripts/tests/test_renovate_renderer_closure_no_automerge.py.",
       "matchDatasources": [
         "pypi"
       ],
       "matchPackageNames": [
         "jinja2",
         "pyyaml",
-        "markupsafe"
+        "markupsafe",
+        "pydantic",
+        "pydantic-core",
+        "annotated-types",
+        "typing-extensions",
+        "typing-inspection"
       ],
       "automerge": false
     },

@@ -7,6 +7,7 @@ requires-python = ">=3.15"
 dependencies = [
   "pyyaml",
   "jinja2>=3",
+  "pydantic>=2.14.4",
 ]
 
 [build-system]
@@ -403,6 +404,7 @@ extra-paths = [
   "tests/k8s",
   "tests/repo",
   "scripts/renderer/tests",
+  "hosts/tests",
   "scripts/docs/tests",
 ]
 

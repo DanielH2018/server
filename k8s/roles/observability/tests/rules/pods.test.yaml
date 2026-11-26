@@ -105,8 +105,6 @@ tests:
       - eval_time: 25m
         alertname: AutofixBridgeDown
         exp_alerts: []
-  # AutofixBridgeStale, arm one: the timestamp stops moving at minute 0. The deadline is 900s, so
-  # it ages out at minute 15, and the 10m hold fires it at minute 25.
   - interval: 1m
     input_series:
       - series: up{job="autofix-bridge",instance="autofix-bridge.homelab.svc:9183"}
@@ -179,8 +177,6 @@ tests:
                 for 10 minutes the cycle's verdict has aged past its deadline or the exporter serves
                 no homelab_check_success, so the loop is hung or never completes a cycle.
               runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#autofixbridgestale
-  # A restart's partial first cycle: the exporter serves the timestamp and deadline from its
-  # start, and the first cycle's success gauge appears 5 minutes later. Quiet at every step.
   - interval: 1m
     input_series:
       - series: up{job="autofix-bridge",instance="autofix-bridge.homelab.svc:9183"}
@@ -198,8 +194,6 @@ tests:
       - eval_time: 30m
         alertname: AutofixBridgeStale
         exp_alerts: []
-  # One missed scrape: Prometheus marks every series stale for that one evaluation and `up` reads
-  # 0, so neither arm holds. Quiet.
   - interval: 1m
     input_series:
       - series: up{job="autofix-bridge",instance="autofix-bridge.homelab.svc:9183"}
@@ -214,8 +208,6 @@ tests:
       - eval_time: 30m
         alertname: AutofixBridgeStale
         exp_alerts: []
-  # A dead exporter: `up` reads 0 and no check series exists. AutofixBridgeStale stays quiet,
-  # because AutofixBridgeDown owns that case.
   - interval: 1m
     input_series:
       - series: up{job="autofix-bridge",instance="autofix-bridge.homelab.svc:9183"}
@@ -365,8 +357,6 @@ tests:
       - eval_time: 5m
         alertname: PiPeerBackupFailed
         exp_alerts: []
-  # PiPeerBackupNotReporting, zero-series case: no run clock at all. The 72h range sees nothing,
-  # so the absent arm fires once the 5m hold passes.
   - interval: 1m
     input_series: []
     alert_rule_test:
@@ -415,8 +405,6 @@ tests:
                 WireGuard peer keys have not been copied off daniel-pi for three nights. Read `kubectl
                 -n homelab get jobs` for its newest Job and that Job's logs. A failed export of the verdict
                 ends the run with exit 1.
-  # A run clock that keeps pace with the evaluation time (a run every minute, as fast as a
-  # test can say it): never stale, never fires.
   - interval: 1m
     input_series:
       - series: kube_cronjob_status_last_successful_time{job="kube-state-metrics",instance="kube-state-metrics:8080",namespace="homelab",cronjob="pi-peer-backup"}
@@ -425,8 +413,6 @@ tests:
       - eval_time: 4330m
         alertname: PiPeerBackupNotReporting
         exp_alerts: []
-  # A nightly run: the clock moves every 1440 minutes and lags the evaluation by under 3 days.
-  # Quiet through the whole 3-day window, even right before the next run lands.
   - interval: 1m
     input_series:
       - series: kube_cronjob_status_last_successful_time{job="kube-state-metrics",instance="kube-state-metrics:8080",namespace="homelab",cronjob="pi-peer-backup"}

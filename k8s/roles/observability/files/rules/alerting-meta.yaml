@@ -6,10 +6,8 @@
 groups:
   - name: alerting-meta
     rules:
-      # Always fires. Alertmanager routes it to the alertmanager-watchdog check on
-      # Healthchecks.io every 60s, so a silent Alertmanager, or a Prometheus that stopped
-      # sending it alerts, pages off-site. The C7 health gate excludes it by name, and
-      # alert_conventions.py holds the repo to exactly one rule of that name.
+      # Routed to the alertmanager-watchdog check on Healthchecks.io every 60s; alert_conventions.py
+      # holds the repo to exactly one rule of that name.
       - alert: Watchdog
         expr: vector(1)
         labels:
@@ -17,9 +15,8 @@ groups:
           service: observability
         annotations:
           summary: 'observability: the alert pipeline is alive. This alert always fires.'
-      # prometheus_config_last_reload_successful covers the rule files as well as
-      # prometheus.yml: a rule file that fails to load fails the whole reload, and Prometheus
-      # keeps evaluating the last good set.
+      # A rule file that fails to load fails the whole reload; Prometheus keeps evaluating the last
+      # good set.
       - alert: PrometheusRuleReloadFailed
         expr: prometheus_config_last_reload_successful == 0
         for: 10m
@@ -31,11 +28,8 @@ groups:
           description: >-
             {{ $labels.instance }} has reported a failed reload for 10 minutes, so it still
             evaluates the last rule set it loaded. Its log names the file it refused.
-      # A rule that loaded can still fail every evaluation. A join that matches many-to-many
-      # is the usual cause, and the rule's output then goes stale: workload-service's
-      # recording rules stop, and every alert joined to them falls back to service="unmapped".
-      # PrometheusRuleReloadFailed cannot see this, because the reload succeeded. No other check
-      # covers it, so it pages without a shadow label.
+      # A loaded rule can still fail every evaluation (usually a many-to-many join), leaving its
+      # output stale; PrometheusRuleReloadFailed cannot see it.
       - alert: PrometheusRuleEvaluationFailures
         expr: sum by (rule_group) (increase(prometheus_rule_evaluation_failures_total[10m])) > 0
         labels:
@@ -69,12 +63,9 @@ groups:
             the last 30 minutes, for a reason other than a rate limit. Read
             alertmanager_notifications_failed_total by reason, and the alertmanager pod's log.
           runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#alertmanagernotificationsfailing
-      # A rate limit that outlasts a rollout's burst. The counter moves once per failed flush,
-      # so a group stuck behind the limit adds one failure per 5m `group_interval`; the 7m
-      # window always holds one. One failed flush holds the 7m increase above 0 for about 8
-      # minutes and two for about 11, both under the 15m `for:`, so a rollout's burst passes;
-      # three in a row page. 15m matches the fleet's longest critical `for:`, so the soak's
-      # fleet timeout stays put. Critical, so a sustained Discord rate limit still reaches email.
+      # The 7m window always holds one failed flush per 5m group_interval; one or two stay under the
+      # 15m `for:` so a rollout's burst passes, three page.
+      # 15m matches the fleet's longest critical `for:`.
       - alert: AlertmanagerNotificationsRateLimited
         expr: >-
           sum by (integration)
@@ -93,14 +84,9 @@ groups:
             through. Read the alertmanager pod's log, and look for an alert group that floods
             the receiver.
           runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#alertmanagernotificationsratelimited
-      # This family's zero-series alert. Without it, lost Alertmanager metrics would leave
-      # AlertmanagerNotificationsFailing evaluating to nothing.
-      #
-      # A FAILED SCRAPE IS NOT THIS RULE'S TO PAGE. The job is configured and up{job="alertmanager"}
-      # reads 0. ScrapeTargetDown pages that condition, and its rule for job alertmanager
-      # carries service="observability" and no exemption: this rule's second arm requires
-      # up == 1, so an exemption would leave the failed scrape with no pager. The conjunction
-      # also keeps this rule from paging ScrapeTargetDown's condition a second time.
+      # A FAILED SCRAPE IS NOT THIS RULE'S TO PAGE: ScrapeTargetDown owns it, so the second arm
+      # requires up == 1.
+      # An exemption there would leave the failed scrape with no pager.
       - alert: AlertmanagerMetricsMissing
         expr: >-
           absent(up{job="alertmanager"})
@@ -119,26 +105,13 @@ groups:
             prometheus.yml, or the scrape works and alertmanager_notifications_failed_total is
             gone, as after an upgrade that renamed it. AlertmanagerNotificationsFailing cannot
             fire until the series is back.
-      # A warning notifies Discord alone and repeats there every 6h, so one that never resolves
-      # reaches nobody who acts on it. This rule ages each firing warning into a
-      # critical, which routes to Discord and email. The original alertname and service move to
-      # `escalated_from` and `escalated_service`: Prometheus overwrites `alertname` with this
-      # rule's name, and a source `service` would put a critical in that tag's health gate and
-      # block the landing that fixes the job. `alert-escalation` is no deploy tag, so no gate
-      # reads this alert. To silence one escalation, match `escalated_from`.
-      #
-      # Shadow and drill alerts page nobody, so they never escalate. A rule whose warning holds
-      # by design, such as DeployHoldActive, carries `escalate: "false"` and is left out too.
-      # A warning Alertmanager blackholes because another path already paged it, labelled
-      # `paged_by`, still escalates: the escalation drops that label, so it pages.
-      #
-      # NO `for:`. Prometheus does not carry an alert's activation across a restart
-      # (m6-retire-kuma.md, Open question 9), so a 48h `for` would start over at every restart.
-      # The age is read from the stored ALERTS samples instead: the warning fires now, fired in
-      # the hour before the window opened, and fired in at least 95% of the window's
-      # evaluations, counted against the Watchdog's, which fires at every one. A restart
-      # gap removes samples from both counts, and an absence shorter than about 2h does not
-      # restart the age.
+      # Ages a firing warning into a critical (a warning only reaches Discord). The original
+      # alertname and service move to `escalated_from`/`escalated_service`:
+      # a source `service` would put a critical in that tag's health gate and block the landing that
+      # fixes it.
+      # NO `for:`: Prometheus does not carry an activation across a restart, so the age is read from
+      # stored ALERTS samples against the Watchdog's.
+      # Shadow and drill alerts and `escalate: "false"` rules never escalate.
       - alert: WarningUnresolved
         expr: >-
           label_replace(

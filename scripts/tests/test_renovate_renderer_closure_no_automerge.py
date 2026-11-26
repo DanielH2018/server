@@ -114,11 +114,11 @@ def closure_problems(rules: list[dict], closure: set[str]) -> list[str]:
 
 def test_the_rule_names_the_renderers_closure() -> None:
     imports = renderer_imports()
-    assert imports == {"yaml", "jinja2"}, (
+    assert imports == {"yaml", "jinja2", "pydantic"}, (
         "the renderer imports a package this guard has not read"
     )
     closure = lock_closure((REPO / "uv.lock").read_text(), imports)
-    assert {"jinja2", "pyyaml", "markupsafe"} <= closure
+    assert {"jinja2", "pyyaml", "markupsafe", "pydantic", "pydantic-core"} <= closure
     assert closure_problems(_PACKAGE_RULES, closure) == []
 
 

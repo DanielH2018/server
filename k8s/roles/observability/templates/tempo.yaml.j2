@@ -19,28 +19,16 @@ data:
         otlp:
           protocols:
             grpc:
-              # In-cluster only. No hostPort here: Claude Code exports everything to the
-              # collector, which fans out — nothing sends spans to Tempo directly.
               endpoint: 0.0.0.0:4317
-    # No `ingester:` block. Tempo 3.0 removed the ingester module outright. Its live-store cuts
-    # blocks every 30s by default, so a span is queryable soon after the turn that produced it,
-    # and setting live_store.max_block_duration would only make that slower.
-    #
-    # `backend_scheduler:` replaces `compactor:`. The nesting is not a typo — `provider.compaction`
-    # is the compaction JOB config, and the `compaction` inside it is the compaction SETTINGS
-    # block. Getting the path wrong is silent: retention falls back to its 336h default, halving
-    # this window to a fortnight with nothing logged. Read block_retention back from Tempo's
-    # own /status/config to verify.
+    # backend_scheduler replaces compactor; the doubled `compaction` nesting is not a typo.
+    # A wrong path silently falls back to 336h retention; read block_retention from /status/config.
     backend_scheduler:
       provider:
         compaction:
           compaction:
             block_retention: {{ observability_tempo_retention }}
-    # Set on the worker too. 3.0 splits compaction across a scheduler that decides which blocks
-    # to act on and a worker that executes the jobs, and each carries its own copy of the
-    # compaction settings — setting only the scheduler leaves the worker reading the 336h
-    # default. Which of the two governs deletion is not worth resolving from docs when the
-    # failure mode is a silent halving of the window: pin both to the same value.
+    # Set on the worker too: it has its own compaction settings and otherwise reads the 336h
+    # default.
     backend_worker:
       compaction:
         block_retention: {{ observability_tempo_retention }}
@@ -51,8 +39,7 @@ data:
           path: /var/tempo/blocks
         wal:
           path: /var/tempo/wal
-    # Tempo posts anonymous usage stats to grafana.com by default. Nothing in this stack
-    # reaches the internet by design; opt out rather than leave it on.
+    # Opt out of Tempo's anonymous usage stats to grafana.com; nothing here reaches the internet.
     usage_report:
       reporting_enabled: false
 {% endset %}
@@ -99,8 +86,6 @@ spec:
           ports:
             - name: http
               containerPort: 3200
-              # On the node's loopback so otelq can reach it; see
-              # observability_query_host_ip in defaults/main.yml.
               hostPort: 3200
               hostIP: {{ observability_query_host_ip }}
             - name: otlp-grpc
@@ -139,8 +124,7 @@ metadata:
   name: tempo
   namespace: {{ k8s_observability_namespace }}
 spec:
-  # Pinned: host-side query tools carry this address as a constant. See
-  # observability_tempo_cluster_ip in defaults/main.yml for why.
+  # Pinned: host-side query tools carry this address as a constant.
   clusterIP: {{ observability_tempo_cluster_ip }}
   selector:
     app: tempo

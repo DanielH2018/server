@@ -15,7 +15,7 @@
 #
 # Each deadline is the DEADLINE_S its producer renders: 2 x the timers' 300s period + 300s, as M3
 # derives it. Both literals of a NotReporting rule are pinned to it by
-# hosts/tests/test_pi_heartbeat_textfiles.py (M1 convention 1).
+# hosts/tests/pi/test_pi_heartbeat_textfiles.py (M1 convention 1).
 #
 # `PiRecoveryFailed` fires on every cycle that restarted a container, not only on a failed
 # restart, because the producer reports `down` for those on purpose (the `# DECIDED:` marker in
@@ -85,9 +85,8 @@ groups:
             `systemctl status homelab-pi-recovery.timer` there. Setting
             optimize_pi_recovery_restart_enabled false drops the timer and fires this on purpose.
           runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#pirecoverynotreporting
-      # `for` outlasts the stop an initial_setup apply holds on purpose.
-      # wd_keepalive keeps the hardware watchdog meanwhile, so 30m of waiting costs
-      # only the load test.
+      # `for` outlasts the stop an initial_setup apply holds on purpose; wd_keepalive keeps the
+      # watchdog meanwhile.
       - alert: PiWatchdogFailed
         expr: homelab_check_success{check="pi-watchdog-health",origin="daniel-pi"} == 0
         for: 30m
@@ -119,9 +118,9 @@ groups:
             textfile collector, so nothing confirms the watchdog daemon is being watched. Read
             `systemctl status homelab-pi-watchdog-health.timer` on daniel-pi, then
             /var/lib/node-exporter-textfile/pi-watchdog-health.prom.
-      # A suspended auditd keeps its unit active, so the producer reads the age of audit.log. `for`
-      # outlasts a boot: log2ram restores the log with its old mtime, and the Pi has no clock until
-      # NTP answers, so the first cycles after a boot read a silent log.
+      # A suspended auditd keeps its unit active, so the producer reads audit.log's age. `for`
+      # outlasts a boot:
+      # log2ram restores the log with its old mtime and the Pi has no clock until NTP answers.
       - alert: PiAuditFailed
         expr: homelab_check_success{check="pi-audit-health",origin="daniel-pi"} == 0
         for: 30m

@@ -9,8 +9,6 @@ rule_files:
   - ../../files/rules/log-pipeline.yaml
 evaluation_interval: 1m
 tests:
-  # The zero-series case: no input at all, so the shipper's counter is gone. The missing-series
-  # alert fires after its 10m hold, and not before.
   - interval: 1m
     input_series: []
     alert_rule_test:
@@ -32,8 +30,6 @@ tests:
                 is gone from prometheus.yml or Alloy renamed the counter.
                 LogShipperDroppingEntries cannot fire until the series is back.
 
-  # Client side: 200 dropped entries a minute is 12000 an hour, over the 3000 threshold. The
-  # node settled long ago, so the 80-minute boot hold is not in play.
   - interval: 1m
     input_series:
       - series: 'loki_write_dropped_entries_total{job="alloy", instance="a:12345", reason="ingester_error"}'
@@ -58,8 +54,6 @@ tests:
         alertname: LogShipperMetricsMissing
         exp_alerts: []
 
-  # The BOOT_SETTLE_S grace. The same drops, but the node booted 20 minutes before the
-  # evaluation, inside the 80-minute hold, so the reboot's own drops page nobody.
   - interval: 1m
     input_series:
       - series: 'loki_write_dropped_entries_total{job="alloy", instance="a:12345", reason="ingester_error"}'
@@ -130,8 +124,6 @@ tests:
                 line_too_long, so Claude Code's logs are being lost. Read
                 loki_discarded_samples_total by reason.
 
-  # The SHIPPER_BACKLOG_GRACE_S grace. The node booted 100 minutes before the evaluation, past
-  # the settle hold and inside 6h. A too_far_behind backlog is held, and rate_limited is not.
   - interval: 1m
     input_series:
       - series: 'loki_discarded_samples_total{job="loki-homelab", reason="too_far_behind"}'
@@ -156,8 +148,6 @@ tests:
                 backfill problem. rate_limited, stream_limited and line_too_long are limit problems.
                 Read loki_discarded_samples_total by reason.
 
-  # Past the 6h backlog window the same too_far_behind count pages. The node booted at time 0,
-  # so 6h has passed at 400m.
   - interval: 1m
     input_series:
       - series: 'loki_discarded_samples_total{job="loki-homelab", reason="too_far_behind"}'
@@ -180,8 +170,6 @@ tests:
                 backfill problem. rate_limited, stream_limited and line_too_long are limit problems.
                 Read loki_discarded_samples_total by reason.
 
-  # The collector's export arm: one failed export in 15 minutes pages, and a collector that is
-  # not scraped does not.
   - interval: 1m
     input_series:
       - series: 'otelcol_exporter_send_failed_log_records{job="otel-collector-internal", instance="c:8888", exporter="loki"}'

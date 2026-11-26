@@ -24,8 +24,8 @@ from bridge.types import (
 )
 from verdicts.storage import b2_lock_verdict, b2_storage_verdict, b2_sum_versions
 
-# ASSUMPTION, untestable without a live breach: B2 checks the Class B cap before it looks the
-# name up, so a capped account answers 403 rather than this 404.
+# ASSUMPTION, untestable without a live breach: B2 checks the Class B cap before the name lookup, so
+# a capped account answers 403, not 404.
 B2_CLASS_B_PROBE_FILE = "monitor-bridge-class-b-probe-absent"
 
 
@@ -176,8 +176,7 @@ def b2_authorize(cfg: Config, src: Sources) -> tuple[bool, str]:
       RuntimeError: Either call never reached B2.
     """
     data = b2_authorize_data(cfg, src)
-    # A 200 from something that isn't B2 must not read as healthy. Either field will do: both
-    # have been top-level since v1, and a wrong guess here would page every cycle.
+    # A 200 from something that is not B2 must not read as healthy; either field will do.
     if not (data.get("accountId") or data.get("authorizationToken")):
         return False, "B2 auth returned neither accountId nor authorizationToken"
     api_info = optional_object(data.get("apiInfo"), "apiInfo") or {}

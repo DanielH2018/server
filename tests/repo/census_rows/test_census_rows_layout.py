@@ -252,10 +252,7 @@ def _bare_sibling_offence(subject: Subject) -> list[str]:
 SUITE_CAP = 40
 _TO_GROUP = "the Test suite organization milestone groups it"
 UNGROUPED_SUITES = dict.fromkeys(
-    (
-        "hosts/lib/tests",
-        "hosts/tests",
-    ),
+    ("hosts/lib/tests",),
     _TO_GROUP,
 )
 

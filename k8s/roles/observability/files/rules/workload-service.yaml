@@ -44,8 +44,6 @@ groups:
               label_replace(kube_deployment_status_replicas_unavailable, "service", "unmapped", "", "")
           )
           and on(namespace, deployment) kube_deployment_status_replicas_unavailable
-      # No rendered DaemonSet lacks the label, so this rule has no override step. The pytest
-      # named above asks for one the day a rendered DaemonSet does.
       - record: homelab:daemonset_service:info
         expr: |
           group by (namespace, daemonset, service) (

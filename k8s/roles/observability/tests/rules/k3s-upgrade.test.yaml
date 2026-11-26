@@ -148,8 +148,6 @@ tests:
         alertname: K3sUpgradeJobFailed
         exp_alerts: []
 
-  # K3sConfigRestartFailed fires at once on a failed series and stays quiet on a clean host. The
-  # daniel-server series reads 1 and fires nothing, because no rule names that host yet.
   - interval: 1m
     input_series:
       - series: 'homelab_k3s_restart_failed{host="daniel-box"}'
@@ -176,8 +174,6 @@ tests:
                 another attempt.
               runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#k3sconfigrestartfailed
 
-  # K3sConfigRestartPending fires only after 72 hours of `pending 1`. An absent series fires
-  # nothing here: K3sConfigRestartMetricsAbsent owns that case.
   - interval: 1m
     input_series:
       - series: 'homelab_k3s_restart_pending{host="daniel-box"}'
@@ -209,8 +205,6 @@ tests:
         alertname: K3sConfigRestartPending
         exp_alerts: []
 
-  # K3sConfigRestartMetricsAbsent fires one hour after daniel-box's series disappears, and stays
-  # quiet while it is present. daniel-server has no series and no term.
   - interval: 1m
     input_series:
       - series: 'homelab_k3s_restart_failed{host="daniel-box"}'

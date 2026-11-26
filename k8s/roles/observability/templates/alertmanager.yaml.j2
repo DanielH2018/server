@@ -21,9 +21,7 @@ spec:
       app: alertmanager
   template:
     metadata:
-      # No checksum annotation: the config is a Secret, and hashing its bytes into a
-      # world-readable annotation would open a read path over it. The role's restart task rolls
-      # this pod on a Secret change instead (`restart_on: [secret]` in defaults/main.yml).
+      # No checksum annotation: it would expose Secret bytes; the role's restart task rolls the pod.
       labels:
         app: alertmanager
         netpol-baseline: enforced
@@ -44,16 +42,13 @@ spec:
           args:
             - --config.file=/etc/alertmanager/alertmanager.yml
             - --storage.path=/alertmanager
-            # Empty turns gossip off. One replica has no peer, and a listening cluster port
-            # would only add a surface.
             - --cluster.listen-address=
           ports:
             - name: http
               containerPort: 9093
           volumeMounts:
-            # The Secret's five keys land side by side, so the config names its template as
-            # the relative path `homelab.tmpl`, which also resolves when amtool checks the
-            # rendered pair in CI.
+            # Config names its template as relative `homelab.tmpl`: the Secret's keys mount side by
+            # side.
             - name: alertmanager-config
               mountPath: /etc/alertmanager
               readOnly: true

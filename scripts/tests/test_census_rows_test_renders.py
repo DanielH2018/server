@@ -204,9 +204,9 @@ ROWS = (
         min_matches=MODULE_FLOOR,
         must_find=frozenset(
             {
-                "hosts/tests/test_host_python_invocations.py",
+                "hosts/tests/host_config/test_host_python_invocations.py",
                 "evals/tests/test_eval_cases.py",
-                "hosts/tests/test_claude_agent_ssh_login.py",
+                "hosts/tests/claude_code/test_claude_agent_ssh_login.py",
                 "tests/k8s/_manifest_guards.py",
             }
         ),
@@ -395,7 +395,7 @@ ROWS = (
         ),
         must_find=frozenset(
             {
-                "hosts/tests/test_aide_check.py",
+                "hosts/tests/host_checks/test_aide_check.py",
                 "tests/deploy/test_k8s_toposort.py",
                 "tests/k8s/workloads/test_configmap_keys_not_absorbed.py",
                 "tests/k8s/edge/test_vip_pins.py",

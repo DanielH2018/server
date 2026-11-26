@@ -89,6 +89,39 @@ def test_a_missing_path_is_kept_only_when_the_table_can_hold_it(
     assert "\\udc" not in out.read_text()
 
 
+def test_a_path_under_a_tracked_file_is_recorded_as_that_file(tmp_path):
+    (tmp_path / "scripts").mkdir()
+    (tmp_path / "scripts/b2_drain.py").touch()
+    tracked = frozenset({TRACE_TEST, "scripts/b2_drain.py"})
+    touched = trace.Touched(
+        missing={
+            f"{tmp_path}/scripts/b2_drain.py/conda-meta/history",
+            f"{tmp_path}/scripts/b2_drain.py/pyvenv.cfg",
+        }
+    )
+
+    row = record.reduce(touched, set(), tmp_path, tracked, "/git/index")
+
+    assert row.missing == {"scripts/b2_drain.py"}
+    rows = table.Table()
+    rows.put(TRACE_TEST, row, "0" * 40)
+    rows.put(
+        TABLE_TEST,
+        table.Row(frozenset({"scripts/b2_drain.py"}), frozenset(), frozenset(), False),
+        "1" * 40,
+    )
+    blobs = {
+        TRACE_TEST: "0" * 40,
+        TABLE_TEST: "1" * 40,
+        "scripts/b2_drain.py/x.py": "2" * 40,
+    }
+    changes = [("D", "scripts/b2_drain.py"), ("A", "scripts/b2_drain.py/x.py")]
+    selection = table.select(rows, changes, [TRACE_TEST, TABLE_TEST], blobs)
+    assert selection.modules == [TABLE_TEST, TRACE_TEST] and not selection.full, (
+        selection.reason
+    )
+
+
 def test_a_run_that_read_gits_index_depends_on_the_whole_tree(tmp_path):
     touched = trace.Touched(reads={"/git/index"}, root_pid=1)
 

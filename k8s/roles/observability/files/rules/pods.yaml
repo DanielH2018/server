@@ -28,11 +28,9 @@
 groups:
   - name: pods
     rules:
-      # AUTOFIX-BRIDGE. The cycle's verdict: the *arr auto-block loop reports down when an *arr
-      # was unreachable, a mutation failed, or more than MAX_ACTIONS_PER_CYCLE items were
-      # eligible at once so it acted on none. autofix.py records the verdict each
-      # cycle, and a cycle that raises records 0. A missing series stays quiet here:
-      # AutofixBridgeStale owns a loop that stopped recording.
+      # Reports down when an *arr was unreachable, a mutation failed, or more than
+      # MAX_ACTIONS_PER_CYCLE items were eligible so it acted on none.
+      # A missing series is AutofixBridgeStale's.
       - alert: ArrAutoBlockFailing
         expr: homelab_check_success{job="autofix-bridge", check="arr-autoblock"} == 0
         labels:
@@ -45,10 +43,10 @@ groups:
             or search call failed, or more than the per-cycle cap of queue items were eligible
             at once, so it acted on none. Read the autofix-bridge pod's log in the homelab
             namespace.
-      # A failed scrape (up 0) or a scrape job missing from prometheus.yml. A restart reads up 0
-      # for a scrape or two, and the pod has no readinessProbe, so the 10m hold rides it out.
+      # A restart reads up 0 for a scrape or two and the pod has no readinessProbe, so the 10m hold
+      # rides it out.
       # alertmanager-secret.yaml.j2 inhibits ScrapeTargetDown{job="autofix-bridge"} while this
-      # rule fires, so one dead exporter pages once.
+      # fires.
       - alert: AutofixBridgeDown
         expr: up{job="autofix-bridge"} == 0 or absent(up{job="autofix-bridge"})
         for: 10m
@@ -62,14 +60,10 @@ groups:
             autofix-bridge pod is down or the autofix-bridge scrape job is gone from
             prometheus.yml. Read the pod's events and log in the homelab namespace.
           runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#autofixbridgedown
-      # The class-3 guard of docs/failure-classes.md for this pod: a loop that hangs behind a live
-      # HTTP thread keeps `up` at 1 and serves stale gauges. The first arm finds a timestamp older
-      # than its own deadline, which is three cycles. The timestamp starts at the exporter's
-      # start, so a loop that never finishes a cycle ages out too. The second arm finds no
-      # success series while the exporter is up, the case of one row that is missing. A dead
-      # exporter has neither (a failed scrape drops the series and reads up 0), and
-      # AutofixBridgeDown owns that case. `for: 10m` covers the first cycle after a restart,
-      # which has set the timestamp and not yet the success gauge.
+      # Class-3 guard: a loop hanging behind a live HTTP thread keeps `up` at 1 and serves stale
+      # gauges. The deadline is three cycles from the exporter's start.
+      # `for: 10m` covers the first cycle after a restart, which has set the timestamp and not yet
+      # the success gauge. A dead exporter is AutofixBridgeDown's.
       - alert: AutofixBridgeStale
         expr: |
           (
@@ -92,13 +86,12 @@ groups:
             minutes the cycle's verdict has aged past its deadline or the exporter serves no
             homelab_check_success, so the loop is hung or never completes a cycle.
           runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#autofixbridgestale
-      # CLOUDFLARE-DDNS. favonia's image serves no metrics and has no readiness probe, so the
-      # Deployment's availability is the Prometheus evidence that the updater runs at all. The
-      # update loop's success is the LogQL rules' (homelab-logs.yaml). `verify: "true"` makes the
-      # rule gate `probe.py health cloudflare-ddns`, which a warning alone would not: the gate
-      # reads critical alerts and `verify` ones. It overlaps K8sDeploymentZeroAvailable, a
-      # warning keyed by the workload join, and the two page separately. The absent arms cover a Deployment that is gone, and
-      # `unless` leaves a dead kube-state-metrics to ScrapeTargetDown.
+      # favonia's image serves no metrics and has no readiness probe, so Deployment availability is
+      # the only evidence the updater runs.
+      # `verify: "true"` makes the rule gate `probe.py health cloudflare-ddns`, which a warning
+      # alone would not.
+      # It overlaps K8sDeploymentZeroAvailable and the two page separately; `unless` leaves a dead
+      # kube-state-metrics to ScrapeTargetDown.
       - alert: CloudflareDdnsUnavailable
         expr: |
           (
@@ -120,10 +113,9 @@ groups:
             {{ $labels.deployment }} has had no available replica for 10 minutes, or
             kube-state-metrics reports none, so its Cloudflare A records are not being kept
             current. Read its pod events and log in the homelab namespace.
-      # PI-PEER-BACKUP. The script patches `homelab/check-verdict` to `up` or `down` after each
-      # scheduled run and skips the patch on a deploy-gate run. The series is absent until the
-      # first run and keeps its last value after, which is why the NotReporting rule measures the
-      # run clock. A down verdict stays until the next night's run.
+      # The script patches `homelab/check-verdict` after each scheduled run and skips it on a
+      # deploy-gate run;
+      # the series keeps its last value, so the NotReporting rule measures the run clock.
       - alert: PiPeerBackupFailed
         expr: >-
           kube_configmap_annotations{namespace="homelab", configmap="pi-peer-backup-verdict", annotation_homelab_check_verdict="down"} == 1
@@ -138,11 +130,9 @@ groups:
             keys are un-rebuildable. Read the annotation `homelab/check-message` on the
             pi-peer-backup-verdict ConfigMap.
           runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#pipeerbackupfailed
-      # A script that stopped running or stopped exiting 0 (it exits 1 on any down verdict and
-      # when its export fails). 259200s is three periods of the daily schedule, so two missed
-      # nights are slow and the third is the first that is not noise. The second arm is a CronJob
-      # that never succeeded, or one gone. `unless` leaves a dead kube-state-metrics to
-      # ScrapeTargetDown.
+      # 259200s is three periods of the daily schedule. The second arm is a CronJob that never
+      # succeeded or is gone;
+      # `unless` leaves a dead kube-state-metrics to ScrapeTargetDown.
       - alert: PiPeerBackupNotReporting
         expr: |
           (

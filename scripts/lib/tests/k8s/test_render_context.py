@@ -132,10 +132,10 @@ def test_services_arrive_parsed_with_each_entrys_jinja_expanded(tree):
     # The filters read `services` as parsed entries, so expanding a value must keep the type.
     template, inv = tree({}, group={"vip": "10.0.0.5"}, plane="k8s")
     inv.services.write_text(
-        yaml.safe_dump({"containers_list": [{"name": "dns", "ip": "{{ vip }}"}]})
+        yaml.safe_dump({"containers_list": [{"name": "dns", "hostname": "{{ vip }}"}]})
     )
     services = rc.render_context(template, inventory=inv)["services"]
-    assert services == ({"name": "dns", "ip": "10.0.0.5"},)
+    assert services == ({"name": "dns", "hostname": "10.0.0.5"},)
     assert type(services[0]) is ContainerEntry
 
 

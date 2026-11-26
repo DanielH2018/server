@@ -263,7 +263,7 @@ ROWS = (
             "scripts/diagnostics/probe_lib/health_docker.py": (
                 "one function-local call on a path that runs once"
             ),
-            "hosts/tests/test_github_ruleset_drift.py": (
+            "hosts/tests/repo_crons/test_github_ruleset_drift.py": (
                 "one function-local call on a path that runs once"
             ),
         },

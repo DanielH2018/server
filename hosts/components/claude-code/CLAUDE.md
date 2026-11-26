@@ -108,7 +108,7 @@ shell** spawns sessions **on demand** up to `--capacity`, so only it lets the ph
 ## Activating it
 
 `claude_code_rc_enabled: true` enables and starts the host; back to `false` stops **and** disables
-it and its restart timer, which is the rollback. `hosts/tests/test_claude_rc_unit.py` pins both directions.
+it and its restart timer, which is the rollback. `hosts/tests/claude_code/test_claude_rc_unit.py` pins both directions.
 
 One prerequisite Ansible cannot check, the trust dialog, is in `docs/claude-code-rc-caps.md`. **Re-run that check after a Claude Code upgrade or spawn-mode change.**
 
@@ -129,13 +129,13 @@ directory.
   (#6021), which the package ships with `templates/50-claude-stop-alert.rules.j2`, which
   lets the operator and each agent user start. The StopFailure hook in the dotfiles repo runs as
   a user that cannot read the webhook, so it starts the instance, named by the error cause in
-  `[a-z0-9_]+`. ENFORCED: `hosts/tests/test_claude_stop_alert.py`.
+  `[a-z0-9_]+`. ENFORCED: `hosts/tests/claude_code/test_claude_stop_alert.py`.
 - **A timer that stops firing pages through a textfile, because `OnFailure=` sees only a failed
   run** (#6165). The clone, dotfiles and memory syncs, the triage poller and the fan-out server
   lander write `<unit>.prom` from the `ExecStartPost=` in `templates/timer-textfile.j2`.
   Observability's `host-checks.yaml` pages a stale file as `Claude<Check>NotReporting` on each
   host that arms the timer. The deadline derives from the timer's period, which must stay
-  `<N>min`. ENFORCED: `hosts/tests/test_claude_timer_rule_literals.py`. A timer's flag
+  `<N>min`. ENFORCED: `hosts/tests/claude_code/test_claude_timer_rule_literals.py`. A timer's flag
   set false makes its rule fire, so the PR that disarms a timer deletes its rule.
   `claude-rc-restart` writes no file: a weekly try-restart whose miss only delays adopting an
   auto-update would page from the install until its first run. `claude-cgroup-metrics` writes
@@ -143,9 +143,9 @@ directory.
 
 ## Traps already paid for
 
-`hosts/tests/test_claude_rc_unit.py` enforces every unit-shape rule here;
-`hosts/tests/test_claude_login_slice_caps.py` and
-`hosts/tests/test_claude_fleet_slice_cap.py` enforce the two slice planes.
+`hosts/tests/claude_code/test_claude_rc_unit.py` enforces every unit-shape rule here;
+`hosts/tests/claude_code/test_claude_login_slice_caps.py` and
+`hosts/tests/claude_code/test_claude_fleet_slice_cap.py` enforce the two slice planes.
 
 - **`--spawn=` must be passed explicitly**, or Claude Code asks on stdin and the host hangs,
   never connected, while the unit reads `active`.
@@ -195,7 +195,7 @@ from `ssh host cmd`, which is no login shell. Keep the comment-only `zprofile` b
 the lines arm never removes a block, and aide-check explains only a declared one.
 That drop-in must not be named `50-homelab.conf`: reconcile restarts a unit whose
 `50-homelab.conf` changes, and restarting a user manager ends that user's sessions.
-ENFORCED: `hosts/tests/test_claude_fleet_slice_cap.py`.
+ENFORCED: `hosts/tests/claude_code/test_claude_fleet_slice_cap.py`.
 
 ## Background sessions come back at boot
 
@@ -222,7 +222,7 @@ sessions waited five hours, until the operator ran `claude agents`.
   later dispatch until it idles out. Under the default kill the unit would take every
   session down when it finished or stopped.
 - **The role enables the unit and never starts it.** Its job is the next boot.
-  ENFORCED: `hosts/tests/test_claude_bg_resume_unit.py`.
+  ENFORCED: `hosts/tests/claude_code/test_claude_bg_resume_unit.py`.
 - **To see what it would do,** run `uv run --no-project --python <host_python_version>
   /usr/local/lib/claude-bg-resume/bg_session_resume.py --claude ~/.local/bin/claude --dry-run`. On a running box it prints 0 sessions. After a boot,
   `journalctl -b -u homelab-claude-bg-resume` shows what it respawned.
@@ -305,23 +305,23 @@ runs `hosts/components/claude-code/templates/claude-guardrail-audit.sh.j2` as ro
   path in `claude_code_guardrail_audit_paths` and `claude_code_guardrail_audit_memory_dirs`
   that exists. Each run loads a missing watch and removes one the lists no longer name. It
   touches no rule under any other key, so the host-hardening watches stay as they are
-  (`hosts/tests/test_claude_guardrail_audit.py::test_a_watch_the_list_dropped_is_removed_and_other_keys_are_kept`).
+  (`hosts/tests/repo_crons/test_claude_guardrail_audit.py::test_a_watch_the_list_dropped_is_removed_and_other_keys_are_kept`).
 - **Why a timer, not a rules file:** `augenrules` stops at the first watch whose directory is
   missing, which would also drop the hardening rules. The agent's memory store exists only
   after the agent's first session in its clone, and the next run then watches it.
 - **Mode:** `claude_code_guardrail_audit_enabled`. The timer ships either way, so false
   reaches a run that removes every watch under both keys and reports up
-  (`hosts/tests/test_claude_guardrail_audit.py::test_disarming_removes_every_watch_under_both_keys`).
+  (`hosts/tests/repo_crons/test_claude_guardrail_audit.py::test_disarming_removes_every_watch_under_both_keys`).
 - **Abort valves:** a run stops at its first failed `auditctl` read and reports down, loading
   nothing. It removes a watch only under its own two keys, and only one the lists no longer
   name.
 - **Evidence:** a `status=` line under `journalctl -t claude-guardrail-audit`, and
   `claude-guardrail-audit.prom`. `ClaudeGuardrailAuditFailed` pages a stopped auditd
-  (`hosts/tests/test_claude_guardrail_audit.py::test_a_stopped_auditd_is_flagged`), kernel
+  (`hosts/tests/repo_crons/test_claude_guardrail_audit.py::test_a_stopped_auditd_is_flagged`), kernel
   auditing switched off
-  (`hosts/tests/test_claude_guardrail_audit.py::test_kernel_auditing_off_is_flagged`), or a
+  (`hosts/tests/repo_crons/test_claude_guardrail_audit.py::test_kernel_auditing_off_is_flagged`), or a
   present path with no watch
-  (`hosts/tests/test_claude_guardrail_audit.py::test_a_watch_that_will_not_load_is_flagged_by_path`).
+  (`hosts/tests/repo_crons/test_claude_guardrail_audit.py::test_a_watch_that_will_not_load_is_flagged_by_path`).
   `ClaudeGuardrailAuditNotReporting` pages a timer that stopped. Each watched write lands in
   `/var/log/audit/audit.log`, which loki-homelab's Alloy ships as `{job="audit"}`
   (`tests/k8s/alloy/test_alloy_ships_audit_log.py::test_the_source_tails_auditds_log_into_this_block`). Its SYSCALL line carries the key and the
@@ -386,7 +386,7 @@ runs `hosts/components/claude-code/files/claude_dotfiles_mirror.py` as root on b
 - **The signer:** `hosts/components/claude-code/templates/claude-dotfiles-allowed-signers.j2` holds one key, the operator's
   "Daniel Box Key", as a literal the inventory cannot override. The operator chose that key on
   2026-11-13. The template and the script are on the lander's approval list
-  (`hosts/tests/test_claude_lander.py::test_the_approval_list_land_sh_reads_is_the_floor`).
+  (`hosts/tests/claude_code/test_claude_lander.py::test_the_approval_list_land_sh_reads_is_the_floor`).
 - **Mode:** `claude_code_dotfiles_mirror_enabled`. False drops the timer, its units, the config
   and the signers file from the next package version, and keeps the mirror and the record.
 - **Abort valves:** a refused tag leaves the last record in place, so a bad or rolled-back tag
@@ -496,7 +496,7 @@ Applying it: a new version of daniel-box's host package, which its updater insta
 - **Scope:** `rsync --delete` of each `claude_code_artifacts_peer_sources` entry's `path` into
   `claude_code_artifacts_peer_dir/<name>` on daniel-box, then a copy of
   `claude_code_artifacts_stars_file` to the peer's `stars_path`
-  (`hosts/tests/test_artifacts_sync_alerts_once_per_outage.py::test_the_star_list_is_pushed_to_the_peer_after_the_pull`).
+  (`hosts/tests/repo_crons/test_artifacts_sync_alerts_once_per_outage.py::test_the_star_list_is_pushed_to_the_peer_after_the_pull`).
   It deletes on daniel-box only what the peer has already deleted.
 - **Mode:** always on where it is installed, which is `claude_code_artifacts_node` alone
   (`hosts/lib/tests/test_claude_artifacts_node_timers.py::test_only_the_artifacts_node_ships_them`);
@@ -507,7 +507,7 @@ Applying it: a new version of daniel-box's host package, which its updater insta
   (`hosts/components/claude-code/templates/sync-artifacts.sh.j2`).
 - **Evidence:** `journalctl -t sync-artifacts`, whose `status=down` line starts at
   `claude_code_artifacts_sync_alert_after_failures` consecutive failures
-  (`hosts/tests/test_artifacts_sync_alerts_once_per_outage.py::test_the_verdict_goes_down_at_the_threshold_and_stays_down_past_it`), and
+  (`hosts/tests/repo_crons/test_artifacts_sync_alerts_once_per_outage.py::test_the_verdict_goes_down_at_the_threshold_and_stays_down_past_it`), and
   `sync-artifacts.prom`, which carries the same verdict for the `ArtifactsSyncFailed` and
   `ArtifactsSyncNotReporting` rules.
 
@@ -543,15 +543,15 @@ Applying it: a new version of daniel-box's host package, which its updater insta
   its inode or mtime changed during the request
   (`hosts/components/claude-code/tests/test_claude_triage_run.py::test_a_verdict_an_earlier_request_left_is_not_read_as_this_ones`).
   The broker's wait runs inside the run's wall clock, which adds the broker's pinned timeout
-  (`hosts/tests/test_claude_triage.py::test_the_run_outlasts_the_session_and_the_restart_it_waits_for`).
+  (`hosts/tests/claude_code/test_claude_triage.py::test_the_run_outlasts_the_session_and_the_restart_it_waits_for`).
   A run that asked for a restart keeps its state, so the page's closed list of states is
   unchanged; the broker posts each restart to Discord itself. A fix landed through
   `homelab-claude-land@` is a later slice, under the operator's 2026-10-15 rulings.
 - **Identity:** the controller, `claude-triage-ctl`, runs the poller and the runner and alone may
-  start the units (`hosts/tests/test_claude_triage.py::test_the_poller_runs_as_the_controller`).
+  start the units (`hosts/tests/claude_code/test_claude_triage.py::test_the_poller_runs_as_the_controller`).
   The session user, `claude-triage`, holds no GitHub token and no start right,
   and reads the clone and its toolchain read-only
-  (`hosts/tests/test_claude_triage.py::test_the_session_shares_only_read_access_with_the_controller`).
+  (`hosts/tests/claude_code/test_claude_triage.py::test_the_session_shares_only_read_access_with_the_controller`).
   Neither is `claude` (dotfiles#967's I1).
   The session reaches the network only through the T2 egress proxy,
   `hosts/components/t2-egress/`, whose nftables fence refuses every other connection its uid
@@ -565,14 +565,14 @@ Applying it: a new version of daniel-box's host package, which its updater insta
   The overlay's `env` sends the session's telemetry there with `session.kind=triage` and no
   prompt or tool content. Prometheus keeps only the `claude_code_*` names from the collector,
   so a session cannot forge a series a routed alert reads
-  (`hosts/tests/test_claude_triage_alert_inputs.py::test_no_routed_alert_reads_a_series_a_session_can_send_is_clean`).
+  (`hosts/tests/claude_code/test_claude_triage_alert_inputs.py::test_no_routed_alert_reads_a_series_a_session_can_send_is_clean`).
 - **Mode:** `hosts/components/claude-code/defaults/main.yml:claude_code_triage_enabled`, false
   by default; false stops the poller, then removes
   the rule, the units, the code and the config, and keeps the records.
   `claude_code_triage_poll_mode` is `off`, `shadow` or `armed`, pinned at `shadow` in
   `hosts/components/claude-code/templates/claude-triage-pins.j2`, so arming the trigger needs
   the operator's approval
-  (`hosts/tests/test_claude_triage.py::test_the_template_pins_equal_the_defaults`).
+  (`hosts/tests/claude_code/test_claude_triage.py::test_the_template_pins_equal_the_defaults`).
 - **Abort valves:** `$10`, 60 turns and a 30-minute wall clock per run, and six runs a UTC day,
   all pinned in `hosts/components/claude-code/templates/claude-triage-pins.j2`, plus a lock that holds runs to one at a time. The runner
   enforces the daily cap, because polkit lets the controller start a run without the poller
@@ -618,31 +618,31 @@ Triage slice 3 (#9387). `homelab-claude-restart@<name>.service` runs
   (`hosts/components/claude-code/tests/test_claude_restart.py::test_an_empty_allowlist_refuses_every_name_and_posts_nothing`).
   Each entry is a one-replica rolling Deployment that a failed restart leaves serving, alone
   in its role and outside the alert plane
-  (`hosts/tests/test_claude_restart_allowlist.py::test_every_listed_workload_is_clean`,
-  `hosts/tests/test_claude_restart_allowlist.py::test_a_deployment_a_restart_could_take_down_is_flagged`).
+  (`hosts/tests/claude_code/test_claude_restart_allowlist.py::test_every_listed_workload_is_clean`,
+  `hosts/tests/claude_code/test_claude_restart_allowlist.py::test_a_deployment_a_restart_could_take_down_is_flagged`).
   The poller routes every fall of a listed service nowhere, and every fall labelled
   `unmapped` while a service is listed, so a restart opens no triage episode
   (`hosts/components/claude-code/tests/test_claude_triage_poll_restartable.py::test_a_fall_of_a_restartable_service_opens_nothing_whatever_the_table_says`).
   A poll that cannot read the listed services fails and pages rather than route them
   (`hosts/components/claude-code/tests/test_claude_triage_poll_restartable.py::test_a_poll_that_cannot_read_the_restartable_services_fails`),
   and a `poll_routes` key that names a listed service fails
-  `hosts/tests/test_claude_restart_allowlist.py::test_a_route_naming_a_listed_service_is_flagged`.
+  `hosts/tests/claude_code/test_claude_restart_allowlist.py::test_a_route_naming_a_listed_service_is_flagged`.
 - **Identity:** root, because only root reads the k3s admin kubeconfig. Besides root, only
   the triage controller, `claude-triage-ctl`, may start the unit, and it may only start it:
   `hosts/components/claude-code/templates/50-claude-restart.rules.j2` admits no other user and
   no other verb, by the operator's 2026-11-20 ruling
-  (`hosts/tests/test_claude_restart_broker.py::test_only_the_triage_controller_may_start_the_broker_and_only_start_it`).
+  (`hosts/tests/claude_code/test_claude_restart_broker.py::test_only_the_triage_controller_may_start_the_broker_and_only_start_it`).
   Neither `claude` nor the triage session user can: a triage run asks through its result, and
   the runner starts the unit. The rule admits an instance only in the
   script's name shape
-  (`hosts/tests/test_claude_restart_broker.py::test_the_rule_admits_only_the_broker_in_the_scripts_name_shape`).
+  (`hosts/tests/claude_code/test_claude_restart_broker.py::test_the_rule_admits_only_the_broker_in_the_scripts_name_shape`).
   The unit passes the script its instance and nothing else
-  (`hosts/tests/test_claude_restart_broker.py::test_the_unit_passes_only_its_instance_to_the_root_script`).
+  (`hosts/tests/claude_code/test_claude_restart_broker.py::test_the_unit_passes_only_its_instance_to_the_root_script`).
 - **Mode:** `hosts/components/claude-code/defaults/main.yml:claude_code_restart_enabled`, true
   only in daniel-box's host_vars. False drops the unit, the script and the config from the next
   package version, and keeps `/var/lib/claude-restart`. It also empties the restart names
   the triage config and prompt carry, so no run asks for a restart
-  (`hosts/tests/test_claude_triage.py::test_a_switched_off_broker_leaves_a_run_no_name_to_ask_for`). To stop the broker without a landing,
+  (`hosts/tests/claude_code/test_claude_triage.py::test_a_switched_off_broker_leaves_a_run_no_name_to_ask_for`). To stop the broker without a landing,
   run `sudo touch /etc/claude-restart/hold`; removing the file releases it
   (`hosts/components/claude-code/tests/test_claude_restart.py::test_the_hold_file_refuses_a_listed_workload`).
 - **Abort valves:** one restart per workload per 24 hours
@@ -650,7 +650,7 @@ Triage slice 3 (#9387). `homelab-claude-restart@<name>.service` runs
   and three per UTC day
   (`hosts/components/claude-code/tests/test_claude_restart.py::test_the_daily_cap_counts_every_workloads_restarts`),
   both pins that no inventory value moves
-  (`hosts/tests/test_claude_restart_broker.py::test_an_inventory_value_cannot_list_a_workload_or_raise_a_cap`).
+  (`hosts/tests/claude_code/test_claude_restart_broker.py::test_an_inventory_value_cannot_list_a_workload_or_raise_a_cap`).
   The script refuses while the weekly reboot's mute is open, because a failed restart would
   page nobody
   (`hosts/components/claude-code/tests/test_claude_restart.py::test_the_weekly_reboot_mute_refuses_because_a_failure_would_page_nobody`),
@@ -673,18 +673,18 @@ Applying it: a new version of daniel-box's host package, which its updater insta
 ## Autonomous-role contract (`claude-clone-sync`, `claude-dotfiles-sync`)
 
 - **Scope:** per agent: a `--ff-only` pull of its clone
-  (`hosts/tests/test_agent_clone_fast_forward.py::test_a_clean_master_advances_to_origin`),
+  (`hosts/tests/claude_code/test_agent_clone_fast_forward.py::test_a_clean_master_advances_to_origin`),
   then the venv if its lock moved
-  (`hosts/tests/test_agent_clone_fast_forward.py::test_a_moved_lock_resyncs_the_venv_and_installs_no_collections`);
+  (`hosts/tests/claude_code/test_agent_clone_fast_forward.py::test_a_moved_lock_resyncs_the_venv_and_installs_no_collections`);
   and a pull and `chezmoi apply` of the operator's dotfiles
-  (`hosts/tests/test_agent_dotfiles.py::test_the_agent_variant_is_applied_in_two_passes_that_spare_the_role_owned_dirs`).
+  (`hosts/tests/claude_code/test_agent_dotfiles.py::test_the_agent_variant_is_applied_in_two_passes_that_spare_the_role_owned_dirs`).
 - **Mode:** `claude_code_agent_user_enabled` gates both, and `claude_code_agent_dotfiles` gates
   the dotfiles sync as well; false drops the `homelab-claude-{clone,dotfiles}-sync` units from
   the next package version.
 - **Abort valve:** the clone sync skips unless the clone is a clean `master`
-  (`hosts/tests/test_agent_clone_fast_forward.py::test_the_agents_work_in_progress_is_left_alone`);
+  (`hosts/tests/claude_code/test_agent_clone_fast_forward.py::test_the_agents_work_in_progress_is_left_alone`);
   the dotfiles sync refuses a source without the agent variant
-  (`hosts/tests/test_agent_dotfiles.py::test_a_source_without_the_agent_variant_is_refused`).
+  (`hosts/tests/claude_code/test_agent_dotfiles.py::test_a_source_without_the_agent_variant_is_refused`).
 - **Evidence:** `journalctl -u homelab-claude-{clone,dotfiles}-sync`; a failure pages Discord, and
   `claude-{clone,dotfiles}-sync.prom` pages a timer that stopped
   (`hosts/lib/tests/test_claude_code_component.py::test_each_packaged_unit_names_its_packaged_sibling`).

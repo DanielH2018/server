@@ -103,8 +103,6 @@ tests:
                 sessions. Read the log of the node-exporter pod's `iscsi-sessions` container
                 on daniel-server.
 
-  # The verdict turns red from minute 3 while the file stays fresh. DiskHealthFailed fires at once,
-  # and DiskHealthNotReporting stays quiet.
   - interval: 1m
     input_series:
       - series: 'homelab_check_success{check="disk-health", instance="daniel-box", job="node", origin="daniel-box"}'
@@ -139,8 +137,6 @@ tests:
         alertname: DiskHealthNotReporting
         exp_alerts: []
 
-  # The file stopped being refreshed: node_exporter keeps serving the timestamp written at 0.
-  # The first arm fires once the timestamp is more than 1500s old, between minutes 25 and 26.
   - interval: 1m
     input_series:
       - series: 'homelab_check_last_run_timestamp_seconds{check="disk-health", instance="daniel-box", job="node", origin="daniel-box"}'
@@ -259,8 +255,6 @@ tests:
         alertname: EtcdSnapshotOffboxFailed
         exp_alerts: []
 
-  # Every check turns red from minute 3 while its file stays fresh. Each Failed
-  # rule fires at once and no NotReporting rule does.
   - interval: 1m
     input_series:
       - series: 'homelab_check_success{check="longhorn-backup-health", instance="daniel-box", job="node", origin="daniel-box"}'
@@ -439,9 +433,7 @@ tests:
         alertname: EtcdSnapshotOffboxNotReporting
         exp_alerts: []
 
-  # A short gap: one, then two failed scrapes mark the series stale between fresh timestamps,
-  # as a node-exporter roll does. A bare absent() would fire at each stale minute; the
-  # absent_over_time arm still sees the earlier samples and stays quiet.
+  # A bare absent() would fire at each stale minute; the absent_over_time arm stays quiet.
   - interval: 1m
     input_series:
       - series: 'homelab_check_last_run_timestamp_seconds{check="disk-health", instance="daniel-box", job="node", origin="daniel-box"}'
@@ -462,8 +454,6 @@ tests:
         alertname: DiskHealthNotReporting
         exp_alerts: []
 
-  # daniel-box's collector fails from minute 3. TextfileCollectorError fires in shadow for
-  # daniel-box once its 10m hold has passed, and daniel-server's rule stays quiet.
   - interval: 1m
     input_series:
       - series: 'node_textfile_scrape_error{instance="daniel-box", job="node", origin="daniel-box"}'
@@ -525,8 +515,6 @@ tests:
                 misses.
               runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#textfilecollectorerror
 
-  # daniel-pi's reconcile reads 0 from minute 0, so the host holds. HostReconcileFailed is
-  # pending at 14 minutes and fires for daniel-pi alone at 16, past its 15-minute hold.
   - interval: 1m
     input_series:
       - series: 'homelab_host_reconcile_ok{instance="daniel-pi", job="node-pi", origin="daniel-pi"}'
@@ -590,8 +578,6 @@ tests:
                 homelab-docker-engine`, and docs/host-packages.md, "Host-plane pages".
               runbook_url: https://docs.local.daniel-hunter.com/host-packages/
 
-  # The issue's two cases on a series that starts at 1, as a fresh textfile does: 1 for 6h is
-  # quiet, because no sample precedes the 26h window, and 1 for 26h fires.
   - interval: 5m
     input_series:
       - series: 'homelab_docker_engine_pending{host="daniel-pi", instance="daniel-pi", job="node-pi", origin="daniel-pi"}'
@@ -619,8 +605,6 @@ tests:
                 homelab-docker-engine`, and docs/host-packages.md, "Host-plane pages".
               runbook_url: https://docs.local.daniel-hunter.com/host-packages/
 
-  # The run applied the pins: the series falls back to 0 after 25h of 1, and the rule stays
-  # quiet.
   - interval: 5m
     input_series:
       - series: 'homelab_docker_engine_pending{host="daniel-pi", instance="daniel-pi", job="node-pi", origin="daniel-pi"}'
@@ -630,8 +614,6 @@ tests:
         alertname: DockerEnginePinUnapplied
         exp_alerts: []
 
-  # A dead exporter keeps the rule quiet over a 27h-old 1, leaving the page to
-  # ScrapeTargetDown.
   - interval: 5m
     input_series:
       - series: 'homelab_docker_engine_pending{host="daniel-pi", instance="daniel-pi", job="node-pi", origin="daniel-pi"}'
@@ -643,8 +625,6 @@ tests:
         alertname: DockerEnginePinUnapplied
         exp_alerts: []
 
-  # daniel-pi reconciles, and daniel-box holds. daniel-box's rule fires with its own `service`,
-  # and daniel-pi's stays quiet.
   - interval: 1m
     input_series:
       - series: 'homelab_host_reconcile_ok{instance="daniel-pi", job="node-pi", origin="daniel-pi"}'
@@ -670,8 +650,6 @@ tests:
                 homelab_host_reconcile_ok has read 0 for 15 minutes, so daniel-box installs no newer
                 homelab package.
               runbook_url: https://docs.local.daniel-hunter.com/host-packages/
-  # daniel-box's last success stays at 0 while its exporter is up. HostUpdateStale is quiet at
-  # 59 minutes (3540s) and fires at 61 (3660s), past the 3600s limit.
   - interval: 1m
     input_series:
       - series: 'homelab_host_update_success_timestamp_seconds{instance="daniel-box", job="node", origin="daniel-box"}'
@@ -712,8 +690,6 @@ tests:
         alertname: HostUpdateStale
         exp_alerts: []
 
-  # The exporter is up and serves no success timestamp. The absent arm fires with the equality
-  # matchers' `job` and `origin` alone.
   - interval: 1m
     input_series:
       - series: 'up{instance="daniel-box", job="node", origin="daniel-box"}'
@@ -736,8 +712,6 @@ tests:
                 stale.
               runbook_url: https://docs.local.daniel-hunter.com/host-packages/
 
-  # The exporter is down, so every series of the target is stale and the success timestamp
-  # reads as absent. `up` at 0 keeps the absent arm quiet: a failed scrape is not a stale host.
   - interval: 1m
     input_series:
       - series: 'up{instance="daniel-box", job="node", origin="daniel-box"}'
@@ -778,8 +752,6 @@ tests:
                 is up and serves no success timestamp. The runbook lists what leaves it stale.
               runbook_url: https://docs.local.daniel-hunter.com/host-packages/
 
-  # A success timestamp that follows the clock keeps daniel-pi's rule quiet. This is the
-  # control for the group above.
   - interval: 1m
     input_series:
       - series: 'homelab_host_update_success_timestamp_seconds{instance="daniel-pi", job="node-pi", origin="daniel-pi"}'
@@ -813,8 +785,6 @@ tests:
                 is up and serves no success timestamp. The runbook lists what leaves it stale.
               runbook_url: https://docs.local.daniel-hunter.com/host-packages/
 
-  # node-pi fails its scrape (`up` at 0, a 30s-timeout miss on the Zero 2 W), so the success
-  # timestamp reads as absent. The rule stays quiet: a failed scrape is not a stale host.
   - interval: 1m
     input_series:
       - series: 'up{instance="daniel-pi", job="node-pi", origin="daniel-pi"}'
@@ -1094,8 +1064,6 @@ tests:
                 textfile collector, so nothing is watching the node's iSCSI sessions. Read the
                 log of the node-exporter pod's `iscsi-sessions` container on daniel-box.
 
-  # The same frozen file behind a dead exporter: the `unless` clause leaves it to the bridge's
-  # `targets` check. The group above is its control.
   - interval: 1m
     input_series:
       - series: 'homelab_check_last_run_timestamp_seconds{check="iscsi-sessions", instance="daniel-box", job="node", origin="daniel-box"}'
@@ -1110,8 +1078,6 @@ tests:
       - eval_time: 6m
         alertname: IscsiSessionsNotReporting
         exp_alerts: []
-  # The two daniel-box crons. A failing verdict fires both Failed
-  # rules and leaves both NotReporting rules quiet.
   - interval: 1m
     input_series:
       - series: 'homelab_check_success{check="sync-artifacts", instance="daniel-box", job="node", origin="daniel-box"}'
@@ -1163,8 +1129,6 @@ tests:
       - eval_time: 20m
         alertname: OtlpDoorNotReporting
         exp_alerts: []
-  # The two NotReporting rules differ by their own deadline. The files were last written at
-  # minute 0, so at 20m they are 1200s old: only the 900s sync rule fires. At 40m both do.
   - interval: 1m
     input_series:
       - series: 'homelab_check_success{check="sync-artifacts", instance="daniel-box", job="node", origin="daniel-box"}'
@@ -1215,8 +1179,6 @@ tests:
                 daniel-box, so nothing is watching the OTLP door. Read the `Claude Code
                 telemetry health` cron and `journalctl -t claude-otel-health`, then
                 /var/lib/node-exporter-textfile/claude-otel-health.prom on the host.
-  # Zero-series case: no sample has ever arrived, so both rules fire through absent_over_time,
-  # carrying only the equality matchers' `check` and `origin`.
   - interval: 1m
     input_series:
       - series: 'up{instance="daniel-box", job="node", origin="daniel-box"}'
@@ -1282,8 +1244,6 @@ tests:
                 every path is reviewed, run `sudo /usr/lib/homelab/aide-check --accept`, then
                 `sudo systemctl start homelab-aide-check.service`.
               runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#aidecheckfailed
-  # No AIDE file on any host, and every exporter is up. The absent_over_time arm fires for the
-  # two k3s nodes and not for daniel-pi, which carries no AIDE rule.
   - interval: 1m
     input_series:
       - series: 'up{instance="daniel-box", job="node", origin="daniel-box"}'
@@ -1401,8 +1361,6 @@ tests:
                 Read /var/lib/node-exporter-textfile/new-producer.prom on the host, then the
                 journal of the cron or timer that writes it.
 
-  # The same overdue check with its producer disarmed on purpose: the marker keeps the rule quiet,
-  # because the producer's own pair goes quiet on it too and leaves no inhibit source.
   - interval: 1m
     input_series:
       - series: 'homelab_check_last_run_timestamp_seconds{check="new-producer", instance="daniel-box", job="node", origin="daniel-box"}'
@@ -1472,8 +1430,6 @@ tests:
                 `docker compose up --wait` failed. Read `journalctl -u homelab-compose` and
                 `docker ps -a` on daniel-pi.
 
-  # The Pi booted at time 0, and its compose result predates the boot, so the boot run never
-  # wrote. ComposeUpStale waits out the 1690s grace (quiet at 20m) and fires at 30m.
   - interval: 1m
     input_series:
       - series: 'node_boot_time_seconds{instance="daniel-pi", job="node-pi", origin="daniel-pi"}'
@@ -1503,8 +1459,6 @@ tests:
                 homelab-compose` on daniel-pi.
               runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#composeupstale
 
-  # The same boot, but the boot run writes 120s after it. A week-old result is quiet as long
-  # as it follows the last boot.
   - interval: 1m
     input_series:
       - series: 'node_boot_time_seconds{instance="daniel-pi", job="node-pi", origin="daniel-pi"}'
@@ -1541,8 +1495,6 @@ tests:
                 homelab-compose` on daniel-pi.
               runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#composeupstale
 
-  # A stale result fires while the exporter answers, and the rule goes quiet once the scrape
-  # fails and every series goes stale, leaving the page to ScrapeTargetDown.
   - interval: 1m
     input_series:
       - series: 'node_boot_time_seconds{instance="daniel-pi", job="node-pi", origin="daniel-pi"}'
@@ -2088,8 +2040,6 @@ tests:
                 `Weekly firmware update` cron in root's crontab and `journalctl -t fwupd-auto`,
                 then /var/lib/node-exporter-textfile/firmware-update.prom on the host.
 
-  # Every host-maintenance job on daniel-box writes a fresh red verdict, and each Failed rule
-  # fires.
   - interval: 1m
     input_series:
       - series: 'homelab_check_success{check="apt-autoremove", instance="daniel-box", job="node", origin="daniel-box"}'
@@ -2246,8 +2196,6 @@ tests:
                 claude-guardrail-audit`.
               runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#claudeguardrailauditnotreporting
 
-  # The guardrail acknowledgement pairs, on the audit pairs' timeline: Failed fires on the 0
-  # verdict, NotReporting holds at 600s and fires at 1200s past the 900s deadline.
   - interval: 1m
     input_series:
       - series: 'homelab_check_success{check="claude-guardrail-ack", instance="daniel-box", job="node", origin="daniel-box"}'
@@ -2431,8 +2379,6 @@ tests:
                 A summary that names no unit means the check named none, so run `systemctl --failed`
                 on daniel-pi.
               runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#systemdunitsfailed
-  # SystemdUnitsNotReporting's stale arm: a timestamp frozen at 0 crosses the 900s deadline
-  # after the 15th minute, while the verdict stays green.
   - interval: 1m
     input_series:
       - series: 'up{instance="daniel-box", job="node", origin="daniel-box"}'
@@ -2465,8 +2411,6 @@ tests:
                 nothing is counting its failed units. Read `systemctl status
                 homelab-systemd-units.timer` and `journalctl -t systemd-units` on daniel-box,
                 then /var/lib/node-exporter-textfile/systemd-units.prom.
-  # UcfDistPending: the script holds the day's grace, so daniel-box's red verdict pages at once
-  # and daniel-server's green one stays quiet.
   - interval: 1m
     input_series:
       - series: 'up{instance="daniel-box", job="node", origin="daniel-box"}'
@@ -2497,8 +2441,6 @@ tests:
                 beside it. Run `journalctl -t ucf-dist` on daniel-box for the paths, then merge
                 or replace each file and delete its dist copy; the runbook has the steps.
               runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#ucfdistpending
-  # UcfDistNotReporting's stale arm: a timestamp frozen at 0 crosses the 10800s deadline after
-  # the 180th minute.
   - interval: 10m
     input_series:
       - series: 'up{instance="daniel-box", job="node", origin="daniel-box"}'
@@ -2561,8 +2503,6 @@ tests:
                 homelab-systemd-units.timer` and `journalctl -t systemd-units` on daniel-box,
                 then /var/lib/node-exporter-textfile/systemd-units.prom.
 
-  # The dotfiles root mirror pairs: Failed fires on the 0 verdict, NotReporting holds at 1800s
-  # and fires at 2400s past the 2100s deadline.
   - interval: 1m
     input_series:
       - series: 'homelab_check_success{check="claude-dotfiles-mirror", instance="daniel-box", job="node", origin="daniel-box"}'
@@ -2648,8 +2588,6 @@ tests:
                 claude-dotfiles-mirror`.
               runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#claudedotfilesmirrornotreporting
 
-  # The weekly summary pair: Failed fires on the 0 verdict, NotReporting holds at 169h, the
-  # 608400s deadline, and fires an hour later. The 1h interval keeps every eval on a sample.
   - interval: 1h
     input_series:
       - series: 'homelab_check_success{check="claude-weekly-summary", instance="daniel-box", job="node", origin="daniel-box"}'
@@ -2737,8 +2675,6 @@ tests:
       - eval_time: 25m
         alertname: KubeletShutdownLockNotReporting
         exp_alerts: []
-  # KubeletShutdownLockNotReporting: the check writes until minute 5 and then stops, so the
-  # verdict is older than 900s from minute 21.
   - interval: 1m
     input_series:
       - series: 'up{instance="daniel-server", job="node", origin="daniel-server"}'
@@ -2768,8 +2704,6 @@ tests:
                 on daniel-server.
               runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#kubeletshutdownlocknotreporting
 
-  # checkout-sync on daniel-server refused (a dirty tree, say) from hour 3. CheckoutSyncFailed
-  # fires for daniel-server alone, and daniel-box's green verdict keeps its copy quiet.
   - interval: 1h
     input_series:
       - series: 'homelab_check_success{check="checkout-sync", instance="daniel-server", job="node", origin="daniel-server"}'
@@ -2793,8 +2727,6 @@ tests:
                 `journalctl -t homelab-checkout-sync` on daniel-server.
               runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#checkoutsyncfailed
 
-  # daniel-server's timestamp froze at 0 while daniel-box's stays fresh. The stale arm fires for
-  # daniel-server once the timestamp is more than 7200s old, after hour 2.
   - interval: 1h
     input_series:
       - series: 'homelab_check_last_run_timestamp_seconds{check="checkout-sync", instance="daniel-server", job="node", origin="daniel-server"}'
@@ -2820,8 +2752,6 @@ tests:
                 on daniel-server.
               runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#checkoutsyncnotreporting
 
-  # No checkout-sync series at all: the absent_over_time arm fires for every host whose package
-  # lists the component.
   - interval: 1h
     input_series: []
     alert_rule_test:

@@ -19,6 +19,6 @@
   before you change defaults/main.yml: the declaration is reconciled only when the change on
   GitHub was deliberate.
 
-ENFORCED: hosts/tests/test_github_ruleset_drift.py and
-hosts/tests/test_github_interaction_limit.py (each script against stubs), and
+ENFORCED: hosts/tests/repo_crons/test_github_ruleset_drift.py and
+hosts/tests/repo_crons/test_github_interaction_limit.py (each script against stubs), and
 hosts/lib/tests/test_h737_box_components.py (the units and the legacy entries).

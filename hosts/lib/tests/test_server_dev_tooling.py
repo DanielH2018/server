@@ -1,7 +1,7 @@
 """daniel-server's dev tooling moves into its package, and `/usr/bin/uv` reaches both cluster hosts (H7.61).
 
 The `uv` and `vale` components put the homelab-tools binaries on PATH. The worktree holder scan's
-half of the row is `hosts/tests/test_worktree_holders_install.py`.
+half of the row is `hosts/tests/repo_crons/test_worktree_holders_install.py`.
 
 Run: uv run pytest hosts/lib/tests/test_server_dev_tooling.py
 """

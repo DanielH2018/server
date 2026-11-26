@@ -2,31 +2,14 @@
 {% from 'container-resources.yml.j2' import container_resources with context %}
 {% from 'security-context.yml.j2' import hardened_security_context with context %}
 {% from 'workload-shell.yml.j2' import spec_shell, pod_shell with context %}
-{#
-  Histogram-bucket trim for the control-plane jobs, invoked at COLUMN 0 (it carries its own
-  8-space indent, matching `relabel_configs:` in the job blocks below).
-
-  The cap here is BYTES, not series: retention.size is `observability_prometheus_retention_size`
-  (7GB) against a 12Gi PVC (deliberately under it — the WAL, the head and compaction share the
-  volume). The dropped `_bucket` families were most of the control-plane series, so keeping every
-  bucket would roughly double the block growth rate and quietly cut retention from 30 days to
-  under three weeks. Nothing would report that; the boards would stop going back as far.
-
-  `_count` and `_sum` SURVIVE, so rates and averages are intact for every family; only
-  quantiles are lost, and nothing here reads them.
-#}
+{# The cap is bytes: keeping dropped `_bucket` families would silently cut retention under 3 weeks.
+   `_count` and `_sum` survive, so rates and averages are intact. #}
 {# DECIDED: etcd_request_duration_seconds_bucket is kept, although it is the largest family in
    the TSDB; etcd write latency is the signal the control-plane scrape exists for. It is also,
    usefully, available from the apiserver's side WITHOUT `--etcd-expose-metrics`, so this one
    family delivers a good part of what the gated etcd job would add. #}
-{#
-  An EXPLICIT list, not `_bucket` minus an exception. Prometheus matches with RE2, which has no
-  lookaround at all — a `(?!etcd_...)` negative-lookahead spelling does not error, it silently
-  stops dropping anything. Naming the families also makes a new high-cardinality family a
-  deliberate decision rather than something this rule swallows by accident.
-#}
-{# NOT `-%}` on the opening tag: it would strip the newline AND the 8-space indent off the first
-   body line, landing `metric_relabel_configs:` at column 0 and breaking the YAML. #}
+{# Explicit list: RE2 has no lookaround, so a negative-lookahead spelling silently drops nothing. #}
+{# NOT `-%}` on the opening tag: it strips the 8-space indent and breaks the YAML. #}
 {% macro control_plane_bucket_drop() %}
         metric_relabel_configs:
           - source_labels: [__name__]
@@ -51,9 +34,7 @@ data:
       alertmanagers:
         - static_configs:
             - targets: ['alertmanager:9093']
-    # The prometheus-rules ConfigMap (prometheus-rules.yaml.j2), mounted as a directory below.
-    # --config.auto-reload hashes every file this glob matches, so a new or edited rule file
-    # reloads without rolling the pod.
+    # --config.auto-reload hashes every file this glob matches, so rule edits reload without a roll.
     rule_files:
       - /etc/prometheus-rules/*.yaml
     scrape_configs:
@@ -63,12 +44,8 @@ data:
       - job_name: prometheus
         static_configs:
           - targets: ['localhost:9090']
-      # The collector re-exposes Claude Code's OTLP metrics here. This is the only source of
-      # session/token/cost data — nothing else produces it.
-      #
-      # PER-POD discovery, not the Service: each collector pod exports only the metrics ITS node
-      # received, so a Service-target scrape would round-robin between partial views and corrupt
-      # every counter. Dashboards and monitor-bridge pin the job names.
+      # PER-POD discovery, not the Service: each collector pod exports only its own node's metrics,
+      # so a Service scrape would round-robin partial views and corrupt counters.
       - job_name: otel-collector
         kubernetes_sd_configs:
           - role: pod
@@ -90,9 +67,8 @@ data:
           - source_labels: [__name__]
             regex: claude_code_.*
             action: keep
-      # The collector's OWN metrics, on a different port. These carry the send_failed_*
-      # counters that are the only evidence a batch was dropped en route to Loki. Without
-      # this scrape a silent export failure is indistinguishable from "Claude Code was idle".
+      # Carries the send_failed_* counters, the only evidence a batch was dropped on the way to
+      # Loki.
       - job_name: otel-collector-internal
         kubernetes_sd_configs:
           - role: pod
@@ -107,49 +83,23 @@ data:
             action: keep
           - source_labels: [__meta_kubernetes_pod_node_name]
             target_label: node
-      # Workload readiness for every Pod/Deployment in the cluster; see the header of
-      # kube-state-metrics.yaml.j2.
-      # THE FOUR CONTROL-PLANE JOBS SCRAPE AT 1m, NOT THE 15s GLOBAL, and this is the note the
-      # other three point back at. kube-state-metrics, kubernetes-cadvisor, kubernetes-kubelet
-      # and kubernetes-apiserver are the largest producers (about 69% of series), and retention
-      # here is bound by BYTES, not time: `retention.size` is
-      # `observability_prometheus_retention_size` (defaults/main.yml) against a configured 30d, so
-      # the window is whatever that many bytes buys.
-      #
-      # Safe because nothing reads these at sub-minute resolution. The rule groups in files/rules/
-      # evaluate every minute, Prometheus's default, since this file sets no evaluation_interval.
-      # monitor-bridge reads Prometheus every 300s. Grafana provisions no alert, files/dashboards/
-      # holds no `irate()`, and the only boards touching these families use fixed [5m] windows or
-      # the daniel-server datasource, which declares timeInterval 1m (grafana.yaml.j2). A restart
-      # count is a COUNTER, so a 1m scrape loses no restart event, only its timing to within 60s.
-      #
-      # A RULE THAT READS ONE OF THESE FOUR JOBS' FAMILIES MUST KEEP THAT TRUE: no `irate()` over
-      # them, and every range window at least four scrape intervals (4m), so a missed scrape
-      # still leaves the window enough samples.
+      # Four jobs scrape at 1m, not the 15s global (kube-state-metrics, cadvisor, kubelet,
+      # apiserver).
+      # A rule over their families must use no irate() and range windows of at least 4m.
       - job_name: kube-state-metrics
         scrape_interval: 1m
         static_configs:
           - targets: ['kube-state-metrics:8080']
-        # kube-state-metrics collects replicasets for kube_replicaset_owner alone, the pod to
-        # Deployment hop of files/rules/workload-service.yaml. Each of the other ten families
-        # would add one series per ReplicaSet, old revisions included, for no reader. The list
-        # is explicit because RE2 has no lookaround (see control_plane_bucket_drop above), so
-        # a family a kube-state-metrics upgrade adds is kept until it is named here.
+        # The list is explicit because RE2 has no lookaround: a family an upgrade adds is kept until
+        # named.
         metric_relabel_configs:
           - source_labels: [__name__]
             action: drop
             regex: kube_replicaset_(annotations|created|labels|metadata_generation|spec_replicas|status_fully_labeled_replicas|status_observed_generation|status_ready_replicas|status_replicas|status_terminating_replicas)
-          # Services are collected for kube_service_status_load_balancer_ingress alone, which
-          # files/rules/k8s-services.yaml reads. The other seven v2.20 families have no reader.
           - source_labels: [__name__]
             action: drop
             regex: kube_service_(annotations|created|deletion_timestamp|info|labels|spec_external_ip|spec_type)
-          # Jobs are collected for the gate-Job durations files/rules/gate-jobs.yaml records: the
-          # start and completion times, the succeeded and failed counts, and status_active for
-          # one still running. kube_job_failed is kept too: its
-          # `condition="true"` series is the Failed condition K3sUpgradeJobFailed in
-          # files/rules/k3s-upgrade.yaml reads, and a family dropped here would leave that rule
-          # inert. The other eleven v2.20 families have no reader.
+          # kube_job_failed is kept: its condition="true" series is what K3sUpgradeJobFailed reads.
           - source_labels: [__name__]
             action: drop
             regex: kube_job_(annotations|complete|created|info|labels|owner|spec_active_deadline_seconds|spec_completions|spec_parallelism|status_ready|status_suspended)
@@ -159,31 +109,15 @@ data:
           - source_labels: [__name__]
             action: drop
             regex: kube_cronjob_(annotations|created|info|labels|metadata_resource_version|next_schedule_time|spec_failed_job_history_limit|spec_starting_deadline_seconds|spec_successful_job_history_limit|spec_suspend|status_active|status_last_schedule_time)
-          # ConfigMaps are collected for kube_configmap_annotations alone, and only the series
-          # that carry the homelab/check-verdict annotation: the allowlist emits one empty
-          # series per ConfigMap in the cluster otherwise. The other four families have no
-          # reader.
+          # Keep only series with the check-verdict annotation; else one empty series per ConfigMap.
           - source_labels: [__name__]
             action: drop
             regex: kube_configmap_(created|info|labels|metadata_resource_version)
           - source_labels: [__name__, annotation_homelab_check_verdict]
             action: drop
             regex: kube_configmap_annotations;
-      # The three Flux controllers' own metrics, on the `http-prom` container port (8080). No
-      # Service exposes that port, so this job discovers the pods, and scrape_jobs.py leaves a
-      # job needing pod discovery hand-written. The flux role's flux-allow-prometheus policy
-      # admits this Prometheus to 8080 and nothing else does. `flux-system` is a literal because
-      # flux_namespace is a flux role default, which this role cannot read.
-      #
-      # Every `_bucket` series is dropped, whatever the family. No rule or board here reads a
-      # Flux histogram, and controller-runtime's workqueue, REST-client and reconcile-time
-      # histograms make up most of what the controllers export. `_count` and `_sum` survive,
-      # so rates and averages stay available. gotk_resource_info, the per-object series the
-      # Flux rules read, comes from the kube-state-metrics job above, not from here.
-      #
-      # `app` and `pod` name the target. Not `controller`, `name`, `kind` or `namespace`: the
-      # controllers' own series carry those, and a target label of the same name would rename
-      # theirs to exported_*.
+      # Target labels are `app` and `pod` only: `controller`, `name`, `kind`, `namespace` would
+      # rename the controllers' own series to exported_*.
       - job_name: flux
         scrape_interval: 1m
         kubernetes_sd_configs:
@@ -216,15 +150,8 @@ data:
         scrape_interval: 1m
         static_configs:
           - targets: ['monitor-bridge.{{ k8s_namespace }}.svc:9180']
-      # The plain exporters: a static `<service>.<namespace>.svc:<port>` target with no auth or
-      # relabeling. Each is a `metrics` item on its containers_list entry, which is where the
-      # port is defined; the owning role reads it back with `metrics_port`, so its Service and
-      # this target cannot drift apart. Only pihole-exporter, game-stats and
-      # nut-exporter also pass it to the process; the others record a port their image or
-      # config fixes, as scrape_jobs.py explains. The item's comment there says what the job
-      # feeds. A job needing anything more stays hand-written below, and reads its target's
-      # port from the entry with `entry_port`.
-      # scripts/renderer/template_filters/scrape_jobs.py documents the keys.
+      # Plain exporters: each is a `metrics` item on its containers_list entry, which defines the
+      # port.
 {% for job in services | scrape_jobs(k8s_namespace) %}
       - job_name: {{ job.job }}
 {% if job.interval is defined %}
@@ -242,15 +169,8 @@ data:
         static_configs:
           - targets: ['{{ job.target }}']
 {% endfor %}
-      # In-cluster ClusterIP targets, so no route/bypass/DNS in the path; dashboard queries
-      # and consumers resolve these job names.
-      # Credentials are file-mounted from the prometheus-scrape-credentials Secret — they
-      # must NOT be inlined here (this is a world-readable ConfigMap, not a Secret).
-      #
-      # HA's prometheus integration; the bearer token is the gate (its route carries no
-      # Authelia by design). Feeds hass_* — the home-assistant + ups boards and
-      # monitor-bridge's UPS battery checks (which query hass_* unpinned, so the native
-      # series feeds them with no origin-label caveat).
+      # Credentials come from the prometheus-scrape-credentials Secret; never inline them here, this
+      # ConfigMap is world-readable.
       - job_name: home-assistant
         scrape_interval: 1m
         metrics_path: /api/prometheus
@@ -297,22 +217,13 @@ data:
             target_label: instance
           - target_label: __address__
             replacement: 'blackbox-exporter.{{ k8s_namespace }}.svc:{{ services | entry_port('blackbox-exporter') }}'
-      # The extra probes (docs/archive/monitoring/m6-retire-kuma.md). The Pi's
-      # ping has no target: `up{job="node-pi"}` carries it. Loki's /ready has none
-      # either, because `ScrapeTargetDown` (service loki-homelab) covers it. Each target sets
-      # `service`, so the extra-probes rules take it from this job, and `page_tier` picks the
-      # severity, as in blackbox-ingress. The same relabel rewrite and the same no-`timeout` reasoning apply.
-      # The edge all-clear is a literal critical, and the mosquitto and pihole targets take
-      # `page_tier` from `in_service_tier`, so they page critical while the service is in the
-      # home-critical tier.
+      # No Pi ping or Loki /ready target: `up{job="node-pi"}` and ScrapeTargetDown cover them.
       - job_name: blackbox-extra
         scrape_interval: 1m
         metrics_path: /probe
         static_configs:
-          # The one Pi target in this job, so it alone takes the Pi's 30s budget through the
-          # per-target `__scrape_timeout__` (the pi-scrape-jobs-outlast-the-default-timeout
-          # property). At the 10s default, a loaded Pi's probes stop at blackbox's 9.5s cap with
-          # no HTTP status.
+          # Pi target needs 30s: at the 10s default a loaded Pi's probes stop at blackbox's 9.5s
+          # cap.
           - targets: ['http://{{ hosts['daniel-pi'].server_ip }}:51821']
             labels: {service: wg-easy, module: http_2xx, page_tier: warning, __scrape_timeout__: 30s}
           - targets: ['https://email-rss.{{ domain }}/admin/login']
@@ -348,19 +259,11 @@ data:
             target_label: instance
           - target_label: __address__
             replacement: 'blackbox-exporter.{{ k8s_namespace }}.svc:{{ services | entry_port('blackbox-exporter') }}'
-      # One tcp_connect target per container the Pi publishes a port for, from the
-      # `published_ports` selection, which this job alone reads. A container added
-      # to daniel-pi's compose_services gets a probe with no edit here. The targets sort by
-      # name, so the probe order is independent of the entries' order in the list.
-      # `service` is the container name. A container recreated by a deploy closes its port for a
-      # few seconds, which PiPortDead's `for:` rides out. A container that comes back attached
-      # to no Docker network stays closed until someone recreates it, and that is what this job
-      # exists to catch.
+      # This job catches a container that comes back attached to no Docker network (port stays
+      # closed).
       - job_name: blackbox-pi-ports
         scrape_interval: 1m
-        # A contended Pi can take over the default 10s to accept a connect, which the exporter
-        # would then report as a closed port. The pi-scrape-jobs-outlast-the-default-timeout
-        # property holds every job that targets the Pi to a longer timeout.
+        # A contended Pi can take over 10s to accept a connect, reported as a closed port.
         scrape_timeout: 30s
         metrics_path: /probe
         static_configs:
@@ -377,21 +280,10 @@ data:
             target_label: instance
           - target_label: __address__
             replacement: 'blackbox-exporter.{{ k8s_namespace }}.svc:{{ services | entry_port('blackbox-exporter') }}'
-      # GPU utilization on each node, through gpu-exporter (k8s/roles/gpu-exporter). The
-      # dri-device-plugin advertises the render node as `devic.es/dri` and jellyfin and tdarr
-      # both request it. This job turns the resulting load into a series, so a slow transcode
-      # and a contended one are distinguishable.
-      #
-      # Per-pod discovery, NOT a Service, and that is the point: this is a DaemonSet in front of
-      # two DIFFERENT GPUs (daniel-box AMD/amdgpu, daniel-server Intel/i915), so a ClusterIP
-      # would round-robin the scrape and produce one series flipping between two cards.
-      # `origin` carries the node name, matching the `node` job above.
-      #
-      # THE UTILIZATION SERIES DIFFERS BY DRIVER, because the drivers do. amdgpu gives a direct
-      # `homelab_gpu_busy_percent` gauge; i915 exposes no busy percentage without the perf PMU,
-      # so it gives `homelab_gpu_rc6_residency_seconds_total`, an idle counter whose complement
-      # is the busy fraction — a panel covering both nodes reads
-      # `homelab_gpu_busy_percent / 100` OR `1 - rate(homelab_gpu_rc6_residency_seconds_total[5m])`.
+      # Per-pod discovery, not a Service: two different GPUs, so a ClusterIP would flip between
+      # cards.
+      # amdgpu exports homelab_gpu_busy_percent; i915 an idle counter, rc6_residency (busy = 1 -
+      # rate).
       - job_name: gpu
         scrape_interval: 1m
         kubernetes_sd_configs:
@@ -407,9 +299,8 @@ data:
             target_label: origin
           - source_labels: [__meta_kubernetes_pod_node_name]
             target_label: instance
-      # The node-exporter DaemonSet, scraped per-pod (hostNetwork pods, so the pod IP is the node
-      # IP). Each target's `origin` label carries its NODE name, so monitor-bridge's
-      # origin="daniel-server"-pinned Root Disk / Memory checks keep their exact scope.
+      # `origin` carries the node name so monitor-bridge's origin="daniel-server" checks keep their
+      # scope.
       - job_name: node
         scrape_interval: 1m
         kubernetes_sd_configs:
@@ -441,16 +332,8 @@ data:
             regex: "12345"
           - source_labels: [__meta_kubernetes_pod_node_name]
             target_label: node
-      # The *arr stack's exportarr sidecars — queue depth, indexer health, per-root-folder free
-      # space, and the library counts none of which any other job here carries.
-      #
-      # Discovery by PORT NUMBER, not by an `app` label. The sidecar shares its *arr's pod, so
-      # the pod labels say `app: sonarr` and selecting on them would also match the *arr's own
-      # container port and scrape an HTML page. 9707 is the sidecar's and nothing else's.
-      #
-      # `app` is relabelled onto `arr` rather than left alone so a dashboard can group the three
-      # without knowing their names, and `container` is dropped: every target is `exportarr`, so
-      # the label carries no information and only widens the series.
+      # Discover by port 9707, not the `app` label: the sidecar shares the *arr's pod, so the label
+      # would also match the *arr's own port and scrape an HTML page.
       - job_name: exportarr
         scrape_interval: 1m
         kubernetes_sd_configs:
@@ -494,13 +377,8 @@ data:
             labels:
               origin: daniel-pi
               instance: daniel-pi
-      # The Pi's Alloy shipper's OWN metrics, the answer to "is the Pi still shipping logs". A
-      # log shipper fails quietly by design — the container stays up, /-/ready keeps answering,
-      # and lines simply stop arriving — so loki_write_sent_entries_total and
-      # loki_write_dropped_entries_total are what make that visible. check_shipper_dropped
-      # already reads the second one estate-wide, so this target joins an existing check
-      # rather than needing a new one. The port is the Pi's alloy entry's, read through
-      # `hostvars` because the entry lives in daniel-pi's compose_services.
+      # A log shipper fails quietly (container up, lines stop), so loki_write_*_entries_total expose
+      # it.
       - job_name: alloy-pi
         scrape_interval: 1m
         scrape_timeout: 30s
@@ -509,12 +387,7 @@ data:
             labels:
               origin: daniel-pi
               instance: daniel-pi
-      # The Pi's Docker engine and its containerd, each serving its own Go runtime metrics
-      # (`go_memstats_*`, `go_gc_duration_seconds`). Each GC cycle faults a swapped-out heap
-      # back from zram, and the live heap (`go_memstats_heap_alloc_bytes` floor) is what sizes
-      # the GOMEMLIMIT that cuts it. dockerd binds `metrics-addr`, containerd `[metrics]
-      # address` — both in hosts/components/pi-docker, with docker_install's UFW allows. containerd's
-      # path is /v1/metrics, not /metrics.
+      # containerd's metrics path is /v1/metrics, not /metrics.
       - job_name: dockerd-pi
         scrape_interval: 1m
         scrape_timeout: 30s
@@ -532,28 +405,8 @@ data:
             labels:
               origin: daniel-pi
               instance: daniel-pi
-      # daniel-box's HOST resolver (hosts/components/k3s-host-dns/). Every DNS lookup on the
-      # control-plane node passes through this CoreDNS, and `/etc/resolv.conf` names it and
-      # NOTHING else — the public fallback deliberately does not sit behind it, because a
-      # second nameserver would turn a dead forwarder from a loud outage into silently
-      # unfiltered DNS. This job is what pays for that
-      # choice: without it the only alarm is "DNS is down".
-      #
-      # It needs no rule of its own. `ScrapeTargetDown` (service coredns, files/rules/
-      # scrape-targets.yaml) pages a failed scrape of this job, so a dead forwarder pages
-      # naming it.
-      #
-      # THE SERIES WORTH KNOWING is `coredns_proxy_request_duration_seconds_count{to=...}`,
-      # NOT `coredns_forward_requests_total` — 1.14.7 exports no such name, and the wrong
-      # guess reads as a dead forwarder rather than as a typo. Per-upstream, so it answers
-      # "what share of this node's DNS actually reached Pi-hole" instead of merely "is the
-      # process alive".
-      #
-      # The node's LAN IP, not 127.0.0.1: Prometheus scrapes from inside a pod, where
-      # loopback is the pod's own. Unlike the Pi's targets above this one is NOT reachable
-      # for free — pod-to-host traffic terminates in a host process, so it meets UFW's
-      # default-deny INPUT, and that component's `ufw:` rules carry the matching allows
-      # from the pod CIDR and the agent node. Those allows and this job only work as a set.
+      # Node LAN IP, not 127.0.0.1: Prometheus runs in a pod. UFW default-deny INPUT applies, so the
+      # component's `ufw:` allows from the pod CIDR and agent node must match this job.
       - job_name: coredns-host
         scrape_interval: 1m
         static_configs:
@@ -561,8 +414,6 @@ data:
             labels:
               origin: daniel-box
               instance: daniel-box
-      # The crowdsec node-agent DaemonSet: per-POD discovery like the otel jobs, one target per
-      # node.
       - job_name: crowdsec-node-agents
         scrape_interval: 1m
         kubernetes_sd_configs:
@@ -578,31 +429,9 @@ data:
             action: keep
           - source_labels: [__meta_kubernetes_pod_node_name]
             target_label: node
-      # One job per CrowdSec agent SIDECAR, from crowdsec_k8s_sidecar_agents (group_vars) — the
-      # same map the sidecars' AGENT_USERNAME and the LAPI machine registration read
-      # (k8s/templates/crowdsec-agent.yml.j2). traefik's agent parses the edge access log,
-      # the busiest log source in the fleet; authelia's parses the portal's auth log for the
-      # failed-login scenarios. This job is the only source of their acquisition and parsing
-      # counters, without which a sidecar that stops parsing (a bad parser, a log it lost)
-      # reads as nothing at all rather than as a drop.
-      #
-      # No `node` target_label, unlike crowdsec-node-agents: each host app is a single Recreate
-      # Deployment, so the job name identifies it on its own — the same shape the LAPI job
-      # above uses. The per-node CrowdSec boards therefore do not show them, deliberately.
-      #
-      # The keep on the container port is what makes a job select the sidecar rather than the
-      # app itself: pod-role SD emits one target per DECLARED containerPort, and 6060 is
-      # declared only by the crowdsec-agent container. The sidecar carries its host pod's
-      # labels, which is why the keep is on `app=<app>`. It binds 0.0.0.0:6060 from the
-      # image's own staged config.yaml, which crowdsec-config-install rsyncs in
-      # (build/docker/config.yaml at v1.8.0 — `prometheus.listen_addr: 0.0.0.0`; the
-      # entrypoint rewrites only the PORT, and only when METRICS_PORT is set, which these pods
-      # do not set).
-      #
-      # Reaching it needs the matching netpol grant, which renders from the same map as a
-      # policy of its own per app (netpol-baseline/templates/
-      # networkpolicy-crowdsec-sidecars.yaml.j2), not a port appended to an existing rule
-      # Grant and job only work as a pair.
+      # The keep on containerPort 6060 selects the sidecar: pod-role SD emits one target per
+      # declared port. Needs the per-app grant in networkpolicy-crowdsec-sidecars.yaml.j2; grant and
+      # job work as a pair.
 {% for app in crowdsec_k8s_sidecar_agents %}
       - job_name: crowdsec-{{ app }}-agent
         scrape_interval: 1m
@@ -654,14 +483,8 @@ data:
             action: keep
           - source_labels: [__meta_kubernetes_endpoint_address_target_name]
             target_label: pod
-        # Longhorn re-exports client-go and workqueue histograms under a `longhorn_` prefix, and
-        # they are most of this job's series. Nothing in the repo reads them. `_sum` and `_count`
-        # survive, matching control_plane_bucket_drop(): rates and averages stay available.
-        #
-        # DELIBERATELY A SEPARATE BLOCK, not an extension of control_plane_bucket_drop(). That
-        # macro's regex names the UNPREFIXED workqueue_* and rest_client_* families, which is what
-        # the kubelet job emits; adding the longhorn_-prefixed twins to it would apply this job's
-        # decision to that one by a route nobody reading either job would expect.
+        # Separate from control_plane_bucket_drop(), whose regex names the UNPREFIXED workqueue_*
+        # and rest_client_* families: extending it would apply this job's drop to the kubelet job.
         metric_relabel_configs:
           - source_labels: [__name__]
             action: drop
@@ -683,27 +506,14 @@ data:
           - targets: ['tempo.{{ k8s_observability_namespace }}.svc:3200']
             labels:
               instance_role: observability
-      # Alertmanager's own metrics: alertmanager_notifications_total, its _failed_total twin
-      # and alertmanager_alerts. Alertmanager has no route, so this job is how every reader
-      # sees whether it is up and delivering. `ScrapeTargetDown` (service observability,
-      # files/rules/scrape-targets.yaml) is the one pager for a failed scrape here.
+      # Alertmanager has no route, so this job is how readers see whether it is up and delivering.
       - job_name: alertmanager
         scrape_interval: 1m
         static_configs:
           - targets: ['alertmanager:9093']
-      # Per-pod CPU/memory from each kubelet's cAdvisor, dialed directly at the kubelet's
-      # :10250 rather than through the API server's /proxy/ path. `role: node` discovery
-      # already defaults __address__ to the node's kubelet endpoint (host:10250), so no
-      # __address__ relabel is needed — only the scheme, path and auth.
-      #
-      # The direct path needs only the `nodes/metrics` subresource: the kubelet's own authorizer
-      # maps /metrics/cadvisor (and /metrics, /metrics/resource) to it rather than to
-      # `nodes/proxy`.
-      #
-      # insecure_skip_verify is on the kubelet hop: k3s's kubelet serving cert doesn't carry a
-      # SAN Prometheus can validate against here. The bearer token is still verified by the API
-      # server via TokenReview, so this weakens transport identity, not authn.
-      # 1m, not the 15s global — see the interval note at the kube-state-metrics job.
+      # Dialed at the kubelet's :10250 directly; needs only the `nodes/metrics` subresource.
+      # insecure_skip_verify: no usable SAN on the kubelet cert; the token is still verified
+      # (TokenReview).
       - job_name: kubernetes-cadvisor
         scrape_interval: 1m
         scheme: https
@@ -717,13 +527,8 @@ data:
         relabel_configs:
           - action: labelmap
             regex: __meta_kubernetes_node_label_(.+)
-        # Three cAdvisor housekeeping families nothing in the repo reads, dropped for the same
-        # BYTES reason as the control-plane buckets above.
-        #
-        # NAMED EXPLICITLY, never a prefix glob. container_memory_failcnt is a DIFFERENT family
-        # that check.py:377 reads as a real cross-estate signal, and any
-        # `container_memory_fail.*` spelling would swallow it. Prometheus anchors these regexes
-        # fully, so the exact names below cannot reach it.
+        # NAMED EXPLICITLY, never a glob: container_memory_failcnt is a different family check.py
+        # reads, and `container_memory_fail.*` would swallow it.
         metric_relabel_configs:
           - source_labels: [__name__]
             action: drop
@@ -762,19 +567,8 @@ data:
             separator: ';'
             action: drop
             regex: 'true;(apiserver|etcd)_.+'
-      # Per-pod CPU/memory straight from the kubelet's summary API rather than from cadvisor's
-      # cgroup walk. Cheaper and lower-cardinality than the cadvisor series, and it is what
-      # `kubectl top` reads — so a dashboard built on it agrees with the CLI, where one built
-      # on cadvisor's container_memory_working_set_bytes does not always.
-      # 1m, not the 15s global — see the interval note at the kube-state-metrics job.
-      #
-      # Collision: /metrics/resource emits container_cpu_usage_seconds_total,
-      # container_memory_working_set_bytes and container_start_time_seconds under names that COLLIDE
-      # with the cadvisor job, and monitor-bridge's cadvisor_sel() (check.py:448) is not job-pinned —
-      # it selects on {container!="", container!="POD"} alone, so check_restarts spans both jobs.
-      # The 1m interval is still safe there: the dominant source is already at 1m, 15 samples across
-      # the 15m window still register a start-time change, and the crash-loop spacing that arm is
-      # tuned for is 15-19 minutes (check.py:558), not sub-minute.
+      # Names collide with the cadvisor job and monitor-bridge's cadvisor_sel() is not job-pinned,
+      # so check_restarts spans both. 1m stays safe: that arm's crash-loop spacing is 15-19 minutes.
       - job_name: kubernetes-kubelet-resource
         scrape_interval: 1m
         scheme: https
@@ -788,20 +582,9 @@ data:
         relabel_configs:
           - action: labelmap
             regex: __meta_kubernetes_node_label_(.+)
-      # The API server's own metrics — request latency by verb and resource, error rates,
-      # in-flight request saturation, and the etcd request duration the apiserver observes from
-      # its side. This is the layer between "a pod is unhealthy" and "the cluster is unhealthy",
-      # and nothing else in this config can see it.
-      #
-      # RBAC note, and the trap: /metrics on the API SERVER is a non-resource URL, so the
-      # `nodes/metrics` grant that covers the three kubelet jobs above does NOT cover this one.
-      # It needs the explicit `nonResourceURLs` rule added to the ClusterRole below. Without it
-      # the scrape 403s while every other job stays green — a partial failure that reads as a
-      # working config until you look at the target list.
-      #
-      # No insecure_skip_verify here: unlike the kubelet, the API server's serving cert carries
-      # a SAN for kubernetes.default.svc, so the in-cluster CA validates it properly.
-      # 1m, not the 15s global — see the interval note at the kube-state-metrics job.
+      # API server /metrics is a non-resource URL: `nodes/metrics` does not cover it; the
+      # ClusterRole below needs a `nonResourceURLs` rule, else this scrape 403s while every other
+      # job stays green.
       - job_name: kubernetes-apiserver
         scrape_interval: 1m
         scheme: https
@@ -812,8 +595,7 @@ data:
         static_configs:
           - targets: ['kubernetes.default.svc:443']
 {{ control_plane_bucket_drop() }}
-          # The other half of the kubelet job's server-node drop above: this job keeps only the
-          # `apiserver_` and `etcd_` families, and the kubelet job holds the rest of the registry.
+          # Keeps only `apiserver_` and `etcd_` families; the kubelet job holds the rest.
           - source_labels: [__name__]
             action: keep
             regex: '(apiserver|etcd)_.+'
@@ -863,10 +645,7 @@ rules:
   - apiGroups: [""]
     resources: [nodes, nodes/metrics, services, endpoints, pods]
     verbs: [get, list, watch]
-  # The API server's /metrics is a NON-RESOURCE URL — it is not a `resources:` entry and the
-  # `nodes/metrics` grant above does not reach it. Without this rule the kubernetes-apiserver
-  # job 403s on every scrape while the three kubelet jobs stay green, so the config reads as
-  # working. `get` on this one path only: it grants no read of any object.
+  # /metrics on the API server is a non-resource URL that `nodes/metrics` does not cover.
   - nonResourceURLs: ["/metrics"]
     verbs: [get]
 ---
@@ -926,21 +705,14 @@ spec:
             - --config.auto-reload
             - --storage.tsdb.path=/prometheus
             - --storage.tsdb.retention.time={{ observability_prometheus_retention }}
-            # A SECOND cap, on bytes. The time cap alone does not bound the PVC: retention.time
-            # says how old a block may get, not how much a block holds, so an ingest-rate rise
-            # grows the footprint without aging anything out. A full Prometheus PVC does not
-            # degrade, it wedges — and the instance that would alert on it is this one. Whichever
-            # cap binds first wins, which is the intended behaviour.
+            # Second cap, in bytes: the time cap alone cannot bound the PVC, and a full PVC wedges
+            # Prometheus.
             - --storage.tsdb.retention.size={{ observability_prometheus_retention_size }}
-            # NO --web.enable-remote-write-receiver. It would open /api/v1/write on the
-            # ClusterIP, where nothing fences it: `observability` has no NetworkPolicy, so any
-            # pod in the cluster could push arbitrary series in. Leaving the receiver off closes
-            # that with certainty; a policy would only narrow it.
+            # No --web.enable-remote-write-receiver: with no NetworkPolicy, any pod could push
+            # series.
           ports:
             - name: http
               containerPort: 9090
-              # On the node's loopback so otelq can reach it; see
-              # observability_query_host_ip in defaults/main.yml.
               hostPort: 9090
               hostIP: {{ observability_query_host_ip }}
           volumeMounts:
@@ -962,8 +734,7 @@ spec:
               readOnly: true
             - name: prometheus-data
               mountPath: /prometheus
-            # /etc, not /run/secrets (the ServiceAccount-token-shadow guard); 0444 because
-            # prometheus runs as nobody and secret-volume files are root-owned.
+            # /etc, not /run/secrets (token-shadow guard); 0444 because prometheus runs as nobody.
             - name: prometheus-scrape-creds
               mountPath: /etc/prometheus-scrape-creds
               readOnly: true
@@ -982,12 +753,8 @@ spec:
             periodSeconds: 30
             timeoutSeconds: 5
             failureThreshold: 10
-          # The REQUEST is the half that matters for eviction: the kubelet ranks it by
-          # usage-above-request, and a request below the working set puts Prometheus, which
-          # every other check here reads, near the front of the queue under node pressure.
-          # The p95 working set is 1665Mi and the max 1853Mi. The request is that p95
-          # rounded up to 64Mi. The limit puts p95 at 54% and the max at 60%, because an
-          # OOMKill loses the unflushed head block; a limit is a ceiling, not a reservation.
+          # The request governs eviction order: below the working set, Prometheus is evicted early.
+          # The limit leaves headroom because an OOMKill loses the unflushed head block.
 {{ container_resources(cpu_limit='1', mem_limit='3Gi', cpu_request='50m', mem_request='1728Mi') }}
       volumes:
         - name: prometheus-config
@@ -1017,8 +784,7 @@ metadata:
     # empty, with no error.
     headlamp-prometheus: "true"
 spec:
-  # Pinned: host-side query tools carry this address as a constant. See
-  # observability_prometheus_cluster_ip in defaults/main.yml for why.
+  # Pinned: host-side query tools carry this address as a constant.
   clusterIP: {{ observability_prometheus_cluster_ip }}
   selector:
     app: prometheus

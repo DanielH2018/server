@@ -23,15 +23,11 @@ other's dependencies in.
 
 from collections.abc import Iterable
 
-# An allow-list, not a deny-list: a state this module has not heard of (a rename, a new value
-# after a Longhorn bump) must read as lost redundancy, not pass. `healthy` is a volume with every
-# replica; `unknown` is what an idle, detached volume reports, which is not a fault — the game
-# servers scaled to zero on purpose read it.
+# Allow-list: an unrecognised state must read as lost redundancy. `unknown` is an idle, detached
+# volume, not a fault.
 SAFE_ROBUSTNESS = frozenset({"healthy", "unknown"})
 
-# The worst state wins when one volume reports twice (two longhorn-manager pods, or a scrape
-# that caught a transition). `faulted` has no healthy replica left at all, so it outranks
-# everything; an unrecognised state outranks `degraded` because nothing says it is milder.
+# Worst state wins; an unrecognised state outranks `degraded` because nothing says it is milder.
 _RANK = {"degraded": 1, "faulted": 3}
 _UNRECOGNISED_RANK = 2
 

@@ -33,7 +33,7 @@
 # therefore owes `k3s-bringup.yml --tags node-address` on daniel-box before the next reboot
 # (operator-only); the revert restores that task file's import.
 #
-# ENFORCED: hosts/tests/test_k3s_server_component.py and
+# ENFORCED: hosts/tests/k3s/test_k3s_server_component.py and
 # hosts/lib/tests/test_box_k3s_host_half.py.
 depends:
   - open-iscsi
@@ -138,7 +138,7 @@ defaults:
   #   retention          k3s carries this value over to S3. 28 at 12 hours is 14 days off-box.
   #                      docs/k3s-etcd-restore.md transcludes this value.
   #
-  # ENFORCED: hosts/tests/test_k3s_server_flags_migration.py holds the rendered flags
+  # ENFORCED: hosts/tests/k3s/test_k3s_server_flags_migration.py holds the rendered flags
   # equal to the ones `k3s_server_args` passed before this file existed, plus the etcd-s3 ones.
   k3s_server_config:
     cluster-init: true
