@@ -203,9 +203,9 @@ def _shadowing_offence(subject: Subject) -> list[str]:
     return [f"also a top-level module at {rel}" for rel in others]
 
 
-# A quoted flag tested against `sys.argv` by membership. The `-h`/`--help` guard compares a bound
-# name, so it never matches.
-_ARGV_FLAG_TEST = re.compile(r"""["']-[\w-]+["']\s+(?:not\s+)?in\s+sys\.argv\b""")
+# A quoted flag tested against `argv` or `sys.argv` by membership. The `-h`/`--help` guard
+# compares a bound name, so it never matches.
+_ARGV_FLAG_TEST = re.compile(r"""["']-[\w-]+["']\s+(?:not\s+)?in\s+(?:sys\.)?argv\b""")
 
 ROWS = (
     NO_FUTURE_ANNOTATIONS,
@@ -440,6 +440,7 @@ ROWS = (
             Subject("a.py", 'dry = "--dry-run" in sys.argv\n'),
             Subject("b.py", "once = '--once' not in sys.argv\n"),
             Subject("c.py", 'if "--once" in sys.argv[1:]:\n'),
+            Subject("d.py", 'once = "--once" in argv\n'),
         ),
         green=(
             Subject("a.py", "once = parse_args(argv).once\n"),
@@ -449,6 +450,16 @@ ROWS = (
         ),
         min_matches=100,
         must_find=frozenset({"k8s/roles/autofix-bridge/files/autofix.py"}),
+        allow={
+            "hosts/lib/bootstrap_anchor.py": "tracked in #10240",
+            "scripts/backup/longhorn_reap_lib/snapshots.py": "tracked in #10240",
+            "scripts/dev/fanout_lib/review/batch_run.py": "tracked in #10240",
+            "scripts/dev/fanout_lib/review/held_hooks.py": "tracked in #10240",
+            "scripts/dev/k8s_autodeploy_counts.py": "tracked in #10240",
+            "scripts/dev/renovate_rebase.py": "tracked in #10240",
+            "scripts/diagnostics/probe.py": "tracked in #10240",
+            "scripts/lib/cli_help.py": "tracked in #10240",
+        },
     ),
 )
 _IDS = [row.name for row in ROWS]
