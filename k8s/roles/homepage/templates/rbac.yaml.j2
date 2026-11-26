@@ -1,11 +1,6 @@
 ---
-# Homepage's cluster identity, for the kubernetes info widget (see kubernetes.yaml.j2).
-# Without it the pod runs as the namespace `default` ServiceAccount, which holds nothing — the
-# widget's failure mode with no permissions is an EMPTY TILE, not an error, so a missing
-# binding looks like "the cluster reports no metrics".
-#
-# Narrower than headlamp's: homepage only ever reads node/pod shape and their metrics, and
-# renders no resource detail. It does not need `view`.
+# Without it the widget shows an EMPTY TILE, not an error. Narrower than headlamp's: node/pod shape
+# and metrics only.
 apiVersion: v1
 kind: ServiceAccount
 metadata:
@@ -20,11 +15,8 @@ rules:
   - apiGroups: [""]
     resources: [namespaces, pods, nodes]
     verbs: [get, list]
-  # Ingress/IngressRoute reads back homepage's own service-discovery feature, which this
-  # homelab deliberately leaves off — every tile is hand-authored in services.yaml. Omitted
-  # rather than granted-and-unused, and the omission is only silent because
-  # kubernetes.yaml.j2 sets `ingress: false`: that key defaults to TRUE upstream, so leaving
-  # it out makes the pod list Ingresses on every page load and log the denial.
+  # Ingress/IngressRoute reads back homepage's service discovery, which is off. The omission is
+  # silent only because kubernetes.yaml.j2 sets `ingress: false` (upstream default is true).
   - apiGroups: [metrics.k8s.io]
     resources: [nodes, pods]
     verbs: [get, list]

@@ -20,25 +20,15 @@ import os
 import re
 from pathlib import Path
 
-# How much stripped body text goes into the index, so search reaches content and not just
-# titles. 2 KB per artifact keeps a ~50-file index well under a megabyte.
 EXCERPT_CHARS = int(os.environ.get("ARTIFACTS_EXCERPT_CHARS", "2000"))
 
-# The service names artifacts are matched against. The role's templates/configmap.yaml.j2
-# renders them from both hosts' containers_list plus the retired names older documents still
-# discuss. Absent in a unit test, where the fixtures pass their own list.
+# Absent in a unit test, where fixtures pass their own list.
 SERVICES_FILE = Path(
     os.environ.get("ARTIFACTS_SERVICES_FILE", "/app/known_services.json")
 )
 
-# A service name is only tagged on a WORD match, never a substring: `nut` occurs inside
-# "minute" and "minutes", which appear in nearly every document here.
-#
-# Word boundaries are not enough on their own for a name that is also an ordinary noun. These
-# need two mentions before the document is about that service, so one passing "the container
-# registry" does not tag it.
-# `happy` and `tempo` are retired services whose names are ordinary English words, so they sit
-# here for the same reason `nut` does.
+# A service is tagged on a WORD match only (`nut` occurs inside "minute"). Names that are also
+# ordinary nouns need two mentions before a document counts as about that service.
 AMBIGUOUS_SERVICES = {
     "nut",
     "registry",
@@ -50,8 +40,7 @@ AMBIGUOUS_SERVICES = {
     "foundry",
 }
 
-# Keyword -> category, checked against title and body. First category to reach the highest
-# score wins; ties fall to the earlier entry here, so the more specific categories lead.
+# First category to reach the highest score wins; ties go to the earlier entry.
 CATEGORY_KEYWORDS = {
     "security": (
         "authelia",
@@ -135,18 +124,14 @@ CATEGORY_KEYWORDS = {
 # Chosen only when nothing more specific scores — see derive_category.
 FALLBACK_CATEGORY = "infra"
 
-# Where an artifact came from. A headless run with no operator in the session, such as the
-# changelog-watch timer, declares `scheduled`; anything that declares nothing was written by an
-# interactive session.
+# A headless run with no operator in the session declares `scheduled`.
 SCHEDULED_ORIGIN = "scheduled"
 SESSION_ORIGIN = "session"
 
-# Filename prefixes of scheduled generators whose artifacts predate `artifact:origin`. A
-# generator that declares its origin needs no entry here.
+# Prefixes of scheduled generators that predate `artifact:origin`.
 SCHEDULED_NAME_PREFIXES = ("changelog-watch_",)
 
-# How many service chips a document shows, most-mentioned first. Uncapped, a broad review
-# tags a dozen services and the row stops carrying information.
+# Uncapped, a broad review tags a dozen services and the row stops carrying information.
 MAX_SERVICES = int(os.environ.get("ARTIFACTS_MAX_SERVICES", "5"))
 
 _META_RE = re.compile(
@@ -218,8 +203,6 @@ def parse_html(body: str, excerpt_chars: int = EXCERPT_CHARS) -> dict:
         }
     text = strip_html(body)
     if not meta.get("summary"):
-        # Skip the heading itself, so the summary is the first real prose, not a repeat of
-        # the title one line above it.
         head = meta.get("heading") or meta.get("title") or ""
         rest = text[len(head) :].strip() if head and text.startswith(head) else text
         meta["summary"] = rest[:240].strip()
@@ -301,9 +284,6 @@ def derive_services(
         count = len(re.findall(rf"\b{re.escape(name)}\b", haystack))
         if count >= (2 if name in AMBIGUOUS_SERVICES else 1):
             hits.append((count, name))
-    # Most-mentioned first, then capped: a review touching a dozen services is about the two
-    # or three it keeps returning to, and a row of twelve chips says less than a row of four.
-    # Nothing is lost to search — the names are still in the document text the index carries.
     hits.sort(key=lambda pair: (-pair[0], pair[1]))
     return [name for _, name in hits[:max_services]]
 

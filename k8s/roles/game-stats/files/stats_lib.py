@@ -407,8 +407,8 @@ def run(config, store, fetch, apply_fn, render_metrics, on_poll_ok, argv=None):
         )
     )
     if not (once or backfill):
-        # Threading server so a slow /metrics render can't head-of-line-block the /healthz
-        # probe (and trip autoheal). Handler reads in-memory state under the lock, no SQLite.
+        # Threading server so a slow /metrics render cannot block the /healthz probe and trip
+        # autoheal.
         start_metrics_server(
             make_handler(poll_state, render_metrics, config.health_max_age),
             config.metrics_port,
