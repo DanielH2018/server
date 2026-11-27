@@ -11,8 +11,8 @@ It needs no host state at all — two anonymous fetches against a list the env c
 the bridge has the shape a slow-moving, cheap probe wants: a SUCCESS is cached for CLOUDFLARE_IPS_PROBE_INTERVAL_S
 (a day; Cloudflare changes these ranges on a multi-year cadence), and a FAILURE is never cached,
 so a red tile re-probes every 300 s cycle and clears within one cycle of the list being fixed
-rather than at the next day's slot. Same idiom as `checks/r2.py`; the rationale for the pair of
-idioms is in bridge/config_io.py's header.
+rather than at the next day's slot. `bridge.streaks.cached_success` holds the cache; the rationale for the
+pair of cache idioms is in bridge/config_io.py's header.
 
 Reads config as `cfg.X`. The fetch and the cache are parameters of `cloudflare_ips_drift`, so
 a test hands in a canned fetch and a fresh dict rather than patching this module. The production
@@ -20,12 +20,11 @@ cache is `src.state.cloudflare_ips_probe` (`bridge.streaks.State`).
 """
 
 from collections.abc import Callable
-import time
 import urllib.request
 
 from bridge.common import HTTP_TIMEOUT
 from bridge.config import Config
-from bridge.streaks import ProbeCache
+from bridge.streaks import ProbeCache, cached_success
 from bridge.sources import Sources
 from bridge.types import CheckResult
 from bridge.parsing import describe_fetch_failure
@@ -100,31 +99,19 @@ def cloudflare_ips_drift(
     """
     if not cfg.CLOUDFLARE_IPS_EXPECTED:
         return True, "cloudflare_ips drift check disabled (no expected list)"
-    now = now if now is not None else time.time()
-    if (
-        probe["ts"] is not None
-        and probe["ok"]
-        and now - probe["ts"] < cfg.CLOUDFLARE_IPS_PROBE_INTERVAL_S
-    ):
-        return True, "%s (checked %.0fh ago)" % (
-            probe["msg"],
-            (now - probe["ts"]) / 3600,
-        )
-    try:
-        live = fetch()
-    except RuntimeError as e:
-        result = CheckResult(
-            False,
-            "failed to fetch Cloudflare ranges — allowlist unverified: %s" % e,
-            ["fetch failed"],
-        )
-    else:
-        result = CheckResult.of(
-            cloudflare_ips_verdict(live, cfg.CLOUDFLARE_IPS_EXPECTED)
-        )
-    probe["ts"] = now
-    probe["ok"], probe["msg"] = result
-    return result
+
+    def read() -> CheckResult:
+        try:
+            live = fetch()
+        except RuntimeError as e:
+            return CheckResult(
+                False,
+                "failed to fetch Cloudflare ranges — allowlist unverified: %s" % e,
+                ["fetch failed"],
+            )
+        return CheckResult.of(cloudflare_ips_verdict(live, cfg.CLOUDFLARE_IPS_EXPECTED))
+
+    return cached_success(probe, cfg.CLOUDFLARE_IPS_PROBE_INTERVAL_S, now, read)
 
 
 def check_cloudflare_ips_drift(cfg: Config, src: Sources) -> tuple[bool, str]:
