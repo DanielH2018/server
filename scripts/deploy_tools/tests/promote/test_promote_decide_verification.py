@@ -314,11 +314,10 @@ def test_with_the_flag_on_a_hold_in_another_form_stays_held(world, hold):
 @pytest.mark.parametrize(
     ("failed", "revert_files"),
     [
-        ("bento-pdf-verify", _digests(bento_pdf="c")),
         ("homelab", _digests(bento_pdf="a")),
         ("bento-pdf", _digests(unclassified="u2", bento_pdf="a")),
     ],
-    ids=["per-tag-kind-of-a-moved-tag", "unkeyed-name", "unclassified-differs"],
+    ids=["unkeyed-name", "unclassified-differs"],
 )
 def test_with_the_flag_on_a_failed_name_no_footprint_clears_stays_held(
     world, failed, revert_files
@@ -328,11 +327,18 @@ def test_with_the_flag_on_a_failed_name_no_footprint_clears_stays_held(
     assert promote.decide(_reads(world), revert_rule=True).verdict == "held"
 
 
-def test_with_the_flag_on_a_per_tag_kind_is_cleared_by_its_tags_footprint(world):
-    t, u = _held_world(world, _digests(bento_pdf="a"))
+# The pair: only `held` for a tag still moved separates this rule from matching any unkeyed name.
+@pytest.mark.parametrize(
+    ("tag_footprint", "verdict"),
+    [("a", "promote"), ("c", "held")],
+    ids=["tag-reverted", "tag-still-moved"],
+)
+def test_with_the_flag_on_a_per_tag_kind_is_judged_by_its_tags_footprint(
+    world, tag_footprint, verdict
+):
+    t, _ = _held_world(world, _digests(bento_pdf=tag_footprint))
     world.run.hold = f"{t} failed=bento-pdf-verify"
-    decision = promote.decide(_reads(world), revert_rule=True)
-    assert (decision.verdict, decision.target) == ("promote", u)
+    assert promote.decide(_reads(world), revert_rule=True).verdict == verdict
 
 
 def test_a_revert_bundle_with_no_digests_json_never_qualifies(world):
