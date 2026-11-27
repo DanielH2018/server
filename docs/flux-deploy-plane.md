@@ -1165,6 +1165,9 @@ that failed for an environmental reason*, has the steps.
 `failed=` hold would let `decide` promote a descendant of the held commit whose `footprint`
 for every failed name equals `last-good`'s, and `settle` would set `DEPLOY_HOLD` to `none` once
 it verifies. A hold in any other form, and a `failed=` hold that names `soak`, never qualify.
+A failed per-tag kind such as `<tag>-verify` is judged by `<tag>`'s footprint, which counts its
+files. A failed name that neither `digests.json` keys never matches, and no name matches while
+`_unclassified` differs (`promote_lib/verify_promotion.py:footprints_match`).
 
 **`probe.py landing` shows the hold:**
 

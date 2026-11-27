@@ -98,10 +98,15 @@ from deploy_tools.artifact_retention import (
     PROD_TAG,
     SUPERSEDING_TAG,
 )
-from deploy_tools.changed_set import ROOT, changed_set, footprints, suspended_tags
+from deploy_tools.changed_set import ROOT, changed_set, suspended_tags
 from deploy_tools.chained_timeout import promote_timeout
 from deploy_tools.kustomizations import kustomization_graph
-from deploy_tools.promote_lib import controller_rollout, storage_rollout, superseded
+from deploy_tools.promote_lib import (
+    controller_rollout,
+    forward_only,
+    storage_rollout,
+    superseded,
+)
 from deploy_tools.promote_lib.flux_status import (
     FAILED_STATES,
     STATUS_PREFIX,
@@ -554,13 +559,17 @@ def footprints_match(
 ) -> bool:
     """Whether each name's `footprint` in the candidate's bundle equals `last-good`'s.
 
-    A bundle without a readable `digests.json` never matches.
+    A per-tag kind such as `<tag>-verify` is judged by `<tag>`'s footprint, which counts its
+    files. A name that neither `digests.json` keys never matches. No name matches when
+    `_unclassified` differs, which `forward_only.changed_tags` counts as every name changed,
+    or when either bundle lacks a readable `digests.json`.
     """
-    ours = footprints(bundle_digests(candidate))
-    theirs = footprints(bundle_digests(last_good))
-    if ours is None or theirs is None:
+    ours = bundle_digests(candidate)
+    changed = forward_only.changed_tags(ours, bundle_digests(last_good))
+    if changed is None or not isinstance(ours, Mapping):
         return False
-    return all(ours.get(name) == theirs.get(name) for name in names)
+    owners = {split_kind(name)[0] for name in names}
+    return owners <= ours.keys() - changed
 
 
 @dataclass(frozen=True)
