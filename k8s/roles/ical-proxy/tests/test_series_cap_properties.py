@@ -102,7 +102,7 @@ def capped(earlier, later, start, gap, freq):
 @example(**EAST_MORNING)
 def test_the_capped_series_shares_no_day_with_the_later_one(**draw):
     _, after = capped(**draw)
-    cut = app.local_date(after["new"].decoded("DTSTART"))
+    cut = draw["start"] + timedelta(days=draw["gap"])
 
     assert all(o.date() < cut for o in occurrences(after["old"], cut + HORIZON))
 
@@ -112,7 +112,7 @@ def test_the_capped_series_shares_no_day_with_the_later_one(**draw):
 @example(**EAST_MORNING)
 def test_the_capped_series_keeps_every_occurrence_before_the_later_start_date(**draw):
     before, after = capped(**draw)
-    cut = app.local_date(after["new"].decoded("DTSTART"))
+    cut = draw["start"] + timedelta(days=draw["gap"])
     uncapped = occurrences(before["old"], cut + HORIZON)
 
     assert occurrences(after["old"], cut + HORIZON) == [

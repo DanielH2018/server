@@ -79,11 +79,6 @@ def series_end_before(dtstart, cut):
     return end if dtstart.tzinfo is None else end.astimezone(UTC)
 
 
-def local_date(moment):
-    """Returns the calendar date a DTSTART value falls on in its own zone."""
-    return moment.date() if isinstance(moment, datetime) else moment
-
-
 def cap_overlapping_series(calendar):
     """Caps the earlier of two recurring series that share the same SUMMARY and RRULE.
 
@@ -99,7 +94,10 @@ def cap_overlapping_series(calendar):
     for group in groups.values():
         group.sort(key=lambda e: wire_value(e, "DTSTART"))
         for earlier, later in pairwise(group):
-            cut = local_date(later.decoded("DTSTART"))
+            later_start = later.decoded("DTSTART")
+            cut = (
+                later_start.date() if isinstance(later_start, datetime) else later_start
+            )
             earlier["RRULE"]["UNTIL"] = [
                 series_end_before(earlier.decoded("DTSTART"), cut)
             ]
