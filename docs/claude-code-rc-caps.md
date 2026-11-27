@@ -320,6 +320,10 @@ logs `leaderelection lost` at error level, then calls `klog.FlushAndExit(1)`, wh
 whole k3s process down. Any of the three embedded components that elect a leader can do it:
 kube-controller-manager, kube-scheduler and the cloud-controller-manager.
 
+The memory figures follow the earlier repeats. In the 10 minutes before 16:20 and the 6 minutes
+before 16:36, host `MemAvailable` fell to 1.9 GiB and 2.3 GiB. k3s held 1.78 GiB and 1.68 GiB of
+swap at the two exits.
+
 The upstream lease timings give each component a 10 s renew deadline. In the 90 s before each
 of the eight exits from 2026-11-25 to 2026-11-27, the longest gap between k3s log lines ran
 from 4.5 s to 42 s, and etcd applies took up to 13 s. `k3s_leader_election_args` in
