@@ -406,8 +406,17 @@ jobs. Every landing that merges its PR directly takes the turn.
   as a draft`, and asks for it again as a draft (`merge.await_merge`).
 - A head the update would void or cannot make is left as it stands: a head GitHub reads as
   conflicting, one the landing policy admitted on an approval, and one `LAND_REQUIRE_HEAD`
-  names. It merges as it stands, except an approved head that master moved past on a path
-  the PR changes, which is refused with a rebase remedy (`stale_base.refuse_stale_approved`). A refused update marks the PR ready again.
+  names. A refused update marks the PR ready again.
+- Before every direct merge, the landing compares the master that the head's green run tested
+  with master's tip (`stale_base.refuse_stale_overlap`). A head that reaches the merge stale
+  merges as it stands when master changed no path the PR changes, and master's own run tests
+  it. When master did change one, the landing refuses the merge, because the merged tree was
+  never tested. An approved head's refusal names a rebase and a new approval. Any other head's
+  refusal names a re-run, whose first green poll updates the branch. The check covers every
+  route to the merge: a landing that went on without the turn marked its draft ready with no
+  update, and the run that flip started tested the master of the PR's last push, not master's tip.
+  It also covers a head this landing's own update made, when master moved again during its
+  run. Only a head a landing batch tested is exempt (`stale_base.batch_tested`).
   An update in the turn that GitHub refuses does not stop the landing: the PR keeps the run
   the ready flip started. The exception is a refusal that names a merge conflict, which ends
   the landing `merge-conflict` at once, in the turn and when a ready head rejoins the line
