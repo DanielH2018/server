@@ -127,6 +127,13 @@ def test_the_job_name_moves_with_the_role_digest_and_with_the_script():
     assert _job_name(_files()) == name
 
 
+def test_a_digest8_flux_would_read_as_a_number_is_written_quoted():
+    # PyYAML takes `05094468` for a string and writes it plain; Flux reads the integer 5094468.
+    assert "value: '05094468'\n" in _files(digest8="05094468")["job.yaml"]
+    assert "value: '12345e67'\n" in _files(digest8="12345e67")["job.yaml"]
+    assert "value: 0a1b2c3d\n" in _files(digest8="0a1b2c3d")["job.yaml"]
+
+
 def test_every_snapshot_roles_longest_name_stays_within_63_bytes():
     found, unjudged = role_defaults(
         p.parent.parent.name for p in K8S_ROLES.glob("*/defaults/main.yml")

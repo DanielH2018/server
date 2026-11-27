@@ -109,7 +109,9 @@ authority is written here to keep a later edit from widening it.
 - **Scope of the return to `default`.** A `no-backup` volume returns to `default` only when its
   PVC is `longhorn`-class and on neither list. Most no-backup volumes were never on a list:
   `longhorn-nobackup` excluded them at creation, and sweeping them into the daily set is the
-  B2 transaction blowup this job exists to prevent.
+  B2 transaction blowup this job exists to prevent. A volume on no list that carries `default`
+  as well as `no-backup`, or a shard as well as `no-backup`, ends in `default` alone whatever
+  its class. Longhorn already backs it up daily, and the `no-backup` group runs no job.
 - **A weekly-listed volume that sits in `no-backup` alone is not moved.** The job never moves
   it, and `tests/longhorn/test_daily_group_membership_is_the_r2_list.py` pins that exclusion.
   Remove the volume from the no-backup class by hand first. One that also carries `default` or

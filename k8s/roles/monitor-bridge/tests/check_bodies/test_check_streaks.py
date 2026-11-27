@@ -8,6 +8,7 @@ import pytest
 
 import bridge.config
 import bridge.streaks
+from bridge.types import CheckResult
 import check
 import registry
 
@@ -116,3 +117,25 @@ def test_startup_grace_covers_every_ungated_reach_out_check():
     assert not ungraced, "ungated reach-out checks missing startup grace: %s" % sorted(
         ungraced
     )
+
+
+def test_cached_success_serves_a_stored_success_and_rereads_a_stored_failure():
+    probe: bridge.streaks.ProbeCache = {"ts": None, "ok": True, "msg": ""}
+    verdicts = iter(
+        [
+            CheckResult(False, "console unreadable", ["the console"]),
+            CheckResult(True, "all match"),
+        ]
+    )
+
+    def read():
+        return next(verdicts)
+
+    down = bridge.streaks.cached_success(probe, 3600, 1000.0, read)
+    assert (down, down.details) == ((False, "console unreadable"), ("the console",))
+    assert bridge.streaks.cached_success(probe, 3600, 1001.0, read) == (
+        True,
+        "all match",
+    )
+    held = bridge.streaks.cached_success(probe, 3600, 1001.0 + 1800, read)
+    assert held == (True, "all match (checked 0h ago)")

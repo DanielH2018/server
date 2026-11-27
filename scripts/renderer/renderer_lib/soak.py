@@ -38,6 +38,8 @@ from pathlib import Path
 
 import yaml
 
+from renderer.renderer_lib.manifest_yaml import dump, dump_all
+
 from lib import prom_duration, yaml_fast
 from lib.git import git_stdout
 from renderer.renderer_lib.documents import parse_documents
@@ -421,13 +423,13 @@ def soak_files(
     }
     job["metadata"]["name"] = f"{SOAK}-{job_spec_digest8(job)}"
     cluster = {
-        "configmap.yaml": yaml.safe_dump(configmap, sort_keys=False),
-        "job.yaml": yaml.safe_dump(job, sort_keys=False),
-        "rbac.yaml": yaml.safe_dump_all(rbac(), sort_keys=False),
+        "configmap.yaml": dump(configmap),
+        "job.yaml": dump(job),
+        "rbac.yaml": dump_all(rbac()),
     }
     cluster[KUSTOMIZATION] = kustomization_text(cluster)
     files = {f"{CLUSTER_DIR}/{SOAK}/{name}": text for name, text in cluster.items()}
-    files[f"{FLUX_DIR}/{SOAK}.yaml"] = yaml.safe_dump(kustomization, sort_keys=False)
+    files[f"{FLUX_DIR}/{SOAK}.yaml"] = dump(kustomization)
     return files
 
 
