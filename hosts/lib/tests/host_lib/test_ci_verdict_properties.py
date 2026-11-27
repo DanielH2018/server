@@ -1,29 +1,39 @@
-"""A cancelled run never outvotes a run of the same name that decided, over generated heads.
+"""Properties of `ci_verdict` and `jobs_verdict` over generated heads.
 
 A head is a list of check-runs drawn from the gate's real job names, spread over three suites so
-that one name often carries several runs, as a draft run beside a ready run does. The property
-tests run under the profile `tests/hypothesis_profiles.py` loads.
+that one name often carries several runs, as a draft run beside a ready run does. A cancelled run
+never outvotes a run of the same name that decided. `jobs_verdict` ignores run order, reads any
+failed need as `fail`, and passes only a head whose every planned need passed or was excused.
+The property tests run under the profile `tests/hypothesis_profiles.py` loads.
 
 Run: uv run pytest hosts/lib/tests/host_lib/test_ci_verdict_properties.py
 """
 
+from collections import defaultdict
 from collections.abc import Sequence
 
-from hypothesis import given
+from hypothesis import example, given
 from hypothesis import strategies as st
 
 from ci_verdict import (
+    CI_BUILD_JOB,
+    CI_BUILD_READER_JOBS,
     CI_GATE_NAME,
     CI_GATE_NEEDS_JOBS,
     CI_PROVE_JOB,
+    CI_PYTEST_LEGS,
+    CI_SKIPPED_MATRIX_JOBS,
     CheckRun,
     CheckSuite,
+    RunState,
     ci_verdict,
     jobs_verdict,
 )
 
 
-_NAMES = sorted({CI_GATE_NAME, CI_PROVE_JOB, *CI_GATE_NEEDS_JOBS})
+_NAMES = sorted(
+    {CI_GATE_NAME, CI_PROVE_JOB, *CI_GATE_NEEDS_JOBS, *CI_SKIPPED_MATRIX_JOBS}
+)
 _REQUIRED = frozenset({CI_GATE_NAME})
 _DECIDED = [("completed", c) for c in ("success", "neutral", "failure")]
 _NO_VERDICT = [
@@ -124,3 +134,161 @@ def test_the_generated_heads_reach_every_verdict():
 
     collect()
     assert seen == {"pass", "pending", "fail"}
+
+
+_SUCCESS = ("completed", "success")
+_SKIPPED = ("completed", "skipped")
+_PYTEST_MATRIX_SKIP = next(
+    name for name, legs in CI_SKIPPED_MATRIX_JOBS.items() if legs == CI_PYTEST_LEGS
+)
+_NOISE = [*_DECIDED, *_NO_VERDICT, *_OTHER, _SUCCESS, _SKIPPED]
+# A skipped head whose `prove` did not succeed had every need run, so it never passes.
+_PROVEN_PROVES = [
+    _SUCCESS,
+    _SUCCESS,
+    ("completed", "cancelled"),
+    ("completed", "failure"),
+    _SKIPPED,
+]
+
+
+@st.composite
+def _heads(draw) -> list[CheckRun]:
+    """A ran or a skipped head, with some of its runs dropped and up to four noise runs added.
+
+    A ran head has every need succeed, only the first k pytest legs, and may skip a build
+    reader. A skipped head has every need skip, its legs as one matrix-level skip or as their
+    own runs, and one or two `prove` runs that often succeed: the proven path.
+    """
+    skips_all = draw(st.booleans())
+    need = _SKIPPED if skips_all else _SUCCESS
+    proves = draw(
+        st.lists(
+            st.sampled_from(_PROVEN_PROVES if skips_all else _DECIDED + _NO_VERDICT),
+            min_size=1,
+            max_size=2 if skips_all else 1,
+        )
+    )
+    base = [
+        CheckRun(CI_PROVE_JOB, status, conclusion, suite)
+        for suite, (status, conclusion) in enumerate(proves, 1)
+    ]
+    for name in sorted(CI_GATE_NEEDS_JOBS - CI_PYTEST_LEGS):
+        reader_skips = name in CI_BUILD_READER_JOBS and draw(st.booleans())
+        base.append(CheckRun(name, *(_SKIPPED if reader_skips else need), 1))
+    if skips_all and draw(st.booleans()):
+        base.append(CheckRun(_PYTEST_MATRIX_SKIP, *_SKIPPED, 1))
+    else:
+        legs = sorted(CI_PYTEST_LEGS)[: draw(st.integers(1, len(CI_PYTEST_LEGS)))]
+        base.extend(CheckRun(leg, *need, 1) for leg in legs)
+    kept = [run for run in base if draw(st.integers(0, 19))]
+    noise = draw(st.lists(_runs(_NOISE), max_size=4))
+    return draw(st.permutations([*kept, *noise]))
+
+
+def _states(head: list[CheckRun]) -> defaultdict[str, set[RunState]]:
+    """Each name's run states, a matrix-level skip counted as a skip of each of its legs."""
+    states = defaultdict(set)
+    for run in head:
+        states[run.name].add(run.state)
+        if run.state is RunState.SKIPPED:
+            for leg in CI_SKIPPED_MATRIX_JOBS.get(run.name, ()):
+                states[leg].add(RunState.SKIPPED)
+    return states
+
+
+def _planned_needs(head: list[CheckRun]) -> list[str]:
+    """Every need but the pytest legs numbered past the highest leg with a run of its own."""
+    own_legs = sorted(run.name for run in head if run.name in CI_PYTEST_LEGS)
+    last = own_legs[-1] if own_legs else max(CI_PYTEST_LEGS)
+    return [n for n in CI_GATE_NEEDS_JOBS if n not in CI_PYTEST_LEGS or n <= last]
+
+
+def _unexcused_needs(head: list[CheckRun]) -> list[str]:
+    """The planned needs with neither a passing run nor an excused skip."""
+    states = _states(head)
+    proves = [run for run in head if run.name == CI_PROVE_JOB]
+    proven = (
+        any(run.state is RunState.PASS for run in proves)
+        and all(run.state is RunState.PASS or run.no_verdict for run in proves)
+        and not any(RunState.PASS in states[n] for n in CI_GATE_NEEDS_JOBS)
+    )
+    built = RunState.PASS in states[CI_BUILD_JOB]
+    return [
+        name
+        for name in _planned_needs(head)
+        if RunState.PASS not in states[name]
+        and not (
+            RunState.SKIPPED in states[name]
+            and (proven or (built and name in CI_BUILD_READER_JOBS))
+        )
+    ]
+
+
+@given(_heads(), st.data())
+def test_the_order_of_a_heads_runs_does_not_change_its_verdict(head, data):
+    reordered = data.draw(st.permutations(head))
+
+    assert jobs_verdict(reordered) == jobs_verdict(head)
+
+
+@given(_heads(), st.sampled_from(sorted(CI_GATE_NEEDS_JOBS)), st.integers(1, 3))
+def test_a_failed_need_fails_the_head(head, name, suite):
+    """`prove` is not a need: its failure is a runner fault, after which every need runs."""
+    failed = CheckRun(name, "completed", "failure", suite)
+
+    assert jobs_verdict([*head, failed]) == "fail"
+
+
+def _every_need_skipped(*proves: tuple[str, str | None]) -> list[CheckRun]:
+    return [
+        *(
+            CheckRun(CI_PROVE_JOB, *outcome, suite)
+            for suite, outcome in enumerate(proves, 1)
+        ),
+        *(CheckRun(n, *_SKIPPED, 1) for n in CI_GATE_NEEDS_JOBS),
+    ]
+
+
+@given(_heads())
+@example(_every_need_skipped(("completed", "cancelled")))
+@example(_every_need_skipped(_SUCCESS, _SKIPPED))
+def test_a_passing_head_has_every_planned_need_passed_or_excused(head):
+    if jobs_verdict(head) == "pass":
+        assert _unexcused_needs(head) == []
+
+
+def _pass_routes(head: list[CheckRun]) -> set[str]:
+    states = _states(head)
+    routes = set()
+    if not any(RunState.PASS in states[n] for n in CI_GATE_NEEDS_JOBS):
+        routes.add("proven")
+    if any(states[n] == {RunState.SKIPPED} for n in CI_BUILD_READER_JOBS):
+        routes.add("reader skipped beside a build")
+    if len(_planned_needs(head)) < len(CI_GATE_NEEDS_JOBS):
+        routes.add("legs pruned")
+    if any(run.name == _PYTEST_MATRIX_SKIP for run in head):
+        routes.add("legs skipped at matrix level")
+    return routes
+
+
+def test_the_structured_heads_reach_every_verdict_and_every_pass_route():
+    """Non-vacuity: the completeness property reads only the heads that pass."""
+    verdicts: set[str] = set()
+    routes: set[str] = set()
+
+    @given(_heads())
+    def collect(head):
+        verdict = jobs_verdict(head)
+        verdicts.add(verdict)
+        if verdict == "pass":
+            routes.update(_pass_routes(head))
+
+    collect()
+    assert verdicts == {"pass", "pending", "fail"}
+    assert routes == {
+        "proven",
+        "reader skipped beside a build",
+        "legs pruned",
+        "legs skipped at matrix level",
+    }
