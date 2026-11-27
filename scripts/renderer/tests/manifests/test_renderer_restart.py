@@ -97,6 +97,15 @@ def test_a_target_that_names_no_rendered_workload_is_flagged():
         _values(targets=("four",))
 
 
+def test_a_target_two_workloads_share_is_flagged():
+    files = _two_workloads()["fixture"]
+    files["deploy-c.yaml"] = DEPLOYMENT.format(name="one", secret="b").replace(
+        "  name: one\n", "  name: one\n  namespace: other\n"
+    )
+    with pytest.raises(RenderError, match="restart target one names 2 workloads"):
+        restart_values("fixture", {"fixture": files}, {"one": ALL}, KEYS, SOURCE)
+
+
 def test_a_target_restarted_only_on_config_ignores_its_secrets():
     """`restart_on: [config]` admits no Secret, so a Secret-only workload gets no value."""
     assert _values(kinds=frozenset({"ConfigMap"})) == {}
