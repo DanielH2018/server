@@ -324,6 +324,7 @@ ignore_decorators = [
   "@mcp.tool",  # homelab-mcp tools, called by the MCP client
   "@app.route",  # ical-proxy Flask routes
   "@rule",  # Hypothesis state-machine rules, called by the machine
+  "@invariant",  # Hypothesis state-machine invariants, checked after every rule
 ]
 ignore_names = [
   # Hooks and handlers a framework calls by name.
