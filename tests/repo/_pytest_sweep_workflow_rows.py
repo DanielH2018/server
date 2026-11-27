@@ -4,8 +4,10 @@
 with one property broken.
 """
 
+import tomllib
 from collections.abc import Callable
 
+from _helpers import REPO
 from _ci_job_rows import (
     RESTORE,
     SAVE,
@@ -35,6 +37,7 @@ PYTEST_TOOLS = ".github/actions/pytest-tools/action.yml"
 RUN_STEP = "Run the whole test suite"
 CACHE_STEP = "Cache the age and apt-utils binaries"
 INSTALL_STEP = "Install age and apt-utils for the tests"
+DOTFILES_STEP = "Deploy the dotfiles packages the hooks and the pruner import"
 IMAGE_VERSION = "steps.image.outputs.version"
 
 
@@ -157,6 +160,18 @@ def _sudo_problems(action: Workflow) -> list[str]:
         f"step {s.get('name')!r} runs sudo, which a runner pod under `restricted` cannot"
         for s in steps(action.get("runs") or {})
         if "sudo" in runs(s)
+    ]
+
+
+def _dotfiles_pin_problems(action: Workflow) -> list[str]:
+    ci = _action_step(action, DOTFILES_STEP)["env"]["DOTFILES_SHA"]
+    pyproject = tomllib.loads((REPO / "pyproject.toml").read_text())
+    checkers = pyproject["tool"]["uv"]["sources"]["claude-worktree"]["rev"]
+    if ci == checkers:
+        return []
+    return [
+        f"CI's tests import dotfiles {ci}, and ty and pyright read claude-worktree from "
+        f"{checkers} ([tool.uv.sources] in pyproject.toml)"
     ]
 
 
@@ -363,6 +378,26 @@ PYTEST_SWEEP_ROWS = (
                     "if cached_apt_tools_run; then",
                     "if true; then\n  apt-get install -y age",
                 ),
+            ),
+        )
+    ),
+    Census(
+        **_row(
+            PYTEST_TOOLS,
+            name="pytest-tools-dotfiles-pin-is-the-type-checkers-pin",
+            reason=(
+                "CI's tests import the dotfiles `claude_worktree` at `DOTFILES_SHA`, and ty and "
+                "pyright read its signatures from the `lint` group's copy at the "
+                "`[tool.uv.sources]` rev. Two different commits would type-check against an "
+                "interface the tests do not run. Renovate bumps only `DOTFILES_SHA`, so its PR "
+                "fails here until the rev and `uv.lock` follow."
+            ),
+            offence=judge(_dotfiles_pin_problems),
+            red=mutants(
+                PYTEST_TOOLS,
+                a_dotfiles_sha_the_checkers_do_not_read=lambda a: _action_step(
+                    a, DOTFILES_STEP
+                )["env"].update(DOTFILES_SHA="0" * 40),
             ),
         )
     ),

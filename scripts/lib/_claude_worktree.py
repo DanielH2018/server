@@ -26,8 +26,6 @@ as `--require`
 # the package into `~/.local/share/`.
 """
 
-# pyright: reportMissingImports=false
-
 import os
 import sys
 from pathlib import Path
@@ -49,6 +47,17 @@ except ImportError as exc:
         "It is deployed by the dotfiles repo (chezmoi apply) — run that on this host, "
         "or point CLAUDE_WORKTREE_HOME at a checkout of it."
     ) from exc
+
+# The `lint` group installs a pinned copy for the type checkers; it must never stand in for the deploy.
+if (
+    Path(claude_worktree.__file__ or "").resolve().parent
+    != _CLAUDE_WORKTREE_HOME.resolve()
+):
+    raise ImportError(
+        f"claude_worktree loaded from {claude_worktree.__file__}, not from the deploy at "
+        f"{_CLAUDE_WORKTREE_HOME}. It is deployed by the dotfiles repo (chezmoi apply) — run "
+        "that on this host, or point CLAUDE_WORKTREE_HOME at a checkout of it."
+    )
 
 _deployed = getattr(claude_worktree, "INTERFACE", 1)
 if _deployed < REQUIRED_INTERFACE:
