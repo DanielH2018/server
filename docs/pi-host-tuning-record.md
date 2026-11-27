@@ -271,15 +271,16 @@ H7.25 a task also counted the DISTINCT `JOURNALD_AWARE=` values and failed on an
 
 The caps themselves, set when the tmpfs was 81% full on 2026-06-11:
 
-- A Pi journald drop-in, `60-homelab-pi.conf` with `SystemMaxUse=32M`, overrides
-  initial_setup's server-sized 1G cap. Its `SystemMaxFiles=32` and `SystemMaxFileSize=1M`
-  bound the journal's SD copy at 32 MiB plus the two active files, because `SystemMaxUse`
+- A Pi journald drop-in, `60-homelab-pi.conf` with `SystemMaxUse=40M`, overrides
+  initial_setup's server-sized 1G cap. Its `SystemMaxFiles=40` and `SystemMaxFileSize=1M`
+  bound the journal's SD copy at 40 MiB plus the two active files, because `SystemMaxUse`
   cannot see the zeros written to the card (#4583, #8234, above). The files are small rather
   than few, because every rotation writes a full-size archive whatever it holds. The Pi made
   about 4 archives a day on 2026-11-12 and 11-13: log2ram's daily rotate archives the system
   and user journals, and each journald restart and boot adds more. An archive held about
-  270 KB, so 1 MiB holds one, and 32 archives keep about a week of history. That covers the
-  weekly rkhunter report, which logs to the journal.
+  270 KB, so 1 MiB holds one. The sync before each unattended upgrade, described below,
+  adds a fifth archive a day, so 40 archives keep about eight days of history. That covers
+  the weekly rkhunter report, which logs to the journal.
 - `rotate 3` in `/etc/logrotate.d/acct` cuts pacct retention from 30 generations to 3:
   `pacct.0`, `pacct.1.gz` and `pacct.2.gz`. The stanza's `start 0` and `delaycompress`
   leave `pacct.0` uncompressed. Ubuntu 26.04's acct 6.6.4 rotates pacct only through that
@@ -298,6 +299,12 @@ The caps themselves, set when the tmpfs was 81% full on 2026-06-11:
   went without a rotation from 2026-11-23 and filled `/var/log` to 88% by 2026-11-26. A
   `size` check reads only the file, so the first hourly run after the reset rotates it.
   Every other `daily` stanza still rotates once a day, by its date in the state file.
+- A drop-in for `apt-daily-upgrade.service` runs log2ram's write before every unattended
+  upgrade run. The Pi reset near 06:00 on 2026-11-24, 11-25 and 11-26, each time during
+  or just after that run (#10141). Each reset restored the tmpfs from the 23:55 sync, so
+  it lost the night's logs and the upgrade's own record in `/var/log/apt` and
+  `/var/log/unattended-upgrades`. With the drop-in, a reset loses only what the run wrote
+  since it started.
 - auditd is capped to a 12 MB ceiling. Its free-space thresholds have their own section below.
 - `HISTORY=2` cuts sysstat's shipped 7 days — 18 sa/sar files, 9.9 MB — to 2.
 
@@ -518,7 +525,7 @@ re-proposal that was declined.
 **The DOWN line names why**, from `docker inspect` read BEFORE the `docker start`:
 `not running: autoheal [status=exited exit=137 finished=<ts> error=<daemon text>]`. The restart
 (or the next deploy's recreate) erases that state, the journal here rotates in about a day
-under `SystemMaxUse=32M`, and `/var/log/pi-health/health.log` rotates daily on log2ram — so
+under `SystemMaxUse=40M`, and `/var/log/pi-health/health.log` rotates daily on log2ram — so
 the heartbeat's own line, shipped to Loki under `job="syslog"`, is the only record of a Pi container
 failure that survives a week (#1912). `State.Error` is flattened to one line and capped at 300
 characters so it cannot split the record the alert parser reads.

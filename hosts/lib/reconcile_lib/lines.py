@@ -15,6 +15,11 @@ directory above it is created 0700 with that owner. Rewriting an existing file k
 mode. Both rules exist because sshd's `StrictModes` rejects an authorized_keys file or a `~/.ssh`
 the arm left with the wrong ones.
 
+A line is the text up to and including a `\n`, and nothing else ends one: a `\x0c` or a U+2028
+stays inside its line. The arm compares a line without its `\r\n` or `\n`, so a CRLF file
+matches as an LF file does. The block spans the first END marker that follows a BEGIN, from the
+last BEGIN above it, so a stray BEGIN with no END stays outside the block.
+
 Before it writes, the arm asks one `dpkg -S` call for the owners of every path it edits. It accepts
 an unowned file, and an owned file only when every owner lists the path among its conffiles. It refuses any other owned file, so it
 can never fight dpkg, and a refusal is a fault: the package shipped something wrong. It also
@@ -35,6 +40,7 @@ from reconcile_lib.common import ERR, under_root, run, log
 
 KEYS = ({"path", "line", "regexp"}, {"path", "block", "marker"})
 MODE = re.compile(r"[0-7]{3,4}")
+LINE = re.compile(r"[^\n]*\n|[^\n]+\Z")
 
 
 def valid_edit(edit: object) -> bool:
@@ -55,10 +61,14 @@ def valid_edit(edit: object) -> bool:
     ):
         return False
     if "block" in edit:
-        return "{mark}" in anchor and "\n" not in anchor
+        return (
+            "{mark}" in anchor
+            and not {"\n", "\r"} & set(anchor)
+            and not set(markers(anchor)) & set(map(bare, split(text)))
+        )
     try:
         # A line its own regexp misses would be appended again on every run.
-        return "\n" not in text and re.search(anchor, text) is not None
+        return not {"\n", "\r"} & set(text) and re.search(anchor, text) is not None
     except re.error:
         return False
 
@@ -127,10 +137,24 @@ def conffiles(owner: str) -> dict[str, bool] | None:
     return {row[0]: "obsolete" in row[2:] for row in rows}
 
 
+def split(text: str) -> list[str]:
+    """`text` as lines that keep their ends, split at `\n` alone."""
+    return LINE.findall(text)
+
+
+def bare(line: str) -> str:
+    return line.rstrip("\n").removesuffix("\r")
+
+
+def markers(marker: str) -> tuple[str, str]:
+    begin, end = (marker.replace("{mark}", word) for word in ("BEGIN", "END"))
+    return begin, end
+
+
 def with_line(text: str, edit: dict) -> str:
     """`text` with the last line the regexp matches replaced, or the line appended."""
-    lines = text.splitlines(keepends=True)
-    hits = [i for i, line in enumerate(lines) if re.search(edit["regexp"], line)]
+    lines = split(text)
+    hits = [i for i, line in enumerate(lines) if re.search(edit["regexp"], bare(line))]
     if hits:
         lines[hits[-1]] = edit["line"] + "\n"
     else:
@@ -141,14 +165,15 @@ def with_line(text: str, edit: dict) -> str:
 
 def with_block(text: str, edit: dict) -> str:
     """`text` with the marked block replaced, or the block appended after the last line."""
-    begin, end = (edit["marker"].replace("{mark}", word) for word in ("BEGIN", "END"))
+    begin, end = markers(edit["marker"])
     block = f"{begin}\n{edit['block'].rstrip(chr(10))}\n{end}\n"
-    lines = text.splitlines(keepends=True)
-    names = [line.rstrip("\n") for line in lines]
-    if begin in names and end in names[names.index(begin) :]:
-        first = names.index(begin)
-        last = names.index(end, first)
-        return "".join(lines[:first]) + block + "".join(lines[last + 1 :])
+    lines = split(text)
+    first = None
+    for i, name in enumerate(map(bare, lines)):
+        if name == begin:
+            first = i
+        elif name == end and first is not None:
+            return "".join(lines[:first]) + block + "".join(lines[i + 1 :])
     return text + ("\n" if text and not text.endswith("\n") else "") + block
 
 
