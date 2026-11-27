@@ -93,6 +93,20 @@ def test_a_line_assigns_the_key_pyyaml_parses_and_not_one_its_comment_quotes(
     assert not cluster_pins.assigns(other, line.text)
 
 
+@given(st.lists(values, min_size=1, max_size=3), st.sampled_from(KEYS))
+@example(['x "y', '"z #w"'], "k3s_version")
+@example(["x 'y", "'z #w'"], "k3s_version")
+def test_a_flow_mapping_assigns_a_key_after_scalars_that_hold_quotes(scalars, key):
+    flow = {f"k{n}": value for n, value in enumerate(scalars)} | {key: "v1"}
+    text = yaml.safe_dump(
+        flow, default_flow_style=True, sort_keys=False, width=float("inf")
+    ).removesuffix("\n")
+    assume(not set(text) & set("\r\n\x85  "))
+
+    assert yaml_fast.safe_load(text) == flow
+    assert cluster_pins.assigns(key, text)
+
+
 @given(st.text() | values)
 def test_the_line_reader_takes_any_text_and_only_ever_cuts_its_end(text):
     assert text.startswith(cluster_pins.code_part(text))

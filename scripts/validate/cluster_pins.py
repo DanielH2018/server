@@ -223,9 +223,21 @@ def files_setting(key: str, sha: str, repo: Path = REPO) -> list[str]:
     return [line.split(":", 1)[1] for line in hits.stdout.splitlines()]
 
 
-# A quote opens at line start or after whitespace or `{[,:`; a quote inside a bare word, as in
-# `x's`, opens none.
+# A quote opens a scalar after whitespace or `{[,:`; a quote inside a bare word, as in `x's`,
+# opens none.
 QUOTE_OPENERS = " \t{[,:"
+# What may precede a quoted scalar once whitespace is skipped; `-` and `?` are block indicators.
+SCALAR_STARTERS = "{[,:"
+
+
+def opens_scalar(line: str, i: int) -> bool:
+    """Whether the quote at `line[i]` starts a quoted scalar, not text inside a plain one."""
+    if i == 0:
+        return True
+    if line[i - 1] not in QUOTE_OPENERS:
+        return False
+    before = line[:i].rstrip(" \t")
+    return not before.strip(" \t-?") or before[-1] in SCALAR_STARTERS
 
 
 def code_part(line: str) -> str:
@@ -248,7 +260,7 @@ def code_part(line: str) -> str:
                 escaped = True
             elif char == quote:
                 quote = ""
-        elif char in "\"'" and (i == 0 or line[i - 1] in QUOTE_OPENERS):
+        elif char in "\"'" and opens_scalar(line, i):
             quote = char
         elif char == "#" and (i == 0 or line[i - 1] in " \t"):
             return line[:i]
