@@ -40,8 +40,13 @@ from lib.exit_codes import PROBE_FAILED, PROBE_OK, PROBE_UNREADABLE
 from lib.gh import gh
 from lib.git import git
 
-# `git remote get-url` in both of GitHub's shapes: scp-style ssh and https.
-_SLUG = re.compile(r"github\.com[:/](?P<slug>[^/\s]+/[^/\s]+?)(?:\.git)?/?$")
+# A github.com remote as an https or ssh URL, or in scp form, matched against the whole string.
+# A userinfo holds no `/`, so a `github.com` in another host's path cannot match.
+_SLUG = re.compile(
+    r"(?:(?:https?|ssh)://(?:[^/\s?#@]+@)?github\.com(?::\d+)?/"
+    r"|(?:[^/\s@:]+@)?github\.com:)"
+    r"(?P<slug>[^/\s]+/[^/\s]+?)(?:\.git)?/?"
+)
 
 # Only `always` lets a direct push through; `pull_requests_only` bypasses on PR merge, never on
 # push.
@@ -96,7 +101,7 @@ def run_gh(*args):
 
 def repo_slug(remote_url):
     """`owner/name` from a GitHub remote URL, or None for a remote that is not GitHub."""
-    match = _SLUG.search(remote_url.strip())
+    match = _SLUG.fullmatch(remote_url.strip())
     return match.group("slug") if match else None
 
 
