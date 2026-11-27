@@ -202,3 +202,28 @@ def run_arr(ns):
     )
     print(text, end="")
     return rc
+
+
+def add_parser(sub) -> None:
+    """Add `arr` to probe.py's subparsers; it lives here while cli_parser.py sits at its cap."""
+    ar = sub.add_parser(
+        "arr", help="read-only *arr API GET (key from SOPS, fed via stdin)"
+    )
+    ar.add_argument("app", choices=sorted(ARR_PORTS))
+    ar.add_argument("path", help="api path, e.g. health, indexerstatus, notification")
+    ar.add_argument(
+        "--timeout",
+        type=int,
+        help="curl --max-time in seconds (default 120 for a `release` search, else 10)",
+    )
+    ar.add_argument(
+        "--json",
+        action="store_true",
+        help="print one-line JSON instead of pretty-printed",
+    )
+    ar.add_argument(
+        "--show-secrets",
+        action="store_true",
+        help="print credential-bearing field values instead of <redacted> "
+        "(they land in the transcript — see issue #1388)",
+    )
