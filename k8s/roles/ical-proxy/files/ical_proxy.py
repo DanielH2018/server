@@ -64,10 +64,31 @@ def wire_value(component, name):
     return component[name].to_ical().decode().strip()
 
 
+def series_end_before(dtstart, cut):
+    """Returns the UNTIL that ends a series starting at dtstart on the last local day before cut.
+
+    UNTIL takes DTSTART's value type, as RFC 5545 requires: a DATE for an all-day series, a
+    floating datetime for a floating one, and a UTC datetime for a UTC or TZID one. The day
+    ends in the series' own zone, so a zoned evening occurrence on the day before cut is kept.
+    """
+    if not isinstance(dtstart, datetime):
+        return cut - timedelta(days=1)
+    end = datetime(cut.year, cut.month, cut.day, tzinfo=dtstart.tzinfo) - timedelta(
+        seconds=1
+    )
+    return end if dtstart.tzinfo is None else end.astimezone(UTC)
+
+
+def local_date(moment):
+    """Returns the calendar date a DTSTART value falls on in its own zone."""
+    return moment.date() if isinstance(moment, datetime) else moment
+
+
 def cap_overlapping_series(calendar):
     """Caps the earlier of two recurring series that share the same SUMMARY and RRULE.
 
-    Sets UNTIL to the day before the later series starts, so the two don't overlap.
+    Ends the earlier series on the day before the later series' local start date, so the
+    two don't overlap.
     """
     groups = {}
     for event in calendar.walk("VEVENT"):
@@ -78,13 +99,12 @@ def cap_overlapping_series(calendar):
     for group in groups.values():
         group.sort(key=lambda e: wire_value(e, "DTSTART"))
         for earlier, later in pairwise(group):
-            start = datetime.strptime(
-                wire_value(later, "DTSTART")[:8], "%Y%m%d"
-            ).replace(tzinfo=UTC)
-            until = start - timedelta(seconds=1)
-            earlier["RRULE"]["UNTIL"] = [until]
+            cut = local_date(later.decoded("DTSTART"))
+            earlier["RRULE"]["UNTIL"] = [
+                series_end_before(earlier.decoded("DTSTART"), cut)
+            ]
             print(
-                f"Capped recurring event UNTIL={until:%Y%m%dT%H%M%SZ}: SUMMARY={earlier['SUMMARY']}"
+                f"Capped recurring event {wire_value(earlier, 'RRULE')}: SUMMARY={earlier['SUMMARY']}"
             )
 
 
