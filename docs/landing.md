@@ -414,7 +414,7 @@ jobs. Every landing that merges its PR directly takes the turn.
   never tested. An approved head's refusal names a rebase and a new approval. Any other head's
   refusal names a re-run, whose first green poll updates the branch. The check covers every
   route to the merge: a landing that went on without the turn marked its draft ready with no
-  update, and the run that flip started tested the master of the PR's last push, not today's.
+  update, and the run that flip started tested the master of the PR's last push, not master's tip.
   It also covers a head this landing's own update made, when master moved again during its
   run. Only a head a landing batch tested is exempt (`stale_base.batch_tested`).
   An update in the turn that GitHub refuses does not stop the landing: the PR keeps the run

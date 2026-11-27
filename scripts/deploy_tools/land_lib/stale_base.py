@@ -172,12 +172,15 @@ def refuse_stale_overlap(ln: Landing, head: str) -> None:
             f"it onto origin/{BRANCH}, push, get the new head approved, and re-run this",
             1,
         )
-    shown = _shown(moved)
+    remedy = (
+        f"update its branch from {BRANCH}, check the new head, and re-run this with it"
+        if ln.opts.require_head is not None
+        else f"re-run this, which updates its branch from {BRANCH} first"
+    )
     ln.die(
         f"{BRANCH} changed {len(moved)} path(s) PR #{pr} changes since the run that tested "
-        f"{head[:8]} ({shown}), so merging it would make a tree no run tested — re-run this, "
-        f"which updates its branch from {BRANCH} first; a landing that pins its head "
-        f"(LAND_REQUIRE_HEAD) needs the branch updated and the new head checked",
+        f"{head[:8]} ({_shown(moved)}), so merging it would make a tree no run tested — "
+        f"{remedy}",
         1,
     )
 
