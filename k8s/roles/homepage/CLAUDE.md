@@ -107,10 +107,12 @@ that bite from a config edit alone.
   ENFORCED by `tests/services/homepage/test_homepage_block_label_overrides.py`. A widget that
   takes a `label:` per block, `customapi` or `prometheusmetric`, names its blocks in config and
   needs no rename; the Karma tile is one.
-- **The Karma tile links to Karma's LAN name.** Karma is the alert UI, and its route
-  matches no public name, so the tile passes `lan=True` to `homepage_href`. Its two blocks
-  read Prometheus, not Karma. They count firing critical and warning alerts without `shadow="true"`,
-  `drill="true"` or `paged_by="homelab-alert"`, the matchers the routing tree blackholes.
+- **The Karma tile counts what Karma shows.** Its two `customapi` widgets ask Karma's
+  `/alerts.json` for the critical and the warning count, because Prometheus never sees the Loki
+  ruler's alerts. Karma's API ignores the config's `filters.default`, so each request repeats
+  that list, held equal by
+  `tests/services/homepage/test_homepage_karma_tile.py::test_each_tile_request_sends_karmas_default_filters`.
+  A filter added to Karma's defaults goes into the tile's requests in the same change.
 - **The Longhorn widget is configured across TWO files, and the wrong half is silent.**
   `providers.longhorn.url` in `templates/config/settings.yaml.j2` holds the connection;
   `templates/config/widgets.yaml.j2` holds only the display options. A `url:` written beside

@@ -132,11 +132,14 @@ can express arithmetic), and the `peanut` widget names its two `battery_charge` 
 Three tiles take a different shape. The Home Assistant widget has no `fields:` at all — its
 `custom:` entries ARE the blocks, so pruning it means deleting entries. The Headlamp tile's
 blocks come from `mappings:` paired positionally to the PromQL operands in `defaults/main.yml`,
-so pruning it means editing both files together. The Karma tile is a `prometheusmetric`
-widget: each entry under `metrics:` is one block, with its own `label:` and PromQL `query:`, so
-its headings need no CSS rename. Its Critical and Warning counts drop every matcher the
-Alertmanager routing tree sends to its `blackhole` receiver (`shadow="true"` and
-`drill="true"`).
+so pruning it means editing both files together. The Karma tile carries two `customapi`
+widgets under `widgets:`, one per severity, because each widget makes one request. Each POSTs
+to Karma's `/alerts.json` and shows its `totalAlerts` under its own `label:`, so its headings
+need no CSS rename. It reads Karma rather than Prometheus because the Loki ruler's alerts reach
+Alertmanager and never Prometheus. Karma's API ignores the config's `filters.default`, so each
+request sends that list itself, and
+`tests/services/homepage/test_homepage_karma_tile.py::test_each_tile_request_sends_karmas_default_filters`
+holds the two equal.
 
 The `::after` rename in `custom.css.j2` uses `font-size: 0` rather than `visibility: hidden`,
 because the box must be sized by the NEW text: "Battery Charge" wrapped to two lines in an 85px

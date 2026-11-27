@@ -498,6 +498,9 @@ containers_list:
     port: 8080
     use_authelia: true
     auth_tier: two_factor
+    # The Karma tile counts alerts through Karma's API. Karma proxies silence writes, so the
+    # fence also gives homepage a path to silence an alert.
+    homepage_widget: true
   - name: lidarr
     platform: k8s
     weekly_backup_claims: {lidarr-config: 6}  # Sat
