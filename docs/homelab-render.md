@@ -675,7 +675,10 @@ template shape fixes it, so the guard checks the values where the cluster file i
   changes or rejects any text that is no valid plain scalar. The second is a port of the
   plain-scalar resolver of go-yaml v2.4.4, the version the pinned CLI carries. It types
   `1e3`, `08`, `0o17` and `y`, which PyYAML reads as strings. The flux probe holds both to
-  the pinned CLI.
+  the pinned CLI. The resolver also refuses a value holding a tab, a line break (NEL, U+2028
+  and U+2029 included) or one of `,[]{}?`, and a value with a leading `:`. Each reads back as
+  the same string alone but breaks once Flux puts it in a field or a flow collection, so
+  quote such a value in the template.
 - **The guard is enforced with no exemption list.** Every key with a standalone use is in
   the map. R2's PR 9 deleted `GUARD_DEFERRED`, the set of keys the guard skipped. Its last
   member was `mullvad_account`, whose real value is all digits, until R2's PR 7b moved that
