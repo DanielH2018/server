@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/service_catalog.py
-generated_at: 2026-11-26 18:17 UTC
-generated_sha: 57382e988
+generated_at: 2026-11-27 06:17 UTC
+generated_sha: f8cc3c595
 ---
 
 !!! warning "Generated file — do not edit"
@@ -12,12 +12,12 @@ generated_sha: 57382e988
 
 # Services
 
-71 service(s) declared across 1 host(s).
+72 service(s) declared across 1 host(s).
 
 
 ## daniel-box
 
-71 service(s).
+72 service(s).
 
 | Service | Route | Auth | Backup tier | Auto-deploy |
 |---|---|---|---|---|
@@ -86,6 +86,7 @@ generated_sha: 57382e988
 | tdarr | <span class="fqdn" data-host="tdarr">tdarr.&lt;domain&gt;</span> · <span class="fqdn" data-host="tdarr.local">tdarr.local.&lt;domain&gt;</span> | Authelia one_factor | weekly -> B2 (default target); not Longhorn (media-local) | n/a: applied by Flux, through `promote`; `land.sh` gates the rollout |
 | terraria | no route (infra role) | unknown (use_authelia not declared on this entry) | weekly -> B2 (default target) | n/a: applied by Flux, through `promote`; `land.sh` gates the rollout |
 | texbrain | <span class="fqdn" data-host="texbrain">texbrain.&lt;domain&gt;</span> · <span class="fqdn" data-host="texbrain.local">texbrain.local.&lt;domain&gt;</span> | Authelia one_factor | no PVC (stateless) | n/a: applied by Flux, through `promote`; `land.sh` gates the rollout |
+| tft-assistant | <span class="fqdn" data-host="tft">tft.&lt;domain&gt;</span> · <span class="fqdn" data-host="tft.local">tft.local.&lt;domain&gt;</span> | Authelia one_factor | no backup (StorageClass longhorn-nobackup); weekly -> B2 (default target) | n/a: applied by Flux, through `promote`; `land.sh` gates the rollout |
 | traefik | no route (infra role) | unknown (use_authelia not declared on this entry) | daily -> R2 | n/a: applied by Flux, through `promote`; `land.sh` gates the rollout |
 | traefik-crds | no route (infra role) | unknown (use_authelia not declared on this entry) | no PVC (stateless) | n/a: applied by Flux, through `promote`; `land.sh` gates the rollout |
 | valheim | no route (infra role) | unknown (use_authelia not declared on this entry) | weekly -> B2 (default target); no backup (StorageClass longhorn-nobackup) | n/a: applied by Flux, through `promote`; `land.sh` gates the rollout |
