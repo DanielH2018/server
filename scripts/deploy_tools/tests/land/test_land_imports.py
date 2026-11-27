@@ -22,6 +22,7 @@ MODULES = frozenset(
         "line",
         "batch",
         "stale_base",
+        "stall",
         "stuck_checks",
         "policy",
         "classify",
@@ -98,8 +99,11 @@ ALLOWED = {
         "gh_read",
         "slots",
         "stale_base",
+        "stall",
         "stuck_checks",
     },
+    # The merge wait's decision about a head whose CI no longer moves, and the run it starts.
+    "stall": {"landing", "outcome", "gh_read"},
     # What makes a green head stale against master, and the one branch update.
     "stale_base": {"landing", "outcome", "gh_read", "policy", "pr_json"},
     "turn": {"landing", "outcome", "line", "fresh", "serial_lock"},

@@ -34,7 +34,8 @@ Both are LAPI allowlists (`cscli allowlists`), each fed every 5 min, and an allo
 raises no decision, local or CAPI. **`home-ips`** holds the home public IPv4 address and IPv6
 /64, fed in two halves (below). **`remote-ips`** is `files/remote_allowlist.py`, run by
 the `crowdsec-jobs` sidecar (below): a client address that got
-a 2xx on an `authelia`-gated router, kept 7 days, capped at
+a 2xx on an `authelia`-gated router, an IPv6 client as its /64
+(`k8s/roles/crowdsec/files/remote_allowlist.py:entry_value`), kept 7 days, capped at
 `k8s/roles/crowdsec/files/remote_allowlist.py:CAP` entries, which is what covers a VPN
 exit or a phone (#2123). Its module docstring is the design.
 
