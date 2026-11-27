@@ -91,7 +91,11 @@ def main(argv: list[str] | None = None) -> int:
         print((__doc__ or "").strip(), file=sys.stderr)
         print("\nRunbooks:\n  " + "\n  ".join(REGISTRY.render_list()), file=sys.stderr)
         return USAGE_ERROR
-    return REGISTRY.get(argv[0]).func(argv[1:])
+    handler = REGISTRY.get(argv[0]).func
+    assert callable(handler)
+    code = handler(argv[1:])
+    assert isinstance(code, int)
+    return code
 
 
 if __name__ == "__main__":
