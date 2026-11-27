@@ -1,7 +1,7 @@
 """The host wait's renders run the snapshot's renderer through `lib.snapshot_uv`.
 
 A stub `uv` on `PATH` records what the render handed it and fails, so the render returns
-None and nothing is rendered.
+a `RenderFailed` and nothing is rendered.
 
 Run: uv run pytest scripts/deploy_tools/tests/land_deploy/test_land_host_render_snapshot.py
 """
@@ -17,7 +17,7 @@ def test_a_render_imports_the_snapshots_code_without_syncing(monkeypatch, tmp_pa
     monkeypatch.setenv("PATH", path_with(stubs))
     snapshot = tmp_path / "snapshot"
     snapshot.mkdir()
-    assert host_wait.render_host_tree(snapshot, "daniel-pi") is None
+    assert host_wait.render_host_tree(snapshot, "daniel-pi") == host_wait.RenderFailed()
     seen = (stubs / "uv.argv").read_text().splitlines()
     assert seen[:2] == [f"PYTHONPATH={snapshot / 'scripts'}", "UV_NO_SYNC=1"]
     assert seen[2:12] == [
@@ -32,3 +32,12 @@ def test_a_render_imports_the_snapshots_code_without_syncing(monkeypatch, tmp_pa
         "daniel-pi",
         "--out",
     ]
+
+
+def test_a_render_that_cannot_import_a_module_names_it(monkeypatch, tmp_path):
+    missing = (
+        "echo \"ModuleNotFoundError: No module named 'pydantic.fields'\" >&2\nexit 1\n"
+    )
+    monkeypatch.setenv("PATH", path_with(fake_bin(tmp_path / "bin", uv=missing)))
+    failed = host_wait.render_package_tree(tmp_path, "homelab-tools")
+    assert failed == host_wait.RenderFailed("pydantic")

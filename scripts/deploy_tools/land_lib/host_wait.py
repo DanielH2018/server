@@ -10,7 +10,9 @@ and keeps the hosts whose trees differ. It renders every shared package under
 `hosts/packages/` the same way, and a host whose rendered `nfpm.yaml` depends on a shared
 package that differs is a target too: the host's updater installs that package. When a
 snapshot or a render fails, every host with a `hosts/<host>/package.yml` at the merge commit
-is a target, so a failure waits rather than skips.
+is a target, so a failure waits rather than skips. A merge-commit render that fails on a module
+the primary's `.venv` lacks, in a merge that changes `uv.lock`, is named as a dependency the
+merge adds: the venv gains it when `homelab-checkout-sync` next runs.
 
 `wait_for_hosts` then reads Prometheus until each target settles:
 
@@ -86,6 +88,7 @@ from lib.systemd_timer import timer_settings
 RENDERER = "scripts/renderer/homelab_render.py"
 HOST_RENDER_TIMEOUT = 300
 HostTree = dict[str, tuple[str, int, bytes]]
+MISSING_MODULE = re.compile(r"ModuleNotFoundError: No module named '([^'.]+)")
 
 PROMETHEUS_PORT = 9090
 LOOPBACK = "127.0.0.1"
@@ -140,8 +143,20 @@ class HostTarget:
     compose: bool = False
 
 
-def render_host_tree(snapshot: Path, host: str) -> HostTree | None:
-    """`host`'s package as the renderer in `snapshot` renders it; None when the render failed.
+@dataclass(frozen=True)
+class RenderFailed:
+    """A render that did not produce a package tree.
+
+    Attributes:
+        missing: The top-level module the renderer could not import, from its
+            `ModuleNotFoundError`. None when the render failed some other way.
+    """
+
+    missing: str | None = None
+
+
+def render_host_tree(snapshot: Path, host: str) -> HostTree | RenderFailed:
+    """`host`'s package as the renderer in `snapshot` renders it, or why the render failed.
 
     The renderer runs from the snapshot, never imported here, so the inventory, the templates
     and the renderer code are all the snapshot's commit's. `gate_snapshot` points
@@ -150,14 +165,16 @@ def render_host_tree(snapshot: Path, host: str) -> HostTree | None:
     return _render_tree(snapshot, ["host", "--host", host], Path("hosts") / host)
 
 
-def render_package_tree(snapshot: Path, package: str) -> HostTree | None:
-    """The shared `package` as the renderer in `snapshot` renders it; None when it failed."""
+def render_package_tree(snapshot: Path, package: str) -> HostTree | RenderFailed:
+    """The shared `package` as the renderer in `snapshot` renders it, or why it failed."""
     return _render_tree(
         snapshot, ["package", "--name", package], Path("packages") / package
     )
 
 
-def _render_tree(snapshot: Path, args: list[str], subdir: Path) -> HostTree | None:
+def _render_tree(
+    snapshot: Path, args: list[str], subdir: Path
+) -> HostTree | RenderFailed:
     with tempfile.TemporaryDirectory(prefix="land-host-render-") as out:
         try:
             done = subprocess.run(
@@ -172,11 +189,12 @@ def _render_tree(snapshot: Path, args: list[str], subdir: Path) -> HostTree | No
             )
         except (OSError, subprocess.TimeoutExpired) as exc:
             say(f"host render of {subdir} at {snapshot} did not finish: {exc}")
-            return None
+            return RenderFailed()
         if done.returncode != 0:
             last = (done.stderr.strip().splitlines() or ["no output"])[-1]
             say(f"host render of {subdir} at {snapshot} failed: {last}")
-            return None
+            missing = MISSING_MODULE.search(done.stderr)
+            return RenderFailed(missing[1] if missing else None)
         return read_host_tree(Path(out) / subdir)
 
 
@@ -221,8 +239,8 @@ class HostReads:
     """Every boundary the host wait crosses, so a test replaces one field."""
 
     snapshot: Callable[[Path, str], AbstractContextManager[Path | None]] = gate_snapshot
-    render: Callable[[Path, str], HostTree | None] = render_host_tree
-    render_package: Callable[[Path, str], HostTree | None] = render_package_tree
+    render: Callable[[Path, str], HostTree | RenderFailed] = render_host_tree
+    render_package: Callable[[Path, str], HostTree | RenderFailed] = render_package_tree
     git: Callable[..., Any] = run_git
     fetch: Callable[[str, float], bytes] = fetch_url
     clock: Callable[[], float] = time.time
@@ -264,8 +282,8 @@ def host_targets(
         for host in sorted(_hosts_in(at_merge)):
             new = reads.render(at_merge, host)
             old = reads.render(at_parent, host) if host in before else {}
-            if new is None or old is None:
-                say(f"host targets: the render of {host} failed; waiting on every host")
+            if isinstance(new, RenderFailed) or isinstance(old, RenderFailed):
+                _say_render_failed(host, new, at_merge, at_parent)
                 return _every_host(primary, merge, reads)
             if new != old or depends_of(new) & shared:
                 target = _target(host, old, at_parent)
@@ -292,12 +310,31 @@ def _changed_packages(
     for package in sorted(_packages_in(at_merge)):
         new = reads.render_package(at_merge, package)
         old = reads.render_package(at_parent, package) if package in before else {}
-        if new is None or old is None:
-            say(f"host targets: the render of {package} failed; waiting on every host")
+        if isinstance(new, RenderFailed) or isinstance(old, RenderFailed):
+            _say_render_failed(package, new, at_merge, at_parent)
             return None
         if new != old:
             changed.add(package)
     return changed
+
+
+def _say_render_failed(
+    name: str, new: HostTree | RenderFailed, at_merge: Path, at_parent: Path
+) -> None:
+    """Say that a render of `name` failed, naming a missing module the merge's uv.lock adds."""
+    lock = Path("uv.lock")
+    if (
+        isinstance(new, RenderFailed)
+        and new.missing
+        and (at_merge / lock).read_bytes() != (at_parent / lock).read_bytes()
+    ):
+        say(
+            f"host targets: the render of {name} failed because the primary .venv lacks "
+            f"{new.missing!r}, a dependency this merge adds to uv.lock; the venv gains it "
+            "when homelab-checkout-sync next runs, so this landing waits on every host once"
+        )
+    else:
+        say(f"host targets: the render of {name} failed; waiting on every host")
 
 
 def _every_host(primary: Path, merge: str, reads: HostReads) -> list[HostTarget]:
