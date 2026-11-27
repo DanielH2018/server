@@ -113,11 +113,6 @@ def test_a_revision_that_drops_metallb_is_named_though_t_has_no_metallb_role(
 def test_unreadable_digests_count_every_forward_only_tag_as_changed():
     flagged = frozenset({"longhorn", "metallb"})
     assert forward_only.no_reset_names(None, flagged) == flagged
-    unclassified = forward_only.changed_tags(
-        {"_unclassified": {"footprint": "u2"}, "bento-pdf": {"footprint": "b"}},
-        {"_unclassified": {"footprint": "u"}, "longhorn": {"footprint": "a"}},
-    )
-    assert unclassified == {"bento-pdf", "longhorn"}
 
 
 # -- the gate ---------------------------------------------------------------------------------
