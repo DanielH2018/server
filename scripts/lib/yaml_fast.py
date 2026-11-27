@@ -29,11 +29,16 @@ the cluster-side modules under `k8s/roles/*/files/` cannot import this and still
 call `yaml.safe_load`. They are not a CI cost and are deliberately left alone.
 """
 
+from typing import TYPE_CHECKING
+
 import yaml
 
 # The getattr falls back silently to SafeLoader without libyaml; a test asserts the C loader is
 # selected.
-Loader = getattr(yaml, "CSafeLoader", yaml.SafeLoader)
+if TYPE_CHECKING:
+    Loader = yaml.SafeLoader
+else:
+    Loader = getattr(yaml, "CSafeLoader", yaml.SafeLoader)
 
 
 class UnparsableYaml(yaml.YAMLError, ValueError):

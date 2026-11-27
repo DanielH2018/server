@@ -113,6 +113,7 @@ def test_strict_schema_closes_objects_with_properties_and_only_those():
         "properties": {"a": {"type": "string"}, "b": {"type": "integer"}},
     }
     strict = strict_schema(schema)
+    assert isinstance(strict, dict)
     assert strict["additionalProperties"] is False
     assert strict["type"] == "object"
     assert strict["properties"]["a"]["type"] == "string"
@@ -120,6 +121,7 @@ def test_strict_schema_closes_objects_with_properties_and_only_those():
     open_map = strict_schema(
         {"type": "object", "additionalProperties": {"type": "string"}}
     )
+    assert isinstance(open_map, dict)
     assert (
         "additionalProperties" in open_map
         and open_map["additionalProperties"] is not False

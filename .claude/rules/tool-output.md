@@ -28,7 +28,7 @@ came from (#7892 to #7899). A tool you add or change follows the five rules belo
    `scripts/lib/progress.py:OnChange`. Don't hand-roll a `last` check.
 5. **A result another program reads is machine-readable.** Make it one terminal line in the
    established shape: probe's `PROBE-VERDICT: <state> (…)`, land's
-   `LAND-RESULT: verdict=… cause=… … hold_owner=… merge=…`, or one compact JSON object
+   `LAND-RESULT: verdict=… cause=… … merge=… next=…`, or one compact JSON object
    (`flux_wait.py`). A reader takes a logfmt field by name, so a new field goes at the end
    and no field is renamed. Grade on an
    exit code or that line, never on a sentence's wording. Rewording a message must not change

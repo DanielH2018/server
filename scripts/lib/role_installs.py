@@ -62,7 +62,7 @@ def _render(text: str, role: Path) -> str:
         "role_path": str(role),
     }
 
-    def fill(match: re.Match) -> str:
+    def fill(match: re.Match[str]) -> str:
         return values.get(match.group(1), match.group(0))
 
     return _JINJA.sub(fill, text)

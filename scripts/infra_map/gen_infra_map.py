@@ -174,7 +174,7 @@ def main(argv: list[str] | None = None) -> int:
     with a declared-only render would replace real data with a page that looks healthy
     and reports nothing wrong.
     """
-    parser = ArgumentParser(description=__doc__.splitlines()[0])
+    parser = ArgumentParser(description=(__doc__ or "").partition("\n")[0])
     parser.add_argument(
         "-o", "--output", type=Path, default=DEFAULT_OUTPUT, help="output HTML path"
     )

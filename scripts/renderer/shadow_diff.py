@@ -233,7 +233,7 @@ def main(
         render: `roundtrip`'s `render_sides`. A test passes one that reuses a tag's renders
             across its tests, which a fresh process never could.
     """
-    parser = ArgumentParser(description=__doc__.splitlines()[0])
+    parser = ArgumentParser(description=(__doc__ or "").partition("\n")[0])
     commands = parser.add_subparsers(dest="command", required=True)
     stubs = commands.add_parser(
         "stubs", help="write the stub extra-vars file for a shadow render"

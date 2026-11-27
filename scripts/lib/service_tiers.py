@@ -34,7 +34,7 @@ def r2_volumes(
     if entries is None:
         entries = list(k8s_entries().values())
     if namespace is None:
-        namespace = shared_vars()["k8s_namespace"]
+        namespace = str(shared_vars()["k8s_namespace"])
     return longhorn_r2_claims(entries, namespace)
 
 

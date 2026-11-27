@@ -62,10 +62,10 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 
 
+from dev.fanout_lib.land_result import FINISHED_VERDICTS
 from dev.fanout_lib.review.batch_run import BatchRun
 from dev.fanout_lib.review.processes import Runner
 from dev.fanout_lib.review.review_land import (
-    FINISHED_VERDICTS,
     LAND_MARGIN_S,
     PR_CI_RED,
     RESUME_VERDICTS,

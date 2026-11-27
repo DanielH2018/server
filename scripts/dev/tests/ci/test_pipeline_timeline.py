@@ -54,10 +54,24 @@ def test_landings_take_the_first_start_and_the_last_end():
         5598: {
             "land_start": 900.5,
             "land_end": 5000.0,
-            "attempts": 2,
-            "verdicts": ["pr-ci-red", "settled"],
+            "landings": [
+                {"verdict": "pr-ci-red", "seconds": 100.0},
+                {"verdict": "settled", "seconds": 600.0},
+            ],
         }
     }
+
+
+def test_the_summary_counts_landings_per_pr_and_the_time_failed_landings_cost():
+    pr = {"number": 5598, "title": "t", "createdAt": None, "mergedAt": None}
+
+    (row,) = join([pr], [], parse_landings(LEDGER), {}, {})
+
+    assert len(row["landings"]) == 2
+    assert row["failed_landing_s"] == 100.0
+    lines = summarize([row]).splitlines()
+    assert "landings: 2 over 1 PRs, per PR median 2.0, p90 2.0" in lines
+    assert "failed landing time: 0.0h of 0.2h (14%)" in lines
 
 
 def test_holds_keep_the_longest_reason_and_its_span():
@@ -113,8 +127,7 @@ def test_join_derives_each_gap_and_leaves_a_missing_one_none():
         7: {
             "land_start": 4 * 3600,
             "land_end": 6 * 3600,
-            "attempts": 1,
-            "verdicts": ["settled"],
+            "landings": [{"verdict": "settled", "seconds": 7200.0}],
         }
     }
     reviews = {

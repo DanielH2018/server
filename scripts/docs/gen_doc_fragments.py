@@ -332,7 +332,7 @@ def main(argv: list[str] | None = None) -> int:
     Returns:
         0, or 1 under `--fix` when a fragment was stale and has been rewritten.
     """
-    parser = ArgumentParser(description=__doc__.splitlines()[0])
+    parser = ArgumentParser(description=(__doc__ or "").partition("\n")[0])
     parser.add_argument(
         "--out-dir", default=DEFAULT_OUT_DIR, help="where the fragments go"
     )

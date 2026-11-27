@@ -70,7 +70,7 @@ def lint(args: list[str], root: Path = REPO) -> int:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = ArgumentParser(description=__doc__.split("\n\n")[0])
+    parser = ArgumentParser(description=(__doc__ or "").split("\n\n")[0])
     parser.add_argument("args", nargs="*", help="passed to actionlint")
     return lint(parser.parse_args(argv).args)
 

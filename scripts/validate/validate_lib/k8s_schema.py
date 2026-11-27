@@ -18,6 +18,9 @@ from pathlib import Path
 from typing import Final, Literal
 
 import jsonschema
+import jsonschema.exceptions
+import jsonschema.protocols
+import jsonschema.validators
 
 from lib.repo_paths import SCRIPTS
 

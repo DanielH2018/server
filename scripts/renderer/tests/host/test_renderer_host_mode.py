@@ -23,7 +23,9 @@ SHELL = 'echo "${FOO:-x}" "${domain}" "$${HOME}" "$(date)"\n'
 
 
 def _one(src: str, text: str, defaults: dict | None = None) -> tuple[dict, dict, dict]:
-    component = {"files": [{"src": src, "dst": "/usr/lib/homelab/x", "mode": "0755"}]}
+    component: dict[str, object] = {
+        "files": [{"src": src, "dst": "/usr/lib/homelab/x", "mode": "0755"}]
+    }
     if defaults:
         component["defaults"] = defaults
     return {"components": ["beat"]}, {"beat": component}, {src: text}

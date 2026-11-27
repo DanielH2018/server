@@ -30,7 +30,7 @@ class RenderError(RuntimeError):
 
 
 def strict_env(
-    templates: Path, undefined_cls=StrictChainableUndefined
+    templates: Path, undefined_cls: type[jinja2.Undefined] = StrictChainableUndefined
 ) -> jinja2.Environment:
     """The strict environment over `templates`, then the shared directory, with every filter.
 

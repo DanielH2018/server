@@ -547,7 +547,7 @@ def shard_arg(text: str) -> tuple[int, int]:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = ArgumentParser(description=__doc__.split("\n\n")[0])
+    parser = ArgumentParser(description=(__doc__ or "").split("\n\n")[0])
     parser.add_argument("--image", required=True, help="the test image's tag")
     parser.add_argument(
         "--python", required=True, help="the python3 minor the leg's release carries"

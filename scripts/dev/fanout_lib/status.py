@@ -20,7 +20,7 @@ from deploy_tools.land_lib.detach import result_fields
 from dev.fanout_lib import operator_waits
 from dev.fanout_lib.branch_pr import PR_URL, BranchPrs, own_pr
 from dev.fanout_lib.brief import LANDS, lands
-from dev.fanout_lib.land_result import FINISHED_VERDICTS, VERDICT_LINE, park_line
+from dev.fanout_lib.land_result import VERDICT_LINE, finished, park_line
 from dev.fanout_lib.manifest import Batch, Manifest
 from dev.fanout_lib.transport import Tools
 from dev.fanout_lib.target import SERVER
@@ -576,7 +576,7 @@ def with_lander_verdict(
     if parked:
         text = f"{parked}\n{line}\n{s.pr_url}"
         return dataclasses.replace(s, state=PARKED, final_text=text)
-    if result.get("verdict") in FINISHED_VERDICTS:
+    if finished(result):
         return dataclasses.replace(s, state="landed")
     text = f"needs input: the server lander's landing ended short.\n{line}\n{s.pr_url}"
     return dataclasses.replace(s, state=NEEDS_INPUT, final_text=text)

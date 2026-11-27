@@ -212,7 +212,7 @@ def _unruled_section(rows: list[dict]) -> list[str]:
 def main(argv: list[str] | None = None) -> int:
     # FIRST NON-BLANK line, not `[1]`: line 1 of the docstring is blank, so `[1]` gave argparse an
     # empty description.
-    summary = next(line for line in __doc__.splitlines() if line.strip())
+    summary = next(line for line in (__doc__ or "").splitlines() if line.strip())
     parser = ArgumentParser(description=summary)
     parser.add_argument("--out", type=Path, required=True, help="output file path")
     args = parser.parse_args(argv)
