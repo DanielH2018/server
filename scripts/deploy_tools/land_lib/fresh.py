@@ -21,14 +21,23 @@ master's code. The child inherits the turn's locked descriptor, named in `TURN_F
 The checkout's `land.sh` is a child process, not an exec, so this process outlives it and the
 `finally` removes the checkout whatever the child's exit code. Under `--detach`, land.py forks
 first and runs this inside the fork, so the checkout lives until the landing ends.
+
+The checkout lives under `checkouts_root()`, on disk: `/tmp` on daniel-box is a tmpfs, where
+each 353 MB checkout held RAM. SIGTERM unwinds through the `finally` too. A landing killed
+outright leaves its checkout behind, so each checkout carries an `flock` that this process and
+the child landing hold, and every fresh landing first removes the checkouts no process holds.
 """
 
+import contextlib
+import fcntl
 import os
 import shutil
+import signal
 import subprocess
 import sys
 import tempfile
-from collections.abc import Callable
+import threading
+from collections.abc import Callable, Generator
 from pathlib import Path
 
 from deploy_tools.land_lib.options import Options
@@ -43,6 +52,13 @@ TURN_FD_ENV = "LAND_TURN_FD"
 CHILD_ENV = "LAND_FRESH_CHILD"
 # Each git step is a fetch or a local worktree change; ten minutes bounds a hung remote.
 GIT_TIMEOUT_S = 600
+CHECKOUT_PREFIX = "land-fresh-"
+
+
+def checkouts_root() -> Path:
+    """The directory the fresh checkouts go in: the landing user's cache, which is on disk."""
+    cache = os.environ.get("XDG_CACHE_HOME") or str(Path.home() / ".cache")
+    return Path(cache) / "homelab" / "land-fresh"
 
 
 def child_argv(argv: list[str], since: str) -> list[str]:
@@ -113,7 +129,11 @@ def land_fresh(
     Raises:
       CheckoutFailed: no child landing started, so nothing printed or recorded a verdict.
     """
-    path = Path(tempfile.mkdtemp(prefix="land-fresh-"))
+    root = checkouts_root()
+    root.mkdir(parents=True, exist_ok=True)
+    sweep_dead_checkouts(primary, root, git)
+    path = Path(tempfile.mkdtemp(prefix=CHECKOUT_PREFIX, dir=root))
+    lock_fd = _hold(path)
     try:
         for step in (
             ["fetch", "-q", "origin", "master"],
@@ -127,28 +147,98 @@ def land_fresh(
         print(
             f"land: landing from a fresh checkout of {BASE} at {path}", file=sys.stderr
         )
-        inherit: dict = {"env": {**os.environ, CHILD_ENV: "1"}}
+        inherit: dict = {
+            "env": {**os.environ, CHILD_ENV: "1"},
+            "pass_fds": (lock_fd,),
+        }
         if turn_fd is not None:
-            inherit["pass_fds"] = (turn_fd,)
+            inherit["pass_fds"] = (lock_fd, turn_fd)
             inherit["env"][TURN_FD_ENV] = str(turn_fd)
         try:
-            return run([str(path / LAND_SH), *argv], check=False, **inherit).returncode
+            with _sigterm_unwinds():
+                return run(
+                    [str(path / LAND_SH), *argv], check=False, **inherit
+                ).returncode
         except OSError as exc:
             raise CheckoutFailed(
                 f"--fresh could not start {LAND_SH} in its checkout ({exc})"
             ) from exc
     finally:
-        git(
-            "worktree",
-            "remove",
-            "--force",
-            str(path),
-            cwd=primary,
-            check=False,
-            timeout=120,
+        _remove(primary, path, git)
+        os.close(lock_fd)
+
+
+def sweep_dead_checkouts(
+    primary: Path,
+    root: Path,
+    git: Callable[..., subprocess.CompletedProcess[str]] = _git,
+) -> list[Path]:
+    """Remove each checkout under `root` whose lock no process holds, and return them.
+
+    A landing killed by SIGKILL, or a reboot, skips `land_fresh`'s `finally`. Its lock dies
+    with the last process holding it, so a free lock means no landing uses the checkout.
+    """
+    swept = []
+    for path in sorted(root.glob(CHECKOUT_PREFIX + "*")):
+        try:
+            fd = os.open(path, os.O_RDONLY)
+        except OSError:
+            continue
+        try:
+            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            continue
+        finally:
+            os.close(fd)
+        _remove(primary, path, git)
+        swept.append(path)
+    if swept:
+        print(
+            f"land: removed {len(swept)} fresh checkout(s) a killed landing left in {root}",
+            file=sys.stderr,
         )
-        shutil.rmtree(path, ignore_errors=True)
-        git("worktree", "prune", cwd=primary, check=False, timeout=120)
+    return swept
+
+
+def _hold(path: Path) -> int:
+    """An inheritable descriptor holding `path`'s exclusive lock, for the landing's lifetime."""
+    fd = os.open(path, os.O_RDONLY)
+    fcntl.flock(fd, fcntl.LOCK_EX)
+    os.set_inheritable(fd, True)
+    return fd
+
+
+def _remove(
+    primary: Path, path: Path, git: Callable[..., subprocess.CompletedProcess[str]]
+) -> None:
+    git(
+        "worktree",
+        "remove",
+        "--force",
+        str(path),
+        cwd=primary,
+        check=False,
+        timeout=120,
+    )
+    shutil.rmtree(path, ignore_errors=True)
+    git("worktree", "prune", cwd=primary, check=False, timeout=120)
+
+
+@contextlib.contextmanager
+def _sigterm_unwinds() -> Generator[None]:
+    """Turn SIGTERM into SystemExit, so `subprocess.run` kills the child and `finally` runs."""
+    if threading.current_thread() is not threading.main_thread():
+        yield
+        return
+
+    def _exit(signum: int, _frame: object) -> None:
+        raise SystemExit(128 + signum)
+
+    previous = signal.signal(signal.SIGTERM, _exit)
+    try:
+        yield
+    finally:
+        signal.signal(signal.SIGTERM, previous)
 
 
 def _failed(

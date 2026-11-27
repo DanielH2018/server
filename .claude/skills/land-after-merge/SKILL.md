@@ -27,7 +27,7 @@ checked, which auto-merge cannot do (`docs/landing.md` has the detail).
 
 **A checkout that does not follow master needs no extra flag.** A landing that finds its
 own landing code older than master's re-runs itself from a detached checkout of
-`origin/master`, which it adds under `/tmp` and removes when the landing ends. Its log says
+`origin/master`, which it adds under `~/.cache/homelab/land-fresh/` and removes when the landing ends. Its log says
 so in one `land:` line, and the verdict is that checkout's landing's. `--fresh` forces the
 same checkout from the start and is never required (`docs/landing.md`, *Before the merge, a
 stale checkout re-runs the landing from a fresh one without asking*).
