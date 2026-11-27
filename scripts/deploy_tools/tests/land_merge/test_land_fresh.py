@@ -4,6 +4,9 @@ Run: uv run pytest scripts/deploy_tools/tests/land_merge/test_land_fresh.py
 """
 
 import dataclasses
+import fcntl
+import os
+import signal
 import subprocess
 from pathlib import Path
 
@@ -26,8 +29,14 @@ def primary(tmp_path: Path) -> Path:
     return tmp_path / "primary"
 
 
+@pytest.fixture(autouse=True)
+def cache_home(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    return tmp_path / "home" / ".cache"
+
+
 def _child(seen: list):
-    def run(argv, check, env):
+    def run(argv, check, env, **_inherit):
         checkout = Path(argv[0]).parents[2]
         assert env[fresh.CHILD_ENV]
         seen.append((argv, (checkout / "reader.py").read_text(), checkout))
@@ -57,8 +66,57 @@ def test_a_fresh_landing_handed_the_turn_inherits_its_descriptor(primary):
 
     fresh.land_fresh(primary, ["--pr", "7"], turn_fd=9, run=run)
     [inherit] = seen
-    assert inherit["pass_fds"] == (9,)
+    assert 9 in inherit["pass_fds"]
     assert inherit["env"][fresh.TURN_FD_ENV] == "9"
+
+
+def test_the_fresh_checkout_goes_in_the_cache_on_disk_not_tmp(primary, cache_home):
+    seen: list = []
+    fresh.land_fresh(primary, ["--pr", "7"], run=_child(seen))
+    ((_, _, checkout),) = seen
+    assert checkout.parent == cache_home / "homelab" / "land-fresh"
+
+
+def test_a_landing_stopped_by_sigterm_still_removes_its_checkout(primary):
+    seen: list = []
+
+    def run(argv, check, **inherit):
+        seen.append(Path(argv[0]).parents[2])
+        os.kill(os.getpid(), signal.SIGTERM)
+        raise AssertionError("SIGTERM did not unwind the landing")
+
+    before = signal.getsignal(signal.SIGTERM)
+    with pytest.raises(KeyboardInterrupt):
+        fresh.land_fresh(primary, ["--pr", "7"], run=run)
+    [checkout] = seen
+    assert not checkout.exists()
+    assert signal.getsignal(signal.SIGTERM) is before
+
+
+def _leftover_checkout(primary: Path, cache_home: Path, name: str) -> Path:
+    path = cache_home / "homelab" / "land-fresh" / f"{fresh.CHECKOUT_PREFIX}{name}"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    git_testing.git(primary, "worktree", "add", "-q", "--detach", str(path), "HEAD")
+    return path
+
+
+def test_a_checkout_no_landing_holds_is_swept_is_flagged(primary, cache_home):
+    dead = _leftover_checkout(primary, cache_home, "killed")
+    swept = fresh.sweep_dead_checkouts(primary, dead.parent)
+    assert swept == [dead]
+    assert not dead.exists()
+    assert str(dead) not in git_testing.git(primary, "worktree", "list").stdout
+
+
+def test_a_checkout_a_live_landing_holds_is_kept_is_clean(primary, cache_home):
+    live = _leftover_checkout(primary, cache_home, "live")
+    fd = os.open(live, os.O_RDONLY)
+    fcntl.flock(fd, fcntl.LOCK_EX)
+    try:
+        assert fresh.sweep_dead_checkouts(primary, live.parent) == []
+    finally:
+        os.close(fd)
+    assert live.exists()
 
 
 def test_a_checkout_git_could_not_make_lands_nothing(tmp_path):

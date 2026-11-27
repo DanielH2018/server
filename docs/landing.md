@@ -74,8 +74,12 @@ Three landings still end `refused` before the merge, with nothing merged:
 **How the re-run meets the other parts of a landing.**
 
 - **`--fresh`.** With the flag, `land.sh` fetches `origin/master` in the primary and adds a
-  detached worktree of it under `/tmp`. It runs that checkout's `land.sh` with the same
-  arguments, then removes the worktree. The re-run before the merge, the hand-off after it
+  detached worktree of it under `~/.cache/homelab/land-fresh/` (`fresh.checkouts_root`).
+  It runs that checkout's `land.sh` with the same arguments, then removes the worktree, on
+  SIGTERM too. The worktree is not under `/tmp`, because on daniel-box `/tmp` is a tmpfs
+  and each 353 MB checkout held RAM. A landing killed outright leaves its worktree behind,
+  and the next fresh landing removes every worktree whose `flock` no process holds. The
+  re-run before the merge, the hand-off after it
   and a handed-over turn all use these mechanics (`land_lib/fresh.py`). The flag skips the
   comparison and is never needed for it. A checkout made by hand went stale again within
   minutes when master moved, and the `git -C <primary> worktree add` that made it is a
@@ -406,8 +410,17 @@ jobs. Every landing that merges its PR directly takes the turn.
   as a draft`, and asks for it again as a draft (`merge.await_merge`).
 - A head the update would void or cannot make is left as it stands: a head GitHub reads as
   conflicting, one the landing policy admitted on an approval, and one `LAND_REQUIRE_HEAD`
-  names. It merges as it stands, except an approved head that master moved past on a path
-  the PR changes, which is refused with a rebase remedy (`stale_base.refuse_stale_approved`). A refused update marks the PR ready again.
+  names. A refused update marks the PR ready again.
+- Before every direct merge, the landing compares the master that the head's green run tested
+  with master's tip (`stale_base.refuse_stale_overlap`). A head that reaches the merge stale
+  merges as it stands when master changed no path the PR changes, and master's own run tests
+  it. When master did change one, the landing refuses the merge, because the merged tree was
+  never tested. An approved head's refusal names a rebase and a new approval. Any other head's
+  refusal names a re-run, whose first green poll updates the branch. The check covers every
+  route to the merge: a landing that went on without the turn marked its draft ready with no
+  update, and the run that flip started tested the master of the PR's last push, not master's tip.
+  It also covers a head this landing's own update made, when master moved again during its
+  run. Only a head a landing batch tested is exempt (`stale_base.batch_tested`).
   An update in the turn that GitHub refuses does not stop the landing: the PR keeps the run
   the ready flip started. The exception is a refusal that names a merge conflict, which ends
   the landing `merge-conflict` at once, in the turn and when a ready head rejoins the line

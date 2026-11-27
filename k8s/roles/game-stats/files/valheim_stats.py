@@ -488,11 +488,9 @@ class Store(stats_lib.SqliteStore):
 
 
 # Loki fetch + the run loop — thin per-game bindings over stats_lib's shared skeleton.
-def loki_fetch(start_ns, end_ns):
-    """Fetch entries in (start_ns, end_ns] as [(ts_ns, line)] (one page)."""
-    url = stats_lib.build_query_range_url(
-        LOKI_URL, LOKI_QUERY, start_ns, end_ns, LOKI_PAGE_LIMIT
-    )
+def loki_fetch(start_ns, end_ns, limit):
+    """Fetch entries in (start_ns, end_ns] as [(ts_ns, line)] (one page of `limit`)."""
+    url = stats_lib.build_query_range_url(LOKI_URL, LOKI_QUERY, start_ns, end_ns, limit)
     return extract_entries(stats_lib.http_get_json(url, HTTP_TIMEOUT, "valheim-stats"))
 
 

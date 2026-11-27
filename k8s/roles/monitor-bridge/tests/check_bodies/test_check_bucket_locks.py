@@ -164,6 +164,14 @@ def test_the_plan_probes_the_newest_locked_canary_and_expires_those_past_the_loc
     )
 
 
+def test_another_spelling_of_today_does_not_stand_in_for_todays_canary():
+    yesterday = _canary(TODAY - timedelta(days=1))
+    keys = [yesterday, R2_CANARY_PREFIX + TODAY.strftime("%Y%m%d")]
+    assert r2_canary_plan(keys, TODAY, 7) == CanaryPlan(
+        upload=_canary(TODAY), probe=yesterday, expired=()
+    )
+
+
 class FakeR2:
     """A bucket whose lock refuses each delete or overwrite of a key in `locked`."""
 

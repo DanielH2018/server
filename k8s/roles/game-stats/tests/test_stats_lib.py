@@ -6,10 +6,13 @@ machine and SQLite schema; this file covers the parts that moved here.
 
 import json
 import threading
+from collections import Counter
 from unittest import mock
 
 import pytest
 import stats_lib
+from hypothesis import given
+from hypothesis import strategies as st
 
 # The handler reads this instant on every request, so the /healthz verdict is a fixed distance from
 # `health_max_age`.
@@ -128,31 +131,77 @@ class _FakeStore:
         self.saved.append((cursor_ns, list(events)))
 
 
-def test_run_cycle_pages_until_a_short_page_and_persists_each_page():
-    pages = [
-        [(1_000, "a")] * 3,  # a full page (page_limit=3) triggers another fetch
-        [(4_000, "b")],  # a short page ends paging
-    ]
+def _paging_fetch(log):
+    """A fake Loki over `log`: (start, end] forward, one page of at most `limit`."""
+    ordered = sorted(log, key=lambda entry: entry[0])
+    calls = []
 
-    def fake_fetch(start_ns, end_ns):
-        return pages.pop(0) if pages else []
+    def fetch(start_ns, end_ns, limit):
+        calls.append(start_ns)
+        assert len(calls) <= 200, "run_cycle stopped making progress"
+        return [e for e in ordered if start_ns < e[0] <= end_ns][:limit]
 
-    def fake_apply(state, entries):
-        # max_ts is the last entry's timestamp; events pass through unchanged.
-        return list(entries), entries[-1][0]
+    return fetch
+
+
+def _run_cycles(log, end_points, page_limit):
+    """Runs one cycle per end point and returns (applied entries, store, cursor)."""
+    applied = []
+
+    def apply_fn(state, entries):
+        applied.extend(entries)
+        return list(entries), max(ts for ts, _ in entries)
 
     store = _FakeStore()
-    cursor = stats_lib.run_cycle(
-        state=object(),
-        store=store,
-        cursor=0,
-        end_ns=9_000,
-        fetch=fake_fetch,
-        apply_fn=fake_apply,
-        page_limit=3,
-    )
+    fetch = _paging_fetch(log)
+    cursor = 0
+    for end_ns in end_points:
+        cursor = stats_lib.run_cycle(
+            None, store, cursor, end_ns, fetch, apply_fn, page_limit
+        )
+    return applied, store, cursor
+
+
+def test_run_cycle_pages_until_a_short_page_and_persists_each_page():
+    log = [(1_000, "a"), (2_000, "b"), (3_000, "c"), (4_000, "d")]
+    applied, store, cursor = _run_cycles(log, [9_000], page_limit=3)
+    assert applied == log
     assert cursor == 4_000
-    assert [c for c, _ in store.saved] == [1_000, 4_000]
+    assert [c for c, _ in store.saved] == [2_000, 4_000]
+
+
+def test_run_cycle_keeps_a_timestamp_that_a_full_page_splits():
+    log = [(1, "a"), (2, "b"), (2, "c")]
+    applied, _, _ = _run_cycles(log, [9], page_limit=2)
+    assert applied == log
+
+
+def test_run_cycle_widens_the_page_for_a_timestamp_longer_than_it():
+    log = [(1, "a"), (1, "b"), (1, "c"), (2, "d")]
+    applied, _, _ = _run_cycles(log, [9], page_limit=1)
+    assert applied == log
+
+
+def test_run_cycle_steps_past_a_timestamp_that_fills_the_largest_loki_page():
+    cap = stats_lib.LOKI_MAX_ENTRIES
+    log = [(1, "a")] * (cap + 1) + [(2, "b")]
+    applied, _, cursor = _run_cycles(log, [9], page_limit=cap)
+    assert applied == [(1, "a")] * cap + [(2, "b")]
+    assert cursor == 2
+
+
+@given(
+    log=st.lists(st.tuples(st.integers(1, 6), st.sampled_from("abc")), max_size=20),
+    end_points=st.lists(st.integers(0, 7), min_size=1, max_size=4).map(sorted),
+    page_limit=st.integers(1, 5),
+)
+def test_run_cycle_applies_exactly_the_entries_up_to_end_ns(
+    log, end_points, page_limit
+):
+    applied, store, _ = _run_cycles(log, end_points, page_limit)
+    expected = Counter(e for e in log if e[0] <= end_points[-1])
+    assert Counter(applied) == expected
+    assert Counter(e for _, events in store.saved for e in events) == expected
 
 
 def test_run_cycle_returns_the_cursor_unchanged_on_no_new_entries():
@@ -161,7 +210,7 @@ def test_run_cycle_returns_the_cursor_unchanged_on_no_new_entries():
         store=_FakeStore(),
         cursor=555,
         end_ns=9_000,
-        fetch=lambda s, e: [],
+        fetch=lambda start, end, limit: [],
         apply_fn=lambda state, entries: (list(entries), 0),
         page_limit=5000,
     )
@@ -237,7 +286,7 @@ def test_poll_forever_logs_and_continues_on_a_cycle_exception():
     ):
         stats_lib.poll_forever(
             ps,
-            store=None,
+            store=_FakeRunStore(),
             cursor=0,
             fetch=None,
             apply_fn=None,
@@ -250,6 +299,42 @@ def test_poll_forever_logs_and_continues_on_a_cycle_exception():
     assert calls["n"] == 1
     assert ps.last_poll_ok == 0.0  # never stamped — the cycle raised before it could
     assert any("poll error:" in args for args in logged)
+
+
+class _Stop(BaseException):
+    """Ends poll_forever's loop from the sleep between cycles."""
+
+
+def test_poll_forever_does_not_reapply_pages_saved_before_a_fetch_failed():
+    pages = _paging_fetch([(1, "a"), (2, "b"), (3, "c")])
+    applied = []
+    calls = []
+
+    def fetch(start_ns, end_ns, limit):
+        calls.append(start_ns)
+        if len(calls) == 2:
+            raise RuntimeError("loki unreachable")
+        return pages(start_ns, end_ns, limit)
+
+    def apply_fn(state, entries):
+        applied.extend(entries)
+        return list(entries), entries[-1][0]
+
+    with mock.patch("stats_lib.time.sleep", side_effect=[None, _Stop]):
+        with pytest.raises(_Stop):
+            stats_lib.poll_forever(
+                stats_lib.PollState("state"),
+                _FakeRunStore(),
+                cursor=0,
+                fetch=fetch,
+                apply_fn=apply_fn,
+                page_limit=2,
+                once=False,
+                backfill=False,
+                poll_interval=20,
+                on_poll_ok=lambda state: "ok",
+            )
+    assert applied == [(1, "a"), (2, "b"), (3, "c")]
 
 
 def test_make_handler_serves_metrics_and_healthz_over_a_real_socket():
@@ -370,7 +455,7 @@ class _FakeRunStore(_FakeStore):
         return _FakeState()
 
     def get_cursor(self):
-        return self._cursor
+        return self.saved[-1][0] if self.saved else self._cursor
 
 
 def test_run_with_once_runs_a_single_cycle_and_starts_no_metrics_server():
@@ -386,7 +471,7 @@ def test_run_with_once_runs_a_single_cycle_and_starts_no_metrics_server():
     store = _FakeRunStore(cursor=1_000)
     fetches = []
 
-    def fake_fetch(start_ns, end_ns):
+    def fake_fetch(start_ns, end_ns, limit):
         fetches.append(start_ns)
         return [(2_000, "a")] if len(fetches) == 1 else []
 

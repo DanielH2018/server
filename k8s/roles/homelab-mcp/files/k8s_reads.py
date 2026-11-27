@@ -53,32 +53,23 @@ def parse_pod_list(resp: dict) -> list[dict]:
 def parse_workloads(deployments: dict, daemonsets: dict) -> list[dict]:
     """Merge deployments + daemonsets into {kind, name, ready/desired, images} rows."""
     rows = []
-    for item in deployments.get("items") or []:
-        meta = item.get("metadata") or {}
-        status = item.get("status") or {}
-        rows.append(
-            {
-                "kind": "Deployment",
-                "name": meta.get("name"),
-                "namespace": meta.get("namespace"),
-                "ready": status.get("readyReplicas") or 0,
-                "desired": status.get("replicas") or 0,
-                "images": _pod_template_images(item),
-            }
-        )
-    for item in daemonsets.get("items") or []:
-        meta = item.get("metadata") or {}
-        status = item.get("status") or {}
-        rows.append(
-            {
-                "kind": "DaemonSet",
-                "name": meta.get("name"),
-                "namespace": meta.get("namespace"),
-                "ready": status.get("numberReady") or 0,
-                "desired": status.get("desiredNumberScheduled") or 0,
-                "images": _pod_template_images(item),
-            }
-        )
+    for kind, resp, ready_key, desired_key in (
+        ("Deployment", deployments, "readyReplicas", "replicas"),
+        ("DaemonSet", daemonsets, "numberReady", "desiredNumberScheduled"),
+    ):
+        for item in resp.get("items") or []:
+            meta = item.get("metadata") or {}
+            status = item.get("status") or {}
+            rows.append(
+                {
+                    "kind": kind,
+                    "name": meta.get("name"),
+                    "namespace": meta.get("namespace"),
+                    "ready": status.get(ready_key) or 0,
+                    "desired": status.get(desired_key) or 0,
+                    "images": _pod_template_images(item),
+                }
+            )
     return rows
 
 

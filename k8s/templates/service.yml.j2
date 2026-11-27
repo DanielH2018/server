@@ -34,7 +34,8 @@
     no selector AT ALL  deploy-ui's Service is selector-less on purpose — its backend is a host
                       process reached through a hand-written EndpointSlice, not a pod.
     unready endpoints tft-assistant's Service sets `publishNotReadyAddresses`, so its page keeps
-                      an endpoint while the crawler container beside it restarts. The macro
+                      an endpoint while the crawler container beside it restarts; its route
+                      sets `nativeLB`, or Traefik would skip that endpoint. The macro
                       emits no such field.
     LoadBalancer      the macro is ClusterIP-only (it emits no `type:`), which rules out
                       jellyfin's service-lan, mosquitto, pihole, valheim, terraria, traefik and

@@ -54,10 +54,9 @@ def _env(name: str, default: str) -> str:
     return os.environ.get(name, default)
 
 
-# IMPORTING MUST NOT RAISE: `_int`/`_num` record a bad env value in CONFIG_PROBLEMS and use the
+# IMPORTING MUST NOT RAISE: `_int` records a bad env value in CONFIG_PROBLEMS and uses the
 # default, so cli.py's `main()` prints the list and exits 2 instead of the pod dying at import with
-# a traceback naming neither the variable nor its value. bridge/config.py imports the list and
-# parsers from here.
+# a traceback naming neither the variable nor its value. cli.py hands the list to `load_config`.
 CONFIG_PROBLEMS: list[str] = []
 
 
@@ -77,23 +76,6 @@ def _int(name: str, default: str) -> int:
             "%s=%r is not an integer; falling back to %s" % (name, raw, default)
         )
         return int(default)
-
-
-def _num(name: str, default: str) -> float:
-    """The `name` env var as a float, recording a malformed value instead of raising.
-
-    Args:
-      name: The environment variable to read.
-      default: The value used when the variable is unset OR unparseable.
-    """
-    raw = _env(name, default)
-    try:
-        return float(raw)
-    except ValueError:
-        CONFIG_PROBLEMS.append(
-            "%s=%r is not a number; falling back to %s" % (name, raw, default)
-        )
-        return float(default)
 
 
 # A CEILING, not a budget: it only stops a hang. A slow source needs the cheap signal to decide and
