@@ -53,7 +53,7 @@ from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass, replace
 from pathlib import Path
 
-import yaml
+from renderer.renderer_lib.manifest_yaml import dump, dump_all
 
 from lib.k8s_roles import RoleDefaults, role_defaults
 from lib.repo_paths import K8S_ROLES
@@ -189,7 +189,7 @@ def kustomization_text(files: Iterable[str]) -> str:
     }
     if patches:
         text["patches"] = [{"path": f} for f in patches]
-    return yaml.safe_dump(text, sort_keys=False)
+    return dump(text)
 
 
 def tag_kustomization(
@@ -295,11 +295,9 @@ def cluster_vars_files(dotenv: str, timeout: str) -> dict[str, str]:
     }
     directory = f"{CLUSTER_DIR}/{CLUSTER_VARS}"
     return {
-        f"{FLUX_DIR}/{CLUSTER_VARS}.yaml": yaml.safe_dump(
-            cluster_vars_kustomization(timeout), sort_keys=False
-        ),
+        f"{FLUX_DIR}/{CLUSTER_VARS}.yaml": dump(cluster_vars_kustomization(timeout)),
         f"{directory}/{CLUSTER_VARS_FILE}": dotenv,
-        f"{directory}/{KUSTOMIZATION}": yaml.safe_dump(generator, sort_keys=False),
+        f"{directory}/{KUSTOMIZATION}": dump(generator),
     }
 
 
@@ -309,13 +307,11 @@ def homelab_namespace_files(timeout: str) -> dict[str, str]:
     Its Kustomization takes a tag's fields, `timeout` among them, and no `postBuild`,
     `decryption` or edge. `deletionPolicy: Orphan` keeps both objects if the kind leaves.
     """
-    held = {
-        n: yaml.safe_dump(d, sort_keys=False) for n, d in namespace_documents().items()
-    }
+    held = {n: dump(d) for n, d in namespace_documents().items()}
     held[KUSTOMIZATION] = kustomization_text(set(held))
     files = {f"{CLUSTER_DIR}/{HOMELAB_NAMESPACE}/{n}": t for n, t in held.items()}
     doc = tag_kustomization(HOMELAB_NAMESPACE, False, timeout)
-    files[f"{FLUX_DIR}/{HOMELAB_NAMESPACE}.yaml"] = yaml.safe_dump(doc, sort_keys=False)
+    files[f"{FLUX_DIR}/{HOMELAB_NAMESPACE}.yaml"] = dump(doc)
     return files
 
 
@@ -386,7 +382,7 @@ def flux_files(
             )
             for name in names
         ]
-        files[f"{FLUX_DIR}/{tag}.yaml"] = yaml.safe_dump_all(docs, sort_keys=False)
+        files[f"{FLUX_DIR}/{tag}.yaml"] = dump_all(docs)
     files |= dict(shared or {})
     files[FLUX_INDEX] = kustomization_text(path.split("/", 1)[1] for path in files)
     return files

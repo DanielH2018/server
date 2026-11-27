@@ -28,6 +28,7 @@ from _unit_kubeconfig_row import UNITS_REACHING_THE_CLUSTER_SET_KUBECONFIG
 from _read_only_skill_writes_row import READ_ONLY_REVIEW_SKILLS_WRITE_NO_TRACKED_FILE
 from _review_ledger_glob_row import REVIEW_SKILLS_LIST_LEDGERS_FROM_ANY_USERS_STORE
 from _archived_plan_citations_row import SHIPPED_FILES_CITE_NO_TARGET_ARCHITECTURE_STUB
+from _manifest_yaml_row import RENDERER_LIB_WRITES_YAML_THROUGH_MANIFEST_YAML
 from _ansible_mention_row import LIVE_DOCS_NAME_NO_ANSIBLE
 from _helpers import REPO, discover_docs
 from deploy_tools.land_lib import policy
@@ -353,6 +354,7 @@ ROWS += (
     COMMENTS_CITE_NO_TICKET,
     COMMENTS_CARRY_NO_DATE,
     SHIPPED_FILES_CITE_NO_TARGET_ARCHITECTURE_STUB,
+    RENDERER_LIB_WRITES_YAML_THROUGH_MANIFEST_YAML,
     HOST_KEYS_IN_GROUP_VARS_HAVE_A_READER,
     LIVE_DOCS_NAME_NO_ANSIBLE,
 )
