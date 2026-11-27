@@ -26,11 +26,17 @@ spec:
         kubernetes.io/hostname: {{ tft_assistant_k8s_node }}
       containers:
 {# The image's own command is the crawler. This container serves the page the crawler builds,
-   from the same volume, and holds no key. #}
+   from the same volume, and the edits a reader makes on it. It holds no key.
+   Its state directory is /state, so its edit store is /state/keep/edits.db, on the kept
+   claim. The kept claim cannot mount under /data here: /data is read-only in this container,
+   and the runtime cannot create a mount point inside a read-only mount. #}
         - name: tft-assistant
           image: {{ tft_assistant_k8s_image }}
           imagePullPolicy: IfNotPresent
-          command: ["python", "-m", "http.server", "{{ container_item.port }}", "--directory", "/data/site"]
+          args: ["serve", "--site", "/data/site", "--port", "{{ container_item.port }}"]
+          env:
+            - name: TFT_STATE_DIR
+              value: /state
           ports:
             - containerPort: {{ container_item.port }}
 {{ hardened_security_context(read_only=true, non_root=true) }}
@@ -49,6 +55,8 @@ spec:
             - name: tft-assistant-data
               mountPath: /data
               readOnly: true
+            - name: tft-assistant-keep
+              mountPath: /state/keep
 {{ container_resources(cpu_limit=tft_assistant_k8s_cpu_limit, mem_limit=tft_assistant_k8s_mem_limit, cpu_request=tft_assistant_k8s_cpu_request, mem_request=tft_assistant_k8s_mem_request) }}
         - name: tft-assistant-crawler
           image: {{ tft_assistant_k8s_image }}
@@ -64,6 +72,8 @@ spec:
           volumeMounts:
             - name: tft-assistant-data
               mountPath: /data
+            - name: tft-assistant-keep
+              mountPath: /data/keep
             - name: tft-assistant-tmp
               mountPath: /tmp
 {{ container_resources(cpu_limit=tft_assistant_k8s_crawler_cpu_limit, mem_limit=tft_assistant_k8s_crawler_mem_limit, cpu_request=tft_assistant_k8s_crawler_cpu_request, mem_request=tft_assistant_k8s_crawler_mem_request) }}
@@ -71,5 +81,8 @@ spec:
         - name: tft-assistant-data
           persistentVolumeClaim:
             claimName: {{ tft_assistant_k8s_claim }}
+        - name: tft-assistant-keep
+          persistentVolumeClaim:
+            claimName: {{ tft_assistant_k8s_keep_claim }}
         - name: tft-assistant-tmp
           emptyDir: {}

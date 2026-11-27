@@ -304,7 +304,8 @@ def _wait_out(ln: Landing, kind: str, lock: Locker, bar: Bar) -> Bar | None:
     bound it: the serial lock is held from the serial draft's turn, through its CI run, its
     merge and its deploy, which is longer than `DRAIN_S` measures. No holder of the turn
     reads such a landing's head, so that wait reads its own PR's mergeability
-    (`_conflict_reads`).
+    (`_conflict_reads`). Each poll of a wait for the serial landing adds its seconds to
+    `ln.ledger.serial_wait` as it passes, so a landing that ends during the wait records it.
 
     Returns:
         The bar the wait ended on: None once nothing bars the PR, a bar of another kind as
@@ -318,7 +319,8 @@ def _wait_out(ln: Landing, kind: str, lock: Locker, bar: Bar) -> Bar | None:
     budget = _budget_left(ln)
     if bar.clears is Clears.VERDICTS:
         budget = min(DRAIN_S, budget)
-    conflicts = _conflict_reads(ln) if bar.clears is Clears.SERIAL_ENDS else None
+    serial = bar.clears is Clears.SERIAL_ENDS
+    conflicts = _conflict_reads(ln) if serial else None
     waiting = OnChange(say)
     waited = 0
     while waited + o.merge_poll <= budget:
@@ -327,6 +329,8 @@ def _wait_out(ln: Landing, kind: str, lock: Locker, bar: Bar) -> Bar | None:
         waiting(f"{_WAITING[bar.clears]}: {bar.why}")
         ln.tools.sleep(o.merge_poll)
         waited += o.merge_poll
+        if serial:
+            ln.ledger.serial_wait += o.merge_poll
         now = _bar(ln, kind, lock)
         if now is None:
             say(f"{_CLEARED[bar.clears]} after {waited}s")

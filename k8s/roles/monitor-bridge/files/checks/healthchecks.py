@@ -12,17 +12,16 @@ slug's schedule type, period or cron expression, timezone and grace against
 `monitor_bridge_healthchecks_expected`. Tests tie that list to the cron variables and to the
 doc's table (tests/services/monitor_bridge/test_monitor_bridge_healthchecks_expected.py).
 
-Same cache idiom as `checks/cloudflare_ips.py`: a success is cached for
+`bridge.streaks.cached_success` holds the cache: a success is cached for
 HEALTHCHECKS_PROBE_INTERVAL_S (a day), a failure is never cached, so a red tile re-probes every
 cycle and clears one cycle after the console is fixed.
 """
 
 from collections.abc import Sequence
-import time
 
 from bridge.config import Config
 from bridge.sources import Sources
-from bridge.streaks import ProbeCache
+from bridge.streaks import ProbeCache, cached_success
 from bridge.types import CheckResult, JsonObject, as_object_list
 
 
@@ -138,26 +137,16 @@ def check_healthchecks_drift(
             True,
             "Healthchecks.io drift check disabled (no API key or expected list)",
         )
-    now = now if now is not None else time.time()
-    if (
-        probe["ts"] is not None
-        and probe["ok"]
-        and now - probe["ts"] < cfg.HEALTHCHECKS_PROBE_INTERVAL_S
-    ):
-        return True, "%s (checked %.0fh ago)" % (
-            probe["msg"],
-            (now - probe["ts"]) / 3600,
-        )
-    try:
-        live = fetch_checks(cfg, src)
-    except Exception as e:
-        result = CheckResult(
-            False,
-            "failed to read the Healthchecks.io console — unverified: %s" % e,
-            ["console unreadable"],
-        )
-    else:
-        result = CheckResult.of(healthchecks_verdict(live, cfg.HEALTHCHECKS_EXPECTED))
-    probe["ts"] = now
-    probe["ok"], probe["msg"] = result
-    return result
+
+    def read() -> CheckResult:
+        try:
+            live = fetch_checks(cfg, src)
+        except Exception as e:
+            return CheckResult(
+                False,
+                "failed to read the Healthchecks.io console — unverified: %s" % e,
+                ["console unreadable"],
+            )
+        return CheckResult.of(healthchecks_verdict(live, cfg.HEALTHCHECKS_EXPECTED))
+
+    return cached_success(probe, cfg.HEALTHCHECKS_PROBE_INTERVAL_S, now, read)

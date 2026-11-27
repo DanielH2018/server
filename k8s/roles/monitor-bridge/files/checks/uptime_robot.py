@@ -10,18 +10,17 @@ monitor-bridge's `monitor_bridge_uptime_robot_monitors`, and a test holds it to 
 table (tests/check_bodies/test_check_uptime_robot.py). A monitor that is down is not a failure here:
 Uptime Robot pages on that itself.
 
-Same cache idiom as `checks/healthchecks.py`: a success is cached for
+`bridge.streaks.cached_success` holds the cache: a success is cached for
 UPTIME_ROBOT_PROBE_INTERVAL_S (a day), a failure is never cached, so a red row re-probes every
 cycle and clears one cycle after the console is fixed. A cycle is 300 s, well inside the free
 plan's 10 requests a minute.
 """
 
 from collections.abc import Sequence
-import time
 
 from bridge.config import Config
 from bridge.sources import Sources
-from bridge.streaks import ProbeCache
+from bridge.streaks import ProbeCache, cached_success
 from bridge.types import CheckResult, JsonObject, as_object, as_object_list
 
 # v2's `status`: 0 paused, 1 not checked yet, 2 up, 8 seems down, 9 down.
@@ -101,26 +100,16 @@ def check_uptime_robot_monitors(
     probe = src.state.uptime_robot_probe if probe is None else probe
     if not cfg.UPTIME_ROBOT_API_KEY or not cfg.UPTIME_ROBOT_MONITORS:
         return True, "Uptime Robot monitor check disabled (no API key or monitor list)"
-    now = now if now is not None else time.time()
-    if (
-        probe["ts"] is not None
-        and probe["ok"]
-        and now - probe["ts"] < cfg.UPTIME_ROBOT_PROBE_INTERVAL_S
-    ):
-        return True, "%s (checked %.0fh ago)" % (
-            probe["msg"],
-            (now - probe["ts"]) / 3600,
-        )
-    try:
-        live = fetch_monitors(cfg, src)
-    except Exception as e:
-        result = CheckResult(
-            False,
-            "failed to read the Uptime Robot console — unverified: %s" % e,
-            ["the monitor list"],
-        )
-    else:
-        result = CheckResult.of(uptime_robot_verdict(live, cfg.UPTIME_ROBOT_MONITORS))
-    probe["ts"] = now
-    probe["ok"], probe["msg"] = result
-    return result
+
+    def read() -> CheckResult:
+        try:
+            live = fetch_monitors(cfg, src)
+        except Exception as e:
+            return CheckResult(
+                False,
+                "failed to read the Uptime Robot console — unverified: %s" % e,
+                ["the monitor list"],
+            )
+        return CheckResult.of(uptime_robot_verdict(live, cfg.UPTIME_ROBOT_MONITORS))
+
+    return cached_success(probe, cfg.UPTIME_ROBOT_PROBE_INTERVAL_S, now, read)
