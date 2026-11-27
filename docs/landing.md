@@ -617,6 +617,14 @@ checks. The wait never reads it: `await_ci.py` owns the verdict. The wait keeps 
 while `await_ci.py` answers `pending`, which is what it answers until a required check
 registers; that is the grace period, so no landing is cut short for polling before CI started.
 
+**A merge GitHub refuses because a required check is failing ends the wait too**, with
+`VERDICT: pr-ci-red` naming the check. `await_ci.py` reads `ci.yml`'s checks, and the ruleset
+also requires checks from other workflows, such as `renovate config validator`. A refusal for a
+check that is in progress or queued keeps the wait going. A failing check turns green only on a
+push or a re-run, so waiting held the landing turn for nothing: on 2026-11-27 the serial landing
+of [#10458](https://github.com/DanielH2018/server/pull/10458) held the turn this way while
+other landings waited.
+
 **To read why a CI run went red, start with `ghread run failures`.** It takes a run ID, a SHA
 or `--pr <n>`, and prints each failed job's test IDs, error lines and annotations. For one
 master run it printed 1,117 bytes, where `ghread run logs --failed` printed 40 KB to 380 KB.
