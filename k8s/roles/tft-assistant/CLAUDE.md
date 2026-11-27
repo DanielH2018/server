@@ -33,6 +33,8 @@ See repo-root `CLAUDE.md` for shared conventions.
   crawler writes the comp ids at `/data/keep`, and the web container writes the notes at
   `/state/keep`, which is the same claim.
   `k8s/roles/tft-assistant/templates/deployment.yaml.j2` says why the two paths differ.
+  The operator ruled on 2026-11-27 that weekly to B2 is the cadence and the target for this
+  claim: a daily R2 backup was offered and declined.
 - **The API checks nobody's identity.** Authelia is the only thing between the route and a
   write to the notes, which is a second reason the route keeps its login.
 - **A dead key shows as a page that goes stale, and nothing restarts.** From image 0.2.7 a
@@ -75,7 +77,8 @@ keep a later edit from widening it.
 - **Schedule.** One cycle an hour, started by the process itself. No CronJob runs.
 - **Writes, and nothing else.** Files on the role's two volumes: the match store, a cache of
   Community Dragon's static data and the built page on the data volume, and the comp ids on
-  the kept volume. It never writes the notes. It writes nothing in the cluster and has no
+  the kept volume. The built page is a site: the page, its icons, and one file of boards for
+  each selection, which the page's Explorer tab reads. It never writes the notes. It writes nothing in the cluster and has no
   use for the Kubernetes API.
 - **Calls out.** Riot's API, on the `americas`, `europe` and `asia` routing hosts and the
   `na1`, `euw1` and `kr` platform hosts, and `raw.communitydragon.org`. It stays under the
