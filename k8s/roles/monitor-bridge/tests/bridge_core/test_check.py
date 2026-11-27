@@ -194,7 +194,7 @@ def _gated_cycle(cfg, gate, result, export=None):
         ],
         export=export,
     )
-    return ran, getattr(export, "verdicts", None)
+    return ran, export.verdicts if isinstance(export, FakeExport) else {}
 
 
 @pytest.mark.parametrize("gate", sorted(check.GATE_SKIP))
@@ -275,6 +275,6 @@ def test_run_once_requires_its_sources(cfg):
     """The red-proof half: no default `Sources`, so a forgotten argument cannot reach the
     network."""
     with pytest.raises(TypeError):
-        check.run_once(cfg, checks=[])  # ty: ignore[missing-argument]
+        check.run_once(cfg, checks=[])  # ty: ignore[missing-argument]  # pyright: ignore[reportCallIssue]
     with pytest.raises(TypeError):
-        check.run_once(cfg, FakeSources())  # ty: ignore[missing-argument]
+        check.run_once(cfg, FakeSources())  # ty: ignore[missing-argument]  # pyright: ignore[reportCallIssue]

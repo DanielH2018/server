@@ -95,7 +95,7 @@ def test_pm_safe_boundary():
     assert _advice(75, 65, 30, 26, True) == "none"  # 26 > 25 cap
 
 
-def _close(indoor_temp, outdoor_temp, outdoor_pm, raining, outdoor_pm10=0):
+def _close(indoor_temp, outdoor_temp, outdoor_pm, raining, outdoor_pm10: int | str = 0):
     return render_macro(
         VENT,
         "close_window_advice",
