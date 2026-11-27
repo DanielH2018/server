@@ -78,8 +78,10 @@ KNOWN_CALLERS = {
     ("flux-deletion-drill.yml", "drill", "cosign"),
     ("flux-deletion-drill.yml", "drill", "kind"),
     ("pytest-tools", "pytest-tools", "sops"),
+    ("pytest-tools", "pytest-tools", "dyff"),
     ("promote.yml", "promote", "cosign"),
     ("prune-artifacts.yml", "prune", "cosign"),
+    ("render-diff.yml", "render-diff", "dyff"),
 }
 
 

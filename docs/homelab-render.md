@@ -752,7 +752,14 @@ family.
 ## The advisory render-diff job
 
 `.github/workflows/render-diff.yml` renders the merge base and the PR head with one
-`--revision`, prints `diff -r` of the two trees, and prints the head's digest. The job sets
+`--revision`, prints the head's digest, and prints the difference of the two trees with
+`shadow_diff.py diff`. That subcommand pairs the two trees' files by path and hands each YAML
+or JSON pair to `dyff`, which compares by structure. A reordered key therefore prints nothing,
+and a changed field prints its path. Every other file gets a text diff, and a file in one tree
+alone is named. The subcommand skips `digests.json`, because its hashes cover raw bytes and
+move on a reorder; the digest step prints those bytes' hashes. When `dyff` fails on a pair, the
+subcommand prints the rest and exits 2. The job fetches `dyff` through
+`.github/actions/pinned-tool`, pinned by version and sha256. The job sets
 `continue-on-error: true` and no ruleset requires it, so it blocks nothing. A reviewer reads
 the printed diff before merging a change to the renderer or to a package it imports.
 `renovate.json` disables automerge for `jinja2`, `pyyaml` and `markupsafe`, the dependency
