@@ -841,7 +841,7 @@ and job listings and from the landing logs of both hosts, as before.
 
 **A rejoined PR got its run outside the turn.** `stale_base.rejoin_line` converts a stale
 ready PR to draft and updates its branch. The draft's own run on the new head is still running
-for its first seconds, and `merge._ready_run_on` read that run as a ready one. The landing then
+for its first seconds, and `stall.ready_run_on` read that run as a ready one. The landing then
 skipped the line, marked the PR ready and got a full run outside the turn. Master moved again
 during that run, so the PR rejoined and repeated: #8879 rejoined three times and #8867 twice.
 #8861 then merged 24 s after another PR, on a tree no run tested, and master swept in full.

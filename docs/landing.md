@@ -439,12 +439,12 @@ cancelled, so `ci.yml`'s concurrency group did not cause it.
 A head whose ready run was cancelled by a draft run created in the same second reads the same
 way. On 2026-11-21, PR #9819's update and ready flip made two runs on one head. The draft run
 cancelled the ready run through `ci.yml`'s concurrency group, and the ready run's `always()`
-gate failed on the cancelled jobs. A cancelled run is no verdict, so `await_ci.draft_skipped`
+gate failed on the cancelled jobs. A cancelled run is no verdict, so `ci_stall.draft_skipped`
 counts a gate that `ci_verdict.gates_failed_by_cancellation` names like a skipped one (#9822).
 At least one gate must have skipped: a head whose runs were all cancelled is not a draft case.
 
 - The merge wait prints the cause on the first poll that reads such a head.
-- Once the head has stayed so for `DRAFT_SKIPPED_GRACE_S` (180s), the wait reads the PR's
+- Once the head has stayed so for `stall.GRACE_S` (180s), the wait reads the PR's
   draft state. A PR still a draft keeps waiting, because marking it ready starts its run.
 - A ready PR is converted to draft and back by the landing itself (`gh pr ready --undo <n>`,
   then `gh pr ready <n>`), once per head, and the grace starts again. The landing prints a
@@ -465,6 +465,27 @@ At least one gate must have skipped: a head whose runs were all cancelled is not
   says the toggle already ran. A toggle that fails also ends there, and names a PR left as a
   draft, because a draft PR never merges. The remedy is then a push, or the same two commands
   by hand.
+
+**A head whose every check-run finished with no verdict has its newest cancelled run re-run
+once.** GitHub never re-runs a cancelled run on its own, and such a head is no draft case, so
+before this rule the landing held the turn without a log line until `merge_timeout` (#10291).
+`await_ci` names the head with `ci_stall.NO_RUN_LEFT` once every check-run on it has completed
+and the verdict still reads pending.
+
+- The wait handles it like a draft-skipped head, with the same `stall.GRACE_S` grace and the
+  same draft check. `scripts/deploy_tools/land_lib/stall.py:step` decides both.
+- A ready PR's newest `ci.yml` run that finished with no verdict is re-run
+  (`gh run rerun <id>`), once per head. Only the newest is re-run, because two re-runs in one
+  concurrency group cancel each other.
+- A `ci.yml` run that has not completed stops the re-run, because the re-run would cancel it.
+  A failed read of the runs stops it too.
+- A second no-run-left stall on the same head after the re-run ends at `merge-timeout`, and
+  the message says the re-run already happened. That ending frees the landing turn.
+
+`scripts/deploy_tools/tests/land_merge/test_land_stall_properties.py` holds the rule over
+generated poll sequences. A ready head with nothing running never waits past the grace
+without an action, a run is never started while another is in progress, and each head gets
+at most one run of each kind.
 
 **A check left pending under a completed workflow run ends the wait at `merge-timeout`.**
 GitHub can leave a job `queued` with no runner after its workflow run reads `completed`. PR

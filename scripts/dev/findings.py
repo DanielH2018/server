@@ -185,6 +185,7 @@ import dataclasses
 import json
 import subprocess
 import sys
+from collections.abc import Callable
 
 # DECIDED: the leaves are imported as `dev.findings_lib.<leaf>`, never as bare siblings.
 # `scripts/docs/reference/backlog.py` reaches this code as `dev.findings` with only
@@ -379,6 +380,31 @@ def cmd_touch(args: argparse.Namespace, tools: FindingsTools) -> int:
     return 0
 
 
+def _post_body_file(
+    args: argparse.Namespace,
+    tools: FindingsTools,
+    plan: Callable[[Issue, str], list[list[str]]],
+    done: str,
+) -> int:
+    """Runs what `plan` makes of the issue and the text of `args.body_file`.
+
+    Returns:
+        FINDINGS_BAD_ARGS if the body file is missing, 3 if `plan` refuses, 0 otherwise.
+    """
+    if not args.body_file.is_file():
+        sys.stderr.write(f"{args.cmd}: body file not found: {args.body_file}\n")
+        return FINDINGS_BAD_ARGS
+    issue = _load_issue(args.number, tools)
+    try:
+        plans = plan(issue, args.body_file.read_text())
+    except ClaimRefused as exc:
+        print(f"#{args.number} refused: {exc.reason}", file=sys.stderr)
+        return 3
+    run(plans, args.dry_run, tools)
+    print(f"#{args.number} {done}")
+    return 0
+
+
 def cmd_comment(args: argparse.Namespace, tools: FindingsTools) -> int:
     """Handles the ``comment`` subcommand: posts a plain comment on a finding.
 
@@ -386,18 +412,7 @@ def cmd_comment(args: argparse.Namespace, tools: FindingsTools) -> int:
         FINDINGS_BAD_ARGS if the body file is missing, 3 if `plan_comment` refuses the
         issue or body, 0 otherwise.
     """
-    if not args.body_file.is_file():
-        sys.stderr.write(f"comment: body file not found: {args.body_file}\n")
-        return FINDINGS_BAD_ARGS
-    issue = _load_issue(args.number, tools)
-    try:
-        plans = plan_comment(issue, args.body_file.read_text())
-    except ClaimRefused as exc:
-        print(f"#{args.number} refused: {exc.reason}", file=sys.stderr)
-        return 3
-    run(plans, args.dry_run, tools)
-    print(f"#{args.number} commented")
-    return 0
+    return _post_body_file(args, tools, plan_comment, "commented")
 
 
 def cmd_defer(args: argparse.Namespace, tools: FindingsTools) -> int:
@@ -498,18 +513,9 @@ def cmd_remedy(args: argparse.Namespace, tools: FindingsTools) -> int:
         FINDINGS_BAD_ARGS if the body file is missing; 3 if the issue is closed, lacks the
         label, or the remedy is refused as a comment; 0 otherwise.
     """
-    if not args.body_file.is_file():
-        sys.stderr.write(f"remedy: body file not found: {args.body_file}\n")
-        return FINDINGS_BAD_ARGS
-    issue = _load_issue(args.number, tools)
-    try:
-        plans = plan_remedy(issue, args.body_file.read_text())
-    except ClaimRefused as exc:
-        print(f"#{args.number} refused: {exc.reason}", file=sys.stderr)
-        return 3
-    run(plans, args.dry_run, tools)
-    print(f"#{args.number} remedy recorded; no-vetted-remediation removed")
-    return 0
+    return _post_body_file(
+        args, tools, plan_remedy, "remedy recorded; no-vetted-remediation removed"
+    )
 
 
 def cmd_close(args: argparse.Namespace, tools: FindingsTools) -> int:

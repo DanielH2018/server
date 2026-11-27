@@ -1,8 +1,8 @@
 """Write one day's rows into a warehouse table, replacing whatever that day held, and read them back.
 
 Every load DAG writes through `replace_partition`, so a rerun or a backfill of any day is safe:
-the day's old rows and the new ones never coexist. Its check task reads through
-`read_partition`. Both work on any DB-API connection and use no driver-specific cursor; the
+the day's old rows and the new ones never coexist. Its check task is `check_day`, which reads
+the day back through `read_partition`. Both work on any DB-API connection and use no driver-specific cursor; the
 DAGs pass the Postgres hook's connection, which is psycopg 3 or psycopg2 by what is installed.
 
 Typical usage example:
@@ -147,24 +147,41 @@ def record_check(
         cursor.close()
 
 
-def finish_check(
-    connect: Callable, dag_id: str, day: date, problems: Sequence[str]
+def check_day(
+    connect: Callable,
+    dag_id: str,
+    day: date,
+    tables: Sequence[str],
+    problems_of: Callable[..., Sequence[str]],
+    placeholder: str = "%s",
 ) -> None:
-    """End a check task: fail it on any problem, or record that the day passed.
+    """Run a check task: read the day back, fail on any problem, or record that it passed.
 
     The record is what `warehouse_freshness` reads, so a check that passes without calling
     this reads as a missing day.
 
     Args:
       connect: Opens a DB-API connection to the warehouse, such as a Postgres hook's
-        `get_conn`. It is called only when the day passed.
+        `get_conn`. It is called once to read, and again only when the day passed.
       dag_id: The checked DAG.
       day: The checked day.
-      problems: The check's findings; empty when the day is trustworthy.
+      tables: The tables the DAG loads, each with its day in a `day` column.
+      problems_of: Called with `day` and then each table's rows for it, as `read_partition`
+        returns them, in `tables` order. Returns the check's findings; empty when the day is
+        trustworthy.
+      placeholder: The driver's parameter marker; `%s` for psycopg.
 
     Raises:
-      ValueError: `problems` is not empty.
+      ValueError: `problems_of` found a problem.
     """
+    conn = connect()
+    try:
+        partitions = [
+            read_partition(conn, table, "day", day, placeholder) for table in tables
+        ]
+    finally:
+        conn.close()
+    problems = problems_of(day, *partitions)
     if problems:
         raise ValueError("quality check failed:\n" + "\n".join(problems))
     conn = connect()
@@ -175,6 +192,6 @@ def finish_check(
         finally:
             cursor.close()
         conn.commit()
-        record_check(conn, dag_id, day, datetime.now(timezone.utc))
+        record_check(conn, dag_id, day, datetime.now(timezone.utc), placeholder)
     finally:
         conn.close()
