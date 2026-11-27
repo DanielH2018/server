@@ -228,6 +228,9 @@ def files_setting(key: str, sha: str, repo: Path = REPO) -> list[str]:
 QUOTE_OPENERS = " \t{[,:"
 # What may precede a quoted scalar once whitespace is skipped; `-` and `?` are block indicators.
 SCALAR_STARTERS = "{[,:"
+# A tag, an anchor or a flow `?` explicit-key indicator, which sit between a collection
+# indicator and the scalar they apply to.
+NODE_PROPERTY = re.compile(r"(^|[\s{\[,])([!&]\S*|\?)$")
 
 
 def opens_scalar(line: str, i: int) -> bool:
@@ -237,7 +240,11 @@ def opens_scalar(line: str, i: int) -> bool:
     if line[i - 1] not in QUOTE_OPENERS:
         return False
     before = line[:i].rstrip(" \t")
-    return not before.strip(" \t-?") or before[-1] in SCALAR_STARTERS
+    return (
+        not before.strip(" \t-?")
+        or before[-1] in SCALAR_STARTERS
+        or bool(NODE_PROPERTY.search(before))
+    )
 
 
 def code_part(line: str) -> str:
