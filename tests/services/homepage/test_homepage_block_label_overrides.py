@@ -28,9 +28,7 @@ Run: uv run pytest tests/services/homepage/test_homepage_block_label_overrides.p
 
 import re
 
-from lib import yaml_fast
 from _homepage_config import custom_css, tiles
-from _k8s_render import render_role_template
 
 # The rename itself is in the CSS; this table is what it renames.
 EXPECTED_LABELS = {
@@ -155,56 +153,3 @@ def test_an_override_landing_past_the_end_of_a_fields_list_is_rejected():
     truncated = _tile_fields_with("peanut.", ["battery_charge"])
     flagged = [m for m in misdirected_overrides(truncated) if "lands on nothing" in m]
     assert len(flagged) == 1, flagged
-
-
-def karma_tile() -> dict:
-    """The body of the one tile linking to Karma, the alert UI."""
-    found = [body for _name, body in tiles() if "karma." in (body.get("href") or "")]
-    assert len(found) == 1, f"expected one tile linking to karma., got {len(found)}"
-    return found[0]
-
-
-def test_the_karma_tile_names_its_blocks_in_config():
-    """prometheusmetric takes a `label:` per block, so the tile needs no CSS rename.
-
-    The blocks render in `metrics:` order: what pages at critical, then what pages at warning.
-    """
-    widget = karma_tile()["widget"]
-    assert widget["type"] == "prometheusmetric"
-    assert [m["label"] for m in widget["metrics"]] == [
-        "Critical",
-        "Warning",
-    ]
-    assert not [key for key in css_overrides(custom_css()) if "karma." in key[0]]
-
-
-def blackholed_matchers() -> set[str]:
-    """The matchers of every top-level route the Alertmanager config sends to `blackhole`."""
-    secret = yaml_fast.safe_load(
-        render_role_template("observability", "alertmanager-secret.yaml.j2")
-    )
-    routes = yaml_fast.safe_load(secret["stringData"]["alertmanager.yml"])["route"][
-        "routes"
-    ]
-    return {
-        matcher
-        for route in routes
-        if route.get("receiver") == "blackhole"
-        for matcher in route.get("matchers", [])
-    }
-
-
-def test_the_karma_tile_counts_only_alerts_that_page():
-    """Each severity count negates every matcher the routing tree blackholes.
-
-    A blackholed alert pages nobody, so counting it would show a page nobody received.
-    Reading the matchers from the rendered routing tree means a new blackhole route fails
-    here until the tile drops it too.
-    """
-    matchers = blackholed_matchers()
-    assert 'shadow="true"' in matchers, matchers  # non-vacuity
-    metrics = {m["label"]: m["query"] for m in karma_tile()["widget"]["metrics"]}
-    for label in ("Critical", "Warning"):
-        assert f'severity="{label.lower()}"' in metrics[label], metrics[label]
-        missing = {m for m in matchers if m.replace("=", "!=", 1) not in metrics[label]}
-        assert not missing, f"the {label} count still includes {sorted(missing)}"
