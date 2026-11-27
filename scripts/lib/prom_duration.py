@@ -11,16 +11,19 @@ UNIT_SECONDS = {
     "w": 604800,
     "y": 31536000,
 }
-_COMPONENT = re.compile(r"(\d+)(ms|[smhdwy])")
+# Prometheus takes each unit at most once, largest first, in ASCII digits.
+_DURATION = re.compile(
+    "".join(rf"(?:(?P<{unit}>\d+){unit})?" for unit in reversed(UNIT_SECONDS)),
+    re.ASCII,
+)
 
 
 def seconds(text: str, units: frozenset[str] = frozenset(UNIT_SECONDS)) -> float | None:
-    """`text` in seconds, or None unless it is wholly components whose units are in `units`."""
-    parts = _COMPONENT.findall(text)
-    if (
-        not parts
-        or "".join(n + u for n, u in parts) != text
-        or {u for _, u in parts} - units
-    ):
+    """`text` in seconds, or None unless Prometheus accepts it using only the units in `units`."""
+    match = _DURATION.fullmatch(text)
+    if not match:
         return None
-    return sum(int(n) * UNIT_SECONDS[u] for n, u in parts)
+    parts = {u: int(n) for u, n in match.groupdict().items() if n is not None}
+    if not parts or parts.keys() - units:
+        return None
+    return sum(n * UNIT_SECONDS[u] for u, n in parts.items())
