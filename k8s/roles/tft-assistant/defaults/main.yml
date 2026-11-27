@@ -2,20 +2,21 @@
 # Renovate's k8s-defaults manager tracks this pin. The tag stays beside the digest
 # (`repo:tag@sha256:...`): a bare `repo@sha256:...` freezes the image with no update signal.
 # The image's repository publishes a version tag per release, not per merge.
-tft_assistant_k8s_image: ghcr.io/danielh2018/tft-assistant:0.2.3@sha256:0dd812b5ac989e292c8728161f19627abc3c04b016590e054f2171e31e5eb97c
+tft_assistant_k8s_image: ghcr.io/danielh2018/tft-assistant:0.2.5@sha256:a33977f128b1d2e6433ccab7e6def96d2f13ff4148a7c91fe99c0cc54572abb6
 
 # Renovate stance: whether an image bump here may automerge. `promote` deploys what merges.
 k8s_autodeploy: true
-k8s_autodeploy_reason: "the volume holds matches the crawl can fetch again and a page the pod rebuilds at start, so a bad release costs a stale page until the next one"
+k8s_autodeploy_reason: "the data volume holds matches the crawl can fetch again and a page the pod rebuilds at start, and the kept volume is snapshotted before each revision and backed up weekly, so a bad release costs a stale page or a revert of the notes"
 # Every auto-deployed role with a Recreate strategy and an RWO claim snapshots it before a
-# revision. A revert here saves a re-crawl, not data.
-k8s_autodeploy_snapshot_pvcs: [tft-assistant-data]
+# revision. A revert of the data claim saves a re-crawl. A revert of the kept claim saves the notes.
+k8s_autodeploy_snapshot_pvcs: [tft-assistant-data, tft-assistant-keep]
 
-# The web container: python's http.server over one static page.
+# The web container: the image's `serve` command over one static page and the edit store. The
+# command loads the whole CLI, numpy and scikit-learn included, and holds 136 MB resident.
 tft_assistant_k8s_cpu_limit: "200m"
-tft_assistant_k8s_mem_limit: 96Mi
+tft_assistant_k8s_mem_limit: 256Mi
 tft_assistant_k8s_cpu_request: "10m"
-tft_assistant_k8s_mem_request: 32Mi
+tft_assistant_k8s_mem_request: 160Mi
 
 # The crawler container. It idles on Riot's rate limit between builds. A build holds every board
 # of a selection in memory, about 800 MB for 13,600 matches, and the image analyses 20,000 at most.
@@ -39,7 +40,18 @@ tft_assistant_k8s_claim: tft-assistant-data
 tft_assistant_k8s_storage_class: longhorn-nobackup
 tft_assistant_k8s_size: 10Gi
 
+# What no API gives back: the notes a reader writes, and the comp ids the notes are keyed by.
+# The image keeps both under `keep/` of its state directory. This claim is on the class the
+# backup jobs read, and its `weekly_backup_claims` entry in k8s/services.yml names its day.
+# Both files are a few hundred kilobytes.
+tft_assistant_k8s_keep_claim: tft-assistant-keep
+tft_assistant_k8s_keep_storage_class: longhorn
+tft_assistant_k8s_keep_size: 1Gi
+
 k8s_claims:
   - name: "{{ tft_assistant_k8s_claim }}"
     storage_class: "{{ tft_assistant_k8s_storage_class }}"
     size: "{{ tft_assistant_k8s_size }}"
+  - name: "{{ tft_assistant_k8s_keep_claim }}"
+    storage_class: "{{ tft_assistant_k8s_keep_storage_class }}"
+    size: "{{ tft_assistant_k8s_keep_size }}"

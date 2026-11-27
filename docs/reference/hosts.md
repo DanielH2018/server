@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/hosts.py
-generated_at: 2026-11-26 06:17 UTC
-generated_sha: f2e8e29f8
+generated_at: 2026-11-27 06:17 UTC
+generated_sha: f8cc3c595
 ---
 
 !!! warning "Generated file — do not edit"
@@ -23,7 +23,7 @@ k3s server / control-plane node. The host-package builder, the docs build, landi
 |---|---|
 | LAN address | `10.0.0.215` |
 | Host package | `homelab-daniel-box` (48 components) |
-| Services declared | 71 |
+| Services declared | 72 |
 | Has Docker | no |
 
 ## daniel-pi

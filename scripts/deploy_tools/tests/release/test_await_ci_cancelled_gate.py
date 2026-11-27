@@ -9,7 +9,7 @@ Run: uv run pytest scripts/deploy_tools/tests/release/test_await_ci_cancelled_ga
 
 import pytest
 
-from deploy_tools import await_ci
+from deploy_tools import await_ci, ci_stall
 from lib.exit_codes import CI_PENDING
 from ci_verdict import (
     CI_GATE_NAME,
@@ -112,4 +112,33 @@ def test_a_cancelled_ready_run_beside_a_draft_run_reads_as_draft_skipped(
         fetch_tip=lambda: "tip",
     )
     assert rc == CI_PENDING, line
-    assert (await_ci.DRAFT_SKIPPED in line) is names_the_draft
+    assert (ci_stall.DRAFT_SKIPPED in line) is names_the_draft
+
+
+_RERUN_RUNNING = parse_check_runs(
+    [{"name": "hooks", "status": "in_progress", "conclusion": None}]
+)
+
+
+@pytest.mark.parametrize(
+    "runs, names_no_run_left",
+    [(RUNS, True), (RUNS + _RERUN_RUNNING, False)],
+    ids=["all-finished", "one-running"],
+)
+def test_a_cancelled_head_with_nothing_running_reads_as_no_run_left(
+    runs, names_no_run_left
+):
+    """GitHub never re-runs a cancelled run, so the merge wait has to: the line names the
+    head that needs it. A check-run still in progress may yet decide the head."""
+    rc, line = await_ci.wait(
+        "abc",
+        0,
+        0,
+        sleep=lambda _s: None,
+        fetch=lambda _s: runs,
+        fetch_suites=_suites("cancelled"),
+        descendants=lambda _s: [],
+        fetch_tip=lambda: "tip",
+    )
+    assert rc == CI_PENDING, line
+    assert (ci_stall.NO_RUN_LEFT in line) is names_no_run_left
