@@ -72,15 +72,20 @@ def test_a_refused_isolation_leg_passes(closed_url):
     assert _isolated(closed_url) == f"isolated: {closed_url} refused, as intended"
 
 
-@pytest.mark.parametrize("status", [200, 401], ids=["ok", "error-status"])
-def test_any_answer_fails_the_isolation_leg(serve, status):
+@pytest.mark.parametrize(
+    ("status", "message"),
+    [
+        (200, "POLICY NOT ENFORCED: {url} answered ANSWERED"),
+        (401, "no refusal from {url}"),
+    ],
+    ids=["ok", "error-status"],
+)
+def test_any_answer_fails_the_isolation_leg(serve, status, message):
     """An error status is a connection the server accepted, so it fails the leg too."""
     url = serve(status)
     with pytest.raises(flux_job_verify.Failed) as failed:
         _isolated(url)
-    assert str(failed.value).startswith(
-        (f"POLICY NOT ENFORCED: {url} answered ANSWERED", f"no refusal from {url}")
-    )
+    assert str(failed.value).startswith(message.format(url=url))
 
 
 def test_a_dns_failure_fails_the_isolation_leg():
