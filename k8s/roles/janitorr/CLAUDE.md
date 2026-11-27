@@ -29,8 +29,9 @@ See repo-root `CLAUDE.md` for shared conventions.
 - **HISTORY — the health reader was a daniel-box host cron until H2.5c.** `homelab-reconcile`
   removed the cron, its script and the `janitorr` drift fragment from daniel-box.
 - **The pod holds no Secret.** The reader's code ships in the `janitorr-health` ConfigMap,
-  beside `host_lib.py`. No secret goes in the ConfigMap (`tests/k8s/flux/test_no_secret_in_a_moved_jobs_configmap.py`).
-- **The reader also exports its verdict** (M6 B6b). It patches `homelab/check-verdict`,
+  beside `host_lib.py` and the shared verdict export `scripts/lib/check_verdict.py`, which the
+  CronJob's volume `items:` mount at `lib/check_verdict.py`. No secret goes in the ConfigMap (`tests/k8s/flux/test_no_secret_in_a_moved_jobs_configmap.py`).
+- **The reader also exports its verdict** (M6 B6b), through `scripts/lib/check_verdict.py:export_verdict`. It patches `homelab/check-verdict`,
   `homelab/check-last-run` and `homelab/check-message` onto the `janitorr-health-verdict`
   ConfigMap, which the role renders with no annotations so the reader is their only writer.
   The patch passes `--field-manager=janitorr-health`: under kubectl's default `kubectl-patch`
