@@ -32,6 +32,8 @@ import yaml
 # Restated because the filter plugin loads this module by path and cannot import `lib`.
 _LOADER = getattr(yaml, "CSafeLoader", yaml.SafeLoader)
 
+_FIELD_UNSAFE = frozenset(",[]{}?\t")
+
 # The merge key `<<` decodes as the string `<<` in a value.
 _GO_MAP = frozenset(
     "y Y yes Yes YES true True TRUE on On ON "
@@ -84,13 +86,20 @@ def yaml_1_1_keeps(text: str) -> bool:
     plain = str.__str__(text)
     try:
         return yaml.load(plain, Loader=_LOADER) == plain
-    except yaml.YAMLError:
+    except yaml.YAMLError, ValueError:
         return False
 
 
 def refused(text: str) -> bool:
     """Whether a value whose placeholder stands alone in a field must be refused.
 
-    True when either reader takes the bare text for anything but the same string.
+    True when either reader takes the bare text for anything but the same string, or when the
+    text holds a tab, a flow indicator (`,[]{}?`) or a leading `:`. Each ends or breaks a plain
+    scalar once it sits in a field or a flow collection.
     """
-    return go_yaml_v2_types(text) or not yaml_1_1_keeps(text)
+    return (
+        go_yaml_v2_types(text)
+        or not yaml_1_1_keeps(text)
+        or any(char in _FIELD_UNSAFE for char in text)
+        or text.startswith(":")
+    )
