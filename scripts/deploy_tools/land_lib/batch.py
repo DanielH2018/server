@@ -87,7 +87,10 @@ from lib.json_types import JsonValue, as_object
 # The label a member carries while its own run stands in for the batch's (`ci.yml`'s `prove`).
 LABEL = "landing-batch"
 # How many PRs one batch holds, the holder's own included; the batch's gate reads no more.
-MAX_STACKED = 4
+# DECIDED: 6. The operator raised it from 4 on 2026-11-27 (docs/landing-speed.md): every batch
+# in that day's burst was full while 10 or more PRs stood in line. A larger batch is red more
+# often, and a red batch splits; lower it from the red-batch rate.
+MAX_STACKED = 6
 # The seconds the batch's one full run may take. A run can take 993 s under a saturated pool.
 RUN_TIMEOUT_S = 2700
 MEMBER_TIMEOUT_S = 600

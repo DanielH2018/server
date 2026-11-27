@@ -136,6 +136,6 @@ uses the day's numbers.
 - **The fresh checkout and `.venv`.** PRs 10477 and 10487 moved them to disk.
   `docs/worktree-storage.md` measures `git worktree add` at 0.32 s and `uv sync` at 0.25 s.
 - **Master CI.** The tested-tree skip makes the median wait 21 s.
-- **PR CI.** Batching already shares a run among up to 4 PRs. The run's 281 s median is not
+- **PR CI.** Batching shares a run among up to 6 PRs, 4 before 2026-11-27. The run's 281 s median is not
   the bottleneck. GitHub's 20-job cap stays, because the operator ruled out a paid plan and
   self-hosted runners.

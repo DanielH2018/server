@@ -79,8 +79,8 @@ CREATOR = "github-actions[bot]"
 BODY_ENV = "BATCH_BODY"
 # The line of that body that names the batch's members, as the landing writes it.
 _MEMBERS = re.compile(r"^Members:((?:[ \t]+#\d+)+)[ \t]*\r?$", re.MULTILINE)
-# A landing batch holds up to four pull requests (`docs/ci-throughput.md`).
-MAX_MEMBERS = 4
+# A landing batch holds up to six pull requests (`batch.MAX_STACKED`).
+MAX_MEMBERS = 6
 
 _OBJECT_ID = re.compile(r"[0-9a-f]{40}([0-9a-f]{24})?")
 _TIMEOUT_S = 20
