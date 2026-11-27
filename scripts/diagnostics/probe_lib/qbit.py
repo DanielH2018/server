@@ -63,3 +63,24 @@ def run_qbit(ns):
     )
     print(text, end="")
     return rc
+
+
+def add_parser(sub) -> None:
+    """Add `qbit` to probe.py's subparsers; it lives here while cli_parser.py sits at its cap."""
+    qb = sub.add_parser(
+        "qbit", help="read-only qBittorrent API GET (API key from SOPS, fed via stdin)"
+    )
+    qb.add_argument(
+        "path", help="api path, e.g. torrents/info?category=lidarr, app/preferences"
+    )
+    qb.add_argument(
+        "--json",
+        action="store_true",
+        help="print one-line JSON instead of pretty-printed",
+    )
+    qb.add_argument(
+        "--show-secrets",
+        action="store_true",
+        help="print credential-bearing values instead of <redacted> "
+        "(they land in the transcript — see issue #1388)",
+    )
