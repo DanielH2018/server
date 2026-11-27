@@ -86,10 +86,9 @@ def test_a_landing_stopped_by_sigterm_still_removes_its_checkout(primary):
         raise AssertionError("SIGTERM did not unwind the landing")
 
     before = signal.getsignal(signal.SIGTERM)
-    with pytest.raises(SystemExit) as stopped:
+    with pytest.raises(KeyboardInterrupt):
         fresh.land_fresh(primary, ["--pr", "7"], run=run)
     [checkout] = seen
-    assert stopped.value.code == 128 + signal.SIGTERM
     assert not checkout.exists()
     assert signal.getsignal(signal.SIGTERM) is before
 

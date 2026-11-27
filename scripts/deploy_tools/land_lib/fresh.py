@@ -36,7 +36,6 @@ import signal
 import subprocess
 import sys
 import tempfile
-import threading
 from collections.abc import Callable, Generator
 from pathlib import Path
 
@@ -155,7 +154,7 @@ def land_fresh(
             inherit["pass_fds"] = (lock_fd, turn_fd)
             inherit["env"][TURN_FD_ENV] = str(turn_fd)
         try:
-            with _sigterm_unwinds():
+            with dies_on_a_signal():
                 return run(
                     [str(path / LAND_SH), *argv], check=False, **inherit
                 ).returncode
@@ -225,20 +224,30 @@ def _remove(
 
 
 @contextlib.contextmanager
-def _sigterm_unwinds() -> Generator[None]:
-    """Turn SIGTERM into SystemExit, so `subprocess.run` kills the child and `finally` runs."""
-    if threading.current_thread() is not threading.main_thread():
-        yield
-        return
+def dies_on_a_signal() -> Generator[None]:
+    """SIGTERM and SIGINT raise inside the block, so an enclosing `finally` still runs.
 
-    def _exit(signum: int, _frame: object) -> None:
-        raise SystemExit(128 + signum)
+    Default SIGTERM disposition terminates the interpreter outright, skipping every `finally`
+    -- which for `land_fresh` and `tools.gate_snapshot` leaves a worktree registered in the
+    primary that nothing collects. `KeyboardInterrupt` rather than a new exception type:
+    `land.py` catches neither (its own `finally` suppresses `Exception` only, so this
+    propagates through it after the ledger row is written), and reusing it keeps a SIGTERM'd
+    landing and a Ctrl-C'd one on one path. `subprocess.run` kills its child on the way out.
+    The previous handlers are restored on the way out, because the test suite runs this in
+    pytest's main thread.
+    """
 
-    previous = signal.signal(signal.SIGTERM, _exit)
+    def raise_it(signum, _frame):
+        raise KeyboardInterrupt(f"signal {signum}")
+
+    previous = {s: signal.getsignal(s) for s in (signal.SIGTERM, signal.SIGINT)}
+    for sig in previous:
+        signal.signal(sig, raise_it)
     try:
         yield
     finally:
-        signal.signal(signal.SIGTERM, previous)
+        for sig, handler in previous.items():
+            signal.signal(sig, handler)
 
 
 def _failed(
