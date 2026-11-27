@@ -14,7 +14,7 @@ the parsed list).
 """
 
 import sys
-from collections.abc import Callable
+from collections.abc import Callable, Container
 from pathlib import Path
 
 import yaml
@@ -121,7 +121,9 @@ NO_NEW_PRIV_EXEMPT: dict = {}
 IMAGE_DIGEST_EXEMPT: dict = {}
 
 
-def find_undigested_images(docs, exempt=frozenset()) -> list[tuple[str, str]]:
+def find_undigested_images(
+    docs, exempt: Container[str] = frozenset()
+) -> list[tuple[str, str]]:
     """Return (service, image) for every compose image pinned by tag with no ``@sha256:`` digest.
 
     A tag is a moving name. ``pull: policy`` leaves an already-present ``latest`` ageing in
@@ -149,7 +151,7 @@ def find_undigested_images(docs, exempt=frozenset()) -> list[tuple[str, str]]:
 
 
 def _services_lacking(
-    hardened: Callable[[dict], bool], docs, exempt: frozenset
+    hardened: Callable[[dict], bool], docs, exempt: Container[str]
 ) -> list:
     """Names of the services in `docs` whose spec fails `hardened` and are not in `exempt`."""
     lacking = []
@@ -170,7 +172,7 @@ def _cap_drops_all(spec: dict) -> bool:
     )
 
 
-def find_missing_cap_drop(docs, exempt=frozenset()) -> list:
+def find_missing_cap_drop(docs, exempt: Container[str] = frozenset()) -> list:
     """Return service names that do NOT ``cap_drop: [ALL]`` and aren't in ``exempt``.
 
     Drop-all is the hardening baseline, with minimal caps added back after it. A service that
@@ -187,7 +189,7 @@ def _sets_no_new_privileges(spec: dict) -> bool:
     )
 
 
-def find_missing_no_new_privileges(docs, exempt=frozenset()) -> list:
+def find_missing_no_new_privileges(docs, exempt: Container[str] = frozenset()) -> list:
     """Return service names that do NOT set ``security_opt: [no-new-privileges:true]``.
 
     Excludes anything in ``exempt``. This is the companion baseline to ``cap_drop: [ALL]`` — it

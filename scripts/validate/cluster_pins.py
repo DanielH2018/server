@@ -361,7 +361,7 @@ def check(base: str, head: str, repo: Path = REPO) -> int:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = ArgumentParser(description=__doc__.split("\n\n")[0])
+    parser = ArgumentParser(description=(__doc__ or "").split("\n\n")[0])
     parser.add_argument("--base", required=True, help="the PR's base commit")
     parser.add_argument(
         "--head", default="HEAD", help="the PR's head commit (default HEAD)"

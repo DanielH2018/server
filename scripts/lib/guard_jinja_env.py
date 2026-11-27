@@ -27,7 +27,7 @@ from pathlib import Path
 from types import FunctionType
 from typing import Any, cast
 
-from jinja2 import Environment
+from jinja2 import Environment, Undefined
 
 from lib.k8s_yaml import to_json_stub
 from lib.render_guard import (
@@ -261,7 +261,9 @@ def file_lookup(kind: str, path: str, **_kwargs) -> str:
     return Path(path).read_text().rstrip()
 
 
-def template_env(template_dir: Path, undefined_cls=StubUndefined) -> Environment:
+def template_env(
+    template_dir: Path, undefined_cls: type[Undefined] = StubUndefined
+) -> Environment:
     """The environment for one template directory plus the shared ``k8s/templates/``.
 
     Every guard loads that pair — a role's own templates and the shared macros they import —

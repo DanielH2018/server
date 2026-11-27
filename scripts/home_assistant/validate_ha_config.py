@@ -38,6 +38,7 @@ import tempfile
 from pathlib import Path
 
 import yaml
+import yaml.constructor
 from jinja2 import Environment, nodes
 from jinja2.exceptions import TemplateSyntaxError
 
@@ -82,10 +83,8 @@ class HAConfigLoader(yaml.SafeLoader):
     """
 
     def __init__(self, stream):
-        try:
-            self._root = Path(stream.name).resolve().parent
-        except AttributeError:
-            self._root = Path.cwd()
+        name = getattr(stream, "name", None)
+        self._root = Path(name).resolve().parent if name else Path.cwd()
         super().__init__(stream)
 
     def construct_mapping(self, node, deep=False):
@@ -117,8 +116,17 @@ RUNTIME_INCLUDES = frozenset({"google_service_account.json"})
 _INCLUDE_STACK: set[Path] = set()
 
 
+def _include_target(loader: HAConfigLoader, node: yaml.Node) -> str:
+    """The scalar an `!include` tag carries; a mapping or sequence there is a ConstructorError."""
+    if not isinstance(node, yaml.ScalarNode):
+        raise yaml.constructor.ConstructorError(
+            None, None, f"{node.tag} takes a scalar", node.start_mark
+        )
+    return loader.construct_scalar(node)
+
+
 def _construct_include(loader: HAConfigLoader, node: yaml.Node):
-    name = loader.construct_scalar(node)
+    name = _include_target(loader, node)
     if name in RUNTIME_INCLUDES:
         return f"<include {name}>"
     target = (loader._root / name).resolve()
@@ -151,7 +159,7 @@ def _include_dir_files(loader: HAConfigLoader, node: yaml.Node, expected: type):
     is an error.
     """
     tag = node.tag
-    target = (loader._root / loader.construct_scalar(node)).resolve()
+    target = (loader._root / _include_target(loader, node)).resolve()
     mark = node.start_mark
     if not target.is_dir():
         raise HAConfigError(

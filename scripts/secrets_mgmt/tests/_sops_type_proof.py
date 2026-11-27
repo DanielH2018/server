@@ -160,7 +160,7 @@ def build(out: Path, registry: str) -> None:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser = argparse.ArgumentParser(description=(__doc__ or "").partition("\n")[0])
     parser.add_argument("--out", type=Path, required=True, help="an absent directory")
     parser.add_argument(
         "--registry", required=True, help="HOST:PORT source-controller pulls from"

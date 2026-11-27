@@ -231,7 +231,7 @@ def main(argv=None, fetch=fetch, outdir=OUTDIR, boards=DASHBOARDS):
     Returns:
         0 when every board was written or already matched, 1 when it refused.
     """
-    parser = ArgumentParser(description=__doc__.split("\n", 1)[0])
+    parser = ArgumentParser(description=(__doc__ or "").split("\n", 1)[0])
     parser.add_argument(
         "--overwrite",
         action="store_true",

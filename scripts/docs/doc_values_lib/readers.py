@@ -11,7 +11,7 @@ imports it.
 """
 
 import re
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass
 from pathlib import Path as _Path
 
@@ -46,7 +46,7 @@ ORDINALS = (
 )
 
 
-def one(values: Sequence, where: str) -> str:
+def one(values: Iterable, where: str) -> str:
     distinct = sorted({str(value) for value in values})
     if len(distinct) != 1:
         raise ValueError(f"{where}: expected one value, found {distinct or 'none'}")

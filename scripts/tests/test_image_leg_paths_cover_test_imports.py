@@ -95,6 +95,7 @@ def local_actions(workflow: dict) -> set[str]:
 
 def pull_request_paths(workflow: dict) -> list[str]:
     triggers = workflow.get("on", workflow.get(True))
+    assert triggers is not None
     return triggers["pull_request"]["paths"]
 
 

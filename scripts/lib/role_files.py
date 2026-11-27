@@ -17,8 +17,8 @@ Typical usage example, in a template:
 from pathlib import Path
 
 from jinja2 import UndefinedError, pass_context
-from jinja2.runtime import Context, missing
-
+from jinja2.runtime import Context
+from jinja2.utils import missing
 from lib.repo_paths import CLUSTER_VARS_SOURCE, K8S_ROLES, REPO
 
 _ROLES_DEPTH = len(K8S_ROLES.relative_to(REPO).parts)

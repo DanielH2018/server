@@ -11,7 +11,7 @@ from lib.longhorn_lib import longhorn_cluster_state as state
 
 
 def _target(name, url, available=True, message=""):
-    status = {"available": available}
+    status: dict[str, object] = {"available": available}
     if message:
         status["conditions"] = [{"message": message}]
     return {

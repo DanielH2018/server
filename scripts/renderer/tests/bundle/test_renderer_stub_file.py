@@ -34,7 +34,9 @@ def unexpected_entries(stub_file: Path) -> dict[str, object]:
     keys = homelab_stub_keys(yaml_fast.safe_load(shadow_diff.SECRETS.read_text()))
     expected: dict[str, object] = {key: homelab_secret_stub(key) for key in keys}
     expected[shadow_diff.SENTINEL] = True
-    extra = {k: v for k, v in loaded.items() if expected.get(k, object()) != v}
+    extra: dict[str, object] = {
+        k: v for k, v in loaded.items() if expected.get(k, object()) != v
+    }
     return extra | {k: "<missing>" for k in expected.keys() - loaded.keys()}
 
 

@@ -125,7 +125,7 @@ def main(argv: list[str] | None = None) -> int:
     Returns:
         0 on success.
     """
-    parser = ArgumentParser(description=__doc__.splitlines()[0])
+    parser = ArgumentParser(description=(__doc__ or "").partition("\n")[0])
     parser.add_argument("--out", type=Path, required=True, help="output file path")
     parser.add_argument(
         "--format",

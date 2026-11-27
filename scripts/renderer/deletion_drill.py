@@ -434,7 +434,7 @@ CASES = {
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = ArgumentParser(description=__doc__.splitlines()[0])
+    parser = ArgumentParser(description=(__doc__ or "").partition("\n")[0])
     sub = parser.add_subparsers(dest="command", required=True)
     b = sub.add_parser("build", help="write the bundles and the hand-applied files")
     b.add_argument(
