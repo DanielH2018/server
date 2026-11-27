@@ -31,7 +31,8 @@ print this text and exit 0.
 
 import json
 import subprocess
-import sys
+
+import crowdsec_jobs
 
 CSCLI = "/tools/cscli"
 
@@ -96,7 +97,4 @@ def main(runner=run) -> int:
 
 
 if __name__ == "__main__":
-    if any(arg in ("-h", "--help") for arg in sys.argv[1:]):
-        print(__doc__.strip())
-        sys.exit(0)
-    sys.exit(main())
+    crowdsec_jobs.entrypoint(main, __doc__)

@@ -53,10 +53,10 @@ import hashlib
 import ipaddress
 import json
 import subprocess
-import sys
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
-from pathlib import Path
+
+import crowdsec_jobs
 
 ALLOWLIST = "remote-ips"
 HOME_ALLOWLIST = "home-ips"
@@ -181,7 +181,7 @@ def parse_expiration(raw):
     """An allowlist item's expiry as an aware datetime, or None when it never expires."""
     if not raw or str(raw).startswith("0001-01-01"):
         return None
-    text = str(raw).replace("Z", "+00:00")
+    text = str(raw)
     try:
         parsed = datetime.fromisoformat(text)
     except ValueError:
@@ -350,19 +350,4 @@ def main(runner=run, now=None):
 
 
 if __name__ == "__main__":
-    if any(arg in ("-h", "--help") for arg in sys.argv[1:]):
-        print(__doc__.strip())
-        sys.exit(0)
-    try:
-        sys.exit(main())
-    except subprocess.CalledProcessError as exc:
-        tail = (exc.stderr or exc.stdout or "").strip().splitlines()
-        # Name the verb that failed, never the address: the summary line lands in the pod log and
-        # Loki.
-        words = [Path(exc.cmd[0]).name, *exc.cmd[1:]]
-        verb = " ".join([w for w in words if not w.startswith("-")][:3])
-        print(
-            f"{verb} failed rc={exc.returncode}: {tail[-1] if tail else 'no output'}",
-            file=sys.stderr,
-        )
-        sys.exit(1)
+    crowdsec_jobs.entrypoint(main, __doc__)
