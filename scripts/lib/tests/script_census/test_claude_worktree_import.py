@@ -8,8 +8,6 @@ deployed path, so every test here runs there too.
 Run: uv run pytest scripts/lib/tests/script_census/test_claude_worktree_import.py
 """
 
-# pyright: reportMissingImports=false
-
 import os
 import sys
 from pathlib import Path
@@ -48,6 +46,24 @@ def test_bootstrap_raises_when_the_deploy_is_missing(tmp_path):
     assert proc.returncode != 0
     assert "ImportError" in proc.stderr
     assert str(tmp_path / "absent") in proc.stderr
+    assert "chezmoi apply" in proc.stderr
+
+
+def test_bootstrap_refuses_an_installed_copy_when_the_deploy_is_missing(tmp_path):
+    """The `lint` group's pinned copy is for the type checkers, never a runtime fallback."""
+    installed = tmp_path / "site-packages"
+    installed.mkdir()
+    (installed / "claude_worktree.py").write_text(
+        '"""An installed copy."""\nINTERFACE = 99\n'
+    )
+    proc = run(
+        [sys.executable, "-c", "import lib._claude_worktree"],
+        cwd=SCRIPTS,
+        env={**_without_deploy(tmp_path), "PYTHONPATH": str(installed)},
+        check=False,
+    )
+    assert proc.returncode != 0
+    assert f"not at the deploy at {tmp_path / 'absent'}" in proc.stderr
     assert "chezmoi apply" in proc.stderr
 
 

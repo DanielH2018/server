@@ -609,7 +609,7 @@ def cmd_sync_board(args: argparse.Namespace, tools: FindingsTools) -> int:
     """
     numbers = args.numbers or [i.number for i in load_issues("open", tools)]
     outcomes = tools.sync_board(numbers, tools.repo, dry_run=args.dry_run)
-    counts = dict.fromkeys((UPDATED, UNCHANGED, FAILED), 0)
+    counts: dict[str, int] = dict.fromkeys((UPDATED, UNCHANGED, FAILED), 0)
     for outcome, _ in outcomes.values():
         counts[outcome] += 1
     verb = "would update" if args.dry_run else "updated"

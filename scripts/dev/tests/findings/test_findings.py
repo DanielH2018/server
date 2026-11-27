@@ -432,7 +432,7 @@ def test_main_requires_the_tools_seam():
     real boundaries.
     """
     with pytest.raises(TypeError):
-        findings.main(["list"])  # ty: ignore[missing-argument]
+        findings.main(["list"])  # ty: ignore[missing-argument]  # pyright: ignore[reportCallIssue]
 
 
 def test_help_carries_the_docstring_summary(capsys, make_tools):
