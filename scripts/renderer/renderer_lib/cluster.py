@@ -24,7 +24,8 @@ the same way into `DIR/cluster/<tag>-precheck/`, the check Jobs the tag waits on
 Ansible never reads either directory. Those templates also see `flux_job_image`, the image
 every such Job runs, `flux_job_connect`, the text of the helper a Job script that dials a
 Service carries beside it, and `flux_job_parse`, the text of the parser a Job script that reads
-an EndpointSlice or a Prometheus answer carries beside it.
+an EndpointSlice or a Prometheus answer carries beside it, and `flux_job_verify`, the text of
+the control and isolation legs a NetworkPolicy verify script carries beside it.
 
 A role's vendored files are no template, and `attach_vendored` adds them to `DIR/cluster/<tag>/`
 byte for byte after every pass that edits rendered text (H1.1a). `rendered_docs()` holds none
@@ -93,6 +94,7 @@ LABEL_WRAPPER = SHARED_TPL / "role-labelled.yaml.j2"
 FLUX_DEFAULTS = K8S_ROLES / "flux" / "defaults" / "main.yml"
 FLUX_JOB_CONNECT = JOB_FILES / "flux_job_connect.py"
 FLUX_JOB_PARSE = JOB_FILES / "flux_job_parse.py"
+FLUX_JOB_VERIFY = JOB_FILES / "flux_job_verify.py"
 # Each group variable naming a namespace that a role creates, mapped to that role. A deferred
 # document in that namespace gives `<tag>-deferred` an edge to the role (D4.2).
 NAMESPACE_ROLE_VARS = {"k8s_observability_namespace": "observability"}
@@ -411,11 +413,12 @@ def render_tag(
     # Every Job Flux applies runs `flux_job_image`, a flux role default no other role's
     # context holds. Passing it here keeps a verify template from `lookup()`ing the flux
     # defaults, which `land.sh`'s cross-role scan would read as the role depending on them.
-    # The helper's and the parser's text come the same way, so a fix to either does not
+    # The helper's, the parser's and the verify legs' text come the same way, so a fix to either does not
     # redeploy every verifying role.
     image = _flux_job_image() if verifying or checking else None
     helper = FLUX_JOB_CONNECT.read_text() if verifying or checking else None
     parser = FLUX_JOB_PARSE.read_text() if verifying or checking else None
+    legs = FLUX_JOB_VERIFY.read_text() if verifying or checking else None
     jobs = {}
     for kind, names in (
         (VERIFY_TEMPLATES_DIR, verifying),
@@ -430,6 +433,7 @@ def render_tag(
                 flux_job_image=image,
                 flux_job_connect=helper,
                 flux_job_parse=parser,
+                flux_job_verify=legs,
             )
             for name, src in _sources(tag, names, True, templates / kind).items()
         }

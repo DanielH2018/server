@@ -6,7 +6,8 @@
   applies*): the ConfigMap's in `configmap_digest8` of its data, the Job's in
   `job_spec_digest8` of its spec. Each is computed here from the same JSON those functions
   hash, so the spec is written once as YAML text, parsed for the hash and emitted verbatim.
-  The renderer passes `flux_job_image` and `flux_job_connect`, the helper's text, to every
+  The renderer passes `flux_job_image`, `flux_job_connect`, the helper's text, and
+  `flux_job_verify`, the shared verify legs' text, to every
   `templates/verify/` and `templates/precheck/` file (`render_tag`); import this file
   `with context` so the macros read them and `k8s_namespace`.
 
@@ -32,17 +33,22 @@
     label_note   comment lines above the `app` label.
     token_note   the comment line above `automountServiceAccountToken: false`.
     annotations  the Job's annotations, `homelab/job-kind` among them.
+    verify_legs  carry `flux_job_verify.py`, the shared control and isolation legs, beside
+                 the script, for a script that imports it. Default: false.
 #}
 {% macro digest_job(name, script, script_text, head, env, sa=none, configmap=none,
                     container='verify', label_note='',
                     token_note='# The Job reads no Kubernetes API, so its pod holds no token.',
-                    annotations='homelab/job-kind: verify') %}
+                    annotations='homelab/job-kind: verify', verify_legs=false) %}
 {% set sa = sa or name %}
 {% set script_dir = '/' + container %}
 {% set data = {
   script: script_text,
   'flux_job_connect.py': flux_job_connect,
 } %}
+{% if verify_legs %}
+{% set _ = data.update({'flux_job_verify.py': flux_job_verify}) %}
+{% endif %}
 {% set configmap_name = (configmap or name) + '-' + ({'data': data, 'binaryData': {}} | to_json(sort_keys=True, separators=(',', ':')) | hash('sha256'))[:8] %}
 {% set spec_text %}
 {{ head | trim }}
