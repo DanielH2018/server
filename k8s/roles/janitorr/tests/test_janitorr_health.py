@@ -130,10 +130,10 @@ def test_the_reader_imports_from_the_pods_mounted_layout(tmp_path):
     pod = cronjob["spec"]["jobTemplate"]["spec"]["template"]["spec"]
     [volume] = [v for v in pod["volumes"] if "configMap" in v]
     assert volume["configMap"]["name"] == configmap["metadata"]["name"]
-    # No `items:`, so the kubelet writes every key as a file of the same name.
-    assert "items" not in volume["configMap"]
-    for key, text in configmap["data"].items():
-        (tmp_path / key).write_text(text)
+    for item in volume["configMap"]["items"]:
+        target = tmp_path / item["path"]
+        target.parent.mkdir(exist_ok=True)
+        target.write_text(configmap["data"][item["key"]])
     # `--help` exits after all module-level imports, so exit 0 proves the import closure resolves
     # from the mounted files.
     # `-S` drops site-packages (the pod has no wheels); `-P` keeps the cwd off sys.path.
