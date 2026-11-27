@@ -194,12 +194,17 @@ def main(argv=None, *, plan=plan):
     return rc
 
 
-def _routed(name):
-    """The callable registered for `name`, which must have one."""
+def _routed(name, *args, **kwargs) -> int:
+    """Run the callable registered for `name`, which must have one, and return its exit code."""
     func = REGISTRY.get(name).func
     if not callable(func):
         raise LookupError(f"probe.py subcommand {name!r} has no callable")
-    return func
+    rc = func(*args, **kwargs)
+    if not isinstance(rc, int):
+        raise TypeError(
+            f"probe.py subcommand {name!r} returned {rc!r}, not an exit code"
+        )
+    return rc
 
 
 def _dispatch(ns, argv, plan):
@@ -239,16 +244,13 @@ def _dispatch(ns, argv, plan):
                 )
                 print(" ".join(kubectl_argv(*k8s_pods_args(ns.container, ns_name))))
             return 0
-        run_health = _routed("health")
-        return run_health(ns.container, docker=ns.docker, cluster=ns.cluster)
+        return _routed("health", ns.container, docker=ns.docker, cluster=ns.cluster)
     if ns.cmd == "targets" and (ns.pi or not (ns.json or ns.dry_run)):
-        return _routed("targets")(ns)
-    handlers = {
-        e.name: e.func for e in REGISTRY if "handler" in e.flags and callable(e.func)
-    }
+        return _routed("targets", ns)
+    handlers = {e.name for e in REGISTRY if "handler" in e.flags}
     if ns.cmd in handlers:
         try:
-            return handlers[ns.cmd](ns)
+            return _routed(ns.cmd, ns)
         except WrongCluster as exc:
             # The local kubectl serves another cluster: nothing was read, so exit 75, never the
             # `fail`
@@ -256,7 +258,7 @@ def _dispatch(ns, argv, plan):
             print(f"{ns.cmd}: {exc}", file=sys.stderr)
             return PROBE_UNREADABLE
     if ns.cmd in ("metric", "loki-query") and not ns.json and not ns.dry_run:
-        return _routed(ns.cmd)(ns)
+        return _routed(ns.cmd, ns)
     stages = plan(argv)
     if ns.dry_run:
         for stage in stages:
