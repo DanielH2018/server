@@ -11,13 +11,13 @@ Run: uv run pytest scripts/deploy_tools/tests/promote/test_promote_footprint_pro
 import json
 from typing import NamedTuple
 
-from hypothesis import given
+from hypothesis import assume, given
 from hypothesis import strategies as st
 
 from deploy_tools.promote_lib import forward_only, verify_promotion
 
 UNCLASSIFIED = forward_only.UNCLASSIFIED
-_TAGS = ("longhorn", "metallb", "bento-pdf", "soak")
+_TAGS = ("longhorn", "metallb", "bento-pdf", "sonarr")
 _HASHES = st.sampled_from(["h1", "h2", "h3"])
 
 
@@ -37,14 +37,19 @@ def _bundle(digests: object) -> dict[str, bytes]:
 
 
 def _entry(footprint: str) -> dict:
-    return {"own": footprint, "footprint": footprint, "claims": [], "suspended": False}
+    # `own` is fixed, so a reader that compared it in place of `footprint` fails.
+    return {"own": "o", "footprint": footprint, "claims": [], "suspended": False}
 
 
 _PRINTS = st.dictionaries(st.sampled_from((*_TAGS, UNCLASSIFIED)), _HASHES)
-_READABLE = _PRINTS.map(
-    lambda prints: Side(_bundle({n: _entry(f) for n, f in prints.items()}), prints)
-)
-_BAD_ENTRIES = st.sampled_from(["h1", None, {}, {"own": "h1"}, {"footprint": 1}])
+
+
+def _readable(prints: dict[str, str]) -> Side:
+    return Side(_bundle({n: _entry(f) for n, f in prints.items()}), prints)
+
+
+_READABLE = _PRINTS.map(_readable)
+_BAD_ENTRIES = st.sampled_from(["h1", {"own": "h1"}, {"footprint": 1}])
 _UNREADABLE = st.one_of(
     st.sampled_from(
         [
@@ -90,14 +95,21 @@ def test_a_differing_unclassified_changes_every_other_name(ours, theirs, pair):
     }
 
 
-@given(_SIDES, _SIDES, st.data())
-def test_names_changed_tags_leaves_out_match_footprints(a, b, data):
+# The second file is a few edits to the first, so most tags are in both and unchanged.
+@given(
+    _PRINTS,
+    st.dictionaries(
+        st.sampled_from((*_TAGS, UNCLASSIFIED)), st.none() | _HASHES, max_size=2
+    ),
+    st.data(),
+)
+def test_names_changed_tags_leaves_out_match_footprints(prints, edits, data):
+    edited = {n: f for n, f in {**prints, **edits}.items() if f is not None}
+    a, b = _readable(prints), _readable(edited)
     changed = forward_only.changed_tags(a.parsed, b.parsed)
-    if changed is None:
-        return
-    # `names` come from a `failed=` hold, which names Kustomizations, never UNCLASSIFIED.
+    assert changed is not None
     unchanged = [n for n in _TAGS if n not in changed]
-    names = data.draw(
-        st.frozensets(st.sampled_from(unchanged)) if unchanged else st.just(frozenset())
-    )
+    assume(unchanged)
+    # `names` come from a `failed=` hold, which names Kustomizations, never UNCLASSIFIED.
+    names = data.draw(st.frozensets(st.sampled_from(unchanged), min_size=1))
     assert verify_promotion.footprints_match(a.files, b.files, names)
