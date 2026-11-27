@@ -44,7 +44,7 @@ _OTHER = [("completed", "skipped"), ("in_progress", None), ("queued", None)]
 
 def _runs(outcomes: Sequence[tuple[str, str | None]]) -> st.SearchStrategy[CheckRun]:
     return st.builds(
-        lambda name, outcome, suite: CheckRun(name, *outcome, suite),
+        lambda name, outcome, suite: CheckRun(name, outcome[0], outcome[1], suite),
         st.sampled_from(_NAMES),
         st.sampled_from(outcomes),
         st.integers(1, 3),
@@ -58,7 +58,7 @@ def _head_and_cancelled_run(draw) -> tuple[list[CheckRun], CheckRun]:
     rest = draw(st.lists(_runs(_DECIDED + _NO_VERDICT + _OTHER), max_size=30))
     head = draw(st.permutations([decided, *rest]))
     outcome = draw(st.sampled_from(_NO_VERDICT))
-    return head, CheckRun(decided.name, *outcome, draw(st.integers(1, 3)))
+    return head, CheckRun(decided.name, outcome[0], outcome[1], draw(st.integers(1, 3)))
 
 
 @given(_head_and_cancelled_run())

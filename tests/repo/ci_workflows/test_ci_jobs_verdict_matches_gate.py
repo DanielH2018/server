@@ -266,7 +266,7 @@ def test_a_build_reader_with_no_work_passes_the_gate_and_the_reader():
     ],
 )
 def test_the_gate_fails_a_build_reader_that_did_not_run_for_any_other_reason(
-    reader, build_said
+    reader: str, build_said: dict[str, str]
 ):
     results = _all("success", **dict.fromkeys(CI_BUILD_READER_JOBS, reader))
     assert _gate_exit("skipped", "", results, build_said) != 0

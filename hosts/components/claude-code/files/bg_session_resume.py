@@ -114,7 +114,7 @@ class Tools:
 
 def main(argv: list[str] | None = None, tools: Tools | None = None) -> int:
     tools = tools or Tools()
-    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser = argparse.ArgumentParser(description=(__doc__ or "").partition("\n")[0])
     parser.add_argument("--claude", required=True, help="path to the claude launcher")
     parser.add_argument(
         "--roster",

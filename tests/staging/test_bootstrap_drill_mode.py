@@ -160,8 +160,7 @@ def run(tmp_path, *, args=(), **knobs):
     )
     repo = tmp_path / "repo"
     fake_bin(repo / ".venv" / "bin", python=RENDER)
-    result = Run(tmp_path)
-    result.done = subprocess.run(
+    done = subprocess.run(
         [
             "bash",
             str(tmp_path / "driver.sh"),
@@ -184,7 +183,7 @@ def run(tmp_path, *, args=(), **knobs):
         text=True,
         timeout=120,
     )
-    return result
+    return Run(tmp_path, done)
 
 
 def test_a_passing_drill_runs_every_step_after_the_fence_and_touches_no_drill_evidence(

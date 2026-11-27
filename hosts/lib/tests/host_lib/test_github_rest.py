@@ -28,7 +28,7 @@ class _Body:
     def __exit__(self, *exc):
         return False
 
-    def read(self):
+    def read(self) -> bytes:
         return b'{"ok":true}'
 
 

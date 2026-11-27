@@ -11,6 +11,7 @@ Run: uv run pytest tests/repo/ci_workflows/test_role_glance_hook.py
 """
 
 import functools
+import inspect
 import re
 import shutil
 import tomllib
@@ -56,7 +57,7 @@ def test_the_hook_runs_the_generator_in_fix_mode():
         "k8s/vars.yml",
         # Read from the modules themselves, so a move to a directory outside the gate goes red.
         *(
-            Path(m.__file__).resolve().relative_to(REPO).as_posix()
+            Path(inspect.getfile(m)).resolve().relative_to(REPO).as_posix()
             for m in (catalog_backup, catalog_facts, catalog_model)
         ),
         "scripts/lib/render_guard.py",

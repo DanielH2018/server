@@ -208,7 +208,9 @@ def test_games_reads_the_deployments_and_their_pods_is_clean(tmp_path):
     rows = {g["name"]: g for g in control.game_servers()["games"]}
     assert rows["valheim"]["state"] == "stopped"
     assert rows["terraria"]["start_refused"] == "issue #822"
-    pods_call = next(argv for argv, _ in control._out.calls if "pods" in argv)
+    out = control._out
+    assert isinstance(out, FakeOut)
+    pods_call = next(argv for argv, _ in out.calls if "pods" in argv)
     assert (
         pods_call[pods_call.index("-l") + 1]
         == "app in (valheim,valheim-stats,terraria)"
@@ -222,7 +224,9 @@ def test_game_console_queries_loki_for_the_server_container_is_clean(tmp_path):
         "game": "valheim",
         "lines": [{"ts": 2, "line": "Game server connected"}],
     }
-    [(argv, _)] = control._out.calls
+    out = control._out
+    assert isinstance(out, FakeOut)
+    [(argv, _)] = out.calls
     assert "https://loki.example/loki/api/v1/query_range" in argv
     assert 'query={namespace="homelab",container="valheim"}' in argv
 

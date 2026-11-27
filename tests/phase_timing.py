@@ -101,7 +101,7 @@ def _time_rewrites() -> None:
 
     setattr(timed, KEY, True)
     _timing.rewritten = 0
-    vars(_rewrite)["_rewrite_test"] = timed
+    _rewrite.__dict__["_rewrite_test"] = timed
 
 
 def pytest_sessionstart(session: pytest.Session) -> None:

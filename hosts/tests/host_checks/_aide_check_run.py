@@ -105,8 +105,8 @@ fi
 """
 
 
-def verdict_of(logged: list[str], tag: str) -> list[str] | None:
-    """The [status, message] pair of the `status=` line a script logged under `tag`, or None.
+def verdict_of(logged: list[str], tag: str) -> list[str]:
+    """The [status, message] pair of the `status=` line a script logged under `tag`, or [] if none.
 
     The scans push nothing since M6 batch B9's Cutover-2, so the logged verdict is the one place
     a run's status and message are readable.
@@ -116,7 +116,7 @@ def verdict_of(logged: list[str], tag: str) -> list[str] | None:
         if line.startswith(prefix):
             status, _, message = line.removeprefix(prefix).partition(" ")
             return [status, message]
-    return None
+    return []
 
 
 def _dpkg_log_lines(
@@ -182,7 +182,7 @@ def _run_check(
     DEFS as the installed tool version ships it at TOOL_COPY. The real aide-originals runs,
     with an `apt-get` stub that fails, so a copy no test keeps is never fetched.
     The script's stderr lands in `tmp_path / "stderr"`. Returns (exit code, the verdict as a
-    [status, message] pair read from the `status=` line the script logs, or None when it logged
+    [status, message] pair read from the `status=` line the script logs, or [] when it logged
     none, logged lines, whether aide ran).
     """
     body = render_shell_script(
