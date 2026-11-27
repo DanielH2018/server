@@ -41,6 +41,7 @@ from datetime import datetime, timezone
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from configarr_lib import configarr_health_logic as logic
+from lib.check_verdict import export_verdict
 import host_lib
 
 NAMESPACE = os.environ.get("CONFIGARR_NAMESPACE", "homelab")
@@ -70,49 +71,6 @@ def age_seconds(stamp: str, now: float) -> float:
     if finished.tzinfo is None:
         raise ValueError(f"timestamp {stamp!r} has no UTC offset")
     return now - finished.timestamp()
-
-
-def export_verdict(
-    kubectl: Callable[..., tuple[int, str]],
-    configmap: str,
-    status: str,
-    msg: str,
-    now: float,
-) -> bool:
-    """Writes the verdict and the run time to the verdict ConfigMap's annotations.
-
-    kube-state-metrics exports `homelab/check-verdict` as a label of
-    `kube_configmap_annotations`, which the rule `ConfigarrSyncFailed` reads. The time
-    and the message are for a human reading the object. The rule measures freshness from the
-    CronJob's last successful run instead, because an annotation is a label and cannot be
-    compared with the clock.
-
-    Returns:
-        True when the API server accepted the patch.
-    """
-    stamp = datetime.fromtimestamp(now, timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-    patch = {
-        "metadata": {
-            "annotations": {
-                "homelab/check-verdict": status,
-                "homelab/check-last-run": stamp,
-                "homelab/check-message": msg[:200],
-            }
-        }
-    }
-    rc, out = kubectl(
-        "patch",
-        "configmap",
-        configmap,
-        "--type=merge",
-        # Flux's server-side apply strips fields owned by a manager named `kubectl*`, and the
-        # default here is `kubectl-patch`, so the annotations vanish at every apply.
-        "--field-manager=" + TAG,
-        "--patch=" + json.dumps(patch),
-    )
-    if rc != 0:
-        emit("export failed: cannot patch %s: %s" % (configmap, out.strip()[:200]))
-    return rc == 0
 
 
 def verdict(kubectl: Callable[..., tuple[int, str]], now: float) -> tuple[bool, str]:
@@ -192,14 +150,15 @@ def main(
             ),
         )
     status = "up" if ok else "down"
-    exported = (
-        export_verdict(kubectl, verdict_configmap, status, msg, now())
+    failure = (
+        export_verdict(kubectl, verdict_configmap, TAG, status, msg, now())
         if verdict_configmap
-        else True
+        else None
     )
-    exit_code = 0 if exported else 1
+    if failure:
+        emit(failure)
     emit("status=%s %s" % (status, msg))
-    return exit_code
+    return 1 if failure else 0
 
 
 if __name__ == "__main__":
