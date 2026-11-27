@@ -311,6 +311,31 @@ ran at 1000. The figures follow the 2026-11-25 pattern:
 The OOM score decides which process a global OOM kills. It does not keep k3s in memory, and the
 repeat shows that a session load can take k3s down without any OOM kill.
 
+### The repeat on 2026-11-27, and the longer lease
+
+k3s on daniel-box exited at 16:20:31 and 16:36:04 UTC
+([#10474](https://github.com/DanielH2018/server/issues/10474)). Each exit again followed a lost
+leader lease. The k3s log carries no fatal line because the component that loses its lease
+logs `leaderelection lost` at error level, then calls `klog.FlushAndExit(1)`, which takes the
+whole k3s process down. Any of the three embedded components that elect a leader can do it:
+kube-controller-manager, kube-scheduler and the cloud-controller-manager.
+
+The upstream lease timings give each component a 10 s renew deadline. In the 90 s before each
+of the eight exits from 2026-11-25 to 2026-11-27, the longest gap between k3s log lines ran
+from 4.5 s to 42 s, and etcd applies took up to 13 s. `k3s_leader_election_args` in
+`hosts/components/k3s-server/component.yml` gives all three a 45 s renew deadline and a 60 s
+lease, so a stall shorter than 45 s no longer exits k3s.
+
+- **The longer lease does not keep k3s in memory.** It rides out a stall. A stall past 45 s,
+  such as the four-minute exit at 15:21:13 on 2026-11-25, still exits k3s, and the API stays
+  slow while k3s faults its pages back in.
+  [#10126](https://github.com/DanielH2018/server/issues/10126) holds that decision.
+- **A crash leaves the lease held.** The restarted component waits up to 60 s, not 15 s,
+  before it leads again. Controllers do not run during that wait.
+- **`memory peak` in each exit's systemd line is the cgroup's peak, not the run's.** The
+  containerd shims keep `k3s.service`'s cgroup alive across restarts, so every exit since
+  2026-11-25 reports the same 5.9G and 2.1G swap.
+
 ## The fleet's CPU weight
 
 The same drop-in sets `CPUWeight=` from `claude_code_fleet_cpu_weight`. At the root cgroup,
