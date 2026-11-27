@@ -307,6 +307,21 @@ def test_a_comment_line_inside_a_block_scalar_is_content():
 
 
 @pytest.mark.parametrize(
+    "head",
+    ["a: !!bool |-", "a: &x >", "a:\n- !!str |"],
+    ids=["tag", "anchor", "list-item"],
+)
+def test_a_blank_line_inside_a_tagged_block_scalar_is_content(head):
+    old = f"b: {{{{ x }}}}\n{head}\n  false\n"
+    new = f"b: {{{{ x }}}}\n{head}\n\n  false\n"
+    show = _show({"old": old, "new": new})
+    assert (
+        land_tags.comment_only_k8s_defaults([_SONARR_DEFAULTS], "old", "new", show)
+        == set()
+    )
+
+
+@pytest.mark.parametrize(
     ("old", "new"),
     [
         ("a: foo\n  bar\n", "a: foo\n\n  bar\n"),
