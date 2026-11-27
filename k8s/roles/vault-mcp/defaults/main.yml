@@ -1,0 +1,56 @@
+---
+# Renovate's k8s-defaults manager tracks this pin. Keep the tag alongside a digest
+# (`repo:tag@sha256:...`) if you pin by digest — a bare `repo@sha256:...` freezes the image
+# with no update signal at all.
+vault_mcp_k8s_livesync_cli_image: ghcr.io/vrtmrz/livesync-cli:1.0.52-cli@sha256:cf9c28ca544e5e84e8825185a81032559c5503ad812c6cd66be4a714bca78a4f
+
+# Renovate stance: whether an image bump here may automerge. `promote` deploys what merges.
+k8s_autodeploy: false
+k8s_autodeploy_reason: "state coupled outside the volume — livesync-cli syncs the vault both ways, so a bad image bump writes its damage into CouchDB and every Obsidian device, where no volume revert reaches"
+
+vault_mcp_k8s_cpu_limit: "500m"
+vault_mcp_k8s_mem_limit: 512Mi
+vault_mcp_k8s_cpu_request: "50m"
+vault_mcp_k8s_mem_request: 128Mi
+
+# 0 until livesync's entry admits vault-mcp as a caller: without that fence the default-deny
+# baseline drops the bridge's connections to CouchDB.
+vault_mcp_k8s_replicas: 0
+
+# The image's `node` user. The image sets no USER, so without this pin it runs as root.
+vault_mcp_k8s_uid: 1000
+
+# Both claims rebuild from CouchDB. The vault claim holds the decrypted vault, so a backup of it
+# would put plaintext on B2; `livesync-data`, which is ciphertext, is the copy worth backing up.
+vault_mcp_k8s_storage_class: longhorn-nobackup
+k8s_claims:
+  - name: vault-mcp-vault
+    storage_class: "{{ vault_mcp_k8s_storage_class }}"
+    size: 2Gi
+  - name: vault-mcp-db
+    storage_class: "{{ vault_mcp_k8s_storage_class }}"
+    size: 2Gi
+
+# The plugin settings livesync-cli reads, minus the two secrets the init container adds.
+# Each encryption key must equal the value the Obsidian clients use: a mismatch leaves the
+# bridge unable to decrypt the vault, or writing documents the clients cannot read.
+vault_mcp_livesync_settings:
+  couchDB_URI: "http://livesync.{{ k8s_namespace }}.svc.cluster.local:5984"
+  couchDB_USER: admin
+  couchDB_DBNAME: obsidian
+  encrypt: true
+  E2EEAlgorithm: v2
+  encryptInternalMetadata: true
+  usePathObfuscation: true
+  liveSync: true
+  syncOnStart: true
+  usePluginSync: false
+  isConfigured: true
+
+# Declares the livesync key so a livesync_db_password rotation rolls this pod.
+manifests_outside_secrets:
+  - name: livesync
+    keys: [livesync_db_password]
+
+# SOPS manifest: the passphrase is free text, which a Flux placeholder can type as a non-string.
+render_sops_manifests: [passphrase-secret.yaml]

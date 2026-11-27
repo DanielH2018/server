@@ -61,6 +61,16 @@ defaults:
     - "audit-log-maxage={{ k3s_audit_log_maxage }}"
     - "audit-log-maxbackup={{ k3s_audit_log_maxbackup }}"
     - "audit-log-maxsize={{ k3s_audit_log_maxsize }}"
+  # Leader-election timings for the three embedded components that elect a leader. The
+  # component that misses its renew deadline exits, and k3s exits 1 with it, logging only an
+  # E-level `leaderelection lost`. The renew deadline sits above the longest stall measured
+  # before such an exit (42 s); the upstream default is 10 s. A crash leaves the lease held,
+  # so the restarted component waits up to the lease duration before it leads again. The
+  # component refuses to start unless lease > renew > 1.2 x retry.
+  k3s_leader_election_args:
+    - leader-elect-lease-duration=60s
+    - leader-elect-renew-deadline=45s
+    - leader-elect-retry-period=5s
   # The k3s server's flags. templates/50-homelab.yaml.j2 renders this mapping as
   # /etc/rancher/k3s/config.yaml.d/50-homelab.yaml, and 50-homelab.conf runs a bare
   # `k3s server`, so this mapping is the server's whole configuration. A key is a flag name
@@ -122,7 +132,10 @@ defaults:
   #   kube-apiserver-arg the audit flags above, then the authentication config. That file
   #                      configures the JWT authenticator, which is mutually exclusive with the
   #                      --oidc-* flags: passing both makes the API server refuse to start.
-  #   etcd-s3,           k3s's native etcd snapshots upload to R2. Every S3 value lives
+  #   kube-*-arg         kube-controller-manager, kube-scheduler and kube-cloud-controller-manager
+  #                      each take `k3s_leader_election_args` above: any one of them losing its
+  #                      lease takes the whole k3s process down.
+  #   etcd-s3,          k3s's native etcd snapshots upload to R2. Every S3 value lives
   #   etcd-s3-config-    in the Secret `longhorn-backup` renders into kube-system, which k3s
   #   secret             reads at each snapshot, so this file holds no credential. Any other
   #                      `etcd-s3-*` key here makes k3s ignore that Secret. To disarm the
@@ -159,6 +172,9 @@ defaults:
     secrets-encryption: true
     etcd-expose-metrics: "{{ k3s_etcd_expose_metrics }}"
     kube-apiserver-arg: "{{ (k3s_server_audit_args if k3s_audit_log_enabled else []) + ['authentication-config=' ~ k3s_authentication_config_path] }}"
+    kube-controller-manager-arg: "{{ k3s_leader_election_args }}"
+    kube-scheduler-arg: "{{ k3s_leader_election_args }}"
+    kube-cloud-controller-manager-arg: "{{ k3s_leader_election_args }}"
     etcd-s3: true
     etcd-s3-config-secret: k3s-etcd-snapshot-s3-config
     etcd-snapshot-name: offbox

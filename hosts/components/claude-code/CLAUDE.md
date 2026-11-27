@@ -94,6 +94,11 @@ The operator's own Claude Code install is the dotfiles repo's (H7.38).
 - **Triage's token is a `LoadCredential=` file, `/etc/claude-triage/oauth-token`,** which only
   the session unit loads. The session script joins the whole file without whitespace, so a token
   pasted across `setup-token`'s line wrap still reaches the session whole.
+- **`/tmp` is a tmpfs on both hosts, so a file under it holds RAM.**
+  `tmpfiles.d/homelab-claude-tmp-age.conf` ages the contents of each session's scratchpad and
+  each `pytest-of-<user>` tree at one day, against Ubuntu's 10 days for the rest of `/tmp`.
+  `systemd-tmpfiles-clean.timer` runs the cleanup daily.
+  ENFORCED: `hosts/tests/claude_code/test_claude_tmp_age.py`.
 - **Not packaged:** the operator's own Claude Code install, which the dotfiles repo owns since
   H7.38.
   ENFORCED: `hosts/lib/tests/host_baselines/test_claude_code_component.py`,

@@ -42,6 +42,7 @@ ENTRIES = {
     "qbittorrent": ("mullvad-account-secret.yaml", "mullvad_account"),
     "authelia": ("oidc-jwk-secret.yaml", "authelia_oidc_rsa_key_content"),
     "flux": ("github-status-secret.yaml", "flux_github_app_private_key"),
+    "vault-mcp": ("passphrase-secret.yaml", "livesync_e2ee_passphrase"),
 }
 
 
@@ -71,7 +72,8 @@ def test_a_role_leaves_its_sops_manifest_secret_out_is_clean(role):
     (tag,) = render.tags
     assert entry not in tag.files
     assert entry not in tag.files["kustomization.yaml"]
-    assert "secret.yaml" in tag.files["kustomization.yaml"]
+    kept = [name for name in tag.files if name != "kustomization.yaml"]
+    assert kept and all(name in tag.files["kustomization.yaml"] for name in kept)
     assert key not in render.key_sets[role]
     assert key not in render.standalone[role]
     assert sops_manifest_entries(render, homelab_render.secret_keys()) == []
