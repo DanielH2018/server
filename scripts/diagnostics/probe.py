@@ -197,14 +197,9 @@ def main(argv=None, *, plan=plan):
 def _routed(name, *args, **kwargs) -> int:
     """Run the callable registered for `name`, which must have one, and return its exit code."""
     func = REGISTRY.get(name).func
-    if not callable(func):
+    if func is None:
         raise LookupError(f"probe.py subcommand {name!r} has no callable")
-    rc = func(*args, **kwargs)
-    if not isinstance(rc, int):
-        raise TypeError(
-            f"probe.py subcommand {name!r} returned {rc!r}, not an exit code"
-        )
-    return rc
+    return func(*args, **kwargs)
 
 
 def _dispatch(ns, argv, plan):
