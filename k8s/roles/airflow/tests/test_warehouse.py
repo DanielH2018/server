@@ -7,7 +7,7 @@ import pytest
 
 from dags.homelab_warehouse.warehouse import (
     CHECK_DDL,
-    finish_check,
+    check_day,
     read_partition,
     record_check,
     replace_partition,
@@ -85,12 +85,54 @@ def test_a_day_reads_back_as_one_dict_per_row_keyed_by_column(conn):
     ]
 
 
-def test_a_failed_check_raises_before_it_connects():
-    def connect():
-        raise AssertionError("a failed check must not record a pass")
+class Borrowed:
+    """The fixture's connection, which `check_day` may close and open again."""
+
+    def __init__(self, db):
+        self.db = db
+        self.opened = 0
+
+    def __call__(self):
+        self.opened += 1
+        return self
+
+    def __getattr__(self, name):
+        return getattr(self.db, name)
+
+    def close(self):
+        pass
+
+
+def test_a_check_hands_each_tables_day_to_the_judge_and_fails_on_its_problems(conn):
+    conn.execute("CREATE TABLE fans (day date NOT NULL, rpm integer NOT NULL)")
+    conn.execute("INSERT INTO temps VALUES (?, 'daniel-box', 70.0)", (NOV_17,))
+    conn.execute("INSERT INTO temps VALUES (?, 'daniel-box', 72.0)", (NOV_18,))
+    conn.execute("INSERT INTO fans VALUES (?, 900)", (NOV_17,))
+    connect = Borrowed(conn)
+    judged = []
+
+    def problems_of(day, temps, fans):
+        judged.append((day, temps, fans))
+        return ["missing host"]
 
     with pytest.raises(ValueError, match="quality check failed:\nmissing host"):
-        finish_check(connect, "prom_daily_rollup", NOV_17, ["missing host"])
+        check_day(
+            connect,
+            "prom_daily_rollup",
+            NOV_17,
+            ["temps", "fans"],
+            problems_of,
+            placeholder="?",
+        )
+
+    assert judged == [
+        (
+            NOV_17,
+            [{"day": NOV_17, "host": "daniel-box", "max_c": 70.0}],
+            [{"day": NOV_17, "rpm": 900}],
+        )
+    ]
+    assert connect.opened == 1
 
 
 def test_a_recheck_replaces_the_days_record(conn):

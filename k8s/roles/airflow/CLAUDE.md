@@ -224,9 +224,9 @@ Airflow 3 with the KubernetesExecutor, plus one Postgres holding the metadata da
   makes a new one with the same access, sets it with `sops set`, runs `cluster_vars.py write`,
   and deletes the old one on GitHub once the new one deploys.
 - **A warehouse DAG that misses a day pages through Healthchecks.io.** Each DAG's `check`
-  ends in `k8s/roles/airflow/files/dags/homelab_warehouse/warehouse.py:finish_check`, which
-  fails the task on a problem or records the passed day in `meta.check_log`. At 06:00 UTC
-  `warehouse_freshness` pings the `airflow-warehouse-fresh` check, or its `/fail` naming each
+  is `k8s/roles/airflow/files/dags/homelab_warehouse/warehouse.py:check_day`, which reads
+  the day back, then fails the task on a problem or records the passed day in
+  `meta.check_log`. At 06:00 UTC `warehouse_freshness` pings the `airflow-warehouse-fresh` check, or its `/fail` naming each
   DAG with no passed record for yesterday, and Healthchecks.io also alerts when no ping
   comes. A new warehouse DAG joins
   `k8s/roles/airflow/files/dags/homelab_warehouse/freshness.py:WAREHOUSE_DAGS`;

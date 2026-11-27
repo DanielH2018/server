@@ -14,9 +14,8 @@ from airflow.sdk.exceptions import AirflowSkipException
 from airflow.timetables.interval import CronDataIntervalTimetable
 from homelab_warehouse import backup_spend as bs
 from homelab_warehouse.warehouse import (
+    check_day,
     ensure_schema,
-    finish_check,
-    read_partition,
     replace_partition,
 )
 from kubernetes.client import models as k8s
@@ -72,17 +71,12 @@ def backup_spend_rollup():
     @task
     def check(data_interval_start=None) -> None:
         day = _day(data_interval_start)
-        conn = PostgresHook(postgres_conn_id=WAREHOUSE_CONN).get_conn()
-        try:
-            rows = read_partition(conn, bs.BACKUP_TABLE, "day", day)
-        finally:
-            conn.close()
-        problems = bs.quality_problems(day, rows)
-        finish_check(
+        check_day(
             PostgresHook(postgres_conn_id=WAREHOUSE_CONN).get_conn,
             "backup_spend_rollup",
             day,
-            problems,
+            [bs.BACKUP_TABLE],
+            bs.quality_problems,
         )
 
     load() >> check()

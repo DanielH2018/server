@@ -15,9 +15,8 @@ from airflow.sdk.exceptions import AirflowSkipException
 from airflow.timetables.interval import CronDataIntervalTimetable
 from homelab_warehouse import claude_decisions as cd
 from homelab_warehouse.warehouse import (
+    check_day,
     ensure_schema,
-    finish_check,
-    read_partition,
     replace_partition,
 )
 
@@ -73,18 +72,12 @@ def claude_decisions_rollup():
     @task
     def check(data_interval_start=None) -> None:
         day = _day(data_interval_start)
-        conn = PostgresHook(postgres_conn_id=WAREHOUSE_CONN).get_conn()
-        try:
-            decisions = read_partition(conn, cd.DECISION_TABLE, "day", day)
-            results = read_partition(conn, cd.RESULT_TABLE, "day", day)
-        finally:
-            conn.close()
-        problems = cd.quality_problems(day, decisions, results)
-        finish_check(
+        check_day(
             PostgresHook(postgres_conn_id=WAREHOUSE_CONN).get_conn,
             "claude_decisions_rollup",
             day,
-            problems,
+            [cd.DECISION_TABLE, cd.RESULT_TABLE],
+            cd.quality_problems,
         )
 
     load() >> check()

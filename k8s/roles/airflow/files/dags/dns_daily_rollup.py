@@ -15,9 +15,8 @@ from airflow.sdk.exceptions import AirflowSkipException
 from airflow.timetables.interval import CronDataIntervalTimetable
 from homelab_warehouse import dns_history as dh
 from homelab_warehouse.warehouse import (
+    check_day,
     ensure_schema,
-    finish_check,
-    read_partition,
     replace_partition,
 )
 from kubernetes.client import models as k8s
@@ -86,17 +85,12 @@ def dns_daily_rollup():
     @task
     def check(data_interval_start=None) -> None:
         day = _day(data_interval_start)
-        conn = PostgresHook(postgres_conn_id=WAREHOUSE_CONN).get_conn()
-        try:
-            rows = read_partition(conn, dh.COUNTS_TABLE, "day", day)
-        finally:
-            conn.close()
-        problems = dh.quality_problems(day, rows)
-        finish_check(
+        check_day(
             PostgresHook(postgres_conn_id=WAREHOUSE_CONN).get_conn,
             "dns_daily_rollup",
             day,
-            problems,
+            [dh.COUNTS_TABLE],
+            dh.quality_problems,
         )
 
     load() >> check()

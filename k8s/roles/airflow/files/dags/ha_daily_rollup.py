@@ -15,9 +15,8 @@ from airflow.sdk.exceptions import AirflowSkipException
 from airflow.timetables.interval import CronDataIntervalTimetable
 from homelab_warehouse import ha_rollup as ha
 from homelab_warehouse.warehouse import (
+    check_day,
     ensure_schema,
-    finish_check,
-    read_partition,
     replace_partition,
 )
 
@@ -68,17 +67,12 @@ def ha_daily_rollup():
     @task
     def check(data_interval_start=None) -> None:
         day = _day(data_interval_start)
-        conn = PostgresHook(postgres_conn_id=WAREHOUSE_CONN).get_conn()
-        try:
-            rows = read_partition(conn, ha.SENSOR_TABLE, "day", day)
-        finally:
-            conn.close()
-        problems = ha.quality_problems(day, rows)
-        finish_check(
+        check_day(
             PostgresHook(postgres_conn_id=WAREHOUSE_CONN).get_conn,
             "ha_daily_rollup",
             day,
-            problems,
+            [ha.SENSOR_TABLE],
+            ha.quality_problems,
         )
 
     load() >> check()
