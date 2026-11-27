@@ -126,7 +126,7 @@ def describe() -> dict:
 
 def main(argv: list[str] | None = None, read_state: Callable[[], dict] = read) -> int:
     parser = ArgumentParser(
-        prog="landing_clear.py", description=__doc__.splitlines()[0]
+        prog="landing_clear.py", description=(__doc__ or "").partition("\n")[0]
     )
     parser.add_argument("--describe", action="store_true")
     refuse_help_under_describe(parser, argv)

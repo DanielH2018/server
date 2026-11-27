@@ -38,14 +38,14 @@ MONITORS_HELP = (
 )
 
 
-def _result(data, source):
-    """(series list, None), or (None, a line saying why `data` is unusable). Pure."""
+def _result(data, source) -> list | str:
+    """The series list, or a line saying why `data` is unusable. Pure."""
     if isinstance(data, str):
-        return None, f"  {source} unread: {data}"
+        return f"  {source} unread: {data}"
     if data.get("status") != "success":
         detail = data.get("error") or f"status {data.get('status')!r}"
-        return None, f"  {source} unread: {detail}"
-    return data.get("data", {}).get("result", []), None
+        return f"  {source} unread: {detail}"
+    return data.get("data", {}).get("result", [])
 
 
 def alertmanager_only(result, held):
@@ -95,9 +95,9 @@ def format_alerts(data, held):
     its soak. No Watchdog, or an unread response, exits
     PROBE_UNREADABLE unless a paging alert already makes it 1. So does an unread `held`.
     """
-    result, unread = _result(data, "ALERTS")
-    if unread:
-        return [unread], PROBE_UNREADABLE
+    result = _result(data, "ALERTS")
+    if isinstance(result, str):
+        return [result], PROBE_UNREADABLE
     extra = [] if isinstance(held, str) else alertmanager_only(result, held)
     sources = [(s.get("metric") or {}, "") for s in result]
     sources += [(labels, " (Alertmanager only)") for labels in extra]

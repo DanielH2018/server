@@ -118,11 +118,12 @@ def _get_json(url, resolve, get, sleep, window):
         core.Unreadable: curl failed.
         core.NonJsonResponse: the body is not JSON, a 429 that outlasted the retries included.
     """
-    for delay in (*RETRY_DELAYS_S, None):
-        status, body = get(url, resolve=resolve)
-        if status != RATE_LIMITED or delay is None or not window.allows(delay):
+    status, body = get(url, resolve=resolve)
+    for delay in RETRY_DELAYS_S:
+        if status != RATE_LIMITED or not window.allows(delay):
             break
         sleep(delay)
+        status, body = get(url, resolve=resolve)
     if status == 0:
         raise core.Unreadable(f"curl {url} failed: {body}")
     return core.parse_json(url, body)

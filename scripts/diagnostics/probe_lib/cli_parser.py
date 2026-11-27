@@ -9,7 +9,7 @@ probe.py, so the dependency runs one way.
 """
 
 import argparse
-
+from typing import TypedDict
 
 from diagnostics.probe_lib.core import LOKI_STORE_HELP, LOKI_STORES
 from diagnostics.probe_lib import arr, builder, lander, monitors, host_unit, qbit
@@ -37,7 +37,12 @@ def exits(ok, fail):
     )
 
 
-def _verdict_help(summary, ok, fail):
+class _VerdictHelp(TypedDict):
+    help: str
+    description: str
+
+
+def _verdict_help(summary, ok, fail) -> _VerdictHelp:
     """`add_parser` keywords that end a verdict subcommand's `help` and `--help` with `exits`.
 
     Spread into a literal `add_parser("<name>", ...)` call rather than wrapping it, because

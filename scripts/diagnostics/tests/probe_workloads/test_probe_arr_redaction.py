@@ -13,9 +13,10 @@ import json
 import pytest
 
 from diagnostics.probe_lib import arr
+from lib.json_types import JsonObject, JsonValue, as_object, as_object_list
 
 # Shaped like a real Sonarr `GET /api/v3/notification` object, with the values replaced.
-NOTIFICATION = [
+NOTIFICATION: JsonValue = [
     {
         "id": 1,
         "name": "Discord",
@@ -39,7 +40,7 @@ NOTIFICATION = [
     }
 ]
 
-DOWNLOADCLIENT = [
+DOWNLOADCLIENT: JsonValue = [
     {
         "id": 1,
         "name": "qBittorrent",
@@ -52,7 +53,7 @@ DOWNLOADCLIENT = [
     }
 ]
 
-INDEXER = [
+INDEXER: JsonValue = [
     {
         "id": 3,
         "name": "Some Indexer",
@@ -63,7 +64,7 @@ INDEXER = [
     }
 ]
 
-IMPORTLIST = [
+IMPORTLIST: JsonValue = [
     {
         "id": 2,
         "name": "Trakt list",
@@ -76,8 +77,10 @@ IMPORTLIST = [
 ]
 
 
-def _field(payload, name):
-    return next(f for f in payload[0]["fields"] if f["name"] == name)
+def _field(payload: JsonValue, name) -> JsonObject:
+    first = as_object_list(payload, "payload")[0]
+    fields = as_object_list(first["fields"], "fields")
+    return next(f for f in fields if f["name"] == name)
 
 
 # --- one field it must redact -----------------------------------------------------------
@@ -103,7 +106,9 @@ def test_credential_field_is_redacted(payload, field_name):
 
 def test_plain_dict_key_is_redacted():
     # Not every *arr object wraps its credential in a `fields[]` entry.
-    out = arr.redact_arr_payload({"name": "prowlarr", "apiKey": "TOP-SECRET"})
+    out = as_object(
+        arr.redact_arr_payload({"name": "prowlarr", "apiKey": "TOP-SECRET"}), "out"
+    )
     assert out["apiKey"] == arr.REDACTED
 
 
@@ -129,10 +134,11 @@ def test_ordinary_field_is_printed(payload, field_name, expected):
 
 
 def test_structure_is_preserved():
-    out = arr.redact_arr_payload(NOTIFICATION)
+    out = as_object_list(arr.redact_arr_payload(NOTIFICATION), "out")
     assert out[0]["id"] == 1
     assert out[0]["implementation"] == "Discord"
-    assert [f["name"] for f in out[0]["fields"]] == ["webHookUrl", "username"]
+    fields = as_object_list(out[0]["fields"], "fields")
+    assert [f["name"] for f in fields] == ["webHookUrl", "username"]
 
 
 # --- the wiring: what reaches stdout ----------------------------------------------------
@@ -178,7 +184,7 @@ GRAB_URL = (
 )
 
 
-def _history(download_url):
+def _history(download_url) -> JsonValue:
     return {
         "page": 1,
         "pageSize": 10,
@@ -197,8 +203,11 @@ def _history(download_url):
     }
 
 
-def _download_url(payload):
-    return payload["records"][0]["data"]["downloadUrl"]
+def _download_url(payload: JsonValue) -> str:
+    records = as_object_list(as_object(payload, "payload")["records"], "records")
+    url = as_object(records[0]["data"], "data")["downloadUrl"]
+    assert isinstance(url, str)
+    return url
 
 
 def test_history_download_url_apikey_is_flagged():
@@ -226,10 +235,15 @@ def test_sensitive_query_param_mid_url_is_flagged(param):
 
 def test_url_inside_free_text_is_flagged():
     # "Wherever it appears in a string": a message quoting the URL leaks it as surely.
-    record = {"message": f"Couldn't fetch {GRAB_URL}: 502", "level": "warning"}
-    out = arr.redact_arr_payload(record)
-    assert PROWLARR_KEY not in out["message"]
-    assert out["message"].startswith("Couldn't fetch http://prowlarr:9696/7/download?")
+    record: JsonValue = {
+        "message": f"Couldn't fetch {GRAB_URL}: 502",
+        "level": "warning",
+    }
+    out = as_object(arr.redact_arr_payload(record), "out")
+    message = out["message"]
+    assert isinstance(message, str)
+    assert PROWLARR_KEY not in message
+    assert message.startswith("Couldn't fetch http://prowlarr:9696/7/download?")
     assert out["level"] == "warning"
 
 

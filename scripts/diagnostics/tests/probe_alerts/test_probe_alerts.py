@@ -92,7 +92,9 @@ def test_run_query_sends_the_until_window_to_loki(monkeypatch):
     params = _query_params(seen[0])
     start, end = int(params["start"][0]), int(params["end"][0])
     assert abs((end - start) / 1e9 - 5 * 86400) < 2
-    assert abs(core.since_window_ns("3d")[0] - end) < 2e9
+    window_start, _ = core.since_window_ns("3d")
+    assert window_start is not None
+    assert abs(window_start - end) < 2e9
 
 
 def test_since_not_further_back_than_until_is_a_usage_error():
@@ -132,6 +134,7 @@ def test_run_query_without_since_sends_no_window():
 
 def test_since_window_ns_span_matches_the_requested_duration():
     start, end = core.since_window_ns("2d")
+    assert start is not None and end is not None
     assert abs((end - start) / 1e9 - 2 * 86400) < 2
 
 
@@ -274,6 +277,7 @@ def _fetch_returns(monkeypatch, reply, held_s=None):
 
 def test_a_window_past_the_held_history_names_the_oldest_sample_age():
     warning = alerts.history_shortfall_warning(30, 22.6 * 86400)
+    assert warning is not None
     assert "22.6d old" in warning and "30d requested" in warning
 
 
