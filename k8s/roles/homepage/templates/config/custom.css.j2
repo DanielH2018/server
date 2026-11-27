@@ -122,6 +122,26 @@ li.service:not(#my-calendar) .service-container > div {
   min-width: 0;
 }
 
+/* THE KARMA TILE'S TWO WIDGETS SHARE ONE STAT ROW.
+ *
+ * Each widget renders its own `.service-container`, and the column card above stacks them, which
+ * made the tile 164px in a row of 112px tiles. A wrapping row puts the title on its own line and
+ * the two containers side by side, and each block lands where a two-stat widget puts it.
+ * Measured 2026-11-27 at 1920px: tile 112px, blocks 85x44 at the same offsets as before.
+ * `:not(#my-calendar)` is repeated for specificity: the card rule above carries an id. */
+li.service:not(#my-calendar):has(a[href*="karma."]) > div.service-card {
+  flex-flow: row wrap;
+  align-content: flex-start;
+}
+
+li.service:not(#my-calendar):has(a[href*="karma."]) > div.service-card > .service-title {
+  flex-basis: 100%;
+}
+
+li.service:not(#my-calendar):has(a[href*="karma."]) .service-container {
+  flex: 1 1 0;
+}
+
 /* A THREE-STAT WIDGET SPANS ITS THREE BOXES ACROSS THE FULL WIDTH.
  *
  * At two per row an odd count leaves the last box alone on a half-empty row. Two and four

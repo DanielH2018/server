@@ -7,6 +7,8 @@ list, and a filter added to Karma alone would make the tile count alerts Karma h
 Run: uv run pytest tests/services/homepage/test_homepage_karma_tile.py
 """
 
+import re
+
 from lib import yaml_fast
 from _homepage_config import custom_css, tiles
 from _k8s_render import render_role_template
@@ -49,7 +51,7 @@ def test_the_karma_tile_names_its_blocks_in_config():
     """customapi takes a `label:` per block, so no CSS rule renames the tile's headings."""
     labels = [w["mappings"][0]["label"] for w in _karma_tile_widgets()]
     assert labels == ["Critical", "Warning"]
-    assert "karma." not in custom_css()
+    assert not re.search(r'href\*="karma\."[^{]*::after', custom_css())
 
 
 def test_a_default_filter_the_tile_omits_is_flagged():
