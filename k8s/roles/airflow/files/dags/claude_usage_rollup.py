@@ -15,9 +15,8 @@ from airflow.timetables.interval import CronDataIntervalTimetable
 from homelab_warehouse import claude_usage as cu
 from homelab_warehouse import prom_rollup as pr
 from homelab_warehouse.warehouse import (
+    check_day,
     ensure_schema,
-    finish_check,
-    read_partition,
     replace_partition,
 )
 
@@ -79,17 +78,12 @@ def claude_usage_rollup():
     @task
     def check(data_interval_start=None) -> None:
         day = _day(data_interval_start)
-        conn = PostgresHook(postgres_conn_id=WAREHOUSE_CONN).get_conn()
-        try:
-            rows = read_partition(conn, cu.USAGE_TABLE, "day", day)
-        finally:
-            conn.close()
-        problems = cu.quality_problems(day, rows)
-        finish_check(
+        check_day(
             PostgresHook(postgres_conn_id=WAREHOUSE_CONN).get_conn,
             "claude_usage_rollup",
             day,
-            problems,
+            [cu.USAGE_TABLE],
+            cu.quality_problems,
         )
 
     load() >> check()

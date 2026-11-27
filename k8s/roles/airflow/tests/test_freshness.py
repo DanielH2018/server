@@ -53,7 +53,7 @@ def test_every_dag_that_records_its_check_is_watched():
     recording = {
         dag_id
         for path in DAGS.glob("*.py")
-        if "finish_check(" in path.read_text()
+        if "check_day(" in path.read_text()
         for dag_id in re.findall(r'dag_id="([a-z_]+)"', path.read_text())
     }
 
