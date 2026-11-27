@@ -19,7 +19,7 @@ Inputs come from the Job's environment: `CONTROL_URL` and `HEADLAMP_URL`.
 `HEADLAMP_RENDER_DIGEST8` is in the spec only to rename the Job, and the script prints it.
 Exit 0 when both legs pass, 1 when one fails, naming it.
 
-Run: python3 headlamp_verify.py (in the Job; it takes no arguments)
+Run: python3 headlamp_verify.py (in the Job; it takes no arguments but --help)
      uv run pytest k8s/roles/headlamp/tests/test_headlamp_verify.py
 """
 
