@@ -33,6 +33,7 @@ Run: python3 sweep_lidarr_stalls.py (in the Job; it takes no arguments)
      uv run pytest k8s/roles/lidarr/tests/test_sweep_lidarr_stalls.py
 """
 
+import argparse
 import json
 import os
 import sys
@@ -233,8 +234,9 @@ def sweep(env: dict[str, str], now: float) -> int:
     return 0
 
 
-def main() -> int:
+def main(argv: list[str] | None = None) -> int:
     """Run the sweep from the Job's environment."""
+    argparse.ArgumentParser(description=__doc__.splitlines()[0]).parse_args(argv)
     missing = [
         k
         for k in ("LIDARR_URL", "LIDARR_API_KEY", "QBT_URL", "QBT_API_KEY")
