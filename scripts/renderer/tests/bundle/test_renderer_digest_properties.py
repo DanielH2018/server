@@ -13,9 +13,11 @@ from hypothesis import strategies as st
 
 from renderer.renderer_lib.bundle import (
     CLUSTER_DIR,
+    CLUSTER_VARS,
     DIGESTS,
     FLUX_DIR,
     FLUX_INDEX,
+    HOMELAB_NAMESPACE,
     SHARED_KINDS,
     UNCLASSIFIED,
     digests,
@@ -27,6 +29,12 @@ _TAGS = ("a", "b", "c")
 _KINDS = (*sorted(SHARED_KINDS), "no-rule")
 _NAMES = (*_TAGS, *_KINDS, "stray")
 _FLUX_TEXTS = ("", "a: 1\n", "spec:\n  suspend: true\n")
+# D6's *What a footprint counts*, restated so a changed `FOOTPRINT_RULES` entry goes red.
+_KIND_TAGS = {
+    CLUSTER_VARS: lambda tags, substituting: tags & substituting,
+    "soak": lambda tags, substituting: frozenset(),
+    HOMELAB_NAMESPACE: lambda tags, substituting: tags,
+}
 
 _paths = st.one_of(
     st.builds(
@@ -69,13 +77,40 @@ def _excluded(path: str) -> bool:
     return path in (FLUX_INDEX, DIGESTS) or path.startswith("images/")
 
 
+def _owner(path: str) -> str | None:
+    """The name whose `cluster/<name><suffix>/` or `flux/<name>.yaml` holds `path`."""
+    parts = path.split("/")
+    if len(parts) >= 3 and parts[0] == CLUSTER_DIR:
+        suffix = next((s for s in TAG_KIND_SUFFIXES if parts[1].endswith(s)), "")
+        return parts[1].removesuffix(suffix)
+    if len(parts) == 2 and parts[0] == FLUX_DIR and parts[1].endswith(".yaml"):
+        return parts[1].removesuffix(".yaml")
+    return None
+
+
+def _footprints(
+    path: str, tags: frozenset, substituting: frozenset, kinds: frozenset
+) -> set[str]:
+    """The entries whose footprint a change to the non-excluded `path` must move."""
+    name = _owner(path)
+    if name is None or name not in tags | kinds:
+        return {UNCLASSIFIED}
+    if name not in kinds:
+        return {name}
+    if name not in _KIND_TAGS:
+        return {name, UNCLASSIFIED}
+    return {name} | _KIND_TAGS[name](tags, substituting)
+
+
 def _moved(before: dict, after: dict, field: str) -> set[str]:
     """The entries whose `field` digest differs between two `digests` results."""
     return {name for name in before if before[name][field] != after[name][field]}
 
 
 @given(bundle=_bundles(), data=st.data())
-def test_one_path_changing_moves_own_for_its_directory_and_some_footprint(bundle, data):
+def test_one_path_changing_moves_own_for_its_directory_and_the_footprints_it_counts_for(
+    bundle, data
+):
     files, tags, substituting, kinds = bundle
     path = data.draw(_paths, label="path")
     replacement = data.draw(st.none() | _content(path), label="replacement")
@@ -95,11 +130,12 @@ def test_one_path_changing_moves_own_for_its_directory_and_some_footprint(bundle
     }
     assert _moved(before, after, "own") - {UNCLASSIFIED} == owners
     assert _moved(before, after, "own") <= _moved(before, after, "footprint")
-    footprints = _moved(before, after, "footprint")
-    if not changed or _excluded(path):
-        assert not footprints
-    else:
-        assert footprints
+    expected = (
+        set()
+        if not changed or _excluded(path)
+        else _footprints(path, tags, substituting, kinds)
+    )
+    assert _moved(before, after, "footprint") == expected
 
 
 @given(bundle=_bundles())
