@@ -26,6 +26,8 @@ as `--require`
 # the package into `~/.local/share/`.
 """
 
+# pyright: reportMissingImports=false
+
 import os
 import sys
 from pathlib import Path

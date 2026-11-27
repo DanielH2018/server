@@ -139,6 +139,7 @@ containers_list:
       - lidarr
       - qbittorrent-reach-probe
       - qbittorrent-prefs-check
+      - lidarr-stall-sweep
     homepage_widget: true
   - name: radarr
     weekly_backup_claims: {radarr-config: 2}  # Tue
@@ -515,6 +516,7 @@ containers_list:
       - prowlarr
       - slskd
       - lidarr-verify
+      - lidarr-stall-sweep
     homepage_widget: true
   - name: slskd
     depends_on: [media-volume]

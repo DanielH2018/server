@@ -15,10 +15,12 @@ Run: uv run pytest scripts/validate/tests/alerts/test_alert_tools_guard.py
 
 import hashlib
 import io
+import os
 import platform
 import re
 import shutil
 import tarfile
+import time
 import zipfile
 from pathlib import Path
 
@@ -275,3 +277,40 @@ def test_a_kept_archive_with_a_wrong_digest_is_flagged(checkout):
 
     assert result.returncode != 0
     assert "SHA256SUMS lists" in result.stderr, result.stderr
+
+
+def _stamped(repo: Path, name: str, days_old: float) -> Path:
+    """A `prometheus` version directory whose stamp is `days_old` days old."""
+    tool_dir = repo / ".git" / "alert-tools" / name
+    tool_dir.mkdir(parents=True, exist_ok=True)
+    stamp = tool_dir / ".provisioned"
+    stamp.touch()
+    when = time.time() - days_old * 86400
+    os.utime(stamp, (when, when))
+    return tool_dir
+
+
+def test_a_superseded_version_inside_the_grace_is_kept_is_clean(checkout):
+    assert _run(checkout).returncode == 0
+    old = _stamped(checkout, "prometheus-3.14.0", days_old=40)
+    _stamped(checkout, "prometheus-3.15.0", days_old=10)
+
+    result = _run(checkout, "promtool", "--version")
+
+    assert result.returncode == 0, result.stderr
+    assert old.is_dir()
+
+
+def test_a_superseded_version_past_the_grace_is_flagged_and_removed(checkout):
+    assert _run(checkout).returncode == 0
+    old = _stamped(checkout, "prometheus-3.14.0", days_old=40)
+    pinned = _stamped(checkout, "prometheus-3.15.0", days_old=20)
+    newer = _stamped(checkout, "prometheus-3.16.0", days_old=1)
+
+    result = _run(checkout, "promtool", "--version")
+
+    assert result.returncode == 0, result.stderr
+    assert not old.exists()
+    assert (pinned / "promtool").is_file()
+    assert newer.is_dir()
+    assert _tool_dir(checkout, "alertmanager").is_dir()

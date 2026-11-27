@@ -47,7 +47,7 @@ HERE = _Path(__file__).resolve().parents[1]
 # What `uv run` reads to find an existing venv instead of building one where it stands.
 UV_PROJECT_ENVIRONMENT = "UV_PROJECT_ENVIRONMENT"
 # The parent a gate snapshot is made in, and the env var that moves it for a test.
-GATE_TMP_ROOT = "/tmp"
+GATE_TMP_ROOT = f"{fresh.LANDING_CACHE}/land-gate"
 GATE_TMP_ROOT_ENV = "LAND_GATE_TMPDIR"
 
 
@@ -77,16 +77,19 @@ def gate_snapshot(primary: Path, sha: str) -> Generator[Path | None]:
 
     DECIDED: the parent directory is PINNED to GATE_TMP_ROOT rather than left to `mkdtemp`'s
     own default, which honours TMPDIR -- on this host that is `/tmp/user/1000`, so a leaked
-    snapshot would sit where the recovery below does not look. GATE_TMP_ROOT_ENV moves it.
+    snapshot would sit where the recovery below does not look. GATE_TMP_ROOT is under the
+    landing user's home, on disk: `/tmp` on daniel-box is a tmpfs, where each snapshot held
+    RAM. GATE_TMP_ROOT_ENV moves it.
 
     A SIGKILL or a host reboot still leaks the registration: the directory survives, so
-    nothing prunes it. Recover by hand with `rm -rf /tmp/land-gate-*` then
+    nothing prunes it. Recover by hand with `rm -rf ~/.cache/homelab/land-gate/land-gate-*` then
     `git -C <primary> worktree prune`.
     """
     # The signal handlers wrap the try so they are restored only after the worktree is gone; a
     # second signal during removal cannot skip it.
     with fresh.dies_on_a_signal():
-        root = os.environ.get(GATE_TMP_ROOT_ENV) or GATE_TMP_ROOT
+        root = Path(os.environ.get(GATE_TMP_ROOT_ENV) or GATE_TMP_ROOT).expanduser()
+        root.mkdir(parents=True, exist_ok=True)
         tmp = Path(tempfile.mkdtemp(prefix="land-gate-", dir=root))
         snap = tmp / "tree"
         made = False

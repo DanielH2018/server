@@ -54,10 +54,13 @@ GIT_TIMEOUT_S = 600
 CHECKOUT_PREFIX = "land-fresh-"
 
 
+# Where a landing's worktrees go: on disk, because `/tmp` on daniel-box is a tmpfs.
+LANDING_CACHE = "~/.cache/homelab"
+
+
 def checkouts_root() -> Path:
-    """The directory the fresh checkouts go in: the landing user's cache, which is on disk."""
-    cache = os.environ.get("XDG_CACHE_HOME") or str(Path.home() / ".cache")
-    return Path(cache) / "homelab" / "land-fresh"
+    """The directory the fresh checkouts go in, under the landing user's `LANDING_CACHE`."""
+    return Path(LANDING_CACHE).expanduser() / "land-fresh"
 
 
 def child_argv(argv: list[str], since: str) -> list[str]:
