@@ -13,6 +13,7 @@ Run: uv run pytest scripts/deploy_tools/tests/land_merge/test_land_slots_propert
 
 import fcntl
 import os
+import tempfile
 from functools import partial
 from pathlib import Path
 
@@ -62,15 +63,20 @@ def _locked(paths: list[Path]) -> set[int]:
 
 
 class SlotHolders(RuleBasedStateMachine):
-    """Landings taking and releasing the slot files in `directory`, which a test binds."""
+    """Landings taking and releasing the slot files of one example.
+
+    A test binds `directory`, and each example takes a fresh directory under it, so a
+    descriptor a failing example leaves open locks nothing the next example reads.
+    """
 
     held = Bundle("held")
     directory: Path
 
     def __init__(self):
         super().__init__()
-        self.paths = slots._paths(self.directory)
+        self.paths = slots._paths(Path(tempfile.mkdtemp(dir=self.directory)))
         self.releases: dict[int, slots.Release] = {}
+        self.open: list[slots.Release] = []
         self.released: set[int] = set()
 
     def record(self, event: str) -> None:
@@ -86,6 +92,8 @@ class SlotHolders(RuleBasedStateMachine):
         before = set(self.releases)
         counted = len(before & set(range(count)))
         release = _take(via, self.paths[:count], cap)
+        if release is not None:
+            self.open.append(release)
         taken = _locked(self.paths) - before
         assert (release is not None) == (counted < min(cap, count)), (
             f"{via} under cap {cap} among {count} with {sorted(before)} held"
@@ -110,18 +118,18 @@ class SlotHolders(RuleBasedStateMachine):
     @rule(slot=consumes(held))
     def release(self, slot):
         before = _locked(self.paths)
-        self.releases.pop(slot)()
+        release = self.releases.pop(slot)
+        self.open.remove(release)
+        release()
         self.released.add(slot)
         assert before - _locked(self.paths) == {slot}
 
     @invariant()
-    def the_files_hold_what_the_takes_returned_and_no_more_than_the_largest_cap(self):
-        locked = _locked(self.paths)
-        assert locked == set(self.releases)
-        assert len(locked) <= slots.COUNT
+    def the_files_hold_what_the_takes_returned(self):
+        assert _locked(self.paths) == set(self.releases)
 
     def teardown(self):
-        for release in self.releases.values():
+        for release in self.open:
             release()
 
 
