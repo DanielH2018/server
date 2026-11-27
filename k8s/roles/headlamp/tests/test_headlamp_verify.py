@@ -18,6 +18,7 @@ from urllib.parse import urlsplit
 
 import pytest
 
+import flux_job_verify
 import headlamp_verify
 from lib import yaml_fast
 from lib.k8s_roles import K8S_ROLES
@@ -83,8 +84,15 @@ def _env(control_url, headlamp) -> dict[str, str]:
     }
 
 
+def _main(env: dict[str, str]) -> int:
+    """Run the Job's entry point as its `__main__` block does."""
+    return flux_job_verify.main(
+        "headlamp-verify", headlamp_verify.__doc__, headlamp_verify.run, [], env
+    )
+
+
 def test_a_fenced_headlamp_passes(control, closed_url, capsys):
-    assert headlamp_verify.main([], _env(_url(control), closed_url)) == 0
+    assert _main(_env(_url(control), closed_url)) == 0
     out = capsys.readouterr().out
     assert f"control ok: {_url(control)} answered" in out
     assert f"isolated: {closed_url} refused, as intended" in out
@@ -95,7 +103,7 @@ def test_an_answer_from_headlamp_fails_the_job(control, status, capsys):
     """Any answer is a connection headlamp accepted, an HTTP error status included."""
     server = _serve(status)
     try:
-        assert headlamp_verify.main([], _env(_url(control), _url(server))) == 1
+        assert _main(_env(_url(control), _url(server))) == 1
     finally:
         server.shutdown()
         server.server_close()
@@ -107,13 +115,13 @@ def test_an_answer_from_headlamp_fails_the_job(control, status, capsys):
 def test_a_leg_that_fails_on_dns_fails_the_job(control, capsys):
     """A lookup failure is no refusal, so it proves nothing about the policy."""
     env = _env(_url(control), "http://headlamp.invalid:4466/")
-    assert headlamp_verify.main([], env) == 1
+    assert _main(env) == 1
     assert "no refusal from http://headlamp.invalid:4466/" in capsys.readouterr().err
 
 
 def test_a_refused_control_fails_the_job(closed_url):
     """Without the control, the refusal below it could be a pod with no network."""
-    with pytest.raises(headlamp_verify.Failed, match="CONTROL FAILED"):
+    with pytest.raises(flux_job_verify.Failed, match="CONTROL FAILED"):
         headlamp_verify.run(_env(closed_url, closed_url), control_retry_seconds=0)
 
 
