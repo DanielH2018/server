@@ -136,8 +136,8 @@ directory.
   a user that cannot read the webhook, so it starts the instance, named by the error cause in
   `[a-z0-9_]+`. ENFORCED: `hosts/tests/claude_code/test_claude_stop_alert.py`.
 - **A timer that stops firing pages through a textfile, because `OnFailure=` sees only a failed
-  run** (#6165). The clone, dotfiles and memory syncs, the triage poller and the fan-out server
-  lander write `<unit>.prom` from the `ExecStartPost=` in `templates/timer-textfile.j2`.
+  run** (#6165). The clone, dotfiles and memory syncs, the agent's worktree sweep, the triage
+  poller and the fan-out server lander write `<unit>.prom` from the `ExecStartPost=` in `templates/timer-textfile.j2`.
   Observability's `host-checks.yaml` pages a stale file as `Claude<Check>NotReporting` on each
   host that arms the timer. The deadline derives from the timer's period, which must stay
   `<N>min`. ENFORCED: `hosts/tests/claude_code/test_claude_timer_rule_literals.py`. A timer's flag
@@ -701,6 +701,29 @@ Applying it: a new version of daniel-box's host package, which its updater insta
   A clone left dirty or off
   `master` skips with exit 0 and still writes its file, so the file says the timer runs, not
   that the clone is current.
+
+## Autonomous-role contract (`claude-worktree-sweep`, the agent's merged worktrees)
+
+`homelab-claude-worktree-sweep.timer` runs `/usr/lib/homelab/worktree-sweep`, the
+worktree-sweep component's script, as the agent user in its clone an hour after boot and every
+`claude_code_agent_worktree_sweep_interval` (a week). A host that lists this component lists
+`worktree-sweep` too, or the unit fails on a missing script.
+
+- **Scope:** what `hosts/components/worktree-sweep/CLAUDE.md` lists for the operator's sweep,
+  in `claude_code_agent_user_clone_dir` instead of the primary checkout, and its `uv cache
+  prune` covers the agent's own cache. The pruner is the
+  agent's own `chezmoi apply` copy, and it asks `/run/worktree-holders.sock` for the processes
+  holding a tree. The helper answers it under the agent's clone, so an `ubuntu` process inside
+  an agent tree keeps that tree. The run reaps no claim
+  (`hosts/tests/repo_crons/test_worktree_sweep_cron_reports_its_exit.py::test_a_sweep_as_the_agent_prunes_its_own_clone_and_does_not_reap`).
+- **Mode:** `claude_code_agent_user_enabled`; false drops the unit and the timer from the next
+  package version, and `ClaudeWorktreeSweepNotReporting` then needs deleting.
+- **Abort valves:** the pruner's own, as for the operator's sweep.
+- **Evidence:** `journalctl -u homelab-claude-worktree-sweep` holds the `--brief` lines. The
+  unit imports no Healthchecks.io key, so the agent never holds it: a failed run pages through
+  `homelab-alert@`, and `claude-worktree-sweep.prom` pages a timer that stopped.
+- **Next-run review:** after the first run on each host, check that
+  `/var/lib/claude/server/.claude/worktrees` holds only trees whose PRs are open.
 
 ## Autonomous-role contract (`claude-fanout-server-lander`, a landing with no session behind it)
 

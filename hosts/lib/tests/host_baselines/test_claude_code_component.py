@@ -88,6 +88,22 @@ def test_each_packaged_unit_names_its_packaged_sibling(package):
         assert f"write_check_textfile claude-{sync} 1 " in unit
 
 
+def test_the_agents_worktree_sweep_runs_the_packaged_script_in_its_home_without_the_ping_key(
+    package, manifest
+):
+    # fact: hosts/components/claude-code/CLAUDE.md#Autonomous-role contract (`claude-worktree-sweep`, the agent's merged worktrees)
+    unit = text(package, f"{UNITS}/homelab-claude-worktree-sweep.service")
+    assert "\nUser=claude\n" in unit
+    assert "\nEnvironment=HOME=/var/lib/claude\n" in unit
+    assert "\nExecStart=/usr/lib/homelab/worktree-sweep\n" in unit
+    assert "/usr/lib/homelab/worktree-sweep" in package.files
+    assert "\nImportCredential=" not in unit
+    assert "\nLoadCredential=" not in unit
+    assert "\nOnFailure=homelab-alert@%n.service\n" in unit
+    assert "write_check_textfile claude-worktree-sweep 1 " in unit
+    assert "homelab-claude-worktree-sweep.timer" in manifest["enable_links"]
+
+
 def test_the_agents_github_token_is_a_host_secret_and_never_rendered(package):
     keys = host_secrets.tree_keys(REPO, "daniel-server")
     assert {"claude_code_agent_gh_token", "discord_alert_webhook"} <= keys

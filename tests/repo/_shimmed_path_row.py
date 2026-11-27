@@ -246,10 +246,6 @@ RESET_PATHS = Census(
             "cron ships a bare PATH; `test_github_interaction_limit.py` rewrites this exact "
             "line to put its stub directory first, and asserts the line is still there"
         ),
-        "hosts/components/worktree-sweep/templates/worktree-sweep.sh.j2": (
-            "the reset prefixes one `uv` command, named by absolute path and stubbed under "
-            "the test's fake home; the `curl` after it reads the inherited PATH"
-        ),
         "hosts/components/renovate-agent/templates/renovate-agent-setup.sh.j2": (
             "the reset applies only under root's `runuser`, which every test stubs, and the "
             "commands it carries (`mkdir`, `cp`, `git`, the agent's `uv` and installer) are "
