@@ -4,11 +4,21 @@ import subprocess
 from pathlib import Path
 
 import github_rest
+import pytest
 from _checkout_package import render_daniel_box
 from gh_quota import Ledger
 
 from lib import yaml_fast
 from lib.repo_paths import REPO
+
+
+GH_QUOTA_FILE = Path(__file__).parents[3] / "components/gh-quota/files/gh_quota.py"
+
+
+@pytest.fixture(autouse=True)
+def _checkout_gh_quota(monkeypatch):
+    """Load the checkout's ledger module, never the copy installed at /usr/lib/homelab."""
+    monkeypatch.setenv("GH_QUOTA_MODULE", str(GH_QUOTA_FILE))
 
 
 class _Body:
@@ -102,10 +112,6 @@ def test_github_get_without_a_token_sends_no_authorization_header():
 def test_github_get_counts_an_authenticated_read_under_the_token_it_sends(
     monkeypatch, tmp_path
 ):
-    gh_quota_module = (
-        Path(__file__).parents[3] / "components/gh-quota/files/gh_quota.py"
-    )
-    monkeypatch.setenv("GH_QUOTA_MODULE", str(gh_quota_module))
     monkeypatch.setenv("GH_QUOTA_MODE", "record")
     monkeypatch.setenv("GH_QUOTA_DIR", str(tmp_path))
     monkeypatch.setenv("GH_TOKEN", "the-sessions-own-token")

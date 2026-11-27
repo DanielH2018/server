@@ -21,8 +21,8 @@ the no-backup list the steps read it as `default`; any other such volume stays i
 3. A volume in `default` whose claim is on the weekly list moves to its weekday shard,
    `weekly-backup-d<N>`, the shard its `containers_list` entry declares (0=Sunday).
 4. A volume in a weekly shard group whose claim is off the weekly list returns to `default`.
-   One whose claim declares another shard moves to that shard. A weekly claim that ends in its
-   shard also leaves `no-backup`; one in `no-backup` alone stays there.
+   One whose claim declares another shard moves to that shard. A volume that ends in `default`
+   or a shard also leaves `no-backup`; one in `no-backup` alone stays there.
 
 The steps run against each volume's own labels, in that order. Then one more step sets the
 backup target:
@@ -277,9 +277,9 @@ def desired_labels(
             move(DEFAULT, shard_group(shard))
         elif weekly[claim] != shard:
             move(shard_group(weekly[claim]), shard_group(shard))
-    # DECIDED: a weekly claim in a backed-up group as well as `no-backup` ends in its shard
-    # alone. Keeping `no-backup` instead would stop the backups the weekly list asks for.
-    if claim in weekly and has(shard_group(weekly[claim])):
+    # DECIDED: a volume in a backed-up group as well as `no-backup` keeps the backed-up group
+    # alone. `no-backup` runs no RecurringJob, so dropping it stops no backup; keeping it would.
+    if any(has(group) for group in (DEFAULT, *(shard_group(s) for s in SHARDS))):
         state.pop(label(NO_BACKUP), None)
     # A volume gaining the trim label in the daily tier is also put in `default`, so it keeps one
     # group label.
