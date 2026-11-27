@@ -69,7 +69,9 @@ It covers what banned the operator from a fresh address before `remote-ips` coul
 
 - a stale Homepage tab's widget burst, which Homepage answers with 403s and 404s;
 - LiveSync's existence checks, which CouchDB answers with 404s;
-- a Jellyfin episode's stream segments, which trip `http-crawl-non_statics` on their own.
+- a Jellyfin episode's stream segments, which trip `http-crawl-non_statics` on their own;
+- qBittorrent's web UI polling `/api/v2/` after its own session expired, which qBittorrent
+  answers with 403s and 404s.
 
 The Traefik agent also installs the hub's `crowdsecurity/jellyfin-whitelist`, from
 `k8s/roles/traefik/defaults/main.yml:traefik_k8s_agent_parsers`.

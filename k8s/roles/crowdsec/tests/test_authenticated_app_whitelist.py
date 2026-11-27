@@ -47,16 +47,22 @@ def _crd_router(role, ingressroute):
 
 
 def test_the_crd_patterns_match_the_routers_traefik_derives_and_no_sibling():
-    homepage, _livesync, jellyfin = _expressions()
+    homepage, _livesync, jellyfin, qbittorrent = _expressions()
     assert re.match(
         _router_pattern(homepage), _crd_router("homepage", "homepage-public")
     )
     assert re.match(
         _router_pattern(jellyfin), _crd_router("jellyfin", "jellyfin-public")
     )
+    assert re.match(
+        _router_pattern(qbittorrent), _crd_router("qbittorrent", "qbittorrent-public")
+    )
     # The LAN routes carry no Authelia on Jellyfin and a LAN bypass may apply on Homepage.
     assert not re.match(_router_pattern(homepage), _crd_router("homepage", "homepage"))
     assert not re.match(_router_pattern(jellyfin), _crd_router("jellyfin", "jellyfin"))
+    assert not re.match(
+        _router_pattern(qbittorrent), _crd_router("qbittorrent", "qbittorrent")
+    )
 
 
 def test_the_livesync_names_are_the_token_gated_routers_and_not_the_probe():
