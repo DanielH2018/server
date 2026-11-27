@@ -49,6 +49,19 @@ STALE_SHARD = (
     set(),
     False,
 )
+# A listed claim whose volume holds no group label, in Longhorn's implicit `default`.
+UNLABELLED_NO_BACKUP = ({}, "ns/c", STALE_SHARD[2], set(), False)
+WEEKLY_TIERS = {"r2": set(), "weekly": {"ns/a": 2}, "nobackup": set()}
+UNLABELLED_WEEKLY = ({}, "ns/a", WEEKLY_TIERS, set(), False)
+UNLABELLED_WEEKLY_TRIM = ({}, "ns/a", WEEKLY_TIERS, set(), True)
+# A weekly claim whose volume is in both `default` and `no-backup`.
+WEEKLY_IN_DEFAULT_AND_NO_BACKUP = (
+    dict.fromkeys((lr.label(lr.DEFAULT), lr.label(lr.NO_BACKUP)), lr.ENABLED),
+    "ns/a",
+    WEEKLY_TIERS,
+    set(),
+    False,
+)
 
 
 @given(worlds())
@@ -61,6 +74,7 @@ def test_a_second_pass_changes_nothing(world):
 
 @given(worlds())
 @example(STALE_SHARD)
+@example(UNLABELLED_NO_BACKUP)
 def test_a_no_backup_claim_in_any_backup_group_ends_in_no_backup_alone(world):
     labels, claim, tiers, class_claims, trim = world
     tiers = {
@@ -68,14 +82,15 @@ def test_a_no_backup_claim_in_any_backup_group_ends_in_no_backup_alone(world):
         "weekly": {c: s for c, s in tiers["weekly"].items() if c != claim},
         "nobackup": tiers["nobackup"] | {claim},
     }
-    if not _groups(labels):
-        return
     after = lr.desired_labels(labels, claim, tiers, class_claims, trim)
     assert _groups(after) == {lr.label(lr.NO_BACKUP)}
 
 
 @given(worlds())
-def test_a_weekly_claim_outside_no_backup_ends_in_its_shard_alone(world):
+@example(UNLABELLED_WEEKLY)
+@example(UNLABELLED_WEEKLY_TRIM)
+@example(WEEKLY_IN_DEFAULT_AND_NO_BACKUP)
+def test_a_weekly_claim_not_in_no_backup_alone_ends_in_its_shard_alone(world):
     labels, claim, tiers, class_claims, trim = world
     shard = tiers["weekly"].get(claim, 0)
     tiers = {
@@ -83,7 +98,7 @@ def test_a_weekly_claim_outside_no_backup_ends_in_its_shard_alone(world):
         "weekly": {**tiers["weekly"], claim: shard},
         "nobackup": tiers["nobackup"] - {claim},
     }
-    if not _groups(labels) or labels.get(lr.label(lr.NO_BACKUP)) == lr.ENABLED:
+    if _groups(labels) == {lr.label(lr.NO_BACKUP)}:
         return
     after = lr.desired_labels(labels, claim, tiers, class_claims, trim)
     assert _groups(after) == {lr.label(lr.shard_group(shard))}
