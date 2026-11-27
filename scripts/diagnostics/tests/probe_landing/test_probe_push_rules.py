@@ -10,7 +10,8 @@ import json
 import subprocess
 
 import pytest
-
+from hypothesis import example, given
+from hypothesis import strategies as st
 
 from diagnostics import probe
 from diagnostics.probe_lib import push_rules
@@ -95,15 +96,46 @@ def test_signature_status_counts_only_n_as_unsigned():
     assert push_rules.signature_status(log) == ([UNSIGNED], [SIGNED, "d" * 40])
 
 
-@pytest.mark.parametrize(
-    "url",
-    [
-        "git@github.com:DanielH2018/server.git",
-        "https://github.com/DanielH2018/server.git",
-    ],
+_OWNER = st.from_regex(r"[A-Za-z0-9._-]{1,20}", fullmatch=True)
+# A trailing `.git` reads as the URL's optional suffix, so no repository name here ends in one.
+_NAME = _OWNER.filter(lambda name: not name.endswith(".git"))
+_GITHUB_REMOTES = [
+    "https://github.com/{}",
+    "https://x-access-token:T@github.com/{}",
+    "ssh://git@github.com/{}",
+    "ssh://git@github.com:22/{}",
+    "git@github.com:{}",
+]
+_OTHER_REMOTES = [
+    "https://notgithub.com/{}",
+    "https://github.com.evil/{}",
+    "https://evil.example/github.com/{}",
+    "https://github.com@evil.example/{}",
+    "https://evil.example?@github.com/{}",
+    "ssh://git@notgithub.com/{}",
+    "git@notgithub.com:{}",
+    "git@github.com.evil:{}",
+    "git@evil.example:github.com/{}",
+    "git@evil.example/github.com:{}",
+]
+
+
+@given(
+    remote=st.sampled_from(_GITHUB_REMOTES),
+    owner=_OWNER,
+    name=_NAME,
+    suffix=st.sampled_from(["", ".git", "/", ".git/"]),
 )
-def test_repo_slug_reads_both_remote_shapes(url):
-    assert push_rules.repo_slug(url) == "DanielH2018/server"
+def test_repo_slug_reads_every_github_remote_shape(remote, owner, name, suffix):
+    slug = f"{owner}/{name}"
+    assert push_rules.repo_slug(remote.format(slug + suffix)) == slug
+
+
+@given(remote=st.sampled_from(_OTHER_REMOTES), owner=_OWNER, name=_NAME)
+@example(remote="https://notgithub.com/{}", owner="o", name="r")
+@example(remote="https://evil.example/github.com/{}", owner="o", name="r")
+def test_repo_slug_refuses_a_remote_on_another_host(remote, owner, name):
+    assert push_rules.repo_slug(remote.format(f"{owner}/{name}")) is None
 
 
 def _transport(
