@@ -71,7 +71,7 @@ dev = [                              # `dev` is uv's default group for `uv run`/
 # Local test reruns only, absent from `default-groups`, so CI never installs it. docs/ci-throughput.md
 # says how to run it. The cap keeps testmon below 2.4.0, which has not been measured here.
 local = [
-  "pytest-testmon>=2.3,<2.4",
+  "pytest-testmon>=2.4,<2.5",
 ]
 # Tools only prek hooks and hand-run commands call, never a test. The CI jobs that run no lint
 # hook set UV_NO_GROUP=lint, so a lint tool's install (actionlint-py downloads its binary from
