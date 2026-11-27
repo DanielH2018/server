@@ -26,7 +26,7 @@ LAND_ENV_KNOBS = (
 
 
 @pytest.fixture(autouse=True)
-def _no_inherited_land_env(monkeypatch):
+def _no_inherited_land_env(monkeypatch, tmp_path):
     """Clear the `LAND_*` knobs a caller's environment would otherwise decide a test with.
 
     The unattended renovate agent runs with `LAND_REQUIRE_AUTHOR=app/renovate`
@@ -42,6 +42,8 @@ def _no_inherited_land_env(monkeypatch):
     """
     for name in LAND_ENV_KNOBS:
         monkeypatch.delenv(name, raising=False)
+    # The default gate root is under the real home.
+    monkeypatch.setenv(tools.GATE_TMP_ROOT_ENV, str(tmp_path / "land-gate-root"))
 
 
 @pytest.fixture(autouse=True)

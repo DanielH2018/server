@@ -78,21 +78,27 @@
             # Links the public name; the authelia `karma.<domain>` rules admit `group:admins` only.
             href: {{ services | homepage_href('karma', domain) }}
             description: Alerts
-            # Critical and Warning count what pages (shadow/paged_by/drill dropped); `or vector(0)`
-            # because an empty vector renders blank.
-            widget:
-                type: prometheusmetric
-                url: "http://prometheus.{{ k8s_observability_namespace }}.svc.cluster.local:9090"
-                refreshInterval: 60000
-                metrics:
-                    - label: Critical
-                      query: 'count(ALERTS{alertstate="firing",severity="critical",shadow!="true",drill!="true",paged_by!="homelab-alert"}) or vector(0)'
-                      format:
-                          type: number
-                    - label: Warning
-                      query: 'count(ALERTS{alertstate="firing",severity="warning",shadow!="true",drill!="true",paged_by!="homelab-alert"}) or vector(0)'
-                      format:
-                          type: number
+            # Asks Karma, not Prometheus: the Loki ruler's alerts reach Alertmanager alone. Each
+            # request repeats Karma's `filters.default`, which its browser UI applies and its API
+            # does not; test_homepage_karma_tile.py holds the two lists equal. One widget per
+            # severity, because a customapi widget makes one request.
+            widgets:
+{% for severity in ['critical', 'warning'] %}
+                - type: customapi
+                  url: {{ services | homepage_widget_url('karma', k8s_namespace) }}/alerts.json
+                  method: POST
+                  headers:
+                      Content-Type: application/json
+                      Remote-User: homepage
+                  requestBody:
+                      filters: ["@state=active", "@receiver!=blackhole", "@receiver!=email", "severity={{ severity }}"]
+                      defaultGroupLimit: 1
+                  refreshInterval: 60000
+                  mappings:
+                      - field: totalAlerts
+                        label: {{ severity | capitalize }}
+                        format: number
+{% endfor %}
         - Pihole:
             icon: pi-hole.png
             href: {{ services | homepage_href('pihole', domain, '/admin') }}
