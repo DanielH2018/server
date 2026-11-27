@@ -75,9 +75,33 @@ import json
 import math
 import os
 import statistics
+from collections.abc import Sequence
 from pathlib import Path
+from typing import Protocol
 
 import pytest
+
+
+class _InvocationParams(Protocol):
+    @property
+    def dir(self) -> Path: ...
+
+
+class _WidthConfig(Protocol):
+    """The parts of `pytest.Config` the width rule reads, so a test passes a small fake."""
+
+    @property
+    def args(self) -> Sequence[str]: ...
+
+    @property
+    def args_source(self) -> pytest.Config.ArgsSource: ...
+
+    @property
+    def invocation_params(self) -> _InvocationParams: ...
+
+    @property
+    def rootpath(self) -> Path: ...
+
 
 # Below this many runner seconds a worker costs more to start than it saves; the recorded tables put
 # the floor at 2.0.
@@ -151,7 +175,7 @@ def workers_for(seconds: list[float], cap: int) -> int:
 
 
 @pytest.hookimpl(tryfirst=True)
-def pytest_xdist_auto_num_workers(config: pytest.Config) -> int | None:
+def pytest_xdist_auto_num_workers(config: _WidthConfig) -> int | None:
     """The `-n auto` width for this run, or None to leave xdist's own choice."""
     if config.args_source != pytest.Config.ArgsSource.ARGS:
         return None

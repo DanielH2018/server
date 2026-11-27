@@ -175,7 +175,9 @@ def _probes_only_the_shared_list(script):
 
 
 @pytest.mark.parametrize("cron", WAN_GATED_CRONS, ids=lambda cron: cron[2])
-def test_every_internet_fetching_cron_probes_the_shared_endpoint_list(cron):
+def test_every_internet_fetching_cron_probes_the_shared_endpoint_list(
+    cron: tuple[str, str, str],
+):
     # The URLs are arguments: a cron hardcoding its own pair would probe something the bridge's WAN
     # check never agreed to.
     script = render_shell_script(*cron, {"wan_probe_urls": [SENTINEL_URL]})

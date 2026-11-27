@@ -7,7 +7,7 @@ import json
 import os
 import sys
 from pathlib import Path
-from types import SimpleNamespace
+from dataclasses import dataclass
 
 import pytest
 
@@ -31,13 +31,21 @@ def _tree(root: Path, modules: int, weights: dict[str, float] | None = None) -> 
     return tests
 
 
-def _config(args, source, base: Path, root: Path):
-    return SimpleNamespace(
-        args=args,
-        args_source=source,
-        invocation_params=SimpleNamespace(dir=base),
-        rootpath=root,
-    )
+@dataclass
+class _Params:
+    dir: Path
+
+
+@dataclass
+class _Config:
+    args: list[str]
+    args_source: pytest.Config.ArgsSource
+    invocation_params: _Params
+    rootpath: Path
+
+
+def _config(args: list[str], source: pytest.Config.ArgsSource, base: Path, root: Path):
+    return _Config(args, source, _Params(base), root)
 
 
 def test_files_node_ids_and_directories_are_selected_once_each(tmp_path):

@@ -23,7 +23,7 @@ def advance(
     down,
     hold=False,
     muted=False,
-    unknown=frozenset(),
+    unknown: set[str] | frozenset[str] = frozenset(),
     routes=None,
 ):
     """One poll; unless `routes` says otherwise, every fall in `down` is routed."""
@@ -130,8 +130,8 @@ def test_an_unrouted_fall_is_skipped_once_and_never_makes_a_storm() -> None:
 def test_a_hold_or_the_reboot_mute_defers_the_episode_until_it_lifts(gate) -> None:
     # fact: hosts/components/claude-code/CLAUDE.md#Autonomous-role contract (`claude-triage@`, a session started by a monitor episode)
     state, _ = advance({}, {})
-    state, _ = advance(state, DOWN, **{gate: True})
-    state, episodes = advance(state, DOWN, **{gate: True})
+    state, _ = advance(state, DOWN, hold=gate == "hold", muted=gate == "muted")
+    state, episodes = advance(state, DOWN, hold=gate == "hold", muted=gate == "muted")
     assert episodes == []
     _, episodes = advance(state, DOWN)
     assert len(episodes) == 1

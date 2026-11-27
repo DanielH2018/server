@@ -83,7 +83,7 @@ def _run_check(
     The stub prints `stdout`, writes `log` to the log path when it is not None, and exits `rc`.
     `stale_log` is a log already on disk from the previous week's run, the one a failed run leaves behind. Only
     absolute paths are repointed. Returns (exit code, the verdict as a [status, message] pair
-    read from the `status=` line the script logs, or None when it logged none, logged lines,
+    read from the `status=` line the script logs, or [] when it logged none, logged lines,
     whether rkhunter ran).
     """
     body = render_shell_script(

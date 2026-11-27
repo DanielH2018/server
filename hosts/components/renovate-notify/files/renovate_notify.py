@@ -296,7 +296,7 @@ def renovate_issues(repo: str) -> list[dict]:
 def parse_args(argv: list[str]) -> argparse.Namespace:
     """Parses the notifier's flags, exiting non-zero on an unknown one."""
     parser = argparse.ArgumentParser(
-        description=__doc__.strip().split("\n\n")[0], allow_abbrev=False
+        description=(__doc__ or "").strip().split("\n\n")[0], allow_abbrev=False
     )
     parser.add_argument(
         "--dry-run",

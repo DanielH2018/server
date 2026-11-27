@@ -68,16 +68,6 @@ def _sentinel_overrides() -> dict:
     }
 
 
-def _sentinel_overrides() -> dict:
-    """The primary node variable at the sentinel, with the `hosts` entry the renderer needs."""
-    box = host_context()
-    node = box["hosts"]["daniel-box"]
-    return {
-        PRIMARY_NODE_VAR: SENTINEL_NODE,
-        "hosts": {**box["hosts"], SENTINEL_NODE: node},
-    }
-
-
 def _sentinel_metallb_pool() -> str:
     """metallb-pool.yaml.j2 alone, rendered with the sentinel laid over every role's context."""
     texts = [

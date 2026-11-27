@@ -91,7 +91,7 @@ def test_the_staging_subnet_does_not_overlap_something_in_use(reserved):
     )
 
 
-def _attr_ip(root: ET.Element, path: str, attr: str):
+def _attr_ip(root: ET.Element, path: str, attr: str) -> ipaddress.IPv4Address:
     """The IP in `path`'s `attr`, failing with the missing name rather than a NoneType error.
 
     `find` and `get` both answer None for anything absent, which reaches `ip_address` as a
@@ -101,7 +101,7 @@ def _attr_ip(root: ET.Element, path: str, attr: str):
     assert el is not None, f"no {path} element in the rendered network"
     value = el.get(attr)
     assert value is not None, f"{path} has no {attr} attribute"
-    return ipaddress.ip_address(value)
+    return ipaddress.IPv4Address(value)
 
 
 def test_the_guest_reservation_is_inside_the_subnet():

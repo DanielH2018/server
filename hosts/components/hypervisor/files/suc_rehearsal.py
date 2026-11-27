@@ -230,7 +230,10 @@ def main(argv):
         elif argv[:1] == ["overlay"] and len(argv) == 5:
             print(f"target_version={overlay(*argv[1:])}")
         elif argv[:1] == ["judge"] and len(argv) == 6:
-            ok, why = judge(*argv[1:], json.load(sys.stdin))
+            expect, plan_name, target, hostname, digest = argv[1:]
+            ok, why = judge(
+                expect, plan_name, target, hostname, digest, json.load(sys.stdin)
+            )
             print(("PASS " if ok else "WAIT ") + why)
             return 0 if ok else 1
         else:
