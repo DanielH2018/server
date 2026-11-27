@@ -9,6 +9,7 @@ import os
 import pytest
 
 from dev.fanout_lib import headroom_probe, launch_lock
+from dev.fanout_lib.launch_gates import MAX_LANDINGS_IN_FLIGHT
 from dev.findings_lib.issue_model import Issue, IssueState
 from dev.fanout_lib.manifest import Batch, Manifest, save
 from dev.fanout_lib.place import main as place_main
@@ -179,6 +180,19 @@ def test_a_wait_reads_full_while_a_launch_holds_the_lock(tmp_path):
     }
     after = headroom_probe.read(_tools(ROOMY, ROOMY), 1, None, tmp_path)
     assert after["state"] == "room"
+
+
+def test_a_deep_landing_queue_reads_full_until_it_drains(tmp_path):
+    """The wait a landing-queue refusal names ends only when that refusal would not repeat."""
+    deep = headroom_probe.read(
+        _tools(ROOMY, ROOMY, landings=MAX_LANDINGS_IN_FLIGHT + 1), 1, None, tmp_path
+    )
+    assert deep["state"] == "full"
+    assert f"{MAX_LANDINGS_IN_FLIGHT + 1} landings are in flight" in deep["detail"]
+    drained = headroom_probe.read(
+        _tools(ROOMY, ROOMY, landings=MAX_LANDINGS_IN_FLIGHT), 1, None, tmp_path
+    )
+    assert drained["state"] == "room"
 
 
 def test_cc_wait_reads_afresh_for_every_wait(capsys):
