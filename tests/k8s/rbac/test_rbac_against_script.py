@@ -455,8 +455,14 @@ def test_the_crowdsec_jobs_role_without_its_configmap_rule_is_flagged(
     ]
 
 
-@pytest.mark.parametrize("role", ["configarr", "janitorr"])
-def test_the_health_roles_grant_the_verdict_export_patch(monkeypatch, role) -> None:
+@pytest.mark.parametrize(
+    ("role", "field_manager"),
+    # configarr calls scripts/lib/check_verdict.py, which takes the manager; janitorr's copy reads TAG.
+    [("configarr", ("configarr-health",)), ("janitorr", ())],
+)
+def test_the_health_roles_grant_the_verdict_export_patch(
+    monkeypatch, role, field_manager
+) -> None:
     """M6 B6b: the export's `kubectl patch configmap` is granted on the one named ConfigMap."""
     monkeypatch.syspath_prepend(str(K8S_ROLES / role / "files"))
     reader = importlib.import_module(f"{role}_health")
@@ -466,7 +472,9 @@ def test_the_health_roles_grant_the_verdict_export_patch(monkeypatch, role) -> N
         argvs.append(["kubectl", "-n", "homelab", *args])
         return 0, ""
 
-    reader.export_verdict(record, f"{role}-health-verdict", "up", "ok", 0.0)
+    reader.export_verdict(
+        record, f"{role}-health-verdict", *field_manager, "up", "ok", 0.0
+    )
     needs = recorded_needs(argvs)
     # `kubectl patch` GETs the object before it sends the PATCH.
     assert {need[:4] for need in needs} == {
