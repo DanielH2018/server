@@ -125,11 +125,19 @@ _NO_READINESS = {
         "dri-device-plugin",
         "generic-device-plugin",
     ): "registers a kubelet socket; covered by monitor-bridge's check",
+    (
+        "vault-mcp",
+        "livesync-cli",
+    ): "a sync daemon that serves nothing, so no Service routes to it",
 }
 
 
 # (role, container) -> why this container has no livenessProbe.
 _NO_LIVENESS = {
+    (
+        "vault-mcp",
+        "livesync-cli",
+    ): "a sync daemon with no endpoint or status file a probe could read; a crash exits",
     (
         "traefik",
         "access-log-rotate",

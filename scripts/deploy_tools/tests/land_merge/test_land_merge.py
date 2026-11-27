@@ -15,6 +15,8 @@ Run: uv run pytest scripts/deploy_tools/tests/land_merge/test_land_merge.py
 """
 
 import re
+import subprocess
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -263,6 +265,47 @@ def test_a_red_pr_ci_ends_the_wait(landing):
     with pytest.raises(Outcome) as exc:
         merge.await_merge(ln)
     assert exc.value.verdict == "pr-ci-red" and "dead1234: CI RED" in exc.value.error
+
+
+def _refused_merge(landing, check_state: str):
+    """A green head whose direct merges GitHub refuses on one required check's state."""
+    ln, _ = landing(
+        Fakes(
+            gh_views={
+                "state,mergeable,headRefOid": _wait(
+                    ["OPEN MERGEABLE dead", "CLOSED MERGEABLE dead"]
+                )
+            },
+            await_ci=[(0, "CI green")],
+        )
+    )
+    ln.direct_merge_subject = "Remove dead music torrents"
+    stderr = (
+        "gh: Repository rule violations found\n\n"
+        f'Required status check "renovate config validator" is {check_state}.'
+        "\n\n (HTTP 405)"
+    )
+    fake_gh = ln.tools.gh
+
+    def gh(*args, **kwargs):
+        if args[:3] == ("api", "-X", "PUT") and args[3].endswith("/merge"):
+            raise subprocess.CalledProcessError(1, args, stderr=stderr)
+        return fake_gh(*args, **kwargs)
+
+    ln.tools = replace(ln.tools, gh=gh)
+    with pytest.raises(Outcome) as exc:
+        merge.await_merge(ln)
+    return exc.value
+
+
+def test_a_failing_required_check_ends_the_wait(landing):
+    out = _refused_merge(landing, "failing")
+    assert out.verdict == "pr-ci-red" and "renovate config validator" in out.error
+
+
+def test_a_required_check_in_progress_keeps_the_wait_going(landing):
+    out = _refused_merge(landing, "in progress")
+    assert out.verdict == "refused" and "closed without merging" in out.error
 
 
 @pytest.mark.parametrize("ci_rc", [75, 2])

@@ -1,6 +1,6 @@
 # Shipped by the host package's worktree-sweep component. Started by homelab-worktree-sweep.timer.
 [Unit]
-Description=Remove merged worktrees, repair the git object store and ping Healthchecks.io with the exit code
+Description=Remove merged worktrees, repair the git object store, prune the uv cache and ping Healthchecks.io with the exit code
 After=network-online.target homelab-secrets.service
 Wants=network-online.target homelab-secrets.service
 
@@ -8,6 +8,7 @@ Wants=network-online.target homelab-secrets.service
 SyslogLevel=notice
 Type=oneshot
 User={{ sys_user }}
+Environment=HOME=/home/{{ sys_user }}
 ExecStart=/usr/lib/homelab/worktree-sweep
 SyslogIdentifier=worktree-sweep
 # Import, not Load: a missing ping key must skip only the ping, not the sweep.

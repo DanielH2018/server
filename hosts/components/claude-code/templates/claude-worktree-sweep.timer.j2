@@ -1,0 +1,9 @@
+[Unit]
+Description=Sweep the {{ claude_code_agent_user }} agent user's worktrees every {{ claude_code_agent_worktree_sweep_interval }}
+
+[Timer]
+OnBootSec=1h
+OnUnitActiveSec={{ claude_code_agent_worktree_sweep_interval }}
+
+[Install]
+WantedBy=timers.target

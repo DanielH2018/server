@@ -22,7 +22,7 @@ from flux_job_connect import open_url
 from lib import yaml_fast
 from lib.k8s_roles import K8S_ROLES
 from lib.role_files import cluster_vars_source_path
-from lib.repo_paths import HOST_LIB_FILES, SECRETS
+from lib.repo_paths import HOST_LIB_FILES, SCRIPTS, SECRETS
 from renderer import shadow_diff
 from renderer.renderer_lib import cluster
 from renderer.renderer_lib.context import load_stubs
@@ -187,8 +187,9 @@ def _render_tree_copy(tmp_path, stubs, edit=None) -> cluster.RenderedTag:
     tree = tmp_path
     role = tree / "k8s" / "roles" / TAG
     shutil.copytree(K8S_ROLES / TAG, role)
-    # The health ConfigMap ships host_lib.py from hosts/lib by repo_file().
+    # The health ConfigMap ships host_lib.py and check_verdict.py by repo_file().
     (tmp_path / "hosts").symlink_to(HOST_LIB_FILES.parent)  # repo_file('hosts/lib/...')
+    (tmp_path / "scripts").symlink_to(SCRIPTS)  # repo_file('scripts/lib/...')
     (tree / "secrets").mkdir()
     shutil.copy(SECRETS / "cluster-vars.source", tree / "secrets")
     if edit:

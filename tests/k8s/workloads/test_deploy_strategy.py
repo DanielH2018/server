@@ -99,6 +99,10 @@ _RECREATE = {
     ("karakeep", "karakeep-meilisearch"): "meilisearch holds an exclusive LMDB lock",
     # ── single-writer datastore / world save ──
     ("livesync", "livesync"): "couchdb single-writer data directory",
+    (
+        "vault-mcp",
+        "vault-mcp",
+    ): "livesync-cli allows one process per database directory",
     ("mosquitto", "mosquitto"): "single-writer persistence DB",
     ("valheim", "valheim"): "two servers writing one world save is worse than the gap",
     (

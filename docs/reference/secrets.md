@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/secrets.py
-generated_at: 2026-11-27 06:17 UTC
-generated_sha: f8cc3c595
+generated_at: 2026-11-27 18:17 UTC
+generated_sha: 1e9fa52cb
 ---
 
 !!! warning "Generated file — do not edit"
@@ -146,7 +146,7 @@ lives in a third-party system; rotate there first.
 | `monitor_bridge_deploy_pipeline_github_token` | 2026-10-11 | 2027-09-22 | 299 |
 | `monitor_discord_webhook_url` | 2026-09-19 | 2027-08-27 | 273 |
 | `mullvad_account` | 2025-11-16 | 2026-10-18 | -40 |
-| `riot_api_key` | 2026-02-27 | 2027-02-10 | 75 |
+| `riot_api_key` | 2026-11-27 | 2027-11-10 | 348 |
 | `weather_api_key` | 2026-08-30 | 2027-08-04 | 250 |
 | `wifi_password` | 2026-07-20 | 2027-06-24 | 209 |
 | `wireguard_interface_private_key` | 2026-02-09 | 2027-02-06 | 71 |

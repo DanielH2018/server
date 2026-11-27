@@ -34,3 +34,5 @@
 | `code-server-config` | None | — | — |
 | `scrutiny-influxdb-data` | None | — | — |
 | `slskd-config` | None | — | — |
+| `vault-mcp-vault` | None | — | — |
+| `vault-mcp-db` | None | — | — |

@@ -4,11 +4,13 @@ The operator asked on 2026-11-27 whether worktrees could be cheaper, for example
 edited files their own copy. This page holds the measurements from that day, the options
 compared against them, and the recommendation.
 
-**Recommendation: change no filesystem, mount or host package.** A worktree already shares its
+**Recommendation: change no filesystem or mount.** A worktree already shares its
 object store with the primary clone, and uv already hardlinks each `.venv` into the uv cache.
 A fresh tree holds about 67 MB of its own bytes and is usable in under a second. The largest
 avoidable cost found was outside the trees: superseded tool versions in `.git/alert-tools/`,
-364 MB on each host. `scripts/validate/alert_tools.sh` removes them past a 14-day grace.
+364 MB on each host. `scripts/validate/alert_tools.sh` removes them past a 14-day grace. The
+one host-package change the numbers support, a weekly `uv cache prune`, runs in the
+`worktree-sweep` component.
 
 ## Measurements (2026-11-27)
 
@@ -63,7 +65,7 @@ on a different filesystem from its uv cache, because both hosts keep every home 
 | Copy-on-write through reflinks (XFS `reflink=1` or btrfs) | At most the 67 MB checkout per tree, about 2.5 GB on daniel-box, under 1% of free space. `git worktree add` writes files from objects and makes no reflinks, so a tree would have to be `cp --reflink` of a template tree instead. | A new logical volume or a reformat on both hosts. The uv cache must move onto the same filesystem, or uv loses its hardlinks, which is the #10473 failure again. The pruner, `land_lib/fresh.py` and the fan-out's tree creation all need the template-copy path. | No. The saving is small against 422 GB and 170 GB free, and creation already takes 0.3 s. |
 | Sparse checkout, or `git worktree add --no-checkout` plus a partial checkout | Under half of the 31 MB of tracked content, since most sessions touch `scripts/`, `tests/`, `k8s/` and `docs/`. | The census tests, `repo_guards.py`, the prek hooks and the renderer read the whole tree. A sparse tree passes a check that a full tree fails. Fan-out batches would need each batch's path set before the tree exists. | No. |
 | One uv cache shared by `ubuntu` and the `claude` agent user | About 1 GB on daniel-box, where the two caches overlap. | The cache would need group write across the two user IDs, which undoes part of the agent user's separation (`docs/claude-agent-user.md`). uv's cache lock assumes one owner. | No. |
-| `uv cache prune` on a timer | Unreferenced wheels and builds. daniel-server's cache is 2.8 GB against daniel-box's 964 MB. | A host package change: a timer per host and user. A prune during a sync is safe, because uv locks its cache. | Worth asking the operator. It is the one host-package change these numbers support. |
+| `uv cache prune` in the weekly worktree sweep | On a hardlinked copy of daniel-server's 2.8 GB cache, the prune cut 3,515 MB to 751 MB, and an offline `uv sync --frozen` of master still succeeded against it. A file a live venv holds is freed when that tree goes. | A host package change to the `worktree-sweep` component. A prune during a sync is safe, because uv locks its cache. The agent user's 2.0 GB cache is pruned by the same script, which `homelab-claude-worktree-sweep` runs as the agent. | **Built**, at the operator's request. |
 | A shared read-only `.venv` | 2 to 13 MB per tree. | The venv's editable install points at one checkout's `scripts/`, so every tree would import another tree's code. A branch that changes `uv.lock` could not have its own dependencies. | No. |
 | overlayfs over a master tree | Most of the 67 MB checkout. | A mount per tree needs root or a user-namespace FUSE mount. The agent user has no sudo. A lower layer cannot change under a live mount, so master moving forces a remount. The pruner must unmount before it removes anything. | No. |
 | `PYTHONPYCACHEPREFIX` or `PYTHONDONTWRITEBYTECODE` for sessions | Up to 34 MB per tree. | A prefix keys bytecode by source path, so trees still share nothing and the bytes only move. No bytecode makes every test run recompile. | No. |
