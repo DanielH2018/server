@@ -143,13 +143,13 @@ RULE5_FLOOR = 38
 class NamedUse(NamedTuple):
     """A use rule 5 must find and accept on the real tree.
 
-    At least `count` accepted uses of `key` in `template` must each pass through `form`.
+    At least `min_uses` accepted uses of `key` in `template` must each pass through `form`.
     """
 
     template: str
     key: str
     form: str
-    count: int
+    min_uses: int
 
 
 # The uses rule 5 must accept on the real tree, so a rule that stops matching cannot pass.
@@ -376,9 +376,9 @@ def rule5_members(
             and use.key == member.key
             and member.form in use.forms
         )
-        if found < member.count:
+        if found < member.min_uses:
             problems.append(
-                f"{NO_SECRET_EXPRESSION}: named member gone: {member.count} accepted uses of "
+                f"{NO_SECRET_EXPRESSION}: named member gone: {member.min_uses} accepted uses of "
                 f"{member.key} through {member.form} in {member.template}, found {found}"
             )
     problems += not_alias_problems(result.bindings, not_aliases)

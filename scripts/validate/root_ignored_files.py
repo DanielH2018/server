@@ -95,7 +95,7 @@ def problems(repo: Path) -> list[str]:
 
 
 def main(argv: list[str] | None = None) -> int:
-    ArgumentParser(description=__doc__.split("\n\n")[0]).parse_args(argv)
+    ArgumentParser(description=(__doc__ or "").split("\n\n")[0]).parse_args(argv)
     found = problems(REPO)
     for name in found:
         print(

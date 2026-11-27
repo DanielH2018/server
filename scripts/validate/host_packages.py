@@ -443,7 +443,7 @@ def lint(paths: list[Path]) -> list[str]:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = ArgumentParser(description=__doc__.split("\n\n")[0])
+    parser = ArgumentParser(description=(__doc__ or "").split("\n\n")[0])
     commands = parser.add_subparsers(dest="command", required=True)
     render_cmd = commands.add_parser(
         "render", help="render every package of TREE into DIR"

@@ -139,7 +139,13 @@ def test_render_says_so_when_nothing_is_blocked():
 # --- the settled register ---------------------------------------------------------------
 
 
-def _settled(number, ruling, domain="cicd", reason="because", **kw):
+def _settled(
+    number,
+    ruling,
+    domain: str | None = "cicd",
+    reason: str | None = "because",
+    **kw,
+):
     return _row(
         number,
         state="CLOSED",

@@ -437,7 +437,7 @@ def ciphertext_only(paths: list[Path]) -> list[str]:
 
 def main(argv: list[str] | None = None, tree: Tree | None = None) -> int:
     """Parse `argv`, run the mode, and return its exit code."""
-    parser = ArgumentParser(description=__doc__.splitlines()[0])
+    parser = ArgumentParser(description=(__doc__ or "").partition("\n")[0])
     sub = parser.add_subparsers(dest="mode", required=True)
     sub.add_parser("write", help="operator-only: decrypt and rewrite the cluster files")
     pc = sub.add_parser("check", help="assert the cluster files without decrypting")

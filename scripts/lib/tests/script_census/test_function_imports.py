@@ -155,7 +155,7 @@ def _sibling_tree(tmp_path: Path, *, function: str = "run", pad: int = 0) -> Pat
     return scripts
 
 
-MOD_KEY = ("scripts/fx_pkg/fx_mod.py", "run", "fx_sibling")
+MOD_KEY: tuple[str, str, str] = ("scripts/fx_pkg/fx_mod.py", "run", "fx_sibling")
 
 
 def test_a_bare_sibling_import_is_flagged_though_a_by_path_run_would_resolve_it(

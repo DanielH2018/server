@@ -61,7 +61,7 @@ def main(argv: list[str] | None = None) -> int:
     Args:
         argv: command-line arguments, or None to use `sys.argv`.
     """
-    parser = ArgumentParser(description=__doc__.splitlines()[0])
+    parser = ArgumentParser(description=(__doc__ or "").partition("\n")[0])
     parser.add_argument("--out", type=_Path, required=True, help="output file path")
     args = parser.parse_args(argv)
 

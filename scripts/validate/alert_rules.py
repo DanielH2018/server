@@ -694,7 +694,7 @@ def prove_red(run: Runner = run_tool, fixtures: Path = FIXTURES) -> list[str]:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = ArgumentParser(description=__doc__.split("\n\n")[0])
+    parser = ArgumentParser(description=(__doc__ or "").split("\n\n")[0])
     parser.add_argument(
         "--prove-red",
         action="store_true",

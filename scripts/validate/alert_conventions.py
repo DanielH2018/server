@@ -285,7 +285,7 @@ def _load_yaml(path: Path) -> tuple[object, str | None]:
         return None, f"{path.name}: does not parse: {err}"
 
 
-def _alerts(doc: object) -> list[tuple[str, dict]]:
+def _alerts(doc: object) -> list[tuple[str | None, dict]]:
     """Every alerting rule in a parsed rule file, as (group name, rule) pairs."""
     groups = doc.get("groups") if isinstance(doc, dict) else None
     return [

@@ -419,7 +419,7 @@ def main(argv: list[str] | None = None) -> int:
         0 on success, 2 if one or more generators failed, 3 if the site build failed,
         64 for a bad command line.
     """
-    parser = ArgumentParser(description=__doc__.splitlines()[0])
+    parser = ArgumentParser(description=(__doc__ or "").partition("\n")[0])
     parser.add_argument(
         "--site-dir",
         default=str(Path.home() / "docs-site"),
