@@ -1663,11 +1663,37 @@ tests:
       # The daily snapshot's file was taken 171600s before time 0, so it is 174900s old at 55m.
       - series: 'homelab_check_last_run_timestamp_seconds{check="claude-pipeline-timeline", instance="daniel-box", job="node", origin="daniel-box"}'
         values: '-171600x60'
+      # The agent's weekly sweep wrote its file 1210200s before time 0, so it is 1213500s old at 55m.
+      - series: 'homelab_check_last_run_timestamp_seconds{check="claude-worktree-sweep", instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '0x60'
+      - series: 'homelab_check_last_run_timestamp_seconds{check="claude-worktree-sweep", instance="daniel-server", job="node", origin="daniel-server"}'
+        values: '-1210200x60'
       - series: 'up{instance="daniel-box", job="node", origin="daniel-box"}'
         values: '1x60'
       - series: 'up{instance="daniel-server", job="node", origin="daniel-server"}'
         values: '1x60'
     alert_rule_test:
+      - eval_time: 55m
+        alertname: ClaudeWorktreeSweepNotReporting
+        exp_alerts: []
+      - eval_time: 56m
+        alertname: ClaudeWorktreeSweepNotReporting
+        exp_alerts:
+          - exp_labels:
+              check: claude-worktree-sweep
+              instance: daniel-server
+              job: node
+              origin: daniel-server
+              severity: warning
+              service: daniel-server
+            exp_annotations:
+              summary: 'daniel-server: the agent worktree sweep has stopped reporting.'
+              description: >-
+                No claude-worktree-sweep verdict newer than 1213500s from daniel-server, so the
+                agent's weekly worktree sweep has not completed a clean run. Read `journalctl -u
+                homelab-claude-worktree-sweep`. If you disabled the timer on purpose, delete
+                this rule.
+              runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#claudeworktreesweepnotreporting
       - eval_time: 55m
         alertname: ClaudePipelineTimelineNotReporting
         exp_alerts: []

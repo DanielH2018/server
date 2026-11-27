@@ -37,6 +37,7 @@ def _run(
     prune_rc: int = 0,
     env: dict[str, str] | None = None,
     policy: bool = True,
+    user: str = "home",
 ):
     """Run `host`'s script with the pruner exiting `sweep_rc`; return its result and the ping URL.
 
@@ -46,8 +47,10 @@ def _run(
     `prune_rc` for `uv cache` and `reap_rc` for anything else.
     `env` replaces the inherited environment. `policy=False` leaves the checkout without
     `.claude/prune-worktrees.json`, as a checkout from before that file was added has.
+    The script runs with `HOME` at `tmp_path / user`, and `tmp_path / "home"` stands in for
+    sys_user's home, so another `user` runs it as the agent does.
     """
-    home = tmp_path / "home"
+    home = tmp_path / user
     (home / "server").mkdir(parents=True, exist_ok=True)
     if policy:
         (home / "server/.claude").mkdir(exist_ok=True)
@@ -80,7 +83,7 @@ def _run(
         "worktree-sweep.sh.j2",
         overrides={"sys_user": SYS_USER, "inventory_hostname": host},
     )
-    body = body.replace(f"/home/{SYS_USER}", str(home))
+    body = body.replace(f"/home/{SYS_USER}", str(tmp_path / "home"))
     # The script pins PATH, so the stubbed curl and hostname go in front of it there.
     body = body.replace("export PATH=", f"export PATH={stubs}:")
     assert "{{" not in body, body
@@ -89,6 +92,7 @@ def _run(
     env = {
         **(os.environ if env is None else env),
         "CREDENTIALS_DIRECTORY": str(credentials),
+        "HOME": str(home),
     }
     result = run(["bash", str(script)], env=env)
     return result, pinged.read_text().strip() if pinged.exists() else ""
@@ -167,6 +171,16 @@ def test_the_ops_cron_host_does_not_reap_when_nothing_was_removed(tmp_path):
 def test_a_sweep_on_another_host_does_not_reap_claims(tmp_path):
     # Its reap would read every claim the daniel-box orchestrator holds as stale.
     _run(tmp_path, 0, host="daniel-server", said=REMOVED_ONE)
+    assert _reaped(tmp_path) is None
+
+
+def test_a_sweep_as_the_agent_prunes_its_own_clone_and_does_not_reap(tmp_path):
+    # The agent's clone cannot see the operator's fan-out trees, so its reap would free live claims.
+    result, _ = _run(tmp_path, 0, said=REMOVED_ONE, user="agent")
+
+    assert result.returncode == 0
+    assert (tmp_path / "pruner-args").exists()
+    assert not (tmp_path / "home").exists()
     assert _reaped(tmp_path) is None
 
 

@@ -1,0 +1,19 @@
+[Unit]
+Description=Remove the {{ claude_code_agent_user }} agent user's merged worktrees, repair its git object store
+OnFailure={{ claude_code_sync_alert_unit }}
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+SyslogLevel=notice
+SyslogIdentifier=worktree-sweep
+# As the clone's owner, so the pruner's holder scan gets the agent's worktree-holders view.
+User={{ claude_code_agent_user }}
+Environment=HOME={{ claude_code_agent_user_home }}
+Environment=TMPDIR=/tmp
+# No ImportCredential=: the agent never holds the Healthchecks.io key, so the script sends no
+# ping and OnFailure= pages instead. The script is the worktree-sweep component's.
+ExecStart=/usr/lib/homelab/worktree-sweep
+{% from 'templates/timer-textfile.j2' import timer_textfile with context %}
+{{ timer_textfile(claude_code_agent_user ~ '-worktree-sweep', claude_code_agent_worktree_sweep_interval, 3600) }}
