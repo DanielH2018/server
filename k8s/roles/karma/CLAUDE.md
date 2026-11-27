@@ -33,9 +33,14 @@ See repo-root `CLAUDE.md` for shared conventions.
   fails when an alert rule uses a severity value the list does not carry.
 - **Karma authenticates by the `Remote-User` header** that Authelia's forwardAuth sets, so a
   silence records who made it. `/health` bypasses that check, and both probes use it.
-- **The default filters hide resolved alerts and the `blackhole` receiver** (`shadow` and
-  `drill` alerts). The Watchdog is a healthcheck filter: Karma hides it, and shows an error
-  when it stops firing.
+- **The default filters hide resolved alerts, the `blackhole` receiver** (`shadow`, `drill`
+  and `paged_by` alerts), **and the `email` receiver.** Every email route continues from a
+  discord route, so a critical would otherwise show twice, once per receiver. The Watchdog is
+  a healthcheck filter: Karma hides it, and shows an error when it stops firing.
+- **Homepage's Karma tile reads `/alerts.json` in-cluster** with the default filters copied
+  into each request. The `homepage_widget: true` key on the karma entry admits homepage
+  through Karma's fence. Karma proxies silence writes, so that fence also gives homepage a
+  path to silence an alert.
 
 ## Editing
 
