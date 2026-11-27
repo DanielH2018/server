@@ -10,7 +10,7 @@ real URL property (which Homepage turns into an <a href>) and cleans up the row.
 """
 
 import hashlib
-from datetime import UTC, datetime
+from datetime import date
 
 import icalendar
 import pytest
@@ -227,7 +227,7 @@ def test_the_earlier_of_two_matching_series_ends_the_day_before_the_later_starts
         ),
     )
     rules = {str(e["UID"]): e["RRULE"] for e in _events(app.process_ics(feed))}
-    assert rules["old"]["UNTIL"] == [datetime(2026, 2, 28, 23, 59, 59, tzinfo=UTC)]
+    assert rules["old"]["UNTIL"] == [date(2026, 2, 28)]
     assert "UNTIL" not in rules["new"]
 
 
@@ -239,7 +239,7 @@ def test_a_folded_rrule_keeps_every_part_when_capped():
     )
     rules = {str(e["UID"]): e["RRULE"] for e in _events(app.process_ics(feed))}
     assert rules["old"]["INTERVAL"] == [2]
-    assert rules["old"]["UNTIL"] == [datetime(2026, 2, 28, 23, 59, 59, tzinfo=UTC)]
+    assert rules["old"]["UNTIL"] == [date(2026, 2, 28)]
 
 
 def test_series_with_different_rules_are_not_capped():
