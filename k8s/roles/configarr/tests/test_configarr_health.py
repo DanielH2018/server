@@ -182,18 +182,21 @@ def _bundle_key_name_allowlist() -> re.Pattern[str]:
     return re.compile(regex)
 
 
-def test_the_parser_key_is_a_name_promotes_gitleaks_scan_admits():
-    # `generic-api-key` reads the parser's file name as a credential when it is the key, and the
+def test_each_lib_key_is_a_name_promotes_gitleaks_scan_admits():
+    # `generic-api-key` reads a lib module's file name as a credential when it is the key, and the
     # renderer drops any `# gitleaks:allow` on the line, so only the allowlist's shape passes.
     [cronjob] = yaml_fast.safe_load_all(
         render_role_template("configarr", "health-cronjob.yaml.j2")
     )
     pod = cronjob["spec"]["jobTemplate"]["spec"]["template"]["spec"]
     [volume] = [v for v in pod["volumes"] if "configMap" in v]
-    [item] = [
-        i for i in volume["configMap"]["items"] if i["path"] == "lib/k8s_conditions.py"
-    ]
-    assert _bundle_key_name_allowlist().match(f"          - key: {item['key']}")
+    items = [i for i in volume["configMap"]["items"] if i["path"].startswith("lib/")]
+    assert {i["path"] for i in items} == {
+        "lib/k8s_conditions.py",
+        "lib/check_verdict.py",
+    }
+    for item in items:
+        assert _bundle_key_name_allowlist().match(f"          - key: {item['key']}")
 
 
 def test_age_seconds_refuses_a_stamp_with_no_offset():

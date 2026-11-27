@@ -79,8 +79,18 @@ CONDITIONS = REPO / "scripts/lib/k8s_conditions.py"
 SOAK_READS = REPO / "scripts/renderer/job_files/soak_reads.py"
 SOAK_PODS = REPO / "scripts/renderer/job_files/soak_pods.py"
 PARSE = REPO / "scripts/renderer/job_files/flux_job_parse.py"
+VERIFY_LEGS = REPO / "scripts/renderer/job_files/flux_job_verify.py"
 SIBLINGS = {
-    p.name: p for p in (HELPER, CHANGED_SET, CONDITIONS, SOAK_READS, SOAK_PODS, PARSE)
+    p.name: p
+    for p in (
+        HELPER,
+        CHANGED_SET,
+        CONDITIONS,
+        SOAK_READS,
+        SOAK_PODS,
+        PARSE,
+        VERIFY_LEGS,
+    )
 }
 # DECIDED: an allowlist of imports, not a denylist of connecting calls. A denylist missed
 # `urlretrieve`, `asyncio.open_connection`, `ftplib` and `importlib` in review. No module
@@ -101,6 +111,7 @@ ALLOWED_IMPORTS = frozenset(
     {
         "flux_job_connect",
         "flux_job_parse",
+        "flux_job_verify",
         "changed_set",
         "k8s_conditions",
         "soak_reads",

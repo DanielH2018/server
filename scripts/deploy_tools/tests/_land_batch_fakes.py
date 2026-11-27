@@ -124,7 +124,7 @@ class GitHub:
             raise _refused(502, "Bad Gateway")
         if self._crash == f"{method} {path}":
             raise RuntimeError("a bug in the batch")
-        if path.startswith("pulls/") and method == "GET":
+        if path.startswith("pulls/") and method == "GET" and "/" not in path[6:]:
             pr = self.prs[path.removeprefix("pulls/")]
             if args[-1] in _REST:
                 return {field: pr[field] for field in _REST[args[-1]].split(",")}

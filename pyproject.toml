@@ -71,7 +71,7 @@ dev = [                              # `dev` is uv's default group for `uv run`/
 # Local test reruns only, absent from `default-groups`, so CI never installs it. docs/ci-throughput.md
 # says how to run it. The cap keeps testmon below 2.4.0, which has not been measured here.
 local = [
-  "pytest-testmon>=2.3,<2.4",
+  "pytest-testmon>=2.4,<2.5",
 ]
 # Tools only prek hooks and hand-run commands call, never a test. The CI jobs that run no lint
 # hook set UV_NO_GROUP=lint, so a lint tool's install (actionlint-py downloads its binary from
@@ -82,7 +82,7 @@ lint = [
   "actionlint-py",                  # workflow lint gate (prek hook); its build fetches the actionlint binary
   "mkdocs-material>=9.5",           # the docs site; `uv run mkdocs build` renders docs/ into site/
   "zizmor>=1.0",
-  "ty==0.0.111",                     # first-party Python type gate (prek hook). Pinned exactly, not
+  "ty==0.0.112",                     # first-party Python type gate (prek hook). Pinned exactly, not
   # `>=`, because ty is pre-1.0: a 0.0.x bump can add a rule or
   # change an inference and turn master red on an unrelated PR.
   # Renovate raises the bump as its own PR, which is where the
@@ -324,10 +324,14 @@ ignore_decorators = [
   "@mcp.tool",  # homelab-mcp tools, called by the MCP client
   "@app.route",  # ical-proxy Flask routes
   "@rule",  # Hypothesis state-machine rules, called by the machine
+  "@invariant",  # Hypothesis state-machine invariants, checked after every rule
+  "@initialize",  # Hypothesis state-machine first steps, run before any rule
 ]
 ignore_names = [
   # Hooks and handlers a framework calls by name.
   "do_*", "on_config", "on_files", "on_page_content", "pytest_*", "_missing_",
+  # A Hypothesis state machine's TestCase, which pytest collects by name.
+  "TestClaimLifecycle", "TestFanLoop", "TestHeldStore",
   # Enum members of a Kubernetes field's legal values in lib/k8s_objects.py, reached by value
   # through the enum's constructor, so a known state never reads as UNKNOWN.
   "FALSE", "CREATING", "ATTACHING", "DETACHING", "DELETING",
