@@ -10,6 +10,9 @@
     port               Service port to route to
     authelia           attach the forward-auth Middleware (services use_authelia)
     extra_middlewares  additional Middleware names, applied after the standard two
+    native_lb          route to the Service's cluster IP, so kube-proxy picks the endpoint.
+                       Traefik picks the pod itself by default and skips one that is not
+                       serving, whatever the Service's `publishNotReadyAddresses` says.
 
   The TLS block is explicit rather than relying on the TLSStore default. Omitting it makes
   Traefik request a certificate for the literal Host rule — a separate cert per hostname,
@@ -17,7 +20,7 @@
 #}
 {# DECIDED: no retry middleware in the default chain; the macro has no per-route opt-out, and a
    retry replays a POST body a terminating backend already consumed. #}
-{% macro ingressroute(name, hostname, port, authelia, extra_middlewares=[], namespace=none, public=true, bypass_prefixes=[]) -%}
+{% macro ingressroute(name, hostname, port, authelia, extra_middlewares=[], namespace=none, public=true, bypass_prefixes=[], native_lb=false) -%}
 {# One object per host: rate-limit keying and `spec.tls.options` differ, and each is per object.
    Public object only if k8s_public_route and not `public=false`: its absence is the guard, not DNS. #}
 {% for host, rate_limit, suffix, tls_option in [(hostname ~ '.local.' ~ domain, 'rate-limit', '', 'modern')] + ([(hostname ~ '.' ~ domain, 'rate-limit-proxied', '-public', 'cloudflare-origin-pull')] if k8s_public_route and public else []) %}
@@ -46,6 +49,9 @@ spec:
       services:
         - name: {{ name }}
           port: {{ port }}
+{% if native_lb %}
+          nativeLB: true
+{% endif %}
 {# `tls:` is never conditional (else a non-TLS router); only certResolver and domains are. #}
   tls:
 {% if k8s_tls_cert_resolver %}

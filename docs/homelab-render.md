@@ -279,6 +279,25 @@ lists, such as pihole's macro file, is in neither walk. A guard that reads one n
 own fallback table. `scripts/validate/render_lib/k8s.py` validates the same stub-mode files, and
 the files each tag renders from its `templates/verify/` and `templates/precheck/` too.
 
+### How the renderer writes a document it builds
+
+The renderer builds some documents itself: the Flux Kustomizations and the snapshot, soak,
+pre-pull and gate Jobs. It writes each one through
+`scripts/renderer/renderer_lib/manifest_yaml.py:dump` or `dump_all`, never through
+`yaml.safe_dump`.
+
+PyYAML writes YAML 1.1, and Flux and kubectl resolve a plain scalar by go-yaml's rules. PyYAML
+takes `05094468` for a string and writes it without quotes, and go-yaml reads the integer
+5094468. On 2026-11-27 a role's `digest8` had that value, its snapshot Job failed Flux's dry
+run on the env value's type, and the promotion set `DEPLOY_HOLD`. About 1.6% of 8-hex digests
+have such a shape. `dump` quotes every string `manifest_yaml.py:GO_YAML_NON_STRING` matches,
+which is the pattern the role-label filter uses for the documents a template wrote.
+
+The `renderer-lib-writes-yaml-through-manifest-yaml` row of
+`tests/repo/census_rows/test_census_rows_text.py` refuses a direct PyYAML write in
+`renderer_lib`. `scripts/renderer/tests/manifests/test_manifest_yaml_properties.py` checks the
+writer against the YAML 1.2 core schema's own resolution rules with generated strings.
+
 ## The Jinja dialect the renderer accepts
 
 [ADR-0028](adr/0028-the-renderer-supports-a-closed-jinja-subset.md) specifies the Jinja subset

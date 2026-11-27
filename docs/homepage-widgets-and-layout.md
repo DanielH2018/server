@@ -154,9 +154,11 @@ block and took its whole grid row from 120px to 136px.
   widget-proxy error on that tile is the symptom of it being dropped.
 - **The Longhorn widget dials `longhorn-frontend`, not `longhorn-backend`.** Longhorn's own
   chart-owned `longhorn-manager` policy admits six same-namespace components and nothing else,
-  and editing it means editing an object the Longhorn deploy would revert. `longhorn-frontend` is
-  selected by no policy at all and proxies `/v1` through as `app: longhorn-ui`, which that policy
-  does admit. The node-local-manager trap does not apply here: the caller is a pod and the target
+  and editing it means editing an object the Longhorn deploy would revert. `longhorn-frontend`
+  proxies `/v1` through as `app: longhorn-ui`, which that policy does admit. The UI pods have a
+  fence of their own, `k8s/roles/longhorn/templates/networkpolicy-ui.yaml.j2`, which admits
+  `app: homepage` beside Traefik. A widget that fails with `ECONNREFUSED` on the frontend
+  ClusterIP means that peer is gone. The node-local-manager trap does not apply here: the caller is a pod and the target
   is the frontend Service.
 - **Three widgets are deliberately absent**, each blocked on a credential rather than on
   plumbing: Grafana (#1384 — needs a service-account token; only the admin password exists),
