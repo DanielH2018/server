@@ -11,9 +11,8 @@ probe.py, so the dependency runs one way.
 import argparse
 
 
-from diagnostics.probe_lib.arr import ARR_PORTS
 from diagnostics.probe_lib.core import LOKI_STORE_HELP, LOKI_STORES
-from diagnostics.probe_lib import builder, lander, monitors, host_unit
+from diagnostics.probe_lib import arr, builder, lander, monitors, host_unit, qbit
 from diagnostics.probe_lib.flux import FLUX_HELP, FLUX_TAGS_HELP
 from diagnostics.probe_lib.landing_verdicts import VERDICTS_HELP, add_verdicts_args
 from lib.cli_help import ArgumentParser
@@ -390,31 +389,8 @@ def _build_parser():
         "than answering when the local kubectl serves a different one (#1663). Ignored "
         "with --docker, which reaches the Pi over ssh.",
     )
-    ar = sub.add_parser(
-        "arr", help="read-only *arr API GET (key from SOPS, fed via stdin)"
-    )
-    ar.add_argument("app", choices=sorted(ARR_PORTS))
-    ar.add_argument("path", help="api path, e.g. health, indexerstatus, notification")
-    _flag(ar, "--json", "print one-line JSON instead of pretty-printed")
-    _flag(
-        ar,
-        "--show-secrets",
-        "print credential-bearing field values instead of <redacted> "
-        "(they land in the transcript — see issue #1388)",
-    )
-    qb = sub.add_parser(
-        "qbit", help="read-only qBittorrent API GET (API key from SOPS, fed via stdin)"
-    )
-    qb.add_argument(
-        "path", help="api path, e.g. torrents/info?category=lidarr, app/preferences"
-    )
-    _flag(qb, "--json", "print one-line JSON instead of pretty-printed")
-    _flag(
-        qb,
-        "--show-secrets",
-        "print credential-bearing values instead of <redacted> "
-        "(they land in the transcript — see issue #1388)",
-    )
+    arr.add_parser(sub)
+    qbit.add_parser(sub)
     ha = sub.add_parser("ha", help="Home Assistant live state (read-only, GET)")
     hasub = ha.add_subparsers(dest="ha_cmd", required=True)
     hs = hasub.add_parser("state", help="GET /api/states/<entity_id>")
