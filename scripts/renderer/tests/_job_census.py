@@ -280,8 +280,7 @@ def backoff_offence(job: Mapping, directory: str, docs: list[dict]) -> list[str]
     limit = (job.get("spec") or {}).get("backoffLimit")
     if not isinstance(limit, int):
         return ["sets no backoffLimit"]
-    kind = _annotations(job).get(JOB_KIND)
-    want = BACKOFF.get(kind) if kind else None
+    want = BACKOFF.get(_annotations(job).get(JOB_KIND, ""))
     if want is not None and limit != want:
         return [f"backoffLimit is {limit}, and its kind takes {want}"]
     return []
