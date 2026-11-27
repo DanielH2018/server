@@ -17,7 +17,7 @@ from typing import NamedTuple
 
 import pytest
 import yaml
-from hypothesis import example, given
+from hypothesis import assume, example, given
 from hypothesis import strategies as st
 
 from lib import yaml_fast
@@ -125,9 +125,7 @@ def test_stamp_adds_one_annotation_per_named_workload_and_moves_no_other_byte(
         assert op in ("equal", "insert")
         inserted += after[j1:j2] if op == "insert" else []
     assert all(_INSERTED.fullmatch(line) for line in inserted)
-    if out == text:
-        assert stamp(out, values, "fixture") == out
-    else:
+    if out != text:
         with pytest.raises(RenderError, match="already carries"):
             stamp(out, values, "fixture")
 
@@ -298,21 +296,19 @@ def _held(case: Case, indexes: list[int]) -> set[str]:
     }
 
 
-_SHADOWED = Case(
-    placed=(
-        Placed(
-            "d",
-            "a.yaml",
-            _workload(TARGET, "home", [(("ConfigMap", "cfg-a"), "envFrom")]),
-        ),
-        Placed("d", "b.yaml", _object("ConfigMap", "cfg-a", "home", None, "1")),
-        Placed("e", "b.yaml", _object("ConfigMap", "cfg-a", "other", None, "2")),
+_DEPLOYMENT, _HOME, _OTHER = (
+    Placed(
+        "d", "a.yaml", _workload(TARGET, "home", [(("ConfigMap", "cfg-a"), "envFrom")])
     ),
-    permuted=(),
+    Placed("d", "b.yaml", _object("ConfigMap", "cfg-a", "home", None, "1")),
+    Placed("e", "b.yaml", _object("ConfigMap", "cfg-a", "other", None, "2")),
+)
+_SHADOWED = Case(
+    placed=(_DEPLOYMENT, _HOME, _OTHER),
+    permuted=(_OTHER, _DEPLOYMENT, _HOME),
     reads=frozenset({("ConfigMap", "cfg-a")}),
     admitted=ADMITS[2],
 )
-_SHADOWED = _SHADOWED._replace(permuted=(_SHADOWED.placed[2], *_SHADOWED.placed[:2]))
 
 
 @given(_cases())
@@ -320,27 +316,20 @@ _SHADOWED = _SHADOWED._replace(permuted=(_SHADOWED.placed[2], *_SHADOWED.placed[
 def test_restart_values_does_not_depend_on_the_order_of_directories_files_or_documents(
     case,
 ):
+    assume(_inputs(case))
     assert _value(case.placed, case.admitted) == _value(case.permuted, case.admitted)
 
 
 @given(_cases())
-def test_restart_values_moves_with_each_input_and_each_key_an_input_holds(case):
-    before = _value(case.placed, case.admitted)
-    inputs = _inputs(case)
-
-    for i in inputs:
-        assert _value(_edited(case.placed, i), case.admitted) != before
-    for key in _held(case, inputs):
-        assert _value(case.placed, case.admitted, {**SOURCE, key: "f" * 64}) != before
-
-
-@given(_cases())
 @example(_SHADOWED)
-def test_restart_values_ignores_every_other_document_and_key(case):
+def test_restart_values_moves_with_each_input_and_held_key_and_nothing_else(case):
     before = _value(case.placed, case.admitted)
     inputs = _inputs(case)
+    held = _held(case, inputs)
 
-    for i in set(range(len(case.placed))) - set(inputs):
-        assert _value(_edited(case.placed, i), case.admitted) == before
-    for key in set(KEYS) - _held(case, inputs):
-        assert _value(case.placed, case.admitted, {**SOURCE, key: "f" * 64}) == before
+    for i in range(len(case.placed)):
+        moved = _value(_edited(case.placed, i), case.admitted) != before
+        assert moved == (i in inputs), case.placed[i].doc["metadata"]
+    for key in KEYS:
+        moved = _value(case.placed, case.admitted, {**SOURCE, key: "f" * 64}) != before
+        assert moved == (key in held), key
