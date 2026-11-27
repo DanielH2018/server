@@ -83,7 +83,7 @@ PRs arrived faster than the turn could serve them: 46 `ci.yml` pull-request runs
 between 14:00 and 15:00. When a serial landing is live, the turn serves only docs- and
 tests-only PRs, so the line keeps growing until the serial landing ends.
 
-The log line `another landing has held the turn for 5520s, reaching merge_timeout` reports
+The log line `waited 5520s for the landing turn, reaching merge_timeout` reports
 how long the waiting landing waited. Several holders had the turn in that time.
 
 ## Changes built and landed
