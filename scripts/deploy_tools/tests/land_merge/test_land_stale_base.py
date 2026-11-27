@@ -2,8 +2,8 @@
 
 Inside the landing turn a head gets its run on the master its merge lands on
 (`test_land_turn.py`, `test_land_rejoin_line.py`). A stale green head that reaches the merge
-anyway merges as it stands, unless the operator approved it: an approved head is refused when
-master changed a path the PR changes, because an update would void the approval.
+anyway merges as it stands when master changed no path the PR changes, and is refused when it
+did. An approved head's refusal names a rebase, because an update would void the approval.
 
 Run: uv run pytest scripts/deploy_tools/tests/land_merge/test_land_stale_base.py
 """
@@ -44,7 +44,7 @@ def _gh_writes(calls) -> list[str]:
     """Each PUT the landing sent, as `<endpoint> <pinned sha>`."""
     writes = []
     for name, args, _ in calls:
-        if name == "gh":
+        if name == "gh" and "PUT" in args:
             pin = next(a for a in args if a.startswith(("sha=", "expected_head_sha=")))
             writes.append(f"{args[3].rsplit('/', 1)[-1]} {pin.split('=')[1][:4]}")
     return writes
@@ -54,19 +54,80 @@ def _compares(calls) -> list[str]:
     return [c[1][1] for c in calls if c[0] == "gh:compare"]
 
 
-def test_a_stale_head_nobody_approved_merges_as_it_stands_without_a_compare(landing):
-    """Master's own run tests it; the landing spends no read on a base it will not act on."""
+def _stale_draft_without_the_turn(landing, pr_file: str):
+    """A draft whose run tested TESTED, landed by a landing that went on without the turn.
+
+    No update comes before the ready flip, so the run tested the master of the PR's last push,
+    and master has since changed INCIDENT_2922.
+    """
     ln, calls = landing(
         Fakes(
-            gh_views={"state,mergeable,headRefOid": _polls(OLD)},
+            gh_views={
+                "isDraft,state,mergeable,headRefOid": [
+                    {
+                        "isDraft": True,
+                        "state": "OPEN",
+                        "mergeable": "MERGEABLE",
+                        "headRefOid": OLD,
+                    }
+                ],
+                "state,mergeable,headRefOid": _polls(OLD),
+            },
+            tested_base={OLD: TESTED},
             compare=[INCIDENT_2922],
-            pr_files=[{"status": "modified", "filename": INCIDENT_2922[1]}],
+            pr_files=[{"status": "modified", "filename": pr_file}],
         )
     )
-    ln.direct_merge_subject = "Document the lander"
+    ln.direct_merge_subject = "probe.py arr: --timeout"
+    return ln, calls
+
+
+def test_a_stale_head_is_refused_when_master_changed_one_of_its_paths(landing):
+    ln, calls = _stale_draft_without_the_turn(landing, INCIDENT_2922[1])
+    with pytest.raises(Outcome) as exc:
+        merge.await_merge(ln)
+    assert exc.value.rc == 1
+    assert "1 path(s) PR #999 changes" in exc.value.error
+    assert _gh_writes(calls) == []
+    assert _compares(calls) == [f"repos/{{owner}}/{{repo}}/compare/{TESTED}...master"]
+
+
+def test_a_stale_head_whose_paths_master_did_not_touch_merges_as_it_stands(landing):
+    """Master's own run tests it: the accepted risk of the overlap ruling."""
+    ln, calls = _stale_draft_without_the_turn(landing, "docs/landing.md")
     merge.await_merge(ln)
     assert _gh_writes(calls) == ["merge aaaa"]
-    assert _compares(calls) == []
+
+
+def test_the_head_the_landings_own_update_made_is_refused_when_master_moved_past_it_again(
+    landing,
+):
+    """The update tested NEW against TESTED; master then changed the PR's path once more."""
+    pr_file = INCIDENT_2922[1]
+    ln, calls = landing(
+        Fakes(
+            gh_views={
+                "isDraft,state,mergeable,headRefOid": [
+                    {
+                        "isDraft": True,
+                        "state": "OPEN",
+                        "mergeable": "MERGEABLE",
+                        "headRefOid": OLD,
+                    }
+                ],
+                "state,mergeable,headRefOid": _polls(OLD, NEW, NEW),
+            },
+            tested_base={NEW: TESTED},
+            compare=[[pr_file]],
+            pr_files=[{"status": "modified", "filename": pr_file}],
+        )
+    )
+    ln.direct_merge_subject = "probe.py arr: --timeout"
+    with pytest.raises(Outcome) as exc:
+        merge.await_merge(ln, lambda _draft: (True, 0))
+    assert "1 path(s) PR #999 changes" in exc.value.error
+    assert _gh_writes(calls) == ["update-branch aaaa"]
+    assert _compares(calls)[-1] == f"repos/{{owner}}/{{repo}}/compare/{TESTED}...master"
 
 
 @pytest.mark.parametrize(
@@ -178,12 +239,10 @@ def test_the_policy_checks_and_pins_the_head_the_turns_own_update_made(landing):
     assert _gh_writes(calls) == ["update-branch aaaa", "merge bbbb"]
 
 
-def _approved_landing(landing, tmp_path, compare, mergeable="MERGEABLE", pr_files=None):
+def _approved_landing(landing, tmp_path, compare, pr_files=None):
     """A policy landing whose head OLD the operator approved, armed and ready to await."""
     approval_paths = tmp_path / "approval-paths"
     approval_paths.write_text("scripts/deploy_tools/land\n")
-    polls = _polls(OLD)
-    polls[0]["mergeable"] = mergeable
     ln, calls = landing(
         Fakes(
             gh_views={
@@ -200,7 +259,7 @@ def _approved_landing(landing, tmp_path, compare, mergeable="MERGEABLE", pr_file
                     "isCrossRepository": False,
                 },
                 "headRefOid": {"headRefOid": OLD},
-                "state,mergeable,headRefOid": polls,
+                "state,mergeable,headRefOid": _polls(OLD),
             },
             pr_files=pr_files or [{"status": "modified", "filename": APPROVED_FILE}],
             pr_reviews=[
@@ -225,16 +284,12 @@ def _approved_landing(landing, tmp_path, compare, mergeable="MERGEABLE", pr_file
 
 
 @pytest.mark.parametrize(
-    ("compare", "mergeable", "pr_files"),
+    ("compare", "pr_files"),
     [
-        pytest.param([*INCIDENT_2922, APPROVED_FILE], "MERGEABLE", None, id="overlap"),
-        pytest.param(INCIDENT_2922, "CONFLICTING", None, id="conflicting"),
-        pytest.param(
-            [f"docs/{i}.md" for i in range(300)], "MERGEABLE", None, id="capped-compare"
-        ),
+        pytest.param([*INCIDENT_2922, APPROVED_FILE], None, id="overlap"),
+        pytest.param([f"docs/{i}.md" for i in range(300)], None, id="capped-compare"),
         pytest.param(
             INCIDENT_2922,
-            "MERGEABLE",
             [
                 {
                     "status": "renamed",
@@ -247,10 +302,10 @@ def _approved_landing(landing, tmp_path, compare, mergeable="MERGEABLE", pr_file
     ],
 )
 def test_a_stale_approved_head_is_refused_without_an_update(
-    landing, tmp_path, compare, mergeable, pr_files
+    landing, tmp_path, compare, pr_files
 ):
     """The update would make a head the approval does not name; merging it is untested."""
-    ln, calls = _approved_landing(landing, tmp_path, [compare], mergeable, pr_files)
+    ln, calls = _approved_landing(landing, tmp_path, [compare], pr_files)
     with pytest.raises(Outcome) as exc:
         merge.await_merge(ln)
     assert exc.value.rc == 1
