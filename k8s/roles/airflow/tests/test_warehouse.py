@@ -99,8 +99,27 @@ class Borrowed:
     def __getattr__(self, name):
         return getattr(self.db, name)
 
+    def cursor(self):
+        return WithoutPostgresOnly(self.db.cursor())
+
     def close(self):
         pass
+
+
+class WithoutPostgresOnly:
+    """A SQLite cursor that skips the statements of `ensure_schema` SQLite has no form of."""
+
+    SKIPPED = ("SELECT pg_advisory_xact_lock", "CREATE SCHEMA", "GRANT ")
+
+    def __init__(self, cursor):
+        self.cursor = cursor
+
+    def __getattr__(self, name):
+        return getattr(self.cursor, name)
+
+    def execute(self, sql, *params):
+        if not sql.startswith(self.SKIPPED):
+            self.cursor.execute(sql, *params)
 
 
 def test_a_check_hands_each_tables_day_to_the_judge_and_fails_on_its_problems(conn):
@@ -133,6 +152,26 @@ def test_a_check_hands_each_tables_day_to_the_judge_and_fails_on_its_problems(co
         )
     ]
     assert connect.opened == 1
+
+
+def test_a_check_with_no_problems_records_the_dag_and_day_as_passed(conn):
+    sqlite3.register_adapter(datetime, datetime.isoformat)
+    conn.execute("ATTACH DATABASE ':memory:' AS meta")
+    connect = Borrowed(conn)
+
+    check_day(
+        connect,
+        "prom_daily_rollup",
+        NOV_17,
+        ["temps"],
+        lambda day, temps: [],
+        placeholder="?",
+    )
+
+    assert conn.execute("SELECT dag_id, day FROM meta.check_log").fetchall() == [
+        ("prom_daily_rollup", NOV_17)
+    ]
+    assert connect.opened == 2
 
 
 def test_a_recheck_replaces_the_days_record(conn):
