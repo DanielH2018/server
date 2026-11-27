@@ -184,6 +184,7 @@ files:
   - {src: templates/claude-takeover-check.sudoers.j2, dst: /etc/sudoers.d/homelab-takeover-check, mode: "0440", when: "claude_code_takeover_check_enabled"}
   # Tags and textfiles keep the names `sync-artifacts` and `claude-otel-health`, which Loki and
   # host-checks rules read.
+  - {src: tmpfiles.d/homelab-claude-tmp-age.conf, dst: /usr/lib/tmpfiles.d/homelab-claude-tmp-age.conf}
   - {src: tmpfiles.d/homelab-artifacts.conf.j2, dst: /usr/lib/tmpfiles.d/homelab-artifacts.conf, when: "inventory_hostname == claude_code_artifacts_node"}
   - {src: templates/sync-artifacts.sh.j2, dst: /usr/lib/homelab/sync-artifacts, mode: "0755", when: "inventory_hostname == claude_code_artifacts_node"}
   - {src: units/homelab-sync-artifacts.service.j2, dst: /usr/lib/systemd/system/homelab-sync-artifacts.service, when: "inventory_hostname == claude_code_artifacts_node"}

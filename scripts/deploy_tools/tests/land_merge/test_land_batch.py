@@ -59,6 +59,21 @@ def test_a_head_the_batch_tested_gets_no_branch_update_and_no_stale_base_check(
     assert updates == []
 
 
+def test_a_holder_that_stepped_out_of_the_turn_before_its_batch_merges_the_green_batch(
+    batch_of,
+):
+    moved = Fakes(
+        compare=[["docs/notes.md"]],
+        pr_files=[{"filename": "docs/notes.md", "status": "modified"}],
+    )
+    ln, hub, _ = batch_of(drafts=("7",), fakes=moved)
+    # As a wait in line for a serial landing leaves it (`turn.held`'s `step_out`).
+    ln.turn_interrupted = True
+    land(ln)
+    assert hub.merged == [OWN, "7"]
+    assert hub.full_runs == []
+
+
 def test_another_landing_of_the_holders_own_pr_is_not_stacked_behind_it(batch_of):
     ln, hub, the_line = batch_of(drafts=("7",))
     the_line("join", OWN, head_of(OWN))
