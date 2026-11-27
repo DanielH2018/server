@@ -17,13 +17,22 @@ becomes a named invariant with a test.
 
 - **Ruled, 2026-11-27: direct cutover.** The pre-merge loop is replaced in one slice, guarded
   by characterization traces and a differential test. No shadow mode runs beside it.
-- **Open: who runs `schedule`.** *The queue: tickets over the flock* compares a distributed
-  queue, a coordinator daemon and a hybrid, and recommends the first.
-- **Open: how far the design reaches past the landing.** *The cycle around the landing*
-  compares one machine for the whole change with a typed contract at each stage boundary,
-  and recommends the second.
+- **Ruled, 2026-11-27: the queue is distributed.** Each landing runs `schedule` over the
+  tickets it reads, and the `flock` is the only mutual exclusion. A coordinator daemon may be
+  added later as an adviser on order. *The queue: tickets over the flock* holds the
+  comparison behind the ruling.
+- **Ruled, 2026-11-27: a typed contract at each stage boundary,** and one read model, in
+  place of one state machine for the whole change. *The cycle around the landing* holds the
+  comparison.
+- **Asked, 2026-11-27: use resources well at the landing bottleneck,** local runners
+  included. *What a turn costs* holds the measurements and the answer.
+- **Asked, 2026-11-27: the deploy UI tracks a change from state to state,** and its progress
+  within a state. *The deploy UI reads the machine's state* holds the design.
+- **Open: whether a serial PR yields the turn**
+  ([#10284](https://github.com/DanielH2018/server/issues/10284)). Slice 3 waits on it.
 
-Nothing here is built. The validation below read the code at master `ce5c3abfa`.
+Nothing here is built. The validation below read the code at master `ce5c3abfa`. The
+milestone is `Landing pipeline state machine`.
 
 ## What the pipeline is, validated against the code
 
@@ -287,9 +296,9 @@ Three designs can own the queue. The invariants hold under each.
     - It costs both implementations, and the fallback is the one that runs least. A path that
       rarely runs is where a defect stays hidden.
 
-**Recommendation: distributed, with `schedule` kept pure and the `flock` as the only mutual
-exclusion.** That is the hybrid's fallback, built first and used always. A daemon can be
-added later as an adviser on order, and adding it changes who calls `schedule`, not what
+**Ruled, 2026-11-27: distributed, with `schedule` kept pure and the `flock` as the only
+mutual exclusion.** That is the hybrid's fallback, built first and used always. A daemon can
+be added later as an adviser on order, and adding it changes who calls `schedule`, not what
 `schedule` decides. The replay simulator (slice 6) measures whether the poll gap and
 pipelining are worth a daemon before one is built.
 
@@ -418,51 +427,211 @@ from issue to done. It is the measurement the cycle has.
     - Against: no single record says where a change is. The read model answers that after
       the fact.
 
-**Recommendation: the contracts.** They reach the three losses the day's data shows: failed
-landings found late, the retry loop run by hand, and bursts. One machine for the change adds a
-store and a migration of the claim and fan-out tools, and it still could not see into the
-implementation stage.
+**Ruled, 2026-11-27: the contracts.** They reach the three losses the day's data shows:
+failed landings found late, the retry loop run by hand, and bursts. One machine for the
+change adds a store and a migration of the claim and fan-out tools, and it still could not
+see into the implementation stage.
+
+## What a turn costs
+
+One landing at a time holds the turn, so the turn's seconds are the scarce resource. The
+green batches of 2026-11-26 and 2026-11-27 whose logs are clean show where they go.
+
+- **A turn takes about 220 to 250 s for each PR it merges.** Twenty PRs merged in 4380 s of
+  turn on 2026-11-27, and 29 in 7170 s the day before.
+- **The batch's CI run is two thirds of the turn**, with a median of 360 s.
+- **The rest is polling.** The holder's own merge follows the green run by a median of 45 to
+  60 s, and each member's by 30 s. Both are whole polls of 30 s. A turn that merged four PRs
+  took 510 s, and about 150 s of it was the gap between a check finishing and the next poll.
+- **A batch merged 2.5 PRs on average**, against a limit of 4.
+
+### The run waits on one job, not on runners
+
+Two batch runs, read job by job from GitHub:
+
+- Run 46054678957, with no host change, took 358 s. The `hooks` job ran 335 s, and its full
+  sweep step 283 s. The next job to finish was a `pytest` shard at 243 s.
+- Run 46065308899, with a host change, took 555 s. `host_packages (26.04, 3.14)` ran 417 s,
+  and its updater cases 375 s. It starts 114 s in, after the build job. The next job
+  finished at 240 s.
+- No job in either run waited more than 22 s for a runner. In the 16:50 to 18:00 burst a
+  median of 4.5 hosted jobs ran against the cap of 20.
+
+So the run lasts as long as its slowest job, and the runners beside that job sit idle.
+
+### What a local runner would change
+
+Nothing that helps. `docs/ci-throughput.md`, *Phase C, not planned*, measured runner pods on
+2026-11-20, and the operator ruled against them. Its three findings still hold, and the
+figures above agree with them:
+
+- **A pod is slower than a hosted leg.** A hosted `hooks` or `pytest` job ran 145 s at the
+  median, each on a machine of its own. One pod on daniel-box ran the suite in 209 s on 8
+  workers. A full hook sweep on daniel-box, timed for this page on 16 cores, took 201 s of
+  wall time and 554 s of CPU, against 166 s and 283 s for that step in the two hosted runs.
+- **The run does not wait for a runner.** A pod wins only when the hosted wait is over about
+  100 s, and the batch runs above waited 22 s at most.
+- **The hosts are loaded when landings burst**, and both fell below the 8 GiB memory floor in
+  the fortnight measured.
+
+The question reopens on one measurement: two batch runs at once, under pipelining, would
+need 18 to 24 hosted jobs against the cap of 20. The simulator of slice 6 reports the peak.
+
+Local work does help in one place, before the queue. A draft's first CI verdict comes at its
+turn, and eleven landings ended `pr-ci-red` on 2026-11-27. A pre-flight on the session's own
+host ([#10521](https://github.com/DanielH2018/server/issues/10521)) names a red PR before it
+costs a turn. Its result is advisory, by ADR-0032.
+
+### What would use the turn better, in order
+
+1. **Fill the batch.** Tickets and the fix for #10559 put every waiting draft where a holder
+   can stack it, and [#10527](https://github.com/DanielH2018/server/pull/10527) raises the
+   limit to 6. The same run then carries more PRs.
+1. **Poll faster while holding the turn**
+   ([#10574](https://github.com/DanielH2018/server/issues/10574)). Only the holder polls at
+   the faster rate, so the quota cost is one landing's.
+1. **Split the run's slowest job**
+   ([#10575](https://github.com/DanielH2018/server/issues/10575)): the `hooks` sweep and the
+   host-package updater cases, onto hosted runners that sit idle.
+1. **Stop spending turns on landings that cannot merge.** The pre-flight, and the `next=`
+   field that tells a session what a failed landing needs.
+1. **Overlap the next batch's run with this batch's merges** (slice 7), and let a batch run
+   its CI while a serial landing deploys.
+
+## The deploy UI reads the machine's state
+
+`hosts/components/deploy-ui/` is the one browser view of landings in progress, by the
+operator's ruling of 2026-11-06. `probe.py landing` reads its API. It learns a landing's
+phase by matching the `== N/M` step headers in the landing's log and showing the last line
+under the newest one. Its tests hold those strings to a hand-written fixture, not to the
+code that prints them.
+
+It cannot show:
+
+- which of Queued, Holding, Yielded or Proving a landing is in, unless a sentence says so;
+- how long a landing has been in a state, because the log has no times;
+- who holds the turn, who waits and in what order, the slots or the serial lock, because
+  it watches the git-tree lock only;
+- a landing on daniel-server, because it reads log files on daniel-box;
+- progress inside a state.
+
+### One state record for each live landing
+
+The transition writer of slice 1 has two outputs.
+
+- **A state record on the turn host**, one small JSON file for each PR, written by an atomic
+  rename. It holds the PR, the host, the pid, the state, when the landing entered it, the
+  states before it with their entry times, and a progress triple: done, total and what. A
+  landing on daniel-server writes it through ssh, as it writes its place in the line.
+- **A transition record in syslog**, which Loki keeps and `pipeline_timeline.py` reads.
+
+The page reads the state records. A record is a file on the page's own host, so the page
+does not depend on Loki to show a landing that is deploying Loki.
+
+### What the page shows
+
+- **The queue, in order:** the landing that holds the turn, then each waiting landing in the
+  order the turn serves them, with its position. A landing that stepped out shows what it
+  waits for.
+- **Each landing's state,** with the time in it and the states behind it.
+- **Progress within the state.** Each comes from a read the landing already makes, so it
+  adds no GitHub call:
+    - Queued: the tickets ahead.
+    - Testing, Proving and MasterCI: checks finished of checks expected.
+    - Merging a batch: members merged of members.
+    - Yielded: the serial landing it waits for, or the seconds to the quota's reset.
+    - Promoting: Kustomizations ready of total, then the soak's status.
+    - HostWait: hosts applied of hosts.
+    - Grading: tags gated of tags.
+- **The change around the landing**
+  ([#10577](https://github.com/DanielH2018/server/issues/10577)): one row for each open
+  change, with its stage and its state within the stage, each read from the tool that owns
+  the stage. This is the live half of the read model, and `pipeline_timeline.py` is the
+  half that looks back.
+
+### How the page stays current
+
+- The state names are one enum in `land_lib`, and a test fails when a state has no label on
+  the page. The verdict names are already held to `outcome.VERDICTS` this way.
+- The page renders a state it does not know by its raw name, so a landing on newer code is
+  never blank.
+- The phase stops coming from log sentences, and that derivation is deleted.
+- `hosts/components/deploy-ui/CLAUDE.md` changes in the PR that changes the page.
 
 ## The plan, in slices
 
 Each slice lands on its own through `land.sh`, keeps every check, and leaves something to
 exercise. Order is middle-out: the contract and the model first, then the code behind them.
 
-1. **Transition log.** `Ledger` holds a landing's stamps and writes them once, at the end.
-   This slice writes one record for each state change as it happens: PR, from-state,
-   to-state, event and time. A landing that hangs or dies then leaves its history, and
-   `pipeline_timeline.py` can read it. No behaviour change.
-1. **The queue model and its invariants.** The prototype moves from the test tree into
-   `core/` as the functions slice 3 calls, with the extended import guard. The code does not
-   call it in this slice.
-1. **Tickets.** First the fix for #10559: a landing that steps out keeps its place. Then the
-   ticket in each place, deferral to an older fresh ticket, and stacking in ticket order. This
-   is the first behaviour change, and it waits on the ruling for #10284.
-1. **The landing machine for the pre-merge half, by direct cutover.**
+1. **State and transition records**
+   ([#10561](https://github.com/DanielH2018/server/issues/10561)). `Ledger` holds a landing's
+   stamps and writes them once, at the end. This slice writes a state record on the turn
+   host and a transition record in syslog at each state change. A landing that hangs or dies
+   then leaves its history, and the deploy UI and `pipeline_timeline.py` can read it. No
+   behaviour change.
+1. **The turn's ordering decisions as pure functions**
+   ([#10562](https://github.com/DanielH2018/server/issues/10562)). `may_take` and `stackable`
+   move into `core/`, with the rules the code follows at master, and `turn._wait` and
+   `batch._members` call them. The prototype's state machine checks the functions the code
+   calls. No behaviour change.
+1. **Tickets** ([#10564](https://github.com/DanielH2018/server/issues/10564)). First the fix
+   for #10559: a landing that steps out keeps its place. Then the ticket in each place,
+   deferral to an older fresh ticket, and stacking in ticket order. This is the first
+   behaviour change. It waits on the operator's go-ahead and on the ruling for #10284.
+1. **The landing machine for the pre-merge half, by direct cutover**
+   ([#10570](https://github.com/DanielH2018/server/issues/10570)).
     1. `LandingState`, `step` and the characterization traces land first. Nothing calls
        `step`, and the tests hold it to the traces.
     1. One PR replaces the loop in `merge.await_merge` with the driver and deletes the loop.
        The differential test and the traces guard it.
-1. **The queue machine owns scheduling.** Batch formation, the serial rule and slot grants
-   move from `turn`, `line`, `batch` and `slots` into `schedule`. #10284 becomes a ruling and
-   a one-line change.
-1. **Replay simulator.** It compares batch size, serial-last and pipelining on recorded days.
-1. **Pipelining**, if the simulator shows the gain. A batch run peaks at 9 to 12 concurrent
-   jobs. In the 16:50 to 18:00 burst a median of 4.5 jobs ran against the cap of 20, so a
-   second run fits.
-1. **Post-merge phases as states.** Resolving, master CI, promotion, hosts and health join
-   the machine for the transition log and the verdict map, with little code change.
+1. **The queue machine owns scheduling**
+   ([#10571](https://github.com/DanielH2018/server/issues/10571)). Batch formation, the
+   serial rule and slot grants move from `turn`, `line`, `batch` and `slots` into `schedule`.
+   #10284 becomes a ruling and a one-line change.
+1. **Replay simulator** ([#10576](https://github.com/DanielH2018/server/issues/10576)). It
+   compares batch size, serial-last and pipelining on recorded days, and reports the peak of
+   concurrent CI jobs.
+1. **Pipelining** ([#10578](https://github.com/DanielH2018/server/issues/10578)), if the
+   simulator shows the gain. A batch run peaks at 9 to 12 concurrent jobs. In the 16:50 to
+   18:00 burst a median of 4.5 jobs ran against the cap of 20, so a second run fits.
+1. **Post-merge phases as states**
+   ([#10572](https://github.com/DanielH2018/server/issues/10572)). Resolving, master CI,
+   promotion, hosts and health join the machine for the transition records and the verdict
+   map, with little code change.
 
-If the contracts are ruled in, they are four more slices, each independent of the eight
-above: the `next=` field, the pre-flight result, the launch gate and the timeline's attempts.
+Eight more slices stand beside those eight. None waits for the landing machine.
+
+- **The stage contracts:**
+    - `LAND-RESULT:` names the next action
+      ([#10565](https://github.com/DanielH2018/server/issues/10565)).
+    - The pre-flight result ([#10521](https://github.com/DanielH2018/server/issues/10521)).
+    - The launch gate reads the queue's depth
+      ([#10566](https://github.com/DanielH2018/server/issues/10566)).
+    - The timeline counts the landings for each PR
+      ([#10568](https://github.com/DanielH2018/server/issues/10568)).
+- **The turn's time:**
+    - The holder polls faster ([#10574](https://github.com/DanielH2018/server/issues/10574)).
+    - The run's slowest job is split
+      ([#10575](https://github.com/DanielH2018/server/issues/10575)).
+- **The deploy UI:**
+    - The landing view, after slice 1
+      ([#10573](https://github.com/DanielH2018/server/issues/10573)).
+    - The change view, after it
+      ([#10577](https://github.com/DanielH2018/server/issues/10577)).
+
+Two defects found during the validation are filed apart from the slices:
+[#10559](https://github.com/DanielH2018/server/issues/10559), the lost place, and
+[#10560](https://github.com/DanielH2018/server/issues/10560), a lock that outlives
+daniel-server.
 
 ## Costs and risks
 
 - **This is the code every session lands through.** A bug in a slice stalls every landing.
   The cutover in slice 4 is the largest single change. The fresh-checkout re-run still
   protects landings that started on older code, and a revert of one PR restores the loop.
-- **A model in the test tree can drift from the code.** Slice 2 exists for one slice only.
-  From slice 3 the code calls the model's functions, so no second implementation remains.
+- **A model in the test tree can drift from the code.** The prototype is such a model, and a
+  review of its tests marked nine of ten as discards for that reason. Slice 2 therefore
+  lands the functions with the code calling them, so no second implementation exists.
 - **Complexity delta.** The target moves logic rather than adding it. The pre-merge modules
   hold about 2,850 lines. The core plus the slimmer modules should hold about the same, with
   the decisions in pure functions and the I/O behind `Tools`. Tickets add one field to a
