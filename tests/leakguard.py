@@ -489,6 +489,8 @@ def pytest_configure(config: pytest.Config) -> None:
     textfile_dir = stub_dir / "textfile"
     textfile_dir.mkdir()
     os.environ["TEXTFILE_DIR"] = str(textfile_dir)
+    # lib.github_rest loads the host's installed gh_quota.py, which can predate its PYTEST_VERSION rule.
+    os.environ["GH_QUOTA_MODE"] = "off"
 
     real_popen_init = subprocess.Popen.__init__
 
