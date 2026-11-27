@@ -1127,11 +1127,17 @@ deployed it a minute later (issue #1544).
 
 Every run writes one logfmt line to syslog on exit (`logger -t landing-annotation`): the PR, the
 merge SHA, the verdict, and seconds spent in each phase — `wait_merge`, `wait_ci`, `deploy`,
-`total`. `deploy` runs from master CI's answer to the end of the promotion wait. Two more
-fields measure the landing turn. `turn_wait` is the part of `wait_merge` spent waiting for
-the turn, a batch's run excluded. `batch` counts the PRs that one run tested for a landing
-that took the turn with a draft, its own included, so `1` means nobody stood in the line
-behind it. Each is empty for a landing that never reached it.
+`total`. `deploy` runs from master CI's answer to the end of the promotion wait. Three more
+fields measure the queueing before the merge. `turn_wait` is the seconds the landing spent
+waiting for the turn, a batch's run excluded. It counts every ask, including the one after
+the landing gave the turn back for a rate-limit wait or a serial landing. `serial_wait` is the
+seconds the landing waited in line for a serial landing to end, the wait the log closes with
+`the serial landing ended after Ns`. `turn_wait` and `serial_wait` grow with each poll of their
+wait. A landing that ends before its merge, such as `merge-conflict` or `pr-ci-red`, therefore
+records the waits it made. `batch` counts the PRs that one run tested for a landing that took
+the turn with a draft, its own included, so `1` means nobody stood in the line behind it.
+`turn_wait` and `batch` are empty for a landing that never reached them; `serial_wait` reads
+`0`. The board's *Queueing over the range* panel sums `turn_wait` and `serial_wait`.
 
 **HISTORY — the GitOps tick's fields.** Lines written before H7.49a also carry `tick`, `lock`,
 `holder` and `kick`, which described the GitOps deployer run that `land.sh` no longer starts.

@@ -33,6 +33,7 @@ def _filled() -> Ledger:
         tags_label="sonarr,radarr",
         turn_wait=420,
         batch=3,
+        serial_wait=90,
     )
 
 
@@ -52,6 +53,7 @@ def _filled() -> Ledger:
         ("tags", "sonarr,radarr"),
         ("turn_wait", "420"),
         ("batch", "3"),
+        ("serial_wait", "90"),
     ],
 )
 def test_every_field_of_a_filled_ledger(field, value):
@@ -77,6 +79,12 @@ def test_an_unreached_stamp_leaves_its_field_empty(field, value):
     """A landing that died in step 1: every later stamp is None and must read as empty."""
     line = annotation_line(Ledger(pr="", t_start=0.0), 75, 5.0)
     assert _fields(line)[field] == value
+
+
+def test_serial_wait_is_the_last_field_and_reads_0_for_a_landing_that_never_waited():
+    """Readers take fields by name, so the field added last goes at the end."""
+    line = annotation_line(Ledger(pr="7", t_start=0.0), 75, 5.0)
+    assert line.endswith(" serial_wait=0")
 
 
 def test_a_partial_landing_stamps_the_phases_it_reached_and_no_later_one():

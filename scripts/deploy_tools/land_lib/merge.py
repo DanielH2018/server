@@ -716,9 +716,9 @@ def await_merge(ln: Landing, take_turn: TakeTurn = _no_turn) -> None:
             t.sleep(step)
         waited += step
     ln.merge_wait_s = waited
-    in_line = ln.ledger.turn_wait = queued - ln.batched_s
+    turn_wait = ln.ledger.turn_wait
     notes = [
-        f"{in_line}s of it waiting for the landing turn" if in_line else "",
+        f"{turn_wait}s of it waiting for the landing turn" if turn_wait else "",
         f"{ln.batched_s}s of it on its batch's run" if ln.batched_s else "",
     ]
     say(", ".join([f"merged after {waited}s", *filter(None, notes)]))

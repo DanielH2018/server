@@ -14,7 +14,7 @@
         "type": "loki",
         "uid": "bf4q19tuivta8e"
       },
-      "description": "Seconds spent in each phase, one colour per phase. A point is the longest landing in its interval, so on a wide range two landings close together show as one. `keep` drops the labels logfmt extracts, which otherwise make each landing its own series. A tall wait_merge is PR CI or a PR nobody armed; a tall wait_ci is the master sweep; a tall deploy is rollout and stabilisation waits.",
+      "description": "Seconds spent in each phase, one colour per phase. A point is the longest landing in its interval, so on a wide range two landings close together show as one. `keep` drops the labels logfmt extracts, which otherwise make each landing its own series. A tall wait_merge is PR CI or a PR nobody armed; a tall wait_ci is the master sweep; a tall deploy is rollout and stabilisation waits. turn_wait and serial_wait are the queueing inside wait_merge: the wait for the landing turn, and the wait in line behind a serial landing.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -84,6 +84,24 @@
           "expr": "max_over_time({job=\"syslog\"} |= \"event=landing\" | logfmt | pr !~ \"^(939|999|999999|unknown)$\" | keep total | unwrap total [$__interval])",
           "legendFormat": "total",
           "refId": "D"
+        },
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "bf4q19tuivta8e"
+          },
+          "expr": "max_over_time({job=\"syslog\"} |= \"event=landing\" | logfmt | pr !~ \"^(939|999|999999|unknown)$\" | keep turn_wait | unwrap turn_wait [$__interval])",
+          "legendFormat": "turn_wait",
+          "refId": "E"
+        },
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "bf4q19tuivta8e"
+          },
+          "expr": "max_over_time({job=\"syslog\"} |= \"event=landing\" | logfmt | pr !~ \"^(939|999|999999|unknown)$\" | keep serial_wait | unwrap serial_wait [$__interval])",
+          "legendFormat": "serial_wait",
+          "refId": "F"
         }
       ],
       "title": "Landing phases",
@@ -233,6 +251,101 @@
         "type": "loki",
         "uid": "bf4q19tuivta8e"
       },
+      "description": "Seconds every landing in the range spent queueing, summed. turn_wait is the wait for the landing turn, every ask counted; serial_wait is the wait in line for a serial landing to end. A landing that ends before its merge records both, so the sums count the waits of merge-conflict and pr-ci-red landings too.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "s"
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byFrameRefID",
+              "options": "A"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "total turn_wait"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byFrameRefID",
+              "options": "B"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "total serial_wait"
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 5,
+        "w": 24,
+        "x": 0,
+        "y": 15
+      },
+      "id": 6,
+      "options": {
+        "colorMode": "none",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "horizontal",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "value_and_name"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "bf4q19tuivta8e"
+          },
+          "expr": "sum_over_time({job=\"syslog\"} |= \"event=landing\" | logfmt | pr !~ \"^(939|999|999999|unknown)$\" | keep turn_wait | unwrap turn_wait [$__range])",
+          "legendFormat": "total turn_wait",
+          "queryType": "instant",
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "bf4q19tuivta8e"
+          },
+          "expr": "sum_over_time({job=\"syslog\"} |= \"event=landing\" | logfmt | pr !~ \"^(939|999|999999|unknown)$\" | keep serial_wait | unwrap serial_wait [$__range])",
+          "legendFormat": "total serial_wait",
+          "queryType": "instant",
+          "refId": "B"
+        }
+      ],
+      "title": "Queueing over the range",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "loki",
+        "uid": "bf4q19tuivta8e"
+      },
       "description": "How the landings in the range ended. settled and nothing-to-deploy are the two that delivered; everything else stopped early. `aborted` is the EXIT-trap default, so it means a path that named no verdict rather than one particular failure. Measured 2026-09-06 over the default 7d range: 43 aborted of 495 real landings (8.7%), against 6,326 of 8,777 (72%) before the fixture filter.",
       "fieldConfig": {
         "defaults": {
@@ -256,7 +369,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 15
+        "y": 20
       },
       "id": 4,
       "options": {
@@ -313,7 +426,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 15
+        "y": 20
       },
       "id": 5,
       "options": {
@@ -352,7 +465,7 @@
         "h": 12,
         "w": 24,
         "x": 0,
-        "y": 23
+        "y": 28
       },
       "id": 3,
       "options": {
