@@ -240,11 +240,13 @@ def opens_scalar(line: str, i: int) -> bool:
     if line[i - 1] not in QUOTE_OPENERS:
         return False
     before = line[:i].rstrip(" \t")
-    return (
-        not before.strip(" \t-?")
-        or before[-1] in SCALAR_STARTERS
-        or bool(NODE_PROPERTY.search(before))
-    )
+    while True:
+        if not before.strip(" \t-?") or before[-1] in SCALAR_STARTERS:
+            return True
+        prop = NODE_PROPERTY.search(before)
+        if not prop:
+            return False
+        before = before[: prop.start(2)].rstrip(" \t")
 
 
 def code_part(line: str) -> str:

@@ -117,6 +117,9 @@ def test_a_flow_mapping_assigns_a_key_after_scalars_that_hold_quotes(scalars, ke
         '{a: &x "z #w", k3s_version: v1}',
         '[!!str "z #w", {k3s_version: v1}]',
         '{? "z #w", k3s_version: v1}',
+        '{a: x !y "y, b: "z #w", k3s_version: v1}',
+        '{a: x &y "y, b: !!str "z #w", k3s_version: v1}',
+        '{a: !!str &x "z #w", k3s_version: v1}',
     ],
 )
 def test_a_flow_line_assigns_a_key_after_a_quoted_value_holding_a_hash(text):
