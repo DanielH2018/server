@@ -13,6 +13,8 @@ What is defined here is only what this repo adds: the fan-out lock pattern bound
 `findings.py` needs (`held_by_readable_process`, `worktree_facts`).
 """
 
+# pyright: reportMissingImports=false
+
 import functools
 from collections.abc import Callable, Sequence
 from typing import NamedTuple

@@ -35,6 +35,8 @@ census requires.
 Run: python3 flux_soak.py --revision <R> --services services.json ... (the Job's command)
 """
 
+# pyright: reportMissingImports=false
+
 import argparse
 import hashlib
 import io

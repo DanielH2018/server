@@ -468,6 +468,21 @@ extra-paths = [
   "scripts/renderer/tests",
   "hosts/tests",
   "scripts/docs/tests",
+  "k8s/roles/airflow/tests/stubs",
+  "scripts/deploy_tools/tests/land",
+  "scripts/deploy_tools/tests/land_deploy",
+  "scripts/deploy_tools/tests/land_merge",
+  "scripts/deploy_tools/tests/promote",
+  "scripts/dev/tests/ci",
+  "scripts/dev/tests/fanout_status",
+  "scripts/diagnostics/tests/probe_landing",
+  "scripts/diagnostics/tests/ui_smoke",
+  "scripts/infra_map/tests",
+  "scripts/lib/tests/script_census",
+  "scripts/renderer/tests/bundle",
+  "scripts/renderer/tests/host",
+  "scripts/secrets_mgmt/tests",
+  "scripts/tests",
 ]
 
 [tool.ty.src]
@@ -524,8 +539,6 @@ possibly-missing-submodule = "error"
 # Per-file, not per-module: these files also lose the check on first-party imports, so a typo in
 # `k8s_reads` surfaces as ModuleNotFoundError when the pod starts.
 include = [
-  "k8s/roles/airflow/files/check_dags.py",
-  "k8s/roles/airflow/files/dags/*.py",
   "k8s/roles/homelab-mcp/files/app.py",
   "k8s/roles/karakeep/files/karakeep-time-tagger.py",
   "k8s/roles/home-assistant/files/cast_quit_app.py",
@@ -570,16 +583,22 @@ include = [
 [tool.ty.overrides.rules]
 import-not-found = "ignore"
 
-# Pylance in VS Code reads this table; no gate runs pyright. typeCheckingMode stays unset so the
-# editor's own setting applies.
+# Pylance in VS Code and the `pyright` prek hook read this table. Pyright has no per-file rule
+# overrides, so each file a [[tool.ty.overrides]] block above exempts from import-not-found carries
+# a `# pyright: reportMissingImports=false` line instead.
 [tool.pyright]
 pythonVersion = "3.15"
+typeCheckingMode = "standard"
 venvPath = "."
 venv = ".venv"
 include = ["scripts", ".claude", "k8s", "tests", "evals", "hosts"]
 # An explicit exclude replaces pyright's defaults, whose `**/.*` would drop `.claude/hooks`.
-# `.claude/worktrees` holds a full copy of every module per live session.
-exclude = [".claude/worktrees", "**/__pycache__", "**/node_modules", ".venv", ".git", "site"]
+# `.claude/worktrees` holds a full copy of every module per live session. The karakeep tagger is
+# vendored and byte-pinned, so no pyright diagnostic in it can be fixed.
+exclude = [
+  ".claude/worktrees", "**/__pycache__", "**/node_modules", ".venv", ".git", "site",
+  "k8s/roles/karakeep/files/karakeep-time-tagger.py",
+]
 # Equal to [tool.ty.environment] extra-paths, held by test_ty_config_covers_the_repo.py.
 extraPaths = [
   "tests",
@@ -637,4 +656,28 @@ extraPaths = [
   "scripts/renderer/tests",
   "hosts/tests",
   "scripts/docs/tests",
+  "k8s/roles/airflow/tests/stubs",
+  "scripts/deploy_tools/tests/land",
+  "scripts/deploy_tools/tests/land_deploy",
+  "scripts/deploy_tools/tests/land_merge",
+  "scripts/deploy_tools/tests/promote",
+  "scripts/dev/tests/ci",
+  "scripts/dev/tests/fanout_status",
+  "scripts/diagnostics/tests/probe_landing",
+  "scripts/diagnostics/tests/ui_smoke",
+  "scripts/infra_map/tests",
+  "scripts/lib/tests/script_census",
+  "scripts/renderer/tests/bundle",
+  "scripts/renderer/tests/host",
+  "scripts/secrets_mgmt/tests",
+  "scripts/tests",
 ]
+
+# Airflow and the kubernetes client exist only in the role's image, so the DAGs resolve them
+# through the source-less stubs in k8s/roles/airflow/tests/stubs. `load() >> check()` is how a DAG
+# orders its tasks, which pyright reads as an unused expression. An environment inherits the
+# top-level extraPaths.
+[[tool.pyright.executionEnvironments]]
+root = "k8s/roles/airflow/files"
+reportMissingModuleSource = "none"
+reportUnusedExpression = "none"
