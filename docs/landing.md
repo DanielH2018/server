@@ -74,8 +74,12 @@ Three landings still end `refused` before the merge, with nothing merged:
 **How the re-run meets the other parts of a landing.**
 
 - **`--fresh`.** With the flag, `land.sh` fetches `origin/master` in the primary and adds a
-  detached worktree of it under `/tmp`. It runs that checkout's `land.sh` with the same
-  arguments, then removes the worktree. The re-run before the merge, the hand-off after it
+  detached worktree of it under `~/.cache/homelab/land-fresh/` (`fresh.checkouts_root`).
+  It runs that checkout's `land.sh` with the same arguments, then removes the worktree, on
+  SIGTERM too. The worktree is not under `/tmp`, because on daniel-box `/tmp` is a tmpfs
+  and each 353 MB checkout held RAM. A landing killed outright leaves its worktree behind,
+  and the next fresh landing removes every worktree whose `flock` no process holds. The
+  re-run before the merge, the hand-off after it
   and a handed-over turn all use these mechanics (`land_lib/fresh.py`). The flag skips the
   comparison and is never needed for it. A checkout made by hand went stale again within
   minutes when master moved, and the `git -C <primary> worktree add` that made it is a
