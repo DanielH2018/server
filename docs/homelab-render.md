@@ -512,6 +512,7 @@ in no key set and in no standalone set. Stub mode still renders it.
 | `qbittorrent` | `mullvad-account-secret.yaml` | `qbittorrent-mullvad-account` | `mullvad_account` |
 | `authelia` | `oidc-jwk-secret.yaml` | `authelia-oidc-jwk` | `authelia_oidc_rsa_key_content` |
 | `flux` | `github-status-secret.yaml` | `flux-github-status` | `flux_github_app_id`, `flux_github_app_installation_id`, `flux_github_app_private_key` |
+| `vault-mcp` | `passphrase-secret.yaml` | `vault-mcp-passphrase` | `livesync_e2ee_passphrase` |
 
 A wrong entry would hide a whole Secret from the publish and from the round trip, so the
 `sops-manifest-entries` check in `renderer_lib/sops_entries.py` holds the lists on every
@@ -530,8 +531,8 @@ is in no role's list fails, and so does an entry whose template names none. Rule
 supplies the names, so an alias counts. The clause reads template sources and every role's
 list, so it scans the whole tree on every run, `--role` renders included.
 `secret_checks.check` runs it beside the five rules, so a failure prints `secret check:
-sops-manifest-entries: <template> ...` and `cluster` exits 1. The five entries in the table
-above are the five templates that name such a key.
+sops-manifest-entries: <template> ...` and `cluster` exits 1. The six entries in the table
+above are the six templates that name such a key.
 
 ### Filters that only interpolate a secret
 

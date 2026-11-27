@@ -383,8 +383,8 @@ def test_the_real_render_names_its_known_members():
     """The real provider, end to end. Non-vacuity for every set `check` compares against.
 
     `domain` is published (C3) and must not be a cluster key; `email` stays one. peanut is
-    D3's first flux-owned Secret. The five `render_sops_manifests` entries are R2's, and flux's
-    is the GitHub App Secret (#8023).
+    D3's first flux-owned Secret. Four `render_sops_manifests` entries are R2's, flux's is the
+    GitHub App Secret (#8023), and vault-mcp's holds the LiveSync E2EE passphrase.
     """
     with sharing_placeholder_renders(placeholders):
         expected = fleet_expected()
@@ -399,6 +399,7 @@ def test_the_real_render_names_its_known_members():
         "home-assistant",
         "pi-peer-backup",
         "qbittorrent",
+        "vault-mcp",
     }
     assert all(entry.keys for entry in expected.manifests)
     assert not expected.keys & {k for e in expected.manifests for k in e.keys}

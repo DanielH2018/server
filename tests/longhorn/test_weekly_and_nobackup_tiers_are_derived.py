@@ -50,6 +50,8 @@ _REPLACED_NOBACKUP = frozenset(
         "homelab/crowdsec-db",
         "homelab/code-server-config",
         "homelab/slskd-config",
+        "homelab/vault-mcp-vault",
+        "homelab/vault-mcp-db",
     }
 )
 

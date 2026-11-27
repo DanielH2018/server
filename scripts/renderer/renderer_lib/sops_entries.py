@@ -54,6 +54,8 @@ SOPS_MANIFEST_KEYS = frozenset(
         "flux_github_app_id",
         "flux_github_app_installation_id",
         "flux_github_app_private_key",
+        # vault-mcp's LiveSync E2EE passphrase: free text, which Flux can type as a non-string.
+        "livesync_e2ee_passphrase",
     }
 )
 
