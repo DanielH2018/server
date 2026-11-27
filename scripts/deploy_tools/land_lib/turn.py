@@ -318,6 +318,9 @@ def _lands_alone(ln: Landing) -> None:
 def _wait(ln: Landing, draft: str) -> tuple[Callable[[], None] | None, int]:
     """Poll for the turn for up to `merge_timeout`, standing in the line with `draft`.
 
+    Each poll adds its seconds to `ln.ledger.turn_wait` as it passes, so a landing that ends
+    during the wait, or after it, still records the wait.
+
     Args:
         draft: The head of a draft that has had no CI run, or "" for any other head.
 
@@ -330,6 +333,7 @@ def _wait(ln: Landing, draft: str) -> tuple[Callable[[], None] | None, int]:
     place = line.Place(line_of(ln), o.pr, draft, say)
     waiting = OnChange(say)
     waited = 0
+    before = ln.ledger.turn_wait = ln.ledger.turn_wait or 0
     try:
         while True:
             try:
@@ -380,6 +384,7 @@ def _wait(ln: Landing, draft: str) -> tuple[Callable[[], None] | None, int]:
             )
             ln.tools.sleep(o.merge_poll)
             waited += o.merge_poll
+            ln.ledger.turn_wait = before + waited
     finally:
         place.leave()
 
