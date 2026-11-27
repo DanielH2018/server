@@ -16,7 +16,8 @@ A target's value is one SHA-256 over:
 
 - each ConfigMap and Secret its pod template names through `envFrom`, `env[].valueFrom` or
   `volumes`, from the tag's own placeholder-form render, re-serialised in canonical form, so a
-  YAML comment edit moves nothing;
+  YAML comment edit moves nothing. A pod reads only its own namespace, so a same-named object
+  in another namespace is no input;
 - the `.source` digest of every secret key those ConfigMaps and Secrets reference as
   `${key}`, because the placeholder text does not move when the key rotates;
 - for a Secret shipped as a SOPS manifest, the `.source` digest of its key, never its
@@ -28,7 +29,8 @@ A target's value is one SHA-256 over:
 A ConfigMap whose name matches `RELOADED_IN_PLACE` is never an input: its reader re-reads
 the mount by itself, so an edit to it rolls nothing, as it rolled nothing under Ansible.
 
-A target that names no ConfigMap or Secret of its own render gets no annotation. Both render
+A target that names no ConfigMap or Secret of its own render gets no annotation. `stamp` finds
+a workload by name alone, so a target name that two workloads of one render share is refused. Both render
 modes hash the placeholder-form documents, never a stub, so a stub render and a placeholder
 render of one tag carry the same value. `stamp` inserts the annotation as text, at the place
 the YAML parser marks, so no other byte of the file moves: a re-serialised document would drop
@@ -300,20 +302,19 @@ def restart_values(
             returns them.
 
     Raises:
-        RenderError: A target names no rendered workload, a ConfigMap or Secret it names
-            references a key that `.source` does not record, so a rotation of it would roll
-            nothing, or an `outside` Secret is one no target reads.
+        RenderError: A target names no rendered workload or more than one, a ConfigMap or
+            Secret it names references a key that `.source` does not record, so a rotation
+            of it would roll nothing, or an `outside` Secret is one no target reads.
     """
     keys = frozenset(keys)
     texts = [text for files in directories.values() for text in files.values()]
     docs = parse_documents(texts)
-    own = {(obj.kind, obj.name): doc for obj, doc in docs}
+    own = {(obj.kind, obj.namespace, obj.name): doc for obj, doc in docs}
     shipped = sops_secrets(sops or {}, keys)
-    workloads = {
-        obj.name: template
-        for obj, _ in docs
-        if (template := pod_template(obj)) is not None
-    }
+    workloads: dict[str, list[tuple[str, dict]]] = {}
+    for obj, _ in docs:
+        if (template := pod_template(obj)) is not None:
+            workloads.setdefault(obj.name, []).append((obj.namespace, template))
     outside = outside or {}
     unread = set(outside)
     values = {}
@@ -323,15 +324,21 @@ def restart_values(
                 f"{tag}: restart target {name} is no Deployment, DaemonSet or "
                 "StatefulSet in its render"
             )
+        if len(workloads[name]) > 1:
+            raise RenderError(
+                f"{tag}: restart target {name} names {len(workloads[name])} workloads, "
+                f"and {RESTART_ANNOTATION} carries one value per name"
+            )
+        [(namespace, template)] = workloads[name]
         inputs = []
         admitted = frozenset(targets[name])
-        for kind, ref in sorted(pod_references(workloads[name])):
+        for kind, ref in sorted(pod_references(template)):
             if kind not in admitted or reloaded_in_place(kind, ref):
                 continue
             held = set()
-            if (kind, ref) in own:
+            if (kind, namespace, ref) in own:
                 canonical = json.dumps(
-                    own[(kind, ref)], sort_keys=True, separators=(",", ":")
+                    own[(kind, namespace, ref)], sort_keys=True, separators=(",", ":")
                 )
                 inputs.append(f"{kind}/{ref}\0{canonical}")
                 # A ConfigMap can hold a secret placeholder too, as traefik's static config

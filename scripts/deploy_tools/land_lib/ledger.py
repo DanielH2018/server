@@ -41,10 +41,12 @@ class Ledger:
     # `tags_label` cannot give the owner, since it holds every tag the promotion carried.
     hold_sha: str = ""
     hold_owner: str = ""
-    # Seconds `merge.await_merge` waited for the landing turn, its batch's run excluded.
+    # Seconds this landing stood waiting for the landing turn, every ask counted (`turn._wait`).
     turn_wait: int | None = None
     # PRs the run this landing gave its draft in the turn tested, its own included (`batch.form`).
     batch: int | None = None
+    # Seconds this landing waited in line for a serial landing to end (`slots._wait_out`).
+    serial_wait: int = 0
 
     def __setattr__(self, name: str, value: object) -> None:
         """Coerce a `cause` outside `outcome.CAUSES` to `Cause.INVALID`; "" is no cause.
@@ -113,5 +115,6 @@ def annotation_line(ledger: Ledger, rc: int, total: float) -> str:
             "tags": ledger.tags_label or "none",
             "turn_wait": _count(ledger.turn_wait),
             "batch": _count(ledger.batch),
+            "serial_wait": ledger.serial_wait,
         }
     )

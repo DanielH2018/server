@@ -158,7 +158,7 @@ def test_a_failed_snapshot_makes_every_host_at_the_merge_commit_a_target(
 def test_a_failed_render_makes_every_host_a_target(tmp_path):
     snapshot, _ = _snapshots(tmp_path, {MERGE: ["daniel-pi"], PARENT: ["daniel-pi"]})
     git = _git(stdout={"ls-tree": "hosts/daniel-pi\n"})
-    trees = {("a", "daniel-pi"): None, ("b", "daniel-pi"): {}}
+    trees = {("a", "daniel-pi"): host_wait.RenderFailed(), ("b", "daniel-pi"): {}}
     targets = host_wait.host_targets(
         Path("/p"), MERGE, _reads(snapshot, trees, git=git)
     )
@@ -200,7 +200,7 @@ def test_a_failed_shared_package_render_makes_every_host_a_target(tmp_path):
         tmp_path, {MERGE: ["daniel-pi"], PARENT: ["daniel-pi"]}, packages=["tools"]
     )
     git = _git(stdout={"ls-tree": "hosts/daniel-pi\n"})
-    trees = {("a", "tools"): None, ("b", "tools"): {}}
+    trees = {("a", "tools"): host_wait.RenderFailed(), ("b", "tools"): {}}
     targets = host_wait.host_targets(
         Path("/p"), MERGE, _reads(snapshot, trees, git=git)
     )
@@ -209,7 +209,7 @@ def test_a_failed_shared_package_render_makes_every_host_a_target(tmp_path):
 
 def test_the_real_pi_render_depends_on_the_real_shared_packages():
     tree = host_wait.render_host_tree(REPO, "daniel-pi")
-    assert tree is not None
+    assert not isinstance(tree, host_wait.RenderFailed)
     assert "homelab-tools" in host_wait.depends_of(tree)
     assert host_wait._packages_in(REPO) >= {"homelab-tools", "homelab-updater"}
     assert host_wait.render_package_tree(REPO, "homelab-tools")
@@ -248,7 +248,7 @@ def test_a_dangling_enable_link_written_to_disk_reads_as_armed(tmp_path):
 def test_the_real_pi_render_reads_its_drop_in_schedule():
     # A real render through the CLI, from this checkout. Since H3.9b it ships the link too.
     tree = host_wait.render_host_tree(REPO, "daniel-pi")
-    assert tree is not None
+    assert not isinstance(tree, host_wait.RenderFailed)
     target = host_wait._target("daniel-pi", tree, REPO)
     # The package also arms the poll, whose fires join the daily one.
     assert target.triggers == {

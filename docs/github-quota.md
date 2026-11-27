@@ -354,8 +354,12 @@ their `ReadWritePaths=`, because their sandboxes would otherwise refuse the writ
 **The mode** is `off` or `record`, and slice 2 adds `enforce`. The component's
 `gh_quota_mode` default renders it into `/etc/gh-quota.conf`, and a host's host_vars can
 override it. In `off`, `record` returns at once. `GH_QUOTA_MODE=off` in one call's
-environment is `off` for that call: the test suite sets it, so a test's fake `gh` call never
-lands in the host's ledger.
+environment is `off` for that call. Without one, a call whose environment holds
+`PYTEST_VERSION` is `off`, so a test's fake `gh` call never lands in the host's ledger. pytest
+exports that variable itself, so `-o addopts=""` cannot drop it the way it drops a plugin
+(`hosts/components/gh-quota/tests/test_gh_quota.py::test_a_call_under_pytest_records_nothing_where_the_host_records`).
+The `leakguard` plugin also sets `GH_QUOTA_MODE=off` for the whole suite, because
+`github_rest` loads the host's installed module, which can be older than the checkout.
 
 **The module fails open.** A ledger it cannot open, lock or parse lets the call through and
 counts the failure in a second file that `gh-quota status` reads. `status` counts the

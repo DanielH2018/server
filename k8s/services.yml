@@ -550,4 +550,5 @@ containers_list:
     port: 8080
     use_authelia: true
     auth_tier: one_factor
+    weekly_backup_claims: {tft-assistant-keep: 3}  # Wed
   - name: netpol-baseline
