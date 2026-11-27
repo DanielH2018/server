@@ -19,8 +19,6 @@ That test merges `ignore_foreign_slice_holds_env(tmp_path)` into the subprocess'
 environment instead.
 """
 
-# pyright: reportMissingImports=false
-
 from pathlib import Path as _Path
 
 
