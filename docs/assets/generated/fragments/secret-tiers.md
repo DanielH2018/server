@@ -7,4 +7,4 @@
 | `pinned` | 730 d | 3 |
 | `ignore` | — | 11 |
 
-124 secrets are registered.
+125 secrets are registered.
