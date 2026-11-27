@@ -84,14 +84,14 @@ tools:
   vale:
     amd64:
       # renovate: datasource=github-release-attachments depName=vale-cli/vale
-      version: v3.27.0
-      sha256: c80d62f6bce87b81843ac5b512a26e63213927b957adba0a64fc594570da2000
+      version: v3.28.1
+      sha256: 068954ad869ebec24b8dec6ebcd1cbb1fd5f5a83e966a35baedfae8b2cdc093a
       url: https://github.com/vale-cli/vale/releases/download/{version}/vale_{bare}_Linux_64-bit.tar.gz
       member: vale
     arm64:
       # renovate: datasource=github-release-attachments depName=vale-cli/vale
-      version: v3.27.0
-      sha256: dcaee812fd892c5750702d16ed348a1f7113be57c73cf36fe9e016c789cae6e2
+      version: v3.28.1
+      sha256: af0ca36ec6133ba20093295591e43ed2823b2632520d1f3811293aa4cbe758f2
       url: https://github.com/vale-cli/vale/releases/download/{version}/vale_{bare}_Linux_arm64.tar.gz
       member: vale
   # The host DNS forwarder on daniel-box (k3s-host-dns). Each digest is the release's coredns_<ver>_linux_<arch>.tgz
