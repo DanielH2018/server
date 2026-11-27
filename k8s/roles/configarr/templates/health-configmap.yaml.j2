@@ -1,13 +1,13 @@
 {#
   The configarr-health CronJob's code: the reader, its two configarr_lib modules, the
-  host_lib.py it imports, and the repo's condition parser.
+  host_lib.py it imports, the repo's condition parser and its verdict export.
 
   Flat keys, because a ConfigMap key cannot hold a `/`. The CronJob's volume maps each
-  configarr_lib key back under configarr_lib/, and the parser under lib/, with `items:`, so
-  `from configarr_lib import ...` and `from lib.k8s_conditions import ...` resolve beside the
-  reader.
+  configarr_lib key back under configarr_lib/, and the two scripts/lib modules under lib/, with
+  `items:`, so `from configarr_lib import ...` and `from lib.<module> import ...` resolve
+  beside the reader.
 
-  The parser's key carries no `.py` suffix: promote's gitleaks scan reads that volume item
+  A lib/ key carries no `.py` suffix: promote's gitleaks scan reads that volume item
   as a credential, and .gitleaks.toml admits only a snake_case key name.
 
   No secret goes in here, and the pod takes none from a Secret.
@@ -31,3 +31,5 @@ data:
 {{ lookup('file', repo_file('hosts/lib/host_lib.py')) | indent(4, true) }}
   k8s_conditions: |
 {{ lookup('file', repo_file('scripts/lib/k8s_conditions.py')) | indent(4, true) }}
+  check_verdict: |
+{{ lookup('file', repo_file('scripts/lib/check_verdict.py')) | indent(4, true) }}
