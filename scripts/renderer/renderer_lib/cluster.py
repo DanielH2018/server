@@ -413,8 +413,8 @@ def render_tag(
     # Every Job Flux applies runs `flux_job_image`, a flux role default no other role's
     # context holds. Passing it here keeps a verify template from `lookup()`ing the flux
     # defaults, which `land.sh`'s cross-role scan would read as the role depending on them.
-    # The helper's, the parser's and the verify legs' text come the same way, so a fix to either does not
-    # redeploy every verifying role.
+    # The helper's, the parser's and the verify legs' text come the same way, so a fix to
+    # any of them does not redeploy every verifying role.
     image = _flux_job_image() if verifying or checking else None
     helper = FLUX_JOB_CONNECT.read_text() if verifying or checking else None
     parser = FLUX_JOB_PARSE.read_text() if verifying or checking else None
