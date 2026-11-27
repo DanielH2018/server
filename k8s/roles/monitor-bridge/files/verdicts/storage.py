@@ -318,14 +318,19 @@ def r2_canary_plan(keys: list[str], today: date, lock_days: int) -> CanaryPlan:
 
     A canary is dated by its name in UTC. One dated `lock_days - 1` days ago is younger than
     the lock wherever in the day it was uploaded, and one dated `lock_days + 1` days ago is
-    older. A key whose name carries no date is left alone.
+    older. A key whose name does not end in a `YYYY-MM-DD` date is left alone.
     """
     dated: dict[date, str] = {}
     for key in keys:
+        name = key.removeprefix(R2_CANARY_PREFIX)
         try:
-            dated[date.fromisoformat(key.removeprefix(R2_CANARY_PREFIX))] = key
+            day = date.fromisoformat(name)
         except ValueError:
             continue
+        # `fromisoformat` also reads `20261123` and `2026-W48-1`, which this check never
+        # writes. One naming today would skip the upload and probe an absent key.
+        if name == day.isoformat():
+            dated[day] = key
     todays = R2_CANARY_PREFIX + today.isoformat()
     locked = [d for d in dated if today - timedelta(days=lock_days - 1) <= d < today]
     return CanaryPlan(
