@@ -231,8 +231,9 @@ QUOTE_OPENERS = " \t{[,:"
 def code_part(line: str) -> str:
     """`line` with its comment cut off, so a key quoted in the comment is not read.
 
-    A comment starts at an unquoted `#` that opens the line or follows whitespace. A `#` inside
-    a value, as in `{note: "see #1", ...}`, starts none, so an assignment after it still counts.
+    A comment starts at an unquoted `#` that opens the line or follows a space or tab. U+00A0
+    and the other characters `isspace()` takes are part of a plain scalar. A `#` inside a
+    value, as in `{note: "see #1", ...}`, starts none, so an assignment after it still counts.
     An unclosed quote keeps the rest of the line, which errs toward reading an assignment.
     """
     quote, escaped = "", False
@@ -249,7 +250,6 @@ def code_part(line: str) -> str:
                 quote = ""
         elif char in "\"'" and (i == 0 or line[i - 1] in QUOTE_OPENERS):
             quote = char
-        # Not `isspace()`: it takes U+00A0, which YAML reads as part of a plain scalar.
         elif char == "#" and (i == 0 or line[i - 1] in " \t"):
             return line[:i]
     return line

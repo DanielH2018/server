@@ -67,7 +67,7 @@ def example_line(scalar: str, value: str) -> Line:
 @given(lines(comment_text))
 @example(example_line('"\\\\\\\\\\""', '\\\\"'))
 @example(example_line("'x'''", "x'"))
-@example(example_line('"x"', "x"))
+@example(Line("k3s_version", "x", 'k3s_version: "x"#c'))
 @example(example_line("a\xa0#b", "a\xa0#b"))
 @example(example_line("a\u3000# b", "a\u3000# b"))
 def test_the_code_part_of_a_line_loads_as_the_whole_line_does(line):
