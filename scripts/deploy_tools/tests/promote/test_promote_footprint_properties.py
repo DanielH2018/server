@@ -108,7 +108,7 @@ def test_names_changed_tags_leaves_out_match_footprints(prints, edits, data):
     a, b = _readable(prints), _readable(edited)
     changed = forward_only.changed_tags(a.parsed, b.parsed)
     assert changed is not None
-    unchanged = [n for n in _TAGS if n not in changed]
+    unchanged = sorted((prints.keys() & edited.keys()) - changed - {UNCLASSIFIED})
     assume(unchanged)
     # `names` come from a `failed=` hold, which names Kustomizations, never UNCLASSIFIED.
     names = data.draw(st.frozensets(st.sampled_from(unchanged), min_size=1))
