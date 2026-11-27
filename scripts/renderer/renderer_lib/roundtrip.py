@@ -44,6 +44,8 @@ from pathlib import Path
 
 import yaml
 
+from renderer.renderer_lib.manifest_yaml import dump
+
 from lib import yaml_fast
 from lib.exit_codes import SHADOW_DIFFERENT, SHADOW_OK
 from lib.repo_paths import K8S_ROLES
@@ -101,14 +103,13 @@ def kustomization_file(name: str, substitute: Mapping[str, str] | None) -> str:
     }
     if substitute is not None:
         spec["postBuild"] = {"substitute": dict(sorted(substitute.items()))}
-    return yaml.safe_dump(
+    return dump(
         {
             "apiVersion": "kustomize.toolkit.fluxcd.io/v1",
             "kind": "Kustomization",
             "metadata": {"name": name, "namespace": FLUX_NAMESPACE},
             "spec": spec,
         },
-        sort_keys=False,
         width=4096,
     )
 
