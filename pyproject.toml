@@ -323,6 +323,7 @@ ignore_decorators = [
   "@pytest.fixture",  # autouse fixtures and fixtures named in usefixtures
   "@mcp.tool",  # homelab-mcp tools, called by the MCP client
   "@app.route",  # ical-proxy Flask routes
+  "@rule",  # Hypothesis state-machine rules, called by the machine
 ]
 ignore_names = [
   # Hooks and handlers a framework calls by name.

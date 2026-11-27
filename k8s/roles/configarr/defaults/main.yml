@@ -2,7 +2,7 @@
 # is a CronJob, not a Deployment, and its health is reported by a second CronJob,
 # configarr-health, that READS the last Job through its own ServiceAccount and records the
 # verdict for Prometheus.
-configarr_k8s_image: ghcr.io/raydak-labs/configarr:1.39.2@sha256:48893921c607e96e40310d3ced50a92584667a84595dc9b782f523d46267f2e7
+configarr_k8s_image: ghcr.io/raydak-labs/configarr:1.40.0@sha256:f8f9f67ef4efda44c661d2d51defab9048087628ed3aa9eed4c9dcdb35c36ad3
 
 # Renovate stance: whether an image bump here may automerge. `promote` deploys what merges.
 k8s_autodeploy: true
