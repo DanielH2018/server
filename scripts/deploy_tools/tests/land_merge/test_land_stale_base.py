@@ -97,6 +97,7 @@ def test_a_stale_head_whose_paths_master_did_not_touch_merges_as_it_stands(landi
     ln, calls = _stale_draft_without_the_turn(landing, "docs/landing.md")
     merge.await_merge(ln)
     assert _gh_writes(calls) == ["merge aaaa"]
+    assert _compares(calls) == [f"repos/{{owner}}/{{repo}}/compare/{TESTED}...master"]
 
 
 def test_the_head_the_landings_own_update_made_is_refused_when_master_moved_past_it_again(
