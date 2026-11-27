@@ -665,7 +665,7 @@ Lidarr
 slskd
 Soularr
 btrfs
-hardlinks?
+hardlink(s|ed)?
 overlayfs
 reflinks?
 rerere
