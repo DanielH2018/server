@@ -19,6 +19,7 @@
 | `karakeep-data` | Weekly | B2 | Wednesday |
 | `navidrome-data` | Weekly | B2 | Wednesday |
 | `terraria-config` | Weekly | B2 | Wednesday |
+| `tft-assistant-keep` | Weekly | B2 | Wednesday |
 | `prowlarr-config` | Weekly | B2 | Thursday |
 | `qbittorrent-config` | Weekly | B2 | Thursday |
 | `wg-easy-config` | Weekly | B2 | Thursday |

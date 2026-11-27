@@ -185,8 +185,26 @@ def test_a_live_entry_inside_home_ips_is_pruned_to_free_its_slot():
     items += [_item(f"203.0.113.{i + 1}", 100) for i in range(ra.CAP - 2)]
     decided = ra.plan({"9.9.9.9", "2001:db8:1:3::1"}, items, NOW, home=HOME)
     assert decided.prune == ["2001:db8:1:2:bbbb::1", "198.51.100.7"]
-    assert decided.add == ["2001:db8:1:3::1", "9.9.9.9"]
+    assert decided.add == ["2001:db8:1:3::/64", "9.9.9.9"]
     assert decided.over_cap == []
+
+
+def test_ipv6_sightings_in_one_64_take_one_slot_and_a_present_64_covers_them():
+    seen = {"2001:db8:5:6::1", "2001:db8:5:6:aaaa::2", "2001:db8:7:8::1"}
+    decided = ra.plan(seen, [_item("2001:db8:7:8::/64", 150)], NOW)
+    assert decided.add == ["2001:db8:5:6::/64"]
+    assert decided.refresh == []
+    assert decided.live == ["2001:db8:5:6::/64", "2001:db8:7:8::/64"]
+
+
+def test_stored_ipv6_addresses_collapse_to_their_64_and_free_the_cap():
+    items = [_item(f"2001:db8:5:6::{i + 1}", 100) for i in range(9)]
+    items += [_item(f"203.0.113.{i + 1}", 100) for i in range(ra.CAP - 9)]
+    decided = ra.plan({"2001:db8:9:9::1"}, items, NOW)
+    assert decided.prune == [f"2001:db8:5:6::{i + 1}" for i in range(9)]
+    assert decided.add == ["2001:db8:5:6::/64", "2001:db8:9:9::/64"]
+    assert decided.over_cap == []
+    assert len(decided.live) == ra.CAP - 9 + 2
 
 
 def test_main_writes_exactly_the_plan_and_refuses_with_no_authelia_router():
