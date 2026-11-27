@@ -212,6 +212,7 @@ regex	k8s/roles/traefik/defaults/main.yml	alpine	docker	digest	-
 regex	k8s/roles/traefik/defaults/main.yml	maxlerebourg/crowdsec-bouncer-traefik-plugin	github-releases	-	-
 regex	k8s/roles/traefik/defaults/main.yml	traefik	docker	digest	-
 regex	k8s/roles/valheim/defaults/main.yml	ghcr.io/community-valheim-tools/valheim-server	docker	digest	-
+regex	k8s/roles/vault-mcp/defaults/main.yml	ghcr.io/vrtmrz/livesync-cli	docker	digest	-
 regex	k8s/roles/vaultwarden/defaults/main.yml	vaultwarden/server	docker	digest	-
 regex	k8s/roles/wg-easy/defaults/main.yml	ghcr.io/wg-easy/wg-easy	docker	digest	-
 regex	k8s/roles/zigbee2mqtt/defaults/main.yml	alpine	docker	digest	-

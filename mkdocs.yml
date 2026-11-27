@@ -187,6 +187,8 @@ nav:
           - CI throughput: ci-throughput.md
           # What exhausts the shared GitHub API quota, and the per-session budget ADR-0034 chose.
           - GitHub API quota: github-quota.md
+          # Where a landing's time goes, and the options ranked against it.
+          - Landing speed: landing-speed.md
           - Python code organization: python-code-organization.md
       - Monitoring and alerting:
           # The runbook each critical alert's runbook_url links, one section per alert.

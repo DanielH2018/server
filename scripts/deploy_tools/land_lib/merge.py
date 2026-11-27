@@ -127,6 +127,7 @@ def squash_body(commits: list[CommitMessage]) -> str:
 # gh's header line and HTTP status around a rule-violation refusal, which name no reason.
 _REFUSAL_NOISE = re.compile(r"^gh: Repository rule violations found$|\s*\(HTTP \d+\)$")
 _REQUIRED_CHECK = re.compile(r'^Required status check "([^"]+)" is (.+?)\.?$')
+_FAILING = re.compile(r"(?:^|; )required check (.+?) failing(?=;|$)")
 
 
 def refusal_reason(stderr: str) -> str:
@@ -137,6 +138,11 @@ def refusal_reason(stderr: str) -> str:
         if line:
             reasons.append(_REQUIRED_CHECK.sub(r"required check \1 \2", line))
     return "; ".join(reasons)
+
+
+def _failing_checks(reason: str) -> list[str]:
+    """The required checks a `refusal_reason` line names as failing; no wait turns them green."""
+    return _FAILING.findall(reason)
 
 
 def _merge_directly(ln: Landing, head: str, commits: list[CommitMessage]) -> str:
@@ -521,16 +527,29 @@ def await_merge(ln: Landing, take_turn: TakeTurn = _no_turn) -> None:
                     pin_gate.recheck_before_merge(ln, gated_pins)
                 commits = ln.view("commits").get("commits", [])
                 interrupted, ln.turn_interrupted = ln.turn_interrupted, False
-                if interrupted and stale_base.rejoin_in_turn(
-                    ln, head, view.get("mergeable") == "CONFLICTING"
+                tested = stale_base.batch_tested(ln, head)
+                if (
+                    interrupted
+                    and not tested
+                    and stale_base.rejoin_in_turn(
+                        ln, head, view.get("mergeable") == "CONFLICTING"
+                    )
                 ):
                     in_turn, updated_from, rejoined, drafted = False, head, True, True
                     continue
-                if not stale_base.batch_tested(ln, head):
+                if not tested:
                     stale_base.refuse_stale_overlap(ln, head)
                 refusal = _merge_directly(ln, head, commits)
                 if not refusal:
                     continue
+                failing = _failing_checks(refusal)
+                if failing:
+                    ln.die(
+                        f"PR #{o.pr} cannot merge — required check {', '.join(failing)} "
+                        f"failed at {head[:8]}; fix it, push, and re-run this",
+                        1,
+                        Verdict.PR_CI_RED,
+                    )
                 refused(f"merge refused at {head[:8]}: {refusal}; waiting")
             if head != stuck_head:
                 stuck_head, stuck_read_at = head, waited + stuck_checks.AFTER_S

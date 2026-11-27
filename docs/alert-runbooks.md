@@ -621,6 +621,18 @@ fast-forward has not completed a clean run.
 - If `claude_code_agent_user_enabled` is false on purpose, delete this rule, or narrow its
   `hosts:` selector when another host keeps the timer.
 
+### `ClaudeWorktreeSweepNotReporting`
+
+No `claude-worktree-sweep` verdict newer than 1213500 seconds reached Prometheus, so the agent
+user's weekly worktree sweep has not completed a clean run in two weeks.
+
+- The timer stopped firing, or every run since failed and its `OnFailure` unit posted to
+  Discord. A failed run names the removal, the stale checkout or the missing pruner in
+  `journalctl -u homelab-claude-worktree-sweep`.
+- Read `systemctl status homelab-claude-worktree-sweep.timer` on the host.
+- If `claude_code_agent_user_enabled` is false on purpose, delete this rule, or narrow its
+  `hosts:` selector when another host keeps the timer.
+
 ### `ClaudeDotfilesSyncNotReporting`
 
 No `claude-dotfiles-sync` verdict newer than 2100 seconds reached Prometheus, so the agent's

@@ -56,7 +56,25 @@ MERGE_BASE_ARGS = [
     "--kubelet-arg=system-reserved=memory=7Gi",
     # The runtime's default seccomp profile for every container whose pod sets none.
     "--kubelet-arg=seccomp-default=true",
+    # Leader-election timings long enough to ride out a stalled control plane.
+    *[
+        f"--{component}-arg=leader-elect-{name}"
+        for component in (
+            "kube-controller-manager",
+            "kube-scheduler",
+            "kube-cloud-controller-manager",
+        )
+        for name in ("lease-duration=60s", "renew-deadline=45s", "retry-period=5s")
+    ],
 ]
+
+LEADER_ELECTING_COMPONENTS = (
+    "kube-controller-manager-arg",
+    "kube-scheduler-arg",
+    "kube-cloud-controller-manager-arg",
+)
+# Seconds: the longest gap in /var/log/k3s.log measured before a `leaderelection lost` exit.
+LONGEST_MEASURED_STALL_S = 42
 
 
 def cli_flags(argv: list[str]) -> list[tuple[str, str]]:
@@ -166,3 +184,47 @@ def image_gc_problems(config: dict) -> list[str]:
 
 def test_the_server_starts_image_gc_below_the_longhorn_floor():
     assert image_gc_problems(rendered_config()) == []
+
+
+def leader_election_problems(config: dict) -> list[str]:
+    """Each leader-electing component must outlast a stalled control plane, or k3s exits 1.
+
+    The component refuses to start unless lease > renew > 1.2 x retry, and a stall longer
+    than the renew deadline costs it the lease.
+    """
+    problems = []
+    for key in LEADER_ELECTING_COMPONENTS:
+        args = dict(item.partition("=")[::2] for item in config.get(key, []))
+        try:
+            lease, renew, retry = (
+                int(args[f"leader-elect-{name}"].removesuffix("s"))
+                for name in ("lease-duration", "renew-deadline", "retry-period")
+            )
+        except KeyError, ValueError:
+            problems.append(f"{key} lacks whole-second leader-elect timings")
+            continue
+        if not lease > renew > 1.2 * retry:
+            problems.append(
+                f"{key}: lease {lease}s > renew {renew}s > 1.2 x retry {retry}s fails"
+            )
+        if renew <= LONGEST_MEASURED_STALL_S:
+            problems.append(
+                f"{key}: renew deadline {renew}s does not outlast a {LONGEST_MEASURED_STALL_S}s stall"
+            )
+    return problems
+
+
+def test_every_leader_electing_component_outlasts_the_measured_stall():
+    assert leader_election_problems(rendered_config()) == []
+
+
+def test_timings_the_component_refuses_are_flagged():
+    config = dict(rendered_config())
+    config["kube-scheduler-arg"] = [
+        "leader-elect-lease-duration=45s",
+        "leader-elect-renew-deadline=60s",
+        "leader-elect-retry-period=5s",
+    ]
+    assert leader_election_problems(config) == [
+        "kube-scheduler-arg: lease 45s > renew 60s > 1.2 x retry 5s fails"
+    ]

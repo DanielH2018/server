@@ -1,8 +1,11 @@
-# The weekly worktree sweep and git object-store repair. homelab-worktree-sweep.timer starts
+# The weekly worktree sweep, git object-store repair and uv cache prune.
+# homelab-worktree-sweep.timer starts
 # homelab-worktree-sweep.service on Sunday at 04:20, as sys_user, in the primary checkout.
 # daniel-box and daniel-server both list the component, because fan-out batches run in both
 # hosts' checkouts. Each host pings its own
-# `<host>-worktree-sweep` check, which monitor_bridge_healthchecks_expected lists.
+# `<host>-worktree-sweep` check, which monitor_bridge_healthchecks_expected lists. The script
+# sweeps `$HOME/server`, so the claude-code component's homelab-claude-worktree-sweep.service
+# runs it again as the agent user, in the agent's clone and with no ping key.
 #
 # The service imports the Healthchecks.io ping key as the credential `healthchecks_ping_key`, so
 # every package listing this component lists that credential. daniel-server's package retires

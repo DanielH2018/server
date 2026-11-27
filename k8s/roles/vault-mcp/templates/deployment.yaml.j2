@@ -1,0 +1,98 @@
+{% from 'container-resources.yml.j2' import container_resources with context %}
+{% from 'security-context.yml.j2' import hardened_security_context with context %}
+{% from 'workload-shell.yml.j2' import spec_shell, pod_shell with context %}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vault-mcp
+  namespace: {{ k8s_namespace }}
+spec:
+{{ spec_shell('Recreate') }}
+  replicas: {{ vault_mcp_k8s_replicas }}
+  selector:
+    matchLabels:
+      app: vault-mcp
+  template:
+    metadata:
+      labels:
+        app: vault-mcp
+        netpol-baseline: enforced
+    spec:
+{{ pod_shell('homelab-best-effort', run_as_user=vault_mcp_k8s_uid, run_as_group=vault_mcp_k8s_uid, fs_group=vault_mcp_k8s_uid) }}
+      initContainers:
+{# JSON.stringify escapes the two secrets. Substituting them into the ConfigMap's JSON would
+   not: Flux pastes a value's raw text, so a `"` in the passphrase breaks the file. #}
+        - name: write-settings
+          image: {{ vault_mcp_k8s_livesync_cli_image }}
+          imagePullPolicy: IfNotPresent
+          command:
+            - node
+            - -e
+            - >-
+              const fs = require("fs");
+              const s = JSON.parse(fs.readFileSync("/config/settings.json", "utf8"));
+              s.couchDB_PASSWORD = process.env.COUCHDB_PASSWORD;
+              s.passphrase = process.env.LIVESYNC_PASSPHRASE;
+              fs.writeFileSync("/settings/settings.json", JSON.stringify(s), {mode: 0o600});
+          env:
+{# DECIDED: the bridge logs in as CouchDB's admin, from livesync's own Secret. The obsidian
+   database's _security is empty, so a dedicated user would hold the same access, and creating
+   one needs a bootstrap Job; sharing the Secret also means a rotation reaches the bridge with
+   no step of its own. #}
+            - name: COUCHDB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: livesync
+                  key: COUCHDB_PASSWORD
+            - name: LIVESYNC_PASSPHRASE
+              valueFrom:
+                secretKeyRef:
+                  name: vault-mcp-passphrase
+                  key: LIVESYNC_PASSPHRASE
+          volumeMounts:
+            - name: vault-mcp-config
+              mountPath: /config
+            - name: vault-mcp-settings
+              mountPath: /settings
+{{ hardened_security_context(read_only=true, non_root=true) }}
+{{ container_resources(cpu_limit='250m', mem_limit='128Mi', cpu_request='10m', mem_request='32Mi') }}
+      containers:
+        - name: livesync-cli
+          image: {{ vault_mcp_k8s_livesync_cli_image }}
+          imagePullPolicy: IfNotPresent
+          args:
+            - --settings
+            - /settings/settings.json
+            - --vault
+            - /vault
+            - daemon
+          env:
+            - name: LIVESYNC_DB_PATH
+              value: /data
+{{ hardened_security_context(read_only=true, non_root=true) }}
+          volumeMounts:
+            - name: vault-mcp-db
+              mountPath: /data
+            - name: vault-mcp-vault
+              mountPath: /vault
+            - name: vault-mcp-settings
+              mountPath: /settings
+            - name: vault-mcp-tmp
+              mountPath: /tmp
+{{ container_resources(cpu_limit=vault_mcp_k8s_cpu_limit, mem_limit=vault_mcp_k8s_mem_limit, cpu_request=vault_mcp_k8s_cpu_request, mem_request=vault_mcp_k8s_mem_request) }}
+      volumes:
+        - name: vault-mcp-db
+          persistentVolumeClaim:
+            claimName: vault-mcp-db
+        - name: vault-mcp-vault
+          persistentVolumeClaim:
+            claimName: vault-mcp-vault
+        - name: vault-mcp-config
+          configMap:
+            name: vault-mcp-config
+        - name: vault-mcp-settings
+          emptyDir:
+            medium: Memory
+        - name: vault-mcp-tmp
+          emptyDir: {}
