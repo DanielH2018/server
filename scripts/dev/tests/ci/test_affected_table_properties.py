@@ -33,6 +33,11 @@ def _as_tree(paths: set[str]) -> set[str]:
 
 
 def _dirs(tree: Iterable[str]) -> set[str]:
+    """Every directory of `tree`, root `""` included, built apart from `table.parent_dirs`.
+
+    `select` derives both trees' directories from `parent_dirs`, so an oracle that used it
+    would share any fault in it.
+    """
     return {""} | {
         path.rsplit("/", depth)[0]
         for path in tree
@@ -111,10 +116,7 @@ def _must_select(diff: _Diff) -> set[str]:
     }
     appeared = (diff.head | _dirs(diff.head)) - (diff.base | _dirs(diff.base))
     stale = {
-        module
-        for module in diff.census
-        if module not in diff.rows.rows
-        or diff.rows.stamps[module] != diff.blobs[module][:12]
+        module for module in diff.census if not diff.rows.current(module, diff.blobs)
     }
     return stale | {
         module
