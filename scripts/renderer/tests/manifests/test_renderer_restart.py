@@ -376,7 +376,8 @@ def outside_references(
 ) -> list[tuple[str, str, str]]:
     """Each `(tag, kind, name)` a pod of `tags` names and its own render does not hold.
 
-    A Secret the tag ships as a SOPS manifest counts as its own, and so does one its
+    A pod holds only what its own render puts in the pod's namespace, as `restart_values`
+    reads it. A Secret the tag ships as a SOPS manifest counts as its own, and so does one its
     `manifests_outside_secrets` declares, whose keys `checksum/restart` hashes.
     """
     found = []
@@ -385,29 +386,24 @@ def outside_references(
         objs = [
             obj
             for obj, _ in parse_documents(
-                [
-                    *(
-                        text
-                        for files in forms[tag].directories().values()
-                        for text in files.values()
-                    ),
-                    *(
-                        text or ""
-                        for text in (render.sops_manifests.get(tag) or {}).values()
-                    ),
-                ]
+                text
+                for files in forms[tag].directories().values()
+                for text in files.values()
             )
         ]
-        own = {(obj.kind, obj.name) for obj in objs}
-        own |= {("Secret", name) for name in outside_secrets(tag)}
+        sops = (render.sops_manifests.get(tag) or {}).values()
+        own = {(obj.kind, obj.namespace, obj.name) for obj in objs}
+        by_name = {
+            ("Secret", obj.name)
+            for obj, _ in parse_documents(text or "" for text in sops)
+            if obj.kind == "Secret"
+        }
+        by_name |= {("Secret", name) for name in outside_secrets(tag)}
         for obj in objs:
             template = any_pod_template(obj)
             for kind, name in sorted(pod_references(template or {})):
-                if (kind, name) not in own and (
-                    tag,
-                    kind,
-                    name,
-                ) not in exempt:
+                held = (kind, obj.namespace, name) in own or (kind, name) in by_name
+                if not held and (tag, kind, name) not in exempt:
                     found.append((tag, kind, name))
     return found
 
@@ -490,3 +486,15 @@ def test_a_flux_owned_role_whose_pod_names_another_roles_secret_is_flagged():
     assert outside_references(render, {"fixture"}) == [
         ("fixture", "Secret", "peanut-secrets")
     ]
+
+
+def test_a_pod_that_names_a_secret_its_render_holds_in_another_namespace_is_flagged():
+    elsewhere = SECRET.format(name="a", key="alpha_token").replace(
+        "  name: a\n", "  name: a\n  namespace: other\n"
+    )
+    files: dict[str, str] = {
+        "a.yaml": elsewhere,
+        "deploy.yaml": DEPLOYMENT.format(name="one", secret="a"),
+    }
+    render = PlaceholderRender([RenderedTag("fixture", files)], {}, {})
+    assert outside_references(render, {"fixture"}) == [("fixture", "Secret", "a")]
