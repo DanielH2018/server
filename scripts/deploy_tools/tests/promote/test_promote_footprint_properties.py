@@ -41,7 +41,9 @@ def _entry(footprint: str) -> dict:
     return {"own": "o", "footprint": footprint, "claims": [], "suspended": False}
 
 
-_PRINTS = st.dictionaries(st.sampled_from((*_TAGS, UNCLASSIFIED)), _HASHES)
+_PRINTS: st.SearchStrategy[dict[str, str]] = st.dictionaries(
+    st.sampled_from((*_TAGS, UNCLASSIFIED)), _HASHES
+)
 
 
 def _readable(prints: dict[str, str]) -> Side:

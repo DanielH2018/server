@@ -162,7 +162,9 @@ def _is_plain_deferral(log: Path, verdict: str) -> bool:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = ArgumentParser(prog="land_probe.py", description=__doc__.splitlines()[0])
+    parser = ArgumentParser(
+        prog="land_probe.py", description=(__doc__ or "").partition("\n")[0]
+    )
     parser.add_argument("--describe", action="store_true")
     parser.add_argument("pr")
     where = parser.add_mutually_exclusive_group()

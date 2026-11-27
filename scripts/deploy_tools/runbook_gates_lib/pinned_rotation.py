@@ -261,4 +261,4 @@ def run_gates(
 
 
 def main(argv: list[str] | None = None) -> int:
-    return gate_runner.cli(__doc__, argv, run_gates)
+    return gate_runner.cli(__doc__ or "", argv, run_gates)

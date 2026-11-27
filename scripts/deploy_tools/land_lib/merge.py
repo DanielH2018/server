@@ -288,7 +288,7 @@ def _start_run(
 
     in_turn, queued = False, 0
     # Read again after a wait in line, because the PR may have moved during it.
-    for _ in range(2):
+    while True:
         view = ln.view("isDraft,state,mergeable,headRefOid")
         head = view.get("headRefOid") or ""
         if view.get("state") != "OPEN" or not head:
@@ -468,6 +468,7 @@ def await_merge(ln: Landing, take_turn: TakeTurn = _no_turn) -> None:
             wait_ends_at = min(waited + o.merge_timeout, wait_cap)
             continue
         pause, spent = 0, ""
+        rc, line = CI_PENDING, ""
         if head:
             try:
                 rc, line = t.await_ci(head, 0)

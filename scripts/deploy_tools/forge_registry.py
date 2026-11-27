@@ -74,11 +74,12 @@ class Registry:
         response = self._transport("GET", url, headers)
         if response.status != 200:
             raise ForgeError(f"GHCR token request: HTTP {response.status}")
-        token = _json(response, "GHCR token request")
-        if not isinstance(token, dict) or not isinstance(token.get("token"), str):
+        body = _json(response, "GHCR token request")
+        bearer = body.get("token") if isinstance(body, dict) else None
+        if not isinstance(bearer, str):
             raise ForgeError("GHCR token request: the body has no token")
-        self._bearer = token["token"]
-        return self._bearer
+        self._bearer = bearer
+        return bearer
 
     def _request(
         self, method: str, url: str, headers: Mapping[str, str] | None = None
