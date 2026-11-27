@@ -25,7 +25,9 @@ from lib.repo_paths import REPO
 from lib import host_modules  # noqa: F401
 from ci_verdict import WorkflowRun
 
-_DURATION_LINE = re.compile(r"^([0-9.]+)s\s+(call|setup|teardown)\s+(\S+?)::")
+_DURATION_LINE = re.compile(
+    r"^([0-9]+(?:\.[0-9]+)?)s\s+(call|setup|teardown)\s+(\S+?)::"
+)
 
 # Only a CI measurement shows a heavy module's cost; below ten runner seconds the error is less than
 # the hardware difference between legs (`leg_speed`).
@@ -219,7 +221,9 @@ def durations_complaints(
 
 # Packed on runner seconds: the runner measures modules 1.0x to 5.5x a workstation's.
 # Each leg's readings are scaled by its cold bytecode-compile speed (leg hardware varies).
-_COMPILE_LINE = re.compile(r"Bytecode compiled (\d+) files in ([0-9.]+)(ms|s)\b")
+_COMPILE_LINE = re.compile(
+    r"Bytecode compiled (\d+) files in ([0-9]+(?:\.[0-9]+)?)(ms|s)\b"
+)
 # Fixed, so the table's scale does not move with the runs a refresh reads.
 REFERENCE_COMPILE_SECONDS_PER_FILE = 0.00085
 # A compile faster than this found its bytecode already built, so it measures no CPU.
