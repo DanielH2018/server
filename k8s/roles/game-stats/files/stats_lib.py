@@ -147,22 +147,38 @@ def initial_cursor(stored_cursor, backfill, now, backfill_days):
 def run_cycle(state, store, cursor, end_ns, fetch, apply_fn, page_limit):
     """One poll: page through new entries from `cursor`, fold, persist. Returns new cursor.
 
-    `fetch(start_ns, end_ns) -> [(ts_ns, line)]`. `apply_fn(state, entries) -> (events,
-    max_ts)` is the per-game fold (e.g. Valheim's excludes heartbeats from the audit log,
-    Terraria's has no heartbeat at all). Pages until a short/empty page. State mutation +
-    cursor advance are persisted together so a crash re-runs the batch cleanly (events past
-    the saved cursor simply re-apply on next start).
+    `fetch(start_ns, end_ns, limit) -> [(ts_ns, line)]` returns the earliest `limit`
+    entries, ascending. `apply_fn(state, entries) -> (events, max_ts)` is the per-game
+    fold (e.g. Valheim's excludes heartbeats from the audit log, Terraria's has no
+    heartbeat at all). Pages until a short/empty page. State mutation + cursor advance are
+    persisted together so a crash re-runs the batch cleanly (events past the saved cursor
+    simply re-apply on next start).
+
+    A full page may stop partway through its last timestamp, and the cursor cannot point
+    inside one, so those entries wait for the next page. A full page holding a single
+    timestamp is fetched again with twice the limit. Loki refuses a limit above its
+    `max_entries_limit_per_query` (5000 unless configured), so a `fetch` that raises
+    there leaves the cursor short of that timestamp instead of skipping entries.
     """
+    limit = page_limit
     while True:
-        entries = fetch(cursor, end_ns)
+        entries = fetch(cursor, end_ns, limit)
         if not entries:
             break
+        full = len(entries) >= limit
+        if full:
+            last_ts = entries[-1][0]
+            entries = [entry for entry in entries if entry[0] < last_ts]
+            if not entries:
+                limit *= 2
+                continue
         events, max_ts = apply_fn(state, entries)
         if max_ts > cursor:
             cursor = max_ts
         store.save(state, cursor, events)
-        if len(entries) < page_limit:
+        if not full:
             break
+        limit = page_limit
     return cursor
 
 

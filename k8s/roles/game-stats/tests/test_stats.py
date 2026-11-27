@@ -184,7 +184,7 @@ def test_run_cycle_end_to_end(tmp_path):
         ]
     ]
 
-    def fake_fetch(start_ns, end_ns):
+    def fake_fetch(start_ns, end_ns, limit):
         # one page then empty (mimics pagination end)
         return pages.pop(0) if pages else []
 
