@@ -19,9 +19,15 @@ def toposort_containers(containers_list, deps_map):
 
     Stable: ties within a topological level preserve the original list order.
     Deps not present in containers_list are silently ignored.
-    Raises DependencyCycle if a dependency cycle is detected.
+    Raises DependencyCycle if a dependency cycle is detected, and ValueError if two
+    entries share a name.
     """
     position = {c["name"]: i for i, c in enumerate(containers_list)}
+    repeated = sorted(
+        {c["name"] for i, c in enumerate(containers_list) if position[c["name"]] != i}
+    )
+    if repeated:
+        raise ValueError(f"Duplicate names in containers: {', '.join(repeated)}")
     sorter = TopologicalSorter(
         {
             name: sorted(dep for dep in deps_map.get(name, []) if dep in position)
