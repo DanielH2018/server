@@ -12,11 +12,13 @@ k8s_autodeploy_reason: "the data volume holds matches the crawl can fetch again 
 k8s_autodeploy_snapshot_pvcs: [tft-assistant-data, tft-assistant-keep]
 
 # The web container: the image's `serve` command over one static page and the edit store. The
-# command loads the whole CLI, numpy and scikit-learn included, and holds 136 MB resident.
+# command holds 35 MB resident at its peak under 20 concurrent page loads. That figure is for
+# image 0.2.5 and later: 0.2.4 loaded numpy and scikit-learn in this command and held 136 MB, so
+# a pin below 0.2.5 needs 256Mi here.
 tft_assistant_k8s_cpu_limit: "200m"
-tft_assistant_k8s_mem_limit: 256Mi
+tft_assistant_k8s_mem_limit: 128Mi
 tft_assistant_k8s_cpu_request: "10m"
-tft_assistant_k8s_mem_request: 160Mi
+tft_assistant_k8s_mem_request: 48Mi
 
 # The crawler container. It idles on Riot's rate limit between builds. A build holds every board
 # of a selection in memory, about 800 MB for 13,600 matches, and the image analyses 20,000 at most.
