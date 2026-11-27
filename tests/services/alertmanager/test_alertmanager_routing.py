@@ -80,7 +80,7 @@ ROUTED = [
     ("gitops-checks.yaml", 4, set()),
     (
         "host-checks.yaml",
-        101,
+        103,
         {
             "DiskHealthFailed",
             "DiskHealthNotReporting",

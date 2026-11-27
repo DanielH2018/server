@@ -159,12 +159,14 @@ def test_discover_templates_finds_the_known_set():
         "claude-pipeline-timeline.service.j2",
         "claude-pipeline-timeline.timer.j2",
         "claude-clone-sync.service.j2",
+        "claude-worktree-sweep.service.j2",
+        "claude-worktree-sweep.timer.j2",
         "claude-dotfiles-sync.service.j2",
         "claude-bg-resume.service.j2",
         "homelab-rootq.socket.j2",
         "homelab-rootq@.service.j2",
     } <= names
-    assert len(names) == 32
+    assert len(names) == 34
 
 
 def test_render_context_layers_the_owning_roles_real_defaults(fixture_unit):
