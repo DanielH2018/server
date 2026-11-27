@@ -31,8 +31,8 @@ def primary(tmp_path: Path) -> Path:
 
 @pytest.fixture(autouse=True)
 def cache_home(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
-    monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path / "cache"))
-    return tmp_path / "cache"
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    return tmp_path / "home" / ".cache"
 
 
 def _child(seen: list):

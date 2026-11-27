@@ -8,6 +8,8 @@ deployed path, so every test here runs there too.
 Run: uv run pytest scripts/lib/tests/script_census/test_claude_worktree_import.py
 """
 
+# pyright: reportMissingImports=false
+
 import os
 import sys
 from pathlib import Path

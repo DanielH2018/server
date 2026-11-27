@@ -47,8 +47,8 @@ from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from changed_set import ROOT, changed_set
-from k8s_conditions import NO_CONDITION, ConditionStatus, parse_conditions
+from changed_set import ROOT, changed_set  # pyright: ignore[reportMissingImports]
+from k8s_conditions import NO_CONDITION, ConditionStatus, parse_conditions  # pyright: ignore[reportMissingImports]
 from soak_pods import (
     UNMAPPED,
     WORKLOADS,
