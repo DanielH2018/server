@@ -14,10 +14,12 @@ line like any draft (`rejoin_line`). One that master moved past while it waited 
 rejoined once it takes the turn, and gives the turn back (`rejoin_in_turn`), as is one that
 master moved past while a rate-limit wait had the turn given up.
 
-A green head that reaches the merge with a stale base anyway merges as it stands, and master's
-own run tests it. The one exception is a head the landing policy admitted on an approval,
-which an update would void: `refuse_stale_approved` refuses it with a rebase remedy when master
-changed a path the PR changes.
+A green head that reaches the merge with a stale base anyway merges as it stands when master
+changed no path the PR changes, and master's own run tests it. When master did change one,
+`refuse_stale_overlap` refuses the merge, whichever route brought the head there: a landing
+that went on without the turn marks its draft ready with no update, and that run tests the
+master of the PR's last push. An approved head gets a rebase remedy, because an update would
+void the approval; any other head gets a re-run, which updates its branch (`rejoin_line`).
 """
 
 import subprocess
@@ -108,6 +110,12 @@ def master_paths_since(ln: Landing, head: str) -> list[str]:
     return [p for p in paths if isinstance(p, str)]
 
 
+def _shown(paths: list[str]) -> str:
+    """The first three of `paths`, and how many more, for a message."""
+    more = f" and {len(paths) - 3} more" if len(paths) > 3 else ""
+    return ", ".join(paths[:3]) + more
+
+
 def _pr_paths(ln: Landing) -> set[str] | None:
     """Every path the PR's REST `files` listing names, a rename's old path included.
 
@@ -131,35 +139,50 @@ def _pr_paths(ln: Landing) -> set[str] | None:
     return {p for pair in names for p in pair if p}
 
 
-def refuse_stale_approved(ln: Landing, head: str, conflicting: bool) -> None:
-    """Die when `head` is the one the operator approved and master changed a path it changes.
+def refuse_stale_overlap(ln: Landing, head: str) -> None:
+    """Die when master changed a path the PR changes since `head`'s green run tested it.
 
-    Reads nothing for any other head. Overlap the reads cannot rule out counts as overlap:
-    `conflicting`, a compare list at GitHub's cap, and a file listing at its cap.
+    Every head is judged, one this landing's own update made included, because master can move
+    again during that head's run. A head a landing batch tested is the caller's to exempt
+    (`batch_tested`). Overlap the reads cannot rule out counts as overlap: a compare list at
+    GitHub's cap, and a file listing at its cap. GitHub's `CONFLICTING` does not count: it
+    flickers for one poll whenever master moves, and a real conflict shares a path anyway.
     """
-    if head != ln.approved_head:
-        return
     moved = master_paths_since(ln, head)
-    # DECIDED: only a path both master and the PR changed makes an approved head stale
-    # Refusing on any master move would make every
+    # DECIDED: only a path both master and the PR changed makes a green head stale at the merge
+    # Refusing on any master move would refuse nearly every landing, and would make every
     # approved PR be rebased and approved again, since master moves between nearly every
     # approval and its landing. The accepted risk is a red master from a path the PR never
     # touched.
-    if moved and not conflicting and len(moved) < COMPARE_CAP:
+    if moved and len(moved) < COMPARE_CAP:
         pr_paths = _pr_paths(ln)
         if pr_paths is not None:
             moved = sorted(set(moved) & pr_paths)
-    if moved:
+    if not moved:
+        return
+    pr = ln.opts.pr
+    if head == ln.approved_head:
         # DECIDED: a stale approved head is refused, not updated and not merged. The update
         # would make a head the operator's approval does not name, so the policy would refuse
         # it anyway. The rebase moves the merge base to master, so the re-approved head goes
         # stale only if master moves again between the approval and the landing.
         ln.die(
-            f"PR #{ln.opts.pr}'s base is behind {BRANCH} by {len(moved)} changed path(s), "
+            f"PR #{pr}'s base is behind {BRANCH} by {len(moved)} changed path(s), "
             "and its approved head cannot be updated without voiding the approval — rebase "
             f"it onto origin/{BRANCH}, push, get the new head approved, and re-run this",
             1,
         )
+    remedy = (
+        f"update its branch from {BRANCH}, check the new head, and re-run this with it"
+        if ln.opts.require_head is not None
+        else f"re-run this, which updates its branch from {BRANCH} first"
+    )
+    ln.die(
+        f"{BRANCH} changed {len(moved)} path(s) PR #{pr} changes since the run that tested "
+        f"{head[:8]} ({_shown(moved)}), so merging it would make a tree no run tested — "
+        f"{remedy}",
+        1,
+    )
 
 
 def update_branch(ln: Landing, head: str, moved: list[str]) -> None:
@@ -169,9 +192,7 @@ def update_branch(ln: Landing, head: str, moved: list[str]) -> None:
     refusal dies: the PR cannot be re-tested from here, and merging it untested is what this
     check exists to stop.
     """
-    shown = ", ".join(moved[:3]) + (
-        f" and {len(moved) - 3} more" if len(moved) > 3 else ""
-    )
+    shown = _shown(moved)
     say(
         f"{BRANCH} changed {len(moved)} path(s) since PR #{ln.opts.pr}'s base ({shown}); "
         f"updating its branch so CI tests it against {BRANCH} before the merge"
