@@ -583,9 +583,10 @@ include = [
 [tool.ty.overrides.rules]
 import-not-found = "ignore"
 
-# Pylance in VS Code and the `pyright` prek hook read this table. Pyright has no per-file rule
-# overrides, so each file a [[tool.ty.overrides]] block above exempts from import-not-found carries
-# a `# pyright: reportMissingImports=false` line instead.
+# Pylance in VS Code reads this table. Pyright has no per-file rule overrides, so each file a
+# [[tool.ty.overrides]] block above exempts from import-not-found carries a `# pyright:` comment
+# instead: a `reportMissingImports=false` file line, or a line ignore where the renderer's size
+# ceiling counts the file's lines.
 [tool.pyright]
 pythonVersion = "3.15"
 typeCheckingMode = "standard"
