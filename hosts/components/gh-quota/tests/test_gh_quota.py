@@ -122,6 +122,16 @@ def test_record_writes_nothing_when_the_host_does_not_record(tmp_path: Path):
     assert list(ledger.root.iterdir()) == []
 
 
+def test_a_call_under_pytest_records_nothing_where_the_host_records(tmp_path: Path):
+    # fact: docs/github-quota.md#A ledger the three owners call
+    ledger, _clock, _gh = make_ledger(tmp_path, "record", {"PYTEST_VERSION": "9.2.0"})
+
+    ledger.record(["pr", "list"])
+
+    assert ledger.mode() == "off"
+    assert list(ledger.root.iterdir()) == []
+
+
 def test_github_is_sampled_once_per_interval(recording):
     ledger, clock, gh = recording
     ledger.record(["pr", "list"])

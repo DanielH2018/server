@@ -349,13 +349,16 @@ class Ledger:
     def mode(self) -> str:
         """`record` when the host's conf file says so, else `off`.
 
-        `GH_QUOTA_MODE` in the call's environment wins over the file when it is `off` or
-        `record`. The test suite sets `off`, so a test's fake `gh` call never lands in the
-        host's ledger.
+        `GH_QUOTA_MODE` in the call's environment wins when it is `off` or `record`. Short of
+        that, a call whose environment holds `PYTEST_VERSION` is `off`, so a test's fake `gh`
+        call never lands in the host's ledger. A test that drives a real wrapper forces
+        `record` and points `GH_QUOTA_DIR` at its own directory.
         """
-        forced = self.env.get("GH_QUOTA_MODE")
-        if forced in ("off", "record"):
+        if (forced := self.env.get("GH_QUOTA_MODE")) in ("off", "record"):
             return forced
+        # DECIDED: pytest itself exports PYTEST_VERSION; `-o addopts=""` or `-p no:<plugin>` drops a plugin that sets GH_QUOTA_MODE.
+        if "PYTEST_VERSION" in self.env:
+            return "off"
         try:
             lines = self.conf.read_text().splitlines()
         except OSError:
@@ -370,8 +373,7 @@ class Ledger:
         """
         if self.mode() == "off":
             return
-        call = classify(args)
-        if call is None:
+        if (call := classify(args)) is None:
             return
         bucket, argv_class = call
         session = session_key(self.env)
