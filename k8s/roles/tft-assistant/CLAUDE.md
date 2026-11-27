@@ -35,12 +35,23 @@ See repo-root `CLAUDE.md` for shared conventions.
   `k8s/roles/tft-assistant/templates/deployment.yaml.j2` says why the two paths differ.
 - **The API checks nobody's identity.** Authelia is the only thing between the route and a
   write to the notes, which is a second reason the route keeps its login.
-- **A dead key shows as a restarting crawler and a page that goes stale.** A failed crawl
-  ends the crawler process, the kubelet restarts it, and `K8sContainerCrashLooping` fires
-  (`k8s/roles/observability/files/rules/k8s-workloads.yaml`). The web container keeps serving
-  the last page, whose footer states the age of its newest match. A personal key does not
-  expire on a schedule. A development key expires after 24 hours, so a Secret that holds one
-  needs the rotation under *Editing* every day.
+- **A dead key shows as a page that goes stale, and nothing restarts.** From image 0.2.7 a
+  failed crawl prints `the crawl failed and the next cycle tries again` in the crawler's log
+  and the crawler stays up. The web container keeps serving the last page, whose footer
+  states the age of its newest match, and no alert fires. A personal key does not expire on
+  a schedule. A development key expires after 24 hours, so a Secret that holds one needs the
+  rotation under *Editing* every day.
+- **HISTORY — a dead key took the page down on 2026-11-27.** Before image 0.2.7 a failed
+  crawl ended the crawler process. The container restarted in a loop, the pod read 1/2, and
+  Traefik answered 503 for the page although the Service publishes unready addresses: the
+  endpoint read `ready=true serving=false`, and Traefik routed nothing to it. A crawler
+  that exits takes the page with it, so the crawler must not exit over a condition that
+  outlasts a restart.
+- **The route reaches the page through the Service's cluster IP.**
+  `k8s/roles/tft-assistant/templates/ingressroute.yaml.j2:DECIDED: the route goes to the Service's cluster IP`
+  holds the reason: Traefik skips a pod that is not serving, and kube-proxy does not.
+  `tests/k8s/edge/test_unready_services_route_through_the_cluster_ip.py::test_every_route_to_an_unready_publishing_service_uses_its_cluster_ip`
+  holds the pair, the Service's field and the route's.
 - **The page keeps its endpoint while the pod is unready.**
   `k8s/roles/tft-assistant/templates/service.yaml.j2:DECIDED: the page keeps its endpoint while the pod is unready`
   holds the reason. The role ships its own Service for that one field.

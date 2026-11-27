@@ -35,10 +35,11 @@
 # the distinction is the whole reason this widget works. The manager's own API is fenced by
 # Longhorn's chart-owned `longhorn-manager` NetworkPolicy, which admits six same-namespace
 # Longhorn components and nothing else — homepage cannot reach it, and widening that object means
-# editing something the Longhorn deploy owns and would revert. `longhorn-frontend` is selected by
-# NO NetworkPolicy in longhorn-system, and its nginx proxies `/v1` through to the manager as
-# `app: longhorn-ui`, which that policy DOES admit. So the widget needs no NetworkPolicy change
-# on either side.
+# editing something the Longhorn deploy owns and would revert. `longhorn-frontend`'s nginx proxies
+# `/v1` through to the manager as `app: longhorn-ui`, which that policy DOES admit. The UI pods
+# are fenced by the repo's own `longhorn-ui` policy (k8s/roles/longhorn/templates/networkpolicy-ui.yaml.j2),
+# which admits `app: homepage` beside Traefik; drop that peer and this widget fails with
+# ECONNREFUSED on the frontend ClusterIP.
 #
 # This is also why the node-local-manager trap (only that node's manager answers a HOST caller)
 # does not apply: the caller is a pod, and it addresses the frontend Service rather than the

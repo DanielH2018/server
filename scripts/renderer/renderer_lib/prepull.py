@@ -66,7 +66,7 @@ from pathlib import Path
 
 import json
 
-import yaml
+from renderer.renderer_lib.manifest_yaml import dump, dump_all
 
 from lib.repo_paths import K8S_ROLES
 from renderer.renderer_lib.bundle import (
@@ -275,8 +275,8 @@ def prepull_files(tag: str, pulls: Iterable[tuple[dict, list[str]]]) -> dict[str
         job["metadata"]["name"] = f"{base}-{job_spec_digest8(job)}"
         jobs.append(job)
     files = {
-        "configmap.yaml": yaml.safe_dump(configmap, sort_keys=False),
-        "job.yaml": yaml.safe_dump_all(jobs, sort_keys=False),
+        "configmap.yaml": dump(configmap),
+        "job.yaml": dump_all(jobs),
     }
     files[KUSTOMIZATION] = kustomization_text(files)
     return files

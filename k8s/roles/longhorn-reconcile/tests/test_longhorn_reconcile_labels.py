@@ -64,6 +64,32 @@ WEEKLY_IN_DEFAULT_AND_NO_BACKUP = (
 )
 
 
+UNLISTED_TIERS = {"r2": set(), "weekly": {}, "nobackup": set()}
+UNLISTED_IN_DEFAULT_AND_NO_BACKUP = (
+    dict.fromkeys((lr.label(lr.DEFAULT), lr.label(lr.NO_BACKUP)), lr.ENABLED),
+    "ns/d",
+    UNLISTED_TIERS,
+    set(),
+    False,
+)
+UNLISTED_IN_SHARD_AND_NO_BACKUP = (
+    dict.fromkeys((lr.label(lr.shard_group(3)), lr.label(lr.NO_BACKUP)), lr.ENABLED),
+    "ns/d",
+    UNLISTED_TIERS,
+    set(),
+    False,
+)
+
+
+@given(worlds())
+@example(UNLISTED_IN_DEFAULT_AND_NO_BACKUP)
+@example(UNLISTED_IN_SHARD_AND_NO_BACKUP)
+def test_a_volume_ends_in_at_most_one_group(world):
+    labels, claim, tiers, class_claims, trim = world
+    after = lr.desired_labels(labels, claim, tiers, class_claims, trim)
+    assert len(_groups(after)) <= 1
+
+
 @given(worlds())
 @example(STALE_SHARD)
 def test_a_second_pass_changes_nothing(world):

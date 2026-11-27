@@ -119,6 +119,8 @@ Released: `worktree-issue-1132`
 
 Reading who holds an issue means folding the comment list forward in `createdAt` order: a
 `Claim:` line opens if no claim is open already, and a matching `Released:` line closes.
+`ordered_comments` compares instants, not strings, so `Z` and `+00:00` spellings of one
+moment tie, and a tie keeps gh's order.
 
 **The first writer wins, not the last.** gh returns comments in `createdAt` order, so the
 earlier of two racing claims is the earlier comment. Letting a later claim overwrite a live
