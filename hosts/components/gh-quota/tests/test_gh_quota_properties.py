@@ -46,7 +46,8 @@ _sampled_window = st.tuples(
     ),
 )
 
-_windows_and_a_permutation = st.lists(_sampled_window, max_size=8).flatmap(
+_windows = st.lists(_sampled_window, max_size=8)
+_windows_and_a_permutation = _windows.flatmap(
     lambda ws: st.tuples(st.just(ws), st.permutations(ws))
 )
 
@@ -74,9 +75,8 @@ def _by_limit(windows: list[Window]) -> dict[tuple[str, int], tuple[Counter, Cou
     return totals
 
 
-@given(_windows_and_a_permutation)
-def test_the_join_keeps_every_identity_and_call_under_its_own_bucket_and_limit(drawn):
-    windows, _ = drawn
+@given(_windows)
+def test_the_join_keeps_every_identity_and_call_under_its_own_bucket_and_limit(windows):
     assert _by_limit(_shared(windows)) == _by_limit([w for _, w in windows])
 
 
