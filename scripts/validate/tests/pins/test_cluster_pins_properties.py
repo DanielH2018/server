@@ -9,6 +9,7 @@ Run: uv run pytest scripts/validate/tests/pins/test_cluster_pins_properties.py
 
 from dataclasses import dataclass
 
+import pytest
 import yaml
 from hypothesis import assume, example, given
 from hypothesis import strategies as st
@@ -91,6 +92,39 @@ def test_a_line_assigns_the_key_pyyaml_parses_and_not_one_its_comment_quotes(
     assert set(yaml_fast.safe_load(line.text)) == {line.key}
     assert cluster_pins.assigns(line.key, line.text)
     assert not cluster_pins.assigns(other, line.text)
+
+
+@given(st.lists(values, min_size=1, max_size=3), st.sampled_from(KEYS))
+@example(['x "y', '"z #w"'], "k3s_version")
+@example(["x 'y", "'z #w'"], "k3s_version")
+def test_a_flow_mapping_assigns_a_key_after_scalars_that_hold_quotes(scalars, key):
+    flow = {f"k{n}": value for n, value in enumerate(scalars)} | {key: "v1"}
+    text = yaml.safe_dump(
+        flow, default_flow_style=True, sort_keys=False, width=float("inf")
+    ).removesuffix("\n")
+    assume(not set(text) & set("\r\n\x85  "))
+
+    assert yaml_fast.safe_load(text) == flow
+    assert cluster_pins.assigns(key, text)
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        '{a: x "y, b: "z #w", k3s_version: v1}',
+        "{a: x 'y, b: 'z #w', k3s_version: v1}",
+        '{a: !!str "z #w", k3s_version: v1}',
+        '{a: &x "z #w", k3s_version: v1}',
+        '[!!str "z #w", {k3s_version: v1}]',
+        '{? "z #w", k3s_version: v1}',
+        '{a: x !y "y, b: "z #w", k3s_version: v1}',
+        '{a: x &y "y, b: !!str "z #w", k3s_version: v1}',
+        '{a: !!str &x "z #w", k3s_version: v1}',
+    ],
+)
+def test_a_flow_line_assigns_a_key_after_a_quoted_value_holding_a_hash(text):
+    assert yaml_fast.safe_load(text)
+    assert cluster_pins.assigns("k3s_version", text)
 
 
 @given(st.text() | values)

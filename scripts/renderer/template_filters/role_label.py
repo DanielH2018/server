@@ -22,32 +22,16 @@ rendered, so labelling a workload rolls no pods and touches no Service selector.
 `FilterError("homelab_role_label: ...")` before any apply.
 """
 
-import re
-
 import yaml
+
+from renderer.renderer_lib.manifest_yaml import GO_YAML_NON_STRING
 
 
 ROLE_LABEL = "homelab/role"
 
-# go-yaml (kubectl) resolves `y`/`n`, `1e3` and `0o17` as non-strings where PyYAML does not quote
-# them, so matching strings are double-quoted. A scalar the template wrote PLAIN (`defaultMode:
-# 0o444`) is kept as `_GoPlain` and written back plain, since quoting it would fail the apply.
-_GO_YAML_NON_STRING = re.compile(
-    r"""
-    (?: y|Y|yes|Yes|YES|n|N|no|No|NO
-      | true|True|TRUE|false|False|FALSE
-      | on|On|ON|off|Off|OFF
-      | null|Null|NULL|~
-      | [-+]?(?:\.[0-9]+|[0-9][0-9_]*(?:\.[0-9_]*)?)(?:[eE][-+]?[0-9]+)?
-      | [-+]?0[xX][0-9a-fA-F_]+
-      | [-+]?0[oO][0-7_]+
-      | [-+]?0[bB][01_]+
-      | [-+]?\.(?:inf|Inf|INF)
-      | \.(?:nan|NaN|NAN)
-    )
-    """,
-    re.VERBOSE,
-)
+# A string go-yaml would not read as one is double-quoted. A scalar the template wrote PLAIN
+# (`defaultMode: 0o444`) is kept as `_GoPlain` and written back plain, since quoting it would
+# fail the apply.
 
 
 class _GoPlain(str):
@@ -62,7 +46,7 @@ class _Loader(getattr(yaml, "CSafeLoader", yaml.SafeLoader)):
 def _construct_str(loader: yaml.SafeLoader, node: yaml.ScalarNode) -> str:
     value = loader.construct_scalar(node)
     # A plain scalar's style is None from PyYAML's parser and "" from libyaml's.
-    if not node.style and _GO_YAML_NON_STRING.fullmatch(value):
+    if not node.style and GO_YAML_NON_STRING.fullmatch(value):
         return _GoPlain(value)
     return value
 
@@ -79,7 +63,7 @@ class _Dumper(yaml.SafeDumper):
 def _represent_str(dumper: yaml.SafeDumper, data: str) -> yaml.ScalarNode:
     if "\n" in data:
         style = "|"
-    elif _GO_YAML_NON_STRING.fullmatch(data):
+    elif GO_YAML_NON_STRING.fullmatch(data):
         style = '"'
     else:
         style = None
