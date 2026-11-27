@@ -88,6 +88,70 @@ class Cause(StrEnum):
 CAUSES = frozenset(Cause)
 
 
+class Next(StrEnum):
+    """What the session that ran a landing does next, as `LAND-RESULT:`'s `next` field prints it.
+
+    `wait:<source>` names a `cc-wait` source to wait on before re-running the same `land.sh`
+    command. `follow:land` waits on another landing of the PR with `cc-wait land`, and that
+    landing's result is this PR's: re-running `land.sh` would only be refused again.
+    """
+
+    DONE = "done"
+    RERUN = "rerun"
+    WAIT_LANDING_CLEAR = "wait:landing-clear"
+    FOLLOW_LAND = "follow:land"
+    FIX_AND_RERUN = "fix-and-rerun"
+    APPLY_BY_HAND = "apply-by-hand"
+    OPERATOR = "operator"
+
+
+# Each verdict's next action, keyed `(verdict, None)`, and the causes or exit codes that change
+# it, keyed `(verdict, cause)` or `(verdict, exit code)`. The cause wins, then the exit code.
+# Taken from `.claude/skills/land-after-merge/SKILL.md` (*Reading the verdict*) and
+# `docs/landing.md`, which say what each verdict needs.
+NEXT: dict[tuple[str, str | int | None], Next] = {
+    (Verdict.SETTLED, None): Next.DONE,
+    (Verdict.NOTHING_TO_DEPLOY, None): Next.DONE,
+    # A host's updater applies its package; cc-wait ends it with exit 4.
+    (Verdict.DEFERRED, None): Next.DONE,
+    (Verdict.DEFERRED, Cause.PROMOTE_TIMEOUT): Next.FIX_AND_RERUN,
+    (Verdict.DEFERRED, Cause.GATE_UNREADABLE): Next.RERUN,
+    (Verdict.DEFERRED, Cause.GATE_STALE): Next.RERUN,
+    (Verdict.UNHEALTHY, None): Next.FIX_AND_RERUN,
+    # Without a cause, a host's reconcile failed, and its `--clear-hold` needs sudo.
+    (Verdict.DEPLOY_FAILED, None): Next.OPERATOR,
+    (Verdict.DEPLOY_FAILED, Cause.TAG_MISS): Next.FIX_AND_RERUN,
+    (Verdict.DEPLOY_FAILED, Cause.PROMOTE_HELD): Next.WAIT_LANDING_CLEAR,
+    (Verdict.DEPLOY_FAILED, Cause.SOAK_FAILED): Next.OPERATOR,
+    (Verdict.NEEDS_MANUAL_APPLY, None): Next.APPLY_BY_HAND,
+    (Verdict.MERGE_CONFLICT, None): Next.FIX_AND_RERUN,
+    (Verdict.PR_CI_RED, None): Next.FIX_AND_RERUN,
+    (Verdict.MERGE_TIMEOUT, None): Next.RERUN,
+    (Verdict.CI_RED, None): Next.WAIT_LANDING_CLEAR,
+    (Verdict.CI_TIMEOUT, None): Next.RERUN,
+    (Verdict.CI_UNPROVEN, None): Next.FIX_AND_RERUN,
+    (Verdict.REFUSED, None): Next.FIX_AND_RERUN,
+    # A landing rule refused before the merge (`slots.py`), and a re-run waits in line again.
+    (Verdict.REFUSED, LAND_GAVE_UP): Next.RERUN,
+    (Verdict.REFUSED, Cause.LANDING_LIVE): Next.FOLLOW_LAND,
+    (Verdict.HANDOFF_TIMEOUT, None): Next.RERUN,
+    (Verdict.UNBUILT, None): Next.FIX_AND_RERUN,
+}
+
+
+def next_action(verdict: str | None, cause: str, rc: int) -> Next | None:
+    """The `NEXT` row for a landing that ended `verdict`, beside `cause`, with exit `rc`.
+
+    Returns None for a landing that named no verdict, such as a usage error.
+    """
+    if verdict is None:
+        return None
+    for key in ((verdict, cause), (verdict, rc), (verdict, None)):
+        if key in NEXT:
+            return NEXT[key]
+    raise KeyError(f"no next action for verdict {verdict!r}")
+
+
 class Outcome(Exception):
     """How a landing ends: the exit code, the verdict, and what to print.
 

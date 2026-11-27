@@ -44,6 +44,26 @@ def test_the_result_line_sits_just_above_the_verdict(land_run):
     assert verdict.startswith("VERDICT: ci-timeout")
 
 
+def test_a_landing_whose_pr_ci_is_red_names_its_next_action_last(land_run):
+    head = {"state": "OPEN", "mergeable": "MERGEABLE", "headRefOid": "c" * 40}
+    fakes = Fakes(
+        gh_views={
+            "state,title,body,reviewDecision": {
+                "state": "OPEN",
+                "title": "t",
+                "body": "",
+            },
+            "headRefOid": {"headRefOid": "c" * 40},
+            "state,mergeable,headRefOid": [head],
+        },
+        await_ci=[(1, "cccccccc: CI RED")],
+    )
+    rc, out, _, _, _ = land_run(["--arm-merge", "--await-merge"], fakes)
+    result = next(line for line in out.splitlines() if line.startswith("LAND-RESULT:"))
+    assert rc == 1 and "verdict=pr-ci-red " in result
+    assert result.endswith(" next=fix-and-rerun")
+
+
 def test_an_unexpected_exception_annotates_as_aborted_and_propagates(monkeypatch):
     """Built by hand rather than through `land_run`, because the raising gh_json must be
     injected into `tools`; the primary override is repeated here for the same reason the

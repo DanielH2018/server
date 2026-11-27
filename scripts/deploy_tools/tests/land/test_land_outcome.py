@@ -14,6 +14,24 @@ def test_an_exit_75_outcome_must_name_a_verdict():
     assert outcome.Outcome(75, "gave up", "ci-timeout").verdict == "ci-timeout"
 
 
+def test_every_verdict_has_a_next_action():
+    missing = [v for v in outcome.Verdict if (v, None) not in outcome.NEXT]
+    assert missing == []
+
+
+def test_a_cause_that_decides_overrides_its_verdicts_next_action():
+    deferred = outcome.Verdict.DEFERRED
+    assert outcome.next_action(deferred, "", 75) == outcome.Next.DONE
+    assert outcome.next_action(deferred, "gate-stale", 75) == outcome.Next.RERUN
+
+
+def test_a_refusal_before_the_merge_reruns_and_any_other_refusal_needs_a_fix():
+    refused = outcome.Verdict.REFUSED
+    assert outcome.next_action(refused, "", 75) == outcome.Next.RERUN
+    assert outcome.next_action(refused, "", 1) == outcome.Next.FIX_AND_RERUN
+    assert outcome.next_action(refused, "landing-live", 75) == outcome.Next.FOLLOW_LAND
+
+
 def test_an_unknown_verdict_is_refused():
     with pytest.raises(ValueError, match="unknown verdict"):
         outcome.Outcome(1, "x", "not-a-verdict")

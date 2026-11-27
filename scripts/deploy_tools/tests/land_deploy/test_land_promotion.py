@@ -159,7 +159,7 @@ def test_a_held_promotion_puts_the_waits_hold_owner_on_the_result_line(land_run)
     )
     _, out, _, _, _ = land_run([], _fakes(land_wait=[held]))
     result = out.rstrip().splitlines()[-2]
-    assert result.endswith(f"hold_sha=abc hold_owner=other merge={MERGE_SHA}")
+    assert f" hold_sha=abc hold_owner=other merge={MERGE_SHA} " in result
 
 
 def test_a_held_promotion_still_names_the_plane_and_the_host_it_carries(land_run):
