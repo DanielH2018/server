@@ -28,13 +28,18 @@ def keys_model(
 
 
 def key_errors(model: type[pydantic.BaseModel], mapping: Mapping) -> KeyErrors:
-    """The required keys `mapping` lacks, and the keys it carries that `model` does not name."""
+    """The required keys `mapping` lacks, and the keys it carries that `model` does not name.
+
+    A key that is not a string, such as the bool YAML reads `on:` or `yes:` as, is unknown.
+    """
     try:
         model.model_validate(mapping)
     except pydantic.ValidationError as exc:
         errors = exc.errors()
+        unknown = [str(e["loc"][0]) for e in errors if e["type"] == "extra_forbidden"]
+        unknown += [str(e["input"]) for e in errors if e["type"] == "invalid_key"]
         return KeyErrors(
             sorted(str(e["loc"][0]) for e in errors if e["type"] == "missing"),
-            sorted(str(e["loc"][0]) for e in errors if e["type"] == "extra_forbidden"),
+            sorted(unknown),
         )
     return KeyErrors([], [])
