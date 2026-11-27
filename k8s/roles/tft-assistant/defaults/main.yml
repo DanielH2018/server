@@ -2,7 +2,7 @@
 # Renovate's k8s-defaults manager tracks this pin. The tag stays beside the digest
 # (`repo:tag@sha256:...`): a bare `repo@sha256:...` freezes the image with no update signal.
 # The image's repository publishes a version tag per release, not per merge.
-tft_assistant_k8s_image: ghcr.io/danielh2018/tft-assistant:0.2.4@sha256:fea3663178e4e28e6d78527b9cf277032ef6d9037f9d04ce013d29d4a5356c19
+tft_assistant_k8s_image: ghcr.io/danielh2018/tft-assistant:0.2.5@sha256:a33977f128b1d2e6433ccab7e6def96d2f13ff4148a7c91fe99c0cc54572abb6
 
 # Renovate stance: whether an image bump here may automerge. `promote` deploys what merges.
 k8s_autodeploy: true
@@ -11,11 +11,12 @@ k8s_autodeploy_reason: "the data volume holds matches the crawl can fetch again 
 # revision. A revert of the data claim saves a re-crawl. A revert of the kept claim saves the notes.
 k8s_autodeploy_snapshot_pvcs: [tft-assistant-data, tft-assistant-keep]
 
-# The web container: the image's `serve` command over one static page and the edit store.
+# The web container: the image's `serve` command over one static page and the edit store. The
+# command loads the whole CLI, numpy and scikit-learn included, and holds 136 MB resident.
 tft_assistant_k8s_cpu_limit: "200m"
-tft_assistant_k8s_mem_limit: 96Mi
+tft_assistant_k8s_mem_limit: 256Mi
 tft_assistant_k8s_cpu_request: "10m"
-tft_assistant_k8s_mem_request: 32Mi
+tft_assistant_k8s_mem_request: 160Mi
 
 # The crawler container. It idles on Riot's rate limit between builds. A build holds every board
 # of a selection in memory, about 800 MB for 13,600 matches, and the image analyses 20,000 at most.
