@@ -222,8 +222,11 @@ prints for a solo session, plus the call to `scripts/dev/repo_guards.py`, which 
 repo-wide guards no test beside a change reaches) and starts a headless
 agent at its rung as a transient user service in a fresh worktree on whichever host has the
 most memory headroom under the tighter of its fleet and login-plane caps. Exit 3 means nothing
-was placed: every claim was refused (step 2), or one of three placement refusals fired, which
-claim nothing. Exit 7 is a launch that started batches but dropped a refused claim. The
+was placed: every claim was refused (step 2), the landing queue was too deep, or one of three
+placement refusals fired, all of which claim nothing. The landing-queue gate holds a server
+batch while more than `scripts/dev/fanout_lib/launch_gates.py:MAX_LANDINGS_IN_FLIGHT`
+landings are in flight, read from deploy-ui at no GitHub cost; wait with
+`cc-wait fanout-headroom`. A failed read holds nothing. Exit 7 is a launch that started batches but dropped a refused claim. The
 placement refusals: neither host has a
 reservation's worth of headroom; the placement would put more
 than three batches on one remote host in this run (the ssh budget, which binds only when the
@@ -327,7 +330,7 @@ daniel-server batch awaits the server lander, so `finished` means every PR lande
 `cc-wait fanout-headroom [--batches N] [--host HOST] --budget 1740` in the background, and
 re-run it on exit 75. It ends `room` (exit 0) once a `launch` of N batches would place, or
 `no-signing-host` (6) when no host signs verifiably. While it waits, its detail is the
-refusal `launch` would print. Placement skips a host at its live-batch cap and places on the
+refusal `launch` would print, and a deep landing queue reads `full` before any host is read. Placement skips a host at its live-batch cap and places on the
 next host with memory headroom (#6421), so `room` names a host that has both. It
 answers for every run, other sessions' included, which `cc-wait fanout` cannot. Each wait
 reads the hosts itself and never reuses an earlier wait's reading, so a wait started just

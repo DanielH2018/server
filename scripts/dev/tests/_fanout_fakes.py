@@ -84,6 +84,7 @@ def fake_tools(
     refused_claims=(),
     head="worktree-orch",
     multiplexed=False,
+    landings=0,
 ) -> tuple[Tools, FakeRun]:
     """Build a Tools whose boundaries answer from tables, plus the FakeRun behind it.
 
@@ -110,6 +111,8 @@ def fake_tools(
         refused_claims: issue numbers whose `claim` exits 3 instead, refused.
         head: what `head_branch` answers, or an exception it raises instead.
         multiplexed: what `multiplexed` answers; True lifts the per-run ssh budget.
+        landings: how many landings `landings` reports in flight, or an exception it raises
+            instead. The default of none keeps every launch test off deploy-ui.
 
     Returns:
         The Tools and the FakeRun it holds, so a test can script and read the calls.
@@ -165,6 +168,11 @@ def fake_tools(
     def default_ref(checkout: str) -> str:
         return "origin/main"
 
+    def landings_in_flight() -> int:
+        if isinstance(landings, BaseException):
+            raise landings
+        return landings
+
     return Tools(
         run=run,
         gh_issue=gh_issue,
@@ -182,6 +190,7 @@ def fake_tools(
         ),
         # Unmultiplexed, so the per-run ssh budget the launch tests pin still binds.
         multiplexed=lambda: multiplexed,
+        landings=landings_in_flight,
     ), run
 
 

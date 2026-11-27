@@ -8,6 +8,7 @@ import json
 import os
 import socket
 import subprocess
+import urllib.request
 import dataclasses
 from collections.abc import Callable, Collection, Sequence
 from dataclasses import dataclass
@@ -365,6 +366,26 @@ def run_findings(argv: list[str]) -> subprocess.CompletedProcess:
     )
 
 
+def landings_in_flight() -> int:
+    """How many `land.sh` runs are live, as deploy-ui's `/api/inflight` lists them.
+
+    One HTTP GET to the daemon on the landing host, which every node can reach, and no
+    GitHub call, so a cc-wait poll from each session costs the shared API quota nothing.
+
+    Raises:
+        OSError: the daemon could not be reached or answered an error status.
+        ValueError: its answer was not the JSON `/api/inflight` returns.
+    """
+    # Call-time: `fanout.py headroom` runs outside the venv, and the module-level imports of
+    # `landing_blockers` pull in the landing's own modules.
+    from diagnostics.probe_lib.landing_blockers import HTTP_TIMEOUT_S, deploy_ui_url
+
+    url = deploy_ui_url() + "/api/inflight"
+    with urllib.request.urlopen(url, timeout=HTTP_TIMEOUT_S) as resp:
+        runs = json.loads(resp.read()).get("runs", [])
+    return sum(1 for r in runs if r.get("kind") == "land")
+
+
 def default_ref(checkout: str) -> str | None:
     """`checkout`'s remote default branch, such as `origin/main`, or None when it has none."""
     from lib.worktrees import default_ref as read
@@ -405,6 +426,7 @@ class Tools:
         comment: post a comment on an issue in a repo, for the `Worked by` record.
         multiplexed: whether ssh calls share one connection per host, which lifts the
             per-run ssh budget `launch_gates.over_ssh_budget` enforces.
+        landings: how many landings are in flight, for `launch_gates.over_landing_queue`.
     """
 
     run: Callable[..., subprocess.CompletedProcess] = run_command
@@ -420,6 +442,7 @@ class Tools:
     head_branch: Callable[[], str] = head_branch
     comment: Callable[[int, str, str], bool] = comment_issue
     multiplexed: Callable[[], bool] = ssh_multiplexed
+    landings: Callable[[], int] = landings_in_flight
 
 
 def read_host(

@@ -2,8 +2,8 @@
 
 Each gate prints its own reason and returns True to refuse, so `cmd_launch` reads as a list of
 refusals rather than a nest of conditions. Three read the issue bodies: `refuse_shared_files`,
-`refuse_live_shared_files` and `refuse_solo_only`. The rest read the placement and the live
-run manifests.
+`refuse_live_shared_files` and `refuse_solo_only`. `over_landing_queue` reads how many
+landings deploy-ui lists in flight. The rest read the placement and the live run manifests.
 
 The shared-file check exists because the triage step groups issues so no two batches share an
 Ansible role, and that rule never covers the shared code under `scripts/`. Two batches with
@@ -49,6 +49,12 @@ MAX_LIVE_BATCHES_PER_HOST = 6
 # node (`claude_code_fleet_memory_high` derives the floor). CPU on daniel-server (8 cores) is
 # the known risk at 6: the earlier week measured a p95 of 6.0 of 8 cores at 4 batches.
 LIVE_BATCH_CAP_BY_HOST = {"daniel-server": 6}
+# DECIDED: refuse a launch while more than 6 landings are in flight (2026-11-27). Of 90 batches
+# launched 2026-11-22..27, the 78 launched at depth 0-6 ended `merge-conflict` 2 times, with a
+# median 0.65 h from PR to merge; the 12 launched at depth 7-9 conflicted 5 times, at 2.42 h
+# (one-sided hypergeometric p=0.0003). The limit holds 13% of those launches. All 12 came from
+# one burst on 2026-11-26, whose batches may also have shared files.
+MAX_LANDINGS_IN_FLIGHT = 6
 
 
 def live_batch_cap(host: str) -> int:
@@ -188,6 +194,32 @@ def over_live_batch_cap(
         )
         over = True
     return over
+
+
+def over_landing_queue(tools: Tools) -> bool:
+    """Print and return True when more than `MAX_LANDINGS_IN_FLIGHT` landings are in flight.
+
+    A batch launched into a deep landing queue waits longer for the landing turn and meets a
+    master that moved further, so it conflicts more. `cc-wait fanout-headroom` reads this gate
+    too, so the wait it names ends once the queue drains. A read that fails holds nothing, as
+    the landing's own reads fail open, and says so on stderr.
+    """
+    try:
+        depth = tools.landings()
+    except Exception as exc:
+        warn(
+            f"could not read how many landings are in flight ({type(exc).__name__}: "
+            f"{exc}); launching without the landing-queue gate"
+        )
+        return False
+    if depth <= MAX_LANDINGS_IN_FLIGHT:
+        return False
+    error(
+        f"{depth} landings are in flight, over the {MAX_LANDINGS_IN_FLIGHT} a launch waits "
+        "behind: a batch launched into a deeper queue waits longer to land and conflicts "
+        "more — wait with `cc-wait fanout-headroom`, then launch again"
+    )
+    return True
 
 
 def fetch_issues(
