@@ -26,8 +26,7 @@ as `--require`
 # the package into `~/.local/share/`.
 """
 
-# pyright: reportMissingImports=false
-
+import importlib.util
 import os
 import sys
 from pathlib import Path
@@ -38,8 +37,23 @@ _CLAUDE_WORKTREE_HOME = Path(
     os.environ.get("CLAUDE_WORKTREE_HOME", "~/.local/share/claude-worktree")
 ).expanduser()
 
-if "claude_worktree" not in sys.modules and _CLAUDE_WORKTREE_HOME.is_dir():
-    sys.path.insert(0, str(_CLAUDE_WORKTREE_HOME))
+if "claude_worktree" not in sys.modules:
+    if _CLAUDE_WORKTREE_HOME.is_dir():
+        sys.path.insert(0, str(_CLAUDE_WORKTREE_HOME))
+    # The `lint` group installs a pinned copy for the type checkers; it never stands in for the
+    # deploy. The check reads where the import will start, not `__file__`, which a test shim
+    # in CLAUDE_WORKTREE_HOME sets to the module it loads.
+    _found = importlib.util.find_spec("claude_worktree")
+    if (
+        _found is not None
+        and _found.origin
+        and Path(_found.origin).resolve().parent != _CLAUDE_WORKTREE_HOME.resolve()
+    ):
+        raise ImportError(
+            f"claude_worktree found at {_found.origin}, not at the deploy at "
+            f"{_CLAUDE_WORKTREE_HOME}. It is deployed by the dotfiles repo (chezmoi apply) — "
+            "run that on this host, or point CLAUDE_WORKTREE_HOME at a checkout of it."
+        )
 
 try:
     import claude_worktree
