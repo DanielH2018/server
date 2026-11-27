@@ -34,13 +34,13 @@ def fleets(draw):
 @given(fleets())
 def test_every_workload_goes_to_the_longest_service_it_starts_with(fleet):
     services, workloads = fleet
-    names = {_join(s) for s in services}
+    scopes = {_join(s): {NS} for s in services}
     live = {
         (NS, _join(w)): {"ready": 1, "desired": 1, "image": "i:1"} for w in workloads
     }
     claims: dict[str, list[str]] = {}
-    for name in names:
-        for w in g.match_k8s_workloads({"name": name, "namespace": NS}, live, names):
+    for name in scopes:
+        for w in g.match_k8s_workloads({"name": name, "namespace": NS}, live, scopes):
             claims.setdefault(w["name"], []).append(name)
     for workload in workloads:
         owner = max((s for s in services if workload[: len(s)] == s), key=len)

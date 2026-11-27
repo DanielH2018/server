@@ -7,7 +7,7 @@ Pure functions over both inputs — nothing here touches the cluster or the repo
 
 from infra_map.constants import HOST_PLANE, HOST_ROLE, HOSTS, NAMESPACE_OWNERS
 from infra_map.inventory import RoleIndex, declared_services
-from collections.abc import Collection, Sequence
+from collections.abc import Collection, Mapping, Sequence
 from typing import Any
 
 
@@ -20,7 +20,7 @@ def _owning_service(wl_name: str, service_names: Collection[str]) -> str | None:
 def match_k8s_workloads(
     service: dict,
     workloads: dict[tuple[str, str], dict],
-    service_names: Collection[str],
+    scopes: Mapping[str, Collection[str | None]],
     extra_namespaces: frozenset[str] = frozenset(),
 ) -> list[dict]:
     """Find the workloads backing a declared k8s service.
@@ -31,12 +31,13 @@ def match_k8s_workloads(
     any namespace its own manifests name literally (*extra_namespaces*):
     dri-device-plugin's DaemonSet lives in kube-system because an extended
     resource is a node property, and the inventory has no field saying so.
-    A helper goes to the longest of *service_names* it matches, so ``foo``
-    does not claim ``foo-bar``'s workloads when ``foo-bar`` is declared too.
+    *scopes* maps each declared service to the namespaces it searches. A
+    workload goes to the longest service name it matches among those that
+    search its namespace, so ``foo`` does not claim ``foo-bar``'s workloads
+    when ``foo-bar`` looks there too.
     """
     name, namespace = service["name"], service.get("namespace")
     namespaces = {namespace, *extra_namespaces}
-    candidates = {name, *service_names}
     matched = []
     if name in NAMESPACE_OWNERS:
         for (ns, wl_name), info in workloads.items():
@@ -46,7 +47,8 @@ def match_k8s_workloads(
         for (ns, wl_name), info in workloads.items():
             if ns not in namespaces:
                 continue
-            if _owning_service(wl_name, candidates) == name:
+            rivals = {n for n, scope in scopes.items() if ns in scope}
+            if _owning_service(wl_name, {name, *rivals}) == name:
                 matched.append({"name": wl_name, "namespace": ns, **info})
     return sorted(matched, key=lambda w: w["name"])
 
@@ -84,16 +86,22 @@ def reconcile_k8s(
     service: dict,
     workloads: dict[tuple[str, str], dict],
     roles: RoleIndex,
-    service_names: Collection[str],
+    declared: Collection[dict],
 ) -> dict:
     """Overlay live workload state onto one declared k8s service.
 
-    *service_names* is every declared service; a workload goes to the longest one it matches.
+    *declared* is every declared service; a workload goes to the longest name
+    among those that search its namespace.
     """
+
+    def scope(s: dict) -> frozenset[str | None]:
+        extra = roles.manifest_namespaces.get(s["name"], frozenset())
+        return frozenset({s.get("namespace"), *extra})
+
     matched = match_k8s_workloads(
         service,
         workloads,
-        service_names,
+        {s["name"]: scope(s) for s in declared},
         roles.manifest_namespaces.get(service["name"], frozenset()),
     )
     if not matched:
@@ -253,7 +261,7 @@ def build_model(
             if platform == "k8s":
                 services = [
                     place_on_nodes(
-                        reconcile_k8s(s, info["data"], roles, declared_names),
+                        reconcile_k8s(s, info["data"], roles, declared),
                         cluster["pods"],
                     )
                     for s in declared
