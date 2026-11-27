@@ -47,6 +47,11 @@ See repo-root `CLAUDE.md` for shared conventions.
   endpoint read `ready=true serving=false`, and Traefik routed nothing to it. A crawler
   that exits takes the page with it, so the crawler must not exit over a condition that
   outlasts a restart.
+- **The route reaches the page through the Service's cluster IP.**
+  `k8s/roles/tft-assistant/templates/ingressroute.yaml.j2:DECIDED: the route goes to the Service's cluster IP`
+  holds the reason: Traefik skips a pod that is not serving, and kube-proxy does not.
+  `tests/k8s/edge/test_unready_services_route_through_the_cluster_ip.py::test_every_route_to_an_unready_publishing_service_uses_its_cluster_ip`
+  holds the pair, the Service's field and the route's.
 - **The page keeps its endpoint while the pod is unready.**
   `k8s/roles/tft-assistant/templates/service.yaml.j2:DECIDED: the page keeps its endpoint while the pod is unready`
   holds the reason. The role ships its own Service for that one field.
