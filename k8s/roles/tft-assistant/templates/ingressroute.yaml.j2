@@ -1,0 +1,17 @@
+{% from 'ingressroute.yml.j2' import ingressroute with context %}
+{# DECIDED: the route goes to the Service's cluster IP, not to the pod. The crawler container
+   beside the web container can restart, on an out-of-memory build, and the pod is then
+   unready. Traefik picks pods itself and skips one that is not serving, so it answered 503
+   for a page that was up. kube-proxy honours the Service's `publishNotReadyAddresses` and
+   keeps routing to the pod. The role has one replica, so Traefik's own balancing across pods
+   is nothing to lose. #}
+---
+{{ ingressroute(
+    container_item.name,
+    container_item.hostname | default(container_item.name),
+    container_item.port,
+    container_item.use_authelia,
+    public=container_item.public_route | default(true),
+    native_lb=true,
+  )
+}}

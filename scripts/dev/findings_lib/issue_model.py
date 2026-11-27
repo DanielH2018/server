@@ -286,14 +286,19 @@ def ordered_comments(comments: tuple[Comment, ...]) -> tuple[Comment, ...]:
     so its answer is only correct if the list really is oldest-first. gh returns them that
     way — measured ascending across 17 issues — but nothing enforced it.
 
-    SORTS ONLY WHEN EVERY COMMENT CARRIES A TIMESTAMP. A mixed list is the dangerous case: a
-    key of `created_at or ""` hoists every unstamped comment to the front, which can flip
-    the verdict of the one function in this protocol that must not change by accident.
-    Fixtures routinely omit `createdAt`, so the mixed list is not hypothetical.
+    SORTS ON THE INSTANT, NOT THE STRING. ``…T10:00:00Z`` sorts after ``…T10:00:00.5Z`` as
+    text, and a ``+00:00`` stamp sorts before the same instant spelled ``Z``. The sort is
+    stable, so comments posted at one instant keep gh's order.
+
+    SORTS ONLY WHEN EVERY COMMENT CARRIES A ZONE-AWARE TIMESTAMP. A mixed list is the
+    dangerous case: a key of `created_at or ""` hoists every unstamped comment to the front,
+    which can flip the verdict of the one function in this protocol that must not change by
+    accident. Fixtures routinely omit `createdAt`, so the mixed list is not hypothetical.
     """
-    if not all(c.created_at for c in comments):
+    stamped = [(t, c) for c in comments if (t := _aware(c.created_at)) is not None]
+    if len(stamped) < len(comments):
         return comments
-    return tuple(sorted(comments, key=lambda c: c.created_at))
+    return tuple(c for _, c in sorted(stamped, key=lambda pair: pair[0]))
 
 
 def claim_of(comments: tuple[Comment, ...]) -> Claim | None:

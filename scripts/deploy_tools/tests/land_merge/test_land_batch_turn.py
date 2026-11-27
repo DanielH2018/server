@@ -10,9 +10,12 @@ ends the batch, and so does a holder's own wait after which it could not take th
 import subprocess
 from dataclasses import replace
 
+import pytest
+
 from _land_batch_fakes import OWN, answers, land
 from _land_fakes import Fakes
 from deploy_tools.land_lib import gh_read, pr_json
+from deploy_tools.land_lib.outcome import Outcome
 
 LIMITED = subprocess.CalledProcessError(
     1, "gh", stderr="gh: You have exceeded a secondary rate limit. (HTTP 403)"
@@ -80,10 +83,11 @@ def test_a_members_rate_limit_wait_gives_the_turn_back_and_forms_no_batch(batch_
     assert answers(the_line, "7") == [""]
 
 
-def test_a_holder_whose_turn_a_members_wait_lost_leaves_its_branch_alone(
+def test_a_holder_whose_turn_a_members_wait_lost_leaves_its_branch_alone_and_is_refused(
     batch_of, capsys
 ):
-    # Master moved on the PR's path, which a holder of the turn answers with a branch update.
+    # Master moved on the PR's path, which a holder of the turn answers with a branch update,
+    # and a landing without the turn with a refusal, because its run tested the older master.
     moved = Fakes(
         turn=[True, False],
         compare=[["docs/notes.md"]],
@@ -101,15 +105,17 @@ def test_a_holder_whose_turn_a_members_wait_lost_leaves_its_branch_alone(
         return hub.gh_json(*args, **kwargs)
 
     ln.tools = replace(ln.tools, gh_json=gh_json)
-    land(ln)
+    with pytest.raises(Outcome) as exc:
+        land(ln)
     assert "going on without a turn" in capsys.readouterr().out
+    assert "1 path(s) PR #999 changes" in exc.value.error
     updates = [
         args
         for name, args, _ in hub.calls
         if name == "gh" and args[3].endswith("/update-branch")
     ]
     assert updates == []
-    assert hub.stacked == {} and hub.merged == [OWN]
+    assert hub.stacked == {} and hub.merged == []
 
 
 def test_a_holder_whose_own_wait_lost_the_turn_stacks_no_batch(batch_of, capsys):

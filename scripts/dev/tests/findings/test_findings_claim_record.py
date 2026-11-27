@@ -247,6 +247,28 @@ def test_comments_are_folded_in_created_at_order_not_the_order_gh_returned():
     assert _issue(later, earlier).holder == "worktree-first"
 
 
+def test_a_fractional_stamp_sorts_after_the_whole_second_it_follows():
+    """``…00Z`` sorts after ``…00.500000Z`` as text, so a string sort hands the issue to B."""
+    first = operator_comment(
+        claim_comment("worktree-a", None, "t"), createdAt="2026-11-26T09:00:00Z"
+    )
+    second = operator_comment(
+        claim_comment("worktree-b", None, "t"), createdAt="2026-11-26T09:00:00.500000Z"
+    )
+    assert _issue(first, second).holder == "worktree-a"
+
+
+def test_one_instant_spelled_two_ways_keeps_the_order_gh_returned():
+    """``+00:00`` sorts before ``Z`` as text, so a string sort lets the later claim jump the tie."""
+    first = operator_comment(
+        claim_comment("worktree-a", None, "t"), createdAt="2026-11-26T09:00:00Z"
+    )
+    second = operator_comment(
+        claim_comment("worktree-b", None, "t"), createdAt="2026-11-26T09:00:00+00:00"
+    )
+    assert _issue(first, second).holder == "worktree-a"
+
+
 def test_a_comment_with_no_timestamp_leaves_the_order_alone():
     """The rejecting half: a MIXED list must not be reordered.
 

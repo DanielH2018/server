@@ -115,15 +115,24 @@ def authenticated_clients(lines, routers):
             entry = json.loads(line)
         except ValueError, TypeError:
             continue
-        if not isinstance(entry, dict) or entry.get("RouterName") not in routers:
+        if not isinstance(entry, dict):
             continue
-        if entry.get("DownstreamStatus") not in OK_STATUSES:
+        router = entry.get("RouterName")
+        status = entry.get("DownstreamStatus")
+        forwarded = entry.get("ClientHost")
+        if not (
+            isinstance(router, str)
+            and isinstance(status, int)
+            and isinstance(forwarded, str)
+        ):
+            continue
+        if router not in routers or status not in OK_STATUSES:
             continue
         # ClientHost is Traefik's whole X-Forwarded-For; from Cloudflare only the RIGHTMOST entry is
         # not client-chosen.
         # The crowdsecurity/traefik-logs parser takes the same entry, so this list holds the address
         # CrowdSec bans.
-        host = (entry.get("ClientHost") or "").rsplit(",", 1)[-1].strip()
+        host = forwarded.rsplit(",", 1)[-1].strip()
         if is_remote_client(host):
             seen.add(host)
     return frozenset(seen)
@@ -180,13 +189,20 @@ def parse_expiration(raw):
     return parsed if parsed.tzinfo else parsed.replace(tzinfo=UTC)
 
 
+def _latest(first, second):
+    """The later of two expiries, where None (never expires, or unreadable) is the latest."""
+    if first is None or second is None:
+        return None
+    return max(first, second)
+
+
 @dataclass
 class Plan:
     add: list = field(default_factory=list)  # new entries
     refresh: list = field(
         default_factory=list
-    )  # present, under REFRESH_BELOW left: remove+add
-    prune: list = field(default_factory=list)  # present, already expired
+    )  # present but expired, unreadable or under REFRESH_BELOW left, and wanted: remove+add
+    prune: list = field(default_factory=list)  # present and not kept
     over_cap: list = field(default_factory=list)  # seen, would exceed CAP, NOT added
     live: list = field(default_factory=list)  # present and unexpired after this run
 
@@ -204,47 +220,63 @@ class Plan:
 def plan(seen, items, now, home=frozenset(), refresh_below=REFRESH_BELOW, cap=CAP):
     """Decide the writes for this run from the sightings and the LAPI's current items.
 
-    `items` is `cscli allowlists inspect -o json`'s `items` list. An item whose expiry cannot be
-    read counts as due for refresh: one extra rewrite is cheaper than an entry that quietly
-    lapsed. Additions stop at `cap`, and the addresses left out are reported, not dropped.
+    `items` is `cscli allowlists inspect -o json`'s `items` list. Items sharing a value are one
+    entry holding the latest expiry, because `cscli allowlists remove` deletes every copy. An
+    item whose value is not a string is ignored. An item whose expiry cannot be read counts as
+    due for refresh: one extra rewrite is cheaper than an entry that quietly lapsed. An expired
+    item that is wanted again is refreshed, not pruned, so no value is both pruned and live.
+    Additions stop at `cap`, and the addresses left out are reported, not dropped.
     `home` is `home_networks()` of the `home-ips` list: a sighting inside it is ignored and a
     present item inside it is pruned, because `home-ips` already exempts it.
     An IPv6 sighting counts as its /64 (`entry_value`). A present single IPv6 address is pruned
     and its /64 added with a full TTL, taking the one slot all its siblings shared.
     """
-    live = []
     result = Plan()
     present = {}
-    widened = set()
     for item in items:
         value = item.get("value")
-        if not value:
+        if not value or not isinstance(value, str):
             continue
         expires = parse_expiration(item.get("expiration"))
-        if (expires is not None and expires <= now) or is_home_covered(value, home):
+        present[value] = (
+            _latest(present[value], expires) if value in present else expires
+        )
+    live = {}
+    expired = set()
+    widened = set()
+    for value, expires in present.items():
+        if is_home_covered(value, home):
             result.prune.append(value)
-            continue
-        if entry_value(value) != value:
+        elif expires is not None and expires <= now:
+            expired.add(value)
+        elif entry_value(value) != value:
             result.prune.append(value)
             widened.add(entry_value(value))
-            continue
-        present[value] = expires
-        live.append(value)
-    for value in sorted(widened - present.keys()):
-        result.add.append(value)
-        present[value] = now + TTL
-        live.append(value)
+        else:
+            live[value] = expires
+
+    def write(value):
+        if value in expired:
+            expired.discard(value)
+            result.refresh.append(value)
+        else:
+            result.add.append(value)
+        live[value] = now + TTL
+
+    for value in sorted(widened - live.keys()):
+        write(value)
     wanted = {entry_value(v) for v in seen if not is_home_covered(v, home)}
     for value in sorted(wanted):
-        if value in present:
-            expires = present[value]
+        if value in live:
+            expires = live[value]
             if expires is None or expires - now < refresh_below:
                 result.refresh.append(value)
+                live[value] = now + TTL
         elif len(live) < cap:
-            result.add.append(value)
-            live.append(value)
+            write(value)
         else:
             result.over_cap.append(value)
+    result.prune += [v for v in present if v in expired]
     result.live = sorted(live)
     return result
 

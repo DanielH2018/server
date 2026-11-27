@@ -463,10 +463,14 @@ def test_the_health_roles_grant_the_verdict_export_patch(monkeypatch, role) -> N
     argvs = []
 
     def record(*args: str) -> tuple[int, str]:
-        argvs.append(["kubectl", "-n", "homelab", *args])
+        if args[0] == "patch":
+            argvs.append(["kubectl", "-n", "homelab", *args])
         return 0, ""
 
-    reader.export_verdict(record, f"{role}-health-verdict", "up", "ok", 0.0)
+    reader.main(
+        kubectl=record, now=lambda: 0.0, verdict_configmap=f"{role}-health-verdict"
+    )
+    assert len(argvs) == 1
     needs = recorded_needs(argvs)
     # `kubectl patch` GETs the object before it sends the PATCH.
     assert {need[:4] for need in needs} == {

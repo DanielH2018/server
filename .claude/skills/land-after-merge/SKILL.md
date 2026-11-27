@@ -27,7 +27,7 @@ checked, which auto-merge cannot do (`docs/landing.md` has the detail).
 
 **A checkout that does not follow master needs no extra flag.** A landing that finds its
 own landing code older than master's re-runs itself from a detached checkout of
-`origin/master`, which it adds under `/tmp` and removes when the landing ends. Its log says
+`origin/master`, which it adds under `~/.cache/homelab/land-fresh/` and removes when the landing ends. Its log says
 so in one `land:` line, and the verdict is that checkout's landing's. `--fresh` forces the
 same checkout from the start and is never required (`docs/landing.md`, *Before the merge, a
 stale checkout re-runs the landing from a fresh one without asking*).
@@ -43,9 +43,10 @@ is converted to draft and updated before the landing asks for the turn, and prin
 it to draft and updated its branch`. One that master moved past while it waited for the turn
 does the same once it takes the turn, and prints `gave the landing turn back to wait in the
 line as a draft`. Each adds a CI run's worth of time, not a fault. A stale green head that
-reaches the merge anyway merges as it stands, and master's own run tests it.
-The exception is a stale head the operator approved: the update would void the approval, so
-`land.sh` refuses it when master changed a path the PR changes, and names the remedy, which is
+reaches the merge anyway merges as it stands when master changed no path the PR changes, and
+master's own run tests it. When master did change one, `land.sh` refuses the merge with a
+`refused` verdict. For most heads the remedy is to re-run `land.sh`, which updates the branch
+first. For a head the operator approved, an update would void the approval, so the remedy is
 to rebase onto origin/master, push and get the new head approved.
 `land_lib/merge.py`'s module docstring owns the rule.
 
