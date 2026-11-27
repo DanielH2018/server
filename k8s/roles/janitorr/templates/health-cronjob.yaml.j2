@@ -90,6 +90,15 @@ spec:
             - name: janitorr-health-code
               configMap:
                 name: janitorr-health
+                items:
+                  - key: janitorr_health.py
+                    path: janitorr_health.py
+                  - key: janitorr_health_logic.py
+                    path: janitorr_health_logic.py
+                  - key: host_lib.py
+                    path: host_lib.py
+                  - key: check_verdict
+                    path: lib/check_verdict.py
             - name: janitorr-health-kubectl
               emptyDir: {}
             - name: janitorr-health-tmp

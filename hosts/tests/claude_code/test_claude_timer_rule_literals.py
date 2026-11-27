@@ -38,6 +38,11 @@ PRODUCERS = {
         "claude-clone-sync",
         "claude_code_agent_clone_sync_interval",
     ),
+    "ClaudeWorktreeSweepNotReporting": (
+        "claude-worktree-sweep.service.j2",
+        "claude-worktree-sweep",
+        "claude_code_agent_worktree_sweep_interval",
+    ),
     "ClaudeDotfilesSyncNotReporting": (
         "claude-dotfiles-sync.service.j2",
         "claude-dotfiles-sync",
@@ -111,6 +116,7 @@ def test_literal_problems_is_clean_on_the_shipped_rule(alert):
 def test_the_deadlines_are_two_periods_plus_the_run_timeout_plus_300s():
     assert {alert: rendered_deadline(alert) for alert in PRODUCERS} == {
         "ClaudeCloneSyncNotReporting": 2100,
+        "ClaudeWorktreeSweepNotReporting": 1213500,
         "ClaudeDotfilesSyncNotReporting": 2100,
         "ClaudeMemorySyncNotReporting": 2100,
         "ClaudeTriagePollNotReporting": 660,
@@ -121,6 +127,7 @@ def test_the_deadlines_are_two_periods_plus_the_run_timeout_plus_300s():
 
 ARMED_BY = {
     "ClaudeCloneSyncNotReporting": ("claude_code_agent_user_enabled",),
+    "ClaudeWorktreeSweepNotReporting": ("claude_code_agent_user_enabled",),
     "ClaudeDotfilesSyncNotReporting": (
         "claude_code_agent_user_enabled",
         "claude_code_agent_dotfiles",

@@ -8,7 +8,7 @@ on a bad verdict: a DOWN is data to report, not a crash.
 Runs as the janitorr-health CronJob (templates/health-cronjob.yaml.j2), in the repo's pinned
 python image, with kubectl copied in by an init container and the pod's own ServiceAccount
 (templates/health-rbac.yaml.j2) as its credential. host_lib.py sits beside it in the same
-ConfigMap.
+ConfigMap, and the shared verdict export under lib/check_verdict.py.
 
 Usage:
 
@@ -31,7 +31,6 @@ Environment (all optional):
 
 from __future__ import annotations
 
-import json
 import os
 import socket
 import sys
@@ -42,6 +41,7 @@ from datetime import datetime, timezone
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import host_lib
 import janitorr_health_logic as logic
+from lib.check_verdict import export_verdict
 
 NAMESPACE = os.environ.get("JANITORR_NAMESPACE", "homelab")
 WINDOW_S = float(os.environ.get("JANITORR_WINDOW_H", "12")) * 3600
@@ -70,49 +70,6 @@ def uptime_seconds(started_at: str, now: float) -> float:
     if started.tzinfo is None:
         raise ValueError(f"timestamp {started_at!r} has no UTC offset")
     return now - started.timestamp()
-
-
-def export_verdict(
-    kubectl: Callable[..., tuple[int, str]],
-    configmap: str,
-    status: str,
-    msg: str,
-    now: float,
-) -> bool:
-    """Writes the verdict and the run time to the verdict ConfigMap's annotations.
-
-    kube-state-metrics exports `homelab/check-verdict` as a label of
-    `kube_configmap_annotations`, which the shadow rule `JanitorrErrorsFound` reads. The time
-    and the message are for a human reading the object. The rule measures freshness from the
-    CronJob's last successful run instead, because an annotation is a label and cannot be
-    compared with the clock.
-
-    Returns:
-        True when the API server accepted the patch.
-    """
-    stamp = datetime.fromtimestamp(now, timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-    patch = {
-        "metadata": {
-            "annotations": {
-                "homelab/check-verdict": status,
-                "homelab/check-last-run": stamp,
-                "homelab/check-message": msg[:200],
-            }
-        }
-    }
-    rc, out = kubectl(
-        "patch",
-        "configmap",
-        configmap,
-        "--type=merge",
-        # Flux's server-side apply strips fields owned by a manager named `kubectl*`; the default
-        # `kubectl-patch` would make the annotations vanish at every apply.
-        "--field-manager=" + TAG,
-        "--patch=" + json.dumps(patch),
-    )
-    if rc != 0:
-        emit("export failed: cannot patch %s: %s" % (configmap, out.strip()[:200]))
-    return rc == 0
 
 
 def verdict(kubectl: Callable[..., tuple[int, str]], now: float) -> tuple[bool, str]:
@@ -189,14 +146,15 @@ def main(
     except Exception as e:  # any crash is reported as the verdict
         ok, msg = False, "janitorr health reader failed: %s: %s" % (type(e).__name__, e)
     status = "up" if ok else "down"
-    exported = (
-        export_verdict(kubectl, verdict_configmap, status, msg, now())
+    failure = (
+        export_verdict(kubectl, verdict_configmap, TAG, status, msg, now())
         if verdict_configmap
-        else True
+        else None
     )
-    exit_code = 0 if exported else 1
+    if failure:
+        emit(failure)
     emit("status=%s %s" % (status, msg))
-    return exit_code
+    return 1 if failure else 0
 
 
 if __name__ == "__main__":
