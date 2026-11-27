@@ -34,6 +34,7 @@ from lib.render_guard import (  # noqa: F401  (`service_tags_at` is read through
 )
 from lib.repo_paths import REPO
 from lib.role_paths import SECRETS_FILE, tag_for
+from lib.yaml_fast import UnparsableYaml, parse_yaml
 from secrets_mgmt.stale_copies import unapplied_keys
 
 # A rotated secret's value lives in no role's template, so changed-path matching has nothing to
@@ -139,7 +140,9 @@ _K8S_DEFAULTS_FILE = re.compile(
 )
 # A bare list item `- |` opens a block scalar too; missing it read the scalar's `#` lines as
 # comments.
-_BLOCK_SCALAR_HEAD = re.compile(r"(?::|^\s*-)\s*[|>][-+0-9]*\s*(?:#.*)?$")
+_BLOCK_SCALAR_HEAD = re.compile(
+    r"(?::|^\s*-)(?:\s+[!&]\S+)*\s*[|>][-+0-9]*\s*(?:#.*)?$"
+)
 
 
 def _content_lines(text: str) -> list[str]:
@@ -147,7 +150,7 @@ def _content_lines(text: str) -> list[str]:
 
     Full-line comments and blank lines are dropped, except inside a block scalar, where a
     line starting with `#` is part of the string and a blank line is a newline in it. The
-    scalar runs from its `key: |` line until the next non-blank line indented no deeper
+    scalar runs from its `key: |` line, tagged or anchored (`key: !!str |`) or not, until the next non-blank line indented no deeper
     than that key. A trailing comment on a content line is kept, so such a line reads as
     changed.
     """
@@ -178,7 +181,8 @@ def _git_show(ref: str, path: str) -> str:
 def comment_only_k8s_defaults(paths, old: str, new: str, show=_git_show) -> set[str]:
     """The k8s role `defaults/` files whose change between two refs is comments only.
 
-    A path that is added, deleted or unreadable on either side is left out: the fail-safe
+    A path is quiet when its content lines match and its loaded YAML values match too. A
+    path that is added, deleted or unreadable on either side is left out: the fail-safe
     direction is to keep the change, never to skip past one this did not read.
     """
     quiet: set[str] = set()
@@ -189,9 +193,34 @@ def comment_only_k8s_defaults(paths, old: str, new: str, show=_git_show) -> set[
             before, after = show(old, p), show(new, p)
         except RuntimeError, subprocess.CalledProcessError, OSError:
             continue
-        if _content_lines(before) == _content_lines(after):
+        if _content_lines(before) == _content_lines(after) and _same_values(
+            before, after
+        ):
             quiet.add(p)
     return quiet
+
+
+_UNLOADABLE = object()
+
+
+def _load(text: str) -> object:
+    """The YAML value of `text`, or `_UNLOADABLE` when it does not load."""
+    try:
+        return parse_yaml(text)
+    except UnparsableYaml:
+        return _UNLOADABLE
+
+
+def _same_values(before: str, after: str) -> bool:
+    """Whether both sides load to the same YAML value.
+
+    `_content_lines` drops a blank or `#` line inside a multi-line plain or quoted scalar,
+    where it is part of the value. Loading both sides catches that. When neither side
+    loads, such as a file with an unquoted Jinja expression, this is True and the line
+    comparison decides alone. When only one side loads, the edit changed what loads.
+    """
+    old, new = _load(before), _load(after)
+    return old is new or old == new
 
 
 def quiet_paths(paths: list[str], range_: str) -> set[str]:

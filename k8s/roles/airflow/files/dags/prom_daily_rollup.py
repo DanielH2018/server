@@ -14,9 +14,8 @@ from airflow.sdk.exceptions import AirflowSkipException
 from airflow.timetables.interval import CronDataIntervalTimetable
 from homelab_warehouse import prom_rollup as pr
 from homelab_warehouse.warehouse import (
+    check_day,
     ensure_schema,
-    finish_check,
-    read_partition,
     replace_partition,
 )
 
@@ -74,18 +73,12 @@ def prom_daily_rollup():
     @task
     def check(data_interval_start=None) -> None:
         day = _day(data_interval_start)
-        conn = PostgresHook(postgres_conn_id=WAREHOUSE_CONN).get_conn()
-        try:
-            ups = read_partition(conn, pr.UPS_TABLE, "day", day)
-            temps = read_partition(conn, pr.TEMP_TABLE, "day", day)
-        finally:
-            conn.close()
-        problems = pr.quality_problems(day, ups, temps)
-        finish_check(
+        check_day(
             PostgresHook(postgres_conn_id=WAREHOUSE_CONN).get_conn,
             "prom_daily_rollup",
             day,
-            problems,
+            [pr.UPS_TABLE, pr.TEMP_TABLE],
+            pr.quality_problems,
         )
 
     load() >> check()

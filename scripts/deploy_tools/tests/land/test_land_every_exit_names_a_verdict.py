@@ -123,7 +123,7 @@ def _unreadable_pr(landing):
 
 
 def _unfetchable_master(landing):
-    ln, _ = landing(Fakes(fetch_rc=1))
+    ln, _ = landing(Fakes(fetch_rc=[1]))
     ln.fetch_branch()
 
 

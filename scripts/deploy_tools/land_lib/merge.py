@@ -64,7 +64,7 @@ from functools import partial
 
 
 from lib.exit_codes import CI_DISARMED, CI_GREEN, CI_PENDING, CI_RED
-from lib.json_types import JsonObject, as_list, as_object
+from lib.json_types import JsonObject, as_object
 from lib.progress import OnChange
 from lib import gh_rate_limit, removes_object
 from deploy_tools import await_ci
@@ -75,19 +75,14 @@ from deploy_tools.land_lib import (
     policy,
     slots,
     stale_base,
+    stall,
     stuck_checks,
 )
 from deploy_tools.land_lib.landing import BRANCH, Landing
 from deploy_tools.land_lib.outcome import Outcome, Verdict, disarmed, say
 from deploy_tools.land_lib.pr_json import CommitMessage
 
-from lib import host_modules  # noqa: F401
-from ci_verdict import WorkflowRun
 
-
-# GitHub registers the ready run seconds after the flip; the push-delivery grace await_ci allows is
-# far wider.
-DRAFT_SKIPPED_GRACE_S = await_ci.DROPPED_PUSH_GRACE_S
 type TakeTurn = Callable[[str], tuple[bool, int]]
 
 
@@ -250,109 +245,6 @@ def arm_merge(ln: Landing) -> None:
     _leave_for_a_direct_merge(ln, subject)
 
 
-_RETRIGGER_DONE = (
-    "The landing already converted it to draft and back once for this head."
-)
-
-
-def _draft_skipped_dead_end(ln: Landing, head: str, retriggered: bool = False) -> str:
-    """Why a ready PR whose head's CI skipped as a draft cannot merge; "" while it is a draft.
-
-    The reason carries no remedy: `_toggle_by_hand` is the manual one, and a rate-limited
-    toggle replaces it with the wait (`_retrigger_ready_run`).
-
-    A PR marked ready right after its push can get only the push's draft-era run, or a ready
-    run that the draft-era run cancelled. No other run follows the ready flip, so nothing would
-    ever supply a verdict. A PR still a draft gets its run once someone marks it ready, so the
-    wait goes on.
-    """
-    if ln.view("isDraft").get("isDraft") is not False:
-        return ""
-    pr = ln.opts.pr
-    return (
-        f"PR #{pr} is ready, but every CI run on {head[:8]} either ran while it was a draft "
-        "and skipped every job, or was cancelled, and GitHub started no other run; a re-run "
-        "of the draft run replays the draft event and skips again."
-        f"{' ' + _RETRIGGER_DONE if retriggered else ''}"
-    )
-
-
-def _toggle_by_hand(pr: str) -> str:
-    return (
-        f"convert it to draft and back (`gh pr ready --undo {pr}`, then "
-        f"`gh pr ready {pr}`) or push, then re-run this"
-    )
-
-
-def _ready_run_on(ln: Landing, head: str) -> str:
-    """Why the PR's `ci.yml` runs on `head` forbid the draft toggle; "" when none can give a verdict.
-
-    A run that is not completed, or that completed with a verdict, ran while the PR was
-    ready. Its `prek` gate `needs` every other job, so the gate gets no check run until they
-    finish, and for those minutes `await_ci` reads only the draft run's skipped gate.
-    Converting to draft then cancels the ready run. A run that completed `skipped` allows the
-    toggle. So does one that completed with no verdict, such as `cancelled`, beside a skipped
-    run: a draft run cancels a ready run made in the same second (`await_ci.draft_skipped`).
-    A head with no skipped run is no draft case, so its cancelled run forbids the toggle and
-    `_start_run` takes no turn for it. A failed read forbids it, because the toggle is the
-    one action here that can cancel a run.
-    """
-    url = f"repos/{{owner}}/{{repo}}/actions/workflows/ci.yml/runs?head_sha={head}&event=pull_request"
-
-    def call() -> list:
-        got = ln.tools.gh_json(
-            "api", url, "--jq", "[.workflow_runs[] | {id, status, conclusion}]"
-        )
-        return as_list(got, "gh api ci.yml runs")
-
-    try:
-        runs = [WorkflowRun.parse(r) for r in ln.read(call, "gh api ci.yml runs")]
-    except (gh_read.GhReadFailed, ValueError) as exc:
-        return f"its CI runs could not be read ({exc})"
-    skipped = [r for r in runs if (r.status, r.conclusion) == ("completed", "skipped")]
-    for run in runs:
-        if run not in skipped and not (skipped and run.no_verdict):
-            return f"run {run.id} is {run.conclusion or run.status}"
-    return ""
-
-
-def _retrigger_ready_run(ln: Landing, head: str, dead_end: str) -> str:
-    """Convert the PR to draft and back so GitHub starts a ready run; "" on success.
-
-    GitHub starts no `ci.yml` run for the ready flip of a PR whose push run skipped as a
-    draft, and a re-run replays the draft event. The conversion is the only thing
-    that makes one, so the landing does it once per head instead of ending `merge-timeout`
-    for a person to do the same two commands. A failure returns the landing's ending, which
-    leads with `dead_end`. It names the PR's state when the first command had already run,
-    because a draft PR never merges. A rate-limited step's remedy is the wait, never the
-    refused command.
-    """
-    pr = str(ln.opts.pr)
-    say(
-        f"PR #{pr} is ready but {head[:8]}'s CI skipped as a draft or was cancelled; converting it to draft and back"
-    )
-    for step, args, by_hand in (
-        ("to draft", ("pr", "ready", "--undo", pr), _toggle_by_hand(pr)),
-        (
-            "back to ready",
-            ("pr", "ready", pr),
-            f"run `gh pr ready {pr}`, then re-run this",
-        ),
-    ):
-        left = "" if step == "to draft" else f"; PR #{pr} is left as a draft"
-        try:
-            ln.tools.gh(*args)
-        except subprocess.CalledProcessError as exc:
-            why = (exc.stderr or "").strip() or f"gh exited {exc.returncode}"
-            return (
-                f"{dead_end} Converting it {step} failed ({why}){left}; "
-                + ln.remedy(why, by_hand)
-            )
-        except subprocess.TimeoutExpired:
-            return f"{dead_end} Converting it {step} timed out{left}; {by_hand}"
-    return ""
-
-
 def _mark_ready(ln: Landing) -> None:
     """Mark a draft PR ready: a draft's CI run runs no job, and a draft cannot merge."""
     stale_base.ready_again(ln)
@@ -370,7 +262,7 @@ def _start_run(
     """Give a PR that has had no CI run its one run, on the master of the landing turn.
 
     A head with no CI run that ran jobs, or whose only such runs were cancelled beside a
-    draft run (`_ready_run_on`), takes the landing turn first (`turn.py`), so that the
+    draft run (`stall.ready_run_on`), takes the landing turn first (`turn.py`), so that the
     run it is about to get tests the master its merge lands on. A draft stands in the line
     for the turn while it waits (`line.py`). With the turn, the PR's branch is updated from
     master when master is ahead of it, and only then is a draft marked ready, because a
@@ -401,7 +293,7 @@ def _start_run(
         head = view.get("headRefOid") or ""
         if view.get("state") != "OPEN" or not head:
             return "", in_turn, queued
-        untested = rejoined or not _ready_run_on(ln, head)
+        untested = rejoined or not stall.ready_run_on(ln, head)
         if not untested or in_turn or queued:
             break
         in_turn, queued = ask(head, view.get("isDraft") is True)
@@ -467,13 +359,14 @@ def await_merge(ln: Landing, take_turn: TakeTurn = _no_turn) -> None:
     (`stale_base.batch_tested`). The seconds of the batch's run reach this wait with the
     seconds in line for the turn, and the wait then ends inside the two merge budgets.
 
-    A head whose every CI run skipped as a draft, or was cancelled, is named on the poll that
-    first reads it (`await_ci.draft_skipped`). Once
-    it has stayed so for `DRAFT_SKIPPED_GRACE_S`, a PR that is no longer a draft is converted
-    to draft and back once for that head (`_retrigger_ready_run`) and the grace starts again.
-    If the head is still skipped after it, the wait ends (`_draft_skipped_dead_end`). Neither
-    happens while a `ci.yml` run that can still give a verdict exists on the head
-    (`_ready_run_on`); the grace restarts.
+    A head whose CI no longer moves on its own is named on the poll that first reads it:
+    every run skipped as a draft or was cancelled (`ci_stall.draft_skipped`), or every
+    check-run finished with no verdict (`ci_stall.no_run_left`). Once it has stayed so for
+    `stall.GRACE_S`, a ready PR gets one run for that head and stall: a draft toggle
+    (`stall.on_poll`) or a re-run of its newest cancelled run. The
+    grace then starts again, and a head that stalls the same way after it ends the wait.
+    Neither happens while a `ci.yml` run that can still give a verdict exists on the head
+    (`stall.ready_run_on`); the grace restarts. `stall.step` owns the decision.
 
     A head the wait has sat on for `stuck_checks.AFTER_S` has its checks read on a poll where
     await_ci reads it green, and again each `AFTER_S` after. A check left pending under a completed workflow run
@@ -533,11 +426,7 @@ def await_merge(ln: Landing, take_turn: TakeTurn = _no_turn) -> None:
     gated_head = ""
     # The forward-only pins that head bumps, whose land rule is read again before each retry.
     gated_pins: list[str] = []
-    # The head await_ci last read as skipped in a draft, and the `waited` it was first read at.
-    draft_head = ""
-    draft_since = 0
-    # A second draft-skip on this head ends the wait, because another conversion would loop.
-    retriggered_head = ""
+    watch = stall.Watch()
     # The head whose checks `stuck_checks` reads, and the `waited` of its next read.
     stuck_head = ""
     stuck_read_at = 0
@@ -589,33 +478,7 @@ def await_merge(ln: Landing, take_turn: TakeTurn = _no_turn) -> None:
                 )
         if head and not pause:
             ci_pending = line if rc == CI_PENDING else ""
-            if await_ci.DRAFT_SKIPPED not in ci_pending:
-                draft_head = ""
-            elif head != draft_head:
-                draft_head, draft_since = head, waited
-                say(f"{line}; waiting up to {DRAFT_SKIPPED_GRACE_S}s for a ready run")
-            elif waited - draft_since >= DRAFT_SKIPPED_GRACE_S:
-                dead_end = _draft_skipped_dead_end(ln, head, head == retriggered_head)
-                ready_run = _ready_run_on(ln, head) if dead_end else ""
-                if ready_run:
-                    say(
-                        f"{head[:8]} reads as skipped as a draft, but {ready_run}; "
-                        "not converting it to draft, which would cancel that run"
-                    )
-                    draft_since = waited
-                elif dead_end and head != retriggered_head:
-                    retriggered_head = head
-                    failure = _retrigger_ready_run(ln, head, dead_end)
-                    if failure:
-                        ln.die(failure, 75, Verdict.MERGE_TIMEOUT)
-                    # The new run takes a moment to register, so the grace starts again.
-                    draft_since = waited
-                elif dead_end:
-                    ln.die(
-                        f"{dead_end} To get a run, {_toggle_by_hand(o.pr)}",
-                        75,
-                        Verdict.MERGE_TIMEOUT,
-                    )
+            watch = stall.on_poll(ln, watch, head, stall.of(ci_pending), waited, line)
             if rc == CI_RED:
                 ln.die(
                     f"PR #{o.pr} cannot merge — its own CI is red ({line}); fix it, push, "
@@ -687,7 +550,7 @@ def await_merge(ln: Landing, take_turn: TakeTurn = _no_turn) -> None:
             # skips again.
             if pause:
                 why = f"GitHub refused its CI read for the rate; the quota frees in {pause}s"
-            elif draft_head:
+            elif watch.head:
                 why = f"its head has no CI verdict ({ci_pending})"
             elif ci_pending:
                 why = (
@@ -716,9 +579,9 @@ def await_merge(ln: Landing, take_turn: TakeTurn = _no_turn) -> None:
             t.sleep(step)
         waited += step
     ln.merge_wait_s = waited
-    in_line = ln.ledger.turn_wait = queued - ln.batched_s
+    turn_wait = ln.ledger.turn_wait
     notes = [
-        f"{in_line}s of it waiting for the landing turn" if in_line else "",
+        f"{turn_wait}s of it waiting for the landing turn" if turn_wait else "",
         f"{ln.batched_s}s of it on its batch's run" if ln.batched_s else "",
     ]
     say(", ".join([f"merged after {waited}s", *filter(None, notes)]))

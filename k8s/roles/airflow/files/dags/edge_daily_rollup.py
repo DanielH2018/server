@@ -15,9 +15,8 @@ from airflow.timetables.interval import CronDataIntervalTimetable
 from homelab_warehouse import edge_counts as ec
 from homelab_warehouse import prom_rollup as pr
 from homelab_warehouse.warehouse import (
+    check_day,
     ensure_schema,
-    finish_check,
-    read_partition,
     replace_partition,
 )
 
@@ -82,17 +81,12 @@ def edge_daily_rollup():
     @task
     def check(data_interval_start=None) -> None:
         day = _day(data_interval_start)
-        conn = PostgresHook(postgres_conn_id=WAREHOUSE_CONN).get_conn()
-        try:
-            rows = read_partition(conn, ec.COUNTS_TABLE, "day", day)
-        finally:
-            conn.close()
-        problems = ec.quality_problems(day, rows)
-        finish_check(
+        check_day(
             PostgresHook(postgres_conn_id=WAREHOUSE_CONN).get_conn,
             "edge_daily_rollup",
             day,
-            problems,
+            [ec.COUNTS_TABLE],
+            ec.quality_problems,
         )
 
     load() >> check()

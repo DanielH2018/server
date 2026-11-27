@@ -11,9 +11,13 @@ Run: uv run pytest scripts/deploy_tools/tests/land_deploy/test_land_tags.py
 """
 
 import pytest
+import yaml
+from hypothesis import given
+from hypothesis import strategies as st
 
 
 from deploy_tools.land_lib import land_tags
+from lib.yaml_fast import parse_yaml
 
 # A fixture, not live inventory, so retiring a service does not fail these derivation tests.
 _DECLARED = frozenset(
@@ -300,6 +304,89 @@ def test_a_comment_line_inside_a_block_scalar_is_content():
         land_tags.comment_only_k8s_defaults([_SONARR_DEFAULTS], "old", "new", show)
         == set()
     )
+
+
+@pytest.mark.parametrize(
+    "head",
+    ["a: !!bool |-", "a: &x >", "a:\n- !!str |"],
+    ids=["tag", "anchor", "list-item"],
+)
+def test_a_blank_line_inside_a_tagged_block_scalar_is_content(head):
+    old = f"b: {{{{ x }}}}\n{head}\n  false\n"
+    new = f"b: {{{{ x }}}}\n{head}\n\n  false\n"
+    show = _show({"old": old, "new": new})
+    assert (
+        land_tags.comment_only_k8s_defaults([_SONARR_DEFAULTS], "old", "new", show)
+        == set()
+    )
+
+
+@pytest.mark.parametrize(
+    ("old", "new"),
+    [
+        ("a: foo\n  bar\n", "a: foo\n\n  bar\n"),
+        ('a: "x\n  # one\n  y"\n', 'a: "x\n  # two\n  y"\n'),
+    ],
+    ids=["blank-line-in-plain-scalar", "hash-line-in-quoted-scalar"],
+)
+def test_a_value_change_inside_a_multi_line_scalar_is_flagged(old, new):
+    show = _show({"old": old, "new": new})
+    assert (
+        land_tags.comment_only_k8s_defaults([_SONARR_DEFAULTS], "old", "new", show)
+        == set()
+    )
+
+
+def test_an_edit_that_stops_a_file_loading_is_flagged():
+    show = _show({"old": "a: !!bool |-\n  false\n", "new": "a: !!bool |-\n\n  false\n"})
+    assert (
+        land_tags.comment_only_k8s_defaults([_SONARR_DEFAULTS], "old", "new", show)
+        == set()
+    )
+
+
+_SCALARS = st.one_of(
+    st.text(alphabet=st.sampled_from("ab #:-\n"), max_size=40),
+    st.integers(),
+    st.booleans(),
+    st.none(),
+)
+_KEYS = st.text(alphabet="abc", min_size=1, max_size=3)
+_DOCUMENTS = st.dictionaries(
+    _KEYS,
+    st.recursive(
+        _SCALARS,
+        lambda inner: (
+            st.lists(inner, max_size=3) | st.dictionaries(_KEYS, inner, max_size=3)
+        ),
+        max_leaves=6,
+    ),
+    min_size=1,
+    max_size=4,
+)
+
+
+@given(
+    value=_DOCUMENTS,
+    style=st.sampled_from([None, "", "'", '"', "|", ">"]),
+    width=st.integers(min_value=5, max_value=80),
+    inserts=st.lists(
+        st.tuples(st.integers(min_value=0), st.sampled_from(["", "# c"])), max_size=4
+    ),
+)
+def test_a_quiet_defaults_edit_never_changes_a_loaded_value(
+    value, style, width, inserts
+):
+    before = yaml.safe_dump(value, default_style=style, width=width)
+    lines = before.splitlines()
+    for at, extra in inserts:
+        at %= len(lines) + 1
+        nxt = lines[at] if at < len(lines) else ""
+        lines.insert(at, nxt[: len(nxt) - len(nxt.lstrip())] + extra)
+    after = "\n".join(lines) + "\n"
+    show = _show({"old": before, "new": after})
+    if land_tags.comment_only_k8s_defaults([_SONARR_DEFAULTS], "old", "new", show):
+        assert parse_yaml(after) == parse_yaml(before)
 
 
 def test_an_unusable_range_reads_only_docs_as_quiet():

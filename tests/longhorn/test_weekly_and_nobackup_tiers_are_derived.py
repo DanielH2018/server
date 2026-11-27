@@ -37,6 +37,7 @@ _REPLACED_WEEKLY = {
     "homelab/valheim-stats-data": 1,
     "homelab/tdarr-configs": 2,
     "homelab/navidrome-data": 3,
+    "homelab/tft-assistant-keep": 3,
     "homelab/wg-easy-config": 4,
     "homelab/n8n-files": 5,
     "homelab/pi-peer-backup-data": 6,

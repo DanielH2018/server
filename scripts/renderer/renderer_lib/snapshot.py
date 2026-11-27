@@ -28,7 +28,7 @@ from collections.abc import Iterable, Mapping
 from dataclasses import replace
 from pathlib import Path
 
-import yaml
+from renderer.renderer_lib.manifest_yaml import dump, dump_all
 
 from lib import yaml_fast
 from lib.k8s_roles import role_defaults
@@ -317,9 +317,9 @@ def snapshot_files(
     }
     job["metadata"]["name"] = f"{base}-{job_spec_digest8(job)}"
     files = {
-        "configmap.yaml": yaml.safe_dump(configmap, sort_keys=False),
-        "job.yaml": yaml.safe_dump(job, sort_keys=False),
-        "rbac.yaml": yaml.safe_dump_all(rbac(tag, claims), sort_keys=False),
+        "configmap.yaml": dump(configmap),
+        "job.yaml": dump(job),
+        "rbac.yaml": dump_all(rbac(tag, claims)),
     }
     files[KUSTOMIZATION] = kustomization_text(files)
     return files

@@ -137,6 +137,7 @@ def test_a_draft_the_holder_found_conflicting_ends_merge_conflict(
     # It merges nothing, holds no turn and leaves its place.
     assert call_order(calls) == calls_made
     assert line_calls(calls)[-1] == ("leave", "999")
+    assert ln.ledger.turn_wait == ln.opts.merge_poll
 
 
 def test_a_draft_merged_by_the_holder_that_frees_the_turn_gives_it_straight_back(

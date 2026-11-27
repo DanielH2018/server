@@ -89,6 +89,7 @@ files:
   # until removed.
   - {src: templates/apt-daily-quiet-hour.conf, dst: /usr/lib/systemd/system/apt-daily.timer.d/50-homelab.conf}
   - {src: templates/apt-daily-upgrade-quiet-hour.conf, dst: /usr/lib/systemd/system/apt-daily-upgrade.timer.d/50-homelab.conf}
+  - {src: units/apt-daily-upgrade-dropin.conf, dst: /usr/lib/systemd/system/apt-daily-upgrade.service.d/50-homelab.conf}
   - {src: templates/logrotate-hourly.conf, dst: /usr/lib/systemd/system/logrotate.timer.d/50-homelab.conf}
   # log2ram 1.7.2 ships its stanza inside a /etc/logrotate.d/log2ram directory, which logrotate's
   # include skips. A second stanza for the same log fails the logrotate run, so this file goes once

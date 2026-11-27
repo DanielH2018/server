@@ -17,6 +17,8 @@ import os
 import sys
 
 import pytest
+from hypothesis import given
+from hypothesis import strategies as st
 
 _HERE = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 _REPO = os.path.dirname(os.path.dirname(_HERE))
@@ -163,3 +165,39 @@ def test_a_payload_with_cwd_does_not_read_the_process_cwd(
         },
     )
     assert out is None
+
+
+# ── arm 1 again, over the shapes a write takes in a real command line ─────────────────
+
+_WRITERS = (
+    "sed -i s/a/b/ {}",
+    "perl -pi -e s/a/b/ {}",
+    "echo x > {}",
+    "echo x >> {}",
+    "tee {}",
+    "tee -a {}",
+)
+_HARMLESS = ("ls", "git status", "true", "echo done")
+_CONNECTORS = (" && ", " || ", "; ", " | ", "\n", "&&", ";")
+
+
+@st.composite
+def _reshaped(draw, targets):
+    """A write to one of `targets`, its target maybe quoted, between harmless stages."""
+    quote = draw(st.sampled_from(("", "'", '"')))
+    target = draw(st.sampled_from(targets))
+    write = draw(st.sampled_from(_WRITERS)).format(f"{quote}{target}{quote}")
+    stage, connector = st.sampled_from(_HARMLESS), st.sampled_from(_CONNECTORS)
+    before = draw(st.lists(st.tuples(stage, connector), max_size=2))
+    after = draw(st.lists(st.tuples(connector, stage), max_size=2))
+    return "".join(s + c for s, c in before) + write + "".join(c + s for c, s in after)
+
+
+@given(_reshaped(("secrets/secrets.yml", "docs/reference/services.md")))
+def test_a_protected_write_is_flagged_quoted_or_between_other_commands(command):
+    assert _mod.decide(command, _REPO)[0] == "ask", command
+
+
+@given(_reshaped(("README.md", "/tmp/scratch.txt")))
+def test_the_same_shapes_around_an_ordinary_file_are_clean(command):
+    assert _mod.decide(command, _REPO)[0] is None, command

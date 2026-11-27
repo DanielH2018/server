@@ -148,6 +148,21 @@ def find_undigested_images(docs, exempt=frozenset()) -> list[tuple[str, str]]:
     return missing
 
 
+def _services_lacking(
+    hardened: Callable[[dict], bool], docs, exempt: frozenset
+) -> list:
+    """Names of the services in `docs` whose spec fails `hardened` and are not in `exempt`."""
+    lacking = []
+    for doc in docs:
+        services = doc.get("services") if isinstance(doc, dict) else None
+        if not isinstance(services, dict):
+            continue
+        for svc, spec in services.items():
+            if isinstance(spec, dict) and svc not in exempt and not hardened(spec):
+                lacking.append(svc)
+    return lacking
+
+
 def _cap_drops_all(spec: dict) -> bool:
     caps = spec.get("cap_drop")
     return isinstance(caps, list) and any(
@@ -161,19 +176,7 @@ def find_missing_cap_drop(docs, exempt=frozenset()) -> list:
     Drop-all is the hardening baseline, with minimal caps added back after it. A service that
     drops nothing — or only a subset — keeps Docker's default capability set.
     """
-    missing = []
-    for doc in docs:
-        services = doc.get("services") if isinstance(doc, dict) else None
-        if not isinstance(services, dict):
-            continue
-        for svc, spec in services.items():
-            if (
-                isinstance(spec, dict)
-                and svc not in exempt
-                and not _cap_drops_all(spec)
-            ):
-                missing.append(svc)
-    return missing
+    return _services_lacking(_cap_drops_all, docs, exempt)
 
 
 def _sets_no_new_privileges(spec: dict) -> bool:
@@ -192,19 +195,7 @@ def find_missing_no_new_privileges(docs, exempt=frozenset()) -> list:
     A service that omits it (a new one, or a copy-paste that drops the line) is flagged unless
     allowlisted with a reason.
     """
-    missing = []
-    for doc in docs:
-        services = doc.get("services") if isinstance(doc, dict) else None
-        if not isinstance(services, dict):
-            continue
-        for svc, spec in services.items():
-            if (
-                isinstance(spec, dict)
-                and svc not in exempt
-                and not _sets_no_new_privileges(spec)
-            ):
-                missing.append(svc)
-    return missing
+    return _services_lacking(_sets_no_new_privileges, docs, exempt)
 
 
 def check_component_service(

@@ -552,6 +552,7 @@ containers_list:
     port: 8080
     use_authelia: true
     auth_tier: one_factor
+    weekly_backup_claims: {tft-assistant-keep: 3}  # Wed
   - name: vault-mcp
     # The vault claim holds the decrypted vault; both rebuild from livesync's CouchDB.
     no_backup_claims: [vault-mcp-vault, vault-mcp-db]

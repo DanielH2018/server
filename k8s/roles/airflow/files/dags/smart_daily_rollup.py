@@ -14,9 +14,8 @@ from airflow.sdk.exceptions import AirflowSkipException
 from airflow.timetables.interval import CronDataIntervalTimetable
 from homelab_warehouse import smart_history as sh
 from homelab_warehouse.warehouse import (
+    check_day,
     ensure_schema,
-    finish_check,
-    read_partition,
     replace_partition,
 )
 
@@ -61,18 +60,15 @@ def smart_daily_rollup():
     @task
     def check(data_interval_start=None) -> None:
         day = _day(data_interval_start)
-        conn = PostgresHook(postgres_conn_id=WAREHOUSE_CONN).get_conn()
-        try:
-            rows = read_partition(conn, sh.SMART_TABLE, "day", day)
-        finally:
-            conn.close()
         devices = sh.active_devices(sh.fetch_summary())
-        problems = sh.quality_problems(day, rows, devices, datetime.now(timezone.utc))
-        finish_check(
+        check_day(
             PostgresHook(postgres_conn_id=WAREHOUSE_CONN).get_conn,
             "smart_daily_rollup",
             day,
-            problems,
+            [sh.SMART_TABLE],
+            lambda day, rows: sh.quality_problems(
+                day, rows, devices, datetime.now(timezone.utc)
+            ),
         )
 
     load() >> check()

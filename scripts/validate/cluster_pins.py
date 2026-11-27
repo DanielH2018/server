@@ -223,16 +223,38 @@ def files_setting(key: str, sha: str, repo: Path = REPO) -> list[str]:
     return [line.split(":", 1)[1] for line in hits.stdout.splitlines()]
 
 
-# A quote opens at line start or after whitespace or `{[,:`; a quote inside a bare word, as in
-# `x's`, opens none.
+# A quote opens a scalar after whitespace or `{[,:`; a quote inside a bare word, as in `x's`,
+# opens none.
 QUOTE_OPENERS = " \t{[,:"
+# What may precede a quoted scalar once whitespace is skipped; `-` and `?` are block indicators.
+SCALAR_STARTERS = "{[,:"
+# A tag, an anchor or a flow `?` explicit-key indicator, which sit between a collection
+# indicator and the scalar they apply to.
+NODE_PROPERTY = re.compile(r"(^|[\s{\[,])([!&]\S*|\?)$")
+
+
+def opens_scalar(line: str, i: int) -> bool:
+    """Whether the quote at `line[i]` starts a quoted scalar, not text inside a plain one."""
+    if i == 0:
+        return True
+    if line[i - 1] not in QUOTE_OPENERS:
+        return False
+    before = line[:i].rstrip(" \t")
+    while True:
+        if not before.strip(" \t-?") or before[-1] in SCALAR_STARTERS:
+            return True
+        prop = NODE_PROPERTY.search(before)
+        if not prop:
+            return False
+        before = before[: prop.start(2)].rstrip(" \t")
 
 
 def code_part(line: str) -> str:
     """`line` with its comment cut off, so a key quoted in the comment is not read.
 
-    A comment starts at an unquoted `#` that opens the line or follows whitespace. A `#` inside
-    a value, as in `{note: "see #1", ...}`, starts none, so an assignment after it still counts.
+    A comment starts at an unquoted `#` that opens the line or follows a space or tab. U+00A0
+    and the other characters `isspace()` takes are part of a plain scalar. A `#` inside a
+    value, as in `{note: "see #1", ...}`, starts none, so an assignment after it still counts.
     An unclosed quote keeps the rest of the line, which errs toward reading an assignment.
     """
     quote, escaped = "", False
@@ -247,9 +269,9 @@ def code_part(line: str) -> str:
                 escaped = True
             elif char == quote:
                 quote = ""
-        elif char in "\"'" and (i == 0 or line[i - 1] in QUOTE_OPENERS):
+        elif char in "\"'" and opens_scalar(line, i):
             quote = char
-        elif char == "#" and (i == 0 or line[i - 1].isspace()):
+        elif char == "#" and (i == 0 or line[i - 1] in " \t"):
             return line[:i]
     return line
 

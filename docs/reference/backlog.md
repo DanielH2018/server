@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/backlog.py
-generated_at: 2026-11-26 18:17 UTC
-generated_sha: 57382e988
+generated_at: 2026-11-27 06:17 UTC
+generated_sha: f8cc3c595
 ---
 
 !!! warning "Generated file — do not edit"
@@ -16,18 +16,20 @@ Findings Claude confirmed and did not fix in the session that found them, filed 
 
 | # | Severity | Kind | Domain | Finding | First seen | Re-observed | Claim | Verify-by |
 |---|---|---|---|---|---|---|---|---|
-| [#10126](https://github.com/DanielH2018/server/issues/10126) | high | gap | container | k3s is the only plane on daniel-box the kernel can swap out when the Claude fleet fills memory — *no vetted remediation* | 2026-11-25 | 0 | - | ✓ |
+| [#10126](https://github.com/DanielH2018/server/issues/10126) | high | gap | container | k3s is the only plane on daniel-box the kernel can swap out when the Claude fleet fills memory — *no vetted remediation* | 2026-11-25 | 1 | - | ✓ |
 | [#9667](https://github.com/DanielH2018/server/issues/9667) | medium | improvement | cicd | The landing turn takes 80% of a landing's time from arm to merge under load | 2026-11-20 | 0 | - | ✓ |
 | [#9725](https://github.com/DanielH2018/server/issues/9725) | medium | improvement | container | Roll out the kubelet's default seccomp profile to daniel-box, then census explicit Unconfined | 2026-11-21 | 0 | - | ✓ |
-| [#10119](https://github.com/DanielH2018/server/issues/10119) | medium | gap | - | k3s on daniel-box exited three times under session load on 2026-11-25, after #9060's fix — *no vetted remediation* | 2026-11-25 | 0 | - | ✓ |
-| [#10127](https://github.com/DanielH2018/server/issues/10127) | medium | gap | container | The pytest worker cap does not reach desktop sessions or an explicit pytest -n — *no vetted remediation* | 2026-11-25 | 0 | claude/hungry-lewin-d348d8 | ✓ |
+| [#10119](https://github.com/DanielH2018/server/issues/10119) | medium | gap | - | k3s on daniel-box exited three times under session load on 2026-11-25, after #9060's fix — *no vetted remediation* | 2026-11-25 | 0 | claude/hungry-lewin-d348d8 | ✓ |
 | [#10140](https://github.com/DanielH2018/server/issues/10140) | medium | gap | container | daniel-pi's pacct no longer rotates since Ubuntu 26.04, and /var/log is 82% full — *no vetted remediation* | 2026-11-25 | 0 | claude/hungry-lewin-d348d8 | ✓ |
 | [#10141](https://github.com/DanielH2018/server/issues/10141) | medium | gap | container | An unattended kernel upgrade on daniel-pi saturates the SD card for 20 to 35 minutes — *no vetted remediation* | 2026-11-25 | 0 | - | ✓ |
 | [#10153](https://github.com/DanielH2018/server/issues/10153) | medium | improvement | container | willfarrell/autoheal:latest merges a digest bump almost every day — *no vetted remediation* | 2026-11-25 | 0 | claude/hungry-lewin-d348d8 | ✓ |
 | [#10157](https://github.com/DanielH2018/server/issues/10157) | medium | improvement | security | AIDE and rkhunter took 13 repairs in a month and still alert on benign changes — *no vetted remediation* | 2026-11-25 | 0 | - | ✓ |
 | [#10167](https://github.com/DanielH2018/server/issues/10167) | medium | gap | cicd | The offline bootstrap kit needs pydantic-core wheels for amd64 and arm64 | 2026-11-25 | 0 | - | ✓ |
-| [#10233](https://github.com/DanielH2018/server/issues/10233) | medium | gap | backup-observability | daniel-pi resets near 06:00 without a log2ram sync, so each night's log rotation is lost | 2026-11-26 | 0 | - | ✓ |
-| [#10238](https://github.com/DanielH2018/server/issues/10238) | medium | gap | backup-observability | daniel-pi's pacct has no size bound that holds while its daily rotation stalls | 2026-11-26 | 0 | - | ✓ |
+| [#10338](https://github.com/DanielH2018/server/issues/10338) | medium | gap | - | daniel-pi still resets near 06:00 after the watchdog load limits rose to 24 | 2026-11-26 | 0 | - | ✓ |
+| [#10351](https://github.com/DanielH2018/server/issues/10351) | medium | gap | backup-observability | longhorn-reconcile leaves a listed claim with no group label in Longhorn's implicit default group | 2026-11-26 | 1 | claude/hungry-lewin-d348d8 | ✓ |
+| [#10368](https://github.com/DanielH2018/server/issues/10368) | medium | gap | cicd | A landing merged a PR on a master commit its tested head lacked, with both changing one file | 2026-11-27 | 0 | - | ✓ |
+| [#10401](https://github.com/DanielH2018/server/issues/10401) | medium | improvement | cicd | Property-test the restart checksum stamp and its values | 2026-11-27 | 0 | worktree-hypothesis-wave2 | ✓ |
+| [#10405](https://github.com/DanielH2018/server/issues/10405) | medium | improvement | cicd | Property-test that a plain scalar refused() passes survives field position | 2026-11-27 | 0 | worktree-hypothesis-wave2 | ✓ |
 | [#7220](https://github.com/DanielH2018/server/issues/7220) | low | improvement | docs | Delete the lock-retired lint rule once no branch predates the G2 flip | 2026-11-05 | 0 | - | ✓ |
 | [#8080](https://github.com/DanielH2018/server/issues/8080) | low | gap | cicd | Confirm hosted Renovate regenerates actions.lock on its first Actions bump | 2026-11-12 | 0 | - | ✓ |
 | [#8193](https://github.com/DanielH2018/server/issues/8193) | low | feature | container | Turn on navidrome scrobbling and Lidarr import lists for music discovery | 2026-11-12 | 0 | - | - |
@@ -42,51 +44,52 @@ Findings Claude confirmed and did not fix in the session that found them, filed 
 | [#9390](https://github.com/DanielH2018/server/issues/9390) | low | improvement | cicd | Re-measure the share of rework that removes wrong-shape code, 30 days after the 2026-11-19 gates | 2026-11-19 | 0 | - | ✓ |
 | [#9394](https://github.com/DanielH2018/server/issues/9394) | low | improvement | cicd | Give the next multi-PR migration a retirement manifest that fails while a retired name remains | 2026-11-19 | 0 | - | ✓ |
 | [#9750](https://github.com/DanielH2018/server/issues/9750) | low | gap | backup-observability | The restore drill's Postgres check has not yet run against a live airflow-postgres-data restore | 2026-11-21 | 0 | - | ✓ |
-| [#9855](https://github.com/DanielH2018/server/issues/9855) | low | gap | cicd | 59 percent of gh-quota core spend is attributed to neither host's ledger | 2026-11-21 | 0 | - | ✓ |
-| [#9944](https://github.com/DanielH2018/server/issues/9944) | low | gap | cicd | GitHub REST readers left beyond the gh-quota ledger: the deploy-pipeline exporter, github-checks and renovate-notify | 2026-11-22 | 0 | - | ✓ |
+| [#9944](https://github.com/DanielH2018/server/issues/9944) | low | gap | cicd | GitHub REST readers left beyond the gh-quota ledger: the deploy-pipeline exporter, github-checks and renovate-notify | 2026-11-22 | 0 | claude/hungry-lewin-d348d8 | ✓ |
 | [#10000](https://github.com/DanielH2018/server/issues/10000) | low | improvement | backup-observability | Decide on 2026-12-06 whether user.slice gets a systemd-oomd pressure kill | 2026-11-22 | 0 | - | ✓ |
-| [#10056](https://github.com/DanielH2018/server/issues/10056) | low | improvement | cicd | The deploy-pipeline exporter spends about 24 core calls an hour that no gh-quota ledger can record | 2026-11-23 | 0 | - | ✓ |
-| [#10078](https://github.com/DanielH2018/server/issues/10078) | low | improvement | - | Merge the duplicated blocks scb-check finds, starting with the Airflow check task | 2026-11-24 | 0 | - | - |
-| [#10079](https://github.com/DanielH2018/server/issues/10079) | low | improvement | - | Merge eight pass-through functions into the functions they call | 2026-11-24 | 0 | claude/hungry-lewin-d348d8 | - |
 | [#10096](https://github.com/DanielH2018/server/issues/10096) | low | - | cicd | Compare improving the renderer in place, Helm and Python builders on three roles | 2026-11-25 | 0 | - | ✓ |
 | [#10099](https://github.com/DanielH2018/server/issues/10099) | low | improvement | container | Pilot Zot as the one registry in place of three registry:3 processes | 2026-11-25 | 0 | - | ✓ |
-| [#10103](https://github.com/DanielH2018/server/issues/10103) | low | improvement | cicd | Document pytest-testmon as a local-only test selector | 2026-11-25 | 0 | claude/hungry-lewin-d348d8 | ✓ |
 | [#10104](https://github.com/DanielH2018/server/issues/10104) | low | improvement | cicd | Run the nightly pytest sweep in random order | 2026-11-25 | 0 | claude/hungry-lewin-d348d8 | ✓ |
-| [#10105](https://github.com/DanielH2018/server/issues/10105) | low | improvement | cicd | Replace the import-direction test's facade rules with import-linter contracts | 2026-11-25 | 0 | claude/hungry-lewin-d348d8 | ✓ |
-| [#10106](https://github.com/DanielH2018/server/issues/10106) | low | improvement | cicd | Show render diffs with dyff instead of diff -r | 2026-11-25 | 0 | - | ✓ |
-| [#10108](https://github.com/DanielH2018/server/issues/10108) | low | improvement | container | Use prometheus_client for metric exposition from one shared Python image | 2026-11-25 | 0 | - | ✓ |
 | [#10111](https://github.com/DanielH2018/server/issues/10111) | low | improvement | - | Make the fan-out batch state a StrEnum with an exhaustive match | 2026-11-25 | 0 | - | ✓ |
 | [#10112](https://github.com/DanielH2018/server/issues/10112) | low | improvement | network | Test gluetun as the shared VPN sidecar for qbittorrent and slskd | 2026-11-25 | 0 | - | ✓ |
 | [#10113](https://github.com/DanielH2018/server/issues/10113) | low | improvement | backup-observability | Check the Airflow scheduler through the blackbox exporter | 2026-11-25 | 0 | claude/hungry-lewin-d348d8 | ✓ |
 | [#10114](https://github.com/DanielH2018/server/issues/10114) | low | improvement | security | Move every in-cluster secret to native SOPS manifests, hardest three first — *no vetted remediation* | 2026-11-25 | 0 | - | ✓ |
 | [#10117](https://github.com/DanielH2018/server/issues/10117) | low | improvement | security | Pilot a ValidatingAdmissionPolicy that limits the restore drill to its own PVs and pods | 2026-11-25 | 0 | - | ✓ |
 | [#10123](https://github.com/DanielH2018/server/issues/10123) | low | gap | backup-observability | The 26.04 upgrade's *.dpkg-dist copies are unreviewed, and the ucf-dist check passes over them | 2026-11-25 | 0 | - | ✓ |
-| [#10132](https://github.com/DanielH2018/server/issues/10132) | low | improvement | cicd | Remove land.py's handler for an exit code parse_args never raises, and its repeated refusal | 2026-11-25 | 0 | claude/hungry-lewin-d348d8 | ✓ |
-| [#10135](https://github.com/DanielH2018/server/issues/10135) | low | improvement | cicd | Use datetime.fromisoformat for the RFC 3339 reads outside monitor-bridge | 2026-11-25 | 0 | - | ✓ |
-| [#10136](https://github.com/DanielH2018/server/issues/10136) | low | improvement | cicd | Keep one Prometheus duration table under scripts/ | 2026-11-25 | 0 | claude/hungry-lewin-d348d8 | ✓ |
+| [#10135](https://github.com/DanielH2018/server/issues/10135) | low | improvement | cicd | Use datetime.fromisoformat for the RFC 3339 reads outside monitor-bridge | 2026-11-25 | 0 | claude/hungry-lewin-d348d8 | ✓ |
 | [#10137](https://github.com/DanielH2018/server/issues/10137) | low | improvement | cicd | Fold fanout.py's COMMANDS and _HELP into one table | 2026-11-25 | 0 | - | ✓ |
-| [#10138](https://github.com/DanielH2018/server/issues/10138) | low | improvement | cicd | Name the fields of worktree_facts, r2_query_usage and the lander grade | 2026-11-25 | 0 | - | ✓ |
+| [#10138](https://github.com/DanielH2018/server/issues/10138) | low | improvement | cicd | Name the fields of worktree_facts, r2_query_usage and the lander grade | 2026-11-25 | 0 | claude/hungry-lewin-d348d8 | ✓ |
 | [#10150](https://github.com/DanielH2018/server/issues/10150) | low | improvement | cicd | Parse arguments outside main in eight large scripts, starting with b2_drain | 2026-11-25 | 0 | - | ✓ |
 | [#10151](https://github.com/DanielH2018/server/issues/10151) | low | improvement | cicd | Type the cc-wait probes' states as StrEnums | 2026-11-25 | 0 | - | ✓ |
 | [#10155](https://github.com/DanielH2018/server/issues/10155) | low | gap | cicd | place runs keeps a sweep-stopped row for a worktree that no longer exists — *no vetted remediation* | 2026-11-25 | 0 | - | ✓ |
 | [#10158](https://github.com/DanielH2018/server/issues/10158) | low | improvement | security | Four keys in secrets.yml have no reader, and one is due for rotation on 2026-12-09 — *no vetted remediation* | 2026-11-25 | 0 | - | ✓ |
 | [#10160](https://github.com/DanielH2018/server/issues/10160) | low | gap | container | janitorr runs live against Sonarr's v5 beta, which upstream does not support | 2026-11-25 | 0 | - | ✓ |
-| [#10168](https://github.com/DanielH2018/server/issues/10168) | low | improvement | cicd | Move the renderer's last two hand-kept unknown-key checks to pydantic models | 2026-11-25 | 0 | - | ✓ |
 | [#10171](https://github.com/DanielH2018/server/issues/10171) | low | improvement | cicd | Retire the pre-move cluster/services.yml fallbacks in the render-diff gate and k8s_tags_in | 2026-11-25 | 0 | - | ✓ |
-| [#10218](https://github.com/DanielH2018/server/issues/10218) | low | improvement | cicd | Record the REST path in gh-quota's call class, so slice 3 can be priced | 2026-11-26 | 0 | claude/hungry-lewin-d348d8 | ✓ |
 | [#10219](https://github.com/DanielH2018/server/issues/10219) | low | gap | docs | Find which issue changes move updated_at | 2026-11-26 | 0 | - | ✓ |
 | [#10226](https://github.com/DanielH2018/server/issues/10226) | low | improvement | cicd | affected_tests.json: measure 30 days of packed growth, and whether missing can be stored as import names — *no vetted remediation* | 2026-11-26 | 0 | - | ✓ |
-| [#10231](https://github.com/DanielH2018/server/issues/10231) | low | improvement | cicd | cluster_pins still parses INI though every vars file it scans is YAML | 2026-11-26 | 0 | - | ✓ |
-| [#10234](https://github.com/DanielH2018/server/issues/10234) | low | gap | backup-observability | log2ram.log on daniel-pi never rotates: Ubuntu's log2ram ships /etc/logrotate.d/log2ram as a directory | 2026-11-26 | 0 | - | ✓ |
 | [#10240](https://github.com/DanielH2018/server/issues/10240) | low | improvement | cicd | Eight modules still test a flag by membership in argv | 2026-11-26 | 0 | - | ✓ |
-| [#10247](https://github.com/DanielH2018/server/issues/10247) | low | improvement | cicd | A landing that adds a dependency reports its host render failure as an unexplained error | 2026-11-26 | 0 | - | ✓ |
-| [#10253](https://github.com/DanielH2018/server/issues/10253) | low | improvement | cicd | pi-proxy-digest-schedule row passes without the autoheal schedule rule | 2026-11-26 | 0 | - | ✓ |
-| [#10255](https://github.com/DanielH2018/server/issues/10255) | low | gap | container | ical-proxy drops a whole recurring series when its first occurrence is overridden | 2026-11-26 | 0 | - | ✓ |
-| [#10258](https://github.com/DanielH2018/server/issues/10258) | low | improvement | container | probe.py arr times out before an *arr interactive search answers, so release decisions cannot be read | 2026-11-26 | 0 | - | ✓ |
-| [#10280](https://github.com/DanielH2018/server/issues/10280) | low | gap | cicd | The landing annotation drops turn_wait on early exits and records no serial wait | 2026-11-26 | 0 | - | - |
-| [#10281](https://github.com/DanielH2018/server/issues/10281) | low | improvement | cicd | A landing waiting behind a serial landing never learns its PR conflicts | 2026-11-26 | 0 | - | - |
-| [#10283](https://github.com/DanielH2018/server/issues/10283) | low | gap | cicd | land.sh reports refused for a PR it already merged when one fetch of master fails | 2026-11-26 | 0 | - | ✓ |
-| [#10098](https://github.com/DanielH2018/server/issues/10098) | - | - | - | homelab-mcp's bearer check raises on a non-ASCII token instead of refusing it | 2026-11-25 | 0 | - | ✓ |
+| [#10280](https://github.com/DanielH2018/server/issues/10280) | low | gap | cicd | The landing annotation drops turn_wait on early exits and records no serial wait | 2026-11-26 | 0 | claude/hungry-lewin-d348d8 | - |
+| [#10284](https://github.com/DanielH2018/server/issues/10284) | low | improvement | cicd | Let a serial PR yield the landing turn while other landings wait in line | 2026-11-26 | 0 | - | - |
+| [#10312](https://github.com/DanielH2018/server/issues/10312) | low | improvement | container | Drop the Z replacement from four role payloads, one role per PR | 2026-11-26 | 0 | claude/hungry-lewin-d348d8 | ✓ |
+| [#10323](https://github.com/DanielH2018/server/issues/10323) | low | gap | cicd | A test run on daniel-box wrote 2,601 phantom core calls into the real gh-quota ledger directory | 2026-11-26 | 0 | claude/hungry-lewin-d348d8 | ✓ |
+| [#10337](https://github.com/DanielH2018/server/issues/10337) | low | gap | backup-observability | longhorn-reconcile leaves a weekly volume in both default and no-backup with two group labels | 2026-11-26 | 1 | claude/hungry-lewin-d348d8 | ✓ |
+| [#10342](https://github.com/DanielH2018/server/issues/10342) | low | gap | cicd | The comment-only defaults check misses a tagged block scalar such as `key: !!bool \|-` | 2026-11-26 | 0 | - | ✓ |
+| [#10369](https://github.com/DanielH2018/server/issues/10369) | low | improvement | container | Give export_verdict one owner across the configarr and janitorr health readers | 2026-11-27 | 0 | claude/hungry-lewin-d348d8 | - |
+| [#10370](https://github.com/DanielH2018/server/issues/10370) | low | improvement | network | Move the repeated isolated, control and main blocks of the verify Jobs into flux_job_connect | 2026-11-27 | 0 | claude/hungry-lewin-d348d8 | - |
+| [#10371](https://github.com/DanielH2018/server/issues/10371) | low | improvement | security | Give the crowdsec allowlist scripts one CalledProcessError handler | 2026-11-27 | 0 | - | - |
+| [#10372](https://github.com/DanielH2018/server/issues/10372) | low | improvement | backup-observability | Merge monitor-bridge's duplicated _int and _num, console read and serve blocks | 2026-11-27 | 0 | claude/hungry-lewin-d348d8 | - |
+| [#10373](https://github.com/DanielH2018/server/issues/10373) | low | improvement | container | Merge or justify the small duplicated blocks in the arr-notification, lidarr, karakeep, sonarr and homelab-mcp roles | 2026-11-27 | 0 | - | - |
+| [#10374](https://github.com/DanielH2018/server/issues/10374) | low | improvement | cicd | Decide whether a duplicated-block check joins CI, and whether the two Prometheus envelope parsers stay split | 2026-11-27 | 0 | - | - |
+| [#10383](https://github.com/DanielH2018/server/issues/10383) | low | improvement | container | Move the janitorr health reader onto the shared export_verdict | 2026-11-27 | 0 | - | - |
+| [#10384](https://github.com/DanielH2018/server/issues/10384) | low | gap | backup-observability | longhorn-reconcile leaves an unlisted non-longhorn-class claim in both default and no-backup | 2026-11-27 | 0 | - | ✓ |
+| [#10386](https://github.com/DanielH2018/server/issues/10386) | low | improvement | cicd | Move prowlarr's verify Job onto flux_job_verify | 2026-11-27 | 0 | - | - |
+| [#10388](https://github.com/DanielH2018/server/issues/10388) | low | improvement | cicd | Move n8n's verify Job onto flux_job_verify | 2026-11-27 | 0 | - | - |
+| [#10389](https://github.com/DanielH2018/server/issues/10389) | low | improvement | cicd | Move registry's verify Job onto flux_job_verify | 2026-11-27 | 0 | - | - |
+| [#10390](https://github.com/DanielH2018/server/issues/10390) | low | improvement | cicd | Move the jellyfin, netpol-baseline, sonarr and tdarr verify mains onto flux_job_verify.main | 2026-11-27 | 0 | - | - |
+| [#10394](https://github.com/DanielH2018/server/issues/10394) | low | gap | cicd | test_github_rest runs the host's installed gh_quota.py, not the checkout's | 2026-11-27 | 0 | - | ✓ |
+| [#10395](https://github.com/DanielH2018/server/issues/10395) | low | improvement | container | Merge bridge/common.py's duplicated _int and _num | 2026-11-27 | 0 | - | - |
+| [#10419](https://github.com/DanielH2018/server/issues/10419) | low | gap | cicd | cluster-pins line reader: a quote inside a flow plain scalar hides a later assignment | 2026-11-27 | 0 | - | ✓ |
+| [#10423](https://github.com/DanielH2018/server/issues/10423) | low | gap | cicd | The revert rule's footprints_match passes a failed name that no digests.json keys | 2026-11-27 | 0 | - | - |
+| [#10424](https://github.com/DanielH2018/server/issues/10424) | low | improvement | cicd | The _unclassified assertion in test_promote_forward_only.py passes without the rule | 2026-11-27 | 0 | - | - |
 
 ## Deferred, by date
 
@@ -94,8 +97,6 @@ Open findings carrying a Not Before date, soonest first. `findings.py next` with
 
 | Not before | State | # | Finding |
 |---|---|---|---|
-| 2026-11-23 | date passed | [#9855](https://github.com/DanielH2018/server/issues/9855) | 59 percent of gh-quota core spend is attributed to neither host's ledger |
-| 2026-11-24 | date passed | [#10056](https://github.com/DanielH2018/server/issues/10056) | The deploy-pipeline exporter spends about 24 core calls an hour that no gh-quota ledger can record |
 | 2026-11-28 | withheld | [#8567](https://github.com/DanielH2018/server/issues/8567) | The restore drill's 300-second probe bound may not fit a large SQLite integrity check |
 | 2026-11-28 | withheld | [#8931](https://github.com/DanielH2018/server/issues/8931) | Read the dotfiles mirror's first week of status lines after 2026-11-21 |
 | 2026-11-28 | withheld | [#10171](https://github.com/DanielH2018/server/issues/10171) | Retire the pre-move cluster/services.yml fallbacks in the render-diff gate and k8s_tags_in |
@@ -118,6 +119,10 @@ Open findings with an open "blocked by" issue. `findings.py next` withholds each
 | # | Blocked by | Finding |
 |---|---|---|
 | [#8539](https://github.com/DanielH2018/server/issues/8539) | #8193 | Add Explo: ListenBrainz discovery playlists in Navidrome |
+| [#10386](https://github.com/DanielH2018/server/issues/10386) | #10370 | Move prowlarr's verify Job onto flux_job_verify |
+| [#10388](https://github.com/DanielH2018/server/issues/10388) | #10370 | Move n8n's verify Job onto flux_job_verify |
+| [#10389](https://github.com/DanielH2018/server/issues/10389) | #10370 | Move registry's verify Job onto flux_job_verify |
+| [#10390](https://github.com/DanielH2018/server/issues/10390) | #10370 | Move the jellyfin, netpol-baseline, sonarr and tdarr verify mains onto flux_job_verify.main |
 
 ## Settled findings — do not re-flag
 
@@ -220,6 +225,7 @@ Findings closed with `findings.py close --accepted` (true, and the operator chos
 | [#9040](https://github.com/DanielH2018/server/issues/9040) | accepted | Decide whether one golden snapshot per host package replaces the 80 render-and-grep test files | Operator ruling, 2026-11-20: no golden snapshot per host package; the named assertions stay. The re-measure on this issue found 323 of the 792 tests in the 79 rendering files are render-and-grep, about 2,400 lines of test bodies against the 8,000 to 10,000 the finding estimated, and a regenerated snapshot can be approved without reading it. |
 | [#9625](https://github.com/DanielH2018/server/issues/9625) | accepted | Thirty server branches and twenty-seven dotfiles branches are stale, and nothing sweeps them | Delete-on-merge works on both repos and the stale branches are gone; the leak left (closed-unmerged and never-PR'd branches) is too small for a weekly listing job. |
 | [#9730](https://github.com/DanielH2018/server/issues/9730) | accepted | Decide whether to sweep single not-in assertions that pin one removed name inside live tests | Operator ruling 2026-11-22 (accept all 4): no sweep. A single-name absence assertion inside a live test is trimmed only when that test is edited for another reason. |
+| [#9855](https://github.com/DanielH2018/server/issues/9855) | accepted | 59 percent of gh-quota core spend is attributed to neither host's ledger | Operator ruled 2026-11-27 for option (c). Restated Verify-by: every in-repo GitHub REST reader records its calls in the gh-quota ledger (confirmed by the 2026-11-27 fan-out batch: github_rest.github_get, count_github_call, forge.py and lib/gh.py cover await_ci, checkout-sync, the builder and renovate-notify). The residual is a session's bare gh writes plus the operator's own terminal and PC, as the 2026-11-26 join in docs/github-quota.md measures, and gh-quota status already counts each identity's writes against the secondary limits. No PostToolUse recorder (a), and ghread stays read-only (b). Revisit (a) only if a session exhausts the secondary write limit. |
 | [#10107](https://github.com/DanielH2018/server/issues/10107) | accepted | Run step-security/harden-runner in audit mode on the promote workflow | Operator ruled 2026-11-26: harden-runner audit mode sends promote run data to StepSecurity's servers outside GitHub and cannot turn that off, so the promote workflow runs without it. |
 
 ### container

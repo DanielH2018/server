@@ -295,6 +295,25 @@ attributed to neither host. Each window left between 38 and 203 calls. The quiet
 left 38, 38 and 46, so a floor of about 40 calls an hour is spent whatever the sessions do.
 The rest rises with session activity, up to about 200 an hour.
 
+**Since the exporter's conditional reads deployed, a quiet hour leaves nothing beyond the
+ledgers.** The join on 2026-11-26 read every ledger file on both hosts whose identity has a
+`truth` sample on the operator's counter: `tok-2edb9dd14a9a`, `tok-0b068a5c1034`, and
+`tok-efaef766d6d0`, the token checkout-sync and the builder read with. It kept the 46 closed
+core windows from 00:00 UTC on 2026-11-23 to 21:12 UTC on 2026-11-26. The six quietest, on
+2026-11-24 and 2026-11-25, counted between 4 and 42 calls each. Each left between -1 and 4
+calls beyond the ledgers. A ledger can record a call that GitHub did not count, such as a 304,
+so a window can read slightly negative. In the window that reset at 20:05 UTC on 2026-11-25,
+GitHub counted 4 calls. Over the same hour the exporter served 60 samples each of
+`homelab_deploy_hold_active` and `homelab_deploy_unpromoted_age_seconds`. Those gauges exist
+only while the variables read and the runs read succeed, so the exporter was reading GitHub
+throughout, not disabled or failing. Without
+conditional reads the exporter alone spent about 24 an hour. The busy windows still leave
+the residual that rises with session activity. Across all 46 windows, GitHub counted 19,990
+calls, and 6,291 of them, or 31%, are attributed to no ledger. Thirteen identities with no
+`truth` sample hold 2,601 more calls in one window on 2026-11-26, more than that window's
+residual. They are excluded, because those calls never reached GitHub on the operator's
+counter.
+
 The callers that still spend the operator's core quota beyond both ledgers:
 
 | Caller | Calls | Why no ledger records it |
@@ -306,8 +325,10 @@ The callers that still spend the operator's core quota beyond both ledgers:
 | a session's bare `gh` write, and the operator's terminal and PC | unmeasured | `ghread` refuses writes, and the operator's calls go around every wrapper |
 
 The exporter explained most of the floor while it sent unconditional reads, about 24 calls an
-hour. The table's other callers spend too little to explain the rest of the busy-hour residual. By elimination, that rest is a session's bare `gh` writes
-and the operator's own calls. Nothing has counted either of them.
+hour. The quiet windows of 2026-11-24 and 2026-11-25 show it spends next to nothing since.
+The table's other callers spend too little to explain the busy-hour residual. By
+elimination, that residual is a session's bare `gh` writes and the operator's own calls.
+Nothing has counted either of them.
 
 **`github_rest.github_get` records each authenticated read** as `api rest <path template>`, such as `api rest repos/{o}/{r}/actions/runs`, under the token the
 read sends and against the caller's session key. A systemd timer such as the builder or
@@ -333,8 +354,12 @@ their `ReadWritePaths=`, because their sandboxes would otherwise refuse the writ
 **The mode** is `off` or `record`, and slice 2 adds `enforce`. The component's
 `gh_quota_mode` default renders it into `/etc/gh-quota.conf`, and a host's host_vars can
 override it. In `off`, `record` returns at once. `GH_QUOTA_MODE=off` in one call's
-environment is `off` for that call: the test suite sets it, so a test's fake `gh` call never
-lands in the host's ledger.
+environment is `off` for that call. Without one, a call whose environment holds
+`PYTEST_VERSION` is `off`, so a test's fake `gh` call never lands in the host's ledger. pytest
+exports that variable itself, so `-o addopts=""` cannot drop it the way it drops a plugin
+(`hosts/components/gh-quota/tests/test_gh_quota.py::test_a_call_under_pytest_records_nothing_where_the_host_records`).
+The `leakguard` plugin also sets `GH_QUOTA_MODE=off` for the whole suite, because
+`github_rest` loads the host's installed module, which can be older than the checkout.
 
 **The module fails open.** A ledger it cannot open, lock or parse lets the call through and
 counts the failure in a second file that `gh-quota status` reads. `status` counts the

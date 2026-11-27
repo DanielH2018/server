@@ -107,8 +107,8 @@ DEFAULT_ARM = [
     pytest.param(
         "homelab/crowdsec-db",
         [],
-        [],
-        id="nobackup-listed-claim-with-no-group-stays-out",
+        ["no-backup"],
+        id="nobackup-listed-claim-with-no-group-moves-to-nobackup",
     ),
 ]
 

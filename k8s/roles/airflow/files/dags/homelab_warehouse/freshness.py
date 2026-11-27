@@ -21,7 +21,7 @@ from datetime import date, timedelta
 
 from .warehouse import CHECK_TABLE
 
-# Every DAG that ends its check with `warehouse.finish_check`.
+# Every DAG that runs its check through `warehouse.check_day`.
 WAREHOUSE_DAGS = (
     "backup_spend_rollup",
     "claude_decisions_rollup",
