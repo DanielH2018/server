@@ -308,7 +308,7 @@ def _select(role: _Path, names: Iterable[str]) -> list[Vendored] | None:
 def main(
     argv: list[str] | None = None, roles: _Path = K8S_ROLES, fetcher: Fetcher = fetch
 ) -> int:
-    parser = ArgumentParser(description=__doc__.split("\n\n")[0])
+    parser = ArgumentParser(description=(__doc__ or "").split("\n\n")[0])
     parser.add_argument("role", nargs="?", help="the role to refresh, such as metallb")
     parser.add_argument(
         "names", nargs="*", help="files under files/upstream/ (default: all)"

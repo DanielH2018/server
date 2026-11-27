@@ -1,7 +1,10 @@
 """`session_milestone.main` against a fake gh."""
 
+import subprocess
+
 from dev.findings_lib.milestone import description_for
 from dev.session_milestone import main
+from lib.json_types import JsonValue
 
 FOCUS = {
     "title": "Opt-in milestones",
@@ -14,13 +17,14 @@ FOCUS = {
 def _fake(pr, milestones=()):
     writes = []
 
-    def gh_json(*argv, **_kw):
+    def gh_json(*argv, **_kw) -> JsonValue:
         if argv[0] == "api":
             return [[m for m in milestones if f"state={m['state']}" in argv[1]]]
         return pr
 
-    def gh(*argv, **_kw):
+    def gh(*argv, **_kw) -> subprocess.CompletedProcess[str]:
         writes.append(list(argv))
+        return subprocess.CompletedProcess(list(argv), 0, "", "")
 
     return gh_json, gh, writes
 

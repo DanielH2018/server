@@ -383,7 +383,7 @@ def main(
     `hooks_dir` and `settings` are overridable so a test can run the whole path against a
     scratch tree; the defaults are the repo's own.
     """
-    parser = ArgumentParser(description=__doc__.splitlines()[0])
+    parser = ArgumentParser(description=(__doc__ or "").partition("\n")[0])
     mode = parser.add_mutually_exclusive_group()
     mode.add_argument(
         "--check",

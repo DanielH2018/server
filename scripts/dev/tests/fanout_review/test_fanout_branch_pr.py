@@ -89,6 +89,7 @@ def test_parse_branch_prs_lists_open_before_merged_and_drops_closed_ones():
         {"url": "merged7", "number": 7, "state": "MERGED"},
     ]
     held = parse_branch_prs(json.dumps(rows))
+    assert held is not None
     assert held == BranchPrs(open=("open5",), merged=("merged7",))
     assert held.urls == ["open5", "merged7"]
     assert parse_branch_prs(json.dumps(rows[:1])) == BranchPrs()
