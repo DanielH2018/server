@@ -13,10 +13,6 @@ vault_mcp_k8s_mem_limit: 512Mi
 vault_mcp_k8s_cpu_request: "50m"
 vault_mcp_k8s_mem_request: 128Mi
 
-# 0 until livesync's entry admits vault-mcp as a caller: without that fence the default-deny
-# baseline drops the bridge's connections to CouchDB.
-vault_mcp_k8s_replicas: 0
-
 # The image's `node` user. The image sets no USER, so without this pin it runs as root.
 vault_mcp_k8s_uid: 1000
 
