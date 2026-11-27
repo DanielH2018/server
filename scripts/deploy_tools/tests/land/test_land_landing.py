@@ -8,7 +8,8 @@ import subprocess
 
 import pytest
 
-from _land_fakes import PRIMARY, Fakes
+from _land_fakes import MERGE_SHA, PRIMARY, Fakes
+from deploy_tools.land_lib import classify
 from deploy_tools.land_lib.outcome import Outcome
 
 
@@ -87,9 +88,26 @@ def test_view_asks_rest_when_rest_carries_every_field_and_gh_pr_view_otherwise(l
 
 
 def test_git_runs_in_the_primary_checkout_without_raising(landing):
-    ln, calls = landing(Fakes(fetch_rc=1))
+    ln, calls = landing(Fakes(fetch_rc=[1]))
     assert ln.git("fetch", "-q", "origin", "master").returncode == 1
     assert calls[-1] == ("git", ("fetch", "-q", "origin", "master"), {"cwd": PRIMARY})
+
+
+def test_fetch_branch_retries_a_failed_fetch(landing):
+    ln, calls = landing(Fakes(fetch_rc=[1, 0]))
+    ln.fetch_branch()
+    fetches = [c for c in calls if c[0] == "git" and c[1][0] == "fetch"]
+    assert len(fetches) == 2
+    assert [c for c in calls if c[0] == "sleep"] == [("sleep", (5,), {})]
+
+
+def test_a_fetch_that_fails_after_the_merge_names_the_merge(landing):
+    ln, _ = landing(Fakes(fetch_rc=[1]))
+    with pytest.raises(Outcome) as exc:
+        classify.resolve(ln)
+    assert (exc.value.rc, exc.value.verdict) == (1, "refused")
+    assert f"merged as {MERGE_SHA[:8]}, deploy not followed" in exc.value.detail
+    assert "re-run land.sh --pr 999" in exc.value.detail
 
 
 def test_fakes_defaults_are_fresh_per_instance():

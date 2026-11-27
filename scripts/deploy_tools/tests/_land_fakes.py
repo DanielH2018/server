@@ -60,7 +60,7 @@ class Fakes:
 
     gh_views: dict[str, Any] = field(default_factory=dict)
     gh_merge_rc: list[int] = field(default_factory=lambda: [0])
-    fetch_rc: int = 0
+    fetch_rc: list[int] = field(default_factory=lambda: [0])
     pull_ref_rc: int = 0
     tip: str = MERGE_SHA
     await_ci: list[tuple[int, str]] = field(default_factory=lambda: [(0, "CI green")])
@@ -266,6 +266,8 @@ def build_tools(f: Fakes) -> tuple[Tools, list]:
         return view_seq[args[args.index("--json") + 1]]()
 
     gh_rc = _seq(f.gh_merge_rc, calls, "gh")
+    # `git_run` records the fetch itself, so this sequence records into a list nothing reads.
+    fetch_rc = _seq(f.fetch_rc, [], "fetch")
 
     def gh_run(*args, **kwargs):
         rc = gh_rc(*args, **kwargs)
@@ -278,7 +280,7 @@ def build_tools(f: Fakes) -> tuple[Tools, list]:
         if args[0] == "fetch" and "refs/pull" in args[-1]:
             return _cp(f.pull_ref_rc)
         if args[0] == "fetch":
-            return _cp(f.fetch_rc)
+            return _cp(fetch_rc())
         if args == ("rev-parse", "FETCH_HEAD"):
             return _cp(0, "prhead\n")
         if args[0] == "ls-tree":
