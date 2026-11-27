@@ -88,6 +88,28 @@ def test_a_cloudflare_chain_counts_its_rightmost_entry_and_never_the_client_sent
         _line(AUTH_ROUTER, 200, "1.1.1.1,10.0.0.50"),  # chain ending in the LAN
         _line(AUTH_ROUTER, 200, "not-an-ip"),
         "not json at all",
+        pytest.param(
+            json.dumps(
+                {"RouterName": [], "DownstreamStatus": 200, "ClientHost": "1.1.1.1"}
+            ),
+            id="list-router-name",
+        ),
+        pytest.param(
+            json.dumps(
+                {
+                    "RouterName": AUTH_ROUTER,
+                    "DownstreamStatus": {},
+                    "ClientHost": "1.1.1.1",
+                }
+            ),
+            id="object-status",
+        ),
+        pytest.param(
+            json.dumps(
+                {"RouterName": AUTH_ROUTER, "DownstreamStatus": 200, "ClientHost": 7}
+            ),
+            id="number-client-host",
+        ),
     ],
 )
 def test_anything_else_is_flagged_out(line):
@@ -123,6 +145,22 @@ def test_an_unreadable_expiry_counts_as_due_for_refresh():
         {"198.51.100.2"}, [{"value": "198.51.100.2", "expiration": "soon"}], NOW
     )
     assert decided.refresh == ["198.51.100.2"]
+
+
+def test_an_expired_address_seen_again_is_refreshed_not_pruned():
+    decided = ra.plan({"198.51.100.2"}, [_item("198.51.100.2", -1)], NOW)
+    assert (decided.prune, decided.add) == ([], [])
+    assert decided.refresh == ["198.51.100.2"]
+    assert decided.live == ["198.51.100.2"]
+
+
+def test_duplicate_items_take_one_slot_and_keep_the_latest_expiry():
+    items = [_item("198.51.100.2", -1), _item("198.51.100.2", 150)]
+    items += [_item(f"203.0.113.{i + 1}", 100) for i in range(ra.CAP - 2)]
+    decided = ra.plan({"9.9.9.9"}, items, NOW)
+    assert decided.prune == []
+    assert decided.add == ["9.9.9.9"]
+    assert decided.live.count("198.51.100.2") == 1
 
 
 def test_the_cap_stops_additions_and_names_what_it_left_out():
