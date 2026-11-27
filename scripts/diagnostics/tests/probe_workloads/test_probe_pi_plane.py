@@ -92,7 +92,7 @@ def test_from_another_host_the_pi_is_reached_through_the_landing_host():
 def _container(
     name, status="running", health=None, networks=("proxy",), image="x:latest"
 ):
-    state = {"Status": status}
+    state: dict[str, object] = {"Status": status}
     if health:
         state["Health"] = {"Status": health}
     return {
@@ -201,6 +201,14 @@ def test_run_targets_prints_the_count(capsys):
     )
     assert code == 0
     assert capsys.readouterr().out == "1/1 targets up\n"
+
+
+def test_run_targets_reads_a_json_null_body_as_unreadable():
+    class Ns:
+        pi = False
+
+    code = pi_plane.run_targets(Ns(), fetch_json=lambda url, resolve=None: (None, None))
+    assert code == pi_plane.PROBE_UNREADABLE
 
 
 def _run_targets_one_down(scaled):
