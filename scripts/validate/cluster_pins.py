@@ -249,7 +249,8 @@ def code_part(line: str) -> str:
                 quote = ""
         elif char in "\"'" and (i == 0 or line[i - 1] in QUOTE_OPENERS):
             quote = char
-        elif char == "#" and (i == 0 or line[i - 1].isspace()):
+        # Not `isspace()`: it takes U+00A0, which YAML reads as part of a plain scalar.
+        elif char == "#" and (i == 0 or line[i - 1] in " \t"):
             return line[:i]
     return line
 
