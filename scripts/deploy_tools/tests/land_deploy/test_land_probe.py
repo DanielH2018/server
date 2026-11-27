@@ -70,6 +70,17 @@ def test_the_result_line_decides_the_verdict_over_the_prose(tmp_path):
     assert land_probe.read(log)["state"] == "deferred"
 
 
+def test_the_wait_s_detail_ends_with_the_landing_s_next_action(tmp_path):
+    """cc-wait prints only the state and the detail, so `next` rides at the detail's end."""
+    log = landing(
+        tmp_path,
+        "LAND-RESULT: verdict=pr-ci-red cause=- exit=1 pr=939 sha=- tags=0 next=fix-and-rerun\n"
+        "VERDICT: pr-ci-red (PR #939 cannot merge: its own CI is red)\n",
+        rc=1,
+    )
+    assert land_probe.read(log)["detail"].endswith("; next=fix-and-rerun")
+
+
 def test_a_promote_timeout_cause_gave_up_without_its_note(tmp_path):
     """The cause on `LAND-RESULT:` decides, not the note's wording."""
     log = landing(

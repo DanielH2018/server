@@ -19,7 +19,7 @@ from dataclasses import dataclass
 
 import sys
 
-from deploy_tools.land_lib.outcome import CAUSES, Cause, Outcome
+from deploy_tools.land_lib.outcome import CAUSES, Cause, Outcome, next_action
 
 from lib import host_modules  # noqa: F401
 from host_lib import logfmt
@@ -69,11 +69,12 @@ RESULT_PREFIX = "LAND-RESULT:"
 
 
 def result_line(ledger: Ledger, outcome: Outcome) -> str:
-    """`LAND-RESULT: verdict=.. cause=.. exit=.. pr=.. sha=.. tags=<count> hold_sha=.. hold_owner=.. merge=..`.
+    """`LAND-RESULT: verdict=.. cause=.. exit=.. pr=.. sha=.. tags=<count> hold_sha=.. hold_owner=.. merge=.. next=..`.
 
     A field the landing never reached reads `-`, so every value is one bare token. `sha` is
     the merge commit's first 8 characters and `merge` is all of it. `hold_sha` and
-    `hold_owner` are set beside cause `promote-held` only.
+    `hold_owner` are set beside cause `promote-held` only. `next` is the landing's
+    `outcome.NEXT` row.
     """
     tags = [t for t in ledger.tags_label.split(",") if t]
     fields = {
@@ -86,6 +87,7 @@ def result_line(ledger: Ledger, outcome: Outcome) -> str:
         "hold_sha": ledger.hold_sha or "-",
         "hold_owner": ledger.hold_owner or "-",
         "merge": ledger.merge_sha or "-",
+        "next": next_action(outcome.verdict, ledger.cause, outcome.rc) or "-",
     }
     return f"{RESULT_PREFIX} {logfmt(fields)}"
 
