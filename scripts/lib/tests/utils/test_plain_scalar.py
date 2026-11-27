@@ -21,7 +21,9 @@ from lib.plain_scalar import (
 )
 
 _ANY_TEXT = st.text(alphabet=st.characters(blacklist_categories=["Cs"]), max_size=20)
-_YAML_INDICATORS = st.text(alphabet="#&!*{}[]:,-?|>'\"%@0123456789._exob ", max_size=20)
+_YAML_INDICATORS = st.text(
+    alphabet="#&!*{}[]:,-?|>'\"%@0123456789._exob \u2028\u2029\x85\t", max_size=20
+)
 _VALUES = st.one_of(_ANY_TEXT, _YAML_INDICATORS)
 
 
@@ -70,6 +72,9 @@ def test_refused_returns_for_any_text(text):
 @example("0?")
 @example(":0")
 @example("0\t0")
+@example("a\u2028b")
+@example("a\u2029b")
+@example("a\x85b")
 @example("0]>0")
 @given(_VALUES)
 def test_a_value_refused_passes_survives_every_field_position(text):

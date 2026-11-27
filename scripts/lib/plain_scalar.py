@@ -4,7 +4,12 @@ A placeholder that is the whole scalar of a field, such as `email: ${email}`, is
 use. Flux substitutes into a resource it has already serialised, without the template's
 quotes, and then reads the result as YAML again. A standalone value therefore keeps its
 string type only when a YAML reader takes its bare text for exactly that string.
-`refused(text)` answers that for one value, on the union of two readers:
+`refused(text)` answers that for one value, on the union of two readers, and it also refuses a
+tab, a line break (including NEL, U+2028 and U+2029), a flow indicator (`,[]{}?`) and a leading
+`:`. Those characters read back as the same string alone but break once the value sits in a
+field or a flow collection.
+
+The two readers:
 
 - PyYAML's `safe_load`, a YAML 1.1 reader. It types timestamps and sexagesimal numbers, and
   it changes or rejects any text that is not a valid plain scalar: a leading `#`, `&`, `!` or
@@ -32,7 +37,7 @@ import yaml
 # Restated because the filter plugin loads this module by path and cannot import `lib`.
 _LOADER = getattr(yaml, "CSafeLoader", yaml.SafeLoader)
 
-_FIELD_UNSAFE = frozenset(",[]{}?\t")
+_FIELD_UNSAFE = frozenset(",[]{}?\t\r\n\x85\u2028\u2029")
 
 # The merge key `<<` decodes as the string `<<` in a value.
 _GO_MAP = frozenset(
@@ -94,8 +99,8 @@ def refused(text: str) -> bool:
     """Whether a value whose placeholder stands alone in a field must be refused.
 
     True when either reader takes the bare text for anything but the same string, or when the
-    text holds a tab, a flow indicator (`,[]{}?`) or a leading `:`. Each ends or breaks a plain
-    scalar once it sits in a field or a flow collection.
+    text holds a tab, a line break, a flow indicator (`,[]{}?`) or a leading `:`. Each ends or
+    breaks a plain scalar once it sits in a field or a flow collection.
     """
     return (
         go_yaml_v2_types(text)
