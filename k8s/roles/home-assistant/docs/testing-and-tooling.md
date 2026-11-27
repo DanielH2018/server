@@ -39,6 +39,18 @@ precision 0) rather than Jinja's stock half-away-from-zero float. The fan level 
 `test_fan_macros.py` carries an old-inline-vs-macro equivalence grid (8.8k points) as a
 permanent behaviour-preservation guard against the curve being changed in only one place.
 
+**Property tests hold the invariants that survive a retune.** The `test_*_properties.py`
+modules draw their inputs with Hypothesis, under the seed and example count of
+`tests/hypothesis_profiles.py`. Two of them are stateful. `test_fan_properties.py` replays
+the fan loop: `fan_target_level`, then the DREO round trip, then the reported level fed back
+in. It asserts the caps, that unchanged inputs keep the level, and that sensor noise inside
+the deadband does not move a settled level. `test_notify_properties.py` replays the held-alert
+store against a plain dict. `test_ventilation_properties.py` holds `ventilation_advice` and
+`close_window_advice` in step, so a window opened on advice is never told to close on the
+same readings. `test_lighting_properties.py` holds the wake ramp's shape and the ambient-fill
+dimming. A failure in the nightly sweep
+prints a `@reproduce_failure` blob; pin that input as an `@example` on the test.
+
 ## What the pre-deploy validator checks
 
 The `validate-ha-config` prek hook (`scripts/home_assistant/validate_ha_config.py`) runs

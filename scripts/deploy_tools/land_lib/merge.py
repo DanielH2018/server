@@ -333,7 +333,7 @@ def await_merge(ln: Landing, take_turn: TakeTurn = _no_turn) -> None:
     reads its head green. A green ready head master moved past rejoins the line as a draft,
     before it asks for the turn or, when master moved while it waited, by giving the turn
     back (`stale_base.rejoin_line`). A stale head that reaches the merge anyway merges as it
-    stands unless the operator approved it (`stale_base.refuse_stale_approved`).
+    stands unless master changed a path the PR changes (`stale_base.refuse_stale_overlap`).
 
     `take_turn` takes the landing turn (`turn.held`): it waits in line and returns whether
     this landing holds the turn and the seconds that call waited. A head with no CI run takes
@@ -514,10 +514,6 @@ def await_merge(ln: Landing, take_turn: TakeTurn = _no_turn) -> None:
                     continue
             if rc == CI_GREEN and ln.direct_merge_subject:
                 slots.refuse_before_merge(ln, head)
-                if not (updated_from or stale_base.batch_tested(ln, head)):
-                    stale_base.refuse_stale_approved(
-                        ln, head, view.get("mergeable") == "CONFLICTING"
-                    )
                 if head != gated_head:
                     gated_pins = pin_gate.gate_before_merge(ln, head)
                     gated_head = head
@@ -530,6 +526,8 @@ def await_merge(ln: Landing, take_turn: TakeTurn = _no_turn) -> None:
                 ):
                     in_turn, updated_from, rejoined, drafted = False, head, True, True
                     continue
+                if not stale_base.batch_tested(ln, head):
+                    stale_base.refuse_stale_overlap(ln, head)
                 refusal = _merge_directly(ln, head, commits)
                 if not refusal:
                     continue

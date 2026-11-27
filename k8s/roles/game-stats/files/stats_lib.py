@@ -132,6 +132,11 @@ def extract_entries(loki_json):
 
 
 # cursor handling
+
+# Loki's default `max_entries_limit_per_query`, which loki-homelab does not raise.
+LOKI_MAX_ENTRIES = 5000
+
+
 def initial_cursor(stored_cursor, backfill, now, backfill_days):
     """Pick the starting cursor (ns).
 
@@ -147,22 +152,45 @@ def initial_cursor(stored_cursor, backfill, now, backfill_days):
 def run_cycle(state, store, cursor, end_ns, fetch, apply_fn, page_limit):
     """One poll: page through new entries from `cursor`, fold, persist. Returns new cursor.
 
-    `fetch(start_ns, end_ns) -> [(ts_ns, line)]`. `apply_fn(state, entries) -> (events,
-    max_ts)` is the per-game fold (e.g. Valheim's excludes heartbeats from the audit log,
-    Terraria's has no heartbeat at all). Pages until a short/empty page. State mutation +
-    cursor advance are persisted together so a crash re-runs the batch cleanly (events past
-    the saved cursor simply re-apply on next start).
+    `fetch(start_ns, end_ns, limit) -> [(ts_ns, line)]` returns the earliest `limit`
+    entries, ascending. `apply_fn(state, entries) -> (events, max_ts)` is the per-game
+    fold (e.g. Valheim's excludes heartbeats from the audit log, Terraria's has no
+    heartbeat at all). Pages until a short/empty page. State mutation + cursor advance are
+    persisted together so a crash re-runs the batch cleanly (events past the saved cursor
+    simply re-apply on next start).
+
+    A full page may stop partway through its last timestamp, and the cursor cannot point
+    inside one, so those entries wait for the next page. A full page holding a single
+    timestamp is fetched again with twice the limit, up to LOKI_MAX_ENTRIES. A page
+    still holding one timestamp there is folded and logged, and any further entries at
+    that timestamp are skipped: Loki serves no larger page.
     """
+    limit = page_limit
     while True:
-        entries = fetch(cursor, end_ns)
+        entries = fetch(cursor, end_ns, limit)
         if not entries:
             break
+        full = len(entries) >= limit
+        if full:
+            last_ts = entries[-1][0]
+            earlier = [entry for entry in entries if entry[0] < last_ts]
+            if earlier:
+                entries = earlier
+            elif limit < LOKI_MAX_ENTRIES:
+                limit = min(limit * 2, LOKI_MAX_ENTRIES)
+                continue
+            else:
+                log(
+                    "page of %d entries at ts %d: any more are skipped"
+                    % (limit, last_ts)
+                )
         events, max_ts = apply_fn(state, entries)
         if max_ts > cursor:
             cursor = max_ts
         store.save(state, cursor, events)
-        if len(entries) < page_limit:
+        if not full:
             break
+        limit = page_limit
     return cursor
 
 
@@ -274,7 +302,8 @@ def poll_forever(
 
     Returns after one cycle when `once`/`backfill`; otherwise loops forever at
     `poll_interval`. A cycle's own exception is caught and logged so an unreachable Loki
-    cannot kill the loop. `on_poll_ok(state) -> str` describes a successful cycle for the
+    cannot kill the loop, and the next cycle resumes after the last page the failed one
+    saved. `on_poll_ok(state) -> str` describes a successful cycle for the
     log line — the one per-game difference left in the loop (Valheim logs a death count,
     Terraria does not).
     """
@@ -289,6 +318,8 @@ def poll_forever(
             log("poll ok: " + on_poll_ok(poll_state.value))
         except Exception as e:  # an unreachable Loki must not kill the loop
             log("poll error:", e)
+            # The failed cycle may have saved pages that its lost return value covered.
+            cursor = max(cursor, store.get_cursor())
         if once or backfill:
             return
         time.sleep(poll_interval)
