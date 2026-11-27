@@ -197,6 +197,31 @@ def test_format_backup_budget_flags_a_b2_volume_left_on_the_daily_tier():
     assert "ON THE DAILY TIER AND ON B2" in text and "pvc-new" in text
 
 
+def test_a_daily_volume_whose_target_is_r2_is_stranded_on_b2_not_over_budget_is_clean():
+    """A volume backed up to B2 before its first reconcile moved it to R2 keeps that backup on
+    B2, but its nightly prune runs on R2, so B2 is charged nothing for it."""
+    vols = {"pvc-vault": {"prune": 12, "blocks": 6, "backups": 1}}
+    text, code = longhorn_budget.format_backup_budget(
+        vols, {"pvc-vault": "default"}, targets={"pvc-vault": "r2"}
+    )
+    assert code == 0, text
+    assert "OVER BUDGET" not in text
+    assert "1 stranded backup(s) left on B2" in text and "pvc-vault -> r2" in text
+
+
+@pytest.mark.parametrize("targets", [{}, {"pvc-new": ""}, {"pvc-new": "default"}])
+def test_a_daily_volume_with_no_named_off_b2_target_is_still_charged_is_flagged(
+    targets,
+):
+    """An unreadable or blank target proves nothing, so it must not turn the check green."""
+    vols = {"pvc-new": {"prune": 300, "blocks": 200, "backups": 4}}
+    text, code = longhorn_budget.format_backup_budget(
+        vols, {"pvc-new": "default"}, targets=targets
+    )
+    assert code == 1
+    assert "ON THE DAILY TIER AND ON B2" in text
+
+
 def test_stranded_counts_backups_the_current_tier_does_not_own():
     """Stranded means "no job will ever prune this", not "past retain".
 
