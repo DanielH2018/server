@@ -55,6 +55,10 @@ See repo-root `CLAUDE.md` for shared conventions.
 - **The page keeps its endpoint while the pod is unready.**
   `k8s/roles/tft-assistant/templates/service.yaml.j2:DECIDED: the page keeps its endpoint while the pod is unready`
   holds the reason. The role ships its own Service for that one field.
+- **The readiness probe asks `/api/health`, never the page.** The page is several megabytes.
+  The kubelet reads 10 KB of an answer and hangs up, and the server logs each broken write.
+  A probe of `/index.html` logged 360 tracebacks an hour and fired `WorkloadLogErrors`.
+  `/api/health` needs image 0.2.11 or later.
 - **The pod is pinned to one node.**
   `k8s/roles/tft-assistant/templates/deployment.yaml.j2:DECIDED: pinned to the node with memory to spare`
   holds the reason, and

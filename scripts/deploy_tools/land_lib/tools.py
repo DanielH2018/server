@@ -17,7 +17,6 @@ beside `Tools`, so a test takes the real ones and fake boundaries.
 import contextlib
 import os
 import shutil
-import signal
 import socket
 import subprocess
 import tempfile
@@ -50,32 +49,6 @@ UV_PROJECT_ENVIRONMENT = "UV_PROJECT_ENVIRONMENT"
 # The parent a gate snapshot is made in, and the env var that moves it for a test.
 GATE_TMP_ROOT = "/tmp"
 GATE_TMP_ROOT_ENV = "LAND_GATE_TMPDIR"
-
-
-@contextlib.contextmanager
-def _dies_on_a_signal() -> Generator[None]:
-    """SIGTERM and SIGINT raise inside the block, so an enclosing `finally` still runs.
-
-    Default SIGTERM disposition terminates the interpreter outright, skipping every `finally`
-    -- which for `gate_snapshot` leaves a worktree registered in the primary that nothing
-    collects. `KeyboardInterrupt` rather than a new exception type: `land.py` catches neither
-    (its own `finally` suppresses `Exception` only, so this propagates through it after the
-    ledger row is written), and reusing it keeps a SIGTERM'd landing and a Ctrl-C'd one on one
-    path. The previous handlers are restored on the way out, because the test suite runs this
-    in pytest's main thread.
-    """
-
-    def raise_it(signum, _frame):
-        raise KeyboardInterrupt(f"signal {signum}")
-
-    previous = {s: signal.getsignal(s) for s in (signal.SIGTERM, signal.SIGINT)}
-    for sig in previous:
-        signal.signal(sig, raise_it)
-    try:
-        yield
-    finally:
-        for sig, handler in previous.items():
-            signal.signal(sig, handler)
 
 
 @contextlib.contextmanager
@@ -112,7 +85,7 @@ def gate_snapshot(primary: Path, sha: str) -> Generator[Path | None]:
     """
     # The signal handlers wrap the try so they are restored only after the worktree is gone; a
     # second signal during removal cannot skip it.
-    with _dies_on_a_signal():
+    with fresh.dies_on_a_signal():
         root = os.environ.get(GATE_TMP_ROOT_ENV) or GATE_TMP_ROOT
         tmp = Path(tempfile.mkdtemp(prefix="land-gate-", dir=root))
         snap = tmp / "tree"
