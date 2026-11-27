@@ -141,7 +141,10 @@ def test_the_graph_is_acyclic_but_for_a_precheck_in_its_own_tags_namespace(case)
 
 
 @given(case=cases())
-def test_an_applies_last_tag_depends_on_every_other_tags_deferred_apply(case):
+@example(case=_deferring("a", "b"))
+def test_an_applies_last_tag_depends_on_the_deferred_apply_of_each_tag_outside_applies_last(
+    case,
+):
     edges = case.edges()
     deferred = {
         tag + DEFERRED_SUFFIX
@@ -151,7 +154,8 @@ def test_an_applies_last_tag_depends_on_every_other_tags_deferred_apply(case):
     }
 
     for tag in case.ordering.applies_last:
-        assert deferred <= edges[tag].kept | edges[tag].suspended
+        named = edges[tag].kept | edges[tag].suspended
+        assert {n for n in named if n.endswith(DEFERRED_SUFFIX)} == deferred
 
 
 @given(case=cases(), data=st.data())
