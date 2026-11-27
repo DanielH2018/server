@@ -140,7 +140,9 @@ _K8S_DEFAULTS_FILE = re.compile(
 )
 # A bare list item `- |` opens a block scalar too; missing it read the scalar's `#` lines as
 # comments.
-_BLOCK_SCALAR_HEAD = re.compile(r"(?::|^\s*-)\s*[|>][-+0-9]*\s*(?:#.*)?$")
+_BLOCK_SCALAR_HEAD = re.compile(
+    r"(?::|^\s*-)(?:\s+[!&]\S+)*\s*[|>][-+0-9]*\s*(?:#.*)?$"
+)
 
 
 def _content_lines(text: str) -> list[str]:
@@ -148,7 +150,7 @@ def _content_lines(text: str) -> list[str]:
 
     Full-line comments and blank lines are dropped, except inside a block scalar, where a
     line starting with `#` is part of the string and a blank line is a newline in it. The
-    scalar runs from its `key: |` line until the next non-blank line indented no deeper
+    scalar runs from its `key: |` line, tagged or anchored (`key: !!str |`) or not, until the next non-blank line indented no deeper
     than that key. A trailing comment on a content line is kept, so such a line reads as
     changed.
     """

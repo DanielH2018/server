@@ -153,7 +153,9 @@ _OBSERVABILITY_EXEMPT_SET_IS_EMPTY = Census(
 # ── No inventory block scalar carries a `#`-led continuation line ───────────────────────
 
 # The indicator starts a block; the indentation of the line that carries it ends one.
-_BLOCK_START = re.compile(r"^(\s*)(?:[^#\s][^#]*?:|-)\s*[|>][0-9+-]*\s*(?:#.*)?$")
+_BLOCK_START = re.compile(
+    r"^(\s*)(?:[^#\s][^#]*?:|-)(?:\s+[!&]\S+)*\s*[|>][0-9+-]*\s*(?:#.*)?$"
+)
 
 
 def _comment_shaped_continuations(subject: Subject) -> list[str]:
@@ -207,6 +209,8 @@ _INVENTORY_BLOCK_SCALARS_HAVE_NO_COMMENT_SHAPED_LINE = Census(
         ),
         *(Subject("a.yml", f"k: {m}\n  # x\n") for m in ("|", "|-", ">", ">+", "|2")),
         Subject("a.yml", "items:\n  - |\n    # x\n"),
+        *(Subject("a.yml", f"k: {h} |\n  # x\n") for h in ("!!str", "&anchor")),
+        Subject("a.yml", "items:\n  - !!str >\n    # x\n"),
     ),
     green=(
         Subject(
