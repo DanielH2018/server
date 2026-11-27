@@ -147,6 +147,7 @@ regex	k8s/roles/karakeep/templates/deployment-time-tagger.yaml.j2	tqdm	pypi	-	-
 regex	k8s/roles/karma/defaults/main.yml	ghcr.io/prymitive/karma	docker	digest	-
 regex	k8s/roles/lidarr/defaults/main.yml	ghcr.io/onedr0p/exportarr	docker	digest	-
 regex	k8s/roles/lidarr/defaults/main.yml	lscr.io/linuxserver/lidarr	docker	digest	-
+regex	k8s/roles/lidarr/defaults/main.yml	python	docker	digest	-
 regex	k8s/roles/littlelink/defaults/main.yml	ghcr.io/techno-tim/littlelink-server	docker	digest	-
 regex	k8s/roles/livesync/defaults/main.yml	couchdb	docker	digest	-
 regex	k8s/roles/loki-homelab/defaults/main.yml	grafana/alloy	docker	digest	-
