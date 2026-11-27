@@ -132,7 +132,7 @@ def main(
         0 when every row matched the tree, and 1 when a doc was rewritten or a row needs
         a hand edit.
     """
-    ArgumentParser(description=__doc__.splitlines()[0]).parse_args(argv)
+    ArgumentParser(description=(__doc__ or "").partition("\n")[0]).parse_args(argv)
     rewritten = fix(values, repo)
     problems = stale(values, repo)
     if rewritten:

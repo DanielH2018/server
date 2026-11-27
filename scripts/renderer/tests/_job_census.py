@@ -280,7 +280,8 @@ def backoff_offence(job: Mapping, directory: str, docs: list[dict]) -> list[str]
     limit = (job.get("spec") or {}).get("backoffLimit")
     if not isinstance(limit, int):
         return ["sets no backoffLimit"]
-    want = BACKOFF.get(_annotations(job).get(JOB_KIND))
+    kind = _annotations(job).get(JOB_KIND)
+    want = BACKOFF.get(kind) if kind else None
     if want is not None and limit != want:
         return [f"backoffLimit is {limit}, and its kind takes {want}"]
     return []
@@ -359,9 +360,12 @@ def delivery_offence(job: Mapping, directory: str, docs: list[dict]) -> list[str
             if m.get("mountPath", "").rstrip("/") == str(script.parent)
             and not m.get("subPath")
         ]
-        source = (volumes.get(mounts[0].get("name")) or {}) if mounts else {}
+        volume = mounts[0].get("name") if mounts else None
+        source = (volumes.get(volume) or {}) if volume else {}
         configmap = source.get("configMap") or {}
-        data = (configmaps.get(configmap.get("name")) or {}).get("data") or {}
+        configmap_name = configmap.get("name")
+        mounted = (configmaps.get(configmap_name) if configmap_name else None) or {}
+        data = mounted.get("data") or {}
         if not configmap or configmap.get("items") or script.name not in data:
             offences.append(
                 f"{label} runs {script}, which is no key of a ConfigMap mounted whole at "

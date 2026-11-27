@@ -42,6 +42,7 @@ Usage (the homelab-b2-retention timer runs it from the primary checkout):
 
 import sys
 import time
+from collections.abc import Callable
 from datetime import datetime, timezone
 
 from diagnostics.probe_lib import core
@@ -128,11 +129,11 @@ def main(
     argv: list[str] | None = None,
     *,
     _secret=core.sops_extract,
-    _session=B2Session,
+    _session: Callable[[str, str], B2Session] = B2Session,
     _now=time.time,
 ) -> int:
     """Run one sweep. Exits 0 on a sweep or a decline, 1 on a refused update, 75 on an error."""
-    ArgumentParser(description=__doc__.split("\n", 1)[0]).parse_args(argv)
+    ArgumentParser(description=(__doc__ or "").split("\n", 1)[0]).parse_args(argv)
     try:
         session = _session(
             _secret("longhorn_b2_key_id"), _secret("longhorn_b2_application_key")

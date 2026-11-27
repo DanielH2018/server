@@ -41,13 +41,14 @@ SERVICE_TIERS = {
 }
 
 
-def _known_tier(tier: str) -> str:
-    if tier not in SERVICE_TIERS:
+def _known_tier(tier: str | None) -> str | None:
+    if tier is not None and tier not in SERVICE_TIERS:
         raise ValueError(f"unknown tier {tier!r}")
     return tier
 
 
 _NAME = Annotated[str, pydantic.StringConstraints(min_length=1)]
+_TIER = Annotated[str | None, pydantic.AfterValidator(_known_tier)]
 _STRINGS = list[str] | None
 _MAPPINGS = list[dict[str, Any]] | None
 
@@ -61,7 +62,7 @@ _COMPOSE_FIELDS: dict[str, Any] = {
 }
 _SERVICE_FIELDS: dict[str, Any] = {
     "name": (_NAME, ...),
-    "tier": (Annotated[str, pydantic.AfterValidator(_known_tier)] | None, None),
+    "tier": (_TIER, None),
     "tags": (_STRINGS, None),
     "platform": (str | None, None),
     "depends_on": (_STRINGS, None),

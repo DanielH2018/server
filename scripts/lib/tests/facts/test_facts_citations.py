@@ -42,37 +42,49 @@ def _one(text):
     return (cites or rejects)[0]
 
 
+def _cite(text):
+    cites, rejects = parse_citations(text)
+    assert len(cites) == 1 and not rejects, (cites, rejects)
+    return cites[0]
+
+
+def _reject(text):
+    cites, rejects = parse_citations(text)
+    assert len(rejects) == 1 and not cites, (cites, rejects)
+    return rejects[0]
+
+
 def test_path_file_is_clean():
-    c = _one("see `scripts/lib/kubectl.py` for the gate")
+    c = _cite("see `scripts/lib/kubectl.py` for the gate")
     assert c == Citation("path", "scripts/lib/kubectl.py", "scripts/lib/kubectl.py", "")
 
 
 def test_path_directory_keeps_trailing_slash():
-    c = _one("under `k8s/roles/traefik/`")
+    c = _cite("under `k8s/roles/traefik/`")
     assert c.form == "path" and c.path == "k8s/roles/traefik/"
 
 
 def test_symbol_is_clean():
-    c = _one("`scripts/lib/kubectl.py:run` refuses")
+    c = _cite("`scripts/lib/kubectl.py:run` refuses")
     assert c == Citation(
         "symbol", "scripts/lib/kubectl.py:run", "scripts/lib/kubectl.py", "run"
     )
 
 
 def test_yaml_key_is_clean():
-    c = _one("`k8s/roles/traefik/defaults/main.yml:traefik_replicas` is 2")
+    c = _cite("`k8s/roles/traefik/defaults/main.yml:traefik_replicas` is 2")
     assert c.form == "yaml"
     assert c.path == "k8s/roles/traefik/defaults/main.yml"
     assert c.selector == "traefik_replicas"
 
 
 def test_yaml_dotted_key_is_clean():
-    c = _one("`hosts/daniel-box/vars.yml:containers_list.0.name`")
+    c = _cite("`hosts/daniel-box/vars.yml:containers_list.0.name`")
     assert c.form == "yaml" and c.selector == "containers_list.0.name"
 
 
 def test_test_node_is_clean():
-    c = _one(
+    c = _cite(
         "ENFORCED by `scripts/lib/tests/k8s/test_kubectl.py::test_refuses_other_cluster`"
     )
     assert c.form == "test"
@@ -81,7 +93,7 @@ def test_test_node_is_clean():
 
 
 def test_marker_is_clean():
-    c = _one(
+    c = _cite(
         "`scripts/deploy_tools/land_lib/land_tags.py:DECIDED: name the changed keys`"
     )
     assert c.form == "marker"
@@ -94,12 +106,12 @@ def test_a_probe_subcommand_is_no_citation():
 
 
 def test_file_line_is_flagged():
-    r = _one("`deploy_logic.py:458` used to say")
+    r = _reject("`deploy_logic.py:458` used to say")
     assert r == Rejected("deploy_logic.py:458", "file:line")
 
 
 def test_file_line_range_is_flagged():
-    assert _one("`CLAUDE.md:12-20`").reason == "file:line"
+    assert _reject("`CLAUDE.md:12-20`").reason == "file:line"
 
 
 def test_bare_word_is_not_a_citation():
