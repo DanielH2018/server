@@ -521,12 +521,17 @@ def await_merge(ln: Landing, take_turn: TakeTurn = _no_turn) -> None:
                     pin_gate.recheck_before_merge(ln, gated_pins)
                 commits = ln.view("commits").get("commits", [])
                 interrupted, ln.turn_interrupted = ln.turn_interrupted, False
-                if interrupted and stale_base.rejoin_in_turn(
-                    ln, head, view.get("mergeable") == "CONFLICTING"
+                tested = stale_base.batch_tested(ln, head)
+                if (
+                    interrupted
+                    and not tested
+                    and stale_base.rejoin_in_turn(
+                        ln, head, view.get("mergeable") == "CONFLICTING"
+                    )
                 ):
                     in_turn, updated_from, rejoined, drafted = False, head, True, True
                     continue
-                if not stale_base.batch_tested(ln, head):
+                if not tested:
                     stale_base.refuse_stale_overlap(ln, head)
                 refusal = _merge_directly(ln, head, commits)
                 if not refusal:

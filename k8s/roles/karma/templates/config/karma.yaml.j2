@@ -18,6 +18,9 @@ filters:
   default:
     - "@state=active"
     - "@receiver!=blackhole"
+{# Every email route continues from a discord route, so this hides a critical's second copy
+   and no alert. #}
+    - "@receiver!=email"
 grid:
   sorting:
     order: label
