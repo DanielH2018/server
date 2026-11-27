@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/scripts.py
-generated_at: 2026-11-27 06:17 UTC
-generated_sha: f8cc3c595
+generated_at: 2026-11-27 18:17 UTC
+generated_sha: 1e9fa52cb
 ---
 
 !!! warning "Generated file — do not edit"
@@ -12,7 +12,7 @@ generated_sha: f8cc3c595
 
 # Scripts
 
-506 first-party script(s) in `scripts/`. Each summary is the script's own module docstring — change the docstring to change this page.
+508 first-party script(s) in `scripts/`. Each summary is the script's own module docstring — change the docstring to change this page.
 
 The sections below split them by **how each one is run**, which is derived from the tree rather than declared: a cron `job:`, a `prek.toml` entry, a workflow step, a Claude hook, an Ansible task, or an import edge. The *Reached by* column is the evidence, so a wrong answer is a wrong answer about a real file. The filter bar above the first table narrows all four at once: by section, by directory, or by any text in a row. A header click sorts by that column.
 
@@ -102,7 +102,7 @@ The sections below split them by **how each one is run**, which is derived from 
 
 ## Imported, never run on their own
 
-408 script(s) — imported by another script — not an entry point.
+410 script(s) — imported by another script — not an entry point.
 
 | Script | Directory | What it does | Reached by | Tests | Exit codes |
 |---|---|---|---|---|---|
@@ -146,6 +146,7 @@ The sections below split them by **how each one is run**, which is derived from 
 | `scripts/docs/catalog_lib/catalog_render.py` | docs | The two renderings of the service catalogue: the MkDocs page and the standalone HTML. | imported by service_catalog.py | — | — |
 | `scripts/deploy_tools/chained_timeout.py` | deploy_tools | How long `promote.py verify` waits: the chained timeout (D4.3), capped at VERIFY_CAP_S. | imported by _land_wait_fakes.py, soak.py, storage_rollout.py, tools.py, verify_promotion.py, wait.py, wait_reads.py | `test_chained_timeout.py` | — |
 | `scripts/deploy_tools/changed_set.py` | deploy_tools | The changed set: which Kustomizations a commit's bundle changes, from two `digests.json` files. | imported by chained_timeout.py, forward_only.py, promote.py, render_diff_gates.py, stateful.py, supersede.py, verify_promotion.py, wait.py | `test_changed_set.py` | — |
+| `scripts/lib/check_verdict.py` | lib | A health reader's verdict, written onto its verdict ConfigMap for kube-state-metrics. | no `__main__` guard; imported by test_check_verdict.py | `test_check_verdict.py` | — |
 | `scripts/deploy_tools/land_lib/ci.py` | deploy_tools | Step 2, the master CI wait on the merge commit. | imported by pipeline.py | `test_land_ci.py` | — |
 | `scripts/deploy_tools/promote_lib/ci_contexts.py` | deploy_tools | The CI contexts a promotion requires, read from the checkout, and `promote.py ci-verdict`. | imported by promote.py, reads.py | `test_promote_ci_contexts.py` | — |
 | `scripts/dev/ci_failures.py` | dev | Survey CI failures across every attempt of every workflow run in a date range. | imported by repo_guards.py | `test_ci_failures.py` | — |
@@ -333,6 +334,7 @@ The sections below split them by **how each one is run**, which is derived from 
 | `scripts/lib/longhorn_lib/longhorn_skipped_volumes_logic.py` | lib | Check 11 of the Longhorn backup-plane heartbeat: weekly volumes a RecurringJob skipped. | no `__main__` guard; imported by test_longhorn_skipped_volumes.py | — | — |
 | `scripts/deploy_tools/runbook_gates_lib/longhorn_upgrade.py` | deploy_tools | Run the stop conditions of `docs/longhorn-upgrade.md` in order, exit code naming the first failure. | no `__main__` guard; imported by test_runbook_gates_longhorn_upgrade.py | `test_runbook_gates_longhorn_upgrade.py` | — |
 | `scripts/dev/fanout_lib/manifest.py` | dev | The run manifest: ~/.claude/fanout/<run-id>.json, outside every checkout — spec §4. | imported by abandon.py, batch_holds.py, boundaries.py, clean.py, coordinators.py, headroom_probe.py, launch.py, launch_gates.py, notify.py, place.py, resume.py, status.py, transport.py, unit_state.py, wait_probe.py | — | — |
+| `scripts/renderer/renderer_lib/manifest_yaml.py` | renderer | Writes a document the renderer built as YAML that Flux and kubectl read back unchanged. | imported by bundle.py, cronjob_gate.py, host_package.py, prepull.py, role_label.py, roundtrip.py, snapshot.py, soak.py | — | — |
 | `scripts/deploy_tools/land_lib/merge.py` | deploy_tools | The merge phase: check the PR here, then merge it directly once its CI is green. | imported by _land_turn_fakes.py, batch.py, pipeline.py | `test_land_merge.py` | — |
 | `scripts/deploy_tools/runbook_gates_lib/metallb_upgrade.py` | deploy_tools | Run the stop conditions of a MetalLB pin bump in order, exit code naming the first failure. | no `__main__` guard; imported by test_runbook_gates_metallb_upgrade.py | `test_runbook_gates_metallb_upgrade.py` | — |
 | `scripts/diagnostics/probe_lib/metrics.py` | diagnostics | `probe.py metric` and `probe.py loki-query` -- Prometheus and Loki queries. | imported by alerts.py, subcommands.py, usage.py | — | — |

@@ -14,7 +14,7 @@
     "homelab/crowdsec/crowdsec": 192,
     "homelab/crowdsec/crowdsec-jobs": 144,
     "homelab/crowdsec/jobs-cscli": 16,
-    "homelab/dockerhub-mirror/dockerhub-mirror": 48,
+    "homelab/dockerhub-mirror/dockerhub-mirror": 32,
     "homelab/ghcr-mirror/ghcr-mirror": 32,
     "homelab/ghcr-mirror/ghcr-resume": 64,
     "homelab/home-assistant/home-assistant": 1360,
@@ -35,7 +35,7 @@
     "homelab/zigbee2mqtt/mqtt-broker-wait": 16,
     "homelab/zigbee2mqtt/zigbee2mqtt": 144,
     "observability/alertmanager/alertmanager": 64,
-    "observability/prometheus/prometheus": 2448,
+    "observability/prometheus/prometheus": 2480,
     "system-upgrade/system-upgrade-controller/system-upgrade-controller": 64
   }
 }
