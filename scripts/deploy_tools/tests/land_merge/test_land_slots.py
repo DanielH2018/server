@@ -203,6 +203,15 @@ def test_a_landing_beside_a_live_serial_landing_waits_in_line_without_the_turn(
     assert "merge" in call_order(calls)
 
 
+def test_the_ledger_counts_the_serial_wait_and_the_wait_to_take_the_turn_back(landing):
+    ln, _ = _merging(
+        landing, _SCRIPT, serial=[False, False, True], turn=[True, False, True]
+    )
+    _land(ln)
+    poll = ln.opts.merge_poll
+    assert (ln.ledger.serial_wait, ln.ledger.turn_wait) == (2 * poll, poll)
+
+
 def test_a_landing_waits_for_the_serial_landing_past_drain_s_while_its_budgets_last(
     landing,
 ):
@@ -233,6 +242,7 @@ def test_a_landing_behind_a_serial_landing_ends_merge_conflict_once_its_pr_confl
     assert "merge" not in call_order(calls)
     waited = _names(calls).count("sleep") * ln.opts.merge_poll
     assert slots.CONFLICT_READ_S < waited < 2 * slots.CONFLICT_READ_S
+    assert ln.ledger.serial_wait == waited
 
 
 def test_one_conflicting_read_behind_a_serial_landing_waits_on_and_merges(landing):

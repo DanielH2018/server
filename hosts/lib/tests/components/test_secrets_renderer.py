@@ -206,14 +206,19 @@ def test_declared_keys_must_match_what_the_template_reads(
     [
         ({"persits": True}, (), r"lacks \[\] or has unknown keys \['persits'\]"),
         ({}, ("owner", "keys"), r"lacks \['keys', 'owner'\]"),
+        (
+            {True: "x", "persits": True},
+            (),
+            r"has unknown keys \['True', 'persits'\]",
+        ),
     ],
-    ids=["misspelt-key", "missing-keys"],
+    ids=["misspelt-key", "missing-keys", "bool-key"],
 )
 def test_an_output_with_a_misspelt_or_missing_key_fails_naming_it(
     tree, extra, dropped, message
 ):
-    (entry,) = output(**extra)["outputs"]
-    kept = {k: v for k, v in entry.items() if k not in dropped}
+    (entry,) = output()["outputs"]
+    kept = {k: v for k, v in {**entry, **extra}.items() if k not in dropped}
     tree.component(sources={"o.j2": "{{ alpha_token }}\n"}, outputs=[kept])
     with pytest.raises(RenderRefused, match=message):
         tree.render()

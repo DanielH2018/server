@@ -102,16 +102,20 @@ authority is written here to keep a later edit from widening it.
   fails the run (exit 1); the next hourly run retries.
 - **A claim on both the weekly and the no-backup list stops the run before any write.** The
   Such a volume would carry both labels, which nothing intends.
-- **A volume in no group stays in none.** Every step moves a volume out of a group it carries.
-  `tests/test_longhorn_reconcile.py` holds that with the `a-volume-in-no-group-is-left-alone`
-  case.
+- **An unlisted volume in no group stays in none.** Every step moves a volume out of a group it
+  carries. Longhorn holds a volume with no group label in `default`, so a claim on the weekly or
+  the no-backup list leaves that implicit `default` for its shard or `no-backup`.
+  `tests/test_longhorn_reconcile.py` holds both with its `no-group` cases.
 - **Scope of the return to `default`.** A `no-backup` volume returns to `default` only when its
   PVC is `longhorn`-class and on neither list. Most no-backup volumes were never on a list:
   `longhorn-nobackup` excluded them at creation, and sweeping them into the daily set is the
-  B2 transaction blowup this job exists to prevent.
-- **A weekly-listed volume that sits in `no-backup` is not moved.** The job never moves it, and
-  `tests/longhorn/test_daily_group_membership_is_the_r2_list.py` pins that exclusion. Remove the
-  volume from the no-backup class by hand first.
+  B2 transaction blowup this job exists to prevent. A volume on no list that carries `default`
+  as well as `no-backup`, or a shard as well as `no-backup`, ends in `default` alone whatever
+  its class. Longhorn already backs it up daily, and the `no-backup` group runs no job.
+- **A weekly-listed volume that sits in `no-backup` alone is not moved.** The job never moves
+  it, and `tests/longhorn/test_daily_group_membership_is_the_r2_list.py` pins that exclusion.
+  Remove the volume from the no-backup class by hand first. One that also carries `default` or
+  a shard ends in its shard alone, because keeping `no-backup` would stop its backups.
 
 ## Traps
 

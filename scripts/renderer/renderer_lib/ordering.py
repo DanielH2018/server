@@ -5,7 +5,8 @@ Every edge is generated, never hand-written, from an `Ordering` the caller reads
 
 - a tag depends on its `build_k8s_dep_map` edges. An edge to a name that is no k8s tag fails
   the render, because it would name a Kustomization that does not exist;
-- a `K8S_APPLIES_LAST` tag also depends on every other tag's `<tag>-deferred`;
+- a `K8S_APPLIES_LAST` tag also depends on the `<tag>-deferred` of every tag outside
+  `K8S_APPLIES_LAST`, as `build_k8s_dep_map` leaves two such tags unordered;
 - a tag with a document in `k8s_namespace`, in any of its directories, depends on the shared
   kind `homelab-namespace`, which creates that Namespace and its LimitRange (D5 step 30);
 - `<tag>-deferred` depends on `<tag>`, and on the role that creates a namespace one of its
@@ -268,13 +269,17 @@ def kustomization_edges(
     for tag in tags:
         kept = existing(tag, set(ordering.deps.get(tag, ())) - {tag})
         if tag in ordering.applies_last:
-            # Every other tag's deferred apply, never its own: `<tag>-deferred` depends on
-            # `<tag>`, so that edge would be a cycle.
+            # No applies-last tag's deferred apply, its own included: `<tag>-deferred`
+            # depends on `<tag>`, so either edge would close a cycle.
             # DECIDED: an applies-last tag waits on no other tag's `-snapshot` or `-verify`.
             # D4 left the choice to D5.1a1. A verify Job probes through netpol-baseline's
             # fences, so netpol-baseline waiting on another tag's `-verify` would run that Job
             # before the fences it dials are applied. A snapshot gates only its own tag.
-            kept |= {other + DEFERRED_SUFFIX for other in deferring if other != tag}
+            kept |= {
+                other + DEFERRED_SUFFIX
+                for other in deferring
+                if other not in ordering.applies_last
+            }
         if ordering.workload_namespace and ordering.workload_namespace in {
             ns
             for name in (tag, *(tag + suffix for suffix in TAG_KIND_SUFFIXES))

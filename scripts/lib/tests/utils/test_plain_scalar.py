@@ -7,8 +7,24 @@ Run: uv run pytest scripts/lib/tests/utils/test_plain_scalar.py
 """
 
 import pytest
+from hypothesis import example, given
+from hypothesis import strategies as st
 
-from lib.plain_scalar import go_yaml_v2_types, refused, yaml_1_1_keeps
+from lib.yaml_fast import safe_load
+from lib.plain_scalar import (
+    _GO_FLOAT,
+    _GO_INT,
+    _GO_TIMESTAMP,
+    go_yaml_v2_types,
+    refused,
+    yaml_1_1_keeps,
+)
+
+_ANY_TEXT = st.text(alphabet=st.characters(blacklist_categories=["Cs"]), max_size=20)
+_YAML_INDICATORS = st.text(
+    alphabet="#&!*{}[]:,-?|>'\"%@0123456789._exob \u2028\u2029\x85\t", max_size=20
+)
+_VALUES = st.one_of(_ANY_TEXT, _YAML_INDICATORS)
 
 
 @pytest.mark.parametrize(
@@ -41,4 +57,40 @@ def test_the_go_yaml_port_types_what_yaml_1_1_reads_as_a_string(text):
 )
 def test_text_that_is_no_plain_scalar_is_flagged_by_the_yaml_1_1_half(text):
     assert not go_yaml_v2_types(text)
+    assert refused(text)
+
+
+@example("0b_")
+@given(_VALUES)
+def test_refused_returns_for_any_text(text):
+    assert refused(text) in (True, False)
+
+
+@example("0,")
+@example("0}")
+@example("0[")
+@example("0?")
+@example(":0")
+@example("0\t0")
+@example("a\u2028b")
+@example("a\u2029b")
+@example("a\x85b")
+@example("0]>0")
+@given(_VALUES)
+def test_a_value_refused_passes_survives_every_field_position(text):
+    if refused(text):
+        return
+    assert safe_load(f"k: {text}") == {"k": text}
+    assert safe_load(f"- {text}") == [text]
+    assert safe_load(f"{{k: {text}}}") == {"k": text}
+
+
+@given(
+    st.one_of(
+        st.from_regex(_GO_INT, fullmatch=True),
+        st.from_regex(_GO_FLOAT, fullmatch=True),
+        st.from_regex(_GO_TIMESTAMP, fullmatch=True),
+    )
+)
+def test_a_string_go_reads_as_typed_is_refused(text):
     assert refused(text)

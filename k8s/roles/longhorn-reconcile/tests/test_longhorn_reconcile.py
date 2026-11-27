@@ -98,6 +98,33 @@ TRANSITIONS = [
         "homelab/authelia-config", ["default"], ["default"], id="settled-daily"
     ),
     pytest.param("homelab/orphan", [], [], id="a-volume-in-no-group-is-left-alone"),
+    pytest.param(
+        "homelab/crowdsec-db", [], ["no-backup"], id="nobackup-leaves-no-group"
+    ),
+    pytest.param(
+        "homelab/sonarr-config",
+        [],
+        ["weekly-backup-d3"],
+        id="weekly-listed-volume-leaves-no-group-for-its-shard",
+    ),
+    pytest.param(
+        "homelab/sonarr-config",
+        ["default", "no-backup"],
+        ["weekly-backup-d3"],
+        id="weekly-listed-volume-in-daily-and-nobackup-ends-in-its-shard-alone",
+    ),
+    pytest.param(
+        "homelab/prometheus-data",
+        ["default", "no-backup"],
+        ["default"],
+        id="unlisted-nobackup-class-volume-in-daily-and-nobackup-ends-in-daily-alone",
+    ),
+    pytest.param(
+        "homelab/prometheus-data",
+        ["no-backup", "weekly-backup-d3"],
+        ["default"],
+        id="unlisted-nobackup-class-volume-in-a-shard-and-nobackup-ends-in-daily-alone",
+    ),
 ]
 
 

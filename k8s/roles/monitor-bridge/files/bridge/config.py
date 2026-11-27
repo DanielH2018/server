@@ -34,7 +34,7 @@ Constants only. The mutable per-check state (the streak counters and probe cache
 `bridge.streaks.State`, which a check reads as `src.state`.
 """
 
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 
 from bridge.config_host import HostConfig, host_config
@@ -112,31 +112,25 @@ def load_config(env: Mapping[str, str], problems: list[str] | None = None) -> Co
             )
         return env.get(name, "")
 
-    def _int(name: str, default: str | None = None) -> int:
-        """The `name` env var as an int, recording a malformed value instead of raising."""
-        raw = _env(name, default)
-        try:
-            return int(raw)
-        except ValueError:
-            if name in env:  # an absent required key is already recorded by _env
-                problems.append(
-                    "%s=%r is not an integer; falling back to %s"
-                    % (name, raw, default or 0)
-                )
-            return int(default or 0)
+    def _parser[T](cast: Callable[[str], T], noun: str) -> Callable[..., T]:
+        """A reader of one env var through `cast`, recording a malformed value instead of raising."""
 
-    def _num(name: str, default: str | None = None) -> float:
-        """The `name` env var as a float, recording a malformed value instead of raising."""
-        raw = _env(name, default)
-        try:
-            return float(raw)
-        except ValueError:
-            if name in env:  # an absent required key is already recorded by _env
-                problems.append(
-                    "%s=%r is not a number; falling back to %s"
-                    % (name, raw, default or 0)
-                )
-            return float(default or 0)
+        def read(name: str, default: str | None = None) -> T:
+            raw = _env(name, default)
+            try:
+                return cast(raw)
+            except ValueError:
+                if name in env:  # an absent required key is already recorded by _env
+                    problems.append(
+                        "%s=%r is not %s; falling back to %s"
+                        % (name, raw, noun, default or 0)
+                    )
+                return cast(default or "0")
+
+        return read
+
+    _int = _parser(int, "an integer")
+    _num = _parser(float, "a number")
 
     def _env_file(name: str, default: str = "") -> str:
         """A secret from the file named by <name>_FILE if set, else the plain <name> env var.

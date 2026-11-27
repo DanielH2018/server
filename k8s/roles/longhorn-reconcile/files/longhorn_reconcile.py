@@ -9,6 +9,9 @@ editing either, so this job reconciles the label. It also holds each volume's
 
 What one run does, in this order, for each volume:
 
+A volume with no group label sits in Longhorn's implicit `default`. For a claim on the weekly or
+the no-backup list the steps read it as `default`; any other such volume stays in no group.
+
 1. A volume in the daily group (`default`) or a weekly shard whose claim is on the no-backup
    list moves to `no-backup`.
 2. A volume in `no-backup` whose claim is `longhorn`-class and on neither list returns to
@@ -18,7 +21,8 @@ What one run does, in this order, for each volume:
 3. A volume in `default` whose claim is on the weekly list moves to its weekday shard,
    `weekly-backup-d<N>`, the shard its `containers_list` entry declares (0=Sunday).
 4. A volume in a weekly shard group whose claim is off the weekly list returns to `default`.
-   One whose claim declares another shard moves to that shard.
+   One whose claim declares another shard moves to that shard. A volume that ends in `default`
+   or a shard also leaves `no-backup`; one in `no-backup` alone stays there.
 
 The steps run against each volume's own labels, in that order. Then one more step sets the
 backup target:
@@ -237,6 +241,9 @@ def desired_labels(
     """
     weekly, nobackup = tiers["weekly"], tiers["nobackup"]
     state = dict(labels)
+    # A listed claim in no group is in Longhorn's implicit `default`, and leaves it like any other.
+    if claim in weekly or claim in nobackup:
+        state.update(dict.fromkeys(groups_of(state), ENABLED))
 
     def has(group: str) -> bool:
         return state.get(label(group)) == ENABLED
@@ -270,6 +277,10 @@ def desired_labels(
             move(DEFAULT, shard_group(shard))
         elif weekly[claim] != shard:
             move(shard_group(weekly[claim]), shard_group(shard))
+    # DECIDED: a volume in a backed-up group as well as `no-backup` keeps the backed-up group
+    # alone. `no-backup` runs no RecurringJob, so dropping it stops no backup; keeping it would.
+    if any(has(group) for group in (DEFAULT, *(shard_group(s) for s in SHARDS))):
+        state.pop(label(NO_BACKUP), None)
     # A volume gaining the trim label in the daily tier is also put in `default`, so it keeps one
     # group label.
     if not trim:
@@ -332,14 +343,24 @@ def label_keys() -> set[str]:
     return group_keys() | {TRIM_LABEL}
 
 
-def tier_of(labels: Mapping[str, str], target: str) -> tuple[frozenset[str], str]:
-    """The tier a volume sits in: its group label keys, and its backup target.
+def groups_of(labels: Mapping[str, str]) -> frozenset[str]:
+    """The group label keys this job owns that a volume sits in.
 
-    No group label reads as `default`, the group Longhorn applies to a volume with none, and a
-    blank target reads as `default`, the B2 target.
+    A volume with no group label at all reads as `default`, the group Longhorn applies to a
+    volume with none. One in only a group this job does not own, such as the retired flat
+    `weekly-backup`, reads as none.
     """
-    groups = frozenset(k for k in group_keys() if labels.get(k) == ENABLED)
-    return groups or frozenset({label(DEFAULT)}), target or B2_TARGET
+    if any(k.startswith(LABEL_PREFIX) and v == ENABLED for k, v in labels.items()):
+        return frozenset(k for k in group_keys() if labels.get(k) == ENABLED)
+    return frozenset({label(DEFAULT)})
+
+
+def tier_of(labels: Mapping[str, str], target: str) -> tuple[frozenset[str], str]:
+    """The tier a volume sits in: its groups (`groups_of`), and its backup target.
+
+    A blank target reads as `default`, the B2 target.
+    """
+    return groups_of(labels), target or B2_TARGET
 
 
 def plan(
