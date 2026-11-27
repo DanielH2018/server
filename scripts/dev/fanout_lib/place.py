@@ -300,7 +300,7 @@ def _launch_locked(
     if isinstance(registered, str):
         error(f"{registered} — refusing to launch")
         return FANOUT_PLACE_NO_SIGNING_HOST
-    hosts = [args.host] if args.host else list(HOSTS)
+    hosts: list[str] = [args.host] if args.host else list(HOSTS)
     good = candidate_readings(tools, registered, hosts, args.manifest_root)
     if isinstance(good, int):
         return good
@@ -450,10 +450,10 @@ def cmd_clean_one(
     target = resolve(args.repo)
     checkout = target.checkout
 
-    if list_worktrees is None:
+    def default_list_worktrees():
+        return git("worktree", "list", "--porcelain", cwd=checkout).stdout
 
-        def list_worktrees():
-            return git("worktree", "list", "--porcelain", cwd=checkout).stdout
+    read_worktrees = list_worktrees or default_list_worktrees
 
     # Resolved paths, not string equality: a worktree launched through a symlinked REPO is still the
     # tree `git worktree list` names by its target.
@@ -461,7 +461,7 @@ def cmd_clean_one(
     tree = next(
         (
             t
-            for t in parse_worktree_list(list_worktrees())
+            for t in parse_worktree_list(read_worktrees())
             if Path(t.path).resolve() == wanted
         ),
         None,
@@ -511,7 +511,9 @@ def _add_manifest_root(parser: argparse.ArgumentParser) -> None:
 
 def main(argv=None, tools: Tools | None = None) -> int:
     p = ArgumentParser(
-        prog="fanout.py place", description=__doc__.splitlines()[0], allow_abbrev=False
+        prog="fanout.py place",
+        description=(__doc__ or "").partition("\n")[0],
+        allow_abbrev=False,
     )
     sub = p.add_subparsers(dest="cmd", required=True)
     sub.add_parser("read").set_defaults(fn=cmd_read)

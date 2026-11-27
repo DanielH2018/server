@@ -609,7 +609,7 @@ def cmd_sync_board(args: argparse.Namespace, tools: FindingsTools) -> int:
     """
     numbers = args.numbers or [i.number for i in load_issues("open", tools)]
     outcomes = tools.sync_board(numbers, tools.repo, dry_run=args.dry_run)
-    counts = dict.fromkeys((UPDATED, UNCHANGED, FAILED), 0)
+    counts: dict[str, int] = dict.fromkeys((UPDATED, UNCHANGED, FAILED), 0)
     for outcome, _ in outcomes.values():
         counts[outcome] += 1
     verb = "would update" if args.dry_run else "updated"
@@ -724,7 +724,7 @@ def main(argv: list[str] | None, tools: FindingsTools) -> int:
     """
     # The first non-blank line, not `[1]`: line 1 of the docstring is blank, so `[1]` gave argparse
     # an empty description.
-    summary = next(line for line in __doc__.splitlines() if line.strip())
+    summary = next((line for line in (__doc__ or "").splitlines() if line.strip()), "")
     parser = _parser(summary)
     refuse_help_under_describe(parser, argv)
     args = parser.parse_args(argv)

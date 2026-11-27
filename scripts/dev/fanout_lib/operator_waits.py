@@ -223,7 +223,7 @@ def issue_states(issues: Iterable[Issue], today: str) -> dict[str, int]:
     issue an open PR closes counts as `free`, so it can read high. On 2026-10-18 it read 54
     against `next`'s 56; the idle rule asks only whether the count is above 0.
     """
-    out = dict.fromkeys(ISSUE_STATES, 0)
+    out: dict[str, int] = dict.fromkeys(ISSUE_STATES, 0)
     for issue in issues:
         if "manual" in issue.labels:
             out["manual"] += 1

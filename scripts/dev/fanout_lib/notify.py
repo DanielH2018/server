@@ -185,7 +185,9 @@ def notify(
 
 def main(argv: list[str] | None = None) -> int:
     p = ArgumentParser(
-        prog="notify.py", description=__doc__.splitlines()[0], allow_abbrev=False
+        prog="notify.py",
+        description=(__doc__ or "").partition("\n")[0],
+        allow_abbrev=False,
     )
     p.add_argument("--batch", required=True)
     p.add_argument("--unit", required=True)

@@ -134,7 +134,7 @@ def select(selector: object, facts: dict[str, dict]) -> list[tuple[str, dict]]:
     raise TableError(f"hosts: {selector!r} is no selector")
 
 
-def _fill(value: object, found: dict, alert: str) -> object:
+def _fill(value: object, found: dict, alert: str | None) -> object:
     if isinstance(value, dict):
         return {key: _fill(item, found, alert) for key, item in value.items()}
     if isinstance(value, list):
@@ -151,7 +151,7 @@ def _fill(value: object, found: dict, alert: str) -> object:
     return PLACEHOLDER.sub(one, value)
 
 
-def _filled(rule: dict, found: dict, alert: str) -> dict:
+def _filled(rule: dict, found: dict, alert: str | None) -> dict:
     return {key: _fill(value, found, alert) for key, value in rule.items()}
 
 
@@ -237,7 +237,7 @@ def render(group: str, role: Path = ROLE, facts: dict[str, dict] | None = None) 
 
 
 def main(argv: list[str] | None = None, role: Path = ROLE) -> int:
-    parser = ArgumentParser(description=__doc__.splitlines()[0])
+    parser = ArgumentParser(description=(__doc__ or "").partition("\n")[0])
     parser.add_argument(
         "--check",
         action="store_true",

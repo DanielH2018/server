@@ -334,7 +334,7 @@ def _summary(shards: int) -> str:
 
 
 def main(argv=None, select=affected) -> int:
-    parser = ArgumentParser(description=__doc__.splitlines()[0])
+    parser = ArgumentParser(description=(__doc__ or "").partition("\n")[0])
     parser.add_argument(
         "--of", type=int, default=CI_LEGS, help="how many shards in total"
     )

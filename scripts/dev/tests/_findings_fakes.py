@@ -25,6 +25,7 @@ from dataclasses import dataclass, field, replace
 from dev.findings_lib.issue_model import DOMAINS, LABELS, Issue, parse_issue
 from dev.fanout_lib.batch_holds import BatchHold
 from dev.findings_lib.boundaries import FindingsTools
+from lib.json_types import JsonValue
 from lib.worktrees import Worktree, WorktreeFacts, held_by_readable_process
 
 CREATED_URL = "https://github.com/o/r/issues/42"
@@ -150,7 +151,7 @@ class Fakes:
     prs: list[dict] = field(default_factory=list)
     url: str = CREATED_URL
     # Left None it asserts: the default 'no worktrees, git ok' would make every claim read stale.
-    worktree_facts: Callable[[], tuple] | None = None
+    worktree_facts: Callable[[], WorktreeFacts] | None = None
     launched: dict[tuple[str, str], set[str]] = field(default_factory=dict)
     batch_holds: dict[int, BatchHold] = field(default_factory=dict)
     # Consumed on the first match, so a later call with the same pair answers normally.
@@ -301,7 +302,7 @@ def build_tools(f: Fakes | None = None) -> tuple[FindingsTools, Calls]:
     gh_errors = dict(f.gh_errors)
     view_reads: dict[int, int] = {}
 
-    def gh_json(*argv, **kwargs):
+    def gh_json(*argv, **kwargs) -> JsonValue:
         calls.gh_json.append(list(argv))
         if argv[:2] == ("api", "graphql"):
             if "api graphql" in f.json_errors:
@@ -363,7 +364,7 @@ def build_tools(f: Fakes | None = None) -> tuple[FindingsTools, Calls]:
                 issue.setdefault("comments", []).append(operator_comment(body))
         return subprocess.CompletedProcess(list(argv), 0, f"{f.url}\n", "")
 
-    def worktree_facts(checkout=None):
+    def worktree_facts(checkout=None) -> WorktreeFacts:
         calls.checkouts.append(checkout)
         if f.worktree_facts is None:
             raise AssertionError(

@@ -138,7 +138,7 @@ def _add_common(sp: argparse.ArgumentParser) -> None:
 
 
 def main(argv: list[str] | None = None) -> int:
-    p = ArgumentParser(description=__doc__.splitlines()[0])
+    p = ArgumentParser(description=(__doc__ or "").partition("\n")[0])
     sub = p.add_subparsers(dest="cmd", required=True)
     ln = sub.add_parser("lint")
     _add_common(ln)
