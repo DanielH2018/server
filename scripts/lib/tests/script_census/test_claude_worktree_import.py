@@ -63,7 +63,7 @@ def test_bootstrap_refuses_an_installed_copy_when_the_deploy_is_missing(tmp_path
         check=False,
     )
     assert proc.returncode != 0
-    assert f"not from the deploy at {tmp_path / 'absent'}" in proc.stderr
+    assert f"not at the deploy at {tmp_path / 'absent'}" in proc.stderr
     assert "chezmoi apply" in proc.stderr
 
 
