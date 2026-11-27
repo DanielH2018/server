@@ -9,8 +9,8 @@ editing either, so this job reconciles the label. It also holds each volume's
 
 What one run does, in this order, for each volume:
 
-1. A volume in the daily group (`default`) whose claim is on the no-backup list moves to
-   `no-backup`.
+1. A volume in the daily group (`default`) or a weekly shard whose claim is on the no-backup
+   list moves to `no-backup`.
 2. A volume in `no-backup` whose claim is `longhorn`-class and on neither list returns to
    `default`. The class is the intent for volumes that never were on a list: most no-backup
    volumes were excluded by `longhorn-nobackup` at creation, and sweeping them into the daily
@@ -246,9 +246,11 @@ def desired_labels(
         state.pop(label(leaving), None)
 
     in_default = has(DEFAULT)
-    # 1. The daily group, minus the no-backup list.
-    if in_default and claim in nobackup:
-        move(NO_BACKUP, DEFAULT)
+    # 1. The daily group and the shards, minus the no-backup list.
+    if claim in nobackup:
+        for group in (DEFAULT, *(shard_group(s) for s in SHARDS)):
+            if has(group):
+                move(NO_BACKUP, group)
     # 2. Back to daily: the class asks for backups and no list overrides it.
     if (
         has(NO_BACKUP)
