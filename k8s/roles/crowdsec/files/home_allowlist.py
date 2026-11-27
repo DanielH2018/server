@@ -45,11 +45,11 @@ import ipaddress
 import json
 import os
 import subprocess
-import sys
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
-from pathlib import Path
+
+import crowdsec_jobs
 
 ALLOWLIST = "home-ips"
 NAMESPACE = "homelab"
@@ -109,7 +109,7 @@ def plan(wanted: Mapping[int, str], stored: list[str]) -> Plan:
 def age_seconds(stamp: str, now: datetime) -> float | None:
     """Seconds since `stamp`, an ISO UTC time, or None when it cannot be read."""
     try:
-        when = datetime.fromisoformat(stamp.replace("Z", "+00:00"))
+        when = datetime.fromisoformat(stamp)
     except ValueError:
         return None
     if when.tzinfo is None:
@@ -186,17 +186,4 @@ def main(
 
 
 if __name__ == "__main__":
-    if any(arg in ("-h", "--help") for arg in sys.argv[1:]):
-        print((__doc__ or "").strip())
-        sys.exit(0)
-    try:
-        sys.exit(main())
-    except subprocess.CalledProcessError as exc:
-        tail = (exc.stderr or exc.stdout or "").strip().splitlines()
-        words = [Path(exc.cmd[0]).name, *exc.cmd[1:]]
-        verb = " ".join([w for w in words if not w.startswith("-")][:3])
-        print(
-            f"{verb} failed rc={exc.returncode}: {tail[-1] if tail else 'no output'}",
-            file=sys.stderr,
-        )
-        sys.exit(1)
+    crowdsec_jobs.entrypoint(main, __doc__)

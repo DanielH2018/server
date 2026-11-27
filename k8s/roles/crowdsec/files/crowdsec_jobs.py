@@ -49,7 +49,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Protocol
+from typing import NoReturn, Protocol
 
 import jobs_metrics
 
@@ -130,6 +130,31 @@ EXPOSITION = jobs_metrics.Exposition(
         if job.exports
     }
 )
+
+
+def entrypoint(main: Callable[[], int], doc: str | None) -> NoReturn:
+    """Runs a job script's `main` as its `__main__` block, and exits with its code.
+
+    `-h` or `--help` prints `doc` and exits 0. A `subprocess.CalledProcessError` from `main`
+    prints one line to stderr, `<verb> failed rc=<code>: <last output line>`, and exits 1, so
+    `run_job` takes that line as the run's summary. The verb is the binary's name and the first
+    two words after it that are not flags. It never names a later word, because the line reaches
+    the pod log and Loki, and an allowlist call's later word is a client address.
+    """
+    if any(arg in ("-h", "--help") for arg in sys.argv[1:]):
+        print((doc or "").strip())
+        sys.exit(0)
+    try:
+        sys.exit(main())
+    except subprocess.CalledProcessError as exc:
+        tail = (exc.stderr or exc.stdout or "").strip().splitlines()
+        words = [Path(exc.cmd[0]).name, *exc.cmd[1:]]
+        verb = " ".join([w for w in words if not w.startswith("-")][:3])
+        print(
+            f"{verb} failed rc={exc.returncode}: {tail[-1] if tail else 'no output'}",
+            file=sys.stderr,
+        )
+        sys.exit(1)
 
 
 def emit(
