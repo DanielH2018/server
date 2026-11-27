@@ -8,10 +8,12 @@ and a test gets a zeroed `State` with every `FakeSources` it builds, so nothing 
 patch a module global between tests (#3866).
 """
 
+from collections.abc import Callable
 from dataclasses import dataclass, field
+import time
 from typing import TypedDict
 
-from bridge.types import JsonValue
+from bridge.types import CheckResult, JsonValue
 
 
 class ProbeCache(TypedDict):
@@ -61,6 +63,35 @@ class RegistrationCache(TypedDict):
     ts: float | None
     ok: bool
     expiry: float | None
+
+
+def cached_success(
+    probe: ProbeCache,
+    interval_s: float,
+    now: float | None,
+    read: Callable[[], CheckResult],
+) -> CheckResult:
+    """`probe`'s cached success while it is younger than `interval_s`, else `read()`, stored.
+
+    Only a success is served from the cache. A failure is stored but re-read on the next call,
+    so a red row clears one cycle after its source is fixed.
+
+    Args:
+      probe: The cache to read and update.
+      interval_s: How long a success holds, in seconds.
+      now: The current Unix time; None reads the clock.
+      read: The uncached read. It returns the verdict, a failed fetch included.
+    """
+    now = now if now is not None else time.time()
+    ts = probe["ts"]
+    if ts is not None and probe["ok"] and now - ts < interval_s:
+        return CheckResult(
+            True, "%s (checked %.0fh ago)" % (probe["msg"], (now - ts) / 3600)
+        )
+    result = read()
+    probe["ts"] = now
+    probe["ok"], probe["msg"] = result
+    return result
 
 
 def _never_probed() -> ProbeCache:
