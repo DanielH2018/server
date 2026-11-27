@@ -18,5 +18,5 @@
 | `sonarr` | `sonarr-config` |
 | `speedtest` | `speedtest-config` |
 | `tdarr` | `tdarr-configs`, `tdarr-server` |
-| `tft-assistant` | `tft-assistant-data` |
+| `tft-assistant` | `tft-assistant-data`, `tft-assistant-keep` |
 | `zigbee2mqtt` | `zigbee2mqtt-data` |

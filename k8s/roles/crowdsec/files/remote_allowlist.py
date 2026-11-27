@@ -27,7 +27,8 @@ capped, and reaching the cap is a DOWN that names the entries rather than a sile
 private, loopback and CGNAT addresses never enter, so an Authelia LAN bypass rule cannot feed
 it. An address inside a `home-ips` entry never enters either, and a live entry inside one is
 pruned on the next run: home devices rotate IPv6 privacy addresses, and each one held a slot for
-TTL until the cap refused the remote exits this list exists for. The way out is
+TTL until the cap refused the remote exits this list exists for. Any other network rotates them
+too, so an IPv6 sighting enters as its /64, and one network holds one slot. The way out is
 `cscli allowlists remove remote-ips <ip>`, or letting the entry lapse; the way to see it is
 `cscli allowlists inspect remote-ips`.
 
@@ -68,6 +69,8 @@ TTL = timedelta(hours=168)
 REFRESH_BELOW = TTL / 2
 # Hitting the cap means the list needs reading; the DOWN message lists the entries.
 CAP = 16
+# One network's devices rotate IPv6 privacy addresses inside its /64, so the /64 is one slot.
+IPV6_PREFIX = 64
 CSCLI = "/tools/cscli"
 KUBECTL = "/tools/kubectl"
 OK_STATUSES = frozenset(range(200, 300)) | {304}
@@ -140,12 +143,29 @@ def home_networks(items):
     return frozenset(networks)
 
 
+def entry_value(address):
+    """The allowlist value for a sighting: an IPv6 address widens to its /64, IPv4 stays as is.
+
+    A value that is not a single address is returned unchanged.
+    """
+    try:
+        parsed = ipaddress.ip_address(address)
+    except ValueError:
+        return address
+    if parsed.version == 6:
+        return str(ipaddress.ip_network(f"{parsed}/{IPV6_PREFIX}", strict=False))
+    return address
+
+
 def is_home_covered(value, home):
     try:
-        address = ipaddress.ip_address(value)
+        network = ipaddress.ip_network(value, strict=False)
     except ValueError:
         return False
-    return any(address in network for network in home)
+    return any(
+        network.version == home_net.version and network.subnet_of(home_net)
+        for home_net in home
+    )
 
 
 def parse_expiration(raw):
@@ -162,7 +182,7 @@ def parse_expiration(raw):
 
 @dataclass
 class Plan:
-    add: list = field(default_factory=list)  # new addresses
+    add: list = field(default_factory=list)  # new entries
     refresh: list = field(
         default_factory=list
     )  # present, under REFRESH_BELOW left: remove+add
@@ -189,10 +209,13 @@ def plan(seen, items, now, home=frozenset(), refresh_below=REFRESH_BELOW, cap=CA
     lapsed. Additions stop at `cap`, and the addresses left out are reported, not dropped.
     `home` is `home_networks()` of the `home-ips` list: a sighting inside it is ignored and a
     present item inside it is pruned, because `home-ips` already exempts it.
+    An IPv6 sighting counts as its /64 (`entry_value`). A present single IPv6 address is pruned
+    and its /64 added with a full TTL, taking the one slot all its siblings shared.
     """
     live = []
     result = Plan()
     present = {}
+    widened = set()
     for item in items:
         value = item.get("value")
         if not value:
@@ -201,11 +224,18 @@ def plan(seen, items, now, home=frozenset(), refresh_below=REFRESH_BELOW, cap=CA
         if (expires is not None and expires <= now) or is_home_covered(value, home):
             result.prune.append(value)
             continue
+        if entry_value(value) != value:
+            result.prune.append(value)
+            widened.add(entry_value(value))
+            continue
         present[value] = expires
         live.append(value)
-    for value in sorted(seen):
-        if is_home_covered(value, home):
-            continue
+    for value in sorted(widened - present.keys()):
+        result.add.append(value)
+        present[value] = now + TTL
+        live.append(value)
+    wanted = {entry_value(v) for v in seen if not is_home_covered(v, home)}
+    for value in sorted(wanted):
         if value in present:
             expires = present[value]
             if expires is None or expires - now < refresh_below:

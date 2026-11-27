@@ -10,7 +10,8 @@ See repo-root `CLAUDE.md` for shared conventions.
 - **Applied by:** Flux, through `promote`; `land.sh --tags=tft-assistant` gates the rollout
 - **Image:** `ghcr.io/danielh2018/tft-assistant` (`tft_assistant_k8s_image`)
 - **Route:** `tft.<domain>` · `tft.local.<domain>`, Authelia one_factor
-- **Claim:** `tft-assistant-data` (no backup (StorageClass longhorn-nobackup))
+- **Claims:** `tft-assistant-data` (no backup (StorageClass longhorn-nobackup)),
+  `tft-assistant-keep` (weekly -> B2 (default target))
 <!-- /generated_from -->
 
 ## Notable
@@ -19,12 +20,21 @@ See repo-root `CLAUDE.md` for shared conventions.
   Riot's terms forbid public use of an app on one. Do not add a public bypass to the
   `tft-assistant` entry in `k8s/services.yml`.
 - **The web container holds no key.** Only the crawler container reads the Secret
-  (`k8s/roles/tft-assistant/templates/secret.yaml.j2`). The web container mounts the volume
-  read-only and runs Python's `http.server` over the built page.
-- **The volume is not backed up, on purpose.** Its storage class is
+  (`k8s/roles/tft-assistant/templates/secret.yaml.j2`). The web container runs the image's
+  `serve` command: the built page, and an API over the notes a reader writes on it. It
+  mounts the data volume read-only and writes the kept volume only.
+- **The data volume is not backed up, on purpose.** Its storage class is
   `k8s/roles/tft-assistant/defaults/main.yml:tft_assistant_k8s_storage_class`. Every byte
   comes back from Riot's API and Community Dragon. After a lost volume the pod crawls again,
   and the page has data within its first hour.
+- **The kept volume is backed up weekly.** It holds what no API gives back: the notes, and the comp
+  ids the notes are keyed by. Its storage class is
+  `k8s/roles/tft-assistant/defaults/main.yml:tft_assistant_k8s_keep_storage_class`. The
+  crawler writes the comp ids at `/data/keep`, and the web container writes the notes at
+  `/state/keep`, which is the same claim.
+  `k8s/roles/tft-assistant/templates/deployment.yaml.j2` says why the two paths differ.
+- **The API checks nobody's identity.** Authelia is the only thing between the route and a
+  write to the notes, which is a second reason the route keeps its login.
 - **A dead key shows as a restarting crawler and a page that goes stale.** A failed crawl
   ends the crawler process, the kubelet restarts it, and `K8sContainerCrashLooping` fires
   (`k8s/roles/observability/files/rules/k8s-workloads.yaml`). The web container keeps serving
@@ -48,9 +58,10 @@ The crawler changes state with no human in the loop, so its authority is written
 keep a later edit from widening it.
 
 - **Schedule.** One cycle an hour, started by the process itself. No CronJob runs.
-- **Writes, and nothing else.** Files on its own volume: the match store, a cache of
-  Community Dragon's static data, and the built page. It writes nothing in the cluster and
-  has no use for the Kubernetes API.
+- **Writes, and nothing else.** Files on the role's two volumes: the match store, a cache of
+  Community Dragon's static data and the built page on the data volume, and the comp ids on
+  the kept volume. It never writes the notes. It writes nothing in the cluster and has no
+  use for the Kubernetes API.
 - **Calls out.** Riot's API, on the `americas`, `europe` and `asia` routing hosts and the
   `na1`, `euw1` and `kr` platform hosts, and `raw.communitydragon.org`. It stays under the
   key's rate limit of 100 requests per two minutes per routing host.
