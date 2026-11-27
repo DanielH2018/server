@@ -1,8 +1,8 @@
 """Passes 2 and 3 survive Flux's envsubst: generated text comes back with each sentinel's value.
 
-A text is a run of literal chunks and sentinels. The literal alphabet has no capital letter
-outside `SENTINEL_PREFIX`, and a key has none, so two pieces never join into a sentinel the
-generator did not place. The property tests run under the profile `tests/hypothesis_profiles.py`
+A text is a run of literal chunks and sentinels. Outside the near misses a literal chunk has
+no capital letter, and no near miss holds `SENTINEL_PREFIX`, a key and `__END` in a row, so
+two pieces never join into a sentinel the generator did not place. The property tests run under the profile `tests/hypothesis_profiles.py`
 loads.
 
 Run: uv run pytest scripts/renderer/tests/secrets/test_renderer_placeholder_properties.py
@@ -22,8 +22,8 @@ from renderer.renderer_lib.placeholders import (
     sentinel,
 )
 
-# Keys that are prefixes of one another, the case the alternation's longest-first order exists for.
-PREFIX_KEYS = ["a", "ab", "ab_c"]
+# `sentinel("a")` is a prefix of `sentinel("a__END_b")`, the case longest-first order exists for.
+PREFIX_KEYS = ["a", "ab", "a__END_b"]
 NEAR_MISSES = [
     SENTINEL_PREFIX,
     SENTINEL_PREFIX + "a__EN",
