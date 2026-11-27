@@ -113,6 +113,18 @@ TRANSITIONS = [
         ["weekly-backup-d3"],
         id="weekly-listed-volume-in-daily-and-nobackup-ends-in-its-shard-alone",
     ),
+    pytest.param(
+        "homelab/prometheus-data",
+        ["default", "no-backup"],
+        ["default"],
+        id="unlisted-nobackup-class-volume-in-daily-and-nobackup-ends-in-daily-alone",
+    ),
+    pytest.param(
+        "homelab/prometheus-data",
+        ["no-backup", "weekly-backup-d3"],
+        ["default"],
+        id="unlisted-nobackup-class-volume-in-a-shard-and-nobackup-ends-in-daily-alone",
+    ),
 ]
 
 
