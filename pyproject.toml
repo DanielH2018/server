@@ -325,12 +325,13 @@ ignore_decorators = [
   "@app.route",  # ical-proxy Flask routes
   "@rule",  # Hypothesis state-machine rules, called by the machine
   "@invariant",  # Hypothesis state-machine invariants, checked after every rule
+  "@initialize",  # Hypothesis state-machine first steps, run before any rule
 ]
 ignore_names = [
   # Hooks and handlers a framework calls by name.
   "do_*", "on_config", "on_files", "on_page_content", "pytest_*", "_missing_",
   # A Hypothesis state machine's TestCase, which pytest collects by name.
-  "TestClaimLifecycle",
+  "TestClaimLifecycle", "TestFanLoop", "TestHeldStore",
   # Enum members of a Kubernetes field's legal values in lib/k8s_objects.py, reached by value
   # through the enum's constructor, so a known state never reads as UNKNOWN.
   "FALSE", "CREATING", "ATTACHING", "DETACHING", "DELETING",
