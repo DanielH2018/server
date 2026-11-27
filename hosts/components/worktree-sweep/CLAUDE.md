@@ -9,7 +9,11 @@
   a day. On `ops_cron_host` alone it also releases the issue claims `findings.py reap` judges
   stale, and only after a run that removed a worktree. No other host reaps, because its checkout
   cannot see the orchestrator's worktree and would read the orchestrator's live claims as stale.
-  Nothing else.
+  Every run also prunes the timer user's uv cache with `uv cache prune`, which keeps what
+  master's lock needs, and a failed prune fails the run
+  (`hosts/tests/repo_crons/test_worktree_sweep_cron_reports_its_exit.py::test_a_failed_uv_cache_prune_is_flagged_and_fails_the_run`).
+  Nothing else. The agent user's trees and cache are outside the sweep
+  ([#10493](https://github.com/DanielH2018/server/issues/10493)).
 - **The pruner is the dotfiles repo's.** `chezmoi apply` deploys it for the timer's user at
   `~/.claude/hooks/prune-worktrees.py`, and it reads this repo's policy from
   `.claude/prune-worktrees.json` in the primary checkout. The script passes `--require` with
