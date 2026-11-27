@@ -52,21 +52,28 @@ def parse_backup_budget(lines):
     return vols
 
 
-def format_backup_budget(vols, shards, names=None, owners=None):
+def format_backup_budget(vols, shards, names=None, owners=None, targets=None):
     """Render the per-shard Class C projection; non-zero exit if a shard is over budget.
 
     `shards` maps volume name to its recurring-job group. A volume with no group never runs a
     backup and never prunes, so it is reported separately rather than charged to a day.
+    `targets` maps volume name to its live `spec.backupTargetName`. A daily volume whose
+    target is named and is not B2 runs its nightly prune on that target, so its B2 backups
+    are stranded, not a nightly B2 cost. A missing or blank target is still charged.
     """
     names = names or {}
+    targets = targets or {}
     budget = B2_CLASS_C_DAILY_CAP - B2_BUDGET_RESERVE
-    byshard, idle, daily = {}, [], []
+    byshard, idle, daily, off_b2 = {}, [], [], []
     for vol, v in vols.items():
         shard = shards.get(vol)
+        target = targets.get(vol)
         if shard and shard.startswith(longhorn_backups.WEEKLY_SHARD_PREFIX):
             byshard.setdefault(shard, []).append((vol, v))
         elif shard in (None, longhorn_backups.NO_BACKUP_GROUP):
             idle.append(vol)
+        elif target and target != longhorn_backups.B2_TARGET:
+            off_b2.append(vol)
         else:
             # A PVC from the `longhorn` StorageClass lands in the DAILY group until the next deploy
             # relabels it: a nightly prune against a weekly budget.
@@ -123,6 +130,17 @@ def format_backup_budget(vols, shards, names=None, owners=None):
         rows.append(
             "no-backup (never pruned): %s"
             % ", ".join(sorted(names.get(v, v) for v in idle))
+        )
+    if off_b2:
+        rows.append(
+            "daily tier off B2, %d stranded backup(s) left on B2 (no job prunes them; "
+            "scripts/backup/longhorn_reap.py backups clears them): %s"
+            % (
+                sum(vols[v]["backups"] for v in off_b2),
+                ", ".join(
+                    "%s -> %s" % (names.get(v, v), targets[v]) for v in sorted(off_b2)
+                ),
+            )
         )
     if daily:
         over.append("daily-on-B2")
