@@ -32,6 +32,14 @@
 # on a deleted inode. The parent is opened read-only on fd 9, so no lock file is created. The
 # lock and the stamp together make concurrent provisions from several worktrees safe.
 #
+# A SUPERSEDED VERSION IS REMOVED ONCE ITS SUCCESSOR HAS BEEN STAMPED FOR 14 DAYS. Each image bump
+# otherwise leaves its old version directory behind, about 100 MB for Prometheus or Loki. When the
+# pinned version's stamp is older than the grace, a run removes every directory of the same tool
+# whose stamp is older than the pin's. A newer directory, such as a Renovate branch's, stays. A
+# worktree on a base from before the bump keeps its version for the grace, which outlasts the
+# worktree pruner's few-day age-out. The prune takes the cache lock without waiting, so a run
+# that finds a provision in progress skips it.
+#
 # ALLOY IS PROVISIONED ONLY WHEN ASKED FOR. Its release binary is 570 MB unpacked (167 MB
 # zipped), against about 100 MB for each other tool, and only the Alloy config check runs it.
 # The other four tools do not wait on that fetch.
@@ -87,6 +95,32 @@ image_version() {
   printf '%s\n' "$version"
 }
 
+superseded_grace_days=14
+
+#######################################
+# Remove the version directories of one tool that the pinned version superseded past the grace.
+# Globals:
+#   cache, superseded_grace_days
+# Arguments:
+#   The cache name, the pinned version's directory, and that directory's stamp.
+#######################################
+prune_superseded() {
+  local name="$1" dir="$2" stamp="$3" other
+  if [[ -z "$(find "$stamp" -mmin "+$((superseded_grace_days * 1440))" -print -quit)" ]]; then
+    return 0
+  fi
+  exec 8<"$cache"
+  if flock -n 8; then
+    for other in "$cache/$name"-*/; do
+      other="${other%/}"
+      if [[ "$other" != "$dir" && "$other/.provisioned" -ot "$stamp" ]]; then
+        rm -rf "$other"
+      fi
+    done
+  fi
+  exec 8<&-
+}
+
 #######################################
 # Fetch, verify and unpack one tool unless its stamped version directory already exists.
 # Globals:
@@ -108,6 +142,7 @@ provision() {
   fi
 
   if [[ "$(cat "$stamp" 2>/dev/null || true)" == "$base" ]]; then
+    prune_superseded "$name" "$dir" "$stamp"
     return 0
   fi
   mkdir -p "$cache"

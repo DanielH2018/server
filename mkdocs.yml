@@ -208,6 +208,7 @@ nav:
           - Claude memory store copy: claude-memory-sync.md
           - Claude Code root helpers: claude-code-root-helpers.md
           - Issue claiming and fan-out: issue-claiming-and-fanout.md
+          - Worktree storage: worktree-storage.md
           - GitHub label audit: github-label-audit.md
           - Failure classes: failure-classes.md
       # The role doc keeps the operating rules within the inject hook's character budget; these
