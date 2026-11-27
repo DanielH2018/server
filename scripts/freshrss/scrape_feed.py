@@ -293,7 +293,7 @@ def check(
 
 def main(argv: list[str] | None = None) -> int:
     parser = ArgumentParser(
-        description=__doc__.split("\n\n")[0],
+        description=(__doc__ or "").split("\n\n")[0],
         example="scrape_feed.py discover https://example.org/blog",
     )
     sub = parser.add_subparsers(dest="command", required=True)

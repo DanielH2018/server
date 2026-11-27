@@ -23,9 +23,8 @@ rendered, so labelling a workload rolls no pods and touches no Service selector.
 """
 
 import yaml
-
+from lib import yaml_fast
 from renderer.renderer_lib.manifest_yaml import GO_YAML_NON_STRING
-
 
 ROLE_LABEL = "homelab/role"
 
@@ -39,7 +38,7 @@ class _GoPlain(str):
 
 
 # Uses libyaml's parser where PyYAML's wheel ships it.
-class _Loader(getattr(yaml, "CSafeLoader", yaml.SafeLoader)):
+class _Loader(yaml_fast.Loader):
     """SafeLoader that marks a plain scalar go-yaml would not read as a string."""
 
 

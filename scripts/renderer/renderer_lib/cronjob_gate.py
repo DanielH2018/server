@@ -86,15 +86,16 @@ def gate_job(cronjob: K8sObject, digest8: str, gate: Mapping) -> dict:
                 f"CronJob {name}'s mutation gate copies its backoffLimit, and it sets none"
             )
         annotations[RERUN_SAFE] = gate["rerun_safe"]
-    job_meta = {"name": name, "namespace": cronjob.namespace}
+    job_meta: dict[str, object] = {"name": name, "namespace": cronjob.namespace}
     if (template.get("metadata") or {}).get("labels"):
         job_meta["labels"] = dict(template["metadata"]["labels"])
     job_meta["annotations"] = annotations
     job = {"apiVersion": "batch/v1", "kind": "Job", "metadata": job_meta, "spec": spec}
-    job_meta["name"] = gate_name(name, job_spec_digest8(job))
-    if len(job_meta["name"]) > MAX_NAME:
+    job_name = gate_name(name, job_spec_digest8(job))
+    job_meta["name"] = job_name
+    if len(job_name) > MAX_NAME:
         raise RenderError(
-            f"gate Job {job_meta['name']} is longer than {MAX_NAME} characters, so its pods "
+            f"gate Job {job_name} is longer than {MAX_NAME} characters, so its pods "
             "would not carry its name as a prefix"
         )
     return job

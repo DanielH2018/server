@@ -326,7 +326,7 @@ def test_the_gates_own_snapshot_reads_digests_json(head_tree):
     writes no bundle, and arm 5 would read no tag as suspended. The real target list is
     narrowed to two of its tags: the `--role` contract holds per tag, and every tag cost 13s."""
 
-    def two_targets(*args):
+    def two_targets(*args) -> list[str]:
         found = render_targets(*args)
         assert set(ROLES) <= set(found), found
         return list(ROLES)
