@@ -404,7 +404,8 @@ def test_no_workload_is_both_labelled_and_exempt() -> None:
     )
 
 
-def test_only_traefik_reaches_the_longhorn_ui() -> None:
+def test_only_traefik_and_homepage_reach_the_longhorn_ui() -> None:
+    """Traefik serves the route; homepage's Longhorn widget reads `/v1/nodes` through it."""
     (policy,) = [
         doc
         for role, _tpl, doc in rendered_docs()
@@ -413,9 +414,12 @@ def test_only_traefik_reaches_the_longhorn_ui() -> None:
         and doc["spec"]["podSelector"].get("matchLabels") == {"app": "longhorn-ui"}
     ]
     (rule,) = policy["spec"]["ingress"]
-    (peer,) = rule["from"]
-    assert peer["podSelector"]["matchLabels"] == {"app": "traefik"}
-    assert peer["namespaceSelector"]["matchLabels"] == {
-        "kubernetes.io/metadata.name": "homelab"
+    peers = {
+        (
+            peer["namespaceSelector"]["matchLabels"]["kubernetes.io/metadata.name"],
+            peer["podSelector"]["matchLabels"]["app"],
+        )
+        for peer in rule["from"]
     }
+    assert peers == {("homelab", "traefik"), ("homelab", "homepage")}
     assert rule["ports"] == [{"protocol": "TCP", "port": 8000}]

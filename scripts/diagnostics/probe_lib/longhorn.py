@@ -35,9 +35,7 @@ from diagnostics.probe_lib.longhorn_budget import (
 from diagnostics.probe_lib.longhorn_cluster import (
     backup_target_url,  # noqa: F401
     pvc_names,
-    # Re-exported only: b2_ledger reaches it as `longhorn.volume_backup_targets()`, and nothing
-    # in this module calls it. Same noqa reason as `backup_target_url` above.
-    volume_backup_targets,  # noqa: F401
+    volume_backup_targets,
     volume_owned_backup_counts,
     volume_shard_labels,
 )
@@ -81,6 +79,7 @@ def run_b2_budget(ns):
         volume_shard_labels(cluster),
         pvc_names(cluster),
         volume_owned_backup_counts(cluster),
+        volume_backup_targets(cluster),
     )
     print(text)
     return code

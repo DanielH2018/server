@@ -7,9 +7,11 @@ metadata:
 spec:
 {# DECIDED: the page keeps its endpoint while the pod is unready. A crawler container that
    restarts, on a dead API key or an out-of-memory build, makes the whole pod unready, and
-   the web container beside it still serves the last page. Without this field Traefik
-   answers 503 for a page that is there. The cost is that a web container with no page yet
-   answers 404 instead of 503. #}
+   the web container beside it still serves the last page. The field keeps the endpoint
+   `ready` for kube-proxy. It does nothing for Traefik on its own, which skips an endpoint that
+   is not `serving`, so the role's IngressRoute sets `nativeLB` to send the request through
+   this Service's cluster IP. The cost is that a web container with no page yet answers 404
+   instead of 503. #}
   publishNotReadyAddresses: true
   selector:
     app: {{ container_item.name }}

@@ -739,15 +739,15 @@ wheels = [
 
 [[package]]
 name = "pytest-testmon"
-version = "2.3.1"
+version = "2.4.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "coverage" },
     { name = "pytest" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/5a/8d/09e1844c02caacfd9f39d73726e2cbe905a9444466598c2fa119e8e305df/pytest_testmon-2.3.1.tar.gz", hash = "sha256:d6056e00bbb80aa2438241bb7b2d37f8e3b7826c2e503cb447d93d31c9e5a9e1", size = 25345, upload-time = "2026-11-19T15:32:12.113Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/73/d3/e44b70397100c06ec5a41a0a91adb486dff24caf87273620c9e0291945bb/pytest_testmon-2.4.1.tar.gz", hash = "sha256:e3142c42344b1f20452a48a3c6c4dbce0423869a4dd1d59ba8d4202168a2d63b", size = 27926, upload-time = "2026-11-26T13:09:47.277Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/78/2a/d1f98f6ce102a94aaf353063187102d49422a0ac04f7bc93d19196808228/pytest_testmon-2.3.1-py3-none-any.whl", hash = "sha256:695bd3c2e3ed38b06244ae5697f51d68cefb4ebbf4785496c5cd1ed5c80a8fa1", size = 27425, upload-time = "2026-11-19T15:32:10.521Z" },
+    { url = "https://files.pythonhosted.org/packages/61/e9/2841b4fd99ca69eead97cb827012cfe326cd8a698c68fc1da0b0b75b77b5/pytest_testmon-2.4.1-py3-none-any.whl", hash = "sha256:ac54271449cb02fa549b533bc9a8a8434e753fb0af52d8e0665bb355bcf9c923", size = 29967, upload-time = "2026-11-26T13:09:46.247Z" },
 ]
 
 [[package]]
@@ -990,7 +990,7 @@ lint = [
     { name = "vulture", specifier = ">=2.16" },
     { name = "zizmor", specifier = ">=1.0" },
 ]
-local = [{ name = "pytest-testmon", specifier = ">=2.3,<2.4" }]
+local = [{ name = "pytest-testmon", specifier = ">=2.4,<2.5" }]
 
 [[package]]
 name = "shellcheck-py"
