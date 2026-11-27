@@ -62,6 +62,8 @@ from xml.etree import ElementTree
 
 from lib import host_modules  # noqa: F401
 from reconcile_lib.activate import ACTION, KINDS, UNIT_KINDS
+from reconcile_lib.lines import KEYS as LINE_KEYS
+from reconcile_lib.lines import valid_edit
 from reconcile_lib.ufw import ID as UFW_ID
 from reconcile_lib.ufw import SPEC as UFW_SPEC
 from renderer.renderer_lib.cluster import RenderRefused
@@ -80,8 +82,6 @@ SYSUSERS = "/usr/lib/sysusers.d/homelab.conf"
 USER_KEYS = frozenset({"name", "uid", "gid", "home", "shell", "comment"})
 USER_IDS = ("uid", "gid")
 USER_NAME = re.compile(r"[a-z_][a-z0-9_-]{0,31}")
-LINE_KEYS = ({"path", "line", "regexp"}, {"path", "block", "marker"})
-OCTAL = re.compile(r"[0-7]{3,4}")
 
 
 class Package(Protocol):
@@ -344,14 +344,6 @@ def add_sysusers(package: Package) -> None:
     package.files[SYSUSERS] = (text.encode(), 0o644)
 
 
-def _matches(pattern: str, text: str) -> bool:
-    """Whether `pattern` compiles and matches `text`, which keeps a rerun from adding a copy."""
-    try:
-        return re.search(pattern, text) is not None
-    except re.error:
-        return False
-
-
 def add_lines(
     package: Package, directory: Path, edits: object, render: Callable[[str], str]
 ) -> None:
@@ -373,21 +365,7 @@ def add_lines(
                 "or path with block and marker"
             )
         edit = {k: render(str(v)) for k, v in entry.items() if k != "activate"}
-        text = edit.get("line") or edit.get("block") or ""
-        anchor = edit.get("regexp") or edit.get("marker") or ""
-        shaped = (
-            "{mark}" in anchor and "\n" not in anchor
-            if "block" in edit
-            else "\n" not in text and _matches(anchor, text)
-        )
-        if not (
-            edit["path"].startswith("/")
-            and ".." not in edit["path"].split("/")
-            and text
-            and anchor
-            and OCTAL.fullmatch(edit.get("mode", "0644"))
-            and shaped
-        ):
+        if not valid_edit(edit):
             raise RenderRefused(f"{directory}: lines edit {edit!r} is malformed")
         action = entry.get("activate")
         if (
