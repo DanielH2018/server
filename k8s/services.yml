@@ -276,6 +276,8 @@ containers_list:
     # Clients use basic auth and cannot pass 2FA. Traefik's livesync-gate-secret serves the
     # names; a bare `Host(livesync…)` router added beside it would bypass the token gate.
     use_authelia: false
+    netpol_from:
+      - vault-mcp  # livesync-cli mirrors the vault for Claude's vault connector
   - name: homepage
     hostname: "homepage"
     port: 3000
