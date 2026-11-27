@@ -34,6 +34,7 @@ def _run(
     pruner: str | None = "",
     said: str = REMOVED_NONE,
     reap_rc: int = 0,
+    prune_rc: int = 0,
     env: dict[str, str] | None = None,
     policy: bool = True,
 ):
@@ -41,7 +42,8 @@ def _run(
 
     The pruner stub writes its arguments to `pruner-args` under `tmp_path`, prints `said`
     and exits `sweep_rc`. A `pruner` body replaces that stub, and None leaves the host with
-    no pruner at all. The `uv` stub writes its arguments to `uv-args` and exits `reap_rc`.
+    no pruner at all. The `uv` stub appends each call's arguments to `uv-calls`, and exits
+    `prune_rc` for `uv cache` and `reap_rc` for anything else.
     `env` replaces the inherited environment. `policy=False` leaves the checkout without
     `.claude/prune-worktrees.json`, as a checkout from before that file was added has.
     """
@@ -59,7 +61,9 @@ def _run(
         )
     write_exec(
         home / ".local/bin/uv",
-        f'printf "%s\\n" "$@" > {tmp_path / "uv-args"}\nexit {reap_rc}\n',
+        f'echo "$*" >> {tmp_path / "uv-calls"}\n'
+        f'if [ "$1" = cache ]; then echo "Removed 7 files (1.0MiB)"; exit {prune_rc}; fi\n'
+        f"exit {reap_rc}\n",
     )
     pinged = tmp_path / "pinged"
     stubs = fake_bin(
@@ -90,9 +94,15 @@ def _run(
     return result, pinged.read_text().strip() if pinged.exists() else ""
 
 
+def _uv_calls(tmp_path: Path) -> list[list[str]]:
+    calls = tmp_path / "uv-calls"
+    if not calls.exists():
+        return []
+    return [line.split() for line in calls.read_text().splitlines()]
+
+
 def _reaped(tmp_path: Path) -> list[str] | None:
-    args = tmp_path / "uv-args"
-    return args.read_text().split() if args.exists() else None
+    return next((call for call in _uv_calls(tmp_path) if call[0] == "run"), None)
 
 
 def test_a_failed_sweep_pings_its_exit_code_and_fails(tmp_path):
@@ -165,6 +175,23 @@ def test_a_reap_that_fails_is_named_and_leaves_the_sweeps_exit_code(tmp_path):
     assert "claims not reaped: reap exited 3" in result.stdout
     assert result.returncode == 0
     assert url == "https://hc-ping.com/k3y/daniel-box-worktree-sweep/0"
+
+
+def test_the_sweep_prunes_the_uv_cache_and_names_what_it_removed(tmp_path):
+    result, url = _run(tmp_path, 0)
+
+    assert ["cache", "prune"] in _uv_calls(tmp_path)
+    assert "uv cache: Removed 7 files (1.0MiB)" in result.stdout
+    assert url == "https://hc-ping.com/k3y/daniel-box-worktree-sweep/0"
+
+
+def test_a_failed_uv_cache_prune_is_flagged_and_fails_the_run(tmp_path):
+    # fact: hosts/components/worktree-sweep/CLAUDE.md#Autonomous-role contract (the timer removes worktrees and branches with no human in the loop)
+    result, url = _run(tmp_path, 0, prune_rc=2)
+
+    assert "uv cache not pruned: uv cache prune exited 2" in result.stdout
+    assert result.returncode == 2
+    assert url == "https://hc-ping.com/k3y/daniel-box-worktree-sweep/2"
 
 
 def _launcher() -> Path:

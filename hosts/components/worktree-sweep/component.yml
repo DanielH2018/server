@@ -1,4 +1,5 @@
-# The weekly worktree sweep and git object-store repair. homelab-worktree-sweep.timer starts
+# The weekly worktree sweep, git object-store repair and uv cache prune.
+# homelab-worktree-sweep.timer starts
 # homelab-worktree-sweep.service on Sunday at 04:20, as sys_user, in the primary checkout.
 # daniel-box and daniel-server both list the component, because fan-out batches run in both
 # hosts' checkouts. Each host pings its own
