@@ -291,7 +291,7 @@ def push(
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = ArgumentParser(description=__doc__.split("\n", 1)[0])
+    parser = ArgumentParser(description=(__doc__ or "").partition("\n")[0])
     parser.add_argument("command", choices=("plan", "push"))
     parser.add_argument("out", type=Path, help="the render's output directory")
     args = parser.parse_args(argv)

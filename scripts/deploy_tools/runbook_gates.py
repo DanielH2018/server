@@ -83,12 +83,12 @@ def main(argv: list[str] | None = None) -> int:
         print("\n".join(REGISTRY.render_list()))
         return 0
     if argv[:1] and argv[0] in HELP_FLAGS:
-        print(__doc__.strip())
+        print((__doc__ or "").strip())
         return 0
     if not argv or argv[0] not in REGISTRY:
         if argv:
             print(f"unknown runbook: {argv[0]}", file=sys.stderr)
-        print(__doc__.strip(), file=sys.stderr)
+        print((__doc__ or "").strip(), file=sys.stderr)
         print("\nRunbooks:\n  " + "\n  ".join(REGISTRY.render_list()), file=sys.stderr)
         return USAGE_ERROR
     return REGISTRY.get(argv[0]).func(argv[1:])

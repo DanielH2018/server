@@ -60,6 +60,7 @@ def _schedule(text: str, tmp_path: Path) -> reboot_window.Schedule:
 def _cron(workflow: dict) -> str:
     # YAML 1.1 reads the bare key `on` as the boolean True.
     triggers = workflow.get("on", workflow.get(True))
+    assert triggers is not None
     return triggers["schedule"][0]["cron"]
 
 

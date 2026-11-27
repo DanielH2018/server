@@ -174,7 +174,11 @@ def select_prunable(facts: PruneFacts) -> Selection:
     first = []
     for v in oldest_first:
         commit = _only_tag(v, _SHA_TAG)
-        if answers.get(("ancestry", commit)) and commit != prod_commit:
+        if (
+            commit is not None
+            and answers.get(("ancestry", commit))
+            and commit != prod_commit
+        ):
             first.append((v, f"sha-{commit} is a strict ancestor of prod's commit"))
         elif ("subject", v.digest) in answers and answers["subject", v.digest] is None:
             first.append((v, "untagged, with no subject"))

@@ -13,7 +13,7 @@ of its own.
 Run: uv run pytest scripts/deploy_tools/tests/release/test_gate_render_source.py
 """
 
-import types
+import subprocess
 from pathlib import Path
 
 from deploy_tools.land_lib import health_gate as notify_mod
@@ -22,7 +22,7 @@ from lib.inventory_lists import host_vars_file
 
 
 def _result(returncode, stdout="", stderr=""):
-    return types.SimpleNamespace(returncode=returncode, stdout=stdout, stderr=stderr)
+    return subprocess.CompletedProcess([], returncode, stdout, stderr)
 
 
 def _k8s_tools(run):

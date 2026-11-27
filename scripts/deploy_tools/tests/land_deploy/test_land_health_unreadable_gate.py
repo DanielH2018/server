@@ -9,9 +9,9 @@ gate rather than a GateResult this file made up.
 Run: uv run pytest scripts/deploy_tools/tests/land_deploy/test_land_health_unreadable_gate.py
 """
 
+import subprocess
 from dataclasses import replace
 from pathlib import Path
-from types import SimpleNamespace
 
 import pytest
 
@@ -32,7 +32,8 @@ def _unreadable_landing(landing, stderr="no available server\n"):
     ln.classification = Classification(plane="")
 
     def run(argv, **kwargs):
-        return SimpleNamespace(
+        return subprocess.CompletedProcess(
+            argv,
             returncode=PROBE_UNREADABLE,
             stdout="PROBE-VERDICT: unreadable (probe.py health, exit 75)\n",
             stderr=stderr,
