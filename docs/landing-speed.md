@@ -34,7 +34,7 @@ Each phase below is summed over the day's landings.
 | Fresh checkout and `.venv` | logs, `docs/worktree-storage.md` | under 1 s each | 0.3 s | `Installed 66 packages in 231ms` |
 | Waiting for the landing turn | `turn_wait` | 9.4 h | 195 s | p90 2130 s, max 5520 s |
 | Waiting behind a serial landing | `serial_wait` | 3.9 h | 0 | 13 waits of 1320-1440 s, two of 2280 and 2760 s |
-| PR CI, ready to green | `ci.yml` runs | 7.6 h of runner time | 281 s | p90 404 s; 13 red runs |
+| PR CI, ready to green | `ci.yml` runs | 7.6 h of run wall time | 281 s | p90 404 s; 13 red runs |
 | Master CI after the merge | `wait_ci` | 1.2 h | 21 s | the tested-tree skip works |
 | Promotion, soak and health gate | `deploy` | 9.4 h | 501 s | `settled` median 962 s; `nothing-to-deploy` median 206 s |
 
@@ -75,8 +75,9 @@ minutes, for up to 4 PRs. Five things held the turn or the serial lock without a
    config validator failing`, and the landing kept waiting while it held the turn. The fix is
    the second change below.
 5. **`DEPLOY_HOLD`.** A hold stopped promotion from about 02:30 to 13:30, and again from 14:31
-   to 16:05. Each hold refused every k8s PR and ended five landings `deploy-failed`. The
-   operator clears a hold, so this page does not propose a change to it.
+   to 16:05. Each hold refused every k8s PR. 8 landings ended `deploy-failed` in the first
+   hold and 7 in the second. The operator clears a hold, so this page does not propose a
+   change to it.
 
 PRs arrived faster than the turn could serve them: 46 `ci.yml` pull-request runs were created
 between 14:00 and 15:00. When a serial landing is live, the turn serves only docs- and
@@ -99,8 +100,10 @@ hold.
    time, each time it fires. The change adds 5 lines.
 2. **End a landing whose required check failed** (the PR that adds this page). A merge
    refused for a failing required check ends `pr-ci-red`. A check that is in progress or
-   queued keeps the wait going. Saves up to a merge budget (5520 s) of turn time per
-   occurrence. The change adds 10 lines.
+   queued keeps the wait going. A merge budget (5520 s) of turn time bounds the saving per
+   occurrence. The one occurrence in the 1010 retained logs held the turn about 6 minutes
+   before its process ended with no exit recorded. That validator had concluded `failure`,
+   and no landing in the logs merged after such a refusal. The change adds 10 lines.
 
 ## Options that need the operator, ranked
 
@@ -111,8 +114,9 @@ uses the day's numbers.
    ([#10284](https://github.com/DanielH2018/server/issues/10284)). The serial lock is held
    from the serial draft's turn to the end of its deploy, about 23 minutes plus the drain.
    With 11 PRs in line, those 23 minutes cost 11 waits of 23 minutes. If the serial PR went
-   after the line instead, one landing would wait. Up to the 3.9 h of `serial_wait` measured
-   today would become one serial PR's wait. Complexity: one rule in `slots._bar_after_waits`
+   after the line instead, the PRs in line would merge first. PRs that arrive during the
+   serial window still wait behind it, so the saving depends on how quiet the line is when the
+   serial PR goes. The 3.9 h of `serial_wait` measured today is the upper bound. Complexity: one rule in `slots._bar_after_waits`
    or `batch._members`, bounded by the serial PR's merge budgets. The cost is the serial PR's
    own latency, and it reorders landings. It weakens no check.
 2. **Exclude from the drain the landings that gate no tag.** 30 `nothing-to-deploy` landings
