@@ -15,6 +15,10 @@
 # - jellyfin-public has no Authelia, so its rule needs an id a scanner cannot guess: a 2xx on
 #   `/Videos/<item GUID>/` is a client streaming an item it listed while logged in. One episode
 #   is enough segments to trip http-crawl-non_statics.
+# - qbittorrent-public carries the authelia middleware and no Authelia bypass covers it, so a
+#   403 or 404 from qBittorrent's `/api/v2/` means a browser past Authelia. Its web UI polls
+#   per-torrent endpoints with `hash=undefined`, which 404, and once its own session expires
+#   it keeps polling `sync/maindata` into a run of 403s.
 #
 # Router names are Traefik's: `<namespace>-<ingressroute>-<hash>@kubernetescrd` for a CRD
 # route, the key in `traefik/templates/livesync-gate-secret.yaml.j2` for the gate.
@@ -28,3 +32,4 @@ whitelist:
     - "evt.Meta.traefik_router_name matches '^homelab-homepage-public-[0-9a-f]{20}@kubernetescrd$' && int(evt.Unmarshaled.traefik.OriginStatus ?? 0) in [403, 404]"
     - "evt.Meta.traefik_router_name in ['livesync-sync-public@file', 'livesync-sync-local@file'] && int(evt.Unmarshaled.traefik.OriginStatus ?? 0) == 404"
     - "evt.Meta.traefik_router_name matches '^homelab-jellyfin-public-[0-9a-f]{20}@kubernetescrd$' && int(evt.Unmarshaled.traefik.OriginStatus ?? 0) >= 200 && int(evt.Unmarshaled.traefik.OriginStatus ?? 0) < 300 && evt.Meta.http_path matches '(?i)^/videos/[0-9a-f]{8}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{12}/'"
+    - "evt.Meta.traefik_router_name matches '^homelab-qbittorrent-public-[0-9a-f]{20}@kubernetescrd$' && int(evt.Unmarshaled.traefik.OriginStatus ?? 0) in [403, 404] && evt.Meta.http_path matches '^/api/v2/'"
