@@ -182,6 +182,14 @@ def test_run_cycle_widens_the_page_for_a_timestamp_longer_than_it():
     assert applied == log
 
 
+def test_run_cycle_steps_past_a_timestamp_that_fills_the_largest_loki_page():
+    cap = stats_lib.LOKI_MAX_ENTRIES
+    log = [(1, "a")] * (cap + 1) + [(2, "b")]
+    applied, _, cursor = _run_cycles(log, [9], page_limit=cap)
+    assert applied == [(1, "a")] * cap + [(2, "b")]
+    assert cursor == 2
+
+
 @given(
     log=st.lists(st.tuples(st.integers(1, 6), st.sampled_from("abc")), max_size=20),
     end_points=st.lists(st.integers(0, 7), min_size=1, max_size=4).map(sorted),
@@ -278,7 +286,7 @@ def test_poll_forever_logs_and_continues_on_a_cycle_exception():
     ):
         stats_lib.poll_forever(
             ps,
-            store=None,
+            store=_FakeRunStore(),
             cursor=0,
             fetch=None,
             apply_fn=None,
@@ -291,6 +299,42 @@ def test_poll_forever_logs_and_continues_on_a_cycle_exception():
     assert calls["n"] == 1
     assert ps.last_poll_ok == 0.0  # never stamped — the cycle raised before it could
     assert any("poll error:" in args for args in logged)
+
+
+class _Stop(BaseException):
+    """Ends poll_forever's loop from the sleep between cycles."""
+
+
+def test_poll_forever_does_not_reapply_pages_saved_before_a_fetch_failed():
+    pages = _paging_fetch([(1, "a"), (2, "b"), (3, "c")])
+    applied = []
+    calls = []
+
+    def fetch(start_ns, end_ns, limit):
+        calls.append(start_ns)
+        if len(calls) == 2:
+            raise RuntimeError("loki unreachable")
+        return pages(start_ns, end_ns, limit)
+
+    def apply_fn(state, entries):
+        applied.extend(entries)
+        return list(entries), entries[-1][0]
+
+    with mock.patch("stats_lib.time.sleep", side_effect=[None, _Stop]):
+        with pytest.raises(_Stop):
+            stats_lib.poll_forever(
+                stats_lib.PollState("state"),
+                _FakeRunStore(),
+                cursor=0,
+                fetch=fetch,
+                apply_fn=apply_fn,
+                page_limit=2,
+                once=False,
+                backfill=False,
+                poll_interval=20,
+                on_poll_ok=lambda state: "ok",
+            )
+    assert applied == [(1, "a"), (2, "b"), (3, "c")]
 
 
 def test_make_handler_serves_metrics_and_healthz_over_a_real_socket():
@@ -411,7 +455,7 @@ class _FakeRunStore(_FakeStore):
         return _FakeState()
 
     def get_cursor(self):
-        return self._cursor
+        return self.saved[-1][0] if self.saved else self._cursor
 
 
 def test_run_with_once_runs_a_single_cycle_and_starts_no_metrics_server():
