@@ -9,7 +9,7 @@ tests read through `host_mode`.
 from dataclasses import dataclass, field
 from pathlib import PurePosixPath
 
-import yaml
+from renderer.renderer_lib.manifest_yaml import dump
 
 from renderer.renderer_lib.host_manifest import DROPIN, UNIT_DIR
 from renderer.renderer_lib.host_tools import Pin, tool_path
@@ -178,4 +178,4 @@ class Package:
                 MAINTAINER_SCRIPTS[name]: f"scripts/{name}"
                 for name in sorted(self.scripts)
             }
-        return yaml.safe_dump(spec, sort_keys=False)
+        return dump(spec)

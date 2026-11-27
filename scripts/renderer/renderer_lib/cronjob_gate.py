@@ -27,7 +27,7 @@ from collections.abc import Iterable, Mapping
 from dataclasses import replace
 from pathlib import Path
 
-import yaml
+from renderer.renderer_lib.manifest_yaml import dump
 
 from lib.k8s_objects import K8sObject
 from renderer.renderer_lib.documents import parse_documents
@@ -180,7 +180,7 @@ def gate_files(
         out = f"{name}-deploy-gate.yaml"
         if out in files:
             raise RenderError(f"{tag.tag}: templates/verify/ already renders {out}")
-        text = yaml.safe_dump(gate_job(rendered[name], digest8, gate), sort_keys=False)
+        text = dump(gate_job(rendered[name], digest8, gate))
         if substitutes and "$" in text:
             raise RenderError(
                 f"{tag.tag}: the gate for CronJob {name} copies a $ from cluster/{tag.tag}/, "
