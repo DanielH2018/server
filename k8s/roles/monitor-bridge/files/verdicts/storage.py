@@ -318,7 +318,7 @@ def r2_canary_plan(keys: list[str], today: date, lock_days: int) -> CanaryPlan:
 
     A canary is dated by its name in UTC. One dated `lock_days - 1` days ago is younger than
     the lock wherever in the day it was uploaded, and one dated `lock_days + 1` days ago is
-    older. A key whose name does not end in a `YYYY-MM-DD` date is left alone.
+    older. A key whose name after the prefix is not a `YYYY-MM-DD` date is left alone.
     """
     dated: dict[date, str] = {}
     for key in keys:
