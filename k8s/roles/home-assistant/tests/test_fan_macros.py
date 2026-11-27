@@ -15,7 +15,7 @@ def _pct(level):
     return int(render_macro(FAN, "level_to_pct", level))
 
 
-def _target(temp_f, cur_level, is_night, sleep, outdoor_temp_f=-999):
+def _target(temp_f, cur_level, is_night, sleep, outdoor_temp_f: float = -999):
     return int(
         render_macro(
             FAN,
@@ -127,9 +127,11 @@ def _inline_target(t, cur_level, is_night):
     if t < 0 or ideal < 0.3:
         want = 0
     elif cur_level == 0 or ideal > cur_level + 0.7 or ideal < cur_level - 0.7:
-        want = _forgiving_round(
+        rounded = _forgiving_round(
             ideal
         )  # banker's rounding, matching HA's forgiving_round
+        assert isinstance(rounded, int)
+        want = rounded
     else:
         want = cur_level
     return min(want, cap)

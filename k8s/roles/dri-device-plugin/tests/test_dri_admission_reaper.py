@@ -6,7 +6,12 @@ Run: uv run pytest k8s/roles/dri-device-plugin/tests/test_dri_admission_reaper.p
 import dri_admission_reaper
 
 
-def pod(name, phase="Failed", reason="UnexpectedAdmissionError", owner="ReplicaSet"):
+def pod(
+    name,
+    phase="Failed",
+    reason: str | None = "UnexpectedAdmissionError",
+    owner: str | None = "ReplicaSet",
+):
     owners = [{"kind": owner, "name": f"{name}-owner"}] if owner else []
     return {
         "metadata": {"name": name, "uid": f"uid-{name}", "ownerReferences": owners},

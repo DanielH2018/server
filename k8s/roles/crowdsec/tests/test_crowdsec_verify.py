@@ -56,7 +56,9 @@ class World(cv.Http):
     read, a single value for every read; the last of either repeats once the list runs out.
     """
 
-    def __init__(self, samples, up=1, ban_reads_back=True, lift_status=200):
+    def __init__(
+        self, samples, up: int | list[int] = 1, ban_reads_back=True, lift_status=200
+    ):
         super().__init__()
         self.samples = list(samples)
         self.ups = list(up) if isinstance(up, list) else [up]
