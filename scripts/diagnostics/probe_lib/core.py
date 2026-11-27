@@ -16,6 +16,7 @@ import socket
 import subprocess
 from datetime import datetime
 from pathlib import Path
+from urllib.parse import unquote
 from zoneinfo import ZoneInfo
 
 import sys as _sys
@@ -531,8 +532,8 @@ SUBSONIC_REST_PARAMS = ("u", "t", "s", "p")
 
 # A URL query parameter inside any text: `?apikey=…`, `&token=…`, or the JSON-escaped
 # `\u0026token=…`. The value stops at a quote or a backslash so a match inside a raw JSON body
-# never runs past the end of its string.
-_QUERY_PARAM_RE = re.compile(r"([?&;]|u0026)([^=&#?;\s\"'\\]+)=([^&#;\s\"'\\]*)")
+# never runs past the end of its string, and at a `?` so a nested URL's own query is read too.
+_QUERY_PARAM_RE = re.compile(r"([?&;]|u0026)([^=&#?;\s\"'\\]+)=([^&#;?\s\"'\\]*)")
 
 # `%3F`/`%26`/`%3B` separate and `%3D` assigns, in either hex case; the value stops at the next
 # encoded separator or `%23`.
@@ -550,7 +551,7 @@ _SUBSONIC_PARAM_RES = tuple(
 
 def query_param_is_secret(name):
     """True when a URL query parameter's name reads as credential-bearing."""
-    low = str(name).lower().replace("_", "").replace("-", "")
+    low = unquote(str(name)).lower().replace("_", "").replace("-", "")
     return low in _SECRET_QUERY_NAMES or any(part in low for part in SECRET_NAME_PARTS)
 
 

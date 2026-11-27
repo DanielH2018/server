@@ -19,6 +19,8 @@ an entry in `tests/repo/monkeypatch_allowlist.txt`, which its header permits for
 """
 
 import pytest
+from hypothesis import given
+from hypothesis import strategies as st
 
 from diagnostics.probe_lib import core
 from diagnostics.probe_lib import ha
@@ -230,4 +232,51 @@ def test_json_escaped_ampersand_before_a_subsonic_param_is_redacted():
 )
 def test_a_path_with_no_credential_param_is_printed(path):
     line = f'"RequestPath":"{path}"'
+    assert core.redact_log_secrets(line) == line
+
+
+SENTINEL = "SEKRIT0value"
+
+
+@st.composite
+def _spelled(draw, names):
+    """A query parameter name as a client may spell it: any case, `_`/`-` inside, percent-encoded."""
+    name = draw(st.sampled_from(names))
+    chars = []
+    for char in name:
+        char = char.upper() if draw(st.booleans()) else char
+        chars.append(f"%{ord(char):02X}" if draw(st.integers(0, 4)) == 0 else char)
+        chars.append(draw(st.sampled_from(("", "", "", "_", "-", "%5F", "%2D"))))
+    return "".join(chars)
+
+
+@st.composite
+def _logged(draw, names):
+    """A log line carrying `?name=SENTINEL` behind any separator the redaction reads."""
+    name = draw(_spelled(names))
+    separator = draw(st.sampled_from(("?", "&", ";", "\\u0026")))
+    prefix = draw(
+        st.sampled_from(
+            (
+                "GET /api/x",
+                '"RequestPath":"/x',
+                "url=https://h/p?a=1",
+                "/login?next=/cb",
+            )
+        )
+    )
+    suffix = draw(st.sampled_from(("", "&page=2", '"', " HTTP/1.1")))
+    return f"{prefix}{separator}{name}={SENTINEL}{suffix}"
+
+
+_SECRET_NAMES = sorted(set(core.SECRET_NAME_PARTS) | {"key", "rsskey", "pass", "code"})
+
+
+@given(_logged(_SECRET_NAMES))
+def test_a_credential_value_is_redacted_however_its_name_is_spelled(line):
+    assert SENTINEL not in core.redact_log_secrets(line), line
+
+
+@given(_logged(("page", "sort", "limit", "q")))
+def test_a_value_behind_an_ordinary_name_is_printed_however_it_is_spelled(line):
     assert core.redact_log_secrets(line) == line
