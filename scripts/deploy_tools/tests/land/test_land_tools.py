@@ -192,6 +192,19 @@ def test_the_gate_snapshot_lands_in_the_pinned_root_its_docstring_names(
     )
 
 
+def test_the_gate_snapshot_defaults_to_the_landing_cache_on_disk_not_tmp(
+    tmp_path, monkeypatch
+):
+    repo, first, _second, _lock = _snapshot_repo(tmp_path)
+    monkeypatch.delenv(tools.GATE_TMP_ROOT_ENV)
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    with tools.gate_snapshot(repo, first) as snap:
+        assert snap is not None
+        assert (
+            snap.parent.parent == tmp_path / "home" / ".cache" / "homelab" / "land-gate"
+        )
+
+
 def _wait_args(timeout_s, token):
     """The (interval, walk_descendants) `await_ci_verdict` hands `await_ci.wait`."""
     seen = []
