@@ -40,9 +40,11 @@ spec:
           ports:
             - containerPort: {{ container_item.port }}
 {{ hardened_security_context(read_only=true, non_root=true) }}
+{# Not the page: it is megabytes, and the kubelet hangs up after 10 KB of an answer, which the
+   server logs as an error each time. /api/health is a few bytes and 503 until a page exists. #}
           readinessProbe:
             httpGet:
-              path: /index.html
+              path: /api/health
               port: {{ container_item.port }}
             initialDelaySeconds: 5
             periodSeconds: 10
