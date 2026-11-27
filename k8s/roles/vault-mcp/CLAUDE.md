@@ -29,6 +29,10 @@ See repo-root `CLAUDE.md` for shared conventions.
   free text as a non-string.
 - **`/vault` is plaintext, so neither claim is backed up.** Both rebuild from CouchDB. A
   backup of the vault belongs on `livesync-data`, whose documents are ciphertext.
+- **`vault_mcp_k8s_replicas` is 0 until livesync's entry lists `vault-mcp` under
+  `netpol_from`.** Without that fence the default-deny baseline drops the bridge's
+  connections to CouchDB. The fence cannot land first, because a fence may only name a pod
+  label some rendered pod carries. The fence and `replicas: 1` land together in one PR.
 - **The Service on port 8000 has no listener yet.** It is the port the MCP server takes.
 - **No probes.** The daemon serves nothing, so there is nothing for a probe to call. A
   crash shows as a restart.

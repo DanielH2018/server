@@ -9,7 +9,7 @@ metadata:
   namespace: {{ k8s_namespace }}
 spec:
 {{ spec_shell('Recreate') }}
-  replicas: 1
+  replicas: {{ vault_mcp_k8s_replicas }}
   selector:
     matchLabels:
       app: vault-mcp
