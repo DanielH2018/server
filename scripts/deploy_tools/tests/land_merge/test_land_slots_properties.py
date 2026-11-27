@@ -92,7 +92,10 @@ class SlotHolders(RuleBasedStateMachine):
         )
         if release is None:
             assert not taken, f"a refused take left {sorted(taken)} locked"
-            self.record(CAP_1_REFUSED if cap == 1 else FALLBACK_REFUSED)
+            if cap == 1:
+                self.record(CAP_1_REFUSED)
+            elif count == slots.FALLBACK_COUNT:
+                self.record(FALLBACK_REFUSED)
             return multiple()
         assert len(taken) == 1, f"one take locked {sorted(taken)}"
         (n,) = taken
