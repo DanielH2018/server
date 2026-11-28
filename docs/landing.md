@@ -183,7 +183,8 @@ is waited out first, as the bullets below say. A refused landing exits 75 with
 - A PR that changes a k8s role, and every serial PR, is refused while `DEPLOY_HOLD` reads
   anything but `none`.
 - A serial PR is refused while another landing holds a slot, and waits while another landing
-  holds the serial lock, as the bullet on the serial lock's wait says. Otherwise it takes the
+  holds the serial lock, as the bullet on the serial lock's wait says. Otherwise, once it
+  stops yielding the turn to the line, it takes the
   serial lock, `/run/lock/homelab-land-serial.lock` on daniel-box, and keeps it
   until its process ends, so every other PR waits meanwhile. `live_limit.kind` decides
   which PR is serial. A serial PR changes the `longhorn` or `metallb` role, which hold the
@@ -223,6 +224,20 @@ is waited out first, as the bullets below say. A refused landing exits 75 with
   verdicts 76 and 115 minutes after the refusal. The times are from each host's
   `landing-verdicts.jsonl` and GitHub's merge times. The measurement records what the
   2026-11-19 decision costs. It does not reopen the decision.
+- A serial PR yields the landing turn while other landings stand in the line, before it
+  takes the serial lock. It gives the turn back and waits until the line is empty, then
+  asks for the turn again and reads the rules once more. Its log prints `yielding the
+  landing turn to the landings in the line`. The wait ends once the landing's merge budgets
+  leave one `merge_timeout`, the length the merge wait gets after the turn, and the PR then
+  takes the turn whoever stands in the line. The line holds only drafts that have had no CI
+  run, so the rule does not see a green ready head that waits for the turn, a landing that
+  lands alone, a landing out of the turn for a wait, or a landing that runs as another UNIX
+  user. A line that cannot be read yields nothing, and inside the no-promotion window a
+  serial PR does not yield. The serial PR still lands alone and still drains, as the next
+  bullet says. The operator ruled this on 2026-11-27
+  ([#10284](https://github.com/DanielH2018/server/issues/10284),
+  `scripts/deploy_tools/land_lib/slots.py:DECIDED: 2026-11-27, the operator ruled that a serial PR yields`).
+  On 2026-11-26 the waits behind serial landings totalled 6.3 hours across 17 waits.
 - A serial PR that holds the turn waits for those landings instead of refusing. At the
   draft's turn its CI run starts anyway. Just before the merge it waits in the turn, up to
   `slots.DRAIN_S`, for the landings past their merge to reach their verdicts. Its log prints

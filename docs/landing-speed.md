@@ -224,28 +224,32 @@ hold.
    no tag-gating landing is in flight. Of the 346 s, 334 s came from no-tag landings that
    then waited on a host package. Those give their slot up too, because the host wait reads
    Prometheus and no GitHub.
+5. **A serial PR yields the turn while others stand in line**
+   ([#10284](https://github.com/DanielH2018/server/issues/10284)). The operator ruled yes on
+   2026-11-27. The serial lock is held from the serial draft's turn to the end of its
+   deploy, about 23 minutes plus the drain. With 11 PRs in line, those 23 minutes cost 11
+   waits of 23 minutes. The serial PR gives the turn back while the line holds a draft,
+   so the drafts in line merge first, and it takes the serial lock once the line is empty
+   (`slots._yields`). PRs that arrive during the serial window still wait behind it, so the
+   saving depends on how quiet the line is when the serial PR goes. The 3.9 h of
+   `serial_wait` measured on 2026-11-27 is the upper bound. The yield lasts at most until
+   the serial PR's merge budgets leave one `merge_timeout`, so the cost is the serial PR's
+   own latency. It reorders landings and weakens no check: the serial PR still lands alone
+   and still drains. The line holds only drafts that have had no CI run, so a green ready
+   head that waits for the turn is not yielded to.
 
 ## Options that need the operator, ranked
 
 Each option is ranked by the turn time it frees against the complexity it adds. The ranking
 uses the day's numbers.
 
-1. **A serial PR yields the turn while others stand in line**
-   ([#10284](https://github.com/DanielH2018/server/issues/10284)). The serial lock is held
-   from the serial draft's turn to the end of its deploy, about 23 minutes plus the drain.
-   With 11 PRs in line, those 23 minutes cost 11 waits of 23 minutes. If the serial PR went
-   after the line instead, the PRs in line would merge first. PRs that arrive during the
-   serial window still wait behind it, so the saving depends on how quiet the line is when the
-   serial PR goes. The 3.9 h of `serial_wait` measured today is the upper bound. Complexity: one rule in `slots._bar_after_waits`
-   or `batch._members`, bounded by the serial PR's merge budgets. The cost is the serial PR's
-   own latency, and it reorders landings. It weakens no check.
-2. **Shorten the soak.** A `settled` landing's deploy has a median of 962 s, and the soak's
+1. **Shorten the soak.** A `settled` landing's deploy has a median of 962 s, and the soak's
    window W is 52% of it (*Where a settled deploy's time goes*). The largest single term is
    one 15-minute rule, which holds every `observability` change at W = 1020 s instead of
    240 s ([#10603](https://github.com/DanielH2018/server/issues/10603)). The deploy runs
    after the merge, so a shorter soak frees no turn time except inside a serial drain. It
    weakens a safety check, so it ranks last.
-3. **Narrow which `k8s/services.yml` edits are serial.** The operator ruled on 2026-11-19 that
+2. **Narrow which `k8s/services.yml` edits are serial.** The operator ruled on 2026-11-19 that
    every edit is serial (`live_limit.py`, `DECIDED:`). Nothing measured today reopens that
    ruling. #10458 adds one CronJob and holds the serial lock for it.
 

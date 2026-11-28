@@ -377,6 +377,10 @@ def build_tools(f: Fakes) -> tuple[Tools, list]:
         t[0] += 1.0
         return t[0]
 
+    def sleep(seconds: float) -> None:
+        t[0] += seconds
+        calls.append(("sleep", (seconds,), {}))
+
     turn_seq = _seq(f.turn, calls, "try_turn")
 
     def try_turn():
@@ -438,7 +442,7 @@ def build_tools(f: Fakes) -> tuple[Tools, list]:
         **host_fakes(f, calls),
         hostname=lambda: f.hostname,
         logger=lambda line: calls.append(("logger", (line,), {})),
-        sleep=lambda s: calls.append(("sleep", (s,), {})),
+        sleep=sleep,
         clock=clock,
     )
     return tools, calls

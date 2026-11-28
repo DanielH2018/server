@@ -211,13 +211,10 @@ def _admit(ln: Landing, pr: str, head: str) -> Member | None:
 def _members(ln: Landing, head: str) -> list[Member]:
     """The drafts in the line this landing may stack behind its own `head`, in line order."""
     try:
-        rows = turn.line_of(ln)("waiting", str(line.FRESH_S)).splitlines()
+        waiting = turn.waiting(ln)
     except OSError as exc:
         say(f"could not read the line for the landing turn ({exc}); no batch")
         return []
-    places = [row.split() for row in rows]
-    # Another landing of this landing's own PR may stand in the line too.
-    waiting = [p for p in places if len(p) == 2 and p[0] != ln.opts.pr]
     if not waiting:
         say(f"no batch: no other draft stands in the line behind PR #{ln.opts.pr}")
         return []
@@ -539,8 +536,7 @@ def _merge_member(ln: Landing, member: Member, before: Landing) -> str:
             return _TURN_LOST
         if not member.ln.tested_on:
             return f"PR #{before.opts.pr}'s merge commit could not be read"
-        waiting = turn.line_of(ln)("waiting", str(line.FRESH_S)).splitlines()
-        if f"{pr} {member.head}" not in waiting:
+        if (pr, member.head) not in turn.waiting(ln):
             return "its own landing left the line"
         head = member.ln.view("headRefOid").get("headRefOid") or ""
         if not stale_base.batch_tested(member.ln, head):
