@@ -168,6 +168,7 @@ from deploy_tools.land_lib.ledger import Ledger, annotation_line, result_line
 from deploy_tools.land_lib.options import HANDOFF_ENV, Options, parse_args
 from deploy_tools.land_lib.outcome import Cause, Outcome, Verdict, write_verdict_file
 from deploy_tools.land_lib.tools import Classifier, Tools
+from deploy_tools.land_lib.transitions import State
 
 
 def _prepare_stdio() -> None:
@@ -392,6 +393,7 @@ def _land(
         line = outcome.file_line()
     except fresh.GradeFresh as moved:
         print(f"land: {moved}", file=sys.stderr)
+        ln.transitions.enter(State.HANDED_OFF)
         try:
             rc = tools.fresh_landing(opts.primary, moved.argv)
             graded_here = False
@@ -405,6 +407,7 @@ def _land(
         # A `LandFresh` holds no turn: its check runs before the landing asks for one.
         fd = moved.fd if isinstance(moved, turn.HandOver) else None
         print(f"land: {moved}", file=sys.stderr)
+        ln.transitions.enter(State.HANDED_OFF)
         try:
             rc = tools.fresh_landing(opts.primary, child, fd)
             graded_here = False
@@ -450,13 +453,14 @@ def _refuse_unstarted(ln: Landing, why: str) -> tuple[int, str]:
 
 
 def _record(opts: Options, tools: Tools, ln: Landing, rc: int, line: str) -> None:
-    """Write the landing's verdict file, its verdict record and its annotation."""
+    """Write the landing's verdict file, its verdict record, its last transition and its annotation."""
     if opts.verdict_file:
         with contextlib.suppress(OSError):
             write_verdict_file(opts.verdict_file, line)
     # `probe.py landing-verdicts` reads this, so a caller never greps a task's output.
     with contextlib.suppress(OSError):
         tools.record_verdict(opts.pr, rc, line)
+    ln.transitions.end(ln.ledger.verdict or "aborted")
     # Fire-and-forget: a landing that succeeded must never report failure because logging it failed.
     with contextlib.suppress(Exception):
         tools.logger(annotation_line(ln.ledger, rc, tools.clock() - ln.ledger.t_start))

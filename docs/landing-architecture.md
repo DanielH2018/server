@@ -33,7 +33,8 @@ becomes a named invariant with a test.
   ([#10284](https://github.com/DanielH2018/server/issues/10284)). `slots._yields` holds the
   rule in one function, so slice 5 can move it into `schedule` unchanged.
 
-Nothing here is built. The validation below read the code at master `ce5c3abfa`. The
+Slice 1 is built: `land_lib/transitions.py` writes the state and transition records.
+Nothing else here is built. The validation below read the code at master `ce5c3abfa`. The
 milestone is `Landing pipeline state machine`.
 
 ## What the pipeline is, validated against the code
@@ -525,13 +526,25 @@ It cannot show:
 
 ### One state record for each live landing
 
-The transition writer of slice 1 has two outputs.
+The transition writer of slice 1, `land_lib/transitions.py`, has two outputs.
+`transitions.State` is the one enum of state names.
 
-- **A state record on the turn host**, one small JSON file for each PR, written by an atomic
-  rename. It holds the PR, the host, the pid, the state, when the landing entered it, the
-  states before it with their entry times, and a progress triple: done, total and what. A
-  landing on daniel-server writes it through ssh, as it writes its place in the line.
-- **A transition record in syslog**, which Loki keeps and `pipeline_timeline.py` reads.
+- **A state record on the turn host**, `/run/lock/homelab-land-line/<pr>.state`, one JSON
+  object written by an atomic rename. It holds `pr`, `host`, `pid`, `state`, `since` (when
+  the landing entered the state, in epoch seconds), `history` (the states before it with
+  their `since`), `progress` (`done`, `total` and `what`, or null) and `verdict`. A landing
+  on daniel-server writes it through ssh, as it writes its place in the line. The record
+  stays after the verdict and names it, so a record whose pid is gone and whose state is not
+  `verdict` is a landing that died. Removing old records is the reader's job.
+- **A transition record in syslog**, one logfmt line under the `landing-annotation` tag:
+  `event=land_transition pr from to at verdict`. Loki keeps it, and `pipeline_timeline.py`
+  can read it. The event is not named `landing...`, because every Landings board query
+  selects `|= "event=landing"`.
+
+Progress comes from the host wait (hosts applied of hosts) and from a batch's merges
+(members merged of members). Checks done of checks expected and Kustomizations ready of
+total need a count that `await_ci` and `land_wait` compute but do not return
+([#10645](https://github.com/DanielH2018/server/issues/10645)).
 
 The page reads the state records. A record is a file on the page's own host, so the page
 does not depend on Loki to show a landing that is deploying Loki.

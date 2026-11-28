@@ -126,7 +126,7 @@ def test_a_landing_off_the_turn_host_reaches_the_line_over_ssh(tmp_path, monkeyp
     )
     monkeypatch.setenv("PATH", path_with(stubs))
     monkeypatch.delenv(turn.TURN_DIR_ENV)
-    turn._line("daniel-server")("leave", "7")
+    line.at_turn_host("daniel-server")("leave", "7")
     args = seen.read_text().splitlines()
     assert turn.TURN_HOST in args
     assert args[-1].endswith(f"{line.DIR} leave 7")
@@ -162,7 +162,7 @@ def test_a_landing_on_the_turn_host_keeps_the_line_itself(
     stubs = fake_bin(tmp_path / "bin", ssh="#!/usr/bin/env bash\nexit 255\n")
     monkeypatch.setenv("PATH", path_with(stubs))
     monkeypatch.delenv(turn.TURN_DIR_ENV)
-    turn._line(hostname, tmp_path / "line")("join", "7", HEAD)
+    line.at_turn_host(hostname, tmp_path / "line")("join", "7", HEAD)
     assert (tmp_path / "line" / "7").read_text().split() == [HEAD]
 
 
@@ -184,7 +184,7 @@ def test_a_moved_turn_dir_keeps_the_lock_and_the_line_on_this_host(
     assert give_up is not None
     assert turn.try_take(tmp_path / "turn" / turn.LOCK.name) is None
     give_up()
-    turn._line("daniel-server")("join", "7", HEAD)
+    line.at_turn_host("daniel-server")("join", "7", HEAD)
     assert (tmp_path / "turn" / line.DIR.name / "7").read_text().split() == [HEAD]
 
 

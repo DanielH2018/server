@@ -551,9 +551,8 @@ def wait_for_hosts(
             `unbuilt` replaces `deferred` when the builder has published no package at or
             after the merge for a host it names.
     """
-    pr = ln.opts.pr
     primary = ln.opts.primary
-    head = f"PR #{pr}, {merge[:12]}"
+    head = f"PR #{ln.opts.pr}, {merge[:12]}"
     pending = list(targets)
     deadlines: dict[str, float] = {}
     green_at: float | None = None
@@ -581,6 +580,9 @@ def wait_for_hosts(
                     and _compose_ok(t, merge, primary, reads)
                 )
             ]
+        ln.transitions.progress(
+            len(targets) - len(pending), len(targets), "hosts applied"
+        )
         if not pending:
             say(f"hosts applied: {', '.join(t.host for t in targets)}")
             return

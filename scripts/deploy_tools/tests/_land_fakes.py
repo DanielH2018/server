@@ -36,6 +36,8 @@ MERGE_SHA = "0123456789abcdef0123456789abcdef01234567"
 FIRST_PARENT = "89abcdef0123456789abcdef0123456789abcdef"
 # The commit `last-good` names unless a test says otherwise.
 LAST_GOOD = "1" * 40
+# The epoch second `tools.now` reads at the fake clock's zero.
+EPOCH = 1_764_000_000.0
 # Where every faked pin lives; the gate reads only the value.
 PIN_FILE = "k8s/roles/system-upgrade/defaults/main.yml"
 
@@ -426,6 +428,10 @@ def build_tools(f: Fakes) -> tuple[Tools, list]:
     line_seq = _seq(f.line, calls, "line")
 
     def line(op, *args):
+        # A state record is no move in the line, so it takes no answer from `f.line`.
+        if op == "record":
+            calls.append(("record", args, {}))
+            return ""
         answer = line_seq(op, *args)
         if isinstance(answer, Exception):
             raise answer
@@ -454,8 +460,18 @@ def build_tools(f: Fakes) -> tuple[Tools, list]:
         logger=lambda line: calls.append(("logger", (line,), {})),
         sleep=sleep,
         clock=clock,
+        now=lambda: EPOCH + t[0],
     )
     return tools, calls
+
+
+def annotations(calls: list) -> list[str]:
+    """The ledger's annotation lines among the `logger` calls, apart from the transition lines."""
+    return [
+        c[1][0]
+        for c in calls
+        if c[0] == "logger" and c[1][0].startswith("event=landing ")
+    ]
 
 
 def make_landing(

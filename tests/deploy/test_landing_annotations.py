@@ -14,6 +14,7 @@ import pytest
 from _helpers import REPO as _REPO
 from deploy_tools.land_lib.ledger import Ledger, annotation_line
 from deploy_tools.land_lib.outcome import NEXT, Cause, Verdict
+from deploy_tools.land_lib.transitions import transition_line
 
 _BOARD = _REPO / "k8s/roles/observability/files/dashboards/Infrastructure/landings.json"
 
@@ -171,6 +172,19 @@ def _selects(expr: str, line: str) -> bool:
             if not kept:
                 return False
     return True
+
+
+def test_no_panel_counts_a_transition_line_as_a_landing():
+    """Every board query selects `|= "event=landing"`, so a transition event named
+    `landing...` would add a landing to each panel at every state change."""
+    # Only the selecting stages, which come before any `keep`.
+    exprs = [e.split(" | keep ")[0] for e in _board_exprs()]
+    assert all(_selects(e, _sample_line()) for e in exprs if "cause" not in e)
+    assert [
+        e
+        for e in exprs
+        if _selects(e, transition_line("1", "grading", "verdict", 1.0, "settled"))
+    ] == []
 
 
 def test_the_cause_panel_selects_on_a_non_empty_cause():

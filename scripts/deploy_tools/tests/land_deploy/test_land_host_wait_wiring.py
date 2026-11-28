@@ -133,7 +133,7 @@ def test_a_tag_and_a_host_wait_on_the_promotion_then_the_host(land_run):
 def test_the_host_wait_sits_between_the_deploy_phase_and_the_verdict():
     from deploy_tools.land_lib import pipeline
 
-    labels = [label for label, _ in pipeline._STEPS]
+    labels = [label for label, _, _ in pipeline._STEPS]
     assert (
         labels.index("waiting for hosts to apply")
         == labels.index("waiting on the promotion") + 1

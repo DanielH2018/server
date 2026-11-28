@@ -16,6 +16,9 @@ the one that created the directory can replace another's place. A place some oth
 left for the same PR therefore closes the line to that landing.
 
 The line is not a safety gate. A landing that cannot use it waits for the turn without it.
+
+The directory also holds each landing's state record (`transitions.py`), `<pr>.state`, written
+through the same operations and the same ssh session as a place.
 """
 
 import inspect
@@ -25,6 +28,8 @@ import subprocess
 import time
 from collections.abc import Callable
 from pathlib import Path
+
+from deploy_tools.land_lib.serial_lock import TURN_DIR_ENV, TURN_HOST, is_turn_host
 
 # Beside the turn's lock file, on the same tmpfs.
 DIR = Path("/run/lock/homelab-land-line")
@@ -56,12 +61,13 @@ def _op(directory: str, op: str, *args: str) -> str:
       fresh and has no answer, and removes this user's stale places.
     - `answer <pr> <head> <what>` writes `what` into the place, if it still names `head`
       and holds no answer yet or `split`. An empty `what` leaves the place unanswered.
+    - `record <pr> <text>` replaces the PR's state record, `<pr>.state`, with `text`.
 
     Raises:
         ValueError: The PR is not a number, or the operation has no such name.
         OSError: The directory or a place cannot be written.
     """
-    if op not in ("join", "stand", "leave", "waiting", "answer"):
+    if op not in ("join", "stand", "leave", "waiting", "answer", "record"):
         raise ValueError(f"no such operation on the line: {op}")
     if op != "waiting" and not args[0].isdigit():
         raise ValueError(f"not a pull request number: {args[0]}")
@@ -82,14 +88,20 @@ def _op(directory: str, op: str, *args: str) -> str:
         except OSError:
             return []
 
-    def write(pr: str, *words: str) -> None:
-        # A reader never finds a half-written place, and a link at the place's name is replaced, not
+    def replace(name: str, text: str) -> None:
+        # A reader never finds a half-written file, and a link at its name is replaced, not
         # followed.
-        scratch = f"{directory}/.{pr}.{os.getpid()}"
+        scratch = f"{directory}/.{name}.{os.getpid()}"
         with open(scratch, "x", encoding="utf-8") as handle:
-            handle.write(" ".join(words) + "\n")
-        os.replace(scratch, f"{directory}/{pr}")
+            handle.write(text)
+        os.replace(scratch, f"{directory}/{name}")
 
+    def write(pr: str, *words: str) -> None:
+        replace(pr, " ".join(words) + "\n")
+
+    if op == "record":
+        replace(args[0] + ".state", args[1])
+        return ""
     if op == "join":
         write(*args)
         return ""
@@ -132,6 +144,19 @@ def _op(directory: str, op: str, *args: str) -> str:
 def here(directory: Path = DIR) -> Line:
     """The line on this host."""
     return lambda op, *args: _op(str(directory), op, *args)
+
+
+def at_turn_host(hostname: str, directory: Path = DIR) -> Line:
+    """The line for the turn, as the host named `hostname` reaches it.
+
+    `TURN_DIR_ENV` moves it into a directory on this host, whatever the host.
+    """
+    moved = os.environ.get(TURN_DIR_ENV)
+    if moved:
+        return here(Path(moved) / directory.name)
+    if is_turn_host(hostname):
+        return here(directory)
+    return over_ssh(TURN_HOST, directory)
 
 
 _REMOTE = f"""import os, sys, time

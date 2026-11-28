@@ -5,6 +5,7 @@ Run: uv run pytest scripts/deploy_tools/tests/land_merge/test_land_batch_merges.
 `test_land_batch.py` has how a batch forms, and the same fixture and model.
 """
 
+import json
 from dataclasses import replace
 
 import pytest
@@ -149,6 +150,20 @@ def test_the_members_merge_inside_the_landings_two_merge_budgets(
     land(ln)
     assert hub.merged == merged
     assert ("7" in hub.ever_labelled) == ("7" in merged)
+
+
+def test_only_the_holder_writes_a_state_record_counting_the_members_it_merged(
+    batch_of,
+):
+    ln, hub, _ = batch_of(drafts=("5", "7"))
+    land(ln)
+    assert hub.merged == [OWN, "5", "7"]
+    records = [json.loads(c[1][1]) for c in hub.calls if c[0] == "record"]
+    # Each member's own landing writes its PR's record, so the holder writes none for it.
+    assert {c[1][0] for c in hub.calls if c[0] == "record"} == {OWN}
+    assert [r["progress"] for r in records if r["progress"]] == [
+        {"done": done, "total": 2, "what": "batch members merged"} for done in (0, 1, 2)
+    ]
 
 
 def test_a_slow_member_leaves_no_budget_for_the_one_behind_it(batch_of):

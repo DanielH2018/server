@@ -296,6 +296,8 @@ class Tools:
     record_verdict: Callable[[str, int, str], None] = verdict_log.record
     sleep: Callable[[float], None] = time.sleep
     clock: Callable[[], float] = time.monotonic
+    # Epoch seconds, for a time another process reads: `clock` is monotonic.
+    now: Callable[[], float] = time.time
     # None means `host_wait`'s own, which imports this module and so cannot be named here.
     host_targets: Callable[[Path, str], list[Any]] | None = None
     try_turn: Callable[[], Callable[[], None] | None] | None = None
