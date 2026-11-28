@@ -353,7 +353,7 @@ def fresh_cluster_problems(items: list[dict], url: str, tag: str) -> list[str]:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = ArgumentParser(description=__doc__.splitlines()[0])
+    parser = ArgumentParser(description=(__doc__ or "").partition("\n")[0])
     sub = parser.add_subparsers(dest="command", required=True)
     b = sub.add_parser("build", help="write the files the fresh-cluster case applies")
     b.add_argument(

@@ -18,7 +18,7 @@ new read therefore starts by adding its field here. Nested fields the lander doe
 dropped.
 """
 
-from typing import TypedDict
+from typing import Required, TypedDict
 
 from lib.json_types import JsonObject, JsonValue, as_object, as_object_list
 
@@ -37,7 +37,7 @@ class CommitMessage(TypedDict, total=False):
 
 
 class ChangedFile(TypedDict, total=False):
-    path: str
+    path: Required[str]
     # `ADDED`, `MODIFIED`, `DELETED`, ...; absent when `gh` gave none.
     changeType: str
 

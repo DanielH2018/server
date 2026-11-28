@@ -556,7 +556,7 @@ def wait_for_hosts(
     head = f"PR #{pr}, {merge[:12]}"
     pending = list(targets)
     deadlines: dict[str, float] = {}
-    first = True
+    green_at: float | None = None
     progress = OnChange(say)
     while True:
         states = _poll(pending, reads)
@@ -585,8 +585,7 @@ def wait_for_hosts(
             say(f"hosts applied: {', '.join(t.host for t in targets)}")
             return
         now = reads.clock()
-        if first:
-            first = False
+        if green_at is None:
             green_at = now
             unwaitable = _unwaitable(pending, green_at, deadlines)
             if unwaitable:

@@ -441,6 +441,36 @@ def test_an_unreadable_log_reads_as_none(tmp_path):
     assert detach.verdict_in(tmp_path / "absent.log") is None
 
 
+def test_a_landing_stopped_by_sigterm_records_its_code_and_why(tmp_path):
+    """A session SIGTERM'd three landings of #10458, and none left a `.rc` or a reason."""
+    hung_gh = _GH_STUB.replace(
+        'case "$*" in', f'touch "{tmp_path}/gh-called"\nsleep 60\ncase "$*" in', 1
+    )
+    started = subprocess.run(
+        ["bash", str(_LAND_SH), "--pr", "939", "--detach"],
+        env=_env(tmp_path, gh=hung_gh),
+        capture_output=True,
+        text=True,
+        timeout=180,
+    )
+    assert started.returncode == 0, started.stderr
+    [log] = _logs(tmp_path)
+    pid = detach.recorded_pid(log)
+    assert pid is not None
+    try:
+        deadline = time.monotonic() + 60
+        while not (tmp_path / "gh-called").exists() and time.monotonic() < deadline:
+            time.sleep(0.05)
+        os.kill(pid, signal.SIGTERM)
+        assert _recorded(log) == 128 + signal.SIGTERM, log.read_text()
+    finally:
+        with contextlib.suppress(ProcessLookupError):
+            os.kill(pid, signal.SIGKILL)
+    assert (
+        detach.error_in(log) == "land: stopped by SIGTERM before it reached a verdict"
+    )
+
+
 def test_fork_creates_the_log_before_the_landing_can_open_it(tmp_path):
     """The landing never starts, so only the parent's own `touch` can have made the log."""
     log = tmp_path / "land7-20260101-000000.log"

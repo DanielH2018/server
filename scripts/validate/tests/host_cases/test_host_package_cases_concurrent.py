@@ -1,6 +1,6 @@
 """The container cases' runner: it runs the case groups concurrently and still fails the leg.
 
-Each test drives `host_package_cases.main()` with the thirteen case groups, `bootstrap_case` among them, replaced by stubs that
+Each test drives `host_package_cases.main()` with the fourteen case groups, `bootstrap_case` among them, replaced by stubs that
 sleep instead of booting a container, so no Docker is needed. The runner must look the groups
 up when `main()` runs, the three `Cases` methods on the instance and each `validate_lib` case
 module's `run` on that module, and must run them in this process (threads, not
@@ -44,8 +44,12 @@ MODULES = {
     "bootstrap_repo_case": bootstrap_repo_case,
     "bootstrap_age_case": bootstrap_age_case,
 }
+NODE_GROUPS = frozenset(f"node_package_case-{host}" for host in node_package_case.NODES)
 # `bootstrap_case` runs only under `--bootstrap` or `--k3s-download`.
-GROUPS = (frozenset(METHODS) | frozenset(MODULES)) - {"bootstrap_case"}
+GROUPS = (frozenset(METHODS) | frozenset(MODULES) | NODE_GROUPS) - {
+    "bootstrap_case",
+    "node_package_case",
+}
 SLEEP = 0.3
 
 
@@ -76,7 +80,10 @@ def _stub(
     raise_in: str | None,
     no_verdict: str | None = None,
 ) -> Callable:
-    def body(target) -> None:
+    label = name
+
+    def body(target, host: str | None = None) -> None:
+        name = label if host is None else f"{label}-{host}"
         start = time.monotonic()
         for line in range(3):
             print(f"stub-output {name} line {line}", file=cases.sys.stderr, flush=True)
@@ -143,7 +150,7 @@ def test_a_case_with_no_verdict_passes_the_leg_and_is_counted_last(
     last = capfd.readouterr().err.splitlines()[-1]
     assert (status, last) == (
         0,
-        "[NO VERDICT] 1 no verdict, 11 passed; --all to list the passes: ['bootstrap_age_case']",
+        "[NO VERDICT] 1 no verdict, 12 passed; --all to list the passes: ['bootstrap_age_case']",
     )
 
 
@@ -165,8 +172,8 @@ def test_a_failed_case_is_annotated_and_summarised_and_no_pass_is_listed(
         "status": 1,
         "errors": ["::error title=host package case failed::cold_install"],
         "passes": [],
-        "last": "[FAIL] 1 failed, 11 passed; --all to list the passes: ['cold_install']",
-        "summary": ["1 failed, 11 passed", "", "- failed: cold_install"],
+        "last": "[FAIL] 1 failed, 12 passed; --all to list the passes: ['cold_install']",
+        "summary": ["1 failed, 12 passed", "", "- failed: cold_install"],
     }
 
 
@@ -177,7 +184,7 @@ def test_a_clean_run_ends_with_one_count_line(tmp_path, monkeypatch, capfd):
     err = capfd.readouterr().err.splitlines()
     assert (status, err[-1], [line for line in err if "::error" in line]) == (
         0,
-        "[PASS] 12 passed; --all to list the passes",
+        "[PASS] 13 passed; --all to list the passes",
         [],
     )
 
@@ -190,7 +197,7 @@ def test_the_all_flag_lists_each_passing_case(tmp_path, monkeypatch, capfd):
     passes = {
         line.removeprefix("[PASS] ") for line in err[:-1] if line.startswith("[PASS] ")
     }
-    assert (status, passes, err[-1]) == (0, GROUPS, "[PASS] 12 passed")
+    assert (status, passes, err[-1]) == (0, GROUPS, "[PASS] 13 passed")
 
 
 def test_failures_past_the_annotation_cap_are_counted_in_the_last_annotation(capfd):
@@ -256,4 +263,28 @@ def test_the_k3s_download_flag_runs_only_the_bootstrap_group(tmp_path, monkeypat
     assert {"status": status, "ran": set(runs.spans)} == {
         "status": 0,
         "ran": {"bootstrap_case"},
+    }
+
+
+def test_the_shards_split_the_groups_and_the_two_longest_apart(tmp_path, monkeypatch):
+    shards = []
+    for shard in ("1/2", "2/2"):
+        runs, status = _run_main(
+            tmp_path / shard[0], monkeypatch, flags=("--shard", shard)
+        )
+        shards.append((status, set(runs.spans)))
+    (first_status, first), (second_status, second) = shards
+
+    assert {
+        "statuses": (first_status, second_status),
+        "shared": first & second,
+        "together": first | second,
+        "longest": [
+            {"upgrade_path", "bootstrap_age_case"} & ran for ran in (first, second)
+        ],
+    } == {
+        "statuses": (0, 0),
+        "shared": set(),
+        "together": GROUPS,
+        "longest": [{"upgrade_path"}, {"bootstrap_age_case"}],
     }

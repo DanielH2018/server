@@ -12,6 +12,9 @@
   Every run also prunes the timer user's uv cache with `uv cache prune`, which keeps what
   master's lock needs, and a failed prune fails the run
   (`hosts/tests/repo_crons/test_worktree_sweep_cron_reports_its_exit.py::test_a_failed_uv_cache_prune_is_flagged_and_fails_the_run`).
+  A prune that times out on the cache lock, which every live `uv run` holds shared, is skipped
+  for the week and leaves the exit code alone
+  (`hosts/tests/repo_crons/test_worktree_sweep_cron_reports_its_exit.py::test_a_prune_a_running_uv_held_off_is_skipped_and_leaves_the_exit_code`).
   Nothing else.
 - **The script sweeps `$HOME/server`, the clone of the user it runs as.** This component's
   timer runs it as sys_user. `homelab-claude-worktree-sweep.timer`, in the claude-code

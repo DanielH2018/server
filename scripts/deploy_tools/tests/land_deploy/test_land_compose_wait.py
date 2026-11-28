@@ -71,6 +71,7 @@ def test_a_passing_run_at_the_merge_sha_settles():
 def test_a_failed_run_at_the_merge_sha_is_not_settled():
     fetch, _ = _prom(_settled_host(_up(MERGE[:12], value="0")))
     outcome, _ = _wait(_compose_pi(), fetch, [_at(12, 0), _at(12, 30), _at(12, 32)])
+    assert outcome is not None
     assert (outcome.verdict, outcome.rc) == ("deferred", 75)
 
 
@@ -79,6 +80,7 @@ def test_a_passing_run_at_an_older_sha_keeps_waiting():
     outcome, sleeps = _wait(
         _compose_pi(), fetch, [_at(12, 0), _at(12, 30), _at(12, 32)]
     )
+    assert outcome is not None
     assert outcome.verdict == "deferred" and len(sleeps) == 2
 
 

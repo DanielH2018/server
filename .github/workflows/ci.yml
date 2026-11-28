@@ -62,13 +62,13 @@ concurrency:
   # Grouping by SHA means a master run is never queued behind another and so can never be
   # evicted. The cost is concurrent master sweeps rather than serialised ones. Runner minutes
   # are free on a public repo, but runner slots are not: the account runs at most 20 hosted
-  # jobs at once, and a full sweep runs 20 jobs. A concurrent master sweep therefore delays
+  # jobs at once, and a full sweep runs 22 jobs. A concurrent master sweep therefore delays
   # queued PR runs by minutes when the pool is full.
   #
   # The grouping stays anyway. A run that waits for a slot still delivers its SHA's verdict,
   # while an evicted run delivers none, so slot contention costs latency and eviction costs
   # correctness. The levers on the cost side are the share each master run takes and the size
-  # of the pool, not the group key: a full sweep runs 20 jobs against a pool of 20.
+  # of the pool, not the group key: a full sweep runs 22 jobs against a pool of 20.
   #
   # A `workflow_dispatch` run keys on `github.run_id`, which is unique per run, so it lands in a
   # group nothing else can enter. Without that arm it falls through to `github.sha` and joins the
@@ -172,10 +172,22 @@ jobs:
 
   # The `prek` gate job at the bottom carries the required context, under "prek (lint + validate +
   # tests + secrets)".
+  #
+  # Two legs: `validate-alert-rules` alone, and every other hook. That hook ran 118-200 s of a
+  # 166-283 s sweep, and it already spreads its tool calls over the runner's CPUs. A hook added to
+  # prek.toml runs in the second leg. `matrix.checks` puts the same text in both legs' `name:`, so
+  # they share the check-run name `ci_verdict.py` lists; a `name:` with no matrix expression would
+  # get the leg's values appended.
   hooks:
     needs: prove
     if: ${{ (needs.prove.result == 'cancelled' || needs.prove.result == 'failure' || (!cancelled() && needs.prove.outputs.proven != 'true')) && github.event.pull_request.draft != true }}
-    name: hooks (lint + validate + secrets + docs)
+    name: hooks (${{ matrix.checks }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {checks: "lint + validate + secrets + docs", hooks: "validate-alert-rules"}
+          - {checks: "lint + validate + secrets + docs", hooks: "--skip validate-alert-rules"}
     # A versioned runner label, not the `-latest` alias: the `language: system` hooks run whatever
     # shellcheck, Go and systemd-analyze the image preinstalls, and GitHub rolls the alias to a
     # new release with no commit here. The built-in github-actions manager tracks a
@@ -253,7 +265,9 @@ jobs:
       # The script's stamps skip every tool the restored cache already holds. Alloy stays out of
       # the entry: it is 570 MB unpacked. The children are listed, because a `!` pattern
       # filters only paths the globs above it expand, never a directory's contents.
+      # These five steps run only in the leg that runs `validate-alert-rules`, which reads them.
       - name: Cache promtool, amtool, pint and lokitool
+        if: matrix.hooks == 'validate-alert-rules'
         uses: actions/cache@v6.1.0
         with:
           path: |
@@ -262,12 +276,14 @@ jobs:
           key: alert-tools-${{ runner.os }}-${{ hashFiles('scripts/validate/alert_tools.sh', 'k8s/roles/observability/defaults/main.yml', 'k8s/roles/loki-homelab/defaults/main.yml') }}
 
       - name: Provision promtool, amtool, pint and lokitool
+        if: matrix.hooks == 'validate-alert-rules'
         run: scripts/validate/alert_tools.sh
 
       # The pytest shards install none of the binaries, so this step shows the hook's tool phase can
       # fail.
       - name: Read the Alloy pin
         id: alloy
+        if: matrix.hooks == 'validate-alert-rules'
         run: |
           set -euo pipefail
           version=$(sed -nE 's/^loki_homelab_k8s_alloy_image: *[^:]+:v?([0-9]+\.[0-9]+\.[0-9]+)(@.*)?$/\1/p' \
@@ -276,12 +292,14 @@ jobs:
           echo "version=$version" >> "$GITHUB_OUTPUT"
 
       - name: Cache the Alloy release zip
+        if: matrix.hooks == 'validate-alert-rules'
         uses: actions/cache@v6.1.0
         with:
           path: ${{ runner.temp }}/pinned/alloy
           key: alloy-zip-${{ runner.os }}-${{ steps.alloy.outputs.version }}
 
       - name: Prove each alert tool rejects its bad fixture
+        if: matrix.hooks == 'validate-alert-rules'
         env:
           ALERT_TOOLS_ARCHIVES: ${{ runner.temp }}/pinned/alloy
         run: uv run python scripts/validate/alert_rules.py --prove-red
@@ -336,7 +354,7 @@ jobs:
       # already wrote stay in the file.
       - name: "Notice: CLAUDE.md sections citing atoms this PR moved"
         id: notice
-        if: github.event_name == 'pull_request'
+        if: github.event_name == 'pull_request' && matrix.hooks != 'validate-alert-rules'
         continue-on-error: true
         timeout-minutes: 5
         env:
@@ -369,7 +387,7 @@ jobs:
       # Tested as `!= 'success'` so it holds for a timeout whether GitHub records `failure` or
       # `cancelled`.
       - name: Notice step failed
-        if: github.event_name == 'pull_request' && steps.notice.outcome != 'success'
+        if: github.event_name == 'pull_request' && matrix.hooks != 'validate-alert-rules' && steps.notice.outcome != 'success'
         continue-on-error: true
         timeout-minutes: 5
         env:
@@ -383,7 +401,7 @@ jobs:
       # With `continue-on-error` the jobs API reports the failed step as `success`, so an artifact
       # is the only findable record.
       - name: Upload notice failure
-        if: github.event_name == 'pull_request' && steps.notice.outcome != 'success'
+        if: github.event_name == 'pull_request' && matrix.hooks != 'validate-alert-rules' && steps.notice.outcome != 'success'
         continue-on-error: true
         timeout-minutes: 5
         uses: actions/upload-artifact@v7.0.2
@@ -405,7 +423,10 @@ jobs:
         # Without --verbose the job log holds only a failing hook's output.
         env:
           RENDER_TEMPLATES_SKIP: k8s
-        run: prek run --all-files --log-file "$RUNNER_TEMP/prek.log" --skip static-ratchet-tests --skip static-ratchet-tests-python --skip static-ratchet-tests-lander --skip static-ratchet-tests-checksum --skip static-ratchet-tests-shell --skip static-ratchet-tests-renovate --skip static-ratchet-tests-evals --skip static-ratchet-tests-landing --skip static-ratchet-tests-alerts --skip static-ratchet-tests-units --skip static-ratchet-tests-test-modules --color always
+          HOOKS: ${{ matrix.hooks }}
+        run: |
+          # shellcheck disable=SC2086 # $HOOKS is this leg's hook selection, split into words
+          prek run --all-files $HOOKS --log-file "$RUNNER_TEMP/prek.log" --skip static-ratchet-tests --skip static-ratchet-tests-python --skip static-ratchet-tests-lander --skip static-ratchet-tests-checksum --skip static-ratchet-tests-shell --skip static-ratchet-tests-renovate --skip static-ratchet-tests-evals --skip static-ratchet-tests-landing --skip static-ratchet-tests-alerts --skip static-ratchet-tests-units --skip static-ratchet-tests-test-modules --color always
       - name: Write the slowest hooks to the job summary
         if: ${{ !cancelled() }}
         continue-on-error: true
@@ -963,9 +984,9 @@ jobs:
   # the legs' image build and cases. The cases legs pay one more job's setup and the hand-off's
   # transfer before their image build.
   #
-  # `host_packages` has no `name:`, so GitHub shows each leg as `host_packages (<release>,
-  # <python>)`, and later host slices filter `gh run view` on that prefix. The build job's
-  # `name:` therefore does not start with `host_packages`.
+  # `host_packages`'s `name:` shows each leg as `host_packages (<release>, <python>)`, and later
+  # host slices filter `gh run view` on that prefix. The build job's `name:` therefore does not
+  # start with `host_packages`.
   #
   # The merge base is HEAD's first parent on every event but a dispatch. On a pull request HEAD
   # is the merge ref, whose first parent is the base branch tip; on a push it is the previous
@@ -1331,7 +1352,12 @@ jobs:
 
   # A leg skips when `run-cases` says no cases; the condition must skip for no other reason, pinned
   # by `test_ci_skip_proven_master.py`.
+  #
+  # The `name:` leaves the shard out, so a release's shards share the check-run name `ci_verdict.py`
+  # lists. Each shard runs `case_groups.groups`'s share: on one runner the groups ran about 150 s
+  # past `upgrade_path`, the longest group, which no shard can split.
   host_packages:
+    name: host_packages (${{ matrix.release }}, ${{ matrix.python }})
     needs: [prove, host_packages_build]
     if: ${{ (needs.prove.result == 'cancelled' || needs.prove.result == 'failure' || (!cancelled() && needs.prove.outputs.proven != 'true')) && github.event.pull_request.draft != true && needs.host_packages_build.result == 'success' && needs.host_packages_build.outputs.run-cases == 'true' }}
     runs-on: ubuntu-26.04
@@ -1348,7 +1374,8 @@ jobs:
         # A leg's name is a check-run name `hosts/lib/ci_verdict.py` lists, so the job stays a
         # matrix with one release.
         include:
-          - {release: "26.04", python: "3.14"}
+          - {release: "26.04", python: "3.14", shard: "1/2"}
+          - {release: "26.04", python: "3.14", shard: "2/2"}
     env:
       # Skips pyproject.toml's `lint` group, which no step here runs (test_ci_lint_group.py).
       UV_NO_GROUP: lint
@@ -1387,11 +1414,12 @@ jobs:
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
 
-      # Step 5: every case, on this leg's release. The script's docstring lists them.
+      # Step 5: this leg's shard of the cases, on its release. The script's docstring lists them.
       - name: Run the updater cases in systemd containers
         env:
           RELEASE: ${{ matrix.release }}
           PYTHON: ${{ matrix.python }}
+          SHARD: ${{ matrix.shard }}
           UPGRADE: ${{ needs.host_packages_build.outputs.upgrade }}
           TOOLS_CACHE_HIT: ${{ steps.handoff.outputs.cache-hit }}
         run: |
@@ -1407,7 +1435,7 @@ jobs:
           fi
           uv run python scripts/validate/host_package_cases.py --image "homelab-host-test:$RELEASE" \
             --python "$PYTHON" --render "$RUNNER_TEMP/render" --debs "$RUNNER_TEMP/debs" \
-            --work "$RUNNER_TEMP/cases" "${seed[@]}"
+            --work "$RUNNER_TEMP/cases" "${seed[@]}" --shard "$SHARD"
 
   # The `name:` leaves the shard out, so a release's shards share the check-run name `ci_verdict.py`
   # lists; a renamed leg would read as pending to installed copies.
@@ -1476,7 +1504,7 @@ jobs:
           uv run python scripts/validate/host_package_cases.py --image "homelab-host-test:$RELEASE" \
             --python "$PYTHON" --render "$RUNNER_TEMP/render" --debs "$RUNNER_TEMP/debs" \
             --work "$RUNNER_TEMP/cases-bootstrap" "${seed[@]}" --bootstrap \
-            --bootstrap-shard "$SHARD"
+            --shard "$SHARD"
 
   # The bootstrap case whose seed never holds k3s, so install.sh's own download and sha256 check
   # of the release binary run whatever the legs seed. One release

@@ -31,8 +31,11 @@
 # nothing else removes one, so daniel-server's cache had grown to 2.8 GB. `uv cache prune` keeps
 # what master's lock needs, and an offline `uv sync --frozen` succeeds against the pruned cache.
 # A venv hardlinks what it uses, so a pruned file a live venv still holds is freed when that
-# worktree goes. uv locks its cache, so the prune is safe beside a running sync. A failed prune
-# fails the run, unless the pruner already failed it with its own code.
+# worktree goes. Every live `uv run` holds a shared lock on the cache, and the prune waits up to
+# uv's lock timeout for it exclusively. A long fan-out review outlasts that wait, so a prune that
+# times out on the lock is skipped for the week and leaves the exit code alone; uv names the
+# timeout only in its message, which is what the script matches. Any other failed prune fails
+# the run, unless the pruner already failed it with its own code.
 #
 # THE EXIT CODE REACHES HEALTHCHECKS.IO. The pruner exits 1 when a removal or a
 # branch deletion failed. `$rc` on the ping URL is Healthchecks.io's exit-status
@@ -84,7 +87,9 @@ fi
 {% endif %}
 pruned="$(uv cache prune 2>&1)"
 prune_rc=$?
-if [[ $prune_rc -ne 0 ]]; then
+if [[ $prune_rc -ne 0 && "$pruned" == *"when waiting for lock"* ]]; then
+  echo "uv cache not pruned this week: a running uv process held the cache lock past uv's timeout"
+elif [[ $prune_rc -ne 0 ]]; then
   echo "uv cache not pruned: uv cache prune exited $prune_rc: ${pruned##*$'\n'}"
   [[ $rc -eq 0 ]] && rc=$prune_rc
 else

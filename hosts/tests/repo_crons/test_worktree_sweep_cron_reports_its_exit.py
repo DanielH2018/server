@@ -35,6 +35,7 @@ def _run(
     said: str = REMOVED_NONE,
     reap_rc: int = 0,
     prune_rc: int = 0,
+    prune_said: str = "Removed 7 files (1.0MiB)",
     env: dict[str, str] | None = None,
     policy: bool = True,
     user: str = "home",
@@ -43,8 +44,8 @@ def _run(
 
     The pruner stub writes its arguments to `pruner-args` under `tmp_path`, prints `said`
     and exits `sweep_rc`. A `pruner` body replaces that stub, and None leaves the host with
-    no pruner at all. The `uv` stub appends each call's arguments to `uv-calls`, and exits
-    `prune_rc` for `uv cache` and `reap_rc` for anything else.
+    no pruner at all. The `uv` stub appends each call's arguments to `uv-calls`. For `uv cache`
+    it prints `prune_said` and exits `prune_rc`, and for anything else it exits `reap_rc`.
     `env` replaces the inherited environment. `policy=False` leaves the checkout without
     `.claude/prune-worktrees.json`, as a checkout from before that file was added has.
     The script runs with `HOME` at `tmp_path / user`, and `tmp_path / "home"` stands in for
@@ -65,7 +66,7 @@ def _run(
     write_exec(
         home / ".local/bin/uv",
         f'echo "$*" >> {tmp_path / "uv-calls"}\n'
-        f'if [ "$1" = cache ]; then echo "Removed 7 files (1.0MiB)"; exit {prune_rc}; fi\n'
+        f"if [ \"$1\" = cache ]; then echo '{prune_said}'; exit {prune_rc}; fi\n"
         f"exit {reap_rc}\n",
     )
     pinged = tmp_path / "pinged"
@@ -206,6 +207,20 @@ def test_a_failed_uv_cache_prune_is_flagged_and_fails_the_run(tmp_path):
     assert "uv cache not pruned: uv cache prune exited 2" in result.stdout
     assert result.returncode == 2
     assert url == "https://hc-ping.com/k3y/daniel-box-worktree-sweep/2"
+
+
+def test_a_prune_a_running_uv_held_off_is_skipped_and_leaves_the_exit_code(tmp_path):
+    # fact: hosts/components/worktree-sweep/CLAUDE.md#Autonomous-role contract (the timer removes worktrees and branches with no human in the loop)
+    # A fan-out review's `uv run` holds the cache's shared lock for hours.
+    held = (
+        "error: Timeout (300s) when waiting for lock on `/home/u/.cache/uv` at "
+        "`.cache/uv/.lock`, is another uv process running?"
+    )
+    result, url = _run(tmp_path, 0, prune_rc=2, prune_said=held)
+
+    assert "uv cache not pruned this week" in result.stdout
+    assert result.returncode == 0
+    assert url == "https://hc-ping.com/k3y/daniel-box-worktree-sweep/0"
 
 
 def _launcher() -> Path:
