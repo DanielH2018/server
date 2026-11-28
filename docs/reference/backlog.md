@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/backlog.py
-generated_at: 2026-11-28 06:17 UTC
-generated_sha: 696c721c2
+generated_at: 2026-11-28 18:17 UTC
+generated_sha: 23c576cd4
 ---
 
 !!! warning "Generated file — do not edit"
@@ -28,17 +28,9 @@ Findings Claude confirmed and did not fix in the session that found them, filed 
 | [#10338](https://github.com/DanielH2018/server/issues/10338) | medium | gap | - | daniel-pi still resets near 06:00 after the watchdog load limits rose to 24 | 2026-11-26 | 0 | - | ✓ |
 | [#10519](https://github.com/DanielH2018/server/issues/10519) | medium | gap | backup-observability | No alert fires when k3s on daniel-box exits on its own and systemd restarts it | 2026-11-27 | 0 | - | ✓ |
 | [#10531](https://github.com/DanielH2018/server/issues/10531) | medium | gap | - | Check that Claude Duet can call a claude.ai custom connector | 2026-11-27 | 0 | - | - |
-| [#10532](https://github.com/DanielH2018/server/issues/10532) | medium | gap | backup-observability | Back up livesync-data, the encrypted vault, to the weekly B2 tier | 2026-11-27 | 0 | claude/vault-connector-coord-f23e2d | - |
-| [#10561](https://github.com/DanielH2018/server/issues/10561) | medium | feature | cicd | Landing slice 1: write a state record and a transition record for each state change | 2026-11-27 | 0 | - | ✓ |
-| [#10562](https://github.com/DanielH2018/server/issues/10562) | medium | feature | cicd | Landing slice 2: move the turn's ordering decisions into pure functions the code calls | 2026-11-27 | 0 | - | ✓ |
-| [#10564](https://github.com/DanielH2018/server/issues/10564) | medium | feature | cicd | Landing slice 3: serve the landing turn first come, first served, by ticket | 2026-11-27 | 0 | - | ✓ |
-| [#10570](https://github.com/DanielH2018/server/issues/10570) | medium | feature | cicd | Landing slice 4: replace the merge wait's loop with a state machine, by direct cutover | 2026-11-27 | 0 | - | ✓ |
 | [#10571](https://github.com/DanielH2018/server/issues/10571) | medium | feature | cicd | Landing slice 5: one schedule function owns batch formation, the serial rule and slot grants | 2026-11-27 | 0 | - | ✓ |
-| [#10573](https://github.com/DanielH2018/server/issues/10573) | medium | feature | cicd | The deploy UI shows each landing's state, queue position and progress from its state record | 2026-11-27 | 0 | - | ✓ |
 | [#10574](https://github.com/DanielH2018/server/issues/10574) | medium | improvement | cicd | The landing that holds the turn polls faster than a landing that waits | 2026-11-27 | 0 | - | ✓ |
-| [#10575](https://github.com/DanielH2018/server/issues/10575) | medium | improvement | cicd | A batch's CI run lasts as long as its one slowest job: split hooks and the host-package updater cases | 2026-11-27 | 0 | claude/landing-machine-coordinator-0cd9e6 | ✓ |
-| [#10605](https://github.com/DanielH2018/server/issues/10605) | medium | gap | cicd | A landing that holds the turn over ssh does not check its session is alive before it merges | 2026-11-28 | 0 | - | - |
-| [#10618](https://github.com/DanielH2018/server/issues/10618) | medium | gap | backup-observability | Cut livesync-data over to the longhorn class and resume livesync | 2026-11-28 | 0 | - | - |
+| [#10694](https://github.com/DanielH2018/server/issues/10694) | medium | gap | container | Terraria 1.4.5.8 still crashes on a connect-and-drop, and the gates that say "past 1.4.5.7" now read as met | 2026-11-28 | 0 | - | ✓ |
 | [#7220](https://github.com/DanielH2018/server/issues/7220) | low | improvement | docs | Delete the lock-retired lint rule once no branch predates the G2 flip | 2026-11-05 | 0 | - | ✓ |
 | [#8080](https://github.com/DanielH2018/server/issues/8080) | low | gap | cicd | Confirm hosted Renovate regenerates actions.lock on its first Actions bump | 2026-11-12 | 0 | - | ✓ |
 | [#8193](https://github.com/DanielH2018/server/issues/8193) | low | feature | container | Turn on navidrome scrobbling and Lidarr import lists for music discovery | 2026-11-12 | 0 | - | - |
@@ -88,26 +80,42 @@ Findings Claude confirmed and did not fix in the session that found them, filed 
 | [#10467](https://github.com/DanielH2018/server/issues/10467) | low | improvement | container | karakeep archive pruner retries HTTP errors in its own connect loop instead of using flux_job_connect | 2026-11-27 | 0 | - | - |
 | [#10470](https://github.com/DanielH2018/server/issues/10470) | low | improvement | cicd | A landing without the turn marks its draft ready with no branch update, so its one run tests a stale master | 2026-11-27 | 0 | - | ✓ |
 | [#10511](https://github.com/DanielH2018/server/issues/10511) | low | gap | container | ical-proxy's series cap can extend a series that already ended | 2026-11-27 | 0 | - | ✓ |
-| [#10533](https://github.com/DanielH2018/server/issues/10533) | low | feature | - | Serve the vault read-only over MCP on the LAN (vault connector slice 2) | 2026-11-27 | 0 | - | - |
-| [#10534](https://github.com/DanielH2018/server/issues/10534) | low | feature | security | Put the vault MCP server behind Authelia OAuth on a public route for claude.ai (vault connector slice 3) | 2026-11-27 | 0 | - | - |
 | [#10535](https://github.com/DanielH2018/server/issues/10535) | low | feature | - | Let Claude edit vault notes through the connector, with no delete (vault connector slice 4) | 2026-11-27 | 0 | - | - |
 | [#10537](https://github.com/DanielH2018/server/issues/10537) | low | improvement | docs | Record the vault connector's design in an ADR and archive its plan (vault connector slice 5) | 2026-11-27 | 0 | - | - |
 | [#10539](https://github.com/DanielH2018/server/issues/10539) | low | improvement | - | Confirm alert_tools.sh removed the six superseded tool versions after 2026-12-03 | 2026-11-27 | 0 | - | ✓ |
-| [#10553](https://github.com/DanielH2018/server/issues/10553) | low | improvement | container | Fix the pyright errors in 30 roles' shipped files/, about five roles per PR | 2026-11-27 | 0 | - | - |
 | [#10554](https://github.com/DanielH2018/server/issues/10554) | low | improvement | cicd | Annotate the production function signatures outside tests | 2026-11-27 | 0 | - | - |
 | [#10555](https://github.com/DanielH2018/server/issues/10555) | low | gap | cicd | Gate pyright 1.1.414 standard mode in prek and CI once the count reaches zero | 2026-11-27 | 0 | - | - |
 | [#10556](https://github.com/DanielH2018/server/issues/10556) | low | improvement | cicd | Remove the type and lint exclusions a fix at the cause makes unnecessary | 2026-11-27 | 0 | - | - |
 | [#10563](https://github.com/DanielH2018/server/issues/10563) | low | gap | - | The infra map places a service on every node where a workload its name prefixes runs | 2026-11-27 | 0 | - | ✓ |
 | [#10572](https://github.com/DanielH2018/server/issues/10572) | low | feature | cicd | Landing slice 8: the post-merge phases as states, with the verdicts each may end in | 2026-11-27 | 0 | - | ✓ |
 | [#10576](https://github.com/DanielH2018/server/issues/10576) | low | feature | cicd | Landing slice 6: replay a recorded day through schedule to compare policies | 2026-11-27 | 0 | - | ✓ |
-| [#10577](https://github.com/DanielH2018/server/issues/10577) | low | feature | cicd | The deploy UI follows a change through the stages before and after its landing | 2026-11-27 | 0 | - | ✓ |
+| [#10577](https://github.com/DanielH2018/server/issues/10577) | low | feature | cicd | The deploy UI follows a change through the stages before and after its landing | 2026-11-27 | 0 | claude/deploy-ui-change-view-8fc263 | ✓ |
 | [#10578](https://github.com/DanielH2018/server/issues/10578) | low | feature | cicd | Landing slice 7: start the next batch's CI run before the turn frees, if the simulator shows the gain | 2026-11-27 | 0 | - | ✓ |
-| [#10591](https://github.com/DanielH2018/server/issues/10591) | low | improvement | cicd | A host-change batch run still lasts about 400 s: the host build and upgrade_path's serial chain | 2026-11-28 | 0 | - | ✓ |
+| [#10591](https://github.com/DanielH2018/server/issues/10591) | low | improvement | cicd | A host-change batch run still lasts about 400 s: the host build and upgrade_path's serial chain | 2026-11-28 | 0 | claude/landing-machine-coordinator-0cd9e6 | ✓ |
 | [#10593](https://github.com/DanielH2018/server/issues/10593) | low | improvement | cicd | A stopped landing does not record who sent the signal | 2026-11-28 | 0 | - | - |
 | [#10603](https://github.com/DanielH2018/server/issues/10603) | low | improvement | cicd | Decide whether one 15-minute Alertmanager rule should hold every observability deploy's soak at 1020 s | 2026-11-28 | 0 | - | ✓ |
 | [#10609](https://github.com/DanielH2018/server/issues/10609) | low | improvement | cicd | repo_guards.py misses the renderer size ceiling and the mkdocs nav tests that failed five pr-ci-red landings | 2026-11-28 | 1 | - | ✓ |
 | [#10616](https://github.com/DanielH2018/server/issues/10616) | low | gap | cicd | test_promote_workflow_retry's unsigned-digest case flakes on SIGPIPE (exit 141) | 2026-11-28 | 0 | - | - |
 | [#10626](https://github.com/DanielH2018/server/issues/10626) | low | improvement | cicd | Record the seconds a serial PR yields the landing turn in the ledger | 2026-11-28 | 0 | - | - |
+| [#10639](https://github.com/DanielH2018/server/issues/10639) | low | improvement | cicd | Annotate the production signatures in scripts/deploy_tools and scripts/dev | 2026-11-28 | 0 | - | - |
+| [#10640](https://github.com/DanielH2018/server/issues/10640) | low | improvement | cicd | Annotate the production signatures in scripts/diagnostics | 2026-11-28 | 0 | - | - |
+| [#10641](https://github.com/DanielH2018/server/issues/10641) | low | improvement | cicd | Annotate the production signatures in the rest of scripts/ and .claude/ | 2026-11-28 | 0 | - | - |
+| [#10642](https://github.com/DanielH2018/server/issues/10642) | low | improvement | cicd | Annotate the production signatures in hosts/, tests/ and evals/ production code | 2026-11-28 | 0 | - | - |
+| [#10655](https://github.com/DanielH2018/server/issues/10655) | low | improvement | container | autofix-bridge passes *arr queue records as raw dicts through its decision functions | 2026-11-28 | 0 | - | ✓ |
+| [#10657](https://github.com/DanielH2018/server/issues/10657) | low | gap | cicd | A yielded landing's state record does not say what it waits for | 2026-11-28 | 0 | - | ✓ |
+| [#10658](https://github.com/DanielH2018/server/issues/10658) | low | gap | cicd | Nothing removes old landing state records from the line's directory | 2026-11-28 | 0 | - | ✓ |
+| [#10660](https://github.com/DanielH2018/server/issues/10660) | low | gap | cicd | A landing over ssh does not notice when it loses its slot, serial or PR lock | 2026-11-28 | 0 | - | ✓ |
+| [#10663](https://github.com/DanielH2018/server/issues/10663) | low | gap | backup-observability | vault-mcp's LAN route has no edge probe | 2026-11-28 | 0 | - | ✓ |
+| [#10664](https://github.com/DanielH2018/server/issues/10664) | low | gap | cicd | Landing state records are written with the writer's umask, so another user's record can be unreadable to the deploy UI | 2026-11-28 | 0 | - | ✓ |
+| [#10668](https://github.com/DanielH2018/server/issues/10668) | low | improvement | cicd | Type flux_job_connect.open_url's return so Job scripts can annotate a response | 2026-11-28 | 0 | - | - |
+| [#10672](https://github.com/DanielH2018/server/issues/10672) | low | improvement | container | vault-mcp walks the whole vault on every tool call and may block its event loop | 2026-11-28 | 0 | - | - |
+| [#10673](https://github.com/DanielH2018/server/issues/10673) | low | gap | backup-observability | vault-mcp has no edge probe, so a broken router turns no monitor red | 2026-11-28 | 0 | - | - |
+| [#10679](https://github.com/DanielH2018/server/issues/10679) | low | improvement | cicd | A remote landing runs two ssh commands on a poll that may take the turn | 2026-11-28 | 0 | - | ✓ |
+| [#10688](https://github.com/DanielH2018/server/issues/10688) | low | gap | backup-observability | vault-mcp's JWKS fetch serialises requests during an Authelia outage, and no probe sees a broken fetch | 2026-11-28 | 0 | - | - |
+| [#10689](https://github.com/DanielH2018/server/issues/10689) | low | improvement | security | vault-mcp's issuer is a literal, and Claude Code cannot sign in to the connector | 2026-11-28 | 0 | - | - |
+| [#10692](https://github.com/DanielH2018/server/issues/10692) | low | gap | - | The merge wait keeps in_turn after a step-out whose re-take of the turn failed | 2026-11-28 | 0 | - | ✓ |
+| [#10695](https://github.com/DanielH2018/server/issues/10695) | low | gap | - | The merge-wait corpus's batch coverage check reads the scenario draw, not whether a batch formed | 2026-11-28 | 0 | - | ✓ |
+| [#10699](https://github.com/DanielH2018/server/issues/10699) | low | improvement | cicd | Drop vault-mcp's explicit traefik edge and its over-derived exemption once its route renders | 2026-11-28 | 0 | - | - |
 
 ## Deferred, by date
 
@@ -138,19 +146,14 @@ Open findings with an open "blocked by" issue. `findings.py next` withholds each
 | # | Blocked by | Finding |
 |---|---|---|
 | [#8539](https://github.com/DanielH2018/server/issues/8539) | #8193 | Add Explo: ListenBrainz discovery playlists in Navidrome |
-| [#10534](https://github.com/DanielH2018/server/issues/10534) | #10533 | Put the vault MCP server behind Authelia OAuth on a public route for claude.ai (vault connector slice 3) |
-| [#10535](https://github.com/DanielH2018/server/issues/10535) | #10534 | Let Claude edit vault notes through the connector, with no delete (vault connector slice 4) |
-| [#10537](https://github.com/DanielH2018/server/issues/10537) | #10534 | Record the vault connector's design in an ADR and archive its plan (vault connector slice 5) |
-| [#10555](https://github.com/DanielH2018/server/issues/10555) | #10553 | Gate pyright 1.1.414 standard mode in prek and CI once the count reaches zero |
+| [#10554](https://github.com/DanielH2018/server/issues/10554) | #10642 | Annotate the production function signatures outside tests |
 | [#10556](https://github.com/DanielH2018/server/issues/10556) | #10555 | Remove the type and lint exclusions a fix at the cause makes unnecessary |
-| [#10564](https://github.com/DanielH2018/server/issues/10564) | #10562 | Landing slice 3: serve the landing turn first come, first served, by ticket |
-| [#10570](https://github.com/DanielH2018/server/issues/10570) | #10564 | Landing slice 4: replace the merge wait's loop with a state machine, by direct cutover |
-| [#10571](https://github.com/DanielH2018/server/issues/10571) | #10570 | Landing slice 5: one schedule function owns batch formation, the serial rule and slot grants |
-| [#10572](https://github.com/DanielH2018/server/issues/10572) | #10570 | Landing slice 8: the post-merge phases as states, with the verdicts each may end in |
-| [#10573](https://github.com/DanielH2018/server/issues/10573) | #10561 | The deploy UI shows each landing's state, queue position and progress from its state record |
-| [#10576](https://github.com/DanielH2018/server/issues/10576) | #10561, #10571 | Landing slice 6: replay a recorded day through schedule to compare policies |
-| [#10577](https://github.com/DanielH2018/server/issues/10577) | #10573 | The deploy UI follows a change through the stages before and after its landing |
+| [#10576](https://github.com/DanielH2018/server/issues/10576) | #10571 | Landing slice 6: replay a recorded day through schedule to compare policies |
 | [#10578](https://github.com/DanielH2018/server/issues/10578) | #10576 | Landing slice 7: start the next batch's CI run before the turn frees, if the simulator shows the gain |
+| [#10639](https://github.com/DanielH2018/server/issues/10639) | #10556 | Annotate the production signatures in scripts/deploy_tools and scripts/dev |
+| [#10640](https://github.com/DanielH2018/server/issues/10640) | #10639 | Annotate the production signatures in scripts/diagnostics |
+| [#10641](https://github.com/DanielH2018/server/issues/10641) | #10640 | Annotate the production signatures in the rest of scripts/ and .claude/ |
+| [#10642](https://github.com/DanielH2018/server/issues/10642) | #10641 | Annotate the production signatures in hosts/, tests/ and evals/ production code |
 
 ## Settled findings — do not re-flag
 
