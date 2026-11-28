@@ -11,7 +11,10 @@ against one run with it.
 The turn is an advisory lock on one file on `TURN_HOST`. A landing there locks the file itself.
 A landing on another host holds the same lock through an ssh session that lasts as long as
 the landing, so both hosts take turns with each other. Either way the lock ends with the
-landing's process, so a landing that dies gives the turn up.
+landing's process, so a landing that dies gives the turn up. sshd on `TURN_HOST` never probes
+a client, so a host that loses power or its network sends no close. A landing on another host
+therefore writes a heartbeat into the session every `HEARTBEAT_S`, and the script on
+`TURN_HOST` frees the lock once three intervals pass without one.
 
 A landing asks for the turn when it is ready to use it (`merge.await_merge`): before the one
 run of a head that has had none, and otherwise once its head is green. It never holds the
@@ -50,8 +53,9 @@ import inspect
 import os
 import shlex
 import subprocess
+import threading
 from collections.abc import Callable, Generator, Sequence
-from typing import NoReturn
+from typing import IO, NoReturn
 
 from pathlib import Path as _Path
 
@@ -72,6 +76,11 @@ LOCK = LOCK_DIR / "homelab-land-turn.lock"
 
 # How long a landing on another host waits for `TURN_HOST` to give up the lock it released.
 _SSH_EXIT_S = 10
+# DECIDED: 5.0 s, three missed heartbeats free an ssh-held lock (operator, 2026-11-28). A landing
+# on another host that stays alive but silent that long (a stopped process, or a network stall
+# between the hosts) loses its lock unaware, so a second landing can take the turn. The turn is
+# not a safety gate: the merge keeps its head-SHA pin and its stale_base check.
+HEARTBEAT_S = 5.0
 
 
 def _lock(path: str) -> int | None:
@@ -135,13 +144,15 @@ def lock_below(paths: list[str], cap: int) -> int | None:
     return keep
 
 
-_HOLD = f"""import fcntl, os, sys
+# argv: the heartbeat interval in seconds, the cap, then the lock files.
+_HOLD = f"""import fcntl, os, select, sys
 {inspect.getsource(_lock)}
 {inspect.getsource(lock_below)}
-fd = lock_below(sys.argv[2:], int(sys.argv[1]))
+fd = lock_below(sys.argv[3:], int(sys.argv[2]))
 print("busy" if fd is None else "held", flush=True)
 if fd is not None:
-    sys.stdin.read()
+    while select.select([0], [], [], 3 * float(sys.argv[1]))[0] and os.read(0, 4096):
+        pass
 """
 
 
@@ -205,8 +216,8 @@ def hold_over_ssh(
 ) -> tuple[str, subprocess.Popen[str], Callable[[], None]]:
     """Run `script` on `host` with `args`, through an ssh session it can outlast a call in.
 
-    The script prints one line, then reads its stdin until that closes, which is how a
-    lock it took lasts as long as the session.
+    The script prints one line, then reads its stdin, which is how a lock it took lasts as
+    long as the session.
 
     Returns:
         The line the script printed, the session, and the call that ends the session.
@@ -255,13 +266,31 @@ def hold_over_ssh(
     return answer, session, release
 
 
+def _heartbeat(stdin: IO[str], stop: threading.Event, beat: float) -> None:
+    """Write a byte into `stdin` every `beat` seconds until `stop` is set or the pipe breaks."""
+    while not stop.wait(beat):
+        try:
+            stdin.write("\n")
+            stdin.flush()
+        except OSError, ValueError:
+            return
+
+
 def try_take_over_ssh(
-    paths: Sequence[_Path] = (LOCK,), cap: int = 1, host: str = TURN_HOST
+    paths: Sequence[_Path] = (LOCK,),
+    cap: int = 1,
+    host: str = TURN_HOST,
+    beat: float = HEARTBEAT_S,
 ) -> Callable[[], None] | None:
     """`lock_below(paths, cap)` on `host` without waiting, through an ssh session.
 
-    The session holds the lock until the call it returns closes it. The turn is one file
-    under a cap of 1; the landing slots (`slots.py`) are several.
+    The session holds the lock until the call it returns closes it, or until `host` reads no
+    heartbeat for three `beat` intervals. A thread of this process writes the heartbeat, so a
+    process forked from this one does not keep the lock. The turn is one file under a cap of
+    1; the landing slots (`slots.py`) are several.
+
+    Args:
+        beat: the seconds between heartbeats; a test shortens it.
 
     Returns:
         The call that gives the lock up, or None while other landings hold `cap` of the files.
@@ -269,10 +298,22 @@ def try_take_over_ssh(
     Raises:
         OSError: `host` did not answer, or could not open a lock file.
     """
-    answer, _, release = hold_over_ssh(host, _HOLD, [str(cap), *map(str, paths)])
+    answer, session, end = hold_over_ssh(
+        host, _HOLD, [str(beat), str(cap), *map(str, paths)]
+    )
     if answer == "held":
+        assert session.stdin
+        stop = threading.Event()
+        threading.Thread(
+            target=_heartbeat, args=(session.stdin, stop, beat), daemon=True
+        ).start()
+
+        def release() -> None:
+            stop.set()
+            end()
+
         return release
-    release()
+    end()
     if answer == "busy":
         return None
     raise OSError(f"ssh {host}: answered {answer!r}")
