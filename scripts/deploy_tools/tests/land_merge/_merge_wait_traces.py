@@ -19,9 +19,10 @@ from pathlib import Path
 from typing import cast
 
 from _land_fakes import PRIMARY
-from _merge_wait_scenarios import Scenario, landing, scenario
+from _merge_wait_scenarios import Scenario, TurnBy, arm, landing, scenario
 from deploy_tools import await_ci
 from deploy_tools.land_lib import (
+    batch,
     failing_checks,
     merge,
     pin_gate,
@@ -46,6 +47,8 @@ CORPUS = Path(__file__).with_name("merge_wait_traces.txt")
 _SEED = "# seed "
 # The seeds the corpus records, one scenario each.
 SEEDS = range(200)
+# The PR a batch member's landing lands, beside the holder's.
+MEMBER_PR = "1000"
 _CI = {
     CI_GREEN: Ci.GREEN,
     CI_RED: Ci.RED,
@@ -80,16 +83,29 @@ class _Printed(io.TextIOBase):
         return len(text)
 
 
+def _offered(ln: Landing, sc: Scenario, wait: Wait) -> None:
+    """Run `wait` with the turn offered as `sc.turn_by` says, as that caller offers it."""
+    if sc.turn_by is TurnBy.NONE:
+        wait(ln, merge._no_turn)
+        return
+    with turn.held(ln) as take_turn:
+        if sc.turn_by is TurnBy.HELD:
+            wait(ln, take_turn)
+        elif sc.turn_by is TurnBy.BATCH:
+            wait(ln, batch.forming(ln, take_turn))
+        else:
+            take_turn("")
+            member = batch._member(ln, MEMBER_PR)
+            arm(member, sc)
+            wait(member, lambda _draft: (True, 0))
+
+
 def trace(sc: Scenario, wait: Wait) -> list[str]:
     """What `wait` does over the fakes `sc` describes, as lines of text."""
     ln, calls = landing(sc)
     with contextlib.redirect_stdout(_Printed(calls)):
         try:
-            if sc.held:
-                with turn.held(ln) as take_turn:
-                    wait(ln, take_turn)
-            else:
-                wait(ln, merge._no_turn)
+            _offered(ln, sc, wait)
             end = "merged"
         except Outcome as exc:
             end = f"outcome rc={exc.rc} verdict={exc.verdict} error={exc.error}"

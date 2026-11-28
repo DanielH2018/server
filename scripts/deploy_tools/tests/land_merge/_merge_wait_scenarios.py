@@ -9,6 +9,7 @@ answers as a scenario says.
 import random
 from collections.abc import Callable
 from dataclasses import dataclass, field, replace
+from enum import StrEnum
 from typing import Any
 
 from _land_fakes import MERGE_SHA, Fakes, make_landing
@@ -55,6 +56,19 @@ _CHECK_RUNS = (
 )
 
 
+class TurnBy(StrEnum):
+    """Who offers a merge wait the landing turn, as each caller of `merge.await_merge` does."""
+
+    # `turn.held`, as the pipeline offers it to a landing that forms no batch.
+    HELD = "held"
+    # No turn: `merge._no_turn`.
+    NONE = "none"
+    # `batch.forming` over `turn.held`, as `batch.land` offers it.
+    BATCH = "batch"
+    # A batch member's wait, inside the turn its holder holds (`batch._merge_member`).
+    MEMBER = "member"
+
+
 @dataclass(frozen=True)
 class Scenario:
     """What every boundary of one merge wait answers, in a shape JSON holds.
@@ -70,11 +84,11 @@ class Scenario:
         compare: Whether master moved on a path the PR leaves alone, per compare read.
         runs: Which of `_RUNS` the head's `ci.yml` runs are.
         check_runs: Which of `_CHECK_RUNS` the head's check-runs are.
-        turn_lost: For a wait outside `turn.held`, what each `ln.turn_lost` answers.
+        turn_lost: For a wait with no turn to offer, what each `ln.turn_lost` answers.
         merge_timeout: `--merge-timeout`.
         merge_poll: `--merge-poll`.
         direct: Whether this landing merges the PR itself.
-        held: Whether the wait runs inside `turn.held`, as the pipeline runs it.
+        turn_by: Who offers the wait the landing turn (`TurnBy`).
         pinned: Whether the landing policy pinned the first head.
         tested: Whether a landing batch tested the first head on master's tip.
         batched_s: The seconds of the batch's run the wait counts.
@@ -94,7 +108,7 @@ class Scenario:
     merge_timeout: int = 300
     merge_poll: int = 30
     direct: bool = True
-    held: bool = True
+    turn_by: TurnBy = TurnBy.HELD
     pinned: bool = False
     tested: bool = False
     batched_s: int = 0
@@ -106,6 +120,7 @@ class Scenario:
         fields: dict[str, Any] = dict(raw)
         fields["polls"] = [tuple(p) for p in raw["polls"]]
         fields["ci"] = [tuple(c) for c in raw["ci"]]
+        fields["turn_by"] = TurnBy(raw["turn_by"])
         return cls(**fields)
 
 
@@ -162,7 +177,9 @@ def scenario(rng: random.Random) -> Scenario:
         merge_timeout=rng.choice([60, 300, 1800]),
         merge_poll=rng.choice([30, 30, 300]),
         direct=rng.random() < 0.85,
-        held=rng.random() < 0.7,
+        turn_by=rng.choice(
+            [*[TurnBy.HELD] * 3, *[TurnBy.NONE, TurnBy.BATCH, TurnBy.MEMBER] * 2]
+        ),
         tested=rng.random() < 0.25,
         batched_s=rng.choice([0, 0, 120]),
         interrupted=rng.random() < 0.2,
@@ -179,7 +196,7 @@ def scenario(rng: random.Random) -> Scenario:
             turn=[True],
             compare=[True],
             runs=0,
-            held=True,
+            turn_by=TurnBy.HELD,
             pinned=True,
         )
     if kind < 0.35:
@@ -205,11 +222,14 @@ def scenario(rng: random.Random) -> Scenario:
             merge_rc=[0],
             compare=[False],
             turn=[True],
-            held=True,
+            turn_by=TurnBy.HELD,
             direct=True,
             tested=True,
             interrupted=rng.random() < 0.7,
         )
+    if drawn.turn_by is TurnBy.MEMBER:
+        # A holder stacks a member only while it holds the turn.
+        return replace(drawn, turn=[True])
     return drawn
 
 
@@ -276,6 +296,12 @@ def landing(sc: Scenario) -> tuple[Landing, list]:
         return gh_json(*args, **kwargs)
 
     ln.tools = replace(ln.tools, gh_json=bounded, await_ci=_CiRead(sc.ci))
+    arm(ln, sc)
+    return ln, calls
+
+
+def arm(ln: Landing, sc: Scenario) -> None:
+    """Set the fields of `ln` that `sc` names, as the landing has them when its wait starts."""
     if sc.direct:
         ln.direct_merge_subject = "Land it"
     if sc.pinned:
@@ -284,7 +310,7 @@ def landing(sc: Scenario) -> tuple[Landing, list]:
         ln.tested_head, ln.tested_on = HEAD, MERGE_SHA
     ln.batched_s = sc.batched_s
     ln.turn_interrupted = sc.interrupted
-    if not sc.held:
+    if sc.turn_by is TurnBy.NONE:
         answers = iter(sc.turn_lost)
         last = [False]
 
@@ -293,4 +319,3 @@ def landing(sc: Scenario) -> tuple[Landing, list]:
             return last[0]
 
         ln.turn_lost = lost
-    return ln, calls

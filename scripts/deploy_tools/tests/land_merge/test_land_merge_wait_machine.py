@@ -20,7 +20,7 @@ import pytest
 from hypothesis import given
 from hypothesis import strategies as st
 
-from _merge_wait_scenarios import scenario
+from _merge_wait_scenarios import TurnBy, scenario
 from _merge_wait_traces import SEEDS, corpus, drive, loop, record, trace
 from deploy_tools.land_lib.core import landing_actions as a
 from deploy_tools.land_lib.core import landing_machine
@@ -88,6 +88,7 @@ def test_the_corpus_reaches_every_action_and_every_end(recorded):
     actions = {kind.__name__ for kind in a.Action.__value__.__args__} - {"Die"}
     ends = {f"end {end}" for end in a.End}
     assert not (actions | ends) - seen, sorted((actions | ends) - seen)
+    assert {sc.turn_by for _, sc, _ in recorded} == set(TurnBy)
 
 
 def _green_in_turn() -> LandingState:
