@@ -89,18 +89,20 @@ spec:
             - containerPort: {{ container_item.port }}
 {{ hardened_security_context(read_only=true, non_root=true) }}
           env:
-            - name: VAULT_MCP_TOKEN
-              valueFrom:
-                secretKeyRef:
-                  name: vault-mcp-token
-                  key: VAULT_MCP_TOKEN
+            - name: VAULT_MCP_RESOURCE_URL
+              value: "{{ vault_mcp_connector_url }}"
+            - name: VAULT_MCP_ISSUER
+              value: "https://auth.{{ domain }}"
+{# The LAN name: the pod reaches Authelia through Traefik, as Grafana does. #}
+            - name: VAULT_MCP_JWKS_URL
+              value: "https://auth.local.{{ domain }}/jwks.json"
             - name: VAULT_MCP_ROOT
               value: /vault
             - name: VAULT_MCP_EXCLUDE_PATHS
               value: {{ vault_mcp_exclude_paths | join('\n') | to_json }}
-            # Trusted host for the MCP transport's DNS-rebinding guard (else 421).
-            - name: MCP_PUBLIC_HOST
-              value: vault-mcp.local.{{ domain }}
+            # Trusted hosts for the MCP transport's DNS-rebinding guard (else 421).
+            - name: MCP_HOSTS
+              value: "vault-mcp.{{ domain }} vault-mcp.local.{{ domain }}"
             - name: PORT
               value: "{{ container_item.port }}"
             - name: PYTHONDONTWRITEBYTECODE

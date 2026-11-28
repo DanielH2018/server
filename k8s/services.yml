@@ -564,4 +564,8 @@ containers_list:
     no_backup_claims: [vault-mcp-vault, vault-mcp-db]
     depends_on: [livesync, traefik]  # the pod reads livesync's Secret; traefik routes it
     port: 8000
+    hostname: "vault-mcp"
+    probe: false  # blackbox-extra's http_401 target covers it
+    # claude.ai's connector cannot pass forward-auth; the app checks Authelia's OAuth tokens.
+    use_authelia: false
   - name: netpol-baseline

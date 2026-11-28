@@ -4,7 +4,7 @@ FROM python:3.15-slim@sha256:63bb298d2b7b88f176f51b5189f54ce6535c997682ea70885d2
 WORKDIR /app
 # mcp stays on 1.x, as in homelab-mcp's Dockerfile: 2.0.0 removed mcp.server.fastmcp. Every
 # package is pinned exact, because a range re-resolves to the newest release on every rebuild.
-RUN pip install --no-cache-dir mcp==1.30.0 uvicorn==0.54.0 pyyaml==6.0.4
+RUN pip install --no-cache-dir mcp==1.30.0 uvicorn==0.54.0 pyyaml==6.0.4 pyjwt[crypto]==2.15.1
 # COPY . (not a multi-file COPY): ConfigMap mount files are symlinks into ..data/, and buildkit
 # drops all but the first from a multi-file COPY.
 COPY . ./

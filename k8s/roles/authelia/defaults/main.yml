@@ -29,6 +29,11 @@ authelia_k8s_manage_crowdsec: true
 # It gates the config block only, not forward-auth, sessions or users.
 authelia_k8s_manage_oidc: true
 
+# The `vault-mcp` OIDC client, its authorization policy and its lifespan. False cuts claude.ai's
+# vault connector off: no new sign-in and no refresh. An access token already issued stays valid
+# for up to its 1h lifespan, because the vault-mcp server checks tokens offline against the JWKS.
+authelia_k8s_vault_mcp_client: true
+
 # A multi-line PEM no Flux placeholder can carry, so it ships as a SOPS-encrypted manifest, applied
 # when authelia_k8s_manage_oidc is true.
 render_sops_manifests: [oidc-jwk-secret.yaml]

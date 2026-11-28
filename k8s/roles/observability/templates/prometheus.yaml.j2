@@ -236,6 +236,8 @@ data:
             labels: {service: scrutiny, module: http_2xx, page_tier: warning}
           - targets: ['https://mcp.local.{{ domain }}/health']
             labels: {service: homelab-mcp, module: http_body_ok, page_tier: warning}
+          - targets: ['https://vault-mcp.local.{{ domain }}/mcp']
+            labels: {service: vault-mcp, module: http_401, page_tier: warning}
 {% if traefik_k8s_manage_crowdsec | default(true) %}
           - targets: ['https://edge-selfcheck.local.{{ domain }}/.well-known/traefik-edge-selfcheck']
             labels: {service: traefik, module: http_body_OK, page_tier: critical}

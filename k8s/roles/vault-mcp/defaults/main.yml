@@ -37,13 +37,9 @@ image_builder_builds:
     image_builder_context_files:
       "{{ role_file('files/vault_server.py') }}": app.py
       "{{ role_file('files/vault_notes.py') }}": vault_notes.py
-      # The bearer check and the transport allowlist; an edit there rebuilds this image too.
+      "{{ role_file('files/oauth_resource.py') }}": oauth_resource.py
+      # The transport allowlist; an edit there rebuilds this image too.
       "{{ role_file('files/safe_reads.py', role='homelab-mcp') }}": safe_reads.py
-
-render_secrets:
-  - name: vault-mcp-token
-    string_data:
-      VAULT_MCP_TOKEN: vault_mcp_token
 
 # Both claims rebuild from CouchDB. The vault claim holds the decrypted vault, so a backup of it
 # would put plaintext on B2; `livesync-data`, which is ciphertext, is the copy worth backing up.

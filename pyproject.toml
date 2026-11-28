@@ -72,6 +72,8 @@ dev = [                              # `dev` is uv's default group for `uv run`/
   "hypothesis>=6.170",              # property tests; profiles in tests/hypothesis_profiles.py
   "icalendar",                      # ical-proxy ical_proxy.py parses and writes every feed with it (test_app.py)
   "import-linter>=2.17",            # [tool.importlinter] contracts (test_scripts_import_direction.py)
+  "pyjwt[crypto]",                  # vault-mcp oauth_resource.py checks Authelia's RS256 tokens (test_oauth_resource.py)
+  "mcp>=1.30,<2",                   # vault-mcp vault_server.py's real ASGI app (test_vault_server.py); <2 as in its Dockerfile
 ]
 # Local test reruns only, absent from `default-groups`, so CI never installs it. docs/ci-throughput.md
 # says how to run it. The cap keeps testmon below 2.4.0, which has not been measured here.
@@ -145,6 +147,9 @@ pythonpath = [
   # Without this, `from jobs_metrics import ...` in autofix.py resolves only when a crowdsec test
   # collected first.
   "k8s/roles/crowdsec/files",
+  # vault-mcp's image ships homelab-mcp's safe_reads.py beside vault_server.py, so its tests
+  # import it from here.
+  "k8s/roles/homelab-mcp/files",
   "scripts/renderer/job_files",
   "hosts/components/claude-code/files",
   # The same for the renovate-agent, renovate-notify, fake-remux, hypervisor and

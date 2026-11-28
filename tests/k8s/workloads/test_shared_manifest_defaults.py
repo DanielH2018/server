@@ -91,6 +91,7 @@ ROLES_WITH_A_DEFAULT_INGRESSROUTE = frozenset(
         "sonarr",
         "tdarr",
         "texbrain",
+        "vault-mcp",
         "wg-easy",
         "zigbee2mqtt",
     }

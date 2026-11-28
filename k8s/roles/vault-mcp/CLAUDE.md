@@ -7,7 +7,7 @@ See repo-root `CLAUDE.md` for shared conventions.
 - **Applied by:** Flux, through `promote`; `land.sh --tags=vault-mcp` gates the rollout
 - **Images:** `ghcr.io/vrtmrz/livesync-cli` (`vault_mcp_k8s_livesync_cli_image`),
   `ghcr.io/danielh2018/vault-mcp` (`vault_mcp_k8s_image`)
-- **Route:** none (no `templates/ingressroute.yaml.j2`)
+- **Route:** `vault-mcp.<domain>` · `vault-mcp.local.<domain>`, no Authelia
 - **Claims:** `vault-mcp-db` (no backup (StorageClass longhorn-nobackup)), `vault-mcp-vault`
   (no backup (StorageClass longhorn-nobackup))
 <!-- /generated_from -->
@@ -49,22 +49,46 @@ See repo-root `CLAUDE.md` for shared conventions.
   would show the excluded folders, so
   `k8s/roles/vault-mcp/files/vault_notes.py:exclude_paths_from_env` exits. An empty value
   hides no folder and logs a warning.
-- **The route is `vault-mcp.local.<domain>`, LAN-only, behind a bearer token.** The
-  `vault-mcp-local` router lives in traefik's file-provider gate Secret
-  (`k8s/roles/traefik/templates/livesync-gate-secret.yaml.j2`), as homelab-mcp's does, so the
-  token stays out of CRD objects the readonly kubeconfig can list. The app checks the same
-  token again with homelab-mcp's `safe_reads.bearer_token_valid`, which the image carries.
-- **A `vault_mcp_token` rotation crosses two Kustomizations.** traefik's gate Secret matches
-  the token, and this role's `vault-mcp-token` Secret hands it to the app. Each copy applies
-  when its own Kustomization reconciles, so bearer calls fail until both have applied.
-- **The daemon has no probes; the server has two.** The daemon serves nothing, so a crash
-  shows as a restart. The server's readiness probe calls `/health`, which the bearer check
-  exempts.
+- **The route is `vault-mcp.<domain>`, with no Authelia middleware, and the app enforces
+  OAuth.** claude.ai's custom connector cannot pass forward-auth, so it signs in through
+  Authelia's `vault-mcp` OIDC client (`k8s/roles/authelia/templates/config-secret.yaml.j2`)
+  with 2FA, and sends the RS256 access token Authelia issues.
+  `k8s/roles/vault-mcp/files/oauth_resource.py:ResourceServer` checks each token's signature
+  against Authelia's JWKS, its `typ`, issuer, audience, its `client_id` (`vault-mcp`) and its
+  `exp`, `nbf` and `iat`, allowing 60 seconds of clock skew. Any error during the check refuses
+  the token. A request without a valid token gets 401 with the `WWW-Authenticate` challenge
+  that names the protected-resource metadata, which the app serves at
+  `/.well-known/oauth-protected-resource/mcp` and `/.well-known/oauth-protected-resource`.
+  The challenge carries `error="invalid_token"` only when the request sent a bearer token.
+- **Only a GET of `/health` or of either metadata path passes without a token.** The match is
+  exact, so `/health/`, `/HEALTH` and `/health/../mcp` get the 401 too.
+  `k8s/roles/vault-mcp/tests/test_vault_server.py` drives the real ASGI app over these paths.
+- **To cut claude.ai off, set `authelia_k8s_vault_mcp_client: false` in
+  `k8s/roles/authelia/defaults/main.yml`, or rotate `vault_mcp_oidc_client_secret` and its
+  hash (`docs/secret-rotation.md`).** Either one stops new sign-ins and refreshes once it
+  lands. An access token already issued stays valid for up to its 1h lifespan, because this
+  server checks tokens offline against the JWKS and does not introspect. Without one of these,
+  a connector that keeps refreshing never signs in again (`k8s/roles/authelia/CLAUDE.md`).
+- **`k8s/vars.yml:vault_mcp_connector_url` is the one copy of the connector URL.** It is the
+  metadata's `resource`, the `aud` every token must hold, and the Authelia client's only
+  `audience`. claude.ai sends it as the RFC 8707 `resource`, and Authelia grants only an
+  audience the client lists, so the URL the connector is added with must equal it exactly.
+- **The pod fetches the JWKS from `auth.local.<domain>`, through Traefik, on the first token.**
+  It caches the keys and refetches on an unknown `kid`, at most once per 30 seconds. A JWKS
+  it cannot fetch refuses every token and logs a warning, and `/health` still answers.
+- **The server refuses to start without `VAULT_MCP_RESOURCE_URL`, `VAULT_MCP_ISSUER` or
+  `VAULT_MCP_JWKS_URL`**, because no token could pass.
+- **The daemon has no probes; the server has two, and blackbox probes its route.** The daemon
+  serves nothing, so a crash shows as a restart. The server's readiness probe calls `/health`,
+  which the OAuth check exempts. blackbox-extra's `http_401` target calls `/mcp` on the LAN
+  name and expects the 401, which proves the route reaches the app and the app refuses an
+  unauthenticated call.
 
 ## Editing
 - Manifests: `templates/`. The Service renders from `k8s/templates/service-default.yaml.j2`,
-  off the containers_list entry. No IngressRoute: the route is traefik's gate Secret.
+  off the containers_list entry, and the IngressRoute from
+  `k8s/templates/ingressroute-default.yaml.j2`.
 - Image pins, Renovate stance, resources, uid, the exclude list and the livesync-cli settings:
   `defaults/main.yml`.
-- App: `files/vault_notes.py` (tests in `tests/`) and the MCP wiring in
-  `files/vault_server.py`. Image: `templates/Dockerfile.j2`.
+- App: `files/vault_notes.py` and `files/oauth_resource.py` (tests in `tests/`), and the MCP
+  wiring in `files/vault_server.py`. Image: `templates/Dockerfile.j2`.

@@ -1,9 +1,10 @@
 """vault-mcp: read-only MCP server over the Obsidian vault livesync-cli mirrors into /vault.
 
 Streamable-HTTP MCP server. Every tool is a read. The vault claim is mounted read-only, so no
-code path here can write a note. Traefik's router already gates requests on the bearer token,
-and the app re-checks it. The hide rule and every read live in vault_notes.py; this file is
-the wiring.
+code path here can write a note. Every request except a GET of `/health` or of the
+protected-resource metadata needs an Authelia access token, which oauth_resource.py checks;
+one without gets 401 and the challenge claude.ai's connector follows to sign in. The hide rule and every read live
+in vault_notes.py; this file is the wiring.
 
 Usage:
 
@@ -14,13 +15,16 @@ until killed. `-h` and `--help` print this text and exit 0.
 
 Environment:
 
-    VAULT_MCP_TOKEN          bearer token every request must carry (required; exits without it)
+    VAULT_MCP_RESOURCE_URL   the connector URL, which every token's `aud` must hold (required)
+    VAULT_MCP_ISSUER         Authelia's public issuer, every token's `iss` (required)
+    VAULT_MCP_JWKS_URL       where Authelia publishes its signing keys (required)
     VAULT_MCP_ROOT           the vault directory (default /vault)
     VAULT_MCP_EXCLUDE_PATHS  newline-separated folders hidden from every tool, beside the
                              hidden-segment rule vault_notes.py builds in (required; exits
                              without it, and an empty value hides no folder and logs a
                              warning)
-    MCP_PUBLIC_HOST          external hostname Traefik forwards, allowlisted for the transport
+    MCP_HOSTS                space-separated hostnames Traefik forwards, allowlisted for the
+                             transport
     PORT                     TCP port to listen on (default 8000)
 """
 
@@ -40,11 +44,13 @@ if __name__ == "__main__":
 
 from mcp.server.fastmcp import FastMCP
 from mcp.server.transport_security import TransportSecuritySettings
+from starlette.concurrency import run_in_threadpool
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import JSONResponse, PlainTextResponse
 
 import safe_reads
 import vault_notes
+import oauth_resource
 
 if TYPE_CHECKING:
     from starlette.applications import Starlette
@@ -52,19 +58,24 @@ if TYPE_CHECKING:
     from starlette.requests import Request
     from starlette.responses import Response
 
-TOKEN = os.environ.get("VAULT_MCP_TOKEN", "")
-PUBLIC_HOST = os.environ.get("MCP_PUBLIC_HOST", "")
+OAUTH = oauth_resource.ResourceServer.from_env()
+HOSTS = os.environ.get("MCP_HOSTS", "").split()
 VAULT = vault_notes.Vault(
     Path(os.environ.get("VAULT_MCP_ROOT", "/vault")),
     vault_notes.exclude_paths_from_env(),
 )
 
-_hosts, _origins = safe_reads.allowed_hosts_and_origins(PUBLIC_HOST)
+_allowed = [safe_reads.allowed_hosts_and_origins(host) for host in HOSTS]
 mcp = FastMCP(
     "vault",
     transport_security=(
-        TransportSecuritySettings(allowed_hosts=_hosts, allowed_origins=_origins)
-        if PUBLIC_HOST
+        TransportSecuritySettings(
+            allowed_hosts=list(
+                dict.fromkeys(h for hosts, _ in _allowed for h in hosts)
+            ),
+            allowed_origins=[o for _, origins in _allowed for o in origins],
+        )
+        if HOSTS
         else None
     ),
 )
@@ -106,29 +117,40 @@ def backlinks(path: str) -> list[dict]:
     return VAULT.backlinks(path)
 
 
-class _BearerAuth(BaseHTTPMiddleware):
+_OPEN_PATHS = frozenset({"/health", *OAUTH.metadata_paths()})
+
+
+class _OAuth(BaseHTTPMiddleware):
     async def dispatch(
         self, request: Request, call_next: RequestResponseEndpoint
     ) -> Response:
-        if request.url.path == "/health":
+        if request.method == "GET" and request.url.path in _OPEN_PATHS:
             return await call_next(request)
-        if not safe_reads.bearer_token_valid(
-            request.headers.get("authorization"), TOKEN
-        ):
-            return JSONResponse({"error": "unauthorized"}, status_code=401)
+        # The first token fetches the JWKS over the network, so it runs off the event loop.
+        challenge = await run_in_threadpool(
+            OAUTH.challenge, request.headers.get("authorization")
+        )
+        if challenge:
+            return PlainTextResponse(
+                "Unauthorized",
+                status_code=401,
+                headers={"WWW-Authenticate": challenge},
+            )
         return await call_next(request)
 
 
 def build_app() -> Starlette:
     app = mcp.streamable_http_app()
-    app.add_middleware(_BearerAuth)
+    app.add_middleware(_OAuth)
     app.add_route("/health", lambda request: PlainTextResponse("ok"), methods=["GET"])
+    for path in OAUTH.metadata_paths():
+        app.add_route(
+            path, lambda request: JSONResponse(OAUTH.metadata()), methods=["GET"]
+        )
     return app
 
 
 if __name__ == "__main__":
     import uvicorn
 
-    if not TOKEN:
-        raise SystemExit("VAULT_MCP_TOKEN is required")
     uvicorn.run(build_app(), host="0.0.0.0", port=int(os.environ.get("PORT", "8000")))

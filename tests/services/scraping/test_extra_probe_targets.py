@@ -7,6 +7,7 @@ real inventory and hold each to the thing it replaces
 (ADR-0026). Cutover-a1 deleted
 the tiles, so the target addresses, modules and tiers are literals here, copied from the deleted
 tiles' declarations (`git show 50f2b2c410:k8s/roles/uptime-kuma/templates/static-monitors.yaml.j2`).
+A target added after the cutover, such as `vault-mcp`'s, has no tile and is listed beside them.
 
 The rejecting halves are `test_a_published_port_the_job_lacks_is_flagged`,
 `test_an_all_clear_pointed_at_an_app_route_is_flagged` and
@@ -44,6 +45,8 @@ PROBES = {
     "zigbee2mqtt": ("tcp_connect", ":6638"),
     "nut": ("tcp_connect", ":3493"),
     "airflow": ("http_2xx", ":8974/health"),
+    # Added after the cutover, with no Kuma tile: the 401 proves the app refuses an anonymous call.
+    "vault-mcp": ("http_401", "vault-mcp.local."),
 }
 TIERED_PROBES = {"mosquitto", "pihole"}
 EDGE_SELFCHECK_PATH = "/.well-known/traefik-edge-selfcheck"
