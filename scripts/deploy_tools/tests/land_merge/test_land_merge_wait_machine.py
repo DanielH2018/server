@@ -1,9 +1,9 @@
-"""`core/landing_machine.step` makes the calls `merge.await_merge`'s loop makes, in its order.
+"""`merge.await_merge` makes the recorded calls of a merge wait, and only what `step` decides.
 
 `merge_wait_traces.txt` is the characterization corpus: for each seed, a scenario of what every
-boundary answers and the trace the loop produced for it at the commit that recorded it. A trace
-is every boundary call, every printed line and the end, as text (`_merge_wait_traces.trace`).
-`drive` runs `step` and carries out each action it returns over the same fakes.
+boundary answers and the trace the merge wait produced for it at the commit that recorded it.
+A trace is every boundary call, every printed line and the end, as text
+(`_merge_wait_traces.trace`).
 
 A deliberate change of behaviour re-records the corpus, and its PR lists the change:
 
@@ -14,14 +14,13 @@ Run: uv run pytest scripts/deploy_tools/tests/land_merge/test_land_merge_wait_ma
 
 import os
 import random
-from functools import partial
 
 import pytest
 from hypothesis import given
 from hypothesis import strategies as st
 
-from _merge_wait_scenarios import TurnBy, scenario
-from _merge_wait_traces import SEEDS, corpus, drive, loop, record, trace
+from _merge_wait_scenarios import Scenario, TurnBy, scenario
+from _merge_wait_traces import SEEDS, Run, corpus, modelled, performed, record, trace
 from deploy_tools.land_lib.core import landing_actions as a
 from deploy_tools.land_lib.core import landing_machine
 from deploy_tools.land_lib.core.landing_state import (
@@ -35,12 +34,26 @@ from deploy_tools.land_lib.core.landing_state import (
 _SETUP = Setup(pr="1", merge_timeout=300, merge_poll=30, direct=True, stuck_after_s=600)
 
 
-def _first_difference(want: list[str], got: list[str]) -> str:
+def _first_difference(want: list, got: list) -> str:
     at = next(
         (i for i, (w, g) in enumerate(zip(want, got, strict=False)) if w != g),
         min(len(want), len(got)),
     )
     return f"line {at}: recorded {want[at : at + 1]}, got {got[at : at + 1]}"
+
+
+def _driven(sc: Scenario) -> tuple[list[str], list[Run]]:
+    """The trace of `sc`, and every merge wait the driver ran to produce it."""
+    with performed() as runs:
+        lines = trace(sc)
+    return lines, runs
+
+
+def _assert_the_model_takes_the_drivers_actions(runs: list[Run], where: str) -> None:
+    assert runs, where
+    for run in runs:
+        want = modelled(run)
+        assert run.actions == want, f"{where}{_first_difference(want, run.actions)}"
 
 
 @pytest.fixture(scope="module")
@@ -56,34 +69,33 @@ def test_the_corpus_holds_every_seed(recorded):
         assert sc == scenario(random.Random(seed)), (
             f"seed {seed} draws another scenario"
         )
-        # A fake the scenario misconfigured crashes the loop and the driver alike.
+        # A fake the scenario misconfigured crashes every wait the same way.
         assert not lines[-1].startswith("raised "), f"seed {seed}: {lines[-1]}"
 
 
-def test_the_loop_reproduces_every_recorded_trace(recorded):
-    for seed, sc, want in recorded:
-        got = trace(sc, loop)
-        assert got == want, f"seed {seed}, {_first_difference(want, got)}"
+def test_the_driver_and_the_model_take_the_actions_the_recorded_wait_took(recorded):
+    """The differential test, over the corpus.
 
-
-def test_step_reproduces_every_recorded_trace(recorded):
+    The driver and the model both run `step`, so they agree on a changed transition. The
+    recorded trace is the side that does not run `step`: the driver's actions must make its
+    calls, and the model must return those actions.
+    """
     for seed, sc, want in recorded:
-        got = trace(sc, drive)
+        got, runs = _driven(sc)
         assert got == want, f"seed {seed}, {_first_difference(want, got)}"
+        _assert_the_model_takes_the_drivers_actions(runs, f"seed {seed}, ")
 
 
 @given(st.randoms(use_true_random=False))
-def test_step_and_the_loop_make_the_same_calls(rng):
-    sc = scenario(rng)
-    want, got = trace(sc, loop), trace(sc, drive)
-    assert got == want, _first_difference(want, got)
+def test_the_driver_carries_out_what_step_returns_for_a_fresh_scenario(rng):
+    """No recorded trace covers a fresh scenario, so this holds the driver to `step` alone."""
+    _, runs = _driven(scenario(rng))
+    _assert_the_model_takes_the_drivers_actions(runs, "")
 
 
 def test_the_corpus_reaches_every_action_and_every_end(recorded):
-    """Non-vacuity: a corpus that never reached a call could not show `step` makes it."""
-    done: list[a.Action] = []
-    for _, sc, _ in recorded:
-        trace(sc, partial(drive, done=done))
+    """Non-vacuity: a corpus that never reached a call could not show the driver makes it."""
+    done = [x for _, sc, _ in recorded for run in _driven(sc)[1] for x in run.actions]
     seen = {f"end {x.end}" if isinstance(x, a.Die) else type(x).__name__ for x in done}
     actions = {kind.__name__ for kind in a.Action.__value__.__args__} - {"Die"}
     ends = {f"end {end}" for end in a.End}

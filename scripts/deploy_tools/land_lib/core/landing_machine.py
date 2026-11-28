@@ -6,11 +6,12 @@ the last action `step` returned and returns the next state and the next actions,
 `Enter` and `Progress` only report. The last one is a call whose answer goes to the next
 `step`, or `Die` or `Merged`, which end the wait.
 
-The driver carries each action out through `ln.tools` and the module that owns it, and builds
-the answer from what came back. `step` reads no clock, sleeps for nothing and calls nothing.
+The driver, `merge.await_merge`, carries each action out through `ln.tools` and the module
+that owns it, and builds the answer from what came back. `step` reads no clock, sleeps for
+nothing and calls nothing.
 
-`merge.await_merge`'s loop makes the same calls in the same order. The characterization
-traces in `scripts/deploy_tools/tests/land_merge/` hold `step` to that loop.
+The characterization traces in `scripts/deploy_tools/tests/land_merge/` hold `step` and the
+driver to the recorded calls of 200 merge waits, in order.
 
 Typical usage example:
 
@@ -273,6 +274,9 @@ def _on_ask(s: LandingState, a: Observation) -> Step:
         s, queued=s.queued + a.in_line, waited=waited, wait_ends_at=_bounded(s, waited)
     )
     p = s.poll
+    # DECIDED: a ready head master moved past while it waited gives the turn back and rejoins
+    # the line as a draft (the operator, 2026-11-15, amending D10 in docs/ci-throughput.md):
+    # merged as it stands, master sweeps in full.
     return _wait(s, RejoinInTurn(p.head, p.conflicting), Point.REJOIN_AFTER_WAIT)
 
 
