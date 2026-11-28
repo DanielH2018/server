@@ -168,7 +168,7 @@ from deploy_tools.land_lib.ledger import Ledger, annotation_line, result_line
 from deploy_tools.land_lib.options import HANDOFF_ENV, Options, parse_args
 from deploy_tools.land_lib.outcome import Cause, Outcome, Verdict, write_verdict_file
 from deploy_tools.land_lib.tools import Classifier, Tools
-from deploy_tools.land_lib.transitions import State
+from deploy_tools.land_lib.core.landing_state import State
 
 
 def _prepare_stdio() -> None:

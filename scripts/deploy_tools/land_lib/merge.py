@@ -83,7 +83,9 @@ from deploy_tools.land_lib import (
 from deploy_tools.land_lib.landing import BRANCH, Landing
 from deploy_tools.land_lib.outcome import Outcome, Verdict, disarmed, say
 from deploy_tools.land_lib.pr_json import CommitMessage
-from deploy_tools.land_lib.transitions import CHECKS, State
+from deploy_tools.land_lib.core.landing_actions import Die, End
+from deploy_tools.land_lib.core.landing_state import State, Watch
+from deploy_tools.land_lib.transitions import CHECKS
 
 
 type TakeTurn = Callable[[str], tuple[bool, int]]
@@ -325,6 +327,100 @@ def _start_run(
     return (head if updated else ""), in_turn, queued
 
 
+def take(
+    ln: Landing, take_turn: TakeTurn, head: str, draft: bool, drafted: bool
+) -> tuple[bool, int]:
+    """Take the turn for `head`, reading what the turn's rules need from GitHub first.
+
+    Returns:
+        What `take_turn` returns: whether this landing holds the turn, and the seconds it
+        stood in line.
+
+    Raises:
+        Outcome: the wait for the turn ended the landing. A PR this landing made a draft
+            (`drafted`) is marked ready first.
+    """
+    # A failed read stores nothing, so the rule inside the turn reads again.
+    with contextlib.suppress(gh_read.GhReadFailed, ValueError):
+        ln.changed_paths(head)
+    try:
+        return take_turn(head if draft else "")
+    except Outcome:
+        if drafted:
+            stale_base.ready_again(ln)
+        raise
+
+
+def ending(pr: str, die: Die) -> tuple[str, int, Verdict | None]:
+    """The message, exit code and verdict of a merge wait that ends without a merge."""
+    head = die.head[:8]
+    match die.end:
+        case End.CLOSED:
+            return f"PR #{pr} was closed without merging — nothing to land", 1, None
+        case End.CONFLICT:
+            return (
+                f"PR #{pr} conflicts with {BRANCH} — rebase it, push, then re-run this",
+                1,
+                Verdict.MERGE_CONFLICT,
+            )
+        case End.HEAD_MOVED:
+            return (
+                f"PR #{pr}'s head moved from {die.detail[:8]} to {head} after "
+                "the landing policy checked it; re-run so the new head is checked",
+                1,
+                None,
+            )
+        case End.CI_RED:
+            return (
+                f"PR #{pr} cannot merge — its own CI is red ({die.detail}); fix it, push, "
+                "and re-run this",
+                1,
+                Verdict.PR_CI_RED,
+            )
+        case End.DISARMED:
+            return disarmed(f" at {head}", f"PR #{pr} not merged"), 1, None
+        case End.FAILING_CHECK:
+            return (
+                f"PR #{pr} cannot merge — required check {', '.join(die.names)} "
+                f"failed at {head}; fix it, push, and re-run this",
+                1,
+                Verdict.PR_CI_RED,
+            )
+        case End.STUCK_CHECK:
+            return (
+                stuck_checks.dead_end(pr, die.head, list(die.names)),
+                75,
+                Verdict.MERGE_TIMEOUT,
+            )
+        case End.TIMEOUT_RATE_LIMITED:
+            why = f"GitHub refused its CI read for the rate; the quota frees in {die.detail}s"
+        case End.TIMEOUT_STALLED:
+            why = f"its head has no CI verdict ({die.detail})"
+        case End.TIMEOUT_PENDING:
+            why = (
+                f"its head has no CI verdict ({die.detail}); if its run was cancelled, "
+                "none arrives on its own: re-run it with `gh run rerun <run-id>`, or push"
+            )
+        case End.TIMEOUT:
+            why = "look at its checks"
+    return (
+        f"PR #{pr} still {die.pr_state} after {die.waited}s — not being merged; {why}",
+        75,
+        Verdict.MERGE_TIMEOUT,
+    )
+
+
+def merged(ln: Landing, waited: int) -> None:
+    """Record and report a merge wait that merged the PR after `waited` seconds."""
+    ln.merge_wait_s = waited
+    turn_wait = ln.ledger.turn_wait
+    notes = [
+        f"{turn_wait}s of it waiting for the landing turn" if turn_wait else "",
+        f"{ln.batched_s}s of it on its batch's run" if ln.batched_s else "",
+    ]
+    say(", ".join([f"merged after {waited}s", *filter(None, notes)]))
+
+
 def _ci_state(ln: Landing, head: str, in_turn: bool) -> State:
     """The state of a landing whose head's CI is pending: its own run, or a run in the turn."""
     if not in_turn:
@@ -421,18 +517,9 @@ def await_merge(ln: Landing, take_turn: TakeTurn = _no_turn) -> None:
     drafted = False
 
     def ask(head: str, draft: bool) -> tuple[bool, int]:
-        """Take the turn for `head`, reading what the turn's rules need from GitHub first."""
         nonlocal asked
         asked = True
-        # A failed read stores nothing, so the rule inside the turn reads again.
-        with contextlib.suppress(gh_read.GhReadFailed, ValueError):
-            ln.changed_paths(head)
-        try:
-            return take_turn(head if draft else "")
-        except Outcome:
-            if drafted:
-                stale_base.ready_again(ln)
-            raise
+        return take(ln, take_turn, head, draft, drafted)
 
     if ln.direct_merge_subject:
         updated_from, in_turn, queued = _start_run(ln, ask)
@@ -445,7 +532,7 @@ def await_merge(ln: Landing, take_turn: TakeTurn = _no_turn) -> None:
     gated_head = ""
     # The forward-only pins that head bumps, whose land rule is read again before each retry.
     gated_pins: list[str] = []
-    watch = stall.Watch()
+    watch = Watch()
     # The last CI read's counts, written once the state they belong to is entered.
     checks: list[tuple[int, int]] = []
 
@@ -462,14 +549,10 @@ def await_merge(ln: Landing, take_turn: TakeTurn = _no_turn) -> None:
             ln.transitions.enter(State.MERGED)
             break
         if state == "CLOSED":
-            ln.die(f"PR #{o.pr} was closed without merging — nothing to land", 1)
+            ln.die(*ending(o.pr, Die(End.CLOSED)))
         conflicting = conflicting + 1 if view.get("mergeable") == "CONFLICTING" else 0
         if conflicting >= 2:
-            ln.die(
-                f"PR #{o.pr} conflicts with {BRANCH} — rebase it, push, then re-run this",
-                1,
-                Verdict.MERGE_CONFLICT,
-            )
+            ln.die(*ending(o.pr, Die(End.CONFLICT)))
         head = view.get("headRefOid") or ""
         # GitHub applies a branch update asynchronously: until the head moves, the stale head's
         # green CI is what the update discards.
@@ -477,11 +560,8 @@ def await_merge(ln: Landing, take_turn: TakeTurn = _no_turn) -> None:
             head = ""
         if ln.pinned_head and head and head != ln.pinned_head:
             if updated_from != ln.pinned_head:
-                ln.die(
-                    f"PR #{o.pr}'s head moved from {ln.pinned_head[:8]} to {head[:8]} after "
-                    "the landing policy checked it; re-run so the new head is checked",
-                    1,
-                )
+                moved = Die(End.HEAD_MOVED, head=head, detail=ln.pinned_head)
+                ln.die(*ending(o.pr, moved))
             say(f"checking the landing policy again on the updated head {head[:8]}")
             ln.pinned_head = policy.check(ln)
             continue
@@ -513,16 +593,11 @@ def await_merge(ln: Landing, take_turn: TakeTurn = _no_turn) -> None:
                     ln.transitions.progress(*checks[-1], CHECKS)
             watch = stall.on_poll(ln, watch, head, stall.of(ci_pending), waited, line)
             if rc == CI_RED:
-                ln.die(
-                    f"PR #{o.pr} cannot merge — its own CI is red ({line}); fix it, push, "
-                    "and re-run this",
-                    1,
-                    Verdict.PR_CI_RED,
-                )
+                ln.die(*ending(o.pr, Die(End.CI_RED, detail=line)))
             # Only this landing's direct merge waits on await_ci's green, so only it can never fire
             # on a disarmed gate.
             if rc == CI_DISARMED and ln.direct_merge_subject:
-                ln.die(disarmed(f" at {head[:8]}", f"PR #{o.pr} not merged"), 1)
+                ln.die(*ending(o.pr, Die(End.DISARMED, head=head)))
             if rc == CI_GREEN and ln.direct_merge_subject and not in_turn:
                 if not asked and stale_base.rejoin_line(
                     ln, head, view.get("mergeable") == "CONFLICTING"
@@ -580,12 +655,8 @@ def await_merge(ln: Landing, take_turn: TakeTurn = _no_turn) -> None:
                     continue
                 failing = failing_checks.find(ln, head, refusal)
                 if failing:
-                    ln.die(
-                        f"PR #{o.pr} cannot merge — required check {', '.join(failing)} "
-                        f"failed at {head[:8]}; fix it, push, and re-run this",
-                        1,
-                        Verdict.PR_CI_RED,
-                    )
+                    red = Die(End.FAILING_CHECK, head=head, names=tuple(failing))
+                    ln.die(*ending(o.pr, red))
                 refused(f"merge refused at {head[:8]}: {refusal}; waiting")
             if head != stuck_head:
                 stuck_head, stuck_read_at = head, waited + stuck_checks.AFTER_S
@@ -593,30 +664,21 @@ def await_merge(ln: Landing, take_turn: TakeTurn = _no_turn) -> None:
                 stuck_read_at = waited + stuck_checks.AFTER_S
                 stuck = stuck_checks.find(ln, head)
                 if stuck:
-                    ln.die(
-                        stuck_checks.dead_end(o.pr, head, stuck),
-                        75,
-                        Verdict.MERGE_TIMEOUT,
-                    )
+                    stuck_end = Die(End.STUCK_CHECK, head=head, names=tuple(stuck))
+                    ln.die(*ending(o.pr, stuck_end))
         if waited >= wait_ends_at:
             # A run skipped as a draft names its own remedy in await_ci's line, because a re-run
             # skips again.
             if pause:
-                why = f"GitHub refused its CI read for the rate; the quota frees in {pause}s"
+                end, detail = End.TIMEOUT_RATE_LIMITED, str(pause)
             elif watch.head:
-                why = f"its head has no CI verdict ({ci_pending})"
+                end, detail = End.TIMEOUT_STALLED, ci_pending
             elif ci_pending:
-                why = (
-                    f"its head has no CI verdict ({ci_pending}); if its run was cancelled, "
-                    "none arrives on its own: re-run it with `gh run rerun <run-id>`, or push"
-                )
+                end, detail = End.TIMEOUT_PENDING, ci_pending
             else:
-                why = "look at its checks"
-            ln.die(
-                f"PR #{o.pr} still {state} after {waited}s — not being merged; {why}",
-                75,
-                Verdict.MERGE_TIMEOUT,
-            )
+                end, detail = End.TIMEOUT, ""
+            timeout = Die(end, detail=detail, waited=waited, pr_state=state)
+            ln.die(*ending(o.pr, timeout))
         step = o.merge_poll
         if pause:
             step = ln.without_turn(
@@ -631,10 +693,4 @@ def await_merge(ln: Landing, take_turn: TakeTurn = _no_turn) -> None:
         else:
             t.sleep(step)
         waited += step
-    ln.merge_wait_s = waited
-    turn_wait = ln.ledger.turn_wait
-    notes = [
-        f"{turn_wait}s of it waiting for the landing turn" if turn_wait else "",
-        f"{ln.batched_s}s of it on its batch's run" if ln.batched_s else "",
-    ]
-    say(", ".join([f"merged after {waited}s", *filter(None, notes)]))
+    merged(ln, waited)

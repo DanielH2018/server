@@ -85,7 +85,8 @@ from deploy_tools.land_lib import (
 from deploy_tools.land_lib.core import queue_machine, queue_state
 from deploy_tools.land_lib.landing import BRANCH, Landing
 from deploy_tools.land_lib.outcome import Outcome, Verdict, say
-from deploy_tools.land_lib.transitions import CHECKS, State, Transitions
+from deploy_tools.land_lib.core.landing_state import State
+from deploy_tools.land_lib.transitions import CHECKS, Transitions
 from lib.exit_codes import CI_GREEN, CI_PENDING, CI_RED
 from lib.json_types import JsonValue, as_object
 

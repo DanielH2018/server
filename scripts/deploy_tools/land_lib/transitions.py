@@ -1,8 +1,7 @@
 """A landing's state, written at each change: a state record on the turn host and a syslog line.
 
-`State` names the states of *The landing state machine* in `docs/landing-architecture.md`.
-`Transitions` is the one writer, and each `Landing` owns one. Nothing in the landing decides
-on what it writes.
+`Transitions` is the one writer of the states `core.landing_state.State` names, and each
+`Landing` owns one. Nothing in the landing decides on what it writes.
 
 Each state change writes two records:
 
@@ -32,10 +31,10 @@ import json
 import os
 from collections.abc import Callable
 from dataclasses import asdict, dataclass
-from enum import StrEnum
 from typing import Protocol
 
 from deploy_tools.land_lib import line
+from deploy_tools.land_lib.core.landing_state import State
 from deploy_tools.land_lib.outcome import say
 
 from lib import host_modules  # noqa: F401
@@ -45,30 +44,6 @@ EVENT = "land_transition"
 # What a count of progress counts: a CI read's check-runs, `land_wait`'s Kustomizations.
 CHECKS = "checks finished"
 KUSTOMIZATIONS = "Kustomizations ready"
-
-
-class State(StrEnum):
-    """One state of a landing, as the state record and the transition line name it."""
-
-    ARMED = "armed"
-    HANDED_OFF = "handed-off"
-    OWN_RUN = "own-run"
-    QUEUED = "queued"
-    HOLDING = "holding"
-    YIELDED = "yielded"
-    TESTING = "testing"
-    SPLIT = "split"
-    PROVING = "proving"
-    MERGING = "merging"
-    REJOINING = "rejoining"
-    NO_TURN = "no-turn"
-    MERGED = "merged"
-    RESOLVING = "resolving"
-    MASTER_CI = "master-ci"
-    PROMOTING = "promoting"
-    HOST_WAIT = "host-wait"
-    GRADING = "grading"
-    VERDICT = "verdict"
 
 
 def transition_line(pr: str, before: str, after: str, at: float, verdict: str) -> str:

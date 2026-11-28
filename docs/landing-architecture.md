@@ -36,7 +36,12 @@ becomes a named invariant with a test.
 Slice 1 is built: `land_lib/transitions.py` writes the state and transition records.
 Slice 2 is built: `land_lib/core/queue_machine.py` holds `may_take` and `stackable`, which
 `turn._wait` and `batch._members` call. Slice 3 is built: those two functions serve the
-turn by ticket, under *The ticket protocol* below. Nothing else here is built. The validation below read the code at master `ce5c3abfa`. The
+turn by ticket, under *The ticket protocol* below. The first half of slice 4 is built:
+`land_lib/core/landing_state.py` holds `LandingState`, and `land_lib/core/landing_machine.py`
+holds `step` for the merge wait. Nothing calls `step` yet. The characterization traces in
+`scripts/deploy_tools/tests/land_merge/merge_wait_traces.txt` hold it to
+`merge.await_merge`'s loop, which the cutover replaces. Nothing else here is built. The
+validation below read the code at master `ce5c3abfa`. The
 milestone is `Landing pipeline state machine`.
 
 ## What the pipeline is, validated against the code
@@ -123,7 +128,7 @@ and no batch may carry it.
 ```text
 land_lib/
   core/                      pure: no I/O, no clock, no sleep
-    landing_state.py         LandingState: frozen dataclasses, one per state
+    landing_state.py         LandingState: one frozen record of the merge wait
     queue_state.py           Place, Queue: the queue as its decisions read it
     landing_machine.py       step(LandingState, Observation) -> (LandingState, [Action])
     queue_machine.py         schedule(QueueState) -> [Grant]: order, batches, serial rule
@@ -533,7 +538,7 @@ Two gaps remain:
 ### One state record for each live landing
 
 The transition writer of slice 1, `land_lib/transitions.py`, has two outputs.
-`transitions.State` is the one enum of state names.
+`land_lib/core/landing_state.py:State` is the one enum of state names.
 
 - **A state record on the turn host**, `/run/lock/homelab-land-line/<pr>.<uid>.state`, one
   JSON object written by an atomic rename. It holds `pr`, `host`, `pid`, `state`, `since` (when

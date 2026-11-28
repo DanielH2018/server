@@ -75,7 +75,7 @@ from deploy_tools.land_lib.core import queue_machine, queue_state
 from deploy_tools.land_lib.fresh import TURN_FD_ENV
 from deploy_tools.land_lib.landing import Landing
 from deploy_tools.land_lib.outcome import Verdict, say
-from deploy_tools.land_lib.transitions import State
+from deploy_tools.land_lib.core.landing_state import State
 from deploy_tools.land_lib.serial_lock import (
     LOCK_DIR,
     TURN_DIR_ENV,
