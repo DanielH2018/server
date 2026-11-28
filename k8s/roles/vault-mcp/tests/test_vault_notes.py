@@ -223,7 +223,10 @@ def _vault_of(root, notes):
 
 @pytest.mark.parametrize(
     "text",
-    ["---\r\ntags: [found]\r\n---\r\nBody.\r\n", "﻿---\ntags: [found]\n---\nBody.\n"],
+    [
+        "---\r\ntags: [found]\r\n---\r\nBody.\r\n",
+        "\ufeff---\ntags: [found]\n---\nBody.\n",
+    ],
     ids=["crlf", "bom"],
 )
 def test_frontmatter_tags_are_read_from_a_crlf_or_bom_note(tmp_path, text):
@@ -237,8 +240,11 @@ def test_a_four_dash_line_does_not_close_frontmatter(tmp_path):
     assert vault.read_note("Note")["frontmatter"] == {}
 
 
-def test_frontmatter_with_a_recursive_alias_reads_as_empty(tmp_path):
-    vault = _vault_of(tmp_path, {"Note.md": "---\nloop: &x [*x]\n---\nBody.\n"})
+def test_frontmatter_with_an_alias_reads_as_empty(tmp_path):
+    anchors = "a0: &a0 [x, x]\n" + "".join(
+        f"a{i}: &a{i} [*a{i - 1}, *a{i - 1}]\n" for i in range(1, 40)
+    )
+    vault = _vault_of(tmp_path, {"Note.md": f"---\n{anchors}---\nBody.\n"})
     note = vault.read_note("Note")
     assert note["frontmatter"] == {}
     json.dumps(note)

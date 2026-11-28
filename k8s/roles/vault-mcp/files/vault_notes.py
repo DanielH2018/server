@@ -34,13 +34,11 @@ _WIKILINK = re.compile(r"!?\[\[([^\]|#^]*)(?:[#^][^\]|]*)?(?:\|[^\]]*)?\]\]")
 _MDLINK = re.compile(r"!?\[[^\]]*\]\(<?([^)<>\s]+)>?(?:\s+\"[^\"]*\")?\)")
 _INLINE_TAG = re.compile(r"(?<![\w/#&])#([\w/-]*[^\W\d][\w/-]*)")
 _FENCE = re.compile(r"^(```|~~~).*?^\1", re.MULTILINE | re.DOTALL)
-_FRONTMATTER = re.compile(
-    r"\A---[ \t]*\r?\n(.*?\r?\n)?---[ \t]*(?:\r?\n|\Z)", re.DOTALL
-)
+_FRONTMATTER = re.compile(r"\A---[ \t]*\n(.*?\n)?---[ \t]*(?:\n|\Z)", re.DOTALL)
 
 
 class _NoAliasLoader(yaml.BaseLoader):
-    """BaseLoader that refuses YAML aliases, so a recursive alias never reaches JSON encoding."""
+    """BaseLoader that refuses YAML aliases, which JSON encoding would expand exponentially."""
 
     def compose_node(self, parent, index):
         if self.check_event(yaml.AliasEvent):
@@ -119,7 +117,7 @@ def parse_note(path: str, text: str, modified: float = 0.0) -> Note:
     """Split a note's YAML frontmatter from its body, and read its link targets and tags.
 
     Frontmatter opens on the first line and closes at the next line that is exactly `---`,
-    with LF or CRLF line ends, after an optional BOM. It loads with PyYAML's BaseLoader and no
+    after an optional BOM. `text` has LF line ends, as text-mode reading gives. It loads with PyYAML's BaseLoader and no
     aliases, so every scalar is a string and the result is always JSON-serialisable.
     Frontmatter that does not parse to a mapping reads as empty.
     """
