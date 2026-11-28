@@ -522,6 +522,9 @@ with an operator cutover between them:
 
 Run the cutover soon after the first PR lands. `FluxSuspended` warns after 24 hours, and arm 5
 of the render-diff gates refuses any other PR whose render reaches `livesync` until the resume.
+A resume PR that drops the suspend and keeps `longhorn-nobackup` fails
+`tests/longhorn/test_every_longhorn_pvc_has_a_tier.py::test_every_backed_up_claim_is_on_longhorn_or_mid_cutover`.
+A claim on a backup tier list that is not on `longhorn` is never backed up.
 
 The longhorn-reconcile job leaves the old volume alone meanwhile. The volume sits in the
 `no-backup` group, and the job moves a weekly claim into its shard only from `default`
