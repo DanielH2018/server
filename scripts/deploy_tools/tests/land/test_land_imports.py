@@ -24,6 +24,7 @@ MODULES = frozenset(
         "stale_base",
         "stall",
         "stuck_checks",
+        "failing_checks",
         "policy",
         "classify",
         "closing_refs",
@@ -91,6 +92,7 @@ ALLOWED = {
     # The landing policy's checks run inside --arm-merge, before any merge call.
     "merge": {
         "closing_refs",
+        "failing_checks",
         "landing",
         "outcome",
         "pin_gate",
@@ -130,6 +132,8 @@ ALLOWED = {
     },
     # The read that ends --await-merge on a check GitHub never finishes.
     "stuck_checks": {"landing", "gh_read"},
+    # The read that ends --await-merge on a merge refused while a required check has failed.
+    "failing_checks": {"landing", "gh_read"},
     # The pin gate runs inside --await-merge's direct merge, and `land.py --regate` alone.
     "pin_gate": {"landing", "outcome", "pin_reads"},
     # Its boundaries. It imports `promote.py`'s `last-good` reader, outside land_lib.
