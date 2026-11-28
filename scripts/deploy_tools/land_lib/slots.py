@@ -365,7 +365,10 @@ def _wait_out(ln: Landing, kind: str, lock: Locker, bar: Bar) -> Bar | None:
     gives the turn back, so it holds nothing another landing needs, and only the budgets
     bound it: the serial lock is held from the serial draft's turn, through its CI run, its
     merge and its deploy, which is longer than `DRAIN_S` measures. A serial PR's yield to the
-    line gives the turn back too, and ends once `_yields` names no reason. No holder of the
+    line gives the turn back too, and ends once `_yields` names no reason. It reads no other
+    rule, because the line empties when the next landing takes the turn, and a serial lock
+    taken then would bar that landing's merge. The rules run again once the turn is taken
+    back. No holder of the
     turn reads the head of a landing in either wait, so both read its own PR's mergeability
     (`_conflict_reads`). Each poll of a wait for the serial landing adds its seconds to
     `ln.ledger.serial_wait` as it passes, so a landing that ends during the wait records it.
@@ -394,7 +397,11 @@ def _wait_out(ln: Landing, kind: str, lock: Locker, bar: Bar) -> Bar | None:
         waited += o.merge_poll
         if serial:
             ln.ledger.serial_wait += o.merge_poll
-        now = _bar(ln, kind, lock)
+        if bar.clears is Clears.LINE_EMPTIES:
+            why = _yields(ln)
+            now = Bar(why, bar.clears) if why else None
+        else:
+            now = _bar(ln, kind, lock)
         if now is None:
             say(f"{_CLEARED[bar.clears]} after {waited}s")
             return None

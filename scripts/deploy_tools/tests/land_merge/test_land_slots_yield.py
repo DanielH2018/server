@@ -45,6 +45,19 @@ def test_a_serial_pr_yields_the_turn_until_the_line_empties(landing, tmp_path, d
     assert "merge" in call_order(calls)
 
 
+def test_a_serial_pr_takes_the_serial_lock_only_once_it_holds_the_turn_again(
+    landing, tmp_path
+):
+    # The waiter leaves the line as it takes the turn, and holds the turn for two more polls.
+    ln, calls = _merging(landing, _SERIAL, draft=True, turn=[True, False, False, True])
+    _waiter_in_the_line(ln, tmp_path, leaves_after=1)
+    _land(ln)
+    names = _names(calls)
+    retaken = [i for i, name in enumerate(names) if name == "try_turn"][3]
+    assert names.index("try_serial") > retaken
+    assert "merge" in call_order(calls)
+
+
 def test_a_serial_pr_takes_the_turn_once_one_merge_budget_is_left(landing, tmp_path):
     ln, calls = _merging(landing, _SERIAL, draft=True)
     _waiter_in_the_line(ln, tmp_path)
