@@ -21,6 +21,7 @@ from hypothesis.stateful import (
 )
 
 from deploy_tools.land_lib import stall
+from deploy_tools.land_lib.core.landing_state import Stall, Watch
 from deploy_tools.land_lib.stall import Act
 
 STEPS = settings(stateful_step_count=40)
@@ -37,20 +38,20 @@ class StallWait(RuleBasedStateMachine):
 
     def start_landing(self) -> None:
         """A new wait. A give-up ends the landing, so the next poll belongs to another one."""
-        self.watch = stall.Watch()
+        self.watch = Watch()
         self.waited = 0
         # The last poll at which the landing had a reason not to act: a new stall, a draft PR,
         # a run in progress, or an action of its own.
         self.excused_at = 0
-        self.last: tuple[str, stall.Stall] | None = None
-        self.started: Counter[tuple[str, stall.Stall]] = Counter()
+        self.last: tuple[str, Stall] | None = None
+        self.started: Counter[tuple[str, Stall]] = Counter()
 
     def record(self, act: Act) -> None:
         """A hook for the coverage test."""
 
     @rule(
         head=st.sampled_from(["aaaa1111", "bbbb2222"]),
-        kind=st.sampled_from([None, *stall.Stall]),
+        kind=st.sampled_from([None, *Stall]),
         ready=st.booleans(),
         running=st.sampled_from(["", "run 9 is in_progress"]),
         poll=_POLLS,

@@ -95,7 +95,7 @@ poll, so it adds no request, and it makes no GitHub call beyond the cached PR ti
 
 - **Each row** is one PR's newest record: its state, by the label `STATE_LABELS` gives it, the
   time in that state, the states it passed through, and its progress (`done`/`total` `what`).
-  `STATE_LABELS` holds a label for every member of `transitions.State`
+  `STATE_LABELS` holds a label for every member of `scripts/deploy_tools/land_lib/core/landing_state.py:State`
   (`hosts/components/deploy-ui/tests/test_deploy_ui_states.py::test_every_landing_state_has_a_label_is_clean`),
   and a state it does not know renders by its raw name
   (`hosts/components/deploy-ui/tests/test_deploy_ui_states.py::test_a_state_the_page_does_not_know_renders_by_its_raw_name_is_flagged`).

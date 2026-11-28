@@ -85,7 +85,8 @@ from deploy_tools.land_lib import (
 from deploy_tools.land_lib.core import queue_machine, queue_state
 from deploy_tools.land_lib.landing import BRANCH, Landing
 from deploy_tools.land_lib.outcome import Outcome, Verdict, say
-from deploy_tools.land_lib.transitions import CHECKS, State, Transitions
+from deploy_tools.land_lib.core.landing_state import State
+from deploy_tools.land_lib.transitions import CHECKS, Transitions
 from lib.exit_codes import CI_GREEN, CI_PENDING, CI_RED
 from lib.json_types import JsonValue, as_object
 
@@ -624,11 +625,12 @@ def _merge_members(ln: Landing) -> None:
         before = member.ln
 
 
-def land(ln: Landing, take_turn: merge.TakeTurn) -> None:
-    """Merge this landing's PR, and the members of the batch it formed, if it formed one.
+def forming(ln: Landing, take_turn: merge.TakeTurn) -> merge.TakeTurn:
+    """`take_turn`, forming the batch once the landing holds the turn for a draft.
 
     The batch is formed as soon as the landing takes the turn with a draft that has had no
-    CI run, which is the one case `merge.await_merge` asks for the turn with a head.
+    CI run, which is the one case `merge.await_merge` asks for the turn with a head. The
+    seconds of the batch's run count as seconds in line.
     """
 
     def take(draft: str) -> tuple[bool, int]:
@@ -650,9 +652,14 @@ def land(ln: Landing, take_turn: merge.TakeTurn) -> None:
             in_turn = ln.give_back_turn is not None
         return in_turn, waited + ln.batched_s
 
+    return take
+
+
+def land(ln: Landing, take_turn: merge.TakeTurn) -> None:
+    """Merge this landing's PR, and the members of the batch it formed, if it formed one."""
     own_red = False
     try:
-        merge.await_merge(ln, take)
+        merge.await_merge(ln, forming(ln, take_turn))
     except Outcome as exc:
         own_red = exc.verdict == Verdict.PR_CI_RED
         if ln.tested_head:

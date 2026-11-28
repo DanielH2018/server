@@ -54,7 +54,7 @@ from deploy_tools.land_lib import (
 )
 from deploy_tools.land_lib.landing import Landing
 from deploy_tools.land_lib.outcome import Outcome, Verdict, say
-from deploy_tools.land_lib.transitions import State
+from deploy_tools.land_lib.core.landing_state import State
 
 
 def _step_resolve(ln: Landing) -> None:
