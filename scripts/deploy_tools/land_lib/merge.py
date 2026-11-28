@@ -62,11 +62,11 @@ import re
 import subprocess
 from collections.abc import Callable
 from functools import partial
+from typing import cast
 
 
 from lib.exit_codes import CI_DISARMED, CI_GREEN, CI_PENDING, CI_RED
 from lib.json_types import JsonObject, as_object
-from lib.progress import OnChange
 from lib import gh_rate_limit, removes_object
 from deploy_tools import await_ci
 from deploy_tools.land_lib import (
@@ -83,8 +83,10 @@ from deploy_tools.land_lib import (
 from deploy_tools.land_lib.landing import BRANCH, Landing
 from deploy_tools.land_lib.outcome import Outcome, Verdict, disarmed, say
 from deploy_tools.land_lib.pr_json import CommitMessage
+from deploy_tools.land_lib.core import landing_actions as act
+from deploy_tools.land_lib.core import landing_machine
 from deploy_tools.land_lib.core.landing_actions import Die, End
-from deploy_tools.land_lib.core.landing_state import State, Watch
+from deploy_tools.land_lib.core.landing_state import Ci, LandingState, Setup
 from deploy_tools.land_lib.transitions import CHECKS
 
 
@@ -421,13 +423,6 @@ def merged(ln: Landing, waited: int) -> None:
     say(", ".join([f"merged after {waited}s", *filter(None, notes)]))
 
 
-def _ci_state(ln: Landing, head: str, in_turn: bool) -> State:
-    """The state of a landing whose head's CI is pending: its own run, or a run in the turn."""
-    if not in_turn:
-        return State.OWN_RUN
-    return State.PROVING if head == ln.tested_head else State.TESTING
-
-
 def await_merge(ln: Landing, take_turn: TakeTurn = _no_turn) -> None:
     """Poll until merged, merging directly once CI is green. Bail early on two dead ends.
 
@@ -496,201 +491,146 @@ def await_merge(ln: Landing, take_turn: TakeTurn = _no_turn) -> None:
     since ended (`turn.SshLock.lost`) does not merge: another landing may hold the turn by
     then. It gives the turn back and asks for it again, as after a rate-limit wait, and polls
     on. A batch member reads its holder's turn, so a lost one ends the batch there.
+
+    `core/landing_machine.step` decides every call above from one `LandingState`, and
+    `_perform` makes each call it returns.
     """
-    o, t = ln.opts, ln.tools
-    waited = 0
-    # The `waited` no update moves the end of the wait past.
-    wait_cap = 2 * o.merge_timeout
-    # Whether this landing holds the landing turn, and the seconds it stood in line for it.
-    in_turn, queued = False, 0
-    conflicting = 0
-    refused = OnChange(say)
-    rate_limited = OnChange(say)
-    # await_ci's last answer when it was `pending`, for the merge-timeout message; else empty.
-    ci_pending = ""
-    updated_from = ""
-    # Whether this landing has asked for the turn, which `turn.held` answers only once.
-    asked = False
-    # Whether `stale_base.rejoin_line` made the PR a draft at a head GitHub has yet to move to.
-    rejoined = False
-    # Whether this landing made the PR a draft, so a refusal inside the turn marks it ready.
-    drafted = False
+    o = ln.opts
+    setup = Setup(
+        pr=o.pr,
+        merge_timeout=o.merge_timeout,
+        merge_poll=o.merge_poll,
+        direct=bool(ln.direct_merge_subject),
+        stuck_after_s=stuck_checks.AFTER_S,
+    )
+    first = LandingState(
+        setup=setup,
+        pinned_head=ln.pinned_head,
+        tested_head=ln.tested_head,
+        batched=bool(ln.batched_s),
+    )
+    _drive(ln, take_turn, first)
 
-    def ask(head: str, draft: bool) -> tuple[bool, int]:
-        nonlocal asked
-        asked = True
-        return take(ln, take_turn, head, draft, drafted)
 
-    if ln.direct_merge_subject:
-        updated_from, in_turn, queued = _start_run(ln, ask)
-        waited = queued
-    # The `waited` at which the wait ends; a wait in line or an update moves it.
-    wait_ends_at = waited + o.merge_timeout
-    if ln.batched_s:
-        wait_ends_at = min(wait_ends_at, wait_cap)
-    # The head the pin gate last passed, so a retried merge reruns the gate only for a new head.
-    gated_head = ""
-    # The forward-only pins that head bumps, whose land rule is read again before each retry.
-    gated_pins: list[str] = []
-    watch = Watch()
-    # The last CI read's counts, written once the state they belong to is entered.
-    checks: list[tuple[int, int]] = []
+def _drive(ln: Landing, take_turn: TakeTurn, s: LandingState) -> None:
+    """Run the merge wait from `s` to its end, making each call `step` returns.
 
-    def count_checks(done: int, total: int) -> None:
-        checks.append((done, total))
-
-    # The head whose checks `stuck_checks` reads, and the `waited` of its next read.
-    stuck_head = ""
-    stuck_read_at = 0
+    Raises:
+        Outcome: the wait ended without a merge, or a call ended the landing.
+    """
+    s, todo = landing_machine.start(s)
     while True:
-        view = ln.view("state,mergeable,headRefOid")
-        state = view.get("state", "")
-        if state == "MERGED":
-            ln.transitions.enter(State.MERGED)
-            break
-        if state == "CLOSED":
-            ln.die(*ending(o.pr, Die(End.CLOSED)))
-        conflicting = conflicting + 1 if view.get("mergeable") == "CONFLICTING" else 0
-        if conflicting >= 2:
-            ln.die(*ending(o.pr, Die(End.CONFLICT)))
-        head = view.get("headRefOid") or ""
-        # GitHub applies a branch update asynchronously: until the head moves, the stale head's
-        # green CI is what the update discards.
-        if updated_from and head == updated_from:
-            head = ""
-        if ln.pinned_head and head and head != ln.pinned_head:
-            if updated_from != ln.pinned_head:
-                moved = Die(End.HEAD_MOVED, head=head, detail=ln.pinned_head)
-                ln.die(*ending(o.pr, moved))
-            say(f"checking the landing policy again on the updated head {head[:8]}")
-            ln.pinned_head = policy.check(ln)
-            continue
-        if rejoined and head:
-            rejoined = False
-            again, in_turn, in_line = _start_run(ln, ask, rejoined=True)
-            updated_from = again or updated_from
-            queued += in_line
-            waited += in_line
-            wait_ends_at = min(waited + o.merge_timeout, wait_cap)
-            continue
-        pause, spent = 0, ""
-        rc, line = CI_PENDING, ""
-        checks.clear()
-        if head:
-            try:
-                rc, line = t.await_ci(head, 0, count_checks)
-            except await_ci.RateLimitedError as exc:
-                pause, spent = exc.wait_s, exc.quota
-                rate_limited(
-                    f"{head[:8]}: {exc}; the merge wait backs off until it does"
-                )
-        if head and not pause:
-            ci_pending = line if rc == CI_PENDING else ""
-            # A head that asked and has no turn stays `no-turn`.
-            if rc == CI_PENDING and (in_turn or not asked):
-                ln.transitions.enter(_ci_state(ln, head, in_turn))
-                if checks:
-                    ln.transitions.progress(*checks[-1], CHECKS)
-            watch = stall.on_poll(ln, watch, head, stall.of(ci_pending), waited, line)
-            if rc == CI_RED:
-                ln.die(*ending(o.pr, Die(End.CI_RED, detail=line)))
-            # Only this landing's direct merge waits on await_ci's green, so only it can never fire
-            # on a disarmed gate.
-            if rc == CI_DISARMED and ln.direct_merge_subject:
-                ln.die(*ending(o.pr, Die(End.DISARMED, head=head)))
-            if rc == CI_GREEN and ln.direct_merge_subject and not in_turn:
-                if not asked and stale_base.rejoin_line(
-                    ln, head, view.get("mergeable") == "CONFLICTING"
-                ):
-                    updated_from, rejoined, drafted = head, True, True
-                    ln.transitions.enter(State.REJOINING)
-                    wait_ends_at = min(waited + o.merge_timeout, wait_cap)
-                    continue
-                in_turn, in_line = ask(head, False)
-                if in_line:
-                    # The PR may have moved while this landing stood in line, so read it again.
-                    queued += in_line
-                    waited += in_line
-                    wait_ends_at = min(waited + o.merge_timeout, wait_cap)
-                    # DECIDED: a ready head master moved past while it waited gives the turn
-                    # back and rejoins the line as a draft (the operator, 2026-11-15, amending
-                    # D10 in docs/ci-throughput.md): merged as it stands, master sweeps in full.
-                    if stale_base.rejoin_in_turn(
-                        ln, head, view.get("mergeable") == "CONFLICTING"
-                    ):
-                        in_turn = False
-                        updated_from, rejoined, drafted = head, True, True
-                        ln.transitions.enter(State.REJOINING)
-                    continue
-            if rc == CI_GREEN and ln.direct_merge_subject:
-                ln.transitions.enter(State.MERGING)
-                slots.refuse_before_merge(ln, head)
-                if head != gated_head:
-                    gated_pins = pin_gate.gate_before_merge(ln, head)
-                    gated_head = head
-                else:
-                    pin_gate.recheck_before_merge(ln, gated_pins)
-                commits = ln.view("commits").get("commits", [])
-                interrupted, ln.turn_interrupted = ln.turn_interrupted, False
-                tested = stale_base.batch_tested(ln, head)
-                if (
-                    interrupted
-                    and not tested
-                    and stale_base.rejoin_in_turn(
-                        ln, head, view.get("mergeable") == "CONFLICTING"
-                    )
-                ):
-                    in_turn, updated_from, rejoined, drafted = False, head, True, True
-                    ln.transitions.enter(State.REJOINING)
-                    continue
-                if not tested:
-                    stale_base.refuse_stale_overlap(ln, head)
-                if ln.turn_lost():
-                    ln.without_turn(
-                        lambda: None, "because the ssh session that held it ended"
-                    )
-                    continue
-                refusal = _merge_directly(ln, head, commits)
-                if not refusal:
-                    continue
-                failing = failing_checks.find(ln, head, refusal)
-                if failing:
-                    red = Die(End.FAILING_CHECK, head=head, names=tuple(failing))
-                    ln.die(*ending(o.pr, red))
-                refused(f"merge refused at {head[:8]}: {refusal}; waiting")
-            if head != stuck_head:
-                stuck_head, stuck_read_at = head, waited + stuck_checks.AFTER_S
-            elif rc == CI_GREEN and waited >= stuck_read_at:
-                stuck_read_at = waited + stuck_checks.AFTER_S
-                stuck = stuck_checks.find(ln, head)
-                if stuck:
-                    stuck_end = Die(End.STUCK_CHECK, head=head, names=tuple(stuck))
-                    ln.die(*ending(o.pr, stuck_end))
-        if waited >= wait_ends_at:
-            # A run skipped as a draft names its own remedy in await_ci's line, because a re-run
-            # skips again.
-            if pause:
-                end, detail = End.TIMEOUT_RATE_LIMITED, str(pause)
-            elif watch.head:
-                end, detail = End.TIMEOUT_STALLED, ci_pending
-            elif ci_pending:
-                end, detail = End.TIMEOUT_PENDING, ci_pending
-            else:
-                end, detail = End.TIMEOUT, ""
-            timeout = Die(end, detail=detail, waited=waited, pr_state=state)
-            ln.die(*ending(o.pr, timeout))
-        step = o.merge_poll
-        if pause:
-            step = ln.without_turn(
-                partial(
-                    gh_rate_limit.sleep_until_reset,
-                    spent,
-                    max(step, min(pause, wait_ends_at - waited)),
-                    t.sleep,
-                    ln.read_quota,
-                )
+        *reports, call = todo
+        for report in reports:
+            _perform(ln, take_turn, report)
+        answer = _perform(ln, take_turn, call)
+        if isinstance(call, act.ENDS):
+            return
+        s, todo = landing_machine.step(s, answer)
+
+
+_CI = {
+    CI_GREEN: Ci.GREEN,
+    CI_RED: Ci.RED,
+    CI_PENDING: Ci.PENDING,
+    CI_DISARMED: Ci.DISARMED,
+}
+
+
+def _perform(ln: Landing, take_turn: TakeTurn, action: act.Action) -> act.Observation:
+    """Carry out one action through the module that owns it.
+
+    Returns:
+        The answer `step` takes next. An action that only reports answers `Done`.
+    """
+    t = ln.tools
+    match action:
+        case act.StartRun(rejoined=rejoined, drafted=drafted):
+            asked = False
+
+            def ask(head: str, draft: bool) -> tuple[bool, int]:
+                nonlocal asked
+                asked = True
+                return take(ln, take_turn, head, draft, drafted)
+
+            updated, in_turn, in_line = _start_run(ln, ask, rejoined=rejoined)
+            return act.RunStarted(
+                updated, in_turn, in_line, asked, ln.tested_head, bool(ln.batched_s)
             )
-        else:
-            t.sleep(step)
-        waited += step
-    merged(ln, waited)
+        case act.ReadView():
+            view = ln.view("state,mergeable,headRefOid")
+            return act.Viewed(
+                view.get("state", ""),
+                view.get("mergeable") == "CONFLICTING",
+                view.get("headRefOid") or "",
+            )
+        case act.CheckPolicy():
+            ln.pinned_head = policy.check(ln)
+            return act.PolicyChecked(ln.pinned_head)
+        case act.ReadCi(head=head):
+            checks: list[tuple[int, int]] = []
+            try:
+                rc, line = t.await_ci(head, 0, lambda d, n: checks.append((d, n)))
+            except await_ci.RateLimitedError as exc:
+                return act.CiRateLimited(exc.wait_s, exc.quota, str(exc))
+            return act.CiRead(
+                _CI.get(rc, Ci.OTHER),
+                line,
+                stall.of(line),
+                checks[-1] if checks else None,
+            )
+        case act.WatchStall(
+            watch=watch, head=head, stall=kind, waited=waited, line=line
+        ):
+            return act.StallWatched(stall.on_poll(ln, watch, head, kind, waited, line))
+        case act.RejoinLine(head=head, conflicting=conflicting):
+            return act.Answer(stale_base.rejoin_line(ln, head, conflicting))
+        case act.AskTurn(head=head, drafted=drafted):
+            in_turn, in_line = take(ln, take_turn, head, False, drafted)
+            return act.TurnAnswered(in_turn, in_line, ln.tested_head)
+        case act.RejoinInTurn(head=head, conflicting=conflicting):
+            return act.Answer(stale_base.rejoin_in_turn(ln, head, conflicting))
+        case act.RefuseBeforeMerge(head=head):
+            slots.refuse_before_merge(ln, head)
+        case act.GatePins(head=head):
+            return act.PinsGated(tuple(pin_gate.gate_before_merge(ln, head)))
+        case act.RecheckPins(pins=pins):
+            pin_gate.recheck_before_merge(ln, list(pins))
+        case act.ReadCommits():
+            return act.CommitsRead(tuple(ln.view("commits").get("commits", [])))
+        case act.ReadTested(head=head):
+            interrupted, ln.turn_interrupted = ln.turn_interrupted, False
+            return act.Tested(stale_base.batch_tested(ln, head), interrupted)
+        case act.RefuseStaleOverlap(head=head):
+            stale_base.refuse_stale_overlap(ln, head)
+        case act.ReadTurnLost():
+            return act.Answer(ln.turn_lost())
+        case act.StepOut(reason=reason):
+            ln.without_turn(lambda: None, reason)
+        case act.Merge(head=head, commits=commits):
+            return act.MergeAnswered(
+                _merge_directly(ln, head, cast(list[CommitMessage], list(commits)))
+            )
+        case act.FindFailing(head=head, refusal=refusal):
+            return act.Names(tuple(failing_checks.find(ln, head, refusal)))
+        case act.FindStuck(head=head):
+            return act.Names(tuple(stuck_checks.find(ln, head)))
+        case act.Sleep(seconds=seconds):
+            t.sleep(seconds)
+            return act.Slept(seconds)
+        case act.WaitOutRateLimit(quota=quota, seconds=seconds):
+            sleep = partial(
+                gh_rate_limit.sleep_until_reset, quota, seconds, t.sleep, ln.read_quota
+            )
+            return act.Slept(ln.without_turn(sleep))
+        case act.Say(text=text):
+            say(text)
+        case act.Enter(state=state):
+            ln.transitions.enter(state)
+        case act.Progress(done=done, total=total):
+            ln.transitions.progress(done, total, CHECKS)
+        case act.Die():
+            ln.die(*ending(ln.opts.pr, action))
+        case act.Merged(waited=waited):
+            merged(ln, waited)
+    return act.Done()

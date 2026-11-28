@@ -125,6 +125,7 @@ ALLOWED = {
         "stuck_checks",
         "transitions",
         "core/landing_actions",
+        "core/landing_machine",
         "core/landing_state",
     },
     # The merge wait's decision about a head whose CI no longer moves, and the run it starts.

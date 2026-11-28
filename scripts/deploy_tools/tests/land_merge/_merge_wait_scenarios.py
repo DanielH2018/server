@@ -76,7 +76,7 @@ class TurnBy(StrEnum):
 
     # `turn.held`, as the pipeline offers it to a landing that forms no batch.
     HELD = "held"
-    # No turn: `merge._no_turn`.
+    # No turn offered: the default of `merge.await_merge`.
     NONE = "none"
     # `batch.forming` over `turn.held`, as `batch.land` offers it.
     BATCH = "batch"
