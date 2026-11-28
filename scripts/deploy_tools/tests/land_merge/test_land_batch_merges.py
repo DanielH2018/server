@@ -5,6 +5,7 @@ Run: uv run pytest scripts/deploy_tools/tests/land_merge/test_land_batch_merges.
 `test_land_batch.py` has how a batch forms, and the same fixture and model.
 """
 
+import json
 from dataclasses import replace
 
 import pytest
@@ -62,10 +63,10 @@ def test_master_moving_during_the_batchs_run_leaves_the_holder_to_the_stale_rule
     ln, hub, the_line = batch_of(drafts=("7",))
     real = ln.tools.await_ci
 
-    def master_moves_during_the_run(sha, timeout):
+    def master_moves_during_the_run(sha, timeout, on_checks):
         if sha == hub.branches.get(f"queue/{OWN}"):
             hub.master = "e" * 40
-        return real(sha, timeout)
+        return real(sha, timeout, on_checks)
 
     ln.tools = replace(ln.tools, await_ci=master_moves_during_the_run)
     land(ln)
@@ -83,10 +84,10 @@ def _during_the_run(ln, hub, change) -> None:
     real = ln.tools.await_ci
     done = []
 
-    def await_ci(sha, timeout):
+    def await_ci(sha, timeout, on_checks):
         if sha == hub.branches.get(f"queue/{OWN}") and not done:
             done.append(change())
-        return real(sha, timeout)
+        return real(sha, timeout, on_checks)
 
     ln.tools = replace(ln.tools, await_ci=await_ci)
 
@@ -151,6 +152,20 @@ def test_the_members_merge_inside_the_landings_two_merge_budgets(
     assert ("7" in hub.ever_labelled) == ("7" in merged)
 
 
+def test_only_the_holder_writes_a_state_record_counting_the_members_it_merged(
+    batch_of,
+):
+    ln, hub, _ = batch_of(drafts=("5", "7"))
+    land(ln)
+    assert hub.merged == [OWN, "5", "7"]
+    records = [json.loads(c[1][1]) for c in hub.calls if c[0] == "record"]
+    # Each member's own landing writes its PR's record, so the holder writes none for it.
+    assert {c[1][0] for c in hub.calls if c[0] == "record"} == {OWN}
+    assert [r["progress"] for r in records if r["progress"]] == [
+        {"done": done, "total": 2, "what": "batch members merged"} for done in (0, 1, 2)
+    ]
+
+
 def test_a_slow_member_leaves_no_budget_for_the_one_behind_it(batch_of):
     ln, hub, the_line = batch_of(
         drafts=("7", "9"), opts={"merge_timeout": 850, "merge_poll": 110}
@@ -159,10 +174,10 @@ def test_a_slow_member_leaves_no_budget_for_the_one_behind_it(batch_of):
     pending = [CiVerdict(CI_PENDING, "pending")] * 5
     its_ci = ln.tools.await_ci
 
-    def await_ci(sha, timeout):
+    def await_ci(sha, timeout, on_checks):
         if sha == head_of("7") and not hub.prs["7"]["isDraft"] and pending:
             return pending.pop()
-        return its_ci(sha, timeout)
+        return its_ci(sha, timeout, on_checks)
 
     ln.tools = replace(ln.tools, await_ci=await_ci)
     land(ln)

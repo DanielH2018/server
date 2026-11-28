@@ -81,6 +81,7 @@ from deploy_tools.land_lib import (
 )
 from deploy_tools.land_lib.landing import BRANCH, Landing
 from deploy_tools.land_lib.outcome import Outcome, Verdict, say
+from deploy_tools.land_lib.transitions import CHECKS, State, Transitions
 from lib.exit_codes import CI_GREEN, CI_PENDING, CI_RED
 from lib.json_types import JsonValue, as_object
 
@@ -182,6 +183,7 @@ def _admit(ln: Landing, pr: str, head: str) -> Member | None:
     """The draft `pr` as a member, or None, with the reason said, when it lands alone."""
     opts = replace(ln.opts, pr=pr, subject="", merge_timeout=MEMBER_TIMEOUT_S)
     member = Landing(opts, ln.tools, ln.classifier)
+    member.transitions = Transitions(pr, None)
     member.step_out_of_turn = partial(_wait_without_turn, ln, member)
     say(f"checking PR #{pr} from the line, as this landing checked its own PR")
     try:
@@ -364,7 +366,7 @@ def _await_run(ln: Landing, tip: str) -> tuple[int, str]:
     waited = 0
     while True:
         try:
-            rc, said = ln.tools.await_ci(tip, 0)
+            rc, said = ln.tools.await_ci(tip, 0, ln.transitions.counter(CHECKS))
         except await_ci.RateLimitedError as exc:
             rc, said = CI_PENDING, str(exc)
         if rc == CI_GREEN:
@@ -461,12 +463,14 @@ def form(ln: Landing, head: str) -> int:
             )
             say(f"testing {named} in one run, stacked on {base[:8]} as {branch}")
             ln.ledger.batch = len(numbers)
+            ln.transitions.enter(State.TESTING)
             waited, why = _await_run(ln, tip)
             if why:
                 say(
                     f"the batch is not green: {why}; PR #{pr}'s own run says whether "
                     "the red PR is its own or one of the others"
                 )
+                ln.transitions.enter(State.SPLIT)
                 ln.lands_alone, ln.split_members = True, members
                 for member in members:
                     _answer(ln, member, line.SPLIT)
@@ -564,7 +568,9 @@ def _merge_members(ln: Landing) -> None:
     # only while that much budget is left.
     left = 2 * ln.opts.merge_timeout - ln.merge_wait_s
     before = ln
-    for member in ln.batch:
+    if ln.batch:
+        ln.transitions.progress(0, len(ln.batch), "batch members merged")
+    for merged, member in enumerate(ln.batch, 1):
         pr = member.ln.opts.pr
         if left < 2 * MEMBER_TIMEOUT_S:
             why = f"this landing's merge budgets have {max(left, 0)}s left"
@@ -574,6 +580,7 @@ def _merge_members(ln: Landing) -> None:
             say(f"PR #{pr} is not merged ({why}); it and the PRs after it land alone")
             return
         _answer(ln, member, line.MERGED)
+        ln.transitions.progress(merged, len(ln.batch), "batch members merged")
         left -= member.ln.merge_wait_s
         before = member.ln
 

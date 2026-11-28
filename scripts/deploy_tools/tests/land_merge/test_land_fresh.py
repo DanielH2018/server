@@ -14,7 +14,7 @@ from pathlib import Path
 
 import pytest
 
-from _land_fakes import PRIMARY, Fakes, build_tools
+from _land_fakes import PRIMARY, Fakes, annotations, build_tools
 from deploy_tools.land_lib import fresh, handoff
 from deploy_tools.land_lib.options import Options
 from lib import git_testing
@@ -240,7 +240,8 @@ def test_land_hands_a_fresh_landing_to_the_checkout_and_annotates_nothing():
     )
     assert rc == 75
     assert handed == [["--pr", "999", "--arm-merge", "--await-merge"]]
-    assert not [c for c in calls if c[0] in ("logger", "gh")]
+    assert not annotations(calls)
+    assert not [c for c in calls if c[0] == "gh"]
 
 
 def test_land_runs_a_handed_over_turn_from_a_fresh_checkout_and_annotates_nothing(
@@ -262,7 +263,7 @@ def test_land_runs_a_handed_over_turn_from_a_fresh_checkout_and_annotates_nothin
     assert land._land(opts, tools, None, child) == 0
     [handed] = [c for c in calls if c[0] == "fresh_landing"]
     assert handed[1][1] == child and handed[2] == {"turn_fd": held.fd}
-    assert not [c for c in calls if c[0] == "logger"]
+    assert not annotations(calls)
     assert turn.try_take(tmp_path / "turn.lock") is not None
 
 
@@ -285,7 +286,7 @@ def test_a_handed_over_turn_whose_checkout_failed_ends_refused_and_frees_the_tur
     out = capsys.readouterr().out
     assert "VERDICT: refused" in out
     assert "git fetch: offline; nothing is merged" in out
-    [(logline,)] = [c[1] for c in calls if c[0] == "logger"]
+    [logline] = annotations(calls)
     assert "verdict=refused" in logline
     assert "refused" in verdict_record.read_text()
     assert turn.try_take(tmp_path / "turn.lock") is not None

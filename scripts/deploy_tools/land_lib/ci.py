@@ -9,11 +9,14 @@ from lib.exit_codes import (
 )
 from deploy_tools.land_lib.landing import Landing
 from deploy_tools.land_lib.outcome import Cause, Verdict, disarmed
+from deploy_tools.land_lib.transitions import CHECKS
 
 
 def wait_master_ci(ln: Landing, sha: str) -> None:
     """Wait for master CI on `sha`; red and no-verdict each end the landing with a name."""
-    rc, line = ln.tools.await_ci(sha, ln.opts.ci_timeout)
+    rc, line = ln.tools.await_ci(
+        sha, ln.opts.ci_timeout, ln.transitions.counter(CHECKS)
+    )
     print(line)
     if rc == CI_GREEN:
         return

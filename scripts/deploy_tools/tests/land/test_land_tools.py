@@ -209,12 +209,40 @@ def _wait_args(timeout_s, token):
     """The (interval, walk_descendants) `await_ci_verdict` hands `await_ci.wait`."""
     seen = []
 
-    def wait(sha, budget, interval, walk_descendants):
+    def wait(sha, budget, interval, walk_descendants, on_runs):
         seen.append((interval, walk_descendants))
         return 0, f"{sha[:8]}: CI green"
 
-    tools.await_ci_verdict("abc123def", timeout_s, wait=wait, token=lambda: token)
+    tools.await_ci_verdict(
+        "abc123def", timeout_s, lambda done, total: None, wait=wait, token=lambda: token
+    )
     return seen
+
+
+def test_a_ci_read_counts_its_check_runs_finished_of_those_listed():
+    from functools import partial
+
+    from ci_verdict import CheckRun
+    from deploy_tools import await_ci
+
+    runs = [
+        *(
+            CheckRun(name, "completed", "success")
+            for name in await_ci.REQUIRED_CONTEXTS
+        ),
+        CheckRun("an optional check", "in_progress", None),
+    ]
+    wait = partial(await_ci.wait, fetch=lambda sha: runs, fetch_suites=lambda sha: [])
+    counts = []
+    verdict = tools.await_ci_verdict(
+        "abc123def",
+        0,
+        lambda *count: counts.append(count),
+        wait=wait,
+        token=lambda: "t",
+    )
+    assert verdict.rc == 0
+    assert counts == [(len(runs) - 1, len(runs))]
 
 
 def test_an_anonymous_ci_wait_backs_off_and_walks_no_descendants(capsys):

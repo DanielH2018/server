@@ -11,6 +11,7 @@ the wait. ADR-0020 records the wait and its changed set.
 Run: uv run pytest scripts/deploy_tools/tests/land_deploy/test_land_waits_on_the_changed_set.py
 """
 
+import json
 from dataclasses import replace
 
 import pytest
@@ -59,7 +60,9 @@ def _land(land_run_main, paths: list[str], sim: Sim, changed_files=None, **kwarg
     )
     tools, calls = build_tools(fakes)
 
-    def land_wait(sha, services, primary, cap_s, window_grace_s, on_root_alone):
+    def land_wait(
+        sha, services, primary, cap_s, window_grace_s, on_root_alone, on_ready
+    ):
         calls.append(("land_wait", (sha, services), {}))
         return promote_wait.land_wait(
             sim.reads(),
@@ -68,6 +71,7 @@ def _land(land_run_main, paths: list[str], sim: Sim, changed_files=None, **kwarg
             cap_s=cap_s,
             window_grace_s=window_grace_s,
             on_root_alone=on_root_alone,
+            on_ready=on_ready,
         )
 
     tools = replace(tools, flux=replace(tools.flux, land_wait=land_wait))
@@ -117,6 +121,27 @@ def test_a_service_manifest_pr_reaches_land_wait_and_settles_on_its_verdict(
     assert [c[1] for c in calls if c[0] == "land_wait"] == [(MERGE_SHA, [])]
     assert sim.annotations == _annotation("bento-pdf")
     assert _gated(calls) == [["bento-pdf"]]
+
+
+def test_the_promotion_wait_counts_the_kustomizations_ready_in_the_state_record(
+    land_run_main,
+):
+    sim = Sim(
+        polls=[at(P, "bento-pdf"), at(M, "bento-pdf")],
+        published={
+            M: digests(authelia="a", bento_pdf="b2", texbrain="t"),
+            P: digests(authelia="a", bento_pdf="b1", texbrain="t"),
+        },
+    )
+    rc, out, calls = _land(land_run_main, [SERVICE_MANIFEST], sim)
+    assert rc == 0, out
+    records = [json.loads(c[1][1]) for c in calls if c[0] == "record"]
+    # `homelab` and `bento-pdf`, applied at P on the first poll and at M on the second.
+    assert [r["progress"] for r in records if r["state"] == "promoting"] == [
+        None,
+        {"done": 0, "total": 2, "what": "Kustomizations ready"},
+        {"done": 2, "total": 2, "what": "Kustomizations ready"},
+    ]
 
 
 def test_a_service_manifest_pr_ends_on_land_waits_failed_verdict(land_run_main):

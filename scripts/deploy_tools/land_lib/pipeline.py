@@ -54,6 +54,7 @@ from deploy_tools.land_lib import (
 )
 from deploy_tools.land_lib.landing import Landing
 from deploy_tools.land_lib.outcome import Outcome, Verdict, say
+from deploy_tools.land_lib.transitions import State
 
 
 def _step_resolve(ln: Landing) -> None:
@@ -96,12 +97,12 @@ def _step_hosts(ln: Landing) -> None:
 
 # The callables are bound at import: a test that monkeypatches `ci.preflight` does not reach the
 # pipeline. Patch an entry of `_STEPS` instead.
-_STEPS: tuple[tuple[str, Callable[[Landing], None]], ...] = (
-    ("resolving PR #{pr}", _step_resolve),
-    ("waiting for master CI", _step_ci),
-    ("waiting on the promotion", deploy.deploy_phase),
-    ("waiting for hosts to apply", _step_hosts),
-    ("health verdict", health_verdict.health),
+_STEPS: tuple[tuple[str, State, Callable[[Landing], None]], ...] = (
+    ("resolving PR #{pr}", State.RESOLVING, _step_resolve),
+    ("waiting for master CI", State.MASTER_CI, _step_ci),
+    ("waiting on the promotion", State.PROMOTING, deploy.deploy_phase),
+    ("waiting for hosts to apply", State.HOST_WAIT, _step_hosts),
+    ("health verdict", State.GRADING, health_verdict.health),
 )
 
 STEP_COUNT = len(_STEPS)
@@ -132,6 +133,7 @@ def _phases(ln: Landing) -> None:
         ln.die(f"cannot cd to {ln.opts.primary}", 1)
     if ln.opts.arm_merge:
         print(f"== arm  arming PR #{ln.opts.pr}'s merge")
+        ln.transitions.enter(State.ARMED)
         merge.arm_merge(ln)
     if ln.opts.await_merge:
         how = (
@@ -145,8 +147,9 @@ def _phases(ln: Landing) -> None:
         with turn.held(ln) as take_turn:
             batch.land(ln, take_turn)
     with contextlib.ExitStack() as holding:
-        for number, (label, phase) in enumerate(_STEPS, 1):
+        for number, (label, state, phase) in enumerate(_STEPS, 1):
             print(f"== {number}/{STEP_COUNT}  {label.format(pr=ln.opts.pr)}")
+            ln.transitions.enter(state)
             if number == _SLOT_FROM_STEP:
                 holding.enter_context(slots.held(ln))
             phase(ln)

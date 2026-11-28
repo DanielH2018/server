@@ -37,7 +37,9 @@ def _wait_beside_a_serial_pr(sim: Sim, bars: list) -> None:
         bars.append(slots._bar(serial, live_limit.SERIAL, slots._lock_of(serial)))
         sim.sleeps += 1
 
-    def land_wait(sha, services, primary, cap_s, window_grace_s, on_root_alone):
+    def land_wait(
+        sha, services, primary, cap_s, window_grace_s, on_root_alone, on_ready
+    ):
         return promote_wait.land_wait(
             replace(sim.reads(), sleep=sleep),
             sha,
@@ -45,6 +47,7 @@ def _wait_beside_a_serial_pr(sim: Sim, bars: list) -> None:
             cap_s=cap_s,
             window_grace_s=window_grace_s,
             on_root_alone=on_root_alone,
+            on_ready=on_ready,
         )
 
     ln.tools = replace(ln.tools, flux=replace(ln.tools.flux, land_wait=land_wait))

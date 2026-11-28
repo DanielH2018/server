@@ -23,6 +23,7 @@ from deploy_tools.land_lib.outcome import Outcome
 from deploy_tools.land_lib.pr_json import PrView, parse_view, rest_filter
 from deploy_tools.land_lib import gh_read
 from deploy_tools.land_lib.tools import Classifier, Tools
+from deploy_tools.land_lib.transitions import Transitions
 from lib import gh_rate_limit
 from lib.json_types import as_object
 
@@ -71,6 +72,7 @@ class Landing:
         self.tools = tools
         self.classifier = classifier or Classifier()
         self.ledger = Ledger(pr=opts.pr, t_start=tools.clock())
+        self.transitions = Transitions(opts.pr, tools)
         self.merge_sha = ""
         self.resolved_tags = [t for t in opts.tags.split(",") if t]
         self.classification = Classification()
