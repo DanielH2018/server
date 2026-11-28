@@ -156,9 +156,11 @@ def test_every_user_can_read_a_place_whatever_the_writers_umask(the_line, tmp_pa
     assert (tmp_path / "line" / "7").stat().st_mode & 0o777 == 0o644
 
 
-def test_a_place_whose_ticket_is_not_a_number_is_left_out(the_line, tmp_path):
+# A superscript two passes `str.isdigit`, and `int()` refuses it.
+@pytest.mark.parametrize("ticket", ["abc", "\u00b2"], ids=["letters", "a-superscript"])
+def test_a_place_whose_ticket_is_not_a_number_is_left_out(the_line, tmp_path, ticket):
     the_line("join", "7", HEAD, "5")
-    (tmp_path / "line" / "8").write_text(f"{HEAD} @abc\n")
+    (tmp_path / "line" / "8").write_text(f"{HEAD} @{ticket}\n", encoding="utf-8")
     assert the_line("stand", "7", HEAD, "5").splitlines() == ["5"]
     assert _waiting(the_line) == [f"7 {HEAD} 5"]
 

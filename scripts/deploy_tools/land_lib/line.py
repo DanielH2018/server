@@ -90,7 +90,12 @@ def _op(directory: str, op: str, *args: str) -> str:
     """
     if op not in ("join", "stand", "leave", "waiting", "answer", "record"):
         raise ValueError(f"no such operation on the line: {op}")
-    if op != "waiting" and not args[0].isdigit():
+
+    def number(text: str) -> bool:
+        """Whether `text` is a number `int()` reads; `str.isdigit` also passes digits it refuses."""
+        return text.isascii() and text.isdigit()
+
+    if op != "waiting" and not number(args[0]):
         raise ValueError(f"not a pull request number: {args[0]}")
     try:
         os.mkdir(directory)
@@ -119,7 +124,7 @@ def _op(directory: str, op: str, *args: str) -> str:
         rows = [f"{ticket} {answer}".rstrip()]
         oldest = time.time() - FRESH_S
         for name in sorted(os.listdir(directory)):
-            if not name.isdigit() or name == pr:
+            if not number(name) or name == pr:
                 continue
             try:
                 if os.lstat(f"{directory}/{name}").st_mtime < oldest:
@@ -130,7 +135,7 @@ def _op(directory: str, op: str, *args: str) -> str:
             _, theirs, said = parse(place)
             if not place or said in ("merged", "conflict"):
                 continue
-            if not theirs or theirs.isdigit():
+            if not theirs or number(theirs):
                 rows.append(f"{name} {theirs or 0}")
         return "\n".join(rows)
 
@@ -169,7 +174,7 @@ def _op(directory: str, op: str, *args: str) -> str:
         for name in sorted(os.listdir(directory)):
             try:
                 status = os.lstat(f"{directory}/{name}")
-                if not name.isdigit() or status.st_uid != os.getuid():
+                if not number(name) or status.st_uid != os.getuid():
                     continue
                 if status.st_mtime < oldest:
                     os.unlink(f"{directory}/{name}")
@@ -181,7 +186,7 @@ def _op(directory: str, op: str, *args: str) -> str:
             if (
                 head not in ("", NO_HEAD)
                 and not answer
-                and (not ticket or ticket.isdigit())
+                and (not ticket or number(ticket))
             ):
                 found.append(f"{name} {head} {ticket or 0}")
         return "\n".join(found)
