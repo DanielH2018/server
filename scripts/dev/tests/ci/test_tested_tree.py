@@ -11,6 +11,7 @@ import pytest
 
 from dev import tested_tree
 from lib.git_testing import commit, git, git_out, init_repo
+from lib.json_types import JsonObject, JsonValue, as_object
 
 REPO_NAME = "o/r"
 SQUASH = "a" * 40
@@ -22,7 +23,7 @@ OTHER_TREE = "d" * 40
 def _api(pulls, statuses):
     """A `get` that serves the two endpoints; an Exception value is raised."""
 
-    def get(path):
+    def get(path: str) -> JsonValue:
         body = pulls if path.endswith("/pulls") else statuses
         if isinstance(body, Exception):
             raise body
@@ -31,7 +32,7 @@ def _api(pulls, statuses):
     return get
 
 
-def _pr(merge_commit_sha=SQUASH):
+def _pr(merge_commit_sha=SQUASH) -> list[JsonValue]:
     return [{"merge_commit_sha": merge_commit_sha, "head": {"sha": HEAD}}]
 
 
@@ -44,7 +45,7 @@ def _status(
     context=tested_tree.CONTEXT,
     login=tested_tree.CREATOR,
     target_url: str | None = RUN_URL,
-):
+) -> list[JsonValue]:
     return [
         {
             "context": context,
@@ -81,7 +82,7 @@ def test_a_failed_or_foreign_status_is_not_proven():
 def test_a_status_from_another_creator_is_not_proven():
     assert _prove(_pr(), _status(login="fake-operator")) is False
     status = _status()
-    del status[0]["creator"]
+    del as_object(status[0], "status")["creator"]
     assert _prove(_pr(), status) is False
 
 
@@ -110,6 +111,18 @@ def test_an_unreadable_api_is_not_proven():
     assert _prove(OSError("boom"), _status()) is False
     assert _prove(_pr(), ValueError("not json")) is False
     assert _prove({"message": "Not Found"}, _status()) is False
+
+
+@pytest.mark.parametrize(
+    ("head", "field"), [({"sha": 7}, "pull.head.sha"), (HEAD, "pull.head")]
+)
+def test_a_malformed_pull_is_not_proven_and_the_reason_names_its_field(head, field):
+    pulls = [{"merge_commit_sha": SQUASH, "head": head}]
+    run, reason = tested_tree.tested_run(
+        _api(pulls, _status()), REPO_NAME, SQUASH, TREE
+    )
+    assert run == ""
+    assert field in reason
 
 
 def test_an_unreadable_tree_is_not_proven():
@@ -167,13 +180,13 @@ def test_main_writes_the_answer_and_exits_zero_when_the_lookup_fails(
     assert "proven=false" in capsys.readouterr().out
 
 
-def _chain(*shas):
+def _chain(*shas) -> list[JsonValue]:
     """The commits API's listing for a linear history, newest first."""
     pairs = zip(shas, shas[1:], strict=False)
     return [{"sha": sha, "parents": [{"sha": parent}]} for sha, parent in pairs]
 
 
-def _gate(conclusion):
+def _gate(conclusion) -> JsonObject:
     run = {"name": tested_tree.CI_GATE_NAME, "status": "completed"}
     return {"check_runs": [run | {"conclusion": conclusion}]}
 
@@ -183,7 +196,7 @@ def _history(gates):
     listing = _chain(SQUASH, *gates)
     asked = []
 
-    def get(path):
+    def get(path: str) -> JsonValue:
         if "/check-runs" in path:
             sha = path.split("/commits/")[1].split("/")[0]
             asked.append(sha)
@@ -223,6 +236,18 @@ def test_an_unreadable_history_is_no_base():
     assert tested_tree.green_base(down, REPO_NAME, SQUASH)[0] == ""
 
 
+@pytest.mark.parametrize(
+    ("page", "field"), [([], "check-runs"), ({"check_runs": {}}, "check_runs")]
+)
+def test_a_malformed_check_run_page_is_no_base_and_the_reason_names_its_field(
+    page, field
+):
+    get, _ = _history({PARENT: page, GRANDPARENT: _gate("success")})
+    base, reason = tested_tree.green_base(get, REPO_NAME, SQUASH)
+    assert base == ""
+    assert f"ValueError: {field}:" in reason
+
+
 def test_main_names_the_base_for_an_unproven_push_and_none_for_a_proven_one(
     tmp_path, monkeypatch
 ):
@@ -231,7 +256,7 @@ def test_main_names_the_base_for_an_unproven_push_and_none_for_a_proven_one(
     argv = ["prove", "--repo", REPO_NAME, "--sha", SQUASH, "--tree", TREE]
     history, _ = _history({PARENT: _gate("success")})
 
-    def get(path):
+    def get(path: str) -> JsonValue:
         if path.endswith("/pulls"):
             return _pr()
         if "/statuses" in path:
@@ -296,7 +321,7 @@ def _batch(tmp_path, second: dict[str, str] | None = None):
     return tmp_path / "checkout", base, heads, trees
 
 
-def _pull(head, state="open", head_repo=REPO_NAME):
+def _pull(head, state="open", head_repo=REPO_NAME) -> JsonObject:
     return {"state": state, "head": {"sha": head, "repo": {"full_name": head_repo}}}
 
 
@@ -304,7 +329,7 @@ def _record(checkout, base, pulls, tested):
     """`record_batch` for members #1 and #2; (what it says, the statuses it posted)."""
     posted = []
 
-    def get(path):
+    def get(path: str) -> JsonValue:
         answer = pulls[int(path.rsplit("/", 1)[1]) - 1]
         if isinstance(answer, Exception):
             raise answer
@@ -355,6 +380,7 @@ def test_a_batch_records_each_members_stacked_tree_on_its_head(tmp_path):
         ("closed", "nothing: #1 is not an open pull request from a branch of this"),
         ("conflict", "nothing: #2 does not merge onto the run's base"),
         ("unreadable", "recording failed: OSError"),
+        ("malformed", "recording failed: ValueError: pull.head:"),
         ("unfetchable", "recording failed: CalledProcessError"),
     ],
 )
@@ -363,7 +389,7 @@ def test_a_batch_the_gate_refuses_or_cannot_rebuild_records_nothing(
 ):
     second = {"a.txt": "two\n"} if case == "conflict" else None
     checkout, base, heads, trees = _batch(tmp_path, second)
-    pulls: list[dict | Exception] = [_pull(h) for h in heads]
+    pulls: list[JsonValue | Exception] = [_pull(h) for h in heads]
     tested = trees[-1]
     if case == "another-tree":
         # The run tested the first member alone, so the batch is not the stack it names.
@@ -374,6 +400,8 @@ def test_a_batch_the_gate_refuses_or_cannot_rebuild_records_nothing(
         pulls[0] = _pull(heads[0], state="closed")
     elif case == "unreadable":
         pulls[1] = OSError("down")
+    elif case == "malformed":
+        pulls[1] = {"state": "open", "head": heads[1]}
     elif case == "unfetchable":
         pulls[1] = _pull("f" * 40)
     told, posted = _record(checkout, base, pulls, tested)
@@ -391,7 +419,7 @@ def test_main_records_the_batch_its_body_names_and_exits_zero(
     argv = ["record-batch", "--repo", REPO_NAME, "--base", base]
     argv += ["--tested-tree", trees[-1], "--run-url", RUN_URL]
 
-    def get(path):
+    def get(path: str) -> JsonValue:
         return _pull(heads[int(path.rsplit("/", 1)[1]) - 1])
 
     assert tested_tree.main(argv, get, lambda *call: posted.append(call)) == 0
