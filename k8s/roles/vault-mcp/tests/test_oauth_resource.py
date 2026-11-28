@@ -39,7 +39,7 @@ def _claims(**changes):
     return {k: v for k, v in claims.items() if v is not None}
 
 
-def _token(key=AUTHELIA_KEY, typ="at+jwt", **changes):
+def _token(key=AUTHELIA_KEY, typ: str | list[str] = "at+jwt", **changes):
     return jwt.encode(
         _claims(**changes), key, algorithm="RS256", headers={"kid": KID, "typ": typ}
     )
