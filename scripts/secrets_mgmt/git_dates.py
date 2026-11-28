@@ -237,6 +237,8 @@ RETIRED: frozenset[str] = frozenset(
         "flux_github_status_token",
         # The B2 bucket name, which the BackupTarget renders from inventory.
         "longhorn_b2_bucket",
+        # vault-mcp's slice-2 LAN bearer token, which Authelia OAuth replaced.
+        "vault_mcp_token",
     }
 )
 
