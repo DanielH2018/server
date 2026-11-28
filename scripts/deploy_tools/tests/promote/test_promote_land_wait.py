@@ -367,7 +367,7 @@ def test_the_exit_codes_are_land_sh_s(capsys):
 def test_a_verdict_outside_the_set_is_refused_where_the_result_is_built():
     """A misspelt verdict would otherwise reach `wait_on_promotion` and end the wrong way."""
     with pytest.raises(ValueError, match="setled"):
-        promote_wait.WaitResult("setled")  # ty: ignore[invalid-argument-type]
+        promote_wait.WaitResult("setled")  # ty: ignore[invalid-argument-type]  # pyright: ignore[reportArgumentType]
 
 
 # -- the forge reads -------------------------------------------------------------------------

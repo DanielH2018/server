@@ -53,12 +53,13 @@ def _runs(outcomes: Sequence[tuple[str, str | None]]) -> st.SearchStrategy[Check
 
 @st.composite
 def _head_and_cancelled_run(draw) -> tuple[list[CheckRun], CheckRun]:
-    """A head holding a decided run, and a no-verdict run of that run's name."""
+    """A head holding a decided run, and a no-verdict run of that run's name in another suite."""
     decided = draw(_runs(_DECIDED))
     rest = draw(st.lists(_runs(_DECIDED + _NO_VERDICT + _OTHER), max_size=30))
     head = draw(st.permutations([decided, *rest]))
     outcome = draw(st.sampled_from(_NO_VERDICT))
-    return head, CheckRun(decided.name, *outcome, draw(st.integers(1, 3)))
+    suite = draw(st.sampled_from([s for s in (1, 2, 3) if s != decided.suite_id]))
+    return head, CheckRun(decided.name, *outcome, suite)
 
 
 @given(_head_and_cancelled_run())
@@ -90,6 +91,18 @@ def test_a_green_ready_run_passes_beside_its_cancelled_draft_run():
     head = [*_every_job(("completed", "success"), 1), *draft]
 
     assert ci_verdict(head, _REQUIRED) == "pass"
+
+
+def test_a_timed_out_leg_beside_its_passing_sibling_leg_is_still_pending():
+    """GitHub reports a job past its `timeout-minutes` as `cancelled`. Two legs of one matrix
+    share a check-run name and a suite, so the leg that passed says nothing for the other."""
+    shared = "hooks (lint + validate + secrets + docs)"
+    head = [
+        *(r for r in _every_job(("completed", "success"), 1) if r.name != CI_GATE_NAME),
+        CheckRun(shared, "completed", "cancelled", 1),
+    ]
+
+    assert jobs_verdict(head) == "pending"
 
 
 def test_a_proven_skip_beside_a_cancelled_run_is_still_pending():

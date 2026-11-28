@@ -528,7 +528,7 @@ def unlanded(prefix: str, tools: PublishTools) -> PublishOutcome:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = ArgumentParser(description=__doc__.split("\n\n", 1)[0])
+    parser = ArgumentParser(description=(__doc__ or "").split("\n\n")[0])
     parser.add_argument(
         "--repo",
         type=Path,

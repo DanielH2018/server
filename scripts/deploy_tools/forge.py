@@ -134,7 +134,8 @@ class GitHub:
             ForgeError: `gh` failed for any other reason, or did not finish.
         """
         argv = ["gh", "variable", "get", name, "-R", self.repository]
-        for waits_left in range(RATE_LIMIT_WAITS, -1, -1):
+        waits_left = RATE_LIMIT_WAITS
+        while True:
             try:
                 proc = self._run(
                     argv, capture_output=True, text=True, timeout=TIMEOUT_S
@@ -149,6 +150,7 @@ class GitHub:
             if not gh_rate_limit.is_rate_limited(proc.stderr) or not waits_left:
                 break
             gh_rate_limit.wait_out(proc.stderr, self._sleep, run=self._run)
+            waits_left -= 1
         raise ForgeError(
             f"gh variable get {name} exited {proc.returncode}: {proc.stderr.strip()}"
         )
@@ -393,7 +395,8 @@ class GitHub:
         """
         url = f"{PACKAGE_VERSIONS_URL}/{version_id}"
         self._sleep(DELETE_PAUSE_S)
-        for tries_left in range(DELETE_TRIES - 1, -1, -1):
+        tries_left = DELETE_TRIES - 1
+        while True:
             response = self._rest("DELETE", url)
             if response.status == 204:
                 return True
@@ -402,6 +405,7 @@ class GitHub:
             if response.status < 500 or not tries_left:
                 break
             self._sleep(DELETE_RETRY_PAUSE_S)
+            tries_left -= 1
         raise ForgeError(
             f"delete package version {version_id}: HTTP {response.status}"
             f"{_api_message(response)}"

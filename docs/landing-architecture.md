@@ -492,7 +492,10 @@ costs a turn. Its result is advisory, by ADR-0032.
    the faster rate, so the quota cost is one landing's.
 1. **Split the run's slowest job**
    ([#10575](https://github.com/DanielH2018/server/issues/10575)): the `hooks` sweep and the
-   host-package updater cases, onto hosted runners that sit idle.
+   host-package updater cases, onto hosted runners that sit idle. `docs/ci-throughput.md`,
+   *The `hooks` and `host_packages` jobs run two legs each*, has the split. A run with a host
+   change stays near 400 s, because the build job and `upgrade_path` run in series
+   ([#10591](https://github.com/DanielH2018/server/issues/10591)).
 1. **Stop spending turns on landings that cannot merge.** The pre-flight, and the `next=`
    field that tells a session what a failed landing needs.
 1. **Overlap the next batch's run with this batch's merges** (slice 7), and let a batch run
