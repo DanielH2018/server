@@ -25,7 +25,7 @@ from lib.k8s_conditions import ConditionStatus, parse_conditions
 _UNFINISHED = object()
 
 
-def finished_at(job) -> str:
+def finished_at(job: dict) -> str:
     """Completion timestamp, or '' if the Job has not finished.
 
     `status.completionTime` is set only on success. A Job that failed has none, so fall back to
@@ -41,7 +41,7 @@ def finished_at(job) -> str:
     return ""
 
 
-def is_configarr_job(job, name: str) -> bool:
+def is_configarr_job(job: dict, name: str) -> bool:
     """Selected by LABEL, not by ownerReference, and the difference is the deploy-time reconcile.
 
     A Job the CronJob controller creates is owned by it; one made with `kubectl create job
@@ -52,7 +52,7 @@ def is_configarr_job(job, name: str) -> bool:
     return (job.get("metadata", {}).get("labels") or {}).get("app") == name
 
 
-def latest_finished(jobs, cronjob_name: str):
+def latest_finished(jobs: list[dict], cronjob_name: str) -> dict | None:
     """The most recently finished configarr Job, or None.
 
     Sorted by finish time rather than taking the last item: `kubectl get` returns creation order,
@@ -67,12 +67,14 @@ def latest_finished(jobs, cronjob_name: str):
     return max(candidates, key=finished_at)
 
 
-def returncode(job) -> int:
+def returncode(job: dict) -> int:
     """0 if the Job succeeded, 1 otherwise — the shape configarr_status.evaluate() expects."""
     return 0 if (job.get("status") or {}).get("succeeded") else 1
 
 
-def decide(job, logs, age_s, max_age_s):
+def decide(
+    job: dict | None, logs: str, age_s: float, max_age_s: float
+) -> tuple[bool, str]:
     """Whether configarr's last sync is healthy, as (ok, msg) for the verdict export.
 
     Three gates, in order, and each covers a way the other two read green while the sync is dead:

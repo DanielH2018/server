@@ -236,7 +236,7 @@ def _r2_etcd_lock_probe(cfg: Config, src: Sources, now: float) -> CheckResult:
 
 def check_r2_etcd_lock(
     cfg: Config, src: Sources, now: float | None = None
-) -> tuple[bool, str]:
+) -> CheckResult:
     """Daily proof of ADR-0041's R2 lock rule over etcd-snapshots/, by its effect. (ok, msg).
 
     R2's S3 API cannot read a lock rule, so the check uploads a zero-byte canary under the
@@ -255,13 +255,15 @@ def check_r2_etcd_lock(
         and cfg.R2_S3_KEY_ID
         and cfg.R2_S3_SECRET_KEY
     ):
-        return True, "R2 etcd lock check disabled (no account id / bucket / S3 key)"
+        return CheckResult(
+            True, "R2 etcd lock check disabled (no account id / bucket / S3 key)"
+        )
     now = now if now is not None else time.time()
     cache = src.state.r2_lock_probe
     if cache["ts"] is not None and now - cache["ts"] < cfg.R2_LOCK_PROBE_INTERVAL_S:
-        return cache["ok"], "%s (checked %.0fh ago)" % (
-            cache["msg"],
-            (now - cache["ts"]) / 3600,
+        return CheckResult(
+            cache["ok"],
+            "%s (checked %.0fh ago)" % (cache["msg"], (now - cache["ts"]) / 3600),
         )
     try:
         result = _r2_etcd_lock_probe(cfg, src, now)

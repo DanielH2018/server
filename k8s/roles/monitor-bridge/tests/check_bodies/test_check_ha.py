@@ -13,7 +13,6 @@ import pytest
 
 import checks.service
 from _fake_sources import FakeSources
-from bridge.types import CheckResult
 
 
 # ── HA automation-engine heartbeat (input_datetime stamped by a 1-min automation) ──
@@ -81,7 +80,7 @@ def _ha_cycle(cfg, state, age_s=600, raises=False, banned=0):
         return _ha_payload(age_s)
 
     src = FakeSources(state=state, loki_count=lambda *a, **k: banned, get_json=get_json)
-    return CheckResult.of(checks.service.check_ha_heartbeat(cfg, src, now=HB_NOW))
+    return checks.service.check_ha_heartbeat(cfg, src, now=HB_NOW)
 
 
 def test_ha_heartbeat_single_stale_cycle_is_suppressed(cfg, state):
