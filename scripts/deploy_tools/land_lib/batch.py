@@ -85,7 +85,8 @@ from deploy_tools.land_lib import (
 from deploy_tools.land_lib.core import queue_machine, queue_state
 from deploy_tools.land_lib.landing import BRANCH, Landing
 from deploy_tools.land_lib.outcome import Outcome, Verdict, say
-from deploy_tools.land_lib.transitions import CHECKS, State, Transitions
+from deploy_tools.land_lib.core.landing_state import State
+from deploy_tools.land_lib.transitions import CHECKS, Transitions
 from lib.exit_codes import CI_GREEN, CI_PENDING, CI_RED
 from lib.json_types import JsonValue, as_object
 
@@ -231,7 +232,7 @@ def _bars(member: Landing, head: str) -> str:
 
 
 def _members(ln: Landing, head: str) -> list[Member]:
-    """The drafts in the line this landing may stack behind its own `head`, in line order.
+    """The drafts in the line this landing may stack behind its own `head`, oldest first.
 
     `queue_machine.stackable` decides the order and skips a PR that must land alone. The
     other checks run here, one draft at a time, until the batch holds `MAX_STACKED` PRs.
@@ -275,9 +276,10 @@ def _members(ln: Landing, head: str) -> list[Member]:
         )
         return _left_out(ln, member, _why_not(partial(_alone, member.ln, place.head)))
 
-    places = tuple(queue_state.Place(pr, member_head) for pr, member_head in waiting)
     members: list[Member] = []
-    for place in queue_machine.stackable(queue_state.Queue(places, lands_alone)):
+    for place in queue_machine.stackable(
+        queue_state.Queue(tuple(waiting), lands_alone)
+    ):
         member = checked[place.pr]
         if _left_out(ln, member, _why_not(partial(_bars, member.ln, member.head))):
             continue
@@ -578,7 +580,7 @@ def _merge_member(ln: Landing, member: Member, before: Landing) -> str:
             return _TURN_LOST
         if not member.ln.tested_on:
             return f"PR #{before.opts.pr}'s merge commit could not be read"
-        if (pr, member.head) not in turn.waiting(ln):
+        if not any((p.pr, p.head) == (pr, member.head) for p in turn.waiting(ln)):
             return "its own landing left the line"
         head = member.ln.view("headRefOid").get("headRefOid") or ""
         if not stale_base.batch_tested(member.ln, head):
@@ -623,11 +625,12 @@ def _merge_members(ln: Landing) -> None:
         before = member.ln
 
 
-def land(ln: Landing, take_turn: merge.TakeTurn) -> None:
-    """Merge this landing's PR, and the members of the batch it formed, if it formed one.
+def forming(ln: Landing, take_turn: merge.TakeTurn) -> merge.TakeTurn:
+    """`take_turn`, forming the batch once the landing holds the turn for a draft.
 
     The batch is formed as soon as the landing takes the turn with a draft that has had no
-    CI run, which is the one case `merge.await_merge` asks for the turn with a head.
+    CI run, which is the one case `merge.await_merge` asks for the turn with a head. The
+    seconds of the batch's run count as seconds in line.
     """
 
     def take(draft: str) -> tuple[bool, int]:
@@ -649,9 +652,14 @@ def land(ln: Landing, take_turn: merge.TakeTurn) -> None:
             in_turn = ln.give_back_turn is not None
         return in_turn, waited + ln.batched_s
 
+    return take
+
+
+def land(ln: Landing, take_turn: merge.TakeTurn) -> None:
+    """Merge this landing's PR, and the members of the batch it formed, if it formed one."""
     own_red = False
     try:
-        merge.await_merge(ln, take)
+        merge.await_merge(ln, forming(ln, take_turn))
     except Outcome as exc:
         own_red = exc.verdict == Verdict.PR_CI_RED
         if ln.tested_head:

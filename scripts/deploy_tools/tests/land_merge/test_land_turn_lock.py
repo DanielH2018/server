@@ -172,8 +172,8 @@ def test_a_landing_on_the_turn_host_keeps_the_line_itself(
     stubs = fake_bin(tmp_path / "bin", ssh="#!/usr/bin/env bash\nexit 255\n")
     monkeypatch.setenv("PATH", path_with(stubs))
     monkeypatch.delenv(turn.TURN_DIR_ENV)
-    line.at_turn_host(hostname, tmp_path / "line")("join", "7", HEAD)
-    assert (tmp_path / "line" / "7").read_text().split() == [HEAD]
+    line.at_turn_host(hostname, tmp_path / "line")("join", "7", HEAD, "1")
+    assert (tmp_path / "line" / "7").read_text().split() == [HEAD, "@1"]
 
 
 @pytest.mark.parametrize("hostname", [turn.TURN_HOST, f"{turn.TURN_HOST}.lan"])
@@ -194,8 +194,8 @@ def test_a_moved_turn_dir_keeps_the_lock_and_the_line_on_this_host(
     assert give_up is not None
     assert turn.try_take(tmp_path / "turn" / turn.LOCK.name) is None
     give_up()
-    line.at_turn_host("daniel-server")("join", "7", HEAD)
-    assert (tmp_path / "turn" / line.DIR.name / "7").read_text().split() == [HEAD]
+    line.at_turn_host("daniel-server")("join", "7", HEAD, "1")
+    assert (tmp_path / "turn" / line.DIR.name / "7").read_text().split() == [HEAD, "@1"]
 
 
 def test_a_turn_given_up_is_free_while_a_handed_copy_of_it_stays_open(tmp_path):

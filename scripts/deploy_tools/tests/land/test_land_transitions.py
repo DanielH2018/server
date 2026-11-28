@@ -12,7 +12,8 @@ from _land_fakes import EPOCH, PRIMARY, Fakes, build_classifier, build_tools
 from _land_turn_fakes import HEAD, MERGED, OPEN, START_VIEW
 from deploy_tools import land
 from deploy_tools.land_lib.options import Options
-from deploy_tools.land_lib.transitions import EVENT, State
+from deploy_tools.land_lib.core.landing_state import State
+from deploy_tools.land_lib.transitions import EVENT
 from deploy_tools.promote_lib.wait import WaitResult, WaitVerdict
 
 from lib import host_modules  # noqa: F401

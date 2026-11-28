@@ -57,7 +57,7 @@ def test_a_green_ready_head_master_moved_past_waits_in_the_line_as_a_draft(landi
         "merge",
         "release_turn",
     ]
-    assert line_calls(calls)[0] == ("join", "999", UPDATED)
+    assert line_calls(calls)[0] == ("join", "999", UPDATED, "")
     assert merged_sha(calls) == UPDATED
 
 
@@ -127,7 +127,7 @@ def test_a_rejoined_head_whose_draft_run_is_still_running_waits_in_the_line(land
         turn=[False, True],
     )
     land_in_turn(ln)
-    assert line_calls(calls)[0] == ("join", "999", UPDATED)
+    assert line_calls(calls)[0] == ("join", "999", UPDATED, "")
     order = call_order(calls)
     assert order.index("try_turn") < order.index("pr ready", 1)
 

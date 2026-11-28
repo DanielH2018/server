@@ -9,7 +9,7 @@ import subprocess
 from itertools import pairwise
 from typing import Any
 
-from deploy_tools.land_lib import batch, pr_json, turn
+from deploy_tools.land_lib import batch, line, pr_json, turn
 from deploy_tools.land_lib.tools import CiVerdict
 from lib.exit_codes import CI_GREEN, CI_PENDING, CI_RED
 
@@ -211,6 +211,18 @@ def land(ln) -> None:
         batch.land(ln, take_turn)
 
 
+def ticket_of(pr: str) -> str:
+    """The ticket of a draft that asked for the turn after the holder, ordered by its number."""
+    return str(2**62 + int(pr))
+
+
 def answers(the_line, *prs) -> list[str]:
     """What each PR's own landing reads in its place on its next poll."""
-    return [the_line("stand", pr, head_of(pr)) for pr in prs]
+    replies = [the_line("stand", pr, head_of(pr), ticket_of(pr)) for pr in prs]
+    return [(reply.splitlines()[0].split()[1:] or [""])[0] for reply in replies]
+
+
+def standing(the_line) -> list[tuple[str, str]]:
+    """The PR and head of each draft that stands in the line unanswered."""
+    rows = the_line("waiting", str(line.FRESH_S)).splitlines()
+    return [(pr, head) for pr, head, _ in (row.split() for row in rows)]

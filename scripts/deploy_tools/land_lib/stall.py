@@ -26,13 +26,14 @@ Typical usage example:
 
 import subprocess
 from collections.abc import Callable
-from dataclasses import dataclass, replace
+from dataclasses import replace
 from enum import StrEnum
 from functools import partial
 
 from lib.json_types import as_list
 from deploy_tools import await_ci, ci_stall
 from deploy_tools.land_lib import gh_read
+from deploy_tools.land_lib.core.landing_state import Stall, Watch
 from deploy_tools.land_lib.landing import Landing
 from deploy_tools.land_lib.outcome import Verdict, say
 
@@ -42,13 +43,6 @@ from ci_verdict import WorkflowRun
 # GitHub registers the ready run seconds after the flip; the push-delivery grace await_ci allows is
 # far wider.
 GRACE_S = await_ci.DROPPED_PUSH_GRACE_S
-
-
-class Stall(StrEnum):
-    """Why a head's CI will not move without the landing."""
-
-    DRAFT_SKIPPED = "draft-skipped"
-    NO_RUN_LEFT = "no-run-left"
 
 
 class Act(StrEnum):
@@ -64,27 +58,6 @@ class Act(StrEnum):
 
 # The actions that start a run, by the stall each one answers.
 START = {Stall.DRAFT_SKIPPED: Act.TOGGLE, Stall.NO_RUN_LEFT: Act.RERUN}
-
-
-@dataclass(frozen=True)
-class Watch:
-    """The stall the wait is sitting on, carried from one poll to the next.
-
-    Attributes:
-        head: the stalled head, or "" when the last poll read no stall.
-        stall: that head's stall, or None.
-        since: the `waited` its grace started at.
-        tried: each (head, stall) the landing already started a run for.
-    """
-
-    head: str = ""
-    stall: Stall | None = None
-    since: int = 0
-    tried: frozenset[tuple[str, Stall]] = frozenset()
-
-    def retried(self) -> bool:
-        """Whether the landing already started a run for the stall it sits on."""
-        return self.stall is not None and (self.head, self.stall) in self.tried
 
 
 def of(line: str) -> Stall | None:

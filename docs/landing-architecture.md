@@ -35,7 +35,13 @@ becomes a named invariant with a test.
 
 Slice 1 is built: `land_lib/transitions.py` writes the state and transition records.
 Slice 2 is built: `land_lib/core/queue_machine.py` holds `may_take` and `stackable`, which
-`turn._wait` and `batch._members` call, under the race's rules. Nothing else here is built. The validation below read the code at master `ce5c3abfa`. The
+`turn._wait` and `batch._members` call. Slice 3 is built: those two functions serve the
+turn by ticket, under *The ticket protocol* below. The first half of slice 4 is built:
+`land_lib/core/landing_state.py` holds `LandingState`, and `land_lib/core/landing_machine.py`
+holds `step` for the merge wait. Nothing calls `step` yet. The characterization traces in
+`scripts/deploy_tools/tests/land_merge/merge_wait_traces.txt` hold it to
+`merge.await_merge`'s loop, which the cutover replaces. Nothing else here is built. The
+validation below read the code at master `ce5c3abfa`. The
 milestone is `Landing pipeline state machine`.
 
 ## What the pipeline is, validated against the code
@@ -60,7 +66,8 @@ Each fact names the symbol that holds it.
   single place lists which state can end in which verdict.
   `scripts/deploy_tools/tests/land/test_land_every_exit_names_a_verdict.py` checks that each
   exit names one.
-- **The queue has no owner and no order.**
+- **The queue has no owner and no order.** Slice 3 replaced the first two facts below with
+  tickets.
     - `turn._wait` tries a non-blocking `flock` before every 30 s sleep. The first poll after
       a release wins, and a landing that arrives while the turn is free takes it ahead of
       every waiter.
@@ -121,7 +128,7 @@ and no batch may carry it.
 ```text
 land_lib/
   core/                      pure: no I/O, no clock, no sleep
-    landing_state.py         LandingState: frozen dataclasses, one per state
+    landing_state.py         LandingState: one frozen record of the merge wait
     queue_state.py           Place, Queue: the queue as its decisions read it
     landing_machine.py       step(LandingState, Observation) -> (LandingState, [Action])
     queue_machine.py         schedule(QueueState) -> [Grant]: order, batches, serial rule
@@ -173,7 +180,7 @@ Each state, and the code that implements it:
   outside the turn (`merge.await_merge`, before its first `ask`). A draft skips this state.
 - **Queued.** The landing waits in `turn._wait`. A draft with no CI run stands in the line,
   where a holder can stack it, and so does a draft back from a step-out. A green ready head,
-  and a landing that lands alone, wait with no place.
+  and a landing that lands alone, hold a place with no head, which no holder stacks.
 - **Holding.** `turn._wait` returned the lock. `slots.refuse_before_run` runs, then
   `batch.form`.
 - **Yielded.** `Landing.without_turn` gives the turn back for a rate-limit wait, for a live
@@ -219,13 +226,16 @@ the only mutual exclusion, because a dead process still releases its lock.
 - **Every waiting landing holds a ticket.** The ticket is the time the landing first asked
   for the turn, read from the turn host's clock and written once into its place. A landing
   with no draft to stack holds a place too, marked so that no holder stacks it.
-- **A landing tries the lock only when no fresh ticket is older than its own.** One operation
-  on the turn host reads the tickets and tries the `flock`. A landing on another host runs it
-  through one ssh command, where two run for each poll before the change.
+- **A landing tries the lock only when no fresh ticket is older than its own.** The stand that
+  refreshes a landing's place also returns every other fresh ticket, of either UNIX user, and
+  `may_take` reads them. A landing on another host runs one ssh command for a poll that
+  defers, and a second, the try of the `flock`, only for a poll that may take the turn.
 - **A holder stacks the oldest drafts**, in ticket order.
-- **A landing that steps out keeps its ticket.** Its place is marked as waiting elsewhere, so
-  no landing defers to it and no holder stacks it. When its wait ends it is the oldest ticket
-  again.
+- **A landing that steps out keeps its ticket.** It leaves its place for the wait, so no
+  landing defers to it and no holder stacks it. When its wait ends it writes the same ticket
+  back, and it is the oldest ticket again.
+- **A place a landing on older code wrote holds no ticket**, and reads as older than every
+  ticket. Such a landing defers to nobody, and no landing on newer code starves it.
 - **No lock guards the tickets.** Each place is written by an atomic rename. Two landings
   that both read themselves as oldest both try the `flock`, and it admits one.
 
@@ -528,7 +538,7 @@ Two gaps remain:
 ### One state record for each live landing
 
 The transition writer of slice 1, `land_lib/transitions.py`, has two outputs.
-`transitions.State` is the one enum of state names.
+`land_lib/core/landing_state.py:State` is the one enum of state names.
 
 - **A state record on the turn host**, `/run/lock/homelab-land-line/<pr>.<uid>.state`, one
   JSON object written by an atomic rename. It holds `pr`, `host`, `pid`, `state`, `since` (when
@@ -599,10 +609,10 @@ exercise. Order is middle-out: the contract and the model first, then the code b
    move into `core/`, with the rules the code follows at master, and `turn._wait` and
    `batch._members` call them. The prototype's state machine checks the functions the code
    calls. No behaviour change.
-1. **Tickets** ([#10564](https://github.com/DanielH2018/server/issues/10564)). The fix for
-   #10559 landed first: a draft that steps out keeps its place. Then the ticket in each place,
-   deferral to an older fresh ticket, and stacking in ticket order. This is the first
-   behaviour change. It waits on the operator's go-ahead and on the ruling for #10284.
+1. **Tickets** ([#10564](https://github.com/DanielH2018/server/issues/10564)), built. The fix
+   for #10559 landed first: a draft that steps out keeps its place. Then the ticket in each
+   place, deferral to an older fresh ticket, and stacking in ticket order. This is the first
+   behaviour change. The operator gave the go-ahead on 2026-11-28.
 1. **The landing machine for the pre-merge half, by direct cutover**
    ([#10570](https://github.com/DanielH2018/server/issues/10570)).
     1. `LandingState`, `step` and the characterization traces land first. Nothing calls

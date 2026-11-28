@@ -24,18 +24,22 @@ A landing asks for the turn when it is ready to use it (`merge.await_merge`): be
 run of a head that has had none, and otherwise once its head is green. It never holds the
 turn while a run that started before it finishes, nor through a rate-limit wait: it gives the
 turn back for the wait's length and asks for it again before it goes on
-(`Landing.without_turn`). A draft that has not been marked ready asks again with its head,
-so it keeps its place in the line and a holder can still stack it.
+(`Landing.without_turn`). It asks again with the ticket it first took, so it keeps its order.
+A draft that has not been marked ready also asks again with its head, so a holder can still
+stack it.
 
-Whether a waiting landing may try a free turn is `core/queue_machine.py`'s `may_take`.
+The turn is served first come, first served. Every landing that waits stands in the line
+beside the lock (`line.py`) with its ticket, and tries a free turn only when no fresh place
+holds an older one (`core/queue_machine.py`'s `may_take`). A waiter that dies stops deferring
+others once its place goes stale, after `line.FRESH_S`. The `flock` stays the only mutual
+exclusion: no lock guards the tickets.
 
-A landing that waits with a draft stands in the line beside the lock (`line.py`), so the
-landing that holds the turn can test that draft's head with its own. A landing whose place
-reads `merged` stops waiting: the holder merged its PR. One whose place reads `alone` leaves
-the line and waits on for the turn: a batch that tested its PR was not green and the holder's
-own run was not red, and it forms no batch of its own (`batch.py`). One whose place reads
-`split` waits on in the line until the holder's own run settles it, and lands alone if it
-takes the turn first.
+A landing that waits with a draft names the draft's head in its place, so the landing that
+holds the turn can test that head with its own. A landing whose place reads `merged` stops
+waiting: the holder merged its PR. One whose place reads `alone` stands on with no head and
+waits for the turn: a batch that tested its PR was not green and the holder's own run was not
+red, and it forms no batch of its own (`batch.py`). One whose place reads `split` waits on in
+the line until the holder's own run settles it, and lands alone if it takes the turn first.
 
 The turn is not a safety gate. A landing that cannot take it within `merge_timeout`, or
 cannot reach `TURN_HOST`, goes on without it and merges as a landing without the turn does.
@@ -71,7 +75,7 @@ from deploy_tools.land_lib.core import queue_machine, queue_state
 from deploy_tools.land_lib.fresh import TURN_FD_ENV
 from deploy_tools.land_lib.landing import Landing
 from deploy_tools.land_lib.outcome import Verdict, say
-from deploy_tools.land_lib.transitions import State
+from deploy_tools.land_lib.core.landing_state import State
 from deploy_tools.land_lib.serial_lock import (
     LOCK_DIR,
     TURN_DIR_ENV,
@@ -388,15 +392,18 @@ def line_of(ln: Landing) -> line.Line:
     return ln.tools.line or line.at_turn_host(ln.tools.hostname())
 
 
-def waiting(ln: Landing) -> list[tuple[str, str]]:
-    """The PR and head of each draft standing in the line, in line order, but `ln`'s own PR.
+def waiting(ln: Landing) -> list[queue_state.Place]:
+    """The place of each draft standing in the line, with its ticket, but `ln`'s own PR.
 
     Raises:
         OSError: The line cannot be read.
     """
     rows = line_of(ln)("waiting", str(line.FRESH_S)).splitlines()
-    places = [row.split() for row in rows]
-    return [(p[0], p[1]) for p in places if len(p) == 2 and p[0] != ln.opts.pr]
+    return [
+        queue_state.Place(pr, head, int(ticket))
+        for pr, head, ticket in (row.split() for row in rows)
+        if pr != ln.opts.pr
+    ]
 
 
 def _conflicts(ln: Landing) -> NoReturn:
@@ -413,13 +420,18 @@ def _lands_alone(ln: Landing) -> None:
     ln.lands_alone = True
 
 
-def _wait(ln: Landing, draft: str) -> tuple[Callable[[], None] | None, int]:
-    """Poll for the turn for up to `merge_timeout`, standing in the line with `draft`.
+def _wait(
+    ln: Landing, place: line.Place, draft: str
+) -> tuple[Callable[[], None] | None, int]:
+    """Poll for the turn for up to `merge_timeout`, standing in the line at `place`.
 
-    Each poll adds its seconds to `ln.ledger.turn_wait` as it passes, so a landing that ends
-    during the wait, or after it, still records the wait.
+    Each poll stands first, which refreshes the place and reads the other tickets, and tries
+    the lock only when `queue_machine.may_take` finds no older one. Each poll adds its seconds
+    to `ln.ledger.turn_wait` as it passes, so a landing that ends during the wait, or after
+    it, still records the wait.
 
     Args:
+        place: This landing's place, which keeps its ticket from one wait to the next.
         draft: The head of a draft that has had no CI run, or "" for any other head.
 
     Returns:
@@ -428,17 +440,27 @@ def _wait(ln: Landing, draft: str) -> tuple[Callable[[], None] | None, int]:
     """
     o = ln.opts
     try_turn = ln.tools.try_turn or _taker(ln.tools.hostname())
-    place = line.Place(line_of(ln), o.pr, draft, say)
-    me = queue_state.Place(o.pr, draft)
-    queue = queue_state.Queue((me,))
     waiting = OnChange(say)
     waited = 0
     before = ln.ledger.turn_wait = ln.ledger.turn_wait or 0
     ln.transitions.enter(State.QUEUED)
     try:
         while True:
+            answer, others = place.stand(draft)
+            if answer == line.MERGED:
+                say(f"the landing that holds the turn merged PR #{o.pr} with its own")
+                ln.transitions.enter(State.MERGED)
+                return None, waited
+            if answer == line.CONFLICT:
+                _conflicts(ln)
+            if answer == line.ALONE:
+                _lands_alone(ln)
+                draft = ""
+                _, others = place.stand(draft)
+            me = queue_state.Place(o.pr, draft, place.ticket)
+            first = queue_machine.may_take(queue_state.Queue((*others, me)), me)
             try:
-                release = try_turn() if queue_machine.may_take(queue, me) else None
+                release = try_turn() if first else None
             except OSError as exc:
                 say(
                     f"could not open the landing turn's lock ({exc}); going on without a "
@@ -447,7 +469,7 @@ def _wait(ln: Landing, draft: str) -> tuple[Callable[[], None] | None, int]:
                 ln.transitions.enter(State.NO_TURN)
                 return None, waited
             if release:
-                # The holder may have answered after this landing's last poll, and frees the turn
+                # The holder may have answered after this poll's stand, and frees the turn
                 # just after writing `merged`.
                 answer = place.answer()
                 if answer == line.MERGED:
@@ -473,20 +495,14 @@ def _wait(ln: Landing, draft: str) -> tuple[Callable[[], None] | None, int]:
                 )
                 ln.transitions.enter(State.NO_TURN)
                 return None, waited
-            answer = place.stand()
-            if answer == line.MERGED:
-                say(f"the landing that holds the turn merged PR #{o.pr} with its own")
-                ln.transitions.enter(State.MERGED)
-                return None, waited
-            if answer == line.CONFLICT:
-                _conflicts(ln)
-            if answer == line.ALONE:
-                _lands_alone(ln)
-                place.leave()
-                place = line.Place(None, o.pr, "", say)
             waiting(
-                "waiting for the landing turn: another landing is between its CI run and "
-                "its merge (`probe.py landing` lists the landings in flight)"
+                "waiting for the landing turn: "
+                + (
+                    "another landing is between its CI run and its merge"
+                    if first
+                    else "a landing that asked for it before this one goes first"
+                )
+                + " (`probe.py landing` lists the landings in flight)"
             )
             ln.tools.sleep(o.merge_poll)
             waited += o.merge_poll
@@ -507,14 +523,16 @@ def held(ln: Landing) -> Generator[Callable[[str], tuple[bool, int]]]:
         got, until `ln.give_back_turn` gives the turn up and the next call asks again.
         `ln.give_back_turn` and `ln.step_out_of_turn` are set only while this landing holds
         the turn, and `ln.turn_lost` reads whether the turn it holds over ssh has ended. A
-        step out of the turn asks again with `ln.line_head`, so a draft keeps its place in
-        the line through the wait, unless the landing lands alone.
+        step out of the turn asks again with `ln.line_head`, so a draft keeps its head in
+        the line, unless the landing lands alone. Every ask writes the ticket the first one
+        took, so the landing keeps its order through every wait out of the turn.
 
     Raises:
         HandOver: from `ln.hand_over_turn`, which leaves the turn locked for the caller.
     """
     release: Callable[[], None] | None = _adopt()
     asked = adopted = release is not None
+    place = line.Place(line_of(ln), ln.opts.pr, say)
 
     def offer() -> None:
         ln.give_back_turn, ln.step_out_of_turn = (
@@ -527,7 +545,7 @@ def held(ln: Landing) -> Generator[Callable[[str], tuple[bool, int]]]:
         if asked:
             return release is not None, 0
         asked = True
-        release, waited = _wait(ln, draft)
+        release, waited = _wait(ln, place, draft)
         offer()
         return release is not None, waited
 

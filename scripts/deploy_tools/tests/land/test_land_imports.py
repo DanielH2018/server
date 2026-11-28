@@ -10,7 +10,16 @@ from pathlib import Path
 
 LIB = Path(__file__).resolve().parents[2] / "land_lib"
 # The pure decisions under `core/`, named as paths from `land_lib/`.
-CORE = frozenset({"core/queue_state", "core/queue_machine", "core/invariants"})
+CORE = frozenset(
+    {
+        "core/queue_state",
+        "core/queue_machine",
+        "core/invariants",
+        "core/landing_state",
+        "core/landing_actions",
+        "core/landing_machine",
+    }
+)
 # What a module under `core/` may import beside its siblings: none of these does I/O.
 PURE_STDLIB = frozenset(
     {"collections.abc", "dataclasses", "enum", "functools", "itertools", "typing"}
@@ -115,9 +124,11 @@ ALLOWED = {
         "stall",
         "stuck_checks",
         "transitions",
+        "core/landing_actions",
+        "core/landing_state",
     },
     # The merge wait's decision about a head whose CI no longer moves, and the run it starts.
-    "stall": {"landing", "outcome", "gh_read"},
+    "stall": {"landing", "outcome", "gh_read", "core/landing_state"},
     # What makes a green head stale against master, and the one branch update.
     "stale_base": {"landing", "outcome", "gh_read", "policy", "pr_json"},
     "turn": {
@@ -126,7 +137,7 @@ ALLOWED = {
         "line",
         "fresh",
         "serial_lock",
-        "transitions",
+        "core/landing_state",
         "core/queue_machine",
         "core/queue_state",
     },
@@ -137,9 +148,9 @@ ALLOWED = {
     # The lock files that bound the landings polling GitHub after their merge, beside the turn.
     "slots": {"landing", "outcome", "live_limit", "pin_gate", "turn", "serial_lock"},
     # The drafts whose landings wait for the turn, which its holder reads; boundaries only.
-    "line": {"serial_lock"},
+    "line": {"serial_lock", "core/queue_state"},
     # The writer of a landing's state record and transition line, light for the deploy UI.
-    "transitions": {"line", "outcome"},
+    "transitions": {"line", "outcome", "core/landing_state"},
     # The drafts in the line, tested with the turn holder's own in one run, then merged.
     "batch": {
         "landing",
@@ -153,6 +164,7 @@ ALLOWED = {
         "stale_base",
         "turn",
         "transitions",
+        "core/landing_state",
         "core/queue_machine",
         "core/queue_state",
     },
@@ -226,12 +238,16 @@ ALLOWED = {
         "deploy",
         "health_verdict",
         "host_wait",
-        "transitions",
+        "core/landing_state",
     },
     # The turn's ordering decisions: pure, so the queue's state machine drives them as is.
     "core/queue_state": set(),
     "core/queue_machine": {"core/queue_state"},
-    "core/invariants": set(),
+    "core/invariants": {"core/queue_state"},
+    # The merge wait's state and its transition function, which the loop's traces hold.
+    "core/landing_state": set(),
+    "core/landing_actions": {"core/landing_state"},
+    "core/landing_machine": {"core/landing_actions", "core/landing_state"},
 }
 
 

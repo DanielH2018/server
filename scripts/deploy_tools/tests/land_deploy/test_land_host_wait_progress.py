@@ -10,7 +10,7 @@ import json
 from _land_fakes import make_landing
 from deploy_tools.land_lib import host_wait
 from deploy_tools.land_lib.host_wait import HostReads
-from deploy_tools.land_lib.transitions import State
+from deploy_tools.land_lib.core.landing_state import State
 from test_land_host_wait import MERGE, _at, _git, _pi, _prom, _series
 
 

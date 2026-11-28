@@ -17,15 +17,12 @@ from homelab_warehouse import claude_decisions as cd
 from homelab_warehouse.warehouse import (
     check_day,
     ensure_schema,
+    interval_day,
     replace_partition,
 )
 
 WAREHOUSE_CONN = "warehouse"
 CLAUDE_DECISIONS = Asset("warehouse://claude/decision_daily")
-
-
-def _day(data_interval_start):
-    return data_interval_start.astimezone(timezone.utc).date()
 
 
 @dag(
@@ -37,10 +34,10 @@ def _day(data_interval_start):
     default_args={"retries": 2, "retry_delay": timedelta(minutes=10)},
     tags=["warehouse", "claude-code"],
 )
-def claude_decisions_rollup():
+def claude_decisions_rollup() -> None:
     @task(outlets=[CLAUDE_DECISIONS])
-    def load(data_interval_start=None) -> dict:
-        day = _day(data_interval_start)
+    def load(data_interval_start: datetime | None = None) -> dict:
+        day = interval_day(data_interval_start)
         if not cd.in_backfill_window(day, datetime.now(timezone.utc)):
             raise AirflowSkipException(
                 f"{day}: Loki keeps {cd.LOKI_KEEP_DAYS} days, and the oldest may be compacting"
@@ -70,8 +67,8 @@ def claude_decisions_rollup():
             conn.close()
 
     @task
-    def check(data_interval_start=None) -> None:
-        day = _day(data_interval_start)
+    def check(data_interval_start: datetime | None = None) -> None:
+        day = interval_day(data_interval_start)
         check_day(
             PostgresHook(postgres_conn_id=WAREHOUSE_CONN).get_conn,
             "claude_decisions_rollup",

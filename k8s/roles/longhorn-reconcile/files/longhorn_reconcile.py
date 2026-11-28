@@ -138,7 +138,7 @@ class Kube:
         opener: Opens a `Request`; `open_url` unless a test passes its own.
     """
 
-    def __init__(self, base: str, token: str, opener: Callable = open_url):
+    def __init__(self, base: str, token: str, opener: Callable = open_url) -> None:
         self.base = base
         self.token = token
         self.opener = opener
@@ -490,7 +490,7 @@ def main(
     kube: Kube | None = None,
     now: str | None = None,
 ) -> int:
-    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser = argparse.ArgumentParser(description=(__doc__ or "").splitlines()[0])
     parser.add_argument(
         "--report-only",
         action="store_true",

@@ -7,7 +7,8 @@ from types import SimpleNamespace
 
 import pytest
 from deploy_tools.land_lib import line, serial_lock, slots, turn
-from deploy_tools.land_lib.transitions import CHECKS, State, Transitions
+from deploy_tools.land_lib.core.landing_state import State
+from deploy_tools.land_lib.transitions import CHECKS, Transitions
 
 import deploy_ui
 from deploy_ui_lib import deploy_ui_reads as reads
