@@ -25,9 +25,4 @@ NO_Z_REPLACEMENT = Census(
     green=(Subject("a.py", "datetime.fromisoformat(s)"),),
     min_matches=100,
     must_find=frozenset({"hosts/lib/host_lib.py"}),
-    allow={
-        "k8s/roles/karakeep/files/karakeep_archive_pruner.py": (
-            "role payload, lands one role per PR in #10312"
-        ),
-    },
 )
