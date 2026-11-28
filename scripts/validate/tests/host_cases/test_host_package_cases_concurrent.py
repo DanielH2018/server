@@ -279,12 +279,10 @@ def test_the_shards_split_the_groups_and_the_two_longest_apart(tmp_path, monkeyp
         "statuses": (first_status, second_status),
         "shared": first & second,
         "together": first | second,
-        "longest": [
-            {"upgrade_path", "bootstrap_age_case"} & ran for ran in (first, second)
-        ],
+        "longest": [len(NODE_GROUPS & ran) for ran in (first, second)],
     } == {
         "statuses": (0, 0),
         "shared": set(),
         "together": GROUPS,
-        "longest": [{"upgrade_path"}, {"bootstrap_age_case"}],
+        "longest": [1, 1],
     }

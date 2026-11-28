@@ -11,7 +11,8 @@ packages from a repository signed with a throwaway key with `python3 -m http.ser
   * upgrade to the head version, which drops a unit and a file and adds `Depends: tree`;
   * stop the server, and the head version's updater exits non-zero with `last_success`
     unadvanced. This is the red proof of step 3's `--error-on=any`: it fails when the
-    updater lets a failed fetch through;
+    updater lets a failed fetch through. `Container.cap_apt_retry_delay` runs first, so the
+    refused fetch costs about 10 seconds;
   * serve an index past its `Valid-Until`, and the head version's updater exits non-zero with
     `last_success` unadvanced, so a host stops trusting an index whose re-sign stopped;
   * upgrade homelab-updater under a running updater, which finishes with no restart. Both
@@ -334,6 +335,7 @@ class Cases:
             time.sleep(1.1)
             before = (c.read(LAST_SUCCESS), success_timestamp(c.read(PROM)))
             expect(before[0] != "", f"{LAST_SUCCESS} is empty before the case")
+            c.cap_apt_retry_delay()
             c.stop_serving()
             try:
                 status = c.run_updater()

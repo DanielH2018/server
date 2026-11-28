@@ -336,11 +336,25 @@ shard ends on a group near 200 s, and on shard 1/2 a second group runs within 10
 - shard 2/2: `bootstrap_age_case` 189 to 194 s, `node_package_case-daniel-box` 174 to 181 s.
 
 A perfect split of the chain therefore leaves a run with a host change near 376 s. The
-cluster-bundle render could leave the build job, but that saves only 14 to 23 s. The 330 s
-target needs those three groups shortened together, or the cases legs started before
+cluster-bundle render could leave the build job, but that saves only 14 to 23 s.
+
+**Two of the three groups waited on retries of a dead source.** `case_groups._run_one`
+names a chained group's three slowest cases on its `[DONE]` line. On run 46135097191 that
+line gave the stopped-server case 183 s of `upgrade_path`'s 214 s. The test image sets
+`Acquire::Retries "10"`, and apt doubles the wait between retries up to 30 s, so a source
+that refuses every connection costs an `apt-get update` 181 s. The stopped-server case and
+`bootstrap_age_case` each fetch from such a source.
+`host_container.Container.cap_apt_retry_delay` caps the wait at 1 s in both. A refused source
+then costs about 10 s, and the snapshot mirror still gets all ten retries. The projection
+from that run puts `upgrade_path` near 40 s, and `bootstrap_age_case` at its snapshot fetch
+plus about 10 s.
+
+**With the cap, the node groups bound each shard.** `node_package_case-daniel-server` ran 201 s and
+`node_package_case-daniel-box` 179 s on run 46135097191, so the cases step falls by only
+10 to 13 s. The 330 s target needs the node case shortened, or the cases legs started before
 `host_packages_build` ends ([#10644](https://github.com/DanielH2018/server/issues/10644)).
-`case_groups._run_one` names a multi-case group's three slowest cases on its `[DONE]` line.
-That line says where `upgrade_path`'s time goes.
+The node case runs no step through `Cases.case`, so its `[DONE]` line names no slowest
+step.
 
 The split adds one runner's setup to each job. A run with no host change gains one job and
 about 35 runner-seconds. A run with a host change gains two jobs and about 120

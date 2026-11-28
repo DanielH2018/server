@@ -6,6 +6,8 @@ turn every `apt-get install` into a simulation. This case purges `age` and the p
 runs the script through `--until 3` with real apt, so it proves the package name, that the
 package ships `age-keygen`, and that the update survives a dead source. The script's REPO_URL
 points at a closed port, the way step 2's source reads while the homelab repository is down.
+`Container.cap_apt_retry_delay` runs first, so apt's retries of that port cost the update about
+10 seconds, not 181.
 
 The fetch goes to snapshot.ubuntu.com, which answers 5xx often enough to redden PRs. A
 run that dies at the age install while apt shows that mirror answering 5xx, or not answering at
@@ -50,6 +52,7 @@ def expect_age_from_apt(c: Container, python: str) -> None:
             at all.
     """
     c.boot(python)
+    c.cap_apt_retry_delay()
     c.ok(
         "rm -f /etc/apt/sources.list.d/homelab.sources && dpkg --purge age"
         " && rm -rf /var/lib/apt/lists/*"
