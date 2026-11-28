@@ -78,7 +78,7 @@ CREATOR = "github-actions[bot]"
 # A body is free text, so it travels as data and never in a command line.
 BODY_ENV = "BATCH_BODY"
 # The line of that body that names the batch's members, as the landing writes it.
-_MEMBERS = re.compile(r"^Members:((?:[ \t]+#\d+)+)[ \t]*\r?$", re.MULTILINE)
+_MEMBERS = re.compile(r"^Members:((?:[ \t]+#[0-9]+)+)[ \t]*\r?$", re.MULTILINE)
 # A landing batch holds up to six pull requests (`batch.MAX_STACKED`).
 MAX_MEMBERS = 6
 
@@ -238,7 +238,7 @@ def batch_members(body: str) -> list[int]:
     lines = _MEMBERS.findall(body)
     if len(lines) != 1:
         return []
-    numbers = [int(number) for number in re.findall(r"\d+", lines[0])]
+    numbers = [int(number) for number in re.findall(r"[0-9]+", lines[0])]
     if len(set(numbers)) != len(numbers) or len(numbers) > MAX_MEMBERS:
         return []
     return numbers
