@@ -104,10 +104,11 @@ def groups(
 ) -> list[tuple[str, Callable]]:
     """Every case group but bootstrap_case, longest first, or shard K of N's share of them.
 
-    The order is the groups' wall times on the 26.04 legs of CI runs 46065308899, 46070619651,
-    46077939789 and 46082772420, where `node_package_case` ran 340-372 s for both nodes in
-    turn; each node is a group of its own, placed by half that. A shard takes every N-th group
-    from the K-th, so the longest groups land on different shards.
+    The order is the groups' wall times on the two shards of CI run 46135097191, where the
+    node groups ran 201 s and 179 s. `upgrade_path` and `bootstrap_age_case` are placed by
+    those times less the 171 s that `Container.cap_apt_retry_delay` takes off each one's dead
+    source. A shard takes every N-th group from the K-th, so the longest groups land on
+    different shards.
 
     `bootstrap_case` is left out: it runs alone under `host_package_cases.py --bootstrap`, in a
     CI job of its own.
@@ -116,13 +117,13 @@ def groups(
     the group list holds.
     """
     ordered = [
-        ("upgrade_path", cases_class.upgrade_path),
-        ("bootstrap_age_case", bootstrap_age_case.run),
         *map(_node_group, node_package_case.NODES),
+        ("by_hand", cases_class.by_hand),
         ("engine_case", engine_case.run),
         ("disarm", disarm_case.run),
-        ("by_hand", cases_class.by_hand),
+        ("upgrade_path", cases_class.upgrade_path),
         ("node_units_case", node_units_case.run),
+        ("bootstrap_age_case", bootstrap_age_case.run),
         ("conffile_case", conffile_case.run),
         ("secrets_case", secrets_case.run),
         ("bootstrap_repo_case", bootstrap_repo_case.run),

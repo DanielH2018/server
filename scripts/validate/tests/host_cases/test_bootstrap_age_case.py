@@ -7,11 +7,13 @@ red run while snapshot.ubuntu.com answers 5xx gives no verdict.
 Run: uv run pytest scripts/validate/tests/host_cases/test_bootstrap_age_case.py
 """
 
+import shlex
 import subprocess
 from types import SimpleNamespace
 
 import pytest
 from validate.validate_lib import bootstrap_age_case as age_case
+from validate.validate_lib import host_container
 from validate.validate_lib.host_container import CaseFailed, Container
 
 
@@ -61,10 +63,21 @@ def test_a_run_that_installed_age_and_printed_the_key_is_clean(monkeypatch, tmp_
         "bootstrap-host: installed age\n"
         "bootstrap-host: age public key for daniel-pi: age1abc\n"
     )
-    purge, script = _age_run(monkeypatch, tmp_path, stdout)
+    _cap, purge, script = _age_run(monkeypatch, tmp_path, stdout)
 
     assert "dpkg --purge age" in purge and "/var/lib/apt/lists" in purge
     assert script.endswith("bootstrap-host.sh daniel-pi --until 3")
+
+
+def test_apts_retry_delay_is_capped_before_the_script_fetches(monkeypatch, tmp_path):
+    stdout = (
+        "bootstrap-host: installed age\n"
+        "bootstrap-host: age public key for daniel-pi: age1abc\n"
+    )
+    cap, *_ = _age_run(monkeypatch, tmp_path, stdout)
+
+    assert cap.endswith(f"> {host_container.RETRY_DELAY_DROPIN}")
+    assert shlex.quote(host_container.RETRY_DELAY_CAP) in cap
 
 
 def test_a_run_that_found_age_already_installed_is_flagged(monkeypatch, tmp_path):

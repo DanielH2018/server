@@ -291,20 +291,30 @@ def _verified_release(repo: Path, tmp_path: Path) -> dict[str, str]:
     }
 
 
-def _apt_update(repo: Path, tmp_path: Path) -> subprocess.CompletedProcess[str]:
-    """Run updater step 3's fetch, unprivileged, against `repo` trusted through its keyring."""
+def _apt_update(
+    repo: Path, tmp_path: Path, uri: str = "", conf: str = ""
+) -> subprocess.CompletedProcess[str]:
+    """Run updater step 3's fetch, unprivileged, against `repo` trusted through its keyring.
+
+    Args:
+        repo: The published repository, whose keyring the source names.
+        tmp_path: Where apt's scratch root goes.
+        uri: The source's URI in place of `repo`'s `file://` one.
+        conf: apt configuration, read after the host's own.
+    """
     apt = tmp_path / "apt"
     for directory in ("etc/sources.list.d", "etc/apt.conf.d", "etc/preferences.d"):
         (apt / directory).mkdir(parents=True)
     for directory in ("state/lists/partial", "cache/archives/partial"):
         (apt / directory).mkdir(parents=True)
     (apt / "state/status").write_text("")
+    (apt / "test.conf").write_text(conf)
     (apt / "etc/sources.list.d/homelab.sources").write_text(
-        f"Types: deb\nURIs: file://{repo}\nSuites: homelab\nComponents: main\n"
-        f"Signed-By: {_keyring(repo)}\n"
+        f"Types: deb\nURIs: {uri or f'file://{repo}'}\nSuites: homelab\n"
+        f"Components: main\nSigned-By: {_keyring(repo)}\n"
     )
     return proc_testing.run(
-        ["apt-get", "update", "--error-on=any"]
+        ["apt-get", "-c", str(apt / "test.conf"), "update", "--error-on=any"]
         + ["-o", f"Dir::Etc={apt / 'etc'}", "-o", f"Dir::State={apt / 'state'}"]
         + ["-o", f"Dir::State::status={apt / 'state/status'}"]
         + ["-o", f"Dir::Cache={apt / 'cache'}", "-o", "Debug::NoLocking=1"]
