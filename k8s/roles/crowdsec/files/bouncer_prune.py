@@ -42,6 +42,7 @@ stdout line says why. `-h` and `--help` print this text and exit 0.
 import json
 import subprocess
 import sys
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 
@@ -57,7 +58,7 @@ MARGIN = timedelta(minutes=10)
 LISTED = 10
 
 
-def parse_time(raw):
+def parse_time(raw: str | None) -> datetime | None:
     """A cscli JSON timestamp (Go RFC3339Nano) as an aware datetime, or None for a null.
 
     `fromisoformat` takes the `Z` and truncates nanoseconds to microseconds on Python 3.11+.
@@ -65,23 +66,30 @@ def parse_time(raw):
     return datetime.fromisoformat(raw) if raw else None
 
 
-def last_seen(row):
+def last_seen(row: Mapping) -> datetime:
     """What `QueryBouncersInactiveSince` compares: `last_pull`, else `created_at`."""
-    return parse_time(row.get("last_pull")) or parse_time(row.get("created_at"))
+    return parse_time(row.get("last_pull")) or datetime.fromisoformat(row["created_at"])
 
 
-def base_name(name):
+def base_name(name: str) -> str:
     """`k8straefik@10.42.0.207` -> `k8straefik`; LAPI's own `baseBouncerName` strips the same."""
     return name.split("@", 1)[0]
 
 
+def pull_times(rows: Sequence[Mapping]) -> dict[str, datetime]:
+    """Each row's raw `last_pull` mapped to its parsed time, for the rows that ever pulled."""
+    return {r["last_pull"]: t for r in rows if (t := parse_time(r.get("last_pull")))}
+
+
 @dataclass
 class Plan:
-    prune: list
+    prune: list[str]
     refused: str = ""
 
 
-def report(before, after, edge=EDGE_BOUNCER):
+def report(
+    before: Sequence[Mapping], after: Sequence[Mapping], edge: str = EDGE_BOUNCER
+) -> str:
     """The summary line, read from the list taken AFTER the prune rather than from the plan.
 
     It names the rows that actually went and the edge rows left, with the oldest `last_pull`
@@ -89,9 +97,8 @@ def report(before, after, edge=EDGE_BOUNCER):
     """
     gone = sorted({r["name"] for r in before} - {r["name"] for r in after})
     left = [r for r in after if base_name(r["name"]) == edge]
-    pulled = [r for r in left if r.get("last_pull")]
-    oldest = min(pulled, key=lambda r: parse_time(r["last_pull"]), default=None)
-    oldest = oldest["last_pull"] if oldest else "none"
+    pulled = pull_times(left)
+    oldest = min(pulled, key=pulled.__getitem__, default="none")
     state = f"{len(left)} {edge} rows left, oldest last pull {oldest}"
     if not gone:
         return f"nothing pruned; {state}"
@@ -99,18 +106,19 @@ def report(before, after, edge=EDGE_BOUNCER):
     return f"pruned {len(gone)} rows: {','.join(gone[:LISTED])}{more}; {state}"
 
 
-def plan(rows, now, window=WINDOW, margin=MARGIN, edge=EDGE_BOUNCER):
+def plan(
+    rows: Sequence[Mapping],
+    now: datetime,
+    window: timedelta = WINDOW,
+    margin: timedelta = MARGIN,
+    edge: str = EDGE_BOUNCER,
+) -> Plan:
     """What `cscli bouncers prune -d <window>` would delete from `rows`, and whether that is safe."""
     cutoff = now - window
     prune = sorted(r["name"] for r in rows if last_seen(r) < cutoff)
-    edge_rows = [
-        r
-        for r in rows
-        if base_name(r["name"]) == edge and parse_time(r.get("last_pull"))
-    ]
-    survivor = max(edge_rows, key=lambda r: parse_time(r["last_pull"]), default=None)
-    if survivor is None or parse_time(survivor["last_pull"]) < cutoff + margin:
-        newest = survivor["last_pull"] if survivor else "never"
+    pulled = pull_times([r for r in rows if base_name(r["name"]) == edge])
+    newest = max(pulled, key=pulled.__getitem__, default="never")
+    if newest not in pulled or pulled[newest] < cutoff + margin:
         return Plan(
             prune,
             f"refusing to prune: no {edge} row pulled in the last "
@@ -120,15 +128,15 @@ def plan(rows, now, window=WINDOW, margin=MARGIN, edge=EDGE_BOUNCER):
     return Plan(prune)
 
 
-def run(argv):
+def run(argv: list[str]) -> str:
     return subprocess.run(argv, check=True, capture_output=True, text=True).stdout
 
 
-def cscli(runner, *args):
+def cscli(runner: Callable[[list[str]], str], *args: str) -> str:
     return runner([CSCLI, *args])
 
 
-def main(runner=run, now=None):
+def main(runner: Callable[[list[str]], str] = run, now: datetime | None = None) -> int:
     now = now or datetime.now(UTC)
     rows = json.loads(cscli(runner, "bouncers", "list", "-o", "json") or "[]")
     decided = plan(rows, now)
@@ -147,7 +155,7 @@ def main(runner=run, now=None):
 
 if __name__ == "__main__":
     if any(arg in ("-h", "--help") for arg in sys.argv[1:]):
-        print(__doc__.strip())
+        print((__doc__ or "").strip())
         sys.exit(0)
     try:
         sys.exit(main())

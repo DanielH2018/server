@@ -54,6 +54,7 @@ import ipaddress
 import json
 import subprocess
 import sys
+from collections.abc import Callable, Iterable, Mapping, Set
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -75,8 +76,10 @@ CSCLI = "/tools/cscli"
 KUBECTL = "/tools/kubectl"
 OK_STATUSES = frozenset(range(200, 300)) | {304}
 
+Network = ipaddress.IPv4Network | ipaddress.IPv6Network
 
-def router_name(namespace, name, match):
+
+def router_name(namespace: str, name: str, match: str) -> str:
     """Traefik's name for one route of a kubernetescrd IngressRoute.
 
     `makeServiceKey` in Traefik's CRD provider: `<ingress name>-%.10x` of sha256 over the match
@@ -87,7 +90,9 @@ def router_name(namespace, name, match):
     return f"{namespace}-{name}-{digest}@kubernetescrd"
 
 
-def authenticated_routers(ingressroutes, middleware=AUTH_MIDDLEWARE):
+def authenticated_routers(
+    ingressroutes: Mapping, middleware: str = AUTH_MIDDLEWARE
+) -> frozenset[str]:
     """The router names whose route lists `middleware` — a `kubectl get ingressroute -A -o json` body."""
     names = set()
     for item in ingressroutes.get("items", []):
@@ -99,7 +104,7 @@ def authenticated_routers(ingressroutes, middleware=AUTH_MIDDLEWARE):
     return frozenset(names)
 
 
-def is_remote_client(host):
+def is_remote_client(host: str) -> bool:
     """A public unicast address — the only kind CrowdSec would ban and the LAN allowlist lacks."""
     try:
         return ipaddress.ip_address(host).is_global
@@ -107,7 +112,7 @@ def is_remote_client(host):
         return False
 
 
-def authenticated_clients(lines, routers):
+def authenticated_clients(lines: Iterable[str], routers: Set[str]) -> frozenset[str]:
     """Client addresses with an authenticated request among `lines` (Traefik JSON access log)."""
     seen = set()
     for line in lines:
@@ -138,7 +143,7 @@ def authenticated_clients(lines, routers):
     return frozenset(seen)
 
 
-def home_networks(items):
+def home_networks(items: Iterable[Mapping]) -> frozenset[Network]:
     """The networks `home-ips` holds, from `cscli allowlists inspect -o json`'s `items` list.
 
     A value that does not parse as an address or network covers nothing and is skipped.
@@ -152,7 +157,7 @@ def home_networks(items):
     return frozenset(networks)
 
 
-def entry_value(address):
+def entry_value(address: str) -> str:
     """The allowlist value for a sighting: an IPv6 address widens to its /64, IPv4 stays as is.
 
     A value that is not a single address is returned unchanged.
@@ -166,18 +171,18 @@ def entry_value(address):
     return address
 
 
-def is_home_covered(value, home):
+def is_home_covered(value: str, home: Set[Network]) -> bool:
     try:
         network = ipaddress.ip_network(value, strict=False)
     except ValueError:
         return False
     return any(
-        network.version == home_net.version and network.subnet_of(home_net)
+        network.network_address in home_net and network.prefixlen >= home_net.prefixlen
         for home_net in home
     )
 
 
-def parse_expiration(raw):
+def parse_expiration(raw: object) -> datetime | None:
     """An allowlist item's expiry as an aware datetime, or None when it never expires."""
     if not raw or str(raw).startswith("0001-01-01"):
         return None
@@ -189,7 +194,7 @@ def parse_expiration(raw):
     return parsed if parsed.tzinfo else parsed.replace(tzinfo=UTC)
 
 
-def _latest(first, second):
+def _latest(first: datetime | None, second: datetime | None) -> datetime | None:
     """The later of two expiries, where None (never expires, or unreadable) is the latest."""
     if first is None or second is None:
         return None
@@ -198,15 +203,19 @@ def _latest(first, second):
 
 @dataclass
 class Plan:
-    add: list = field(default_factory=list)  # new entries
-    refresh: list = field(
+    add: list[str] = field(default_factory=list)  # new entries
+    refresh: list[str] = field(
         default_factory=list
     )  # present but expired, unreadable or under REFRESH_BELOW left, and wanted: remove+add
-    prune: list = field(default_factory=list)  # present and not kept
-    over_cap: list = field(default_factory=list)  # seen, would exceed CAP, NOT added
-    live: list = field(default_factory=list)  # present and unexpired after this run
+    prune: list[str] = field(default_factory=list)  # present and not kept
+    over_cap: list[str] = field(
+        default_factory=list
+    )  # seen, would exceed CAP, NOT added
+    live: list[str] = field(
+        default_factory=list
+    )  # present and unexpired after this run
 
-    def summary(self):
+    def summary(self) -> str:
         parts = [f"{len(self.live)} live"]
         if self.add:
             parts.append("added " + ",".join(self.add))
@@ -217,7 +226,14 @@ class Plan:
         return f"remote-ips: {'; '.join(parts)}"
 
 
-def plan(seen, items, now, home=frozenset(), refresh_below=REFRESH_BELOW, cap=CAP):
+def plan(
+    seen: Iterable[str],
+    items: Iterable[Mapping],
+    now: datetime,
+    home: Set[Network] = frozenset(),
+    refresh_below: timedelta = REFRESH_BELOW,
+    cap: int = CAP,
+) -> Plan:
     """Decide the writes for this run from the sightings and the LAPI's current items.
 
     `items` is `cscli allowlists inspect -o json`'s `items` list. Items sharing a value are one
@@ -232,7 +248,7 @@ def plan(seen, items, now, home=frozenset(), refresh_below=REFRESH_BELOW, cap=CA
     and its /64 added with a full TTL, taking the one slot all its siblings shared.
     """
     result = Plan()
-    present = {}
+    present: dict[str, datetime | None] = {}
     for item in items:
         value = item.get("value")
         if not value or not isinstance(value, str):
@@ -241,9 +257,9 @@ def plan(seen, items, now, home=frozenset(), refresh_below=REFRESH_BELOW, cap=CA
         present[value] = (
             _latest(present[value], expires) if value in present else expires
         )
-    live = {}
-    expired = set()
-    widened = set()
+    live: dict[str, datetime | None] = {}
+    expired: set[str] = set()
+    widened: set[str] = set()
     for value, expires in present.items():
         if is_home_covered(value, home):
             result.prune.append(value)
@@ -255,7 +271,7 @@ def plan(seen, items, now, home=frozenset(), refresh_below=REFRESH_BELOW, cap=CA
         else:
             live[value] = expires
 
-    def write(value):
+    def write(value: str) -> None:
         if value in expired:
             expired.discard(value)
             result.refresh.append(value)
@@ -281,15 +297,15 @@ def plan(seen, items, now, home=frozenset(), refresh_below=REFRESH_BELOW, cap=CA
     return result
 
 
-def run(argv):
+def run(argv: list[str]) -> str:
     return subprocess.run(argv, check=True, capture_output=True, text=True).stdout
 
 
-def cscli(runner, *args):
+def cscli(runner: Callable[[list[str]], str], *args: str) -> str:
     return runner([CSCLI, *args])
 
 
-def main(runner=run, now=None):
+def main(runner: Callable[[list[str]], str] = run, now: datetime | None = None) -> int:
     now = now or datetime.now(UTC)
     ingressroutes = json.loads(
         runner([KUBECTL, "get", "ingressroute", "-A", "-o", "json"])
@@ -351,7 +367,7 @@ def main(runner=run, now=None):
 
 if __name__ == "__main__":
     if any(arg in ("-h", "--help") for arg in sys.argv[1:]):
-        print(__doc__.strip())
+        print((__doc__ or "").strip())
         sys.exit(0)
     try:
         sys.exit(main())
