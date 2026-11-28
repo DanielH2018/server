@@ -222,12 +222,8 @@ def _in_a_real_line(ln, tmp_path, at_each_poll):
     ln.tools = replace(ln.tools, line=the_line, sleep=sleep)
 
 
-@pytest.mark.parametrize(
-    ("lands_alone", "stood"), [(False, True), (True, False)], ids=["a-draft", "alone"]
-)
-def test_a_draft_that_steps_out_for_the_serial_landing_keeps_its_place_in_the_line(
-    landing, tmp_path, lands_alone, stood
-):
+def _line_during_a_serial_step_out(landing, tmp_path, lands_alone):
+    """What the line's `waiting` read at each poll of a draft's landing that steps out."""
     ln, calls = _merging(
         landing, _SCRIPT, draft=True, serial=[False, True], turn=[True, False, True]
     )
@@ -237,8 +233,20 @@ def test_a_draft_that_steps_out_for_the_serial_landing_keeps_its_place_in_the_li
         ln, tmp_path, lambda the_line: seen.append(the_line("waiting", "120"))
     )
     _land(ln)
-    assert (f"999 {HEAD}" in seen) is stood
     assert "merge" in call_order(calls)
+    return seen
+
+
+def test_a_draft_that_steps_out_for_the_serial_landing_keeps_its_place_in_the_line(
+    landing, tmp_path
+):
+    assert f"999 {HEAD}" in _line_during_a_serial_step_out(landing, tmp_path, False)
+
+
+def test_a_draft_that_lands_alone_steps_out_without_rejoining_the_line(
+    landing, tmp_path
+):
+    assert f"999 {HEAD}" not in _line_during_a_serial_step_out(landing, tmp_path, True)
 
 
 def test_a_draft_the_holder_merges_while_it_steps_out_is_not_marked_ready(
