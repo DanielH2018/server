@@ -81,6 +81,48 @@ spec:
             - name: vault-mcp-tmp
               mountPath: /tmp
 {{ container_resources(cpu_limit=vault_mcp_k8s_cpu_limit, mem_limit=vault_mcp_k8s_mem_limit, cpu_request=vault_mcp_k8s_cpu_request, mem_request=vault_mcp_k8s_mem_request) }}
+        - name: vault-mcp
+          image: {{ vault_mcp_k8s_image }}
+          # A rebuild can reuse the tag, so pod creation must re-pull.
+          imagePullPolicy: Always
+          ports:
+            - containerPort: {{ container_item.port }}
+{{ hardened_security_context(read_only=true, non_root=true) }}
+          env:
+            - name: VAULT_MCP_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: vault-mcp-token
+                  key: VAULT_MCP_TOKEN
+            - name: VAULT_MCP_ROOT
+              value: /vault
+            - name: VAULT_MCP_EXCLUDE_PATHS
+              value: {{ vault_mcp_exclude_paths | join('\n') | to_json }}
+            # Trusted host for the MCP transport's DNS-rebinding guard (else 421).
+            - name: MCP_PUBLIC_HOST
+              value: vault-mcp.local.{{ domain }}
+            - name: PORT
+              value: "{{ container_item.port }}"
+            - name: PYTHONDONTWRITEBYTECODE
+              value: "1"
+          volumeMounts:
+            - name: vault-mcp-vault
+              mountPath: /vault
+              readOnly: true
+            - name: vault-mcp-server-tmp
+              mountPath: /tmp
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: {{ container_item.port }}
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            tcpSocket:
+              port: {{ container_item.port }}
+            initialDelaySeconds: 20
+            periodSeconds: 30
+{{ container_resources(cpu_limit=vault_mcp_k8s_server_cpu_limit, mem_limit=vault_mcp_k8s_server_mem_limit, cpu_request=vault_mcp_k8s_server_cpu_request, mem_request=vault_mcp_k8s_server_mem_request) }}
       volumes:
         - name: vault-mcp-db
           persistentVolumeClaim:
@@ -95,4 +137,6 @@ spec:
           emptyDir:
             medium: Memory
         - name: vault-mcp-tmp
+          emptyDir: {}
+        - name: vault-mcp-server-tmp
           emptyDir: {}

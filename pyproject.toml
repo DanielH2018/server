@@ -328,7 +328,7 @@ select = [
 paths = [".claude", "evals", "hosts", "k8s", "scripts", "tests"]
 ignore_decorators = [
   "@pytest.fixture",  # autouse fixtures and fixtures named in usefixtures
-  "@mcp.tool",  # homelab-mcp tools, called by the MCP client
+  "@mcp.tool",  # homelab-mcp and vault-mcp tools, called by the MCP client
   "@app.route",  # ical-proxy Flask routes
   "@rule",  # Hypothesis state-machine rules, called by the machine
   "@invariant",  # Hypothesis state-machine invariants, checked after every rule
@@ -448,6 +448,7 @@ extra-paths = [
   "hosts/components/fake-remux/files",
   "k8s/roles/ical-proxy/files",
   "k8s/roles/homelab-mcp/files",
+  "k8s/roles/vault-mcp/files",
   "k8s/roles/airflow/files",
   "k8s/roles/crowdsec/files",
   "k8s/roles/traefik/files",
@@ -551,6 +552,7 @@ possibly-missing-submodule = "error"
 # `k8s_reads` surfaces as ModuleNotFoundError when the pod starts.
 include = [
   "k8s/roles/homelab-mcp/files/app.py",
+  "k8s/roles/vault-mcp/files/vault_server.py",
   "k8s/roles/karakeep/files/karakeep-time-tagger.py",
   "k8s/roles/home-assistant/files/cast_quit_app.py",
 ]
