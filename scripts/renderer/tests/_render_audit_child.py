@@ -114,7 +114,7 @@ def _main(spec: dict) -> int:
         child.start()
         child.join(30)
         return 0
-    sys.modules["ansible"] = None  # ty: ignore[invalid-assignment]
+    sys.modules["ansible"] = None  # ty: ignore[invalid-assignment]  # pyright: ignore[reportArgumentType]
     from renderer import homelab_render
 
     return homelab_render.cluster(Path(spec["out"]), spec["tags"], Path(spec["stubs"]))

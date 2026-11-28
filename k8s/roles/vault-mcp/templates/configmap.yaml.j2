@@ -1,0 +1,9 @@
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: vault-mcp-config
+  namespace: {{ k8s_namespace }}
+data:
+  settings.json: |
+    {{ vault_mcp_livesync_settings | to_json }}

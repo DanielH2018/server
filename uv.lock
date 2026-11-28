@@ -125,6 +125,11 @@ wheels = [
 ]
 
 [[package]]
+name = "claude-worktree"
+version = "0.1.0"
+source = { git = "https://github.com/DanielH2018/dotfiles?subdirectory=home%2Fdot_local%2Fshare%2Fclaude-worktree&rev=c3208ec44ef0c582635ac6c888dc4e0388e1aac6#c3208ec44ef0c582635ac6c888dc4e0388e1aac6" }
+
+[[package]]
 name = "click"
 version = "8.5.1"
 source = { registry = "https://pypi.org/simple" }
@@ -947,6 +952,7 @@ dev = [
 ]
 lint = [
     { name = "actionlint-py" },
+    { name = "claude-worktree" },
     { name = "mkdocs-material" },
     { name = "ruff" },
     { name = "ty" },
@@ -984,6 +990,7 @@ dev = [
 ]
 lint = [
     { name = "actionlint-py" },
+    { name = "claude-worktree", git = "https://github.com/DanielH2018/dotfiles?subdirectory=home%2Fdot_local%2Fshare%2Fclaude-worktree&rev=c3208ec44ef0c582635ac6c888dc4e0388e1aac6" },
     { name = "mkdocs-material", specifier = ">=9.5" },
     { name = "ruff", specifier = ">=0.16" },
     { name = "ty", specifier = "==0.0.112" },

@@ -202,6 +202,9 @@ claude_code_agent_user_repo: DanielH2018/server
 # A merge touching only the hook shim's or homelab-ui launcher's code applies no role, so this
 # bounds how long the agent runs the old copy.
 claude_code_agent_clone_sync_interval: 15min
+# How often the worktree sweep runs in the agent's clone, as `<N>min`: the textfile deadline
+# derives from it, and the weekly reboot restarts the count.
+claude_code_agent_worktree_sweep_interval: 10080min
 
 # Without the systemd-journal group, `journalctl` shows the agent only its own units.
 claude_code_agent_journal_access: true

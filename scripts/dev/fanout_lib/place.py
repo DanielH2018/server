@@ -40,7 +40,8 @@ Exit codes (`lib.exit_codes`'s `FANOUT_PLACE_*`); `status` ranks its batches' ti
   `parked` (its landing waits on a hold or rule that is not its own), `needs-input`,
   `no-pr`, `no-verdict` (land.sh printed no VERDICT) or `no-report`.
 - 3: `launch` placed nothing: no host had headroom, a `fanout_lib.launch_gates` cap refused
-  (the per-host ssh budget, or the live-batch memory cap across runs), or every claim was.
+  (the per-host ssh budget, the live-batch memory cap across runs, or the landing queue's
+  depth), or every claim was.
 - 4: no host readable.
 - 5: `status` only: a batch's unit exited non-zero or its session set `is_error`.
 - 6: no candidate host signs commits GitHub verifies, or the signing keys were unreadable.
@@ -98,6 +99,7 @@ from dev.fanout_lib.launch_gates import (
     live_elsewhere,
     live_by_host,
     live_batch_slots,
+    over_landing_queue,
     over_live_batch_cap,
     over_ssh_budget,
     refuse_live_shared_files,
@@ -294,6 +296,9 @@ def _launch_locked(
     )
     if excused is None:
         return FANOUT_PLACE_FAILED
+    # Only a server batch lands through `land.sh`; another repo's PR lands with its own tooling.
+    if target.is_server and over_landing_queue(tools):
+        return FANOUT_PLACE_NOTHING_PLACED
     # Read the registered keys before the first ssh so a gh outage refuses having spent no
     # connection against the ssh limit.
     registered = registered_keys(tools)

@@ -72,7 +72,7 @@ lidarr_k8s_stall_sweep_schedule: "41 * * * *"
 # TTL: one period plus the 300s deadline and a margin, so the newest run is always visible.
 lidarr_k8s_stall_sweep_job_ttl_seconds: 4200
 # false reports what the sweep would remove and removes nothing; true removes.
-lidarr_k8s_stall_sweep_armed: false
+lidarr_k8s_stall_sweep_armed: true
 # The renderer copies the sweep's jobTemplate into `lidarr-verify` as
 # `lidarr-stall-sweep-deploy-gate-<spec digest8>`, a real run once per revision. A second run
 # finds nothing more to remove, so the gate is a post-apply mutation.

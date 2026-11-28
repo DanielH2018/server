@@ -940,7 +940,7 @@ it. `land_lib/detach.py:result_in` returns its fields by name, so a field added 
 breaks no reader.
 
 ```text
-LAND-RESULT: verdict=<v> cause=<c> exit=<rc> pr=<n> sha=<8 hex> tags=<count> hold_sha=<sha> hold_owner=<owner> merge=<40 hex>
+LAND-RESULT: verdict=<v> cause=<c> exit=<rc> pr=<n> sha=<8 hex> tags=<count> hold_sha=<sha> hold_owner=<owner> merge=<40 hex> next=<action>
 ```
 
 A field the landing never reached reads `-`.
@@ -959,6 +959,18 @@ A field the landing never reached reads `-`.
     - `other`: the hold names failures, and none is one of this PR's services.
     - `unattributed`: the hold names no failure, or this PR has no service. Nothing ties
       the hold to this PR, and nothing clears the PR of it.
+- `next` is what the session that ran the landing does next. `land_lib/outcome.py:NEXT`
+  maps each verdict to one action, and a cause or an exit code overrides the verdict's row
+  where it decides. `cc-wait land` ends its detail with `; next=<action>`.
+    - `done`: nothing is left for the landing. Still exercise the change itself.
+    - `rerun`: re-run the same `land.sh` command.
+    - `wait:landing-clear`: wait with `cc-wait landing-clear`, then re-run it.
+    - `follow:land`: another landing of the PR is live. Wait on it with the `cc-wait land`
+      command its verdict prints, and do not re-run `land.sh`.
+    - `fix-and-rerun`: change what the detail names, then re-run.
+    - `apply-by-hand`: apply what the remediation lines name. A re-run ends the same way.
+    - `operator`: the next step needs the operator, such as a `sudo` command or a soak
+      failure to triage. Report it and stop.
 
 Only `land-wait` can compute `hold_owner`. It holds the raw hold value and the PR's own
 services together. The ledger's tags are widened with every tag the promotion carried before

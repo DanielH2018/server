@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/decisions.py
-generated_at: 2026-11-27 06:17 UTC
-generated_sha: f8cc3c595
+generated_at: 2026-11-27 18:17 UTC
+generated_sha: 1e9fa52cb
 ---
 
 !!! warning "Generated file — do not edit"
@@ -12,7 +12,7 @@ generated_sha: f8cc3c595
 
 # Decisions
 
-656 `DECIDED:` marker(s) found across the tree. A marker is a settled trade-off recorded as a comment at the line it governs, per `docs/adr/index.md` — written so a reviewer trips over the reasoning before re-opening a decision that already has one. A reviewer brief greps the literal marker text before flagging something as new; this page exists so a human can browse the same set instead of guessing a phrase to grep. Each row names its file, not its line; `rg -n` on the marker text finds the line.
+658 `DECIDED:` marker(s) found across the tree. A marker is a settled trade-off recorded as a comment at the line it governs, per `docs/adr/index.md` — written so a reviewer trips over the reasoning before re-opening a decision that already has one. A reviewer brief greps the literal marker text before flagging something as new; this page exists so a human can browse the same set instead of guessing a phrase to grep. Each row names its file, not its line; `rg -n` on the marker text finds the line.
 
 !!! warning "Possible duplicates"
     Two markers below have a near-identical first sentence once case and whitespace are normalised — usually the same trade-off decided twice, or a marker copied and never specialised. Worth a look, not a verdict.
@@ -195,6 +195,7 @@ generated_sha: f8cc3c595
 | `true`, as configarr's CronJob does. state, and every bump runs the reconcile once as a gate Job in `longhorn-reconcile-verify`, which fails the revision on a read or a write that errors. The role writes Volume labels, but a bump changes the interpreter and not the script, and a wrong label is one merge patch to undo. The alternative, `false`, would need a manual rule in renovate.json for the shared python digest, as the denied roles carry. Contradict this with a measured interpreter break. | `k8s/roles/longhorn-reconcile/defaults/main.yml` | 2026-10-22 |
 | hourly, at minute 17. apply. Hourly bounds how long a PVC recreated from the `longhorn` class sits in the daily group after a deploy that put it on another tier. Minute 17 keeps the run clear of the :00 and :30 marks that Longhorn's own cluster-wide jobs and the */10 health readers share. The job writes nothing on a converged cluster, so the schedule costs two list calls an hour. | `k8s/roles/longhorn-reconcile/defaults/main.yml` | 2026-10-22 |
 | refuse, where the Ansible tasks did not. desired group, and picking one here would hide a wrong `containers_list` entry. The run stops before it writes anything, so the next hourly run retries once the entry is fixed. | `k8s/roles/longhorn-reconcile/files/longhorn_reconcile.py` | 2026-10-22 |
+| a volume in a backed-up group as well as `no-backup` keeps the backed-up group alone. `no-backup` runs no RecurringJob, so dropping it stops no backup; keeping it would. | `k8s/roles/longhorn-reconcile/files/longhorn_reconcile.py` | 2026-11-27 |
 | `false`. `restore-drill-${PVC}` and `cleanup()` deletes that name, so a gate Job beside a scheduled run could tear the other's restore down, and a bump of the runner image would run a real restore with nothing watching it. The stance matches janitorr's and crowdsec's, which pin the same `alpine/k8s` digest. Contradict this with a measured gate that cannot overlap the 04:10 UTC run. | `k8s/roles/longhorn-restore-drill/defaults/main.yml` | 2026-10-24 |
 | 4 GiB, raised from 2 GiB on 2026-08-24. NOTHING today", but valheim-config's actualSize is 2.83 GiB, so a 2 GiB cap excluded a backed-up volume. This cap is applied to actualSize: compare `actualSize` from the Volume CR, never the stored-block total from `probe.py b2-longhorn`. The cost of 4 GiB is ~100 Class B GETs and ~1.34 GB egress once per 25-night rotation. | `k8s/roles/longhorn-restore-drill/defaults/main.yml` | 2026-10-24 |
 | 2700s, raised from 1800s with the cap on 2026-08-24. longhorn_restore_drill_deadline_seconds with it, or the Job dies before the restore times out. | `k8s/roles/longhorn-restore-drill/defaults/main.yml` | 2026-11-06 |
@@ -360,6 +361,7 @@ generated_sha: f8cc3c595
 | the spec embeds a digest of tdarr's rendered Deployment, not the role's `digest8`. | `k8s/roles/tdarr/templates/verify/job.yaml.j2` | 2026-10-17 |
 | permanent posture (operator 2026-08-14) — with ETP Local load-bearing for client IPs, announcement and placement stay on one node as a unit; this pin only ever moves together with the L2Advertisement nodeSelector. | `k8s/roles/terraria/templates/deployment.yaml.j2` | 2026-08-27 |
 | pinned to the node with memory to spare. | `k8s/roles/tft-assistant/templates/deployment.yaml.j2` | 2026-11-26 |
+| the route goes to the Service's cluster IP, not to the pod. | `k8s/roles/tft-assistant/templates/ingressroute.yaml.j2` | 2026-11-27 |
 | the page keeps its endpoint while the pod is unready. | `k8s/roles/tft-assistant/templates/service.yaml.j2` | 2026-11-26 |
 | never pruned. server then deletes every IngressRoute or Middleware of that kind: the whole edge goes down. The cost is that a CRD a later upstream release retires stays live until the operator deletes it. scripts/renderer/tests/bundle/test_renderer_crd_census.py fails a CRD in any tag that renders prune: true. | `k8s/roles/traefik-crds/defaults/main.yml` | 2026-10-18 |
 | these are one-way for a cluster that has already deployed with them on. tag prunes, so dropping a name from the file lists makes Flux delete the live object at the next promotion. Flipping either to false on prod therefore sheds a subsystem the edge still serves. The flags exist so a new cluster can come up without the subsystem, not so prod can shed it. Namespaces this cluster's Traefik watches. rbac.yaml.j2 renders one namespaced Role per entry, and static-config.yaml.j2 lists the same set as `providers.kubernetesCRD.namespaces`. ONE variable, so the two cannot drift. ENFORCED by tests/services/traefik/test_traefik_watched_namespaces.py, which compares the RENDERED manifests (Role namespaces vs the provider list), not the templates' text. | `k8s/roles/traefik/defaults/main.yml` | 2026-11-12 |
@@ -545,7 +547,7 @@ generated_sha: f8cc3c595
 | 6. 6 to 7 live landings spent about 1,700 of the 5,000 core calls an hour and 2,250 of the 5,000 GraphQL calls. Lower it from data. | `scripts/deploy_tools/land_lib/slots.py` | 2026-11-15 |
 | 2400 s, the longest a serial PR in the turn waits for the landings past their merge (`_wait_out`). On 2026-11-18 and 2026-11-19 every landing that settled took 7 to 2209 s from its merge to its verdict (the `landing-annotation` records' wait_ci plus deploy). A landing stuck on a soak for longer would otherwise hold the turn for two merge budgets. | `scripts/deploy_tools/land_lib/slots.py` | 2026-11-19 |
 | 300 s, how often a landing waiting for the serial landing reads whether its PR conflicts. One REST read each: 15 waiting landings spend 180 core calls an hour, where a read every poll would spend 1,800. | `scripts/deploy_tools/land_lib/slots.py` | 2026-11-26 |
-| only a path both master and the PR changed makes an approved head stale Refusing on any master move would make every approved PR be rebased and approved again, since master moves between nearly every approval and its landing. The accepted risk is a red master from a path the PR never touched. | `scripts/deploy_tools/land_lib/stale_base.py` | 2026-11-15 |
+| only a path both master and the PR changed makes a green head stale at the merge Refusing on any master move would refuse nearly every landing, and would make every approved PR be rebased and approved again, since master moves between nearly every approval and its landing. The accepted risk is a red master from a path the PR never touched. | `scripts/deploy_tools/land_lib/stale_base.py` | 2026-11-27 |
 | a stale approved head is refused, not updated and not merged. would make a head the operator's approval does not name, so the policy would refuse it anyway. The rebase moves the merge base to master, so the re-approved head goes stale only if master moves again between the approval and the landing. | `scripts/deploy_tools/land_lib/stale_base.py` | 2026-11-14 |
 | NO tree lock is taken. | `scripts/deploy_tools/land_lib/tools.py` | 2026-10-23 |
 | the parent directory is PINNED to GATE_TMP_ROOT rather than left to `mkdtemp`'s | `scripts/deploy_tools/land_lib/tools.py` | 2026-09-16 |

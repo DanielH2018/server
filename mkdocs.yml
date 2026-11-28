@@ -189,6 +189,7 @@ nav:
           - GitHub API quota: github-quota.md
           # Where a landing's time goes, and the options ranked against it.
           - Landing speed: landing-speed.md
+          - Landing architecture: landing-architecture.md
           - Python code organization: python-code-organization.md
       - Monitoring and alerting:
           # The runbook each critical alert's runbook_url links, one section per alert.
@@ -249,6 +250,7 @@ nav:
           - k3s control-plane upgrade: k3s-upgrade.md
           - Longhorn upgrade: longhorn-upgrade.md
           - Airflow warehouse plan: airflow-warehouse-plan.md
+          - Obsidian vault connector plan: obsidian-vault-connector-plan.md
           - Longhorn disaster recovery: longhorn-disaster-recovery.md
           - k3s etcd restore: k3s-etcd-restore.md
           - Registry push store collection: registry-push-store-gc.md

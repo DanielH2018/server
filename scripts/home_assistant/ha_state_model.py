@@ -427,21 +427,16 @@ def cmd_refresh(get_states=None, get_services=None) -> int:
         base = core.ha_base()
         resolve = core.ha_resolve()
         token = ha.ha_token()
-    if get_states is None:
-        live = [
-            s["entity_id"]
-            for s in ha.ha_get_json(
-                ha.ha_get_url(base, "states"), token, resolve=resolve
-            )
-        ]
+
+        def fetch(path: str) -> list:
+            return ha.ha_get_json(ha.ha_get_url(base, path), token, resolve=resolve)
+
+        read_states = get_states or (lambda: [s["entity_id"] for s in fetch("states")])
+        read_services = get_services or (lambda: parse_services(fetch("services")))
     else:
-        live = list(get_states())
-    if get_services is None:
-        services = parse_services(
-            ha.ha_get_json(ha.ha_get_url(base, "services"), token, resolve=resolve)
-        )
-    else:
-        services = set(get_services())
+        read_states, read_services = get_states, get_services
+    live = list(read_states())
+    services = set(read_services())
     config = load_role()
     derived = config_entities(config, config.get("scene") or [])
     external = sorted(e for e in live if e not in derived)

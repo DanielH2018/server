@@ -405,7 +405,7 @@ def main(
 
     `find_stale` is the seam a test uses to point a real run at fixture roles.
     """
-    parser = ArgumentParser(description=__doc__.splitlines()[0])
+    parser = ArgumentParser(description=(__doc__ or "").partition("\n")[0])
     mode = parser.add_mutually_exclusive_group()
     mode.add_argument(
         "--check",

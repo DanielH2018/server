@@ -246,7 +246,7 @@
     },
     {
       "customType": "regex",
-      "description": "The dotfiles commit the CI pytest job checks out (`DOTFILES_SHA` in .github/actions/pytest-tools/action.yml, #2812). A pin rather than `main` keeps an unrelated dotfiles commit from turning server CI red, and a person reads each bump's CI run before merging.",
+      "description": "The dotfiles commit the CI pytest job checks out (`DOTFILES_SHA` in .github/actions/pytest-tools/action.yml, #2812). A pin rather than `main` keeps an unrelated dotfiles commit from turning server CI red, and a person reads each bump's CI run before merging. The bump is half done: the `claude-worktree` rev in pyproject.toml's [tool.uv.sources] must move to the same SHA, with `uv lock`, or the `pytest-tools-dotfiles-pin-is-the-type-checkers-pin` census row fails.",
       "managerFilePatterns": [
         "/(^|/)\\.github/actions/pytest-tools/action\\.yml$/"
       ],
@@ -691,6 +691,7 @@
         "k8s/roles/traefik/defaults/main.yml",
         "k8s/roles/traefik-crds/defaults/main.yml",
         "k8s/roles/valheim/defaults/main.yml",
+        "k8s/roles/vault-mcp/defaults/main.yml",
         "k8s/roles/vaultwarden/defaults/main.yml",
         "k8s/roles/volume-snapshot/defaults/main.yml",
         "k8s/roles/wg-easy/defaults/main.yml",

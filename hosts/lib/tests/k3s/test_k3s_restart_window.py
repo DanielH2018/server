@@ -65,6 +65,7 @@ EXEMPT = {
     "homelab-updater.timer": "the `windowed` mark: reconcile never restarts k3s",
     "homelab-claude-cgroup-metrics.timer": "writes Claude cgroup metrics; never touches k3s",
     "homelab-claude-clone-sync.timer": "syncs a git clone; never touches k3s",
+    "homelab-claude-worktree-sweep.timer": "prunes the agent's git worktrees; never touches k3s",
     "homelab-claude-dotfiles-sync.timer": "syncs the dotfiles clone; never touches k3s",
     "homelab-claude-memory-sync.timer": "copies the memory store to daniel-server; never touches k3s",
     "homelab-claude-fanout-server-lander.timer": "lands a merged PR over ssh; reads no cluster state",

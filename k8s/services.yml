@@ -276,6 +276,8 @@ containers_list:
     # Clients use basic auth and cannot pass 2FA. Traefik's livesync-gate-secret serves the
     # names; a bare `Host(livesync…)` router added beside it would bypass the token gate.
     use_authelia: false
+    netpol_from:
+      - vault-mcp  # livesync-cli mirrors the vault for Claude's vault connector
   - name: homepage
     hostname: "homepage"
     port: 3000
@@ -556,4 +558,9 @@ containers_list:
     use_authelia: true
     auth_tier: one_factor
     weekly_backup_claims: {tft-assistant-keep: 3}  # Wed
+  - name: vault-mcp
+    # The vault claim holds the decrypted vault; both rebuild from livesync's CouchDB.
+    no_backup_claims: [vault-mcp-vault, vault-mcp-db]
+    depends_on: [livesync]  # the pod reads livesync's Secret
+    port: 8000
   - name: netpol-baseline

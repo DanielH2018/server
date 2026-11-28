@@ -221,7 +221,7 @@ def main(
         repo: the repository to measure; a test passes a scratch one.
         now: the clock the 30- and 90-day offsets count back from; UTC now when omitted.
     """
-    parser = ArgumentParser(description=__doc__.splitlines()[0])
+    parser = ArgumentParser(description=(__doc__ or "").partition("\n")[0])
     parser.add_argument("--out", type=_Path, required=True, help="output file path")
     args = parser.parse_args(argv)
     now = now or datetime.now(timezone.utc)

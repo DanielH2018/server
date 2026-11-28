@@ -344,7 +344,7 @@ def run(
 
 
 def main(argv: list[str] | None = None, env: Mapping[str, str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser = argparse.ArgumentParser(description=(__doc__ or "").partition("\n")[0])
     parser.parse_args(argv)
     cfg = Config.from_env(os.environ if env is None else env)
     kube = Kube(API, Path(TOKEN_FILE).read_text().strip())

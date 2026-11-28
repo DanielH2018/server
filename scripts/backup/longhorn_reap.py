@@ -37,10 +37,10 @@ def main(argv: list[str], now: float | None = None) -> int:
         The reaper's exit code, or 64 when no known subcommand comes first.
     """
     if argv and argv[0] in HELP_FLAGS:
-        print(__doc__.strip())
+        print((__doc__ or "").strip())
         return 0
     if not argv:
-        print(__doc__.strip(), file=sys.stderr)
+        print((__doc__ or "").strip(), file=sys.stderr)
         return USAGE_ERROR
     subcommand, rest = argv[0], argv[1:]
     # Imported only once chosen: the backups reaper int()s its timeout env at import, so a malformed

@@ -49,6 +49,11 @@ and the CI queue and wall medians. The pairs are listed because a planned drill'
 counts too, so a person judges which were failures. A fix that lands as a new PR without
 reverting is not counted; nothing reliable links it to the PR it fixes.
 
+Each row's `landings` lists every land.sh attempt on the PR with its verdict and seconds, and
+`failed_landing_s` sums the attempts that ended `pr-ci-red`, `merge-conflict`,
+`deploy-failed` or `refused` (`FAILED_VERDICTS`). The summary prints the landings for each PR
+and the share of all landing time those failed attempts took.
+
 It also prints the CI re-run count, how many re-runs passed and the jobs that failed their
 re-run, which tracks the flake rate. A flake that passed leaves no job name in the record.
 
@@ -86,6 +91,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 
+from deploy_tools.land_lib.outcome import Verdict
 from dev.ci_slot_cost import job_spans
 from dev.fanout_lib import operator_waits
 from dev.fanout_lib.ci_reruns import NO_RERUN, rerun_fields, rerun_line
@@ -130,6 +136,10 @@ CI_WORKFLOW = "ci.yml"
 JOB_READERS = 8
 # The conclusions that judged the head. `skipped` (a draft) and `cancelled` judged nothing.
 _CI_VERDICTS = frozenset({"success", "failure", "timed_out", "startup_failure"})
+# The landing verdicts whose attempt the PR had to repeat; their time is the failed-landing cost.
+FAILED_VERDICTS = frozenset(
+    {Verdict.PR_CI_RED, Verdict.MERGE_CONFLICT, Verdict.DEPLOY_FAILED, Verdict.REFUSED}
+)
 
 
 def _journal(lines):
@@ -141,7 +151,7 @@ def _journal(lines):
 
 
 def parse_landings(lines) -> dict[int, dict]:
-    """Every land.sh attempt per PR: first start, last end, attempt count and verdicts in order.
+    """Every land.sh attempt per PR: first start, last end, and each attempt's verdict and seconds.
 
     The ledger line is written when an attempt ends and carries its `total`, so an attempt's
     start is its journal time minus that. A line with no PR number (`pr=unknown`) is dropped.
@@ -156,13 +166,19 @@ def parse_landings(lines) -> dict[int, dict]:
         start = ts - float(fields.get("total") or 0)
         row = out.setdefault(
             int(fields["pr"]),
-            {"land_start": start, "land_end": ts, "attempts": 0, "verdicts": []},
+            {"land_start": start, "land_end": ts, "landings": []},
         )
         row["land_start"] = min(row["land_start"], start)
         row["land_end"] = max(row["land_end"], ts)
-        row["attempts"] += 1
-        row["verdicts"].append(fields.get("verdict", ""))
+        row["landings"].append(
+            {"verdict": fields.get("verdict", ""), "seconds": ts - start}
+        )
     return out
+
+
+def failed_seconds(landings: list[dict]) -> float:
+    """The seconds a PR's landings spent in attempts that ended in `FAILED_VERDICTS`."""
+    return sum(x["seconds"] for x in landings if x["verdict"] in FAILED_VERDICTS)
 
 
 def parse_holds(lines) -> dict[int, dict]:
@@ -356,8 +372,8 @@ def join(
                 "pr_to_land": _gap(stamps["pr_created"], stamps["land_start"]),
                 "land_to_merge": _gap(stamps["land_start"], stamps["merged"]),
                 "merge_to_done": _gap(stamps["merged"], stamps["land_end"]),
-                "attempts": landing.get("attempts", 0),
-                "verdicts": landing.get("verdicts", []),
+                "landings": landing.get("landings", []),
+                "failed_landing_s": failed_seconds(landing.get("landings", [])),
                 "phases_min": review.get("phases_min", {}),
                 **holds.get(n, {"held_by": "", "held_h": None}),
                 "first_ci": runs.get("first_ci"),
@@ -405,6 +421,19 @@ def rates(rows: list[dict]) -> list[str]:
     return lines
 
 
+def landing_lines(rows: list[dict]) -> list[str]:
+    """Landings for each PR that had one, and the share of landing time failed landings took."""
+    counts = [len(r["landings"]) for r in rows if r["landings"]]
+    total = sum(x["seconds"] for r in rows for x in r["landings"])
+    failed = sum(r["failed_landing_s"] for r in rows)
+    return [
+        f"landings: {sum(counts)} over {len(counts)} PRs, per PR "
+        + _median_p90([float(c) for c in counts]),
+        f"failed landing time: {failed / 3600:.1f}h of {total / 3600:.1f}h"
+        + (f" ({failed / total:.0%})" if total else ""),
+    ]
+
+
 def concurrency(rows: list[dict]) -> dict[int, float]:
     """The share of the span from the first batch start to the last end with N batches live.
 
@@ -442,6 +471,7 @@ def summarize(rows: list[dict]) -> str:
             f"{gap:15} {len(values):3} {statistics.median(values):10.2f} {p90:7.2f}"
         )
     lines.extend(rates(rows))
+    lines.extend(landing_lines(rows))
     lines.append(rerun_line(rows))
     waited: dict[str, list[float]] = {}
     for r in rows:

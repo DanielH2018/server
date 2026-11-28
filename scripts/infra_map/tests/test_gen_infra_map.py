@@ -107,7 +107,7 @@ def test_declared_services_skips_entries_without_a_name():
 
 def test_match_k8s_workloads_takes_the_service_and_its_helpers():
     service = {"name": "n8n", "namespace": "homelab"}
-    assert [w["name"] for w in g.match_k8s_workloads(service, WORKLOADS)] == [
+    assert [w["name"] for w in g.match_k8s_workloads(service, WORKLOADS, {})] == [
         "n8n",
         "n8n-runners",
     ]
@@ -117,13 +117,41 @@ def test_match_k8s_workloads_requires_a_hyphen_not_a_bare_prefix():
     """`n8nother` is a different service; prefix matching must not swallow it."""
     service = {"name": "n8n", "namespace": "homelab"}
     assert "n8nother" not in [
-        w["name"] for w in g.match_k8s_workloads(service, WORKLOADS)
+        w["name"] for w in g.match_k8s_workloads(service, WORKLOADS, {})
     ]
+
+
+def test_match_k8s_workloads_leaves_a_longer_declared_service_its_own_workloads():
+    workloads = {("homelab", "foo-bar-0"): {"ready": 1, "desired": 1, "image": "x:1"}}
+    scopes = {"foo": {"homelab"}, "foo-bar": {"homelab"}}
+    foo = {"name": "foo", "namespace": "homelab"}
+    foo_bar = {"name": "foo-bar", "namespace": "homelab"}
+    assert g.match_k8s_workloads(foo, workloads, scopes) == []
+    assert [w["name"] for w in g.match_k8s_workloads(foo_bar, workloads, scopes)] == [
+        "foo-bar-0"
+    ]
+
+
+def test_reconcile_k8s_keeps_a_workload_a_longer_service_never_searches_for():
+    """longhorn-ui is declared in homelab, so the upstream longhorn-system/longhorn-ui
+    Deployment stays with longhorn, the role whose manifests name that namespace."""
+    workloads = {
+        ("longhorn-system", "longhorn-ui"): {"ready": 1, "desired": 1, "image": "u:1"}
+    }
+    longhorn = service("longhorn", platform="k8s", namespace="homelab")
+    longhorn_ui = service("longhorn-ui", platform="k8s", namespace="homelab")
+    roles = g.RoleIndex(
+        container_owners={},
+        batch_roles=frozenset(),
+        manifest_namespaces={"longhorn": frozenset({"longhorn-system"})},
+    )
+    result = g.reconcile_k8s(longhorn, workloads, roles, [longhorn, longhorn_ui])
+    assert [w["name"] for w in result["workloads"]] == ["longhorn-ui"]
 
 
 def test_match_k8s_workloads_gives_a_namespace_owner_everything_in_it():
     service = {"name": "observability", "namespace": "observability"}
-    assert [w["name"] for w in g.match_k8s_workloads(service, WORKLOADS)] == [
+    assert [w["name"] for w in g.match_k8s_workloads(service, WORKLOADS, {})] == [
         "loki",
         "tempo",
     ]
@@ -131,7 +159,7 @@ def test_match_k8s_workloads_gives_a_namespace_owner_everything_in_it():
 
 def test_match_k8s_workloads_does_not_cross_namespaces():
     service = {"name": "loki", "namespace": "homelab"}
-    assert g.match_k8s_workloads(service, WORKLOADS) == []
+    assert g.match_k8s_workloads(service, WORKLOADS, {}) == []
 
 
 def test_reconcile_docker_marks_a_running_healthy_container_healthy():
@@ -162,13 +190,13 @@ def test_reconcile_docker_calls_a_batch_role_a_job_not_missing():
 
 def test_reconcile_k8s_is_healthy_when_all_replicas_are_ready():
     svc = service("n8n", platform="k8s", namespace="homelab")
-    assert g.reconcile_k8s(svc, WORKLOADS, ROLES)["status"] == "healthy"
+    assert g.reconcile_k8s(svc, WORKLOADS, ROLES, ())["status"] == "healthy"
 
 
 def test_reconcile_k8s_is_degraded_on_partial_readiness():
     workloads = {("homelab", "n8n"): {"ready": 1, "desired": 3, "image": "n8n:1"}}
     svc = service("n8n", platform="k8s", namespace="homelab")
-    result = g.reconcile_k8s(svc, workloads, ROLES)
+    result = g.reconcile_k8s(svc, workloads, ROLES, ())
     assert result["status"] == "degraded"
     assert result["replicas"] == (1, 3)
 
@@ -176,17 +204,17 @@ def test_reconcile_k8s_is_degraded_on_partial_readiness():
 def test_reconcile_k8s_is_down_when_nothing_is_ready():
     workloads = {("homelab", "n8n"): {"ready": 0, "desired": 2, "image": "n8n:1"}}
     svc = service("n8n", platform="k8s", namespace="homelab")
-    assert g.reconcile_k8s(svc, workloads, ROLES)["status"] == "down"
+    assert g.reconcile_k8s(svc, workloads, ROLES, ())["status"] == "down"
 
 
 def test_reconcile_k8s_calls_a_no_workload_role_a_job():
     svc = service("media-volume", platform="k8s", namespace="homelab")
-    assert g.reconcile_k8s(svc, {}, ROLES)["status"] == "job"
+    assert g.reconcile_k8s(svc, {}, ROLES, ())["status"] == "job"
 
 
 def test_reconcile_k8s_marks_a_genuinely_absent_deployment_missing():
     svc = service("freshrss", platform="k8s", namespace="homelab")
-    assert g.reconcile_k8s(svc, {}, ROLES)["status"] == "missing"
+    assert g.reconcile_k8s(svc, {}, ROLES, ())["status"] == "missing"
 
 
 def test_reconcile_k8s_looks_in_a_namespace_the_manifests_name_literally():
@@ -196,13 +224,13 @@ def test_reconcile_k8s_looks_in_a_namespace_the_manifests_name_literally():
         ("kube-system", "dri-device-plugin"): {"ready": 2, "desired": 2, "image": "p:1"}
     }
     svc = service("dri-device-plugin", platform="k8s", namespace="homelab")
-    assert g.reconcile_k8s(svc, workloads, ROLES)["status"] == "missing"
+    assert g.reconcile_k8s(svc, workloads, ROLES, ())["status"] == "missing"
     roles = g.RoleIndex(
         container_owners={},
         batch_roles=frozenset(),
         manifest_namespaces={"dri-device-plugin": frozenset({"kube-system"})},
     )
-    result = g.reconcile_k8s(svc, workloads, roles)
+    result = g.reconcile_k8s(svc, workloads, roles, ())
     assert result["status"] == "healthy"
     assert result["workloads"][0]["namespace"] == "kube-system"
 
