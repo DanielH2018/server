@@ -15,8 +15,9 @@ the line grammar (Valheim's console differs from Terraria's, not as a dialect bu
 different language — see valheim_stats.py's own docstring), the state machine each grammar
 needs (Valheim tracks deaths and a SteamID<->name map; Terraria does not), and the SQLite
 schema that persists that state. Those three stay in each role's own file. A game's `Store`
-is only that schema plus its `load_state`/`save`: the connection lifecycle and the two
-game-independent tables are `SqliteStore` here, which each game's `Store` subclasses.
+is only that schema plus its `load_state`/`write_state`: the connection lifecycle, the `save`
+transaction and the two game-independent tables are `SqliteStore` here, which each game's
+`Store` subclasses.
 
 What lives here instead — the mechanical skeleton neither game's identity touches:
   - the env reader (`env`)
@@ -36,6 +37,7 @@ needs no test doubles patched onto it — a caller passes a fake `fetch`/`apply_
 """
 
 import argparse
+import copy
 import json
 import os
 import sqlite3
@@ -157,7 +159,8 @@ def run_cycle(state, store, cursor, end_ns, fetch, apply_fn, page_limit):
     fold (e.g. Valheim's excludes heartbeats from the audit log, Terraria's has no
     heartbeat at all). Pages until a short/empty page. State mutation + cursor advance are
     persisted together so a crash re-runs the batch cleanly (events past the saved cursor
-    simply re-apply on next start).
+    simply re-apply on next start). A page whose fold or save raises leaves `state` as it
+    was before the page, so the retry that resumes from the stored cursor folds it once.
 
     A full page may stop partway through its last timestamp, and the cursor cannot point
     inside one, so those entries wait for the next page. A full page holding a single
@@ -184,10 +187,16 @@ def run_cycle(state, store, cursor, end_ns, fetch, apply_fn, page_limit):
                     "page of %d entries at ts %d: any more are skipped"
                     % (limit, last_ts)
                 )
-        events, max_ts = apply_fn(state, entries)
-        if max_ts > cursor:
-            cursor = max_ts
-        store.save(state, cursor, events)
+        before = copy.deepcopy(vars(state))
+        try:
+            events, max_ts = apply_fn(state, entries)
+            page_cursor = max(cursor, max_ts)
+            store.save(state, page_cursor, events)
+        except BaseException:
+            vars(state).clear()
+            vars(state).update(before)
+            raise
+        cursor = page_cursor
         if not full:
             break
         limit = page_limit
@@ -330,7 +339,8 @@ class SqliteStore:
     """Connection lifecycle + the game-independent tables of a stats Store.
 
     A subclass owns what genuinely differs per game: the `players` schema (Valheim carries a
-    death count and a SteamID<->name map, Terraria neither), `load_state`, and `save`. It
+    death count and a SteamID<->name map, Terraria neither), `load_state`, and the rows
+    `write_state` adds to `save`'s transaction. It
     declares its own tables in `_init_game_schema`, which this constructor calls before the
     single commit — so a subclass hook must not read an attribute assigned after
     `super().__init__()`.
@@ -370,20 +380,26 @@ class SqliteStore:
         row = self.conn.execute("SELECT last_ts_ns FROM cursor WHERE id=1").fetchone()
         return int(row[0]) if row else 0
 
-    def write_events(self, conn, events):
-        """Appends raw events to the audit log. No commit — part of `save`'s transaction."""
-        if events:
-            conn.executemany(
-                "INSERT INTO events(ts_ns,player,kind,raw) VALUES(?,?,?,?)", events
+    def save(self, state, cursor_ns, events=()):
+        """Persists events, the game's rows and the cursor as one transaction.
+
+        A failure rolls the whole transaction back, so no row it wrote reaches a later commit.
+        """
+        with self.conn as c:
+            if events:
+                c.executemany(
+                    "INSERT INTO events(ts_ns,player,kind,raw) VALUES(?,?,?,?)", events
+                )
+            self.write_state(c, state)
+            c.execute(
+                "INSERT INTO cursor(id,last_ts_ns) VALUES(1,?) "
+                "ON CONFLICT(id) DO UPDATE SET last_ts_ns=excluded.last_ts_ns",
+                (cursor_ns,),
             )
 
-    def write_cursor(self, conn, cursor_ns):
-        """Upserts the single-row ingest cursor. No commit — part of `save`'s transaction."""
-        conn.execute(
-            "INSERT INTO cursor(id,last_ts_ns) VALUES(1,?) "
-            "ON CONFLICT(id) DO UPDATE SET last_ts_ns=excluded.last_ts_ns",
-            (cursor_ns,),
-        )
+    def write_state(self, conn, state):
+        """Writes the game's rows for `state`. Subclasses override; no commit, `save` commits."""
+        raise NotImplementedError
 
 
 # The entry point both roles' main() is

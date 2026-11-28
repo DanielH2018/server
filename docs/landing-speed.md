@@ -287,3 +287,92 @@ out the 5520 s merge budget while later arrivals took the turn or were stacked. 
 of those waits comes from the ordering: #10482 is serial, so no batch can carry it, and #10449's
 wait includes a serial wait. A proposed architecture, on branch `claude/landing-architecture`,
 models the queue so the effect of the ordering is measured before a change is built.
+
+## A check on drafts before the landing
+
+[#10521](https://github.com/DanielH2018/server/issues/10521) asked whether a cheap check on a
+draft, such as `prek` alone, would have shown a red PR to its author before its landing took
+the turn. D9 rules that a draft runs no `ci.yml` job (`docs/ci-throughput.md`), so the answer
+goes to the operator before anything is built.
+
+**Recommendation: do not build a `prek`-only check on drafts. It would have caught none of the
+day's red landings.** Of the 17 `ci.yml` pull-request runs created on 2026-11-27 that ended
+red, 13 failed a `pytest` leg and 4 failed only `renovate config validator`. No `hooks` job
+failed. The required check named
+`prek (lint + validate + tests + secrets)` is the gate that aggregates every job, so it also
+read red each time; its log says `1 halves failed: pytest=failure`. Two cheaper routes would
+have caught most of the reds, and neither spends a runner slot or changes D9:
+
+1. **Add two tests to `repo_guards.py`**
+   ([#10609](https://github.com/DanielH2018/server/issues/10609)). The size ceiling on
+   the renderer and the MkDocs nav test caused five of the seven reds that were the PR's own
+   fault. Neither test is in `repo_guards.GUARDS` or in a ratchet hook. The author sees the
+   red before the PR opens, provided the guards run at the final head.
+1. **Run the affected tests on daniel-box while a landing waits**, as the operator's comment
+   on #10521 proposes. CI's own selection held each failing test, so a host run of the same
+   selection holds all seven. Its false-red rate is unmeasured, so the first build only logs
+   its verdict beside the hosted one, and at most about 2 such runs go at once
+   ([ADR-0032](adr/0032-cis-heavy-jobs-may-run-on-runner-pods.md)).
+
+### The day's red landings, by cause
+
+Loki holds 14 `pr-ci-red` landings for 2026-11-27, all on daniel-box. Ten of them ended by
+19:26 UTC, where this page's Loki window and the issue's count of 10 stop. Three batch runs
+were red: the two the issue counts, and `queue/10346`, created at 23:58 UTC on 2026-11-26.
+`ghread run failures` on each red run named the failed jobs below. The cause splits two
+ways: a red master the PR inherited, and a fault in the PR's own head.
+
+- **Seven landings inherited a red master.** Master `a8405b4a` put
+  `scripts/diagnostics/probe_lib/cli_parser.py` at 451 code lines, one over its cap, and
+  `31b8d254` fixed it at 00:16 UTC. Until then each PR run tested a merge ref that held the
+  red, and `test_module_length_ratchet.py` failed: #10318, #10339, #10344, #10348, and #10346
+  three times. None of these PRs touched the file. The batch run of `queue/10346` (#10346 and
+  three others) failed the same way. Six of the seven landings ended in 3 to 5 s on a run that
+  already existed, and the batch landing held the turn for 1424 s. A draft check reads the
+  same merge ref, so it would have read red too, on a fault the authors could not fix.
+- **Seven landings, on six PRs, failed on their own head.** Master's gate was green at each
+  PR's merge base.
+    - `test_renderer_size_ceiling.py`: #10408, #10465, and #10329 twice. Each head was over
+      the ceiling on its own, by 2 to 136 lines. The batch run of `queue/10391` stacked
+      #10408 and failed the same way.
+    - `test_rbac_against_script.py`, the `configarr` case: #10393, which changed the
+      configarr health check. Its batch run of four went red, and its three members went
+      back to the line.
+    - Two tests in `test_fanout_clean.py`: #10496, which changed the worktree modules.
+    - `test_mkdocs_config.py`: #10552, a docs-only PR whose new page had no nav entry.
+
+`prek` as it runs at commit includes the `static-ratchet-tests*` hooks, and those run the
+module-length ratchet. That form would have caught only the inherited red. None of the four
+tests behind the own-head reds is in a ratchet hook or in `repo_guards.GUARDS`.
+
+The own-head reds are the ones that cost waiting time. #10465 waited 2280 s behind a serial
+landing and 5520 s for the turn, then its own run went red. #10408 waited 2820 s for the turn,
+#10496 waited 1140 s behind a serial landing, and #10329's first landing waited 990 s in all.
+
+### What each form of the check costs
+
+The day had 194 pull-request runs of `ci.yml` that skipped because the PR was a draft, so
+about 194 draft pushes. The 50 other short runs were tested-tree skips.
+
+- **The `hooks` job on every draft push.** On 2026-11-27 the job was one leg of about 330 s.
+  It has been two legs since `bf0881971` on 2026-11-28. 194 pushes cost about 390 jobs and
+  1070 job-minutes a day. The burst from 16:50 to 18:00 UTC had 11 draft pushes, about one
+  more job running at once against a median of 4.5. It fits the cap of 20, and it catches
+  none of the reds above.
+- **The `pytest` legs on every draft push.** These catch all seven own-head reds, because
+  they are the legs that went red. A PR run on 2026-11-27 had 4 to 6 legs of 110 to 250 s,
+  9 to 18 job-minutes, so 194 pushes cost about 30 to 60 job-hours a day. This is D9 reversed:
+  D9 measured about 2 full runs per PR opened ready against about 0.5 for a draft in a
+  batch.
+- **The affected tests on daniel-box during the wait.** This costs no runner slot. Four of
+  the seven own-head landings waited 990 s or more. #10393 waited 360 s, and #10552 and
+  #10329's second landing did not wait. CI's legs ran the selection in 2 to 4 minutes each;
+  how long one run of it takes on daniel-box is unmeasured. ADR-0032 found
+  four causes of a host verdict that differs from the hosted one: the locale, tools the host
+  has installed, a step only the workflow runs, and files only the host has. The renderer
+  ceiling reads `git ls-files`, so it sees no host-only file. The MkDocs nav test globs
+  `docs/*.md` on disk, which is safe in the landing's fresh checkout. `test_fanout_clean.py`
+  builds git fixtures, so the host's git setup can change its result.
+- **Two more guards in `repo_guards.py`** ([#10609](https://github.com/DanielH2018/server/issues/10609)).
+  Both tests read the tree and render nothing, and together they run in under a second.
+  They cost nothing on a runner or in the turn.

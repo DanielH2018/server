@@ -26,7 +26,7 @@ from dev.fanout_lib.review.review_land import LAND_MARGIN_S, WAIT_MARGIN_S
 from dev.fanout_lib.status import BLOCKER, PR_URL
 from dev.fanout_lib.target import Target
 
-PASSED = (0, "WAIT: passed abcd1234: 20 check runs passed\n")
+PASSED: tuple[int, str] = (0, "WAIT: passed abcd1234: 20 check runs passed\n")
 FAILED = (1, "WAIT: failed abcd1234: 1 failed: pytest\n")
 CANCELLED = (1, "WAIT: cancelled abcd1234: 1 cancelled: pytest\n")
 JOB_URL = "https://github.com/DanielH2018/server/actions/runs/9/job/777"
@@ -329,6 +329,7 @@ def test_a_second_landing_that_ends_before_the_merge_records_no_ci_verdict(tmp_p
 def test_a_ci_fix_that_leaves_too_little_run_time_is_not_landed_again(tmp_path):
     pipeline, run = _red_landing(tmp_path, [PR_CI_RED])
     clock, inner = pipeline.clock, pipeline.run
+    assert isinstance(clock, Clock)
 
     def slow_fix(argv, stdin):
         out = inner(argv, stdin)

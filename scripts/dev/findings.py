@@ -724,7 +724,7 @@ def main(argv: list[str] | None, tools: FindingsTools) -> int:
     """
     # The first non-blank line, not `[1]`: line 1 of the docstring is blank, so `[1]` gave argparse
     # an empty description.
-    summary = next(line for line in __doc__.splitlines() if line.strip())
+    summary = next((line for line in (__doc__ or "").splitlines() if line.strip()), "")
     parser = _parser(summary)
     refuse_help_under_describe(parser, argv)
     args = parser.parse_args(argv)

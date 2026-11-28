@@ -1,8 +1,12 @@
 import os
+import sqlite3
 import subprocess
 import sys
+from unittest import mock
 
+import pytest
 import stats
+import stats_lib
 
 
 def test_parse_join():
@@ -197,6 +201,63 @@ def test_run_cycle_end_to_end(tmp_path):
     # persisted
     with stats.Store(db) as reopened:
         assert reopened.get_cursor() == 4_000_000_000
+
+
+class _CursorWriteFailsOnce:
+    """A connection whose first cursor upsert raises, after the save's other rows are written."""
+
+    def __init__(self, conn):
+        self._conn = conn
+        self.failed = False
+
+    def __getattr__(self, name):
+        return getattr(self._conn, name)
+
+    def __enter__(self):
+        self._conn.__enter__()
+        return self
+
+    def __exit__(self, *exc):
+        return self._conn.__exit__(*exc)
+
+    def execute(self, sql, *args):
+        if sql.startswith("INSERT INTO cursor") and not self.failed:
+            self.failed = True
+            raise sqlite3.OperationalError("database or disk is full")
+        return self._conn.execute(sql, *args)
+
+
+class _Stop(BaseException):
+    """Ends poll_forever's loop from the sleep between cycles."""
+
+
+def test_a_page_whose_save_failed_counts_once_on_the_next_poll(tmp_path):
+    log = [(1_000_000_000, "DBoy has joined."), (4_000_000_000, "DBoy has left.")]
+
+    def fetch(start_ns, end_ns, limit):
+        return [e for e in log if start_ns < e[0] <= end_ns][:limit]
+
+    with stats.Store(str(tmp_path / "stats.db")) as store:
+        store.conn = _CursorWriteFailsOnce(store.conn)
+        poll_state = stats_lib.PollState(store.load_state())
+        with mock.patch("stats_lib.time.sleep", side_effect=[None, _Stop]):
+            with pytest.raises(_Stop):
+                stats_lib.poll_forever(
+                    poll_state,
+                    store,
+                    cursor=0,
+                    fetch=fetch,
+                    apply_fn=stats.apply_entries,
+                    page_limit=stats.LOKI_PAGE_LIMIT,
+                    once=False,
+                    backfill=False,
+                    poll_interval=20,
+                    on_poll_ok=lambda state: "ok",
+                )
+        assert poll_state.value.players["DBoy"]["sessions"] == 1
+        assert poll_state.value.players["DBoy"]["total_playtime"] == 3.0
+        assert store.conn.execute("SELECT COUNT(*) FROM events").fetchone()[0] == 2
+        assert store.load_state().players["DBoy"]["sessions"] == 1
 
 
 def test_main_requires_the_metrics_port_from_the_deployment():

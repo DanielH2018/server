@@ -95,10 +95,11 @@ Three defects lived in the gaps between the pieces above:
 - A turn holder waited on a failing check that could never pass
   ([#10525](https://github.com/DanielH2018/server/pull/10525), fixed).
 - **A landing that steps out of the turn leaves the line**
-  ([#10559](https://github.com/DanielH2018/server/issues/10559), open). `turn.held`'s
-  `step_out` asks for the turn back with no draft, and `line.Place` drops the line for a
-  place with no head. No holder can stack that landing, so it can only win the turn by
-  polling first.
+  ([#10559](https://github.com/DanielH2018/server/issues/10559), fixed). `turn.held`'s
+  `step_out` asked for the turn back with no draft, and `line.Place` drops the line for a
+  place with no head. No holder could stack that landing, so it could only win the turn by
+  polling first. `step_out` now asks with `Landing.line_head`, the draft's head until the
+  PR is marked ready.
 
 The third is the starvation the measurements showed, and its cause is not the polling race
 alone. #10465 and #10449 both stepped out at about 16:09 for the serial landing. Each then
@@ -167,8 +168,8 @@ Each state, and the code that implements it:
 - **OwnRun.** A PR opened ready has a CI run of its own, and its landing polls that run
   outside the turn (`merge.await_merge`, before its first `ask`). A draft skips this state.
 - **Queued.** The landing waits in `turn._wait`. A draft with no CI run stands in the line,
-  where a holder can stack it. A green ready head, and a landing back from a step-out, wait
-  with no place.
+  where a holder can stack it, and so does a draft back from a step-out. A green ready head,
+  and a landing that lands alone, wait with no place.
 - **Holding.** `turn._wait` returned the lock. `slots.refuse_before_run` runs, then
   `batch.form`.
 - **Yielded.** `Landing.without_turn` gives the turn back for a rate-limit wait or for a live
@@ -577,8 +578,8 @@ exercise. Order is middle-out: the contract and the model first, then the code b
    move into `core/`, with the rules the code follows at master, and `turn._wait` and
    `batch._members` call them. The prototype's state machine checks the functions the code
    calls. No behaviour change.
-1. **Tickets** ([#10564](https://github.com/DanielH2018/server/issues/10564)). First the fix
-   for #10559: a landing that steps out keeps its place. Then the ticket in each place,
+1. **Tickets** ([#10564](https://github.com/DanielH2018/server/issues/10564)). The fix for
+   #10559 landed first: a draft that steps out keeps its place. Then the ticket in each place,
    deferral to an older fresh ticket, and stacking in ticket order. This is the first
    behaviour change. It waits on the operator's go-ahead and on the ruling for #10284.
 1. **The landing machine for the pre-merge half, by direct cutover**

@@ -63,7 +63,9 @@ def build(argv: list[str] | None, brief: str) -> Pipeline:
     """
     os.environ.pop("PYTHONPATH", None)
     p = ArgumentParser(
-        prog="fanout.py review", description=__doc__.splitlines()[0], allow_abbrev=False
+        prog="fanout.py review",
+        description=(__doc__ or "").partition("\n")[0],
+        allow_abbrev=False,
     )
     p.add_argument("--batch", required=True)
     p.add_argument("--repo", required=True)

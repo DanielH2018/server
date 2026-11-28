@@ -272,12 +272,10 @@ class Store(stats_lib.SqliteStore):
                 st.last_event_ts = max(st.last_event_ts, ls)
         return st
 
-    def save(self, state, cursor_ns, events=()):
-        """Persist events + player snapshot + cursor atomically (single transaction)."""
-        c = self.conn
-        self.write_events(c, events)
+    def write_state(self, conn, state):
+        """Writes the player snapshot into `save`'s transaction."""
         for name, p in state.players.items():
-            c.execute(
+            conn.execute(
                 "INSERT INTO players(name,total_playtime_seconds,session_count,"
                 "first_seen,last_seen,current_session_start) VALUES(?,?,?,?,?,?) "
                 "ON CONFLICT(name) DO UPDATE SET "
@@ -294,8 +292,6 @@ class Store(stats_lib.SqliteStore):
                     p["open_start"],
                 ),
             )
-        self.write_cursor(c, cursor_ns)
-        c.commit()
 
 
 # Loki fetch + the run loop — thin per-game bindings over stats_lib's shared skeleton.

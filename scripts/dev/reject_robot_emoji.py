@@ -36,7 +36,7 @@ def offending_lines(message: str) -> list[int]:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = ArgumentParser(description=__doc__.splitlines()[0])
+    parser = ArgumentParser(description=(__doc__ or "").partition("\n")[0])
     parser.add_argument(
         "message_file", type=Path, help="the commit message file git passes"
     )

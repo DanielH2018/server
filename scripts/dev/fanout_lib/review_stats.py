@@ -93,7 +93,9 @@ def _counts(counts: dict) -> str:
 
 def main(argv=None) -> int:
     p = ArgumentParser(
-        prog="fanout.py stats", description=__doc__.splitlines()[0], allow_abbrev=False
+        prog="fanout.py stats",
+        description=(__doc__ or "").partition("\n")[0],
+        allow_abbrev=False,
     )
     p.add_argument(
         "--dir",

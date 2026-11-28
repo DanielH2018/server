@@ -18,13 +18,14 @@ from dev.findings_lib.gh_calls import (
     load_backlog_issues,
 )
 from dev.findings_lib.issue_model import NO_REOPEN
+from lib.json_types import JsonValue
 
 
 def _tools(answer_for=lambda argv: []):
     """FindingsTools recording each `issue list` argv and answering from ``answer_for``."""
     seen: list[list[str]] = []
 
-    def gh_json(*argv, **kwargs):
+    def gh_json(*argv, **kwargs) -> JsonValue:
         if argv[:2] == ("api", "graphql"):
             return {"data": {"repository": {}}}
         seen.append(list(argv))
