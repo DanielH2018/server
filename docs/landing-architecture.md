@@ -323,7 +323,7 @@ every one after every step.
   its reads fails.
 - **Holder progress.** Holding never waits on a condition only a push or a re-run can change.
   No single check holds it. Five bounds approximate it: `stall.step`, `stuck_checks`,
-  `merge._failing_checks`, `batch.RUN_TIMEOUT_S` and `slots.DRAIN_S`. It would have caught
+  `failing_checks.find`, `batch.RUN_TIMEOUT_S` and `slots.DRAIN_S`. It would have caught
   #10525 and #10288.
 - **No discarded proof.** A green Testing whose base is still master's tip ends in Merging,
   never Rejoining. Held, since #10507, by the `batch_tested` read before

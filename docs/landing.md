@@ -654,7 +654,10 @@ registers; that is the grace period, so no landing is cut short for polling befo
 **A merge GitHub refuses because a required check is failing ends the wait too**, with
 `VERDICT: pr-ci-red` naming the check. `await_ci.py` reads `ci.yml`'s checks, and the ruleset
 also requires checks from other workflows, such as `renovate config validator`. A refusal for a
-check that is in progress or queued keeps the wait going. A failing check turns green only on a
+check that is in progress or queued keeps the wait going. GitHub also refuses with one line that
+names no check, `N of M required status checks are <state>.`. For that form the wait reads the
+ruleset's required contexts and the head's latest check runs, and ends `pr-ci-red` when one of
+them has failed (`land_lib/failing_checks.py:find`). A failing check turns green only on a
 push or a re-run, so waiting held the landing turn for nothing: on 2026-11-27 the serial landing
 of [#10458](https://github.com/DanielH2018/server/pull/10458) held the turn this way while
 other landings waited.

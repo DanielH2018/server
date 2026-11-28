@@ -45,7 +45,7 @@ def _refused_green_head(landing, pending_checks, completed_suites):
             },
             await_ci=[(0, "c592b53c: CI green")],
             gh_merge_rc=[1],
-            pending_checks=pending_checks,
+            check_runs=pending_checks,
             completed_suites=completed_suites,
         ),
         merge_timeout=stuck_checks.AFTER_S * 3,
@@ -106,7 +106,7 @@ def test_a_head_ci_has_not_read_green_is_never_read_for_stuck_checks(landing):
                 ]
             },
             await_ci=[(75, "c592b53c: pending")],
-            pending_checks=_STUCK,
+            check_runs=_STUCK,
             completed_suites=[_SUITE],
         ),
         merge_timeout=stuck_checks.AFTER_S * 3,

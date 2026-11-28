@@ -16,7 +16,8 @@ to change. `gh pr merge` refuses it at its own pre-flight as well (cli/cli#13388
 await_ci reads the head green, pinned to that head SHA. The master CI gate still refuses that
 call until its own checks pass. A refusal is reported and the wait goes on, so a merge GitHub
 keeps refusing reaches merge-timeout rather than a merge. A check GitHub will never finish ends
-the wait early instead, with its remedy (`stuck_checks`). --arm-merge without --await-merge
+the wait early instead, with its remedy (`stuck_checks`), and so does a refusal while a required
+check has failed, as `pr-ci-red` (`failing_checks`). --arm-merge without --await-merge
 dies: nothing in that run would merge the PR.
 
 A head that bumps a forward-only pin (`k3s_longhorn_version`, `k3s_metallb_version`) merges
@@ -70,6 +71,7 @@ from lib import gh_rate_limit, removes_object
 from deploy_tools import await_ci
 from deploy_tools.land_lib import (
     closing_refs,
+    failing_checks,
     gh_read,
     pin_gate,
     policy,
@@ -127,7 +129,6 @@ def squash_body(commits: list[CommitMessage]) -> str:
 # gh's header line and HTTP status around a rule-violation refusal, which name no reason.
 _REFUSAL_NOISE = re.compile(r"^gh: Repository rule violations found$|\s*\(HTTP \d+\)$")
 _REQUIRED_CHECK = re.compile(r'^Required status check "([^"]+)" is (.+?)\.?$')
-_FAILING = re.compile(r"(?:^|; )required check (.+?) failing(?=;|$)")
 
 
 def refusal_reason(stderr: str) -> str:
@@ -138,11 +139,6 @@ def refusal_reason(stderr: str) -> str:
         if line:
             reasons.append(_REQUIRED_CHECK.sub(r"required check \1 \2", line))
     return "; ".join(reasons)
-
-
-def _failing_checks(reason: str) -> list[str]:
-    """The required checks a `refusal_reason` line names as failing; no wait turns them green."""
-    return _FAILING.findall(reason)
 
 
 def _merge_directly(ln: Landing, head: str, commits: list[CommitMessage]) -> str:
@@ -547,7 +543,7 @@ def await_merge(ln: Landing, take_turn: TakeTurn = _no_turn) -> None:
                 refusal = _merge_directly(ln, head, commits)
                 if not refusal:
                     continue
-                failing = _failing_checks(refusal)
+                failing = failing_checks.find(ln, head, refusal)
                 if failing:
                     ln.die(
                         f"PR #{o.pr} cannot merge — required check {', '.join(failing)} "

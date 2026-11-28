@@ -267,9 +267,12 @@ def test_a_red_pr_ci_ends_the_wait(landing):
     assert exc.value.verdict == "pr-ci-red" and "dead1234: CI RED" in exc.value.error
 
 
-def _refused_merge(landing, check_state: str):
-    """A green head whose direct merges GitHub refuses on one required check's state."""
-    ln, _ = landing(
+def _refused_merge(landing, refusal: str, **checks):
+    """A green head whose direct merges GitHub refuses with `refusal`; `checks` fakes its reads.
+
+    Returns the Outcome that ends the wait, and the name of each call the fakes recorded.
+    """
+    ln, calls = landing(
         Fakes(
             gh_views={
                 "state,mergeable,headRefOid": _wait(
@@ -277,14 +280,11 @@ def _refused_merge(landing, check_state: str):
                 )
             },
             await_ci=[(0, "CI green")],
+            **checks,
         )
     )
     ln.direct_merge_subject = "Remove dead music torrents"
-    stderr = (
-        "gh: Repository rule violations found\n\n"
-        f'Required status check "renovate config validator" is {check_state}.'
-        "\n\n (HTTP 405)"
-    )
+    stderr = f"gh: Repository rule violations found\n\n{refusal}\n\n (HTTP 405)"
     fake_gh = ln.tools.gh
 
     def gh(*args, **kwargs):
@@ -295,17 +295,71 @@ def _refused_merge(landing, check_state: str):
     ln.tools = replace(ln.tools, gh=gh)
     with pytest.raises(Outcome) as exc:
         merge.await_merge(ln)
-    return exc.value
+    return exc.value, [c[0] for c in calls]
 
 
 def test_a_failing_required_check_ends_the_wait(landing):
-    out = _refused_merge(landing, "failing")
+    out, _ = _refused_merge(
+        landing, 'Required status check "renovate config validator" is failing.'
+    )
     assert out.verdict == "pr-ci-red" and "renovate config validator" in out.error
 
 
 def test_a_required_check_in_progress_keeps_the_wait_going(landing):
-    out = _refused_merge(landing, "in progress")
+    out, _ = _refused_merge(
+        landing, 'Required status check "renovate config validator" is in progress.'
+    )
     assert out.verdict == "refused" and "closed without merging" in out.error
+
+
+def _run(name: str, status: str, conclusion: str | None) -> dict:
+    return {"name": name, "status": status, "conclusion": conclusion}
+
+
+_REQUIRED = ["prek (lint + validate + tests + secrets)", "renovate config validator"]
+
+
+def test_an_aggregate_refusal_with_a_failed_required_check_ends_the_wait(landing):
+    out, _ = _refused_merge(
+        landing,
+        "2 of 2 required status checks are in progress.",
+        required_contexts=_REQUIRED,
+        check_runs=[
+            _run(_REQUIRED[0], "completed", "success"),
+            _run(_REQUIRED[1], "completed", "failure"),
+        ],
+    )
+    assert out.verdict == "pr-ci-red" and "renovate config validator" in out.error
+
+
+def test_an_aggregate_refusal_with_only_an_optional_check_failed_keeps_the_wait_going(
+    landing,
+):
+    out, reads = _refused_merge(
+        landing,
+        "2 of 2 required status checks are in progress.",
+        required_contexts=_REQUIRED,
+        check_runs=[
+            _run(_REQUIRED[0], "in_progress", None),
+            _run(_REQUIRED[1], "completed", "cancelled"),
+            _run("docs preview", "completed", "failure"),
+        ],
+    )
+    assert out.verdict == "refused" and "closed without merging" in out.error
+    assert "gh:check-runs" in reads
+
+
+def test_an_aggregate_refusal_whose_ruleset_read_fails_keeps_the_wait_going(landing):
+    out, reads = _refused_merge(
+        landing,
+        "1 of 2 required status checks are failing.",
+        required_contexts=subprocess.CalledProcessError(
+            1, "gh", stderr="HTTP 404: Not Found"
+        ),
+        check_runs=[_run(_REQUIRED[1], "completed", "failure")],
+    )
+    assert out.verdict == "refused" and "closed without merging" in out.error
+    assert "gh:rules/branches" in reads and "gh:check-runs" not in reads
 
 
 @pytest.mark.parametrize("ci_rc", [75, 2])
