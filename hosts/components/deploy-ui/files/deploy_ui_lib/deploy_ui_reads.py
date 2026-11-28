@@ -10,7 +10,6 @@ import json
 import os
 import re
 import stat
-from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -344,27 +343,6 @@ def read_log(path: Path) -> tuple[str, bool]:
     return data[:MAX_LOG_BYTES].decode("utf-8", errors="replace"), len(
         data
     ) > MAX_LOG_BYTES
-
-
-def landing_step(lines: Iterable[str]) -> dict:
-    """Where a landing stands: its newest stage header, the newest line under it, its verdict.
-
-    `step` is `arm`, a number of `of`, or "" before the first header. The caller passes every
-    line rather than `read_log`'s first `MAX_LOG_BYTES`, because the current step is the last
-    header, not the first.
-    """
-    at = {"step": "", "of": 0, "label": "", "latest": "", "verdict": ""}
-    for line in lines:
-        line = line.rstrip("\n")
-        if v := _VERDICT_LINE.match(line):
-            at["verdict"] = v.group(1)
-        elif s := _STAGE.match(line):
-            at["step"] = s.group(1) if s.group(1) is not None else "arm"
-            at["of"] = max(at["of"], int(s.group(2) or 0))
-            at["label"], at["latest"] = s.group(3), ""
-        elif line.strip():
-            at["latest"] = line.strip()
-    return at
 
 
 def parse_landing(text: str) -> dict:
