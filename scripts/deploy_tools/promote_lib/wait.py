@@ -410,6 +410,7 @@ def land_wait(
     cap_s: float | None = None,
     window_grace_s: int = 0,
     on_root_alone: Callable[[], None] = lambda: None,
+    on_ready: Callable[[int, int], None] = lambda ready, total: None,
 ) -> WaitResult:
     """Poll until a promotion covers `merge`, DEPLOY_HOLD holds, or `timeout_s` passes.
 
@@ -429,6 +430,8 @@ def land_wait(
         on_root_alone: called on each poll that reads M's changed set as `homelab` alone,
             unwidened, with no `services`, so the wait gates no tag. The wait goes on after
             the call, and still ends `deploy-failed` on a hold.
+        on_ready: called on each poll that reads the Kustomizations, with how many of
+            those it waits on are settled and how many it waits on.
     """
     started = reads.clock()
     deadline = started + timeout_s
@@ -475,6 +478,7 @@ def land_wait(
                 n for n in cs.names if split_kind(n)[0] not in paused and n != SOAK
             } | {ROOT}
             pending, revision = _pending(reads, merge, items, names)
+            on_ready(len(names) - len(pending), len(names))
             waiting = grouped(pending, noun="Kustomization")
             if SOAK in cs.names:
                 deadline = max(deadline, started + soak_deadline_s(items))

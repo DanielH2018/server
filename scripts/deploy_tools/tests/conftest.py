@@ -15,7 +15,14 @@ import pytest
 
 from _helpers import stub_logger_on_path
 from _land_batch_fakes import GREEN, OWN, GitHub, head_of
-from _land_fakes import PRIMARY, Fakes, build_classifier, build_tools, make_landing
+from _land_fakes import (
+    PRIMARY,
+    Fakes,
+    annotations,
+    build_classifier,
+    build_tools,
+    make_landing,
+)
 from deploy_tools.land_lib import line, options, tools, turn
 from lib.proc_testing import fake_bin, path_with
 
@@ -132,7 +139,7 @@ def land_run(capsys, monkeypatch):
         )
         rc = land.main(argv, tools=tools, classifier=classifier)
         cap = capsys.readouterr()
-        logline = next((c[1][0] for c in calls if c[0] == "logger"), "")
+        logline = next(iter(annotations(calls)), "")
         return rc, cap.out, cap.err, calls, logline
 
     return run

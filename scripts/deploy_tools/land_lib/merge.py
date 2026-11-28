@@ -83,6 +83,7 @@ from deploy_tools.land_lib import (
 from deploy_tools.land_lib.landing import BRANCH, Landing
 from deploy_tools.land_lib.outcome import Outcome, Verdict, disarmed, say
 from deploy_tools.land_lib.pr_json import CommitMessage
+from deploy_tools.land_lib.transitions import CHECKS, State
 
 
 type TakeTurn = Callable[[str], tuple[bool, int]]
@@ -324,6 +325,13 @@ def _start_run(
     return (head if updated else ""), in_turn, queued
 
 
+def _ci_state(ln: Landing, head: str, in_turn: bool) -> State:
+    """The state of a landing whose head's CI is pending: its own run, or a run in the turn."""
+    if not in_turn:
+        return State.OWN_RUN
+    return State.PROVING if head == ln.tested_head else State.TESTING
+
+
 def await_merge(ln: Landing, take_turn: TakeTurn = _no_turn) -> None:
     """Poll until merged, merging directly once CI is green. Bail early on two dead ends.
 
@@ -433,6 +441,12 @@ def await_merge(ln: Landing, take_turn: TakeTurn = _no_turn) -> None:
     # The forward-only pins that head bumps, whose land rule is read again before each retry.
     gated_pins: list[str] = []
     watch = stall.Watch()
+    # The last CI read's counts, written once the state they belong to is entered.
+    checks: list[tuple[int, int]] = []
+
+    def count_checks(done: int, total: int) -> None:
+        checks.append((done, total))
+
     # The head whose checks `stuck_checks` reads, and the `waited` of its next read.
     stuck_head = ""
     stuck_read_at = 0
@@ -440,6 +454,7 @@ def await_merge(ln: Landing, take_turn: TakeTurn = _no_turn) -> None:
         view = ln.view("state,mergeable,headRefOid")
         state = view.get("state", "")
         if state == "MERGED":
+            ln.transitions.enter(State.MERGED)
             break
         if state == "CLOSED":
             ln.die(f"PR #{o.pr} was closed without merging — nothing to land", 1)
@@ -475,9 +490,10 @@ def await_merge(ln: Landing, take_turn: TakeTurn = _no_turn) -> None:
             continue
         pause, spent = 0, ""
         rc, line = CI_PENDING, ""
+        checks.clear()
         if head:
             try:
-                rc, line = t.await_ci(head, 0)
+                rc, line = t.await_ci(head, 0, count_checks)
             except await_ci.RateLimitedError as exc:
                 pause, spent = exc.wait_s, exc.quota
                 rate_limited(
@@ -485,6 +501,11 @@ def await_merge(ln: Landing, take_turn: TakeTurn = _no_turn) -> None:
                 )
         if head and not pause:
             ci_pending = line if rc == CI_PENDING else ""
+            # A head that asked and has no turn stays `no-turn`.
+            if rc == CI_PENDING and (in_turn or not asked):
+                ln.transitions.enter(_ci_state(ln, head, in_turn))
+                if checks:
+                    ln.transitions.progress(*checks[-1], CHECKS)
             watch = stall.on_poll(ln, watch, head, stall.of(ci_pending), waited, line)
             if rc == CI_RED:
                 ln.die(
@@ -502,6 +523,7 @@ def await_merge(ln: Landing, take_turn: TakeTurn = _no_turn) -> None:
                     ln, head, view.get("mergeable") == "CONFLICTING"
                 ):
                     updated_from, rejoined, drafted = head, True, True
+                    ln.transitions.enter(State.REJOINING)
                     wait_ends_at = min(waited + o.merge_timeout, wait_cap)
                     continue
                 in_turn, in_line = ask(head, False)
@@ -518,8 +540,10 @@ def await_merge(ln: Landing, take_turn: TakeTurn = _no_turn) -> None:
                     ):
                         in_turn = False
                         updated_from, rejoined, drafted = head, True, True
+                        ln.transitions.enter(State.REJOINING)
                     continue
             if rc == CI_GREEN and ln.direct_merge_subject:
+                ln.transitions.enter(State.MERGING)
                 slots.refuse_before_merge(ln, head)
                 if head != gated_head:
                     gated_pins = pin_gate.gate_before_merge(ln, head)
@@ -537,6 +561,7 @@ def await_merge(ln: Landing, take_turn: TakeTurn = _no_turn) -> None:
                     )
                 ):
                     in_turn, updated_from, rejoined, drafted = False, head, True, True
+                    ln.transitions.enter(State.REJOINING)
                     continue
                 if not tested:
                     stale_base.refuse_stale_overlap(ln, head)
