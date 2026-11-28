@@ -117,12 +117,12 @@ def plan(
     cutoff = now - window
     prune = sorted(r["name"] for r in rows if last_seen(r) < cutoff)
     pulled = pull_times([r for r in rows if base_name(r["name"]) == edge])
-    newest = max(pulled, key=pulled.__getitem__, default="never")
-    if newest not in pulled or pulled[newest] < cutoff + margin:
+    newest = max(pulled, key=pulled.__getitem__, default=None)
+    if newest is None or pulled[newest] < cutoff + margin:
         return Plan(
             prune,
             f"refusing to prune: no {edge} row pulled in the last "
-            f"{int((window - margin).total_seconds() // 60)}m (newest {newest}), so the prune "
+            f"{int((window - margin).total_seconds() // 60)}m (newest {newest or 'never'}), so the prune "
             "could delete the last row holding its key",
         )
     return Plan(prune)
