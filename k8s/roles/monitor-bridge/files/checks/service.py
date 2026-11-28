@@ -72,7 +72,9 @@ def check_n8n(
     )
 
 
-def check_arr_queue(cfg: Config, src: Sources, now=None) -> tuple[bool, str]:
+def check_arr_queue(
+    cfg: Config, src: Sources, now: datetime | None = None
+) -> tuple[bool, str]:
     """Sonarr/Radarr queue warning/blocked-import watchdog (see queue_warnings).
 
     Empty SONARR_API_KEY/RADARR_API_KEY independently skip that app (like the multi-webhook
@@ -351,7 +353,7 @@ def check_etcd_restore_drill(
     return True, "etcd restore drill passed %.1f days ago" % (age_s / 86400)
 
 
-def with_ha_ban(cfg: Config, src: Sources, ok: bool, msg: str) -> tuple[bool, str]:
+def with_ha_ban(cfg: Config, src: Sources, ok: bool, msg: str) -> CheckResult:
     """Fold the ip_ban arm into a heartbeat verdict, ban winning the message.
 
     Folded into this check rather than given its own: a ban is an HA fault, which is what this
@@ -379,7 +381,7 @@ def with_ha_ban(cfg: Config, src: Sources, ok: bool, msg: str) -> tuple[bool, st
 
 def check_ha_heartbeat(
     cfg: Config, src: Sources, now: datetime | None = None
-) -> tuple[bool, str]:
+) -> CheckResult:
     """Poll HA's automation-driven heartbeat over the apps network (Bearer token).
 
     Empty HA_URL/HA_TOKEN -> disabled (stays up), like check_n8n.
@@ -394,7 +396,7 @@ def check_ha_heartbeat(
     staleness — both are the deploy, not a wedge.
     """
     if not cfg.HA_URL or not cfg.HA_TOKEN:
-        return True, "HA heartbeat monitoring disabled (no URL/token)"
+        return CheckResult(True, "HA heartbeat monitoring disabled (no URL/token)")
     try:
         state = optional_object(
             src.get_json(

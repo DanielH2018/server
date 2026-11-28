@@ -134,10 +134,20 @@ class CiVerdict(NamedTuple):
     line: str
 
 
+# Called with the check-runs finished and the check-runs listed, at each poll that lists any.
+type OnChecks = Callable[[int, int], None]
+
+
 def await_ci_verdict(
-    sha: str, timeout_s: int, wait=await_ci.wait, token=await_ci.lookup_token
+    sha: str,
+    timeout_s: int,
+    on_checks: OnChecks,
+    wait=await_ci.wait,
+    token=await_ci.lookup_token,
 ) -> CiVerdict:
     """await_ci.wait with its CLI's exit contract: 0 green, 1 red, 75 pending, 2 disarmed.
+
+    `on_checks` counts each poll's check-runs, from the read the wait already makes.
 
     An anonymous wait polls every 90s, not 20s, and walks no descendants
     (`await_ci.ANONYMOUS_INTERVAL_S`). A zero budget is one poll that never sleeps or
@@ -148,9 +158,20 @@ def await_ci_verdict(
     """
     authenticated = bool(token()) if timeout_s else True
     interval = await_ci.poll_interval(20, authenticated, timeout_s)
+
+    def counted(runs: list[await_ci.CheckRun]) -> None:
+        if runs:
+            on_checks(sum(run.status == "completed" for run in runs), len(runs))
+
     try:
         return CiVerdict(
-            *wait(sha, timeout_s, interval, walk_descendants=authenticated)
+            *wait(
+                sha,
+                timeout_s,
+                interval,
+                walk_descendants=authenticated,
+                on_runs=counted,
+            )
         )
     except await_ci.DisarmedGateError as exc:
         return CiVerdict(CI_DISARMED, f"await_ci: {exc}")
@@ -271,7 +292,7 @@ class Tools:
     gh: Callable[..., subprocess.CompletedProcess[str]] = gh
     git: Callable[..., subprocess.CompletedProcess[str]] = git
     # Above `await_ci:`, whose field name shadows the module for the rest of this class body.
-    await_ci: Callable[[str, int], CiVerdict] = await_ci_verdict
+    await_ci: Callable[[str, int, OnChecks], CiVerdict] = await_ci_verdict
     ci_passed: Callable[[str], bool | None] = ci_passed
     tested_base: Callable[[str], str | None] = land_tested_base.tested_base
     # `cwd` is the checkout the probe renders the deployed role's manifests from; None is this
@@ -296,6 +317,8 @@ class Tools:
     record_verdict: Callable[[str, int, str], None] = verdict_log.record
     sleep: Callable[[float], None] = time.sleep
     clock: Callable[[], float] = time.monotonic
+    # Epoch seconds, for a time another process reads: `clock` is monotonic.
+    now: Callable[[], float] = time.time
     # None means `host_wait`'s own, which imports this module and so cannot be named here.
     host_targets: Callable[[Path, str], list[Any]] | None = None
     try_turn: Callable[[], Callable[[], None] | None] | None = None

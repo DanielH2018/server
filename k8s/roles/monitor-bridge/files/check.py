@@ -226,7 +226,7 @@ if __name__ == "__main__":
     import sys
 
     if any(arg in ("-h", "--help") for arg in sys.argv[1:]):
-        print(__doc__.strip())
+        print((__doc__ or "").strip())
         sys.exit(0)
 
     print("the entry point is cli.py — run `python cli.py` instead", file=sys.stderr)

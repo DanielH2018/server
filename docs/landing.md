@@ -1254,6 +1254,17 @@ Promtail ships it to Loki and the **Landings** Grafana board (Infrastructure fol
 uv run python scripts/diagnostics/probe.py loki-query '{job="syslog"} |= "event=landing" | logfmt'
 ```
 
+Each state a landing enters writes one more line under the same tag,
+`event=land_transition pr=<n> from=<state> to=<state> at=<epoch seconds> verdict=<v>`, and
+rewrites the landing's state record, `/run/lock/homelab-land-line/<pr>.<uid>.state` on
+daniel-box.
+Only the last line names a verdict. `land_lib/transitions.py` holds the state names and the
+record's fields. A landing that hangs or dies therefore leaves its history: read it with
+
+```bash
+uv run python scripts/diagnostics/probe.py loki-query '{job="syslog"} |= "event=land_transition" | logfmt'
+```
+
 A usage error annotates nothing. argparse raises before a `Landing` or a `Ledger` exists, so the
 only line it could write is `pr=unknown verdict=aborted` — a row meaning "you typed the command
 wrong" in the stream the board counts. The bash original annotated it because its EXIT trap was

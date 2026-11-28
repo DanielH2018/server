@@ -182,7 +182,7 @@ def test_a_ci_read_refused_inside_the_turn_gives_the_turn_back_for_its_wait(land
     ln, calls = turn_landing(landing, polls=(OPEN, OPEN, MERGED))
     verdicts = iter([await_ci.RateLimitedError(MERGE_POLL_S)])
 
-    def ci(sha, timeout):
+    def ci(sha, timeout, on_checks):
         refusal = next(verdicts, None)
         if refusal:
             raise refusal

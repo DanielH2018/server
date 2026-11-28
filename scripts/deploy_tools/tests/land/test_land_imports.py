@@ -52,6 +52,7 @@ MODULES = frozenset(
         "pin_gate",
         "pin_reads",
         "verdict_log",
+        "transitions",
     }
 )
 ALLOWED = {
@@ -88,6 +89,7 @@ ALLOWED = {
         "pr_json",
         "land_tags",
         "gh_read",
+        "transitions",
     },
     # The landing policy's checks run inside --arm-merge, before any merge call.
     "merge": {
@@ -103,12 +105,13 @@ ALLOWED = {
         "stale_base",
         "stall",
         "stuck_checks",
+        "transitions",
     },
     # The merge wait's decision about a head whose CI no longer moves, and the run it starts.
     "stall": {"landing", "outcome", "gh_read"},
     # What makes a green head stale against master, and the one branch update.
     "stale_base": {"landing", "outcome", "gh_read", "policy", "pr_json"},
-    "turn": {"landing", "outcome", "line", "fresh", "serial_lock"},
+    "turn": {"landing", "outcome", "line", "fresh", "serial_lock", "transitions"},
     # One live landing per PR: a lock beside the turn, taken before a landing forks or merges.
     "pr_lock": {"turn", "serial_lock"},
     # The stdlib-only read of the serial lock, which `cc-wait landing-clear` runs without the venv.
@@ -116,7 +119,9 @@ ALLOWED = {
     # The lock files that bound the landings polling GitHub after their merge, beside the turn.
     "slots": {"landing", "outcome", "live_limit", "pin_gate", "turn", "serial_lock"},
     # The drafts whose landings wait for the turn, which its holder reads; boundaries only.
-    "line": set(),
+    "line": {"serial_lock"},
+    # The writer of a landing's state record and transition line, light for the deploy UI.
+    "transitions": {"line", "outcome"},
     # The drafts in the line, tested with the turn holder's own in one run, then merged.
     "batch": {
         "landing",
@@ -129,6 +134,7 @@ ALLOWED = {
         "slots",
         "stale_base",
         "turn",
+        "transitions",
     },
     # The read that ends --await-merge on a check GitHub never finishes.
     "stuck_checks": {"landing", "gh_read"},
@@ -149,13 +155,13 @@ ALLOWED = {
         "fresh",
     },
     "closing_refs": {"gh_read", "landing", "outcome"},
-    "ci": {"landing", "outcome"},
+    "ci": {"landing", "outcome", "transitions"},
     "deploy": {
         "landing",
         "outcome",
         "promotion",
     },
-    "promotion": {"landing", "outcome"},
+    "promotion": {"landing", "outcome", "transitions"},
     "health_verdict": {"landing", "outcome", "promotion", "health_gate"},
     "own_checkout": set(),
     # Makes a checkout and runs a child land.sh; it imports no phase. `grading_argv` reads Options.
@@ -177,6 +183,7 @@ ALLOWED = {
         "compose_wait",
         "host_published",
         "host_schedule",
+        "transitions",
     },
     "land_flux": {"pin_reads"},
     "land_tested_base": set(),
@@ -199,6 +206,7 @@ ALLOWED = {
         "deploy",
         "health_verdict",
         "host_wait",
+        "transitions",
     },
 }
 

@@ -295,10 +295,10 @@ def test_a_batch_that_is_not_green_is_split_by_the_holders_own_run(
     read = hub.await_ci
     while_own_run = []
 
-    def await_ci(sha, timeout):
+    def await_ci(sha, timeout, on_checks):
         if sha == head_of(OWN) and not hub.prs[OWN]["isDraft"]:
             while_own_run.append(answers(the_line, "7", "9"))
-        return read(sha, timeout)
+        return read(sha, timeout, on_checks)
 
     ln.tools = replace(ln.tools, await_ci=await_ci)
     if verdict:

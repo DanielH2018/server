@@ -16,6 +16,8 @@ anything else. Exits 1, with the reason on stderr, when the device cannot be rea
 the quit. Each step waits at most TIMEOUT_S, so a run stays well inside shell_command's 60 s.
 """
 
+# pyright: reportMissingImports=false
+
 import argparse
 import sys
 import uuid
@@ -52,7 +54,7 @@ def quit_dashboard(host: str) -> str:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
-        description=__doc__.split("\n\n")[0],
+        description=(__doc__ or "").split("\n\n")[0],
         epilog="Exit 0: quit, or the dashboard was not running. Exit 1: unreachable or refused.",
     )
     parser.add_argument("host", help="the Cast device's address")

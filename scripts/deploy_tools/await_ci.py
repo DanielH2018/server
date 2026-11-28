@@ -501,8 +501,11 @@ def wait(
     fetch_tip=_fetch_tip,
     walk_descendants: bool = True,
     read_quota=_read_quota,
+    on_runs=lambda runs: None,
 ) -> tuple[int, str]:
     """(exit code, message). Polls until pass/fail or the budget elapses.
+
+    `on_runs` receives each poll's check-runs as they are read, so a caller can count them.
 
     `walk_descendants=False` is the anonymous wait. A dropped push then ends at once on 75
     rather than reading up to `DESCENDANT_LIMIT` descendants a poll, which would spend the
@@ -537,6 +540,7 @@ def wait(
                 runs = fetch(target)
             except urllib.error.URLError, TimeoutError, ValueError, OSError:
                 runs = []
+            on_runs(runs)
             verdict = verdict_for(
                 target, lambda _s, _runs=runs: _runs, None, suites_this_poll
             )

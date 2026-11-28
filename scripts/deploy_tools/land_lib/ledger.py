@@ -1,7 +1,8 @@
 """What the Landings board reads: one logfmt line per landing, from a Ledger of stamps.
 
-This is the only record of where a landing's time goes: how long the merge took to arrive,
-how long master CI took after it, the deploy.
+It sums where a landing's time went, once, at the end: how long the merge took to arrive,
+how long master CI took after it, the deploy. `transitions.py` writes each state as the
+landing enters it, so a landing that dies before this line still leaves its history.
 
 `cause` is a one-token reason beside a `deploy-failed` verdict. Three other verdicts carry one
 too. `deferred` carries `promote-timeout` for a promotion wait that no promotion covered in

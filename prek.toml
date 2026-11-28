@@ -578,7 +578,7 @@ name = "Landings board groups by labels the landing ledger writes"
 entry = "uv run --frozen pytest -q -n0 -p no:cacheprovider tests/deploy/test_landing_annotations.py"
 language = "system"
 pass_filenames = false
-files = "^(k8s/roles/observability/files/dashboards/Infrastructure/landings\\.json|scripts/deploy_tools/land_lib/(ledger|outcome)\\.py|hosts/lib/[^/]+\\.py|scripts/lib/[^/]+\\.py|tests/(_[^/]+|deploy/test_landing_annotations)\\.py|pyproject\\.toml|uv\\.lock)$"
+files = "^(k8s/roles/observability/files/dashboards/Infrastructure/landings\\.json|scripts/deploy_tools/land_lib/(ledger|line|outcome|serial_lock|transitions)\\.py|hosts/lib/[^/]+\\.py|scripts/lib/[^/]+\\.py|tests/(_[^/]+|deploy/test_landing_annotations)\\.py|pyproject\\.toml|uv\\.lock)$"
 
 [[repos.hooks]]
 id = "static-ratchet-tests-alerts"

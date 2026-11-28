@@ -64,6 +64,7 @@ from deploy_tools.land_lib import line
 from deploy_tools.land_lib.fresh import TURN_FD_ENV
 from deploy_tools.land_lib.landing import Landing
 from deploy_tools.land_lib.outcome import Verdict, say
+from deploy_tools.land_lib.transitions import State
 from deploy_tools.land_lib.serial_lock import (
     LOCK_DIR,
     TURN_DIR_ENV,
@@ -349,19 +350,9 @@ def _taker(hostname: str) -> Callable[[], Callable[[], None] | None]:
     return try_take if is_turn_host(hostname) else try_take_over_ssh
 
 
-def _line(hostname: str, directory: _Path = line.DIR) -> line.Line:
-    """The line for the turn, as the host named `hostname` reaches it."""
-    moved = os.environ.get(TURN_DIR_ENV)
-    if moved:
-        return line.here(_Path(moved) / directory.name)
-    if is_turn_host(hostname):
-        return line.here(directory)
-    return line.over_ssh(TURN_HOST, directory)
-
-
 def line_of(ln: Landing) -> line.Line:
     """The line for the turn, as `ln`'s landing reaches it."""
-    return ln.tools.line or _line(ln.tools.hostname())
+    return ln.tools.line or line.at_turn_host(ln.tools.hostname())
 
 
 def waiting(ln: Landing) -> list[tuple[str, str]]:
@@ -408,6 +399,7 @@ def _wait(ln: Landing, draft: str) -> tuple[Callable[[], None] | None, int]:
     waiting = OnChange(say)
     waited = 0
     before = ln.ledger.turn_wait = ln.ledger.turn_wait or 0
+    ln.transitions.enter(State.QUEUED)
     try:
         while True:
             try:
@@ -417,6 +409,7 @@ def _wait(ln: Landing, draft: str) -> tuple[Callable[[], None] | None, int]:
                     f"could not open the landing turn's lock ({exc}); going on without a "
                     "turn"
                 )
+                ln.transitions.enter(State.NO_TURN)
                 return None, waited
             if release:
                 # The holder may have answered after this landing's last poll, and frees the turn
@@ -427,6 +420,7 @@ def _wait(ln: Landing, draft: str) -> tuple[Callable[[], None] | None, int]:
                     say(
                         f"the landing that holds the turn merged PR #{o.pr} with its own"
                     )
+                    ln.transitions.enter(State.MERGED)
                     return None, waited
                 if answer == line.CONFLICT:
                     release()
@@ -435,16 +429,19 @@ def _wait(ln: Landing, draft: str) -> tuple[Callable[[], None] | None, int]:
                 if answer in (line.ALONE, line.SPLIT):
                     _lands_alone(ln)
                 say(f"took the landing turn after {waited}s")
+                ln.transitions.enter(State.HOLDING)
                 return release, waited
             if waited >= o.merge_timeout:
                 say(
                     f"waited {waited}s for the landing turn, reaching "
                     f"merge_timeout={o.merge_timeout}s; going on without a turn"
                 )
+                ln.transitions.enter(State.NO_TURN)
                 return None, waited
             answer = place.stand()
             if answer == line.MERGED:
                 say(f"the landing that holds the turn merged PR #{o.pr} with its own")
+                ln.transitions.enter(State.MERGED)
                 return None, waited
             if answer == line.CONFLICT:
                 _conflicts(ln)
@@ -508,6 +505,7 @@ def held(ln: Landing) -> Generator[Callable[[str], tuple[bool, int]]]:
     def step_out[T](wait: Callable[[], T], reason: str) -> T:
         give_back()
         say(f"gave the landing turn back {reason}")
+        ln.transitions.enter(State.YIELDED)
         got = wait()
         take("" if ln.lands_alone else ln.line_head)
         ln.turn_interrupted = True

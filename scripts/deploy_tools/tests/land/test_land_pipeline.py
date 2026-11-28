@@ -7,7 +7,7 @@ import subprocess
 
 import pytest
 
-from _land_fakes import MERGE_SHA, PRIMARY, Fakes, build_tools
+from _land_fakes import MERGE_SHA, PRIMARY, Fakes, annotations, build_tools
 from deploy_tools.land_lib.tools import Classifier
 from deploy_tools.promote_lib.wait import WaitResult, WaitVerdict
 
@@ -79,9 +79,7 @@ def test_an_unexpected_exception_annotates_as_aborted_and_propagates(monkeypatch
     tools.gh_json = lambda *a, **k: 1 / 0
     with pytest.raises(ZeroDivisionError):
         land.main(["--pr", "7"], tools=tools)
-    assert "verdict=aborted cause= exit=1" in next(
-        c[1][0] for c in calls if c[0] == "logger"
-    )
+    assert "verdict=aborted cause= exit=1" in annotations(calls)[0]
 
 
 def test_an_unexpected_exception_still_prints_and_records_a_verdict(tmp_path, capsys):

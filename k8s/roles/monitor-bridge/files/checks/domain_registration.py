@@ -64,13 +64,13 @@ def check_domain_registration(
     if not cfg.DOMAIN_RDAP_URL:
         return True, "domain registration check disabled (no DOMAIN_RDAP_URL)"
     now = now if now is not None else time.time()
-    fresh = (
-        probe["ts"] is not None
-        and probe["ok"]
-        and now - probe["ts"] < cfg.DOMAIN_REGISTRATION_PROBE_INTERVAL_S
-    )
-    if not fresh:
-        probe["ts"] = now
+    ts = probe["ts"]
+    if (
+        ts is None
+        or not probe["ok"]
+        or now - ts >= cfg.DOMAIN_REGISTRATION_PROBE_INTERVAL_S
+    ):
+        ts = probe["ts"] = now
         try:
             probe["expiry"] = expiry_from_rdap(src.get_json(cfg.DOMAIN_RDAP_URL))
         except Exception as e:
@@ -82,5 +82,5 @@ def check_domain_registration(
         probe["ok"] = True
     return True, "domain registration expires in %.0f days (read %.0fh ago)" % (
         days_remaining(probe, now),
-        (now - probe["ts"]) / 3600,
+        (now - ts) / 3600,
     )
