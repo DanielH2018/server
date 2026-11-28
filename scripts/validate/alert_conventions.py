@@ -58,7 +58,7 @@ RULE_TESTS_DIR = ROLE_DIR / "tests" / "rules"
 RULES_CONFIGMAP = "prometheus-rules"
 GROUP_FLOOR = frozenset({"alerting-meta"})
 RULE_TEST_SUFFIX = ".test.yaml"
-# Rule evaluations per test group: about 70s of promtool on a 4-CPU runner.
+# Rule evaluations per test group: 35-70s of promtool on four CPUs of daniel-server.
 MAX_GROUP_EVALUATIONS = 250_000
 
 SEVERITIES = frozenset({"critical", "warning", "info"})
@@ -290,26 +290,21 @@ def _load_yaml(path: Path) -> tuple[object, str | None]:
         return None, f"{path.name}: does not parse: {err}"
 
 
-def _alerts(doc: object) -> list[tuple[str | None, dict]]:
-    """Every alerting rule in a parsed rule file, as (group name, rule) pairs."""
+def _rules(doc: object) -> list[tuple[str | None, dict]]:
+    """Every rule, alerting and recording, in a parsed rule file, as (group name, rule) pairs."""
     groups = doc.get("groups") if isinstance(doc, dict) else None
     return [
         (group.get("name"), rule)
         for group in groups or []
         if isinstance(group, dict)
         for rule in group.get("rules") or []
-        if isinstance(rule, dict) and "alert" in rule
+        if isinstance(rule, dict)
     ]
 
 
-def _rule_count(doc: object) -> int:
-    """How many rules, alerting and recording, a parsed rule file holds."""
-    groups = doc.get("groups") if isinstance(doc, dict) else None
-    return sum(
-        len(group.get("rules") or [])
-        for group in groups or []
-        if isinstance(group, dict)
-    )
+def _alerts(doc: object) -> list[tuple[str | None, dict]]:
+    """Every alerting rule in a parsed rule file, as (group name, rule) pairs."""
+    return [(group, rule) for group, rule in _rules(doc) if "alert" in rule]
 
 
 def group_list_problems(
@@ -516,7 +511,9 @@ def rule_test_problems(
     return problems
 
 
-def evaluation_problems(name: str, doc: object, rules: int) -> list[str]:
+def evaluation_problems(
+    name: str, cases: list, interval: float, rules: int
+) -> list[str]:
     """A problem for each test group costing more than `MAX_GROUP_EVALUATIONS` rule evaluations.
 
     promtool evaluates every rule in `rule_files` at each `evaluation_interval` step up to a
@@ -525,14 +522,12 @@ def evaluation_problems(name: str, doc: object, rules: int) -> list[str]:
 
     Args:
         name: The test file's name.
-        doc: The parsed test file.
+        cases: Its `tests:` groups.
+        interval: Its `evaluation_interval`, in seconds.
         rules: How many rules its rule file holds.
     """
-    if not isinstance(doc, dict):
-        return []
-    interval = prom_duration.seconds(str(doc.get("evaluation_interval", "1m"))) or 60
     problems = []
-    for index, group in enumerate(doc.get("tests") or []):
+    for index, group in enumerate(cases):
         steps = int(group_cost(group) // interval)
         if steps * rules > MAX_GROUP_EVALUATIONS:
             problems.append(
@@ -602,9 +597,13 @@ def rule_problems(
         if err:
             problems.append(err)
         else:
-            cases = (doc.get("tests") if isinstance(doc, dict) else None) or []
+            doc = doc if isinstance(doc, dict) else {}
+            cases = doc.get("tests") or []
             tests.setdefault(stem, {"tests": []})["tests"] += cases
-            problems += evaluation_problems(path.name, doc, _rule_count(docs.get(stem)))
+            interval = prom_duration.seconds(str(doc.get("evaluation_interval", "1m")))
+            problems += evaluation_problems(
+                path.name, cases, interval or 60, len(_rules(docs.get(stem)))
+            )
     jobs = service_jobs(prometheus_yml)
     for stem, doc in docs.items():
         problems += rule_file_problems(stem, doc, jobs)
