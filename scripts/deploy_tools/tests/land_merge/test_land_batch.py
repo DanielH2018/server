@@ -87,9 +87,9 @@ def test_a_batch_holds_as_many_prs_as_its_gate_reads():
 
 
 def test_a_line_longer_than_a_batch_leaves_the_rest_waiting(batch_of):
-    ln, hub, the_line = batch_of(drafts=("3", "5", "7", "9"))
+    ln, hub, the_line = batch_of(drafts=("2", "3", "5", "7", "8", "9"))
     land(ln)
-    assert hub.merged == [OWN, "3", "5", "7"]
+    assert hub.merged == [OWN, "2", "3", "5", "7", "8"]
     assert answers(the_line, "9") == [""]
     assert hub.labels["9"] == set()
 

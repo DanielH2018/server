@@ -438,7 +438,7 @@ def _name_set(value: str | None) -> set[str]:
 
 
 def _build_parser() -> argparse.ArgumentParser:
-    parser = ArgumentParser(description=__doc__.split("\n\n")[0])
+    parser = ArgumentParser(description=(__doc__ or "").split("\n\n")[0])
     parser.add_argument("--list", action="store_true", help="print the census and exit")
     parser.add_argument(
         "--only", help="comma-separated pin names to check (default: all)"

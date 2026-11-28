@@ -5,6 +5,8 @@ The three reads are fakes handed to `collect`, so no test reaches GitHub, GHCR o
 Run: uv run pytest scripts/diagnostics/tests/probe_landing/test_probe_landing_promote.py
 """
 
+from collections.abc import Callable
+
 import pytest
 
 
@@ -27,17 +29,19 @@ def _broken():
     raise TimeoutError("the read timed out")
 
 
-def _read(value):
+def _read[T](value: T | Callable[[], T]) -> Callable[[], T]:
     """`value` as a read: a callable stays one, and anything else is returned as it is."""
-    return value if callable(value) else lambda: value
+    if isinstance(value, Callable):
+        return value
+    return lambda: value
 
 
 def _snap(
-    deploy_hold="none",
-    prod=PROD,
-    last_good=PROD,
-    suspended=None,
-    reconcile_disabled=None,
+    deploy_hold: str | None | Callable[[], str | None] = "none",
+    prod: dict | Callable[[], dict] = PROD,
+    last_good: dict | None | Callable[[], dict | None] = PROD,
+    suspended: list[dict] | Callable[[], list[dict]] | None = None,
+    reconcile_disabled: list[dict] | Callable[[], list[dict]] | None = None,
 ) -> dict:
     reads = PromoteReads(
         _read(deploy_hold),
@@ -224,7 +228,7 @@ def test_the_live_read_covers_the_coredns_objects_and_both_backup_targets():
     import subprocess
 
     calls = []
-    state = {"missing": None}
+    state: dict[str, str | None] = {"missing": None}
 
     def fake(cluster, *args, **kwargs):
         calls.append(args)

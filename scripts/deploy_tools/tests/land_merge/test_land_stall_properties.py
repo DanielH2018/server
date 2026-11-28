@@ -88,7 +88,7 @@ class StallWait(RuleBasedStateMachine):
                 f"{act} after {self.waited - self.excused_at}s on an idle stall"
             )
         if act in _STARTS:
-            assert key is not None and ready and not running
+            assert key is not None and kind is not None and ready and not running
             assert act is stall.START[kind]
             self.started[key] += 1
             assert self.started[key] == 1, f"a second {act} for {key}"

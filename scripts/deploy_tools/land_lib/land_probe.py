@@ -30,6 +30,9 @@ Flux applies, and a publish refusal does not clear on its own. So does one with 
 kubectl or kubeconfig, and nothing gates health again. So does one with cause
 `gate-stale`: the gate's tree was older than `origin/master`. The cause decides, never the note beside it; a log from before
 `LAND-RESULT:` existed falls back to the notes.
+
+THE NEXT ACTION ENDS THE DETAIL. cc-wait prints only the state and the detail, so a landing whose
+`LAND-RESULT:` line carries `next` ends the detail with `; next=<action>`, its `outcome.NEXT` row.
 """
 
 import json
@@ -39,8 +42,9 @@ from pathlib import Path
 
 from deploy_tools.land_lib import detach
 from deploy_tools.land_lib.outcome import (
+    NEXT,
     PROMOTE_TIMEOUT_NOTE,
-    Cause,
+    Next,
     STALE_GATE_NOTE,
     UNREADABLE_GATE_NOTE,
     Verdict,
@@ -67,11 +71,9 @@ _UNREADABLE_GATE = UNREADABLE_GATE_NOTE.splitlines()[0].strip()
 _STALE_GATE = STALE_GATE_NOTE.splitlines()[0].strip()
 # The causes beside `deferred` that nothing clears on its own.
 _GIVE_UP_CAUSES = frozenset(
-    {
-        Cause.PROMOTE_TIMEOUT,
-        Cause.GATE_UNREADABLE,
-        Cause.GATE_STALE,
-    }
+    cause
+    for (verdict, cause), action in NEXT.items()
+    if verdict == Verdict.DEFERRED and cause is not None and action != Next.DONE
 )
 
 # A landing's phase lines: `== 4/6  deploying ...`. The newest one is the progress detail.
@@ -137,6 +139,9 @@ def read(log: Path, now: float | None = None) -> dict:
         if state == "gave-up" and _is_plain_deferral(log, verdict):
             state = "deferred"
         detail = verdict if code in _STATE_BY_RC else f"exit code {code}: {verdict}"
+        action = (detach.result_in(log) or {}).get("next")
+        if action:
+            detail += f"; next={action}"
         return {"state": state, "detail": detail}
     phases = _PHASE.findall(log.read_text(errors="replace"))
     return {
@@ -162,7 +167,9 @@ def _is_plain_deferral(log: Path, verdict: str) -> bool:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = ArgumentParser(prog="land_probe.py", description=__doc__.splitlines()[0])
+    parser = ArgumentParser(
+        prog="land_probe.py", description=(__doc__ or "").partition("\n")[0]
+    )
     parser.add_argument("--describe", action="store_true")
     parser.add_argument("pr")
     where = parser.add_mutually_exclusive_group()

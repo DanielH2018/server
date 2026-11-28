@@ -28,6 +28,11 @@ default-groups = ["dev", "lint"]     # `uv run` installs both; UV_NO_DEV drops o
 
 # PyYAML ships no wheel for some interpreters, and a source build without libyaml's headers silently
 # falls back to the pure-Python parser.
+# `rev` equals DOTFILES_SHA in .github/actions/pytest-tools/action.yml, the copy CI's tests import, so
+# the checkers read the signatures the tests run (tests/repo/ci_workflows/test_dotfiles_pins_agree.py).
+[tool.uv.sources]
+claude-worktree = { git = "https://github.com/DanielH2018/dotfiles", rev = "c3208ec44ef0c582635ac6c888dc4e0388e1aac6", subdirectory = "home/dot_local/share/claude-worktree" }
+
 [tool.uv.extra-build-variables]
 pyyaml = { PYYAML_FORCE_LIBYAML = "1" }
 
@@ -88,6 +93,8 @@ lint = [
   # Renovate raises the bump as its own PR, which is where the
   # new diagnostics get read.
   "vulture>=2.16",                  # dead-name gate (prek hook); [tool.vulture] holds its ignore list
+  "claude-worktree",                # signatures for ty and pyright only; scripts/lib/_claude_worktree.py
+  # refuses this copy at runtime. Pinned in [tool.uv.sources] below.
 ]
 
 [tool.pytest.ini_options]
@@ -571,18 +578,6 @@ include = [
   ".claude/hooks/_claude_guard.py",
   ".claude/hooks/_hook_common.py",
   ".claude/hooks/tests/bash_guards/test_claude_guard_import.py",
-]
-[tool.ty.overrides.rules]
-import-not-found = "ignore"
-
-[[tool.ty.overrides]]
-# `claude_worktree` is the same kind of import: CI checks out the dotfiles repo rather than an
-# in-tree copy, so ty cannot read its signatures.
-include = [
-  "scripts/lib/_claude_worktree.py",
-  "scripts/lib/worktrees.py",
-  "scripts/lib/worktree_testing.py",
-  "scripts/lib/tests/script_census/test_claude_worktree_import.py",
 ]
 [tool.ty.overrides.rules]
 import-not-found = "ignore"

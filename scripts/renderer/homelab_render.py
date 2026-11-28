@@ -474,7 +474,7 @@ def packages(out: Path, host: str | None, name: str | None) -> int:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = ArgumentParser(description=__doc__.splitlines()[0])
+    parser = ArgumentParser(description=(__doc__ or "").partition("\n")[0])
     commands = parser.add_subparsers(dest="command", required=True)
     render = commands.add_parser(
         "cluster", help="render the k8s tags into DIR/cluster/<tag>/"

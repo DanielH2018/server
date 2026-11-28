@@ -185,11 +185,15 @@ def test_a_dated_session_file_has_no_local_problem():
 
 def test_an_expired_session_file_is_flagged_locally():
     state = ui_login.build_storage_state("tok", "example.com", 1000)
-    assert "expired" in ui_login.local_state_problem(state, now=1000 + 86400)
+    problem = ui_login.local_state_problem(state, now=1000 + 86400)
+    assert problem is not None
+    assert "expired" in problem
 
 
 def test_a_cookieless_state_file_is_flagged_locally():
-    assert "no cookies" in ui_login.local_state_problem({"cookies": []}, now=0)
+    problem = ui_login.local_state_problem({"cookies": []}, now=0)
+    assert problem is not None
+    assert "no cookies" in problem
 
 
 def test_local_check_cannot_see_a_revoked_cookie():
@@ -378,6 +382,7 @@ def test_the_login_file_is_read_and_sops_is_not_asked(tmp_path):
             {"username": "claude-agent", "password": "pw-1", "domain": "lan.example"},
         )
     )
+    assert creds is not None
     assert ui_login.one_factor_login(creds, sops) == ("claude-agent", "pw-1")
     assert creds["domain"] == "lan.example"
     assert sops.asked == []

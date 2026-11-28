@@ -243,7 +243,7 @@ def main(
     argv: list[str] | None = None, root: Path = REPO, tools=None, run=subprocess.run
 ) -> int:
     """Parse `argv`, run the mode, and return its exit code."""
-    parser = ArgumentParser(description=__doc__.splitlines()[0])
+    parser = ArgumentParser(description=(__doc__ or "").partition("\n")[0])
     sub = parser.add_subparsers(dest="mode", required=True)
     sub.add_parser(
         "check", help="assert the host files against their trees and secrets.yml"

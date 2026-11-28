@@ -68,7 +68,7 @@ def _firing(cronjob, name, created):
     }
 
 
-def _kustomization(content=CONTENT):
+def _kustomization(content: str | None = CONTENT):
     annotations = {} if content is None else {CONTENT_DIGEST: content}
     return {"metadata": {"name": "longhorn-reconcile", "annotations": annotations}}
 

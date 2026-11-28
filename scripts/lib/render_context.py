@@ -24,6 +24,8 @@ Typical usage example:
 
 from pathlib import Path
 
+from jinja2 import Undefined
+
 from lib.cli_help import warn
 from lib.container_entry import parse_containers_list
 from lib.inventory_lists import PI_LIST_KEY, host_names
@@ -75,7 +77,7 @@ def render_context(
     inventory: Inventory = REPO_INVENTORY,
     host_vars: dict | None = None,
     base: dict = BASE_CONTEXT,
-    undefined_cls=StubUndefined,
+    undefined_cls: type[Undefined] = StubUndefined,
     component_defaults: dict | None = None,
     withhold: frozenset[str] = frozenset(),
 ) -> dict:
@@ -209,7 +211,9 @@ def _holds_jinja(value) -> bool:
     return False
 
 
-def _resolve(raw: dict, undefined_cls=StubUndefined) -> tuple[dict, dict[str, str]]:
+def _resolve(
+    raw: dict, undefined_cls: type[Undefined] = StubUndefined
+) -> tuple[dict, dict[str, str]]:
     """`raw` expanded against itself, and each key dropped because its expansion raised.
 
     Whole-dict, one `resolve_vars` call when nothing raises. When a key raises, it is dropped

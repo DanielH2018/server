@@ -32,8 +32,8 @@ from pathlib import Path
 
 from deploy_tools.land_lib.detach import result_fields, result_in
 from dev.fanout_lib.land_result import (
-    FINISHED_VERDICTS,
     VERDICT_LINE,
+    finished,
     last_verdict,
     park_line,
 )
@@ -227,7 +227,7 @@ def report(pr: str, landing: Landing) -> dict:
             f"needs input: land.sh printed no VERDICT for {pr} (exit {landing.rc}):\n"
             f"{landing.tail}"
         )
-    elif landing.verdict not in FINISHED_VERDICTS:
+    elif not finished(landing.result, landing.verdict):
         text = f"needs input: the landing of {pr} stopped short.\n{landing.line}"
     else:
         text = landing.line

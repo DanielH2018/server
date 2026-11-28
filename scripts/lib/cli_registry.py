@@ -26,13 +26,14 @@ import dataclasses
 import importlib
 import inspect
 import pkgutil
+from collections.abc import Callable
 
 
 @dataclasses.dataclass
 class Entry:
     name: str
     description: str
-    func: object
+    func: Callable[..., int] | None
     module: str | None = None
     flags: frozenset = dataclasses.field(default_factory=frozenset)
 
@@ -49,7 +50,14 @@ class Registry:
         self.label = label
         self._entries: dict[str, Entry] = {}
 
-    def add(self, name, func, description="", module=None, flags=()):
+    def add(
+        self,
+        name,
+        func: Callable[..., int] | None,
+        description="",
+        module=None,
+        flags=(),
+    ):
         if name in self._entries:
             raise ValueError(f"{self.label}: duplicate entry {name!r}")
         self._entries[name] = Entry(name, description, func, module, frozenset(flags))

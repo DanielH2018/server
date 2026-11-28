@@ -76,7 +76,10 @@ Three landings still end `refused` before the merge, with nothing merged:
 - **`--fresh`.** With the flag, `land.sh` fetches `origin/master` in the primary and adds a
   detached worktree of it under `~/.cache/homelab/land-fresh/` (`fresh.checkouts_root`).
   It runs that checkout's `land.sh` with the same arguments, then removes the worktree, on
-  SIGTERM too. The worktree is not under `/tmp`, because on daniel-box `/tmp` is a tmpfs
+  SIGTERM too. A SIGTERM goes on to the checkout's landing first, and the worktree is
+  removed once that landing has ended, so it keeps no landing turn behind. A stopped landing
+  records the exit code 128 plus the signal's number and a `land: stopped by` line
+  (`detach.until_stopped`). The worktree is not under `/tmp`, because on daniel-box `/tmp` is a tmpfs
   and each 353 MB checkout held RAM. A landing killed outright leaves its worktree behind,
   and the next fresh landing removes every worktree whose `flock` no process holds. The
   re-run before the merge, the hand-off after it
@@ -940,7 +943,7 @@ it. `land_lib/detach.py:result_in` returns its fields by name, so a field added 
 breaks no reader.
 
 ```text
-LAND-RESULT: verdict=<v> cause=<c> exit=<rc> pr=<n> sha=<8 hex> tags=<count> hold_sha=<sha> hold_owner=<owner> merge=<40 hex>
+LAND-RESULT: verdict=<v> cause=<c> exit=<rc> pr=<n> sha=<8 hex> tags=<count> hold_sha=<sha> hold_owner=<owner> merge=<40 hex> next=<action>
 ```
 
 A field the landing never reached reads `-`.
@@ -959,6 +962,18 @@ A field the landing never reached reads `-`.
     - `other`: the hold names failures, and none is one of this PR's services.
     - `unattributed`: the hold names no failure, or this PR has no service. Nothing ties
       the hold to this PR, and nothing clears the PR of it.
+- `next` is what the session that ran the landing does next. `land_lib/outcome.py:NEXT`
+  maps each verdict to one action, and a cause or an exit code overrides the verdict's row
+  where it decides. `cc-wait land` ends its detail with `; next=<action>`.
+    - `done`: nothing is left for the landing. Still exercise the change itself.
+    - `rerun`: re-run the same `land.sh` command.
+    - `wait:landing-clear`: wait with `cc-wait landing-clear`, then re-run it.
+    - `follow:land`: another landing of the PR is live. Wait on it with the `cc-wait land`
+      command its verdict prints, and do not re-run `land.sh`.
+    - `fix-and-rerun`: change what the detail names, then re-run.
+    - `apply-by-hand`: apply what the remediation lines name. A re-run ends the same way.
+    - `operator`: the next step needs the operator, such as a `sudo` command or a soak
+      failure to triage. Report it and stop.
 
 Only `land-wait` can compute `hold_owner`. It holds the raw hold value and the PR's own
 services together. The ledger's tags are widened with every tag the promotion carried before

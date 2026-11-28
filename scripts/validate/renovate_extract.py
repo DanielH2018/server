@@ -580,7 +580,7 @@ def _path_lists(files: Iterable[_Path]) -> list[str]:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = ArgumentParser(description=__doc__.split("\n\n")[0])
+    parser = ArgumentParser(description=(__doc__ or "").split("\n\n")[0])
     sub = parser.add_subparsers(dest="cmd", required=True)
     for name, text in (
         ("check", "check a Renovate file report against the table"),

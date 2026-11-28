@@ -276,11 +276,12 @@ def _shared(windows: Iterable[tuple[float, Window]]) -> list[Window]:
     joined window carries GitHub's count from the freshest sample and the recorded calls of
     every member. Two users whose windows reset within RESET_DRIFT_S of each other and whose
     samples happen to rise with time are still joined: no sample names a token's owner.
+
+    The join is greedy, so it walks the windows in `_join_order`. The order of the input does
+    not change the result.
     """
     groups: list[list[tuple[float, Window]]] = []
-    ordered = sorted(
-        windows, key=lambda sw: (BUCKETS.index(sw[1].bucket), sw[1].quota, sw[1].reset)
-    )
+    ordered = sorted(windows, key=_join_order)
     for sampled, window in ordered:
         last = groups[-1][-1][1] if groups else None
         if (
@@ -302,6 +303,11 @@ def _shared(windows: Iterable[tuple[float, Window]]) -> list[Window]:
         identities = tuple(sorted(i for _, w in group for i in w.identities))
         joined.append(replace(freshest, identities=identities, sessions=sessions))
     return joined
+
+
+def _join_order(sw: tuple[float, Window]) -> tuple[int, int, int, float, int]:
+    """Bucket, limit and reset, then sample time and count; windows equal on all five join alike."""
+    return (BUCKETS.index(sw[1].bucket), sw[1].quota, sw[1].reset, sw[0], sw[1].used)
 
 
 def _one_counter(a: tuple[float, Window], b: tuple[float, Window]) -> bool:

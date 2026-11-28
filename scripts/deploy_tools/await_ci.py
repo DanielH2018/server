@@ -672,7 +672,7 @@ def main(argv: list[str] | None = None, wait=wait, token=lookup_token) -> int:
     Exits with the code `wait` returns (see the module docstring's Exit codes), or 2
     when the required-context gate is disarmed.
     """
-    parser = ArgumentParser(description=__doc__.splitlines()[0])
+    parser = ArgumentParser(description=(__doc__ or "").partition("\n")[0])
     parser.add_argument("sha", help="the commit to wait on")
     parser.add_argument(
         "--timeout", type=int, default=900, help="wait budget in seconds"

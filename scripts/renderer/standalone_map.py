@@ -92,7 +92,7 @@ def fleet_render() -> PlaceholderRender:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = ArgumentParser(description=__doc__.splitlines()[0])
+    parser = ArgumentParser(description=(__doc__ or "").partition("\n")[0])
     parser.add_argument(
         "--check",
         action="store_true",

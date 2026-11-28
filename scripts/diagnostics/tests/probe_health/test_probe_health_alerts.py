@@ -104,7 +104,9 @@ def probe(value, ts):
     return [("probe_success", labels, value, ts)]
 
 
-def run(fake, reference=APPLIED, probe_reference=APPLIED, has_route=False):
+def run(
+    fake, reference: float | None = APPLIED, probe_reference=APPLIED, has_route=False
+):
     return health_alerts.gate(TAG, reference, probe_reference, has_route, fake.tools())
 
 

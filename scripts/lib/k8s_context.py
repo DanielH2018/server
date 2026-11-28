@@ -107,7 +107,10 @@ def _compiled_expression(undefined_cls, expr: str):
 
 
 def resolve_vars(
-    values: dict, context: dict, passes: int = 5, undefined_cls=StubUndefined
+    values: dict,
+    context: dict,
+    passes: int = 5,
+    undefined_cls: type[Undefined] = StubUndefined,
 ) -> dict:
     """Expand ``{{ ... }}`` inside variable VALUES, the way Ansible does before templating.
 

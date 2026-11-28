@@ -6,6 +6,8 @@ parameter. The first, `bento-pdf` with its `.local.` host, is the named member o
 gate and of the object-loss check.
 """
 
+from collections.abc import Set as AbstractSet
+
 from renderer.renderer_lib.bundle import flux_files, kustomization_text
 
 ROUTE = """\
@@ -84,7 +86,7 @@ def tag_files(tag: str, files: dict[str, str]) -> dict[str, str]:
 
 
 def bundle(
-    cluster: dict[str, dict[str, str]], substitutes: frozenset[str] = frozenset()
+    cluster: dict[str, dict[str, str]], substitutes: AbstractSet[str] = frozenset()
 ) -> dict[str, str]:
     """A bundle publishing each tag in `cluster` with its files, by bundle path.
 

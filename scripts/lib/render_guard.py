@@ -29,7 +29,13 @@ import sys
 from typing import Any, cast
 from pathlib import Path
 
-from jinja2 import ChainableUndefined, Environment, FileSystemLoader, StrictUndefined
+from jinja2 import (
+    ChainableUndefined,
+    Environment,
+    FileSystemLoader,
+    StrictUndefined,
+    Undefined,
+)
 
 
 from lib import yaml_fast
@@ -157,7 +163,7 @@ def dump_numbered(text: str) -> None:
         print(f"  {i:3d}| {line}", file=sys.stderr)
 
 
-def make_env(dirs=(), undefined_cls=StubUndefined) -> Environment:
+def make_env(dirs=(), undefined_cls: type[Undefined] = StubUndefined) -> Environment:
     """The one Jinja Environment factory the render guards and the renderer build on.
 
     Carries the given template dirs on the loader, the stub-undefined class, and the whitespace

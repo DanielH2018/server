@@ -525,7 +525,7 @@ def deploy_line(revision: str, services: str, result: str, duration_s=None) -> s
 
 
 def main(argv: list[str] | None = None, reads: Reads | None = None) -> int:
-    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser = argparse.ArgumentParser(description=(__doc__ or "").partition("\n")[0])
     parser.add_argument("--revision", required=True)
     parser.add_argument("--services", required=True, type=Path)
     parser.add_argument("--stabilise-seconds", required=True, type=int)
