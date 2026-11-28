@@ -8,7 +8,7 @@ Self-hosted LiveSync plugin. See repo-root `CLAUDE.md`.
 - **Applied by:** Flux, through `promote`; `land.sh --tags=livesync` gates the rollout
 - **Image:** `couchdb` (`livesync_k8s_image`)
 - **Route:** none (no `templates/ingressroute.yaml.j2`)
-- **Claim:** `livesync-data` (no backup (StorageClass longhorn-nobackup))
+- **Claim:** `livesync-data` (weekly -> B2 (default target))
 <!-- /generated_from -->
 
 - **Host: daniel-box (k8s), since 2026-08-06 — slice 2.** The Docker role this config came from
@@ -29,11 +29,21 @@ Self-hosted LiveSync plugin. See repo-root `CLAUDE.md`.
 - **The `livesync-snapshot` Job snapshots `livesync-data` before each revision applies**.
   The livesync Kustomization depends on `livesync-snapshot`, so a revision applies
   only after the snapshot is ready; `docs/flux-deploy-plane.md` lists the Job's checks. The
-  claim is `longhorn-nobackup`, so the snapshot is Longhorn-local and no backup copies it. A
+  snapshot is Longhorn-local; the weekly B2 backup below is the off-site copy. A
   failed revision that changes livesync writes the stateful hold, and `promote` does not reset
   `prod`. A volume revert is not the default answer to that hold here: reverting the B-tree
   desynchronises it from the clients' already-synced revisions, which is the denial reason
   above. Weigh a forward fix before the revert runbook in `docs/volume-snapshot-drills.md`.
+- **`livesync-data` is backed up weekly to B2, on shard 5 (Friday).** The shard is its
+  `weekly_backup_claims` entry in `k8s/services.yml`. LiveSync's end-to-end encryption
+  leaves only ciphertext in CouchDB, so the B2 copy leaks nothing. The decrypted mirror on
+  the `vault-mcp` claims stays unbacked. The DENIED stance above is about reverting the volume
+  under live clients. A restore from B2 runs only once every device has lost its copy, so no
+  client holds a newer revision to replay, and it desynchronises nothing.
+- **`flux_suspend: true` holds Flux off livesync until the claim is recreated on `longhorn`.**
+  A bound claim's StorageClass is immutable, so the cutover from `longhorn-nobackup` is an
+  operator runbook: *Moving `livesync-data` onto the weekly tier* in
+  `docs/longhorn-backup-tiering.md`. Its last step is the PR that removes the key.
 - **The CouchDB credentials Secret substitutes from `homelab-cluster-vars`.**
   `livesync_db_password` is a `${<key>}` placeholder in the published render. Flux substitutes
   the value from the `homelab-cluster-vars` Secret, which it decrypts from

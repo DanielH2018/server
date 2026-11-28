@@ -25,6 +25,7 @@
 | `wg-easy-config` | Weekly | B2 | Thursday |
 | `bazarr-config` | Weekly | B2 | Friday |
 | `freshrss-config` | Weekly | B2 | Friday |
+| `livesync-data` | Weekly | B2 | Friday |
 | `n8n-files` | Weekly | B2 | Friday |
 | `lidarr-config` | Weekly | B2 | Saturday |
 | `pi-peer-backup-data` | Weekly | B2 | Saturday |

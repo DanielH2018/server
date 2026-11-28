@@ -7,21 +7,27 @@ livesync_k8s_image: couchdb:3.5.3@sha256:907eab5b7e55ab7cfd241d39b90b2a335ea40be
 # every synced client still holds the newer revisions it already pushed, and replaying those
 # against the reverted DB invites a conflict storm an un-reverted rollback would not cause.
 # The snapshot Job and the revert runbook work fine here — they are not why this is denied.
+# A restore from the weekly B2 backup is not a revert: it runs only once every client has lost its
+# copy, so no client holds a newer revision to replay.
 k8s_autodeploy: false
 k8s_autodeploy_reason: "state coupled outside the volume — reverting the CouchDB B-tree to a snapshot desynchronises it from connected Obsidian clients' already-synced revisions, inviting a conflict storm an un-reverted rollback would not cause; the snapshot Job and the operator revert work fine and are not the blocker"
 # The claim snapshotted before each revision applies. Under Flux the renderer turns this
 # list into the livesync-snapshot Kustomization, whose Job snapshots it before livesync applies
 # Declared regardless of k8s_autodeploy.
 k8s_autodeploy_snapshot_pvcs: [livesync-data]
+# Holds Flux off livesync until the operator recreates livesync-data on `longhorn`: applied to the
+# old claim, the class change fails as immutable. The cutover runbook's last step removes it.
+flux_suspend: true
 livesync_k8s_cpu_limit: "1"
 livesync_k8s_mem_limit: 1024Mi
 livesync_k8s_cpu_request: "100m"
 livesync_k8s_mem_request: 128Mi
 
-# longhorn-nobackup on purpose: the CouchDB B-tree dedupes poorly and drives B2 churn; the vault is
-# regenerable by LiveSync's "Rebuild everything" from a client.
+# Backed up weekly to B2 (its shard is in k8s/services.yml): the vault is LiveSync E2EE ciphertext,
+# so B2 holds nothing readable, and the weekly cadence bounds the B-tree's churn. A class change
+# recreates the bound claim; docs/longhorn-backup-tiering.md has the cutover runbook.
 livesync_k8s_claim: livesync-data
-livesync_k8s_storage_class: longhorn-nobackup
+livesync_k8s_storage_class: longhorn
 livesync_k8s_size: 2Gi
 
 # The claim the renderer emits for this role. The livesync Kustomization applies it after the
