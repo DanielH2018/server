@@ -15,20 +15,17 @@ k8s_autodeploy_reason: "state coupled outside the volume — reverting the Couch
 # list into the livesync-snapshot Kustomization, whose Job snapshots it before livesync applies
 # Declared regardless of k8s_autodeploy.
 k8s_autodeploy_snapshot_pvcs: [livesync-data]
-# Holds Flux off livesync while the operator recreates livesync-data on `longhorn`. The cutover
-# runbook in docs/longhorn-backup-tiering.md ends with the PR that removes it and sets the class.
-flux_suspend: true
 livesync_k8s_cpu_limit: "1"
 livesync_k8s_mem_limit: 1024Mi
 livesync_k8s_cpu_request: "100m"
 livesync_k8s_mem_request: 128Mi
 
-# Bound to longhorn-nobackup until the cutover runbook recreates the claim on `longhorn`, the class
-# its weekly B2 shard in k8s/services.yml needs. The vault is LiveSync E2EE ciphertext, so B2
-# holds nothing readable. The class is immutable on a bound claim: change it only in the runbook's
-# resume PR.
+# `longhorn` is the class the claim's weekly B2 shard in k8s/services.yml needs. The vault is
+# LiveSync E2EE ciphertext, so B2 holds nothing readable. The class is immutable on a bound
+# claim, so moving it again means recreating the claim, as the cutover runbook in
+# docs/longhorn-backup-tiering.md (Moving `livesync-data` onto the weekly tier) did.
 livesync_k8s_claim: livesync-data
-livesync_k8s_storage_class: longhorn-nobackup
+livesync_k8s_storage_class: longhorn
 livesync_k8s_size: 2Gi
 
 # The claim the renderer emits for this role. The livesync Kustomization applies it after the
