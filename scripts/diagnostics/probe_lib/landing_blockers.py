@@ -14,6 +14,9 @@ Every fact comes from a reader that already exists; this module only joins them:
   its log is readable on this host, and from deploy-ui's `/api/log` tail elsewhere. That
   endpoint serves only the logs of runs deploy-ui started, so a terminal run's verdict shows
   only on daniel-box.
+- **The landing queue.** The same read's `landings` and `turn`, as deploy-ui answers them:
+  each landing's state from its state record, on either host, in queue order, and the turn,
+  serial and slot locks. The text view prints one line per landing.
 - **Last verdict.** The newest `land*.log` in `land_lib.detach.default_log_dir()`, as this
   process sees it: `$CLAUDE_JOB_DIR/tmp` when that variable is set, otherwise
   `/tmp/homelab-landings-<user>`. A log with no `VERDICT:` line reports its last `land:`
@@ -272,6 +275,8 @@ def collect(
             "reconcile_disabled": None,
         },
         "errors": [],
+        "landings": None,
+        "turn": None,
     }
 
     def attempt(name, fn):
@@ -319,7 +324,8 @@ def collect(
         return match.group(0) if match else None
 
     def read_runs():
-        rows = get_json("/api/inflight").get("runs", [])
+        inflight = get_json("/api/inflight")
+        rows = inflight.get("runs", [])
         snap["runs"] = [
             {
                 "kind": r.get("kind", ""),
@@ -330,6 +336,8 @@ def collect(
             }
             for r in rows
         ]
+        snap["landings"] = inflight.get("landings", [])
+        snap["turn"] = inflight.get("turn")
 
     def read_last_verdict():
         snap["last_verdict"] = _last_verdict()
@@ -409,6 +417,30 @@ def worktree_lines(worktrees: list[dict], blocked: bool) -> list[str]:
     return lines
 
 
+_QUEUE_WORDS = {"turn": "holds the turn", "stepped-out": "stepped out"}
+
+
+def queue_line(row: dict) -> str:
+    """One landing of deploy-ui's queue: its PR, state, place in the queue and progress."""
+    if row["alive"] is False:
+        where = "died"
+    elif row["queue"] == "waiting":
+        where = f"waiting #{row['position']}"
+    else:
+        where = _QUEUE_WORDS.get(row["queue"], "")
+    progress = row["progress"]
+    parts = [
+        f"PR {row['pr']}",
+        row["label"],
+        f"({where})" if where else "",
+        f"{row['in_state_s']}s",
+        f"{progress['done']}/{progress['total']} {progress['what']}"
+        if progress
+        else "",
+    ]
+    return " ".join(p for p in parts if p)
+
+
 def format_text(snap: dict) -> str:
     """The snapshot as lines for a terminal, one blank line between sections."""
 
@@ -447,6 +479,10 @@ def format_text(snap: dict) -> str:
                 f"  {r['kind']} {what} {r['elapsed_s']}s  {r['verdict'] or ''}".rstrip()
             )
         sections.append(in_flight)
+    if snap["landings"]:
+        sections.append(
+            ["Landing queue:"] + [f"  {queue_line(r)}" for r in snap["landings"]]
+        )
     if snap["last_verdict"]:
         sections.append(
             [f"Last landing: {snap['last_verdict']['verdict'] or 'no VERDICT line'}"]

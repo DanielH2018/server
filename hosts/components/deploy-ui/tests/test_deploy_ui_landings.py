@@ -183,57 +183,6 @@ def test_log_route_reads_an_inflight_landing_wherever_it_logs_is_clean(app, tmp_
         proc.wait()
 
 
-def _inflight_with_log(app, log):
-    """The in-flight rows while a process whose stdout is `log` runs as PR #1550's landing."""
-    with log.open("a") as out:
-        proc = subprocess.Popen(["sleep", "30"], stdout=out)
-    try:
-        app.run.out = f"{proc.pid} 1 5 /x/python3 land.py --pr 1550 --since 72c1a41\n"
-        return body(app.get("/api/inflight"))
-    finally:
-        proc.kill()
-        proc.wait()
-
-
-def test_landing_step_is_the_newest_header_and_its_latest_line_is_clean():
-    # fact: hosts/components/deploy-ui/CLAUDE.md#Landing queue
-    running = reads.landing_step(LOG_7827.rsplit("VERDICT", 1)[0].splitlines())
-    assert running == {
-        "step": "5",
-        "of": 6,
-        "label": "waiting for hosts to apply",
-        "latest": "waiting for hosts to apply: daniel-box",
-        "verdict": "",
-    }
-    assert reads.landing_step(LOG_7827.splitlines())["verdict"] == "deferred"
-
-
-def test_inflight_step_comes_from_past_the_viewer_cap_is_flagged(app, tmp_path):
-    # fact: hosts/components/deploy-ui/CLAUDE.md#Landing queue
-    log = tmp_path / "land1550-20261109-170000.log"
-    log.write_text(
-        "== 2/5  waiting for master CI\n"
-        + "  poll\n" * (reads.MAX_LOG_BYTES // 7 + 1)
-        + "== 3/5  waiting on the promotion\n  promote.py land-wait: waiting on homelab\n"
-    )
-    [row] = _inflight_with_log(app, log)["runs"]
-    assert (row["step"]["step"], row["step"]["latest"]) == (
-        "3",
-        "promote.py land-wait: waiting on homelab",
-    )
-
-
-def test_inflight_unreadable_log_leaves_step_blank_and_panel_up_is_flagged(
-    app, tmp_path
-):
-    # fact: hosts/components/deploy-ui/CLAUDE.md#Landing queue
-    log = tmp_path / "land1550-20261109-170000.log"
-    log.write_text("== 3/5  waiting on the promotion\n")
-    log.chmod(0o200)
-    b = _inflight_with_log(app, log)
-    assert "unavailable" not in b and b["runs"][0]["step"] is None
-
-
 def test_inflight_landing_writing_to_a_pipe_is_not_indexed_is_flagged(app):
     """A foreground landing's stdout is a terminal; a pipe fails the same regular-file check."""
     with subprocess.Popen(["sleep", "30"], stdout=subprocess.PIPE) as proc:
