@@ -56,8 +56,12 @@ The bootstrap cases (`validate_lib/bootstrap_case.py`) run only under `--bootstr
 them and nothing else. CI runs them in a job of their own, `host_packages_bootstrap`, beside the
 legs that run every other group: on one runner their offline builds and the other groups slowed
 each other, and they ran 338-477 s against 214-271 s for the next-longest group.
-`--bootstrap-shard K/N` runs one share of them, and that job runs two shares per release so
+`--bootstrap --shard K/N` runs one share of them, and that job runs two shares per release so
 each runner starts all of its share's items at once.
+
+`--shard K/N` without `--bootstrap` runs one share of the other groups
+(`case_groups.groups`). The `host_packages` job runs two shares per release, because the
+groups' sum on one runner ran about 150 s past its longest group.
 
 `--k3s-download` runs one case and nothing else: daniel-box's `--local-build` with no k3s seeded,
 so install.sh downloads and checks the release binary. CI runs it in a job that cannot fail the
@@ -75,7 +79,8 @@ a file and a payload the real package does not ship, so it installs a fixture ho
 `hosts/lib/tests/container/fixture/`'s specs, rendered by the real renderer with the real
 reconcile component and maintainer scripts.
 
-The case groups, the three `Cases` methods and each case module's `run`, run concurrently on
+The case groups, the three `Cases` methods, each case module's `run` and one
+`node_package_case` per node, run concurrently on
 `--jobs` threads, each in its own scratch directory under `--work`, and each group's output is
 written as one block when it ends (`validate_lib/case_groups.py`).
 
@@ -159,7 +164,7 @@ class Cases:
         self.work = args.work.resolve()
         self.tools_cache = args.tools_cache.resolve() if args.tools_cache else None
         self.k3s_download = args.k3s_download
-        self.shard = args.bootstrap_shard
+        self.shard = args.shard
         self.box = box_address(args.render / "head")
         self.passed: list[str] = []
         self.failed: list[str] = []
@@ -537,7 +542,7 @@ class Cases:
 
 
 def shard_arg(text: str) -> tuple[int, int]:
-    """`--bootstrap-shard K/N` as (K, N), refusing anything but 1 <= K <= N."""
+    """`--shard K/N` as (K, N), refusing anything but 1 <= K <= N."""
     number, sep, count = text.partition("/")
     if not (sep and number.isdigit() and count.isdigit()):
         raise ArgumentTypeError(f"a shard is K/N, not {text!r}")
@@ -579,10 +584,10 @@ def main(argv: list[str] | None = None) -> int:
         help="run only the bootstrap cases, which no other run includes",
     )
     parser.add_argument(
-        "--bootstrap-shard",
+        "--shard",
         type=shard_arg,
         metavar="K/N",
-        help="run only the K-th of N shares of the bootstrap cases",
+        help="run only the K-th of N shares of the cases this run takes",
     )
     parser.add_argument(
         "--all", action="store_true", help="also print a [PASS] line per passing case"
@@ -602,7 +607,7 @@ def main(argv: list[str] | None = None) -> int:
     if cases.k3s_download or args.bootstrap:
         run_groups(cases, [("bootstrap_case", bootstrap_case.run)], 1)
     else:
-        run_groups(cases, groups(Cases), args.jobs)
+        run_groups(cases, groups(Cases, cases.shard), args.jobs)
     return report(cases, list_passed=args.all)
 
 

@@ -4,10 +4,15 @@
 one property broken.
 """
 
+import itertools
 import re
+import shlex
+import tomllib
+from collections import Counter
 from collections.abc import Callable
 
 from _ci_workflow_rows import ci_row
+from _helpers import REPO
 from _row_table import Census
 from _workflow_rows import CI, Workflow, jobs, judge, mutants, runs, steps, triggers
 
@@ -22,6 +27,8 @@ SCANS = {
     "Scan the cluster bundle for secrets": "dir out --config .gitleaks.toml",
 }
 FULL_SWEEP = "Run hooks (full sweep)"
+HOOKS_JOB = "hooks"
+LEG_SELECTION = "${{ matrix.hooks }}"
 REJECT = "Reject a PR whose merge changes no files"
 NO_DISPATCH_ARM = (
     "${{ github.workflow }}-${{ github.event_name == 'pull_request' "
@@ -199,6 +206,47 @@ def _scan_problems(wf: Workflow) -> list[str]:
     return found
 
 
+def _skips(tokens: list[str]) -> set[str]:
+    return {after for flag, after in itertools.pairwise(tokens) if flag == "--skip"}
+
+
+def _leg_hooks(selection: str, ids: list[str]) -> set[str]:
+    """The ids `prek run <selection>` runs: the ids it names, or every id, less its skips."""
+    tokens = shlex.split(selection)
+    skipped = _skips(tokens)
+    named = {
+        token
+        for before, token in itertools.pairwise(["", *tokens])
+        if not token.startswith("-") and before != "--skip"
+    }
+    return (named or set(ids)) - skipped
+
+
+def _hooks_leg_problems(wf: Workflow) -> list[str]:
+    job = jobs(wf).get(HOOKS_JOB, {})
+    sweep = next((s for s in steps(job) if s.get("name") == FULL_SWEEP), None)
+    if sweep is None:
+        return [f"the {HOOKS_JOB} job has no step {FULL_SWEEP!r}"]
+    tokens = shlex.split(runs(sweep), comments=True)
+    if "$HOOKS" not in tokens or (sweep.get("env") or {}).get("HOOKS") != LEG_SELECTION:
+        return [f"{FULL_SWEEP!r} does not run its leg's selection, {LEG_SELECTION}"]
+    legs = ((job.get("strategy") or {}).get("matrix") or {}).get("include") or []
+    config = tomllib.loads((REPO / "prek.toml").read_text())
+    ids = [hook["id"] for repo in config["repos"] for hook in repo.get("hooks", [])]
+    counts = Counter(
+        hook for leg in legs for hook in _leg_hooks(str(leg.get("hooks", "")), ids)
+    )
+    return [
+        f"hook {hook} runs in {counts[hook]} {HOOKS_JOB} legs, not one"
+        for hook in ids
+        if hook not in _skips(tokens) and counts[hook] != 1
+    ]
+
+
+def _hooks_legs(wf: Workflow) -> list[dict]:
+    return jobs(wf)[HOOKS_JOB]["strategy"]["matrix"]["include"]
+
+
 def _set_if(name: str, value: str | None) -> Callable[[Workflow], None]:
     def mutate(wf: Workflow) -> None:
         for step in _named_steps(wf, name):
@@ -307,6 +355,29 @@ SWEEP_ROWS = (
                     REJECT, "github.event_name == 'push'"
                 ),
                 a_renamed_sweep_step=_rename(FULL_SWEEP, "Run hooks"),
+            ),
+        )
+    ),
+    Census(
+        **ci_row(
+            name="ci-hooks-legs-run-each-hook-once",
+            reason=(
+                "The `hooks` job splits the sweep across matrix legs, each running the hooks "
+                "its `hooks` value selects. A leg dropped from the matrix, or a selection that "
+                "names a hook the other leg also runs, leaves a hook unrun or runs it twice, "
+                "and both legs still end green. The static-ratchet hooks the sweep skips for "
+                "the `pytest` job are left out of the count."
+            ),
+            offence=judge(_hooks_leg_problems),
+            red=mutants(
+                CI,
+                a_leg_dropped=lambda wf: _hooks_legs(wf).pop(0),
+                a_leg_that_runs_every_hook=lambda wf: _hooks_legs(wf)[1].update(
+                    hooks=""
+                ),
+                a_sweep_that_ignores_its_leg=_edit_step(
+                    FULL_SWEEP, {"env": {"RENDER_TEMPLATES_SKIP": "k8s"}}
+                ),
             ),
         )
     ),

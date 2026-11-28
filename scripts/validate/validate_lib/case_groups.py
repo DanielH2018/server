@@ -1,7 +1,8 @@
 """Run the host package cases' groups concurrently, each in its own scratch directory.
 
-`host_package_cases.main()` hands `run_groups` the twelve case groups: the three `Cases` methods
-and each case module's `run`. Every group boots its own containers, and their names differ, but
+`host_package_cases.main()` hands `run_groups` the case groups, or one shard's share of them:
+the three `Cases` methods, each case module's `run`, and `node_package_case.run` once per node.
+Every group boots its own containers, and their names differ, but
 the serial runner had every container mount the one `<work>/repo` and `<work>/debs`, and every
 group republishes that repository. So `isolate` gives each group a shallow copy of `Cases` whose
 `work` is `<work>/groups/<name>`, with its own `repo/`, `build/` and a copy of each prepared
@@ -77,30 +78,44 @@ class StderrByThread:
             self.real.flush()
 
 
-def groups(cases_class) -> list[tuple[str, Callable]]:
-    """Every case group but bootstrap_case, longest first by CI run 42575480365's 24.04 leg.
+def _node_group(host: str) -> tuple[str, Callable]:
+    return f"node_package_case-{host}", lambda group: node_package_case.run(group, host)
+
+
+def groups(
+    cases_class, shard: tuple[int, int] | None = None
+) -> list[tuple[str, Callable]]:
+    """Every case group but bootstrap_case, longest first, or shard K of N's share of them.
+
+    The order is the groups' wall times on the 26.04 legs of CI runs 46065308899, 46070619651,
+    46077939789 and 46082772420, where `node_package_case` ran 340-372 s for both nodes in
+    turn; each node is a group of its own, placed by half that. A shard takes every N-th group
+    from the K-th, so the longest groups land on different shards.
 
     `bootstrap_case` is left out: it runs alone under `host_package_cases.py --bootstrap`, in a
-    CI job of its own. That run predates `node_package_case`, which sits second unmeasured
-    because it installs two nodes' whole packages in turn.
+    CI job of its own.
 
     Each is looked up when this runs, so a stub set on a module or on `cases_class` is the one
     the group list holds.
     """
-    return [
+    ordered = [
         ("upgrade_path", cases_class.upgrade_path),
-        ("node_package_case", node_package_case.run),
         ("bootstrap_age_case", bootstrap_age_case.run),
+        *map(_node_group, node_package_case.NODES),
         ("engine_case", engine_case.run),
-        ("by_hand", cases_class.by_hand),
         ("disarm", disarm_case.run),
+        ("by_hand", cases_class.by_hand),
+        ("node_units_case", node_units_case.run),
         ("conffile_case", conffile_case.run),
         ("secrets_case", secrets_case.run),
         ("bootstrap_repo_case", bootstrap_repo_case.run),
         ("repos_case", repos_case.run),
-        ("node_units_case", node_units_case.run),
         ("cold_install", cases_class.cold_install),
     ]
+    if shard is None:
+        return ordered
+    number, count = shard
+    return ordered[number - 1 :: count]
 
 
 def isolate(cases, name: str):

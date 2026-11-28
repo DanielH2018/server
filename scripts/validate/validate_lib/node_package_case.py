@@ -215,19 +215,22 @@ def _install(cases, c: Container, host: str) -> None:
     )
 
 
-def run(cases) -> None:
-    """Install each node's package in its own container, and record each verdict on `cases`."""
-    for host in NODES:
-        name = NAME.format(host=host)
-        c = cases.boot(f"node-{host}", hostname=host)
-        if c is None:
-            continue
-        try:
-            _install(cases, c, host)
-        except (CaseFailed, subprocess.SubprocessError) as exc:
-            cases.failed.append(name)
-            print(f"[FAIL] {c.name}: {name}: {exc}", file=sys.stderr)
-        else:
-            cases.passed.append(name)
-        finally:
-            c.remove()
+def run(cases, host: str) -> None:
+    """Install node `host`'s package in a container of its own, and record the verdict on `cases`.
+
+    `case_groups.groups` makes each of NODES a group of its own: one node's install runs about
+    as long as the longest other group, so two in turn would be the leg's longest group.
+    """
+    name = NAME.format(host=host)
+    c = cases.boot(f"node-{host}", hostname=host)
+    if c is None:
+        return
+    try:
+        _install(cases, c, host)
+    except (CaseFailed, subprocess.SubprocessError) as exc:
+        cases.failed.append(name)
+        print(f"[FAIL] {c.name}: {name}: {exc}", file=sys.stderr)
+    else:
+        cases.passed.append(name)
+    finally:
+        c.remove()

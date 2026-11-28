@@ -233,7 +233,7 @@ def main(
     try:
         if opts.detach:
             return _detached(opts, tools, landing, lock)
-        return landing()
+        return detach.until_stopped(landing)
     finally:
         if lock:
             lock.release()
