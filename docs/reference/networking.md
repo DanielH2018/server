@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/networking.py
-generated_at: 2026-11-27 06:17 UTC
-generated_sha: f8cc3c595
+generated_at: 2026-11-28 18:17 UTC
+generated_sha: 23c576cd4
 ---
 
 !!! warning "Generated file — do not edit"
@@ -12,7 +12,7 @@ generated_sha: f8cc3c595
 
 # Networking
 
-40 routed k8s service(s).
+41 routed k8s service(s).
 
 !!! note "The domain is filled in by your browser"
     A route answers on the LAN name, the public name or both, and a static page cannot know which one you are on, so the generator writes `<domain>`. On the docs site the routes below become links, built from the domain of the URL you are reading this on — so you get LAN links on the LAN name and public links on the public one.
@@ -62,6 +62,7 @@ generated_sha: f8cc3c595
 | texbrain | daniel-box | <span class="fqdn" data-host="texbrain">texbrain.&lt;domain&gt;</span> · <span class="fqdn" data-host="texbrain.local">texbrain.local.&lt;domain&gt;</span> | LAN + public | `rate-limit`, `authelia` |
 | tft-assistant | daniel-box | <span class="fqdn" data-host="tft">tft.&lt;domain&gt;</span> · <span class="fqdn" data-host="tft.local">tft.local.&lt;domain&gt;</span> | LAN + public | `rate-limit`, `authelia` |
 | traefik | daniel-box | <span class="fqdn" data-host="traefik.local">traefik.local.&lt;domain&gt;</span> (LAN only) | LAN only | `rate-limit` |
+| vault-mcp | daniel-box | <span class="fqdn" data-host="vault-mcp">vault-mcp.&lt;domain&gt;</span> · <span class="fqdn" data-host="vault-mcp.local">vault-mcp.local.&lt;domain&gt;</span> | LAN + public | `rate-limit` |
 | vaultwarden | daniel-box | <span class="fqdn" data-host="vaultwarden.local">vaultwarden.local.&lt;domain&gt;</span> (LAN only) | LAN only | `rate-limit`, `vaultwarden-lan-only` |
 | wg-easy | daniel-box | <span class="fqdn" data-host="wg-easy">wg-easy.&lt;domain&gt;</span> · <span class="fqdn" data-host="wg-easy.local">wg-easy.local.&lt;domain&gt;</span> | LAN + public | `rate-limit`, `authelia` |
 | zigbee2mqtt | daniel-box | <span class="fqdn" data-host="zigbee2mqtt">zigbee2mqtt.&lt;domain&gt;</span> · <span class="fqdn" data-host="zigbee2mqtt.local">zigbee2mqtt.local.&lt;domain&gt;</span> | LAN + public | `rate-limit`, `authelia` |
