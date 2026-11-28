@@ -506,6 +506,7 @@ extra-paths = [
   "scripts/secrets_mgmt/tests",
   "scripts/tests",
   "scripts/validate/tests/host_cases",
+  "hosts/components/deploy-ui/tests",
 ]
 
 [tool.ty.src]
@@ -688,6 +689,7 @@ extraPaths = [
   "scripts/secrets_mgmt/tests",
   "scripts/tests",
   "scripts/validate/tests/host_cases",
+  "hosts/components/deploy-ui/tests",
 ]
 
 # Airflow and the kubernetes client exist only in the role's image, so the DAGs resolve them
