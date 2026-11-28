@@ -40,7 +40,9 @@ Environment (all optional except METRICS_PORT):
 
 import os
 import re
+import sqlite3
 import sys
+from collections.abc import Callable
 
 import stats_lib
 
@@ -67,7 +69,7 @@ LEAVE_RE = re.compile(r"^(?P<name>.+) has left\.$")
 RESTART_MARKERS = ("Listening on port", "Server started")
 
 
-def parse_line(line):
+def parse_line(line: str) -> tuple[str, str | None] | None:
     """Classify a console line -> ('join'|'leave', name) | ('restart', None) | None."""
     line = line.rstrip("\r\n")
     m = JOIN_RE.match(line)
@@ -82,7 +84,7 @@ def parse_line(line):
     return None
 
 
-def is_unparsed_player_line(line):
+def is_unparsed_player_line(line: str) -> bool:
     """Drift safety net: looks like a join/leave but did NOT strictly parse.
 
     Incremented as terraria_stats_unmatched_player_lines_total so a future
@@ -99,12 +101,12 @@ def is_unparsed_player_line(line):
 class StatsState:
     """In-memory all-time stats. Timestamps are unix seconds (float)."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.players = {}  # name -> dict
         self.last_event_ts = 0.0
         self.unmatched = 0
 
-    def _player(self, name):
+    def _player(self, name: str):
         return self.players.setdefault(
             name,
             {
@@ -116,7 +118,7 @@ class StatsState:
             },
         )
 
-    def _close(self, name, ts):
+    def _close(self, name: str, ts: float) -> None:
         p = self.players.get(name)
         if p and p["open_start"] is not None:
             p["total_playtime"] += max(0.0, ts - p["open_start"])
@@ -124,7 +126,7 @@ class StatsState:
             p["open_start"] = None
             p["last_seen"] = ts
 
-    def apply(self, kind, name, ts):
+    def apply(self, kind: str, name, ts: float) -> None:
         """Applies one connection event (join/leave/restart) to the in-memory state.
 
         A join with no matching leave (a dangling open_start) is closed defensively
@@ -149,10 +151,10 @@ class StatsState:
             for n in list(self.players):
                 self._close(n, ts)
 
-    def online_count(self):
+    def online_count(self) -> int:
         return sum(1 for p in self.players.values() if p["open_start"] is not None)
 
-    def playtime(self, name, now):
+    def playtime(self, name: str, now: float) -> float:
         """Total playtime incl. the in-progress session so the counter ticks live."""
         p = self.players[name]
         base = p["total_playtime"]
@@ -161,7 +163,7 @@ class StatsState:
         return base
 
 
-def render_metrics(state, now):
+def render_metrics(state: StatsState, now: float) -> str:
     """Renders `state` as Prometheus text exposition format.
 
     Args:
@@ -213,7 +215,9 @@ def render_metrics(state, now):
     return "\n".join(out) + "\n"
 
 
-def apply_entries(state, entries):
+def apply_entries(
+    state: StatsState, entries: list[tuple[int, str]]
+) -> tuple[list[tuple[int, str | None, str, str]], int]:
     """Apply ascending (ts_ns, line) entries to `state`.
 
     Returns (events, max_ts_ns) where events is [(ts_ns, name, kind, raw)] for the
@@ -238,7 +242,7 @@ def apply_entries(state, entries):
 class Store(stats_lib.SqliteStore):
     """Terraria's player schema over stats_lib's shared connection + cursor/events tables."""
 
-    def _init_game_schema(self, conn):
+    def _init_game_schema(self, conn: sqlite3.Connection) -> None:
         conn.execute("""CREATE TABLE IF NOT EXISTS players(
             name TEXT PRIMARY KEY,
             total_playtime_seconds REAL NOT NULL DEFAULT 0,
@@ -246,7 +250,7 @@ class Store(stats_lib.SqliteStore):
             first_seen REAL, last_seen REAL,
             current_session_start REAL)""")
 
-    def load_state(self):
+    def load_state(self) -> StatsState:
         """Loads all players from SQLite into a fresh StatsState.
 
         Returns:
@@ -272,7 +276,7 @@ class Store(stats_lib.SqliteStore):
                 st.last_event_ts = max(st.last_event_ts, ls)
         return st
 
-    def write_state(self, conn, state):
+    def write_state(self, conn: sqlite3.Connection, state: StatsState) -> None:
         """Writes the player snapshot into `save`'s transaction."""
         for name, p in state.players.items():
             conn.execute(
@@ -295,13 +299,19 @@ class Store(stats_lib.SqliteStore):
 
 
 # Loki fetch + the run loop — thin per-game bindings over stats_lib's shared skeleton.
-def loki_fetch(start_ns, end_ns, limit):
+def loki_fetch(start_ns: int, end_ns: int, limit: int) -> list[tuple[int, str]]:
     """Fetch entries in (start_ns, end_ns] as [(ts_ns, line)] (one page of `limit`)."""
     url = stats_lib.build_query_range_url(LOKI_URL, LOKI_QUERY, start_ns, end_ns, limit)
     return extract_entries(stats_lib.http_get_json(url, HTTP_TIMEOUT, "terraria-stats"))
 
 
-def run_cycle(state, store, cursor, end_ns, fetch):
+def run_cycle(
+    state: StatsState,
+    store: Store,
+    cursor: int,
+    end_ns: int,
+    fetch: Callable[[int, int, int], list[tuple[int, str]]],
+) -> int:
     """One poll: page through new entries from `cursor`, fold, persist. Returns new cursor.
 
     Thin wrapper over stats_lib.run_cycle binding this game's apply_entries + page limit —
@@ -312,7 +322,7 @@ def run_cycle(state, store, cursor, end_ns, fetch):
     )
 
 
-def main():
+def main() -> None:
     """Runs the poll loop over stats_lib's shared entry point."""
     stats_lib.run(
         stats_lib.RunConfig(
@@ -338,6 +348,6 @@ def main():
 
 if __name__ == "__main__":
     if any(arg in ("-h", "--help") for arg in sys.argv[1:]):
-        print(__doc__.strip())
+        print((__doc__ or "").strip())
         sys.exit(0)
     main()
