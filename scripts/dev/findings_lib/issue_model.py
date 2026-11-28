@@ -711,11 +711,11 @@ def comment_cap_warning(number: int, n: int) -> str | None:
 PR_REPO = "DanielH2018/server"
 _ISSUE_URL_RE = re.compile(r"https?://github\.com/([\w.-]+/[\w.-]+)/issues/\d+")
 
-# GitHub closes on close/fix/resolve forms; `pr_refs` uses the captured owner/repo to ignore other
-# repositories' numbers.
+# GitHub closes on close/fix/resolve forms, with or without a colon; `pr_refs` uses the captured
+# owner/repo to ignore other repositories' numbers.
 _PR_REF_RE = re.compile(
-    r"(?i)\b(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?)\s+"
-    r"(?:https?://github\.com/([\w.-]+/[\w.-]+)/issues/|(?:([\w.-]+/[\w.-]+))?#)(\d+)\b"
+    r"(?i)\b(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?):?\s+"
+    r"(?:https?://github\.com/([\w.-]+/[\w.-]+)/issues/|(?:([\w.-]+/[\w.-]+))?#)([0-9]+)\b"
 )
 
 

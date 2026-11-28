@@ -50,8 +50,9 @@ selecting the `r2` target, not `default`; see
 The table lists the volumes the three tier lists name. Every other volume sits on the
 `longhorn-nobackup` StorageClass and has no backup. The [services page](reference/services.md)
 carries the backup tier of each service, so no list of those volumes is kept here. That is
-consistent with kopia, which excluded FTL/gravity, couchdb-data, plugins and the TSDBs. The
-configs kopia *kept* are rendered from the repo here.
+consistent with kopia, which excluded FTL/gravity, plugins and the TSDBs. kopia excluded
+couchdb-data too, and `livesync-data` departs from that (see below). The configs kopia *kept*
+are rendered from the repo here.
 
 ### Which kopia rule each volume preserves
 
@@ -93,6 +94,12 @@ listed here.
   Sunday into healthchecks-config's index when that role retired (#2806). `ND_DATAFOLDER`
   holds Navidrome's SQLite DB and artwork cache, not the music library, which is a read-only
   `media-data` subPath (`navidrome/templates/deployment.yaml.j2`) that nothing backs up.
+- `livesync-data`: kopia excluded couchdb-data, and this volume reverses that. It is the
+  CouchDB store behind Obsidian LiveSync, and LiveSync's end-to-end encryption leaves only
+  ciphertext in it, so its B2 copy is the one off-site copy of the vault that leaks nothing.
+  The `vault-mcp` claims hold the decrypted mirror and stay on the no-backup list. The claim
+  moves from `longhorn-nobackup` by the runbook in *Moving `livesync-data` onto the weekly
+  tier* below.
 - `scrutiny-influxdb-data` (no backup): kopia excluded `scrutiny/influxdb2/`, and the volume
   IS the TSDB (single mount, verified).
 - `crowdsec-db` (no backup): Docker's `crowdsec-db` named volume was deliberately outside
@@ -494,6 +501,142 @@ b2 bucket delete lock-spike-45841c6d
 
 If the key deletion prints a usage error, `b2 key list` has no `lock-spike` row, so the key is
 already gone.
+
+## Moving `livesync-data` onto the weekly tier
+
+A bound claim's `storageClassName` is immutable, and both Longhorn classes reclaim with
+`Delete`. So the move to `longhorn` recreates the claim, and deleting the old claim would delete
+the vault's server copy with it. A Flux apply of the new class to the old claim fails as
+immutable, and a failed `livesync` revision writes the stateful hold. So the move takes two PRs
+with an operator cutover between them:
+
+- The first PR declares the claim's weekly shard in `k8s/services.yml` and sets
+  `flux_suspend: true` in `k8s/roles/livesync/defaults/main.yml`. It keeps the
+  `longhorn-nobackup` class, so its render matches the live claim. The suspend keeps Flux off
+  `livesync` and `livesync-snapshot` while the operator works.
+- The resume PR, the cutover's last step, sets `livesync_k8s_storage_class: longhorn` and
+  removes `flux_suspend` in one commit. By then the live claim is on `longhorn`, so Flux
+  applies a matching spec. The suspend and the class change never land together, because
+  nothing orders the root's write of `spec.suspend` before the `livesync` Kustomization
+  reconciles the same revision.
+
+Run the cutover soon after the first PR lands. `FluxSuspended` warns after 24 hours, and arm 5
+of the render-diff gates refuses any other PR whose render reaches `livesync` until the resume.
+A resume PR that drops the suspend and keeps `longhorn-nobackup` fails
+`tests/longhorn/test_every_longhorn_pvc_has_a_tier.py::test_every_backed_up_claim_is_on_longhorn_or_mid_cutover`.
+A claim on a backup tier list that is not on `longhorn` is never backed up.
+
+The longhorn-reconcile job leaves the old volume alone meanwhile. The volume sits in the
+`no-backup` group, and the job moves a weekly claim into its shard only from `default`
+(`k8s/roles/longhorn-reconcile/files/longhorn_reconcile.py:desired_labels`). Nothing is
+uploaded from the old 2 MiB-block volume. The recreated volume takes the 16 MiB block size
+(ADR 0008).
+
+The Obsidian clients keep their own copies of the vault throughout. Sync pauses while
+`livesync` is at zero replicas, and the clients push what they changed once it is back.
+
+Every step that writes is operator-only: it needs the k3s admin kubeconfig. Do not start the
+cutover inside the Sunday no-promotion window, because the last step lands a PR.
+
+1. Check that the suspend took hold. `uv run python scripts/diagnostics/probe.py landing` shows
+   `last-good` at or past the merge that set `flux_suspend`, and its `suspended (Flux):` line
+   names `livesync` and `livesync-snapshot`. A reset to an older `last-good` would resume
+   `livesync` in the middle of the cutover.
+1. Scale `deploy/livesync` to zero, and wait for its volume to detach:
+
+    ```bash
+    sudo k3s kubectl -n homelab scale deploy/livesync --replicas=0
+    kubectl -n homelab get pvc livesync-data -o jsonpath='{.spec.volumeName}'
+    cc-wait k8s-field -n longhorn-system volumes.longhorn.io/<pv> \
+      '{.status.state}' --equals detached
+    ```
+
+    `<pv>` is the name the second command prints. Use it in every later step.
+1. Keep the old volume when its claim goes. Set the PV's reclaim policy to `Retain`, delete
+   the claim, then clear the PV's claim reference so a new claim can bind it:
+
+    ```bash
+    sudo k3s kubectl patch pv <pv> \
+      -p '{"spec":{"persistentVolumeReclaimPolicy":"Retain"}}'
+    sudo k3s kubectl -n homelab delete pvc livesync-data
+    sudo k3s kubectl patch pv <pv> --type json \
+      -p '[{"op":"remove","path":"/spec/claimRef"}]'
+    ```
+
+    The old volume is the fallback until the last step. It survives every step before that,
+    so no separate snapshot is needed.
+1. Create two claims. `livesync-data-old` binds the old volume, and `livesync-data` is a new,
+   empty volume on `longhorn` with the spec the resume PR renders. Do not create it between
+   03:17 and 03:30 UTC. A new `longhorn` volume sits in the daily group until the hourly
+   reconcile at :17 moves it, and the daily job at 03:30 would leave a B2 backup that no
+   job's retain prunes. Write this to a file and apply it with
+   `sudo k3s kubectl apply -f <file>`:
+
+    ```yaml
+    apiVersion: v1
+    kind: PersistentVolumeClaim
+    metadata:
+      name: livesync-data-old
+      namespace: homelab
+    spec:
+      accessModes: [ReadWriteOnce]
+      storageClassName: longhorn-nobackup
+      volumeName: <pv>
+      resources:
+        requests:
+          storage: 2Gi
+    ---
+    apiVersion: v1
+    kind: PersistentVolumeClaim
+    metadata:
+      name: livesync-data
+      namespace: homelab
+    spec:
+      accessModes: [ReadWriteOnce]
+      storageClassName: longhorn
+      resources:
+        requests:
+          storage: 2Gi
+    ```
+
+1. Copy the database files across with their ownership, and compare the two trees:
+
+    ```bash
+    sudo k3s kubectl -n homelab run livesync-copy --rm -it --restart=Never \
+      --image=busybox:1.37 \
+      --overrides='{"spec":{"containers":[{"name":"copy","image":"busybox:1.37","command":["sh","-c","cp -a /old/. /new/ && du -s /old /new && ls -lan /new"],"volumeMounts":[{"name":"old","mountPath":"/old"},{"name":"new","mountPath":"/new"}]}],"volumes":[{"name":"old","persistentVolumeClaim":{"claimName":"livesync-data-old"}},{"name":"new","persistentVolumeClaim":{"claimName":"livesync-data"}}]}}'
+    ```
+
+    The two `du` totals should match, and the files should keep the CouchDB uid.
+1. Check the new volume. Its `spec.backupBlockSize` reads `16777216`. Within the hour,
+   longhorn-reconcile labels it `recurring-job-group.longhorn.io/weekly-backup-d0`:
+
+    ```bash
+    kubectl -n homelab get pvc livesync-data -o jsonpath='{.spec.volumeName}'
+    kubectl -n longhorn-system get volumes.longhorn.io <new pv> \
+      -o jsonpath='{.spec.backupBlockSize} {.metadata.labels}'
+    ```
+
+1. Resume `livesync` with a PR that edits `k8s/roles/livesync/defaults/main.yml`: it sets
+   `livesync_k8s_storage_class: longhorn` and removes `flux_suspend`. The same PR adds
+   `("homelab", "livesync-data"): ("longhorn", "2Gi")` to `_KNOWN_CLAIMS` in
+   `tests/k8s/workloads/test_k8s_claims.py`. Land it with `land.sh`. Flux applies a claim that
+   matches the live one and restores `replicas: 1`, and the `livesync-snapshot` Job snapshots
+   the new volume first. Open Obsidian on one device and confirm that it syncs.
+1. Delete the old volume. Set its reclaim policy back to `Delete`, then delete its claim, which
+   deletes the PV and the Longhorn volume:
+
+    ```bash
+    sudo k3s kubectl patch pv <pv> \
+      -p '{"spec":{"persistentVolumeReclaimPolicy":"Delete"}}'
+    sudo k3s kubectl -n homelab delete pvc livesync-data-old
+    ```
+
+The move is finished once `probe.py b2-spend` and the backup-health check show
+`livesync-data` on shard 0 and its first Sunday backup has completed.
+
+If the copy fails, the old volume is untouched under `livesync-data-old`. Every client still
+holds the vault, so LiveSync's "Rebuild everything" from one client is the last fallback.
 
 ## Deliberate deviations from kopiaignore (all in the cheap direction)
 
