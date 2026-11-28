@@ -549,7 +549,7 @@ def hand_off(
 
 def main(argv: list[str] | None = None) -> int:
     p = ArgumentParser(
-        prog="fanout.py land-server", description=__doc__.splitlines()[0]
+        prog="fanout.py land-server", description=(__doc__ or "").partition("\n")[0]
     )
     p.add_argument(
         "--dry-run", action="store_true", help="judge and log, start nothing"

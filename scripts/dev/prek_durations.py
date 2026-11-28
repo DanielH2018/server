@@ -53,7 +53,7 @@ def table(found: dict[str, float], top: int) -> str:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = ArgumentParser(description=__doc__.split("\n\n")[0])
+    parser = ArgumentParser(description=(__doc__ or "").split("\n\n")[0])
     parser.add_argument("log", type=Path, help="the file prek's --log-file wrote")
     parser.add_argument(
         "--top", type=int, default=15, help="how many hooks to list (default 15)"

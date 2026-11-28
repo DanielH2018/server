@@ -43,7 +43,7 @@ def _status(
     state="success",
     context=tested_tree.CONTEXT,
     login=tested_tree.CREATOR,
-    target_url=RUN_URL,
+    target_url: str | None = RUN_URL,
 ):
     return [
         {
@@ -363,7 +363,7 @@ def test_a_batch_the_gate_refuses_or_cannot_rebuild_records_nothing(
 ):
     second = {"a.txt": "two\n"} if case == "conflict" else None
     checkout, base, heads, trees = _batch(tmp_path, second)
-    pulls = [_pull(h) for h in heads]
+    pulls: list[dict | Exception] = [_pull(h) for h in heads]
     tested = trees[-1]
     if case == "another-tree":
         # The run tested the first member alone, so the batch is not the stack it names.

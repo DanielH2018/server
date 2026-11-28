@@ -46,6 +46,7 @@ def test_no_control_directory_leaves_the_call_as_it_was():
 
 def test_the_socket_directory_is_created_private(tmp_path):
     path = control_dir({"XDG_RUNTIME_DIR": str(tmp_path)}, os.getuid())
+    assert path is not None
     assert path == str(tmp_path / "fanout-ssh")
     assert os.stat(path).st_mode & 0o777 == 0o700
 

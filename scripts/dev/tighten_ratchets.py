@@ -67,7 +67,7 @@ def tighten_list(ratchet: Ratchet, counts: dict[str, int], *, write: bool) -> li
 
 
 def main() -> int:
-    parser = ArgumentParser(description=__doc__.splitlines()[0])
+    parser = ArgumentParser(description=(__doc__ or "").partition("\n")[0])
     parser.add_argument(
         "--tighten",
         action="store_true",

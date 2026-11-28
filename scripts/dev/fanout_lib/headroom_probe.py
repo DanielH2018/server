@@ -147,7 +147,7 @@ def describe() -> dict:
 
 def main(argv: list[str] | None = None, tools: Tools | None = None) -> int:
     parser = ArgumentParser(
-        prog="fanout.py headroom", description=__doc__.splitlines()[0]
+        prog="fanout.py headroom", description=(__doc__ or "").partition("\n")[0]
     )
     parser.add_argument("--describe", action="store_true")
     parser.add_argument(

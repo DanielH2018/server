@@ -148,7 +148,7 @@ def main(
     out=sys.stdout,
     stderr=sys.stderr,
 ) -> int:
-    parser = ArgumentParser(description=__doc__.split("\n\n")[0])
+    parser = ArgumentParser(description=(__doc__ or "").split("\n\n")[0])
     parser.add_argument(
         "--prune",
         nargs="*",
