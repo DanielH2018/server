@@ -46,19 +46,21 @@ import threading
 import time
 import urllib.parse
 import urllib.request
+from collections.abc import Callable, Sequence
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from typing import Self
 
 
-def env(name, default):
+def env(name: str, default: str) -> str:
     return os.environ.get(name, default)
 
 
-def log(*args):
+def log(*args: object) -> None:
     print("[%s]" % time.strftime("%Y-%m-%dT%H:%M:%S"), *args, flush=True)
 
 
 # Loki ingestion
-def http_get_json(url, timeout, user_agent):
+def http_get_json(url: str, timeout: float, user_agent: str) -> object:
     req = urllib.request.Request(url, headers={"User-Agent": user_agent})
     with urllib.request.urlopen(req, timeout=timeout) as resp:
         return json.load(resp)
@@ -85,7 +87,9 @@ def http_get_json(url, timeout, user_agent):
 #
 # Contradict this with evidence at a cited file:line, naming this marker. The thing that would
 # overturn it is obs_api growing a cursor-shaped window with a deploy tag behind it.
-def build_query_range_url(loki_url, query, start_ns, end_ns, page_limit):
+def build_query_range_url(
+    loki_url: str, query: str, start_ns: int, end_ns: int, page_limit: int
+) -> str:
     """Builds a Loki query_range URL for entries in (start_ns, end_ns], one page."""
     qs = urllib.parse.urlencode(
         {
@@ -101,7 +105,7 @@ def build_query_range_url(loki_url, query, start_ns, end_ns, page_limit):
 
 # DECIDED: a copy of monitor-bridge's envelope rule (`bridge/net.py:_query_result`), not an
 # import: each game's ConfigMap carries only its script and this file.
-def _loki_streams(loki_json):
+def _loki_streams(loki_json: object) -> list[dict]:
     """The stream objects of a Loki answer; an absent `data` or `result` reads as none.
 
     Raises:
@@ -119,7 +123,7 @@ def _loki_streams(loki_json):
     return streams
 
 
-def extract_entries(loki_json):
+def extract_entries(loki_json: object) -> list[tuple[int, str]]:
     """Flatten a Loki query_range response to [(ts_ns:int, line:str)] ascending.
 
     Raises:
@@ -139,7 +143,9 @@ def extract_entries(loki_json):
 LOKI_MAX_ENTRIES = 5000
 
 
-def initial_cursor(stored_cursor, backfill, now, backfill_days):
+def initial_cursor(
+    stored_cursor: int, backfill: bool, now: float, backfill_days: float
+) -> int:
     """Pick the starting cursor (ns).
 
     On a fresh DB (stored_cursor==0) or an explicit --backfill, bound the start to the last
@@ -151,7 +157,9 @@ def initial_cursor(stored_cursor, backfill, now, backfill_days):
     return stored_cursor
 
 
-def run_cycle(state, store, cursor, end_ns, fetch, apply_fn, page_limit):
+def run_cycle(
+    state, store, cursor: int, end_ns: int, fetch, apply_fn, page_limit: int
+) -> int:
     """One poll: page through new entries from `cursor`, fold, persist. Returns new cursor.
 
     `fetch(start_ns, end_ns, limit) -> [(ts_ns, line)]` returns the earliest `limit`
@@ -204,11 +212,18 @@ def run_cycle(state, store, cursor, end_ns, fetch, apply_fn, page_limit):
 
 
 # Prometheus exposition
-def escape_label_value(v):
+def escape_label_value(v: str) -> str:
     return v.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n")
 
 
-def render_family(lines, name, help_text, metric_type, samples, label_name=None):
+def render_family(
+    lines: list[str],
+    name: str,
+    help_text: str,
+    metric_type: str,
+    samples,
+    label_name: str | None = None,
+) -> None:
     """Appends one Prometheus metric family (HELP + TYPE + one line per sample) to `lines`.
 
     `samples` is [(label_value, value)] pairs when `label_name` is given — a per-player
@@ -240,13 +255,18 @@ class PollState:
     interpreter).
     """
 
-    def __init__(self, initial_state):
+    def __init__(self, initial_state) -> None:
         self.value = initial_state
         self.lock = threading.Lock()
         self.last_poll_ok = 0.0
 
 
-def make_handler(poll_state, render_metrics_fn, health_max_age, clock=time.time):
+def make_handler(
+    poll_state: PollState,
+    render_metrics_fn,
+    health_max_age: float,
+    clock: Callable[[], float] = time.time,
+) -> type[BaseHTTPRequestHandler]:
     """Builds a BaseHTTPRequestHandler serving /metrics and /healthz.
 
     `render_metrics_fn(state, now) -> str` is the per-game exposition renderer. `clock` is
@@ -261,7 +281,7 @@ def make_handler(poll_state, render_metrics_fn, health_max_age, clock=time.time)
         def log_message(self, format: str, *args: object) -> None:
             pass
 
-        def do_GET(self):
+        def do_GET(self) -> None:
             """Routes the request path to /metrics, /healthz, or a 404."""
             if self.path == "/metrics":
                 with poll_state.lock:
@@ -282,7 +302,7 @@ def make_handler(poll_state, render_metrics_fn, health_max_age, clock=time.time)
     return Handler
 
 
-def start_metrics_server(handler_cls, port):
+def start_metrics_server(handler_cls: type[BaseHTTPRequestHandler], port: int) -> None:
     """Starts the /metrics + /healthz server on a daemon thread.
 
     Threading so a slow /metrics render cannot head-of-line-block /healthz.
@@ -296,17 +316,17 @@ def start_metrics_server(handler_cls, port):
 
 
 def poll_forever(
-    poll_state,
+    poll_state: PollState,
     store,
-    cursor,
+    cursor: int,
     fetch,
     apply_fn,
-    page_limit,
-    once,
-    backfill,
-    poll_interval,
+    page_limit: int,
+    once: bool,
+    backfill: bool,
+    poll_interval: float,
     on_poll_ok,
-):
+) -> None:
     """Runs run_cycle in a loop, persisting the cursor and stamping poll_state.last_poll_ok.
 
     Returns after one cycle when `once`/`backfill`; otherwise loops forever at
@@ -349,21 +369,21 @@ class SqliteStore:
     single-row ingest cursor and one raw audit log.
     """
 
-    def __init__(self, path):
+    def __init__(self, path: str) -> None:
         self.conn = sqlite3.connect(path)
         self.conn.execute("PRAGMA journal_mode=WAL")
         self._init_schema()
 
-    def close(self):
+    def close(self) -> None:
         self.conn.close()
 
-    def __enter__(self):
+    def __enter__(self) -> Self:
         return self
 
-    def __exit__(self, *exc):
+    def __exit__(self, *exc: object) -> None:
         self.close()
 
-    def _init_schema(self):
+    def _init_schema(self) -> None:
         c = self.conn
         c.execute("""CREATE TABLE IF NOT EXISTS cursor(
             id INTEGER PRIMARY KEY CHECK(id=1), last_ts_ns INTEGER NOT NULL)""")
@@ -372,15 +392,17 @@ class SqliteStore:
         self._init_game_schema(c)
         c.commit()
 
-    def _init_game_schema(self, conn):
+    def _init_game_schema(self, conn: sqlite3.Connection) -> None:
         """Declares the per-game tables. Subclasses override; no commit, the caller commits."""
         raise NotImplementedError
 
-    def get_cursor(self):
+    def get_cursor(self) -> int:
         row = self.conn.execute("SELECT last_ts_ns FROM cursor WHERE id=1").fetchone()
         return int(row[0]) if row else 0
 
-    def save(self, state, cursor_ns, events=()):
+    def save(
+        self, state, cursor_ns: int, events: Sequence[tuple[object, ...]] = ()
+    ) -> None:
         """Persists events, the game's rows and the cursor as one transaction.
 
         A failure rolls the whole transaction back, so no row it wrote reaches a later commit.
@@ -397,7 +419,7 @@ class SqliteStore:
                 (cursor_ns,),
             )
 
-    def write_state(self, conn, state):
+    def write_state(self, conn: sqlite3.Connection, state) -> None:
         """Writes the game's rows for `state`. Subclasses override; no commit, `save` commits."""
         raise NotImplementedError
 
@@ -408,14 +430,14 @@ class RunConfig:
 
     def __init__(
         self,
-        service_name,
-        loki_url,
-        backfill_days,
-        page_limit,
-        poll_interval,
-        metrics_port,
-        health_max_age,
-    ):
+        service_name: str,
+        loki_url: str,
+        backfill_days: float,
+        page_limit: int,
+        poll_interval: float,
+        metrics_port: int,
+        health_max_age: float,
+    ) -> None:
         self.service_name = service_name
         self.loki_url = loki_url
         self.backfill_days = backfill_days
@@ -425,7 +447,7 @@ class RunConfig:
         self.health_max_age = health_max_age
 
 
-def parse_args(argv):
+def parse_args(argv: Sequence[str]) -> argparse.Namespace:
     """Parses the exporter's flags, exiting non-zero on an unknown one."""
     parser = argparse.ArgumentParser(allow_abbrev=False)
     parser.add_argument(
@@ -439,7 +461,15 @@ def parse_args(argv):
     return parser.parse_args(argv)
 
 
-def run(config, store, fetch, apply_fn, render_metrics, on_poll_ok, argv=None):
+def run(
+    config: RunConfig,
+    store,
+    fetch,
+    apply_fn,
+    render_metrics,
+    on_poll_ok,
+    argv: Sequence[str] | None = None,
+) -> None:
     """Loads persisted state, starts the metrics server, and runs the poll loop.
 
     Runs a single cycle and returns when `argv` carries --once or --backfill; otherwise

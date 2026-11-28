@@ -57,7 +57,9 @@ Environment (all optional except METRICS_PORT):
 
 import os
 import re
+import sqlite3
 import sys
+from collections.abc import Callable
 
 import stats_lib
 
@@ -94,7 +96,7 @@ RESTART_RE = re.compile(r"Game - OnApplicationQuit|ZNet\.LoadWorld: ")
 CONNECTIONS_RE = re.compile(r"Connections (?P<n>\d+) ZDOS:(?P<zdos>\d+)")
 
 
-def parse_line(line):
+def parse_line(line: str) -> tuple[str, str | int | None] | None:
     """Classify a console line.
 
     -> ('connect', steam_id) | ('spawn', name) | ('death', name)
@@ -123,7 +125,7 @@ def parse_line(line):
     return None
 
 
-def is_unparsed_player_line(line):
+def is_unparsed_player_line(line: str) -> bool:
     """Drift safety net: looks player-shaped but did NOT parse.
 
     Exposed as valheim_stats_unmatched_player_lines_total so an upstream wording change
@@ -143,7 +145,7 @@ def is_unparsed_player_line(line):
 class StatsState:
     """In-memory all-time stats. Timestamps are unix seconds (float)."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.players = {}  # name -> dict
         self.last_event_ts = 0.0
         self.unmatched = 0
@@ -157,7 +159,7 @@ class StatsState:
         # name -> highest playtime a read has returned for the open session.
         self.exposed = {}
 
-    def _player(self, name):
+    def _player(self, name: str):
         return self.players.setdefault(
             name,
             {
@@ -170,7 +172,7 @@ class StatsState:
             },
         )
 
-    def _close(self, name, ts):
+    def _close(self, name: str, ts: float) -> None:
         p = self.players.get(name)
         if p and p["open_start"] is not None:
             p["total_playtime"] += max(0.0, ts - p["open_start"])
@@ -180,7 +182,7 @@ class StatsState:
             self.last_present.pop(name, None)
             self.exposed.pop(name, None)
 
-    def _close_stale(self, name, ts):
+    def _close_stale(self, name: str, ts: float) -> None:
         """Closes a session whose disconnect was missed, at the last time it was seen.
 
         Ending it at `ts` would bank every hour since as playtime, so it ends at the
@@ -196,14 +198,14 @@ class StatsState:
         p["open_start"] = None
         p["last_seen"] = end
 
-    def _last_evidence(self, name):
+    def _last_evidence(self, name: str) -> float:
         p = self.players[name]
         return max(p["last_seen"] or p["open_start"], self.last_present.get(name, 0.0))
 
-    def _open_sessions(self):
+    def _open_sessions(self) -> list[str]:
         return [n for n, p in self.players.items() if p["open_start"] is not None]
 
-    def _reconcile(self, connections, ts):
+    def _reconcile(self, connections: int, ts: float) -> None:
         """Folds the server's own connection count into the open sessions.
 
         A count covering every open session marks each one present. A count of 0
@@ -221,7 +223,7 @@ class StatsState:
             for n in open_names:
                 self.last_present[n] = ts
 
-    def apply(self, kind, value, ts):
+    def apply(self, kind: str, value, ts: float) -> None:
         """Applies one console event (connect/spawn/death/disconnect/restart/heartbeat).
 
         connect holds a SteamID until the next spawn names the character (the console
@@ -278,15 +280,15 @@ class StatsState:
             self.connections = value
             self._reconcile(value, ts)
 
-    def online_count(self):
+    def online_count(self) -> int:
         """Open sessions, capped at the server's own count while that count is partial."""
         n = len(self._open_sessions())
         return min(n, self.connections) if self.ambiguous else n
 
-    def total_deaths(self):
+    def total_deaths(self) -> int:
         return sum(p["deaths"] for p in self.players.values())
 
-    def playtime(self, name, now):
+    def playtime(self, name: str, now: float) -> float:
         """Total playtime incl. the in-progress session so the counter ticks live.
 
         While the server's count is partial, an open session stops ticking at the
@@ -305,7 +307,7 @@ class StatsState:
         return value
 
 
-def render_metrics(state, now):
+def render_metrics(state: StatsState, now: float) -> str:
     """Renders `state` as Prometheus text exposition format.
 
     Args:
@@ -382,7 +384,9 @@ def render_metrics(state, now):
     return "\n".join(out) + "\n"
 
 
-def apply_entries(state, entries):
+def apply_entries(
+    state: StatsState, entries: list[tuple[int, str]]
+) -> tuple[list[tuple[int, str, str, str]], int]:
     """Apply ascending (ts_ns, line) entries to `state`.
 
     Returns (events, max_ts_ns) where events is [(ts_ns, subject, kind, raw)] for the
@@ -411,7 +415,7 @@ def apply_entries(state, entries):
 class Store(stats_lib.SqliteStore):
     """Valheim's player + SteamID schema over stats_lib's shared connection and tables."""
 
-    def _init_game_schema(self, conn):
+    def _init_game_schema(self, conn: sqlite3.Connection) -> None:
         conn.execute("""CREATE TABLE IF NOT EXISTS players(
             name TEXT PRIMARY KEY,
             total_playtime_seconds REAL NOT NULL DEFAULT 0,
@@ -423,7 +427,7 @@ class Store(stats_lib.SqliteStore):
         conn.execute("""CREATE TABLE IF NOT EXISTS steam_names(
             steam_id TEXT PRIMARY KEY, name TEXT NOT NULL)""")
 
-    def load_state(self):
+    def load_state(self) -> StatsState:
         """Loads all players and the SteamID<->name mapping from SQLite into a fresh StatsState.
 
         Returns:
@@ -452,7 +456,7 @@ class Store(stats_lib.SqliteStore):
             st.steam_to_name[steam_id] = name
         return st
 
-    def write_state(self, conn, state):
+    def write_state(self, conn: sqlite3.Connection, state: StatsState) -> None:
         """Writes the player snapshot into `save`'s transaction."""
         for name, p in state.players.items():
             conn.execute(
@@ -484,13 +488,19 @@ class Store(stats_lib.SqliteStore):
 
 
 # Loki fetch + the run loop — thin per-game bindings over stats_lib's shared skeleton.
-def loki_fetch(start_ns, end_ns, limit):
+def loki_fetch(start_ns: int, end_ns: int, limit: int) -> list[tuple[int, str]]:
     """Fetch entries in (start_ns, end_ns] as [(ts_ns, line)] (one page of `limit`)."""
     url = stats_lib.build_query_range_url(LOKI_URL, LOKI_QUERY, start_ns, end_ns, limit)
     return extract_entries(stats_lib.http_get_json(url, HTTP_TIMEOUT, "valheim-stats"))
 
 
-def run_cycle(state, store, cursor, end_ns, fetch):
+def run_cycle(
+    state: StatsState,
+    store: Store,
+    cursor: int,
+    end_ns: int,
+    fetch: Callable[[int, int, int], list[tuple[int, str]]],
+) -> int:
     """One poll: page through new entries from `cursor`, fold, persist. Returns new cursor.
 
     Thin wrapper over stats_lib.run_cycle binding this game's apply_entries + page limit —
@@ -501,7 +511,7 @@ def run_cycle(state, store, cursor, end_ns, fetch):
     )
 
 
-def main():
+def main() -> None:
     """Runs the poll loop over stats_lib's shared entry point."""
     stats_lib.run(
         stats_lib.RunConfig(
@@ -528,6 +538,6 @@ def main():
 
 if __name__ == "__main__":
     if any(arg in ("-h", "--help") for arg in sys.argv[1:]):
-        print(__doc__.strip())
+        print((__doc__ or "").strip())
         sys.exit(0)
     main()
