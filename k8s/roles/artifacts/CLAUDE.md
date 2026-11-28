@@ -30,6 +30,10 @@ how that sync behaves.
   (`~/.claude/artifacts`, daniel-box's own) and `artifacts_peer_dir`
   (`~/.claude/artifacts-peer`, everything pulled from peers). Stdlib only — no build, no
   extra deps.
+- **Every served HTML artifact gets a contents panel.** `artifact_server.py:add_page_scripts`
+  adds a `/api/outline.js` tag at serve time, and the script (`_gui_html.py:OUTLINE_JS`) lists
+  the page's h2/h3 headings on the left. A page with fewer than three headings, or with
+  `data-outline="off"` on `<html>` or `<body>`, gets none. The file on disk is never changed.
 - **This role's deploy creates none of the host directories it mounts.** daniel-box's host
   package creates `artifacts_host_dir`, one peer directory per `artifacts_peer_sources` entry
   and `artifacts_stars_dir`, from

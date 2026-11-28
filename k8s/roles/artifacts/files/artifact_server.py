@@ -14,6 +14,7 @@ that wrote the file:
     /api/star               POST: star or unstar one artifact (see StarStore)
                             GET ?host=&path=: that artifact's star, and whether it can change
     /api/star.js            the star button each served HTML artifact loads
+    /api/outline.js         the contents panel each served HTML artifact loads
     /a/<host>/<relpath>     one artifact, served from ROOT/<host>/<relpath>
     /healthz                liveness
 
@@ -21,9 +22,10 @@ The star list is the one thing the server writes. Every artifact tree stays moun
 the list lives in its own file, ARTIFACTS_STARS_FILE, which prune-artifacts.sh on each host
 reads so that a starred artifact is never aged out.
 
-Each HTML artifact is served with one added `<script src="/api/star.js">` tag, so the page can
-be starred where it is read. The file on disk is never changed, so a copied artifact carries no
-button. The tag is added only when a star list is configured.
+Each HTML artifact is served with an added `<script src="/api/outline.js">` tag, which draws a
+contents panel from the page's h2/h3 headings, and, when a star list is configured, a
+`<script src="/api/star.js">` tag, so the page can be starred where it is read. The file on
+disk is never changed, so a copied artifact carries neither.
 
 The index is built ON REQUEST and cached against a signature of (path, mtime, size) for
 every file under ROOT. It is not built on a timer: prune-artifacts.sh deletes artifacts
@@ -65,7 +67,7 @@ from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlparse
 
 # Flat sibling modules, so a plain import resolves under both the server and the tests.
-from _gui_html import FAVICON_SVG, GUI_HTML, STAR_JS
+from _gui_html import FAVICON_SVG, GUI_HTML, OUTLINE_JS, STAR_JS
 from artifact_meta import (
     apply_metadata,
     derive_origin,
@@ -324,14 +326,19 @@ def safe_path(root: Path, host: str, rel: str) -> Path | None:
     return target
 
 
-def add_star_tag(body: bytes, host: str, rel: str) -> bytes:
-    """Inserts the star button's script tag before the page's last `</body>`, or at the end."""
-    tag = (
-        f'<script src="/api/star.js" data-host="{html.escape(host)}" '
-        f'data-path="{html.escape(rel)}" defer></script>'
-    ).encode()
+def add_page_scripts(body: bytes, host: str, rel: str, *, star: bool) -> bytes:
+    """Inserts the outline's script tag, and the star button's when `star`, into an HTML page.
+
+    The tags go before the page's last `</body>`, or at the end when it has none.
+    """
+    tags = '<script src="/api/outline.js" defer></script>'
+    if star:
+        tags += (
+            f'<script src="/api/star.js" data-host="{html.escape(host)}" '
+            f'data-path="{html.escape(rel)}" defer></script>'
+        )
     at = body.lower().rfind(b"</body>")
-    return body + tag if at < 0 else body[:at] + tag + body[at:]
+    return body + tags.encode() if at < 0 else body[:at] + tags.encode() + body[at:]
 
 
 def render_gui() -> bytes:
@@ -388,6 +395,11 @@ class Handler(BaseHTTPRequestHandler):
             return
         if path == "/api/star.js":
             self._send(200, STAR_JS.encode("utf-8"), "text/javascript; charset=utf-8")
+            return
+        if path == "/api/outline.js":
+            self._send(
+                200, OUTLINE_JS.encode("utf-8"), "text/javascript; charset=utf-8"
+            )
             return
         if path == "/api/index.json":
             body = json.dumps(self.cache.get()).encode("utf-8")
@@ -490,8 +502,8 @@ class Handler(BaseHTTPRequestHandler):
             self._send(404, b"not found\n", "text/plain; charset=utf-8")
             return
         ctype = CONTENT_TYPES.get(target.suffix.lower(), "application/octet-stream")
-        if self.stars is not None and ctype.startswith("text/html"):
-            body = add_star_tag(body, host, rel)
+        if ctype.startswith("text/html"):
+            body = add_page_scripts(body, host, rel, star=self.stars is not None)
         st = target.stat()
         self._send(
             200,

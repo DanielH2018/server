@@ -268,5 +268,110 @@ button:focus-visible{outline:2px solid #f9e2af;outline-offset:2px}
 })();
 """
 
+# Lists the page's h2/h3 headings in a panel on the left. A page with fewer than three, or with
+# data-outline="off" on <html> or <body>, gets none.
+OUTLINE_JS = r"""(() => {
+  const MIN_HEADINGS = 3, PANEL_ROOM = 268, KEY = "artifact-outline";
+  if ([document.documentElement, document.body].some(e => e.dataset.outline === "off")) return;
+  const heads = [...document.querySelectorAll("h2, h3")].filter(h => h.textContent.trim());
+  if (heads.length < MIN_HEADINGS) return;
+
+  const label = h => {
+    const copy = h.cloneNode(true);
+    copy.querySelectorAll(".chip").forEach(c => c.remove());
+    return copy.textContent.replace(/\s+/g, " ").trim();
+  };
+  const taken = new Set([...document.querySelectorAll("[id]")].map(e => e.id));
+  heads.forEach(h => {
+    if (h.id) return;
+    const base = label(h).toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "section";
+    let id = base;
+    for (let n = 2; taken.has(id); n++) id = base + "-" + n;
+    taken.add(id);
+    h.id = id;
+  });
+
+  const box = document.createElement("div");
+  // A closed shadow root keeps the artifact's CSS off the panel and the panel's off the page.
+  const root = box.attachShadow({mode: "closed"});
+  root.innerHTML = `<style>
+:host{position:fixed;top:12px;left:12px;z-index:2147483646;font:13px/1.4 system-ui,sans-serif}
+button{font:inherit;padding:6px 12px;border-radius:999px;border:1px solid #45475a;
+  background:#1e1e2ee6;color:#a6adc8;box-shadow:0 1px 4px #0004;cursor:pointer}
+button:hover{color:#cdd6f4}
+button:focus-visible,a:focus-visible{outline:2px solid #cba6f7;outline-offset:2px}
+nav{position:fixed;top:52px;left:12px;bottom:12px;width:232px;overflow-y:auto;padding:8px 0;
+  border:1px solid #45475a;border-radius:8px;background:#181825f2;box-shadow:0 2px 8px #0006}
+nav[hidden]{display:none}
+ol{list-style:none;margin:0;padding:0}
+a{display:block;padding:4px 14px;color:#a6adc8;text-decoration:none}
+a:hover{color:#cdd6f4;background:#313244}
+a.h3{padding-left:28px;font-size:12px;color:#6c7086}
+a.on{color:#cba6f7;font-weight:600}
+@media print{:host{display:none}}
+</style><button type="button" aria-controls="panel">Contents</button>
+<nav id="panel" aria-label="Contents"><ol></ol></nav>`;
+  const toggle = root.querySelector("button"), panel = root.querySelector("nav");
+  const list = root.querySelector("ol");
+  const links = heads.map(h => {
+    const a = document.createElement("a");
+    a.href = "#" + h.id;
+    a.textContent = label(h);
+    if (h.tagName === "H3") a.className = "h3";
+    const li = document.createElement("li");
+    li.append(a);
+    list.append(li);
+    return a;
+  });
+
+  const pref = () => { try { return localStorage.getItem(KEY); } catch { return null; } };
+  const roomy = () => heads[0].getBoundingClientRect().left >= PANEL_ROOM;
+  const show = open => {
+    panel.hidden = !open;
+    toggle.setAttribute("aria-expanded", String(open));
+    toggle.title = open ? "Hide the contents" : "Show the contents";
+  };
+  const fit = () => show(roomy() && pref() !== "closed");
+  toggle.addEventListener("click", () => {
+    const open = panel.hidden;
+    if (roomy()) try { localStorage.setItem(KEY, open ? "open" : "closed"); } catch {}
+    show(open);
+  });
+  list.addEventListener("click", e => {
+    const i = links.indexOf(e.target.closest("a"));
+    if (i < 0) return;
+    e.preventDefault();
+    scrollTo({top: heads[i].getBoundingClientRect().top + scrollY - 56});
+    history.replaceState(null, "", "#" + heads[i].id);
+    if (!roomy()) show(false);
+  });
+  document.addEventListener("keydown", e => {
+    if (e.key === "Escape" && !panel.hidden && !roomy()) show(false);
+  });
+
+  let current = -1, queued = false;
+  const mark = () => {
+    queued = false;
+    let i = 0;
+    heads.forEach((h, k) => { if (h.getBoundingClientRect().top <= 96) i = k; });
+    if (innerHeight + scrollY >= document.documentElement.scrollHeight - 2) i = heads.length - 1;
+    if (i === current) return;
+    if (current >= 0) links[current].classList.remove("on");
+    links[i].classList.add("on");
+    current = i;
+    const a = links[i];
+    if (a.offsetTop < panel.scrollTop || a.offsetTop + a.offsetHeight > panel.scrollTop + panel.clientHeight)
+      panel.scrollTop = a.offsetTop - panel.clientHeight / 2;
+  };
+  addEventListener("scroll", () => { if (!queued) { queued = true; requestAnimationFrame(mark); } },
+    {passive: true});
+  addEventListener("resize", fit);
+
+  document.body.append(box);
+  fit();
+  mark();
+})();
+"""
+
 FAVICON_SVG = r"""<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path fill="#38bdf8" d="M4 4V22H20V24H4C2.9 24 2 23.1 2 22V4H4M15 7H20.5L15 1.5V7M8 0H16L22 6V18C22 19.11 21.11 20 20 20H8C6.89 20 6 19.1 6 18V2C6 .89 6.89 0 8 0M17 16V14H8V16H17M20 12V10H8V12H20Z"/></svg>
 """

@@ -220,6 +220,7 @@ class TestStarOnArtifactPage:
     """The button a served artifact loads: its script tag, its script and its state read."""
 
     PAGE = "<html><body>plan</body></html>"
+    OUTLINE = '<script src="/api/outline.js" defer></script>'
     TAG = (
         '<script src="/api/star.js" data-host="daniel-box" '
         'data-path="plan.html" defer></script>'
@@ -235,15 +236,20 @@ class TestStarOnArtifactPage:
 
         return request
 
-    def test_no_star_list_serves_the_file_byte_for_byte(self, get, root):
-        write(root, "daniel-box", "plan.html", self.PAGE)
-        assert get(None, "/a/daniel-box/plan.html") == (200, self.PAGE.encode())
+    def test_no_star_list_adds_only_the_outline_tag(self, get, root):
+        path = write(root, "daniel-box", "plan.html", self.PAGE)
+        status, body = get(None, "/a/daniel-box/plan.html")
+        assert status == 200
+        assert body.decode() == f"<html><body>plan{self.OUTLINE}</body></html>"
+        assert path.read_text() == self.PAGE
 
     def test_a_star_list_adds_the_tag_and_leaves_the_file_alone(self, get, root, stars):
         path = write(root, "daniel-box", "plan.html", self.PAGE)
         status, body = get(stars, "/a/daniel-box/plan.html")
         assert status == 200
-        assert body.decode() == f"<html><body>plan{self.TAG}</body></html>"
+        assert (
+            body.decode() == f"<html><body>plan{self.OUTLINE}{self.TAG}</body></html>"
+        )
         assert path.read_text() == self.PAGE
 
     def test_a_non_html_artifact_is_served_unchanged(self, get, root, stars):
@@ -251,14 +257,18 @@ class TestStarOnArtifactPage:
         status, body = get(stars, "/a/daniel-box/notes.md")
         assert (status, body) == (200, b"# Notes\n</body>")
 
-    def test_the_script_route_serves_the_button_as_javascript(self, serve, stars):
-        conn = serve(stars)
-        conn.request("GET", "/api/star.js")
+    @pytest.mark.parametrize(
+        ("route", "script"),
+        [("/api/star.js", srv.STAR_JS), ("/api/outline.js", srv.OUTLINE_JS)],
+    )
+    def test_each_script_route_serves_javascript(self, serve, route, script):
+        conn = serve(None)
+        conn.request("GET", route)
         res = conn.getresponse()
         assert res.status == 200
         # X-Content-Type-Options: nosniff makes a browser refuse a script of any other type.
         assert res.getheader("Content-Type") == "text/javascript; charset=utf-8"
-        assert res.read() == srv.STAR_JS.encode()
+        assert res.read() == script.encode()
 
     def test_get_star_reports_the_star_and_that_it_can_change(self, get, root, stars):
         write(root, "daniel-box", "plan.html")
@@ -294,13 +304,16 @@ class TestStarOnArtifactPage:
         write(root, "daniel-box", "plan.html")
         assert get(None, "/api/star?host=daniel-box&path=plan.html")[0] == 404
 
-    def test_the_tag_escapes_its_attributes_and_appends_without_a_body_close(self):
-        assert srv.add_star_tag(b"<p>x", "h", 'a"b.html') == (
-            b'<p>x<script src="/api/star.js" data-host="h" '
+    def test_the_tags_escape_their_attributes_and_append_without_a_body_close(self):
+        assert srv.add_page_scripts(b"<p>x", "h", 'a"b.html', star=True) == (
+            b'<p>x<script src="/api/outline.js" defer></script>'
+            b'<script src="/api/star.js" data-host="h" '
             b'data-path="a&quot;b.html" defer></script>'
         )
 
     def test_the_tag_goes_before_the_last_body_close_in_any_case(self):
-        body = srv.add_star_tag(b"<pre></body></pre></BODY>", "h", "p.html")
+        body = srv.add_page_scripts(
+            b"<pre></body></pre></BODY>", "h", "p.html", star=True
+        )
         assert body.startswith(b"<pre></body></pre><script ")
         assert body.endswith(b"</script></BODY>")
