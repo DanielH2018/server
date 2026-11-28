@@ -79,6 +79,7 @@ from deploy_tools.land_lib import (
     stale_base,
     turn,
 )
+from deploy_tools.land_lib.core import queue_machine, queue_state
 from deploy_tools.land_lib.landing import BRANCH, Landing
 from deploy_tools.land_lib.outcome import Outcome, Verdict, say
 from deploy_tools.land_lib.transitions import CHECKS, State, Transitions
@@ -179,39 +180,58 @@ def _unfit(member: Landing, head: str) -> str:
     return ""
 
 
-def _admit(ln: Landing, pr: str, head: str) -> Member | None:
-    """The draft `pr` as a member, or None, with the reason said, when it lands alone."""
+def _member(ln: Landing, pr: str) -> Landing:
+    """A landing of the draft `pr` with `ln`'s options, to check and merge it in `ln`'s batch."""
     opts = replace(ln.opts, pr=pr, subject="", merge_timeout=MEMBER_TIMEOUT_S)
     member = Landing(opts, ln.tools, ln.classifier)
     member.transitions = Transitions(pr, None)
     member.step_out_of_turn = partial(_wait_without_turn, ln, member)
-    say(f"checking PR #{pr} from the line, as this landing checked its own PR")
+    return member
+
+
+def _why_not(check: Callable[[], str]) -> str:
+    """What `check` returns, or the error of the `Outcome` it raises.
+
+    Raises:
+        _TurnGivenBack: from `check`, which ends the batch.
+    """
     try:
-        why = (
-            _alone(member, head)
-            or _unfit(member, head)
-            or slots.bar_member(member, head)
-        )
-        if not why:
-            merge.arm_merge(member)
-        if not why and member.pinned_head not in ("", head):
-            why = "the landing policy checked another head"
+        return check()
     except _TurnGivenBack:
         raise
     except Outcome as exc:
-        why = exc.error
-    if why:
-        say(f"leaving PR #{pr} out of the batch: {why}")
-        if why == _CONFLICTS_WITH_MASTER:
-            _answer(ln, Member(member, head), line.CONFLICT)
-        return None
-    # The merge wait ends, and merges nothing, if the head moves from the one stacked.
-    member.pinned_head = member.tested_head = head
-    return Member(member, head)
+        return exc.error
+
+
+def _left_out(ln: Landing, member: Member, why: str) -> bool:
+    """Whether `why` leaves `member` out of `ln`'s batch; it says so, and answers a conflict."""
+    if not why:
+        return False
+    say(f"leaving PR #{member.ln.opts.pr} out of the batch: {why}")
+    if why == _CONFLICTS_WITH_MASTER:
+        _answer(ln, member, line.CONFLICT)
+    return True
+
+
+def _bars(member: Landing, head: str) -> str:
+    """Why `member`'s draft may not be stacked at `head`; "" when it may.
+
+    `_members` has already found that it need not land alone (`_alone`).
+    """
+    why = _unfit(member, head) or slots.bar_member(member, head)
+    if not why:
+        merge.arm_merge(member)
+    if not why and member.pinned_head not in ("", head):
+        why = "the landing policy checked another head"
+    return why
 
 
 def _members(ln: Landing, head: str) -> list[Member]:
-    """The drafts in the line this landing may stack behind its own `head`, in line order."""
+    """The drafts in the line this landing may stack behind its own `head`, in line order.
+
+    `queue_machine.stackable` decides the order and skips a PR that must land alone. The
+    other checks run here, one draft at a time, until the batch holds `MAX_STACKED` PRs.
+    """
     try:
         waiting = turn.waiting(ln)
     except OSError as exc:
@@ -242,13 +262,27 @@ def _members(ln: Landing, head: str) -> list[Member]:
     if why:
         say(f"no batch: PR #{ln.opts.pr} lands alone, because {why}")
         return []
+    checked: dict[str, Member] = {}
+
+    def lands_alone(place: queue_state.Place) -> bool:
+        member = checked[place.pr] = Member(_member(ln, place.pr), place.head)
+        say(
+            f"checking PR #{place.pr} from the line, as this landing checked its own PR"
+        )
+        return _left_out(ln, member, _why_not(partial(_alone, member.ln, place.head)))
+
+    places = tuple(queue_state.Place(pr, member_head) for pr, member_head in waiting)
     members: list[Member] = []
-    for pr, member_head in waiting:
+    for place in queue_machine.stackable(queue_state.Queue(places, lands_alone)):
+        member = checked[place.pr]
+        if _left_out(ln, member, _why_not(partial(_bars, member.ln, member.head))):
+            continue
+        # The merge wait ends, and merges nothing, if the head moves from the one stacked.
+        member.ln.pinned_head = member.ln.tested_head = member.head
+        members.append(member)
+        # Before the next place, so `stackable` reads no PR's files past the cap.
         if len(members) == MAX_STACKED - 1:
             break
-        member = _admit(ln, pr, member_head)
-        if member:
-            members.append(member)
     return members
 
 
