@@ -9,6 +9,6 @@ binaryData:
    (404 at the CDN);
    CDN-served icons are referenced by bare name and must NOT be added. A listed name missing from
    files/ fails the RENDER. #}
-{% for icon in ['anilist.png', 'karma.png', 'monarch.png', 'tacticstools.png'] %}
+{% for icon in ['anilist.png', 'karma.png', 'monarch.png', 'tft-assistant.svg'] %}
   {{ icon }}: {{ lookup('b64file', role_file('files/' ~ icon)) }}
 {% endfor %}
