@@ -83,6 +83,32 @@ See repo-root `CLAUDE.md` for shared conventions.
   which the OAuth check exempts. blackbox-extra's `http_401` target calls `/mcp` on the LAN
   name and expects the 401, which proves the route reaches the app and the app refuses an
   unauthenticated call.
+- **The decisions are in
+  `docs/adr/0043-the-vault-is-exposed-through-an-oauth-remote-mcp-server.md`.** The server is
+  read-only by the operator's ruling of 2026-11-28, and write tools are deferred.
+- **No CrowdSec allowlist covers claude.ai.** Anthropic's range `160.79.104.0/21` is shared by
+  every user's connectors, and the trusted-remote whitelist keeps to `/32` exits. A connector
+  sends one unauthenticated request per sign-in, then a few metadata reads, so the first live
+  sign-in is the check that CrowdSec and Cloudflare let it through.
+- **claude.ai posts the client secret in the form body.** It sends `client_secret_post` and
+  never falls back to Basic
+  ([anthropics/claude-ai-mcp#667](https://github.com/anthropics/claude-ai-mcp/issues/667)).
+- **The LAN bearer route is gone.** A client that sends the old static token gets 401 and signs
+  in through OAuth.
+- **Two open PRs that add a secret always conflict.** SOPS keeps one MAC over the whole of
+  `secrets/secrets.yml`, and `cluster_vars.py write` rewrites the cluster-vars files, so git
+  cannot merge two such edits even when their keys differ. Land a PR that adds a secret soon
+  after the operator's `sops` step.
+- **A secret inside a structured file is inserted by code that escapes it.** Flux pastes a
+  value's raw text, so the `write-settings` init container builds `settings.json` with
+  `JSON.stringify`.
+- **A new role and the fence that admits it cannot share a PR.** The render-diff gate refuses
+  netpol-baseline gaining a `dependsOn` edge while its render moves, and a fence may only name
+  a pod label some rendered pod carries. Ship the role at 0 replicas, then start it in the
+  fence PR.
+- **The daemon restarts until netpol-baseline applies.** netpol-baseline applies after every
+  other tag, so on first start the pod runs before its fence exists. It failed initial
+  replication three times, then synced.
 
 ## Editing
 - Manifests: `templates/`. The Service renders from `k8s/templates/service-default.yaml.j2`,

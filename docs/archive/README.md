@@ -66,6 +66,7 @@ recording rather than that nobody looked.
 | `deploy/`, `host/`, `render/`, `monitoring/` (from `docs/target-architecture/`) | every slice's `Status:` line reads DONE or ARCHIVED; the migration finished on 2026-11-12 | [What the migration built](../what-the-migration-built.md), `docs/flux-deploy-plane.md`, `docs/host-packages.md` | [ADR-0020](../adr/0020-flux-applies-the-cluster-from-a-promoted-artifact.md), [ADR-0026](../adr/0026-one-alert-plane-on-prometheus-and-alertmanager.md), [ADR-0029](../adr/0029-each-host-is-configured-by-its-own-package-not-ansible.md) |
 | `design.md`, `contracts.md` (from `docs/target-architecture/`) | ARCHIVED on 2026-11-13 (the pages' own status lines) | [What the migration built](../what-the-migration-built.md) | the same three ADRs |
 | `test-coverage-snapshot.md` | one coverage run at `ec7b15021` on 2026-11-14; it gates nothing | none — coverage is not part of CI | — |
+| `obsidian-vault-connector-plan.md` | slices 0 to 3 built; slice 4 (write tools) deferred by the operator's read-only ruling of 2026-11-28 | `k8s/roles/vault-mcp/CLAUDE.md` | [ADR-0043](../adr/0043-the-vault-is-exposed-through-an-oauth-remote-mcp-server.md) |
 
 `docs/superpowers/plans/` and `docs/superpowers/ledgers/` are **not** in this archive: that
 directory is gitignored (`.gitignore:6`, see commit `eadfdd57`) and untracked, so
