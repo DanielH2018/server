@@ -11,7 +11,8 @@ A slot is one of `COUNT` lock files on `turn.TURN_HOST`, locked the way the turn
 there locks a file itself, and a landing on another host locks one through an ssh session that
 lasts as long as it holds the slot. A landing takes a free file only while other landings hold
 fewer than the cap of them (`turn.lock_below`), so a cap below `COUNT` counts every holder. The lock ends with the landing's process, so a landing that
-dies frees its slot.
+dies frees its slot, and a slot held over ssh ends when its host stops writing the heartbeat
+(`turn.HEARTBEAT_S`).
 
 The count drops to 1 while the core quota runs low (`live_limit.low_quota`). When the turn host
 does not answer, a landing takes one of `FALLBACK_COUNT` slots on its own host instead, so each

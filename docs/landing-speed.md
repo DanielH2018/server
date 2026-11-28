@@ -25,6 +25,19 @@ timestamps, so each duration below comes from one of three sources:
   Ns`) are the only record of what happened inside the turn. daniel-server kept 6 logs, and
   no batch worktree kept a `.fanout/land*.log`.
 
+The split of a `settled` deploy into stages, in *Where a settled deploy's time goes*, reads
+three more sources:
+
+- The job and step timings of the 280 `promote.yml` runs from 2026-11-26 to 2026-11-28, read
+  through the Actions jobs API.
+- The commit statuses on master's commits. Flux posts one `flux/<name>` status per
+  Kustomization, and posts it again on every reconcile while `prod` names that commit, so
+  only each context's first post counts. `homelab/promote-verdict` names the commit T that
+  each promotion moved `prod` to.
+- The soak Job's own log in Loki (`{namespace="flux-system", container="soak"}`). Its pass
+  line, `soak: <R> judged <services> over <N>s; pass`, gives the window from T0, the
+  moment Flux fetched R, to the end of W.
+
 ## The measured breakdown
 
 Each phase below is summed over the day's landings.
@@ -36,7 +49,8 @@ Each phase below is summed over the day's landings.
 | Waiting behind a serial landing | `serial_wait` | 3.9 h | 0 | 13 waits of 1320-1440 s, two of 2280 and 2760 s |
 | PR CI, ready to green | `ci.yml` runs | 7.6 h of run wall time | 281 s | p90 404 s; 13 red runs |
 | Master CI after the merge | `wait_ci` | 1.2 h | 21 s | the tested-tree skip works |
-| Promotion, soak and health gate | `deploy` | 9.4 h | 501 s | `settled` median 962 s; `nothing-to-deploy` median 206 s |
+| Promotion and soak | `deploy` | 9.4 h | 501 s | `settled` median 962 s; `nothing-to-deploy` median 206 s |
+| Health gate and host wait | `total` less `wait_merge`, `wait_ci` and `deploy` | 0.5 h | 4 s | over the 42 `settled` landings; about 70 s for a fleet-wide tag set |
 
 The first four phases come before the merge, and the time spent on them grows with the
 line. A landing waits in the landing turn and behind the serial lock one at a time, so a wait
@@ -86,6 +100,92 @@ tests-only PRs, so the line keeps growing until the serial landing ends.
 The log line `waited 5520s for the landing turn, reaching merge_timeout` reports
 how long the waiting landing waited. Several holders had the turn in that time.
 
+## Where a settled deploy's time goes
+
+**The soak's window W takes half of a `settled` deploy, and the queue behind an earlier
+promotion takes another fifth.** Neither can get shorter without changing what the soak
+checks. The `promote` jobs and Flux's fetch take about a sixth between them, and nothing
+there is worth building for.
+
+`deploy` runs from master CI green to the moment `promote.py land-wait` reports the
+promotion settled (`scripts/deploy_tools/land_lib/deploy.py:95`). The health gate runs after
+that stamp, so it sits outside the 962 s and has its own row in the table above.
+
+The split below covers 30 of the 42 `settled` landings of 2026-11-27. Their stages sum to
+each landing's logged `deploy` with nothing left over, and their median deploy is 940 s.
+The other 12 were left out for one of three reasons:
+
+- Four had already been covered by an earlier promotion, so their deploy lasted 2 to 6 s.
+- Three promoted no service and had no soak to split.
+- Five settled on statuses that `land-wait` read before the commit's
+  `homelab/promote-verdict` was posted, which the match requires.
+
+The longest deploy of the day, 1893 s, is one of those five.
+[#10366](https://github.com/DanielH2018/server/pull/10366) changed 46 tags, `flux` among them.
+Its own soak posted `failure` at 00:46:58, which is provisional while `flux` is in the set
+(`docs/flux-deploy-plane.md`, *Verification*). A later promotion, with W = 1020 s, then
+settled the landing.
+
+| Stage | Median | Sum over 30 | Share |
+|---|---|---|---|
+| Queue behind an earlier promotion | 1 s | 6673 s | 22.2% |
+| `render` job | 46 s | 1323 s | 4.4% |
+| `images` job | 13 s | 636 s | 2.1% |
+| `publish` job | 18 s | 537 s | 1.8% |
+| `decide`, the `promote` job's own work | 28 s | 877 s | 2.9% |
+| Job starts and handoffs between the jobs | 10 s | 425 s | 1.4% |
+| `tag` job, which moves `prod` | 12 s | 405 s | 1.3% |
+| Flux fetches `prod` (T0) | 27 s | 905 s | 3.0% |
+| Rollout, from T0 to the last judged pod's Ready | 58 s | 2730 s | 9.1% |
+| The soak's window W | 240 s | 15540 s | 51.7% |
+| `verify` and `land-wait` read the result | 19 s | 637 s | 2.1% |
+| A run that started before `land.sh` saw CI green | -2 s | -635 s | -2.1% |
+| **`deploy`** | **940 s** | **30053 s** | 100% |
+
+What each stage is, and whether it can get faster without changing the soak or the gate:
+
+- **The soak's window W.** The soak Job waits until W has passed since the last judged pod
+  read Ready. It counts from T0 when the change restarts no pod. W is the longest `for:`
+  among the critical or `verify="true"` rules that can fire for a changed service, at least
+  `k8s_rollout_stabilise_seconds`, plus 120 s of scrape and evaluation
+  (`scripts/renderer/renderer_lib/soak.py:fleet_wait`). Rules with no static `service`
+  label give every service at least 120 s, so W is 240 s for most changes. W took four
+  values across the 30 landings:
+    - 240 s for 17 landings.
+    - 420 s for one, set by `jellyfin`.
+    - 720 s for four, set by `monitor-bridge` and `autofix-bridge`, whose rules carry
+      `for: 10m`.
+    - 1020 s for eight. One rule, `AlertmanagerNotificationsRateLimited`
+      (`for: 15m`, `service: observability`), set it for seven of them, and `longhorn`'s
+      15-minute rules set the eighth.
+
+  Shortening W weakens the soak, so it goes to the operator first:
+  [#10603](https://github.com/DanielH2018/server/issues/10603).
+- **The queue behind an earlier promotion.** One promotion verifies at a time. `decide`
+  waits while `prod` differs from `last-good`, and a landing whose own run did not move
+  `prod` waits for a later run. 18 of the 30 landings queued for under a minute. The other 12
+  waited 156 to 1120 s, most of it the earlier promotion's own W. Overlapping two
+  verifications would change which revision the soak judges, so this is not a free saving
+  either.
+- **The rollout, a median of 58 s.** Flux applies the changed Kustomizations, and their pods
+  restart. `kustomize-controller` also reconciles every unchanged Kustomization at the new
+  revision, about 130 in all, with `k8s_rollout_batch_width` plus one workers. A changed tag
+  can therefore wait its turn behind unchanged ones. The Ready-wait for every changed
+  Kustomization, its `-verify` and `-deferred` kinds included, runs inside W, so it lengthens
+  the deploy only when it outlasts W. Raising the worker count would change the rollout
+  width, which is a separate decision.
+- **Flux's fetch, a median of 27 s.** The `homelab` OCIRepository polls `prod` once a minute
+  (`k8s/roles/flux/templates/sync.yaml.j2`). A webhook receiver could cut the wait, but it
+  would add an inbound path into `flux-system` to save about 30 s.
+- **The `promote` jobs before the move, about 127 s together.** The jobs are separate so that
+  no job that runs repository code holds a token that can sign, push, move a tag or post a
+  status. The header of `.github/workflows/promote.yml` records that rule. `render` is the
+  largest job, and its `Build the bundle` step has a median of 17 s.
+
+The deploy runs after the merge, so a faster deploy frees no landing-turn time except inside
+a serial PR's drain (`slots.DRAIN_S`). There, a drain waits out the W of each landing past
+its merge.
+
 ## Changes built and landed
 
 Each change keeps every check: the turn, the stale-base rules, the soak, the verify and the
@@ -130,9 +230,12 @@ uses the day's numbers.
    PR's drain waits for them too. Ending them at master CI green would shorten drains and free
    slots. It weakens a check: such a landing would no longer see a hold or a failed promotion
    that includes its commit. Ask the operator first.
-3. **Shorten the soak.** A `settled` landing's deploy has a median of 962 s, most of it
-   promotion and soak. The deploy runs after the merge, so a shorter soak frees no turn time
-   except inside a serial drain. It weakens a safety check, so it ranks last.
+3. **Shorten the soak.** A `settled` landing's deploy has a median of 962 s, and the soak's
+   window W is 52% of it (*Where a settled deploy's time goes*). The largest single term is
+   one 15-minute rule, which holds every `observability` change at W = 1020 s instead of
+   240 s ([#10603](https://github.com/DanielH2018/server/issues/10603)). The deploy runs
+   after the merge, so a shorter soak frees no turn time except inside a serial drain. It
+   weakens a safety check, so it ranks last.
 4. **Narrow which `k8s/services.yml` edits are serial.** The operator ruled on 2026-11-19 that
    every edit is serial (`live_limit.py`, `DECIDED:`). Nothing measured today reopens that
    ruling. #10458 adds one CronJob and holds the serial lock for it.
