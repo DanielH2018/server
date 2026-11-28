@@ -5,7 +5,7 @@
     "flux-system/notification-controller/manager": 64,
     "flux-system/source-controller/manager": 64,
     "homelab/authelia-redis/redis": 32,
-    "homelab/authelia/authelia": 144,
+    "homelab/authelia/authelia": 128,
     "homelab/authelia/crowdsec-agent": 64,
     "homelab/authelia/crowdsec-config-install": 16,
     "homelab/authelia/wait-for-redis": 16,
@@ -17,7 +17,7 @@
     "homelab/dockerhub-mirror/dockerhub-mirror": 32,
     "homelab/ghcr-mirror/ghcr-mirror": 32,
     "homelab/ghcr-mirror/ghcr-resume": 64,
-    "homelab/home-assistant/home-assistant": 1360,
+    "homelab/home-assistant/home-assistant": 1344,
     "homelab/monitor-bridge/monitor-bridge": 48,
     "homelab/mosquitto/mosquitto": 16,
     "homelab/nut/nut": 16,
@@ -30,12 +30,12 @@
     "homelab/traefik/crowdsec-agent": 112,
     "homelab/traefik/crowdsec-config-install": 16,
     "homelab/traefik/crowdsec-data-install": 0,
-    "homelab/traefik/traefik": 224,
+    "homelab/traefik/traefik": 208,
     "homelab/wg-easy/wg-easy": 128,
     "homelab/zigbee2mqtt/mqtt-broker-wait": 16,
     "homelab/zigbee2mqtt/zigbee2mqtt": 144,
     "observability/alertmanager/alertmanager": 64,
-    "observability/prometheus/prometheus": 2384,
+    "observability/prometheus/prometheus": 1872,
     "system-upgrade/system-upgrade-controller/system-upgrade-controller": 64
   }
 }

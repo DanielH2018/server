@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/secrets.py
-generated_at: 2026-11-28 06:17 UTC
-generated_sha: 696c721c2
+generated_at: 2026-11-28 18:17 UTC
+generated_sha: 23c576cd4
 ---
 
 !!! warning "Generated file — do not edit"
@@ -12,7 +12,7 @@ generated_sha: 696c721c2
 
 # Secrets
 
-125 secret(s) in the rotation registry (`secrets/secret_rotation.yml`).
+127 secret(s) in the rotation registry (`secrets/secret_rotation.yml`).
 
 !!! note "Names and dates only"
     This page is generated from the plaintext rotation registry. No secret VALUE is read here, and the generator never opens the encrypted store or invokes the decryption tool — a test enforces that.
@@ -129,6 +129,8 @@ needs a human to mint the new value in the app, then `sops set` it.
 | `terraria_password` | 2025-12-26 | 2026-12-09 | 11 |
 | `uptimerobot_api_key` | 2026-03-30 | 2027-03-27 | 119 |
 | `valheim_server_pass` | 2026-08-30 | 2027-08-01 | 246 |
+| `vault_mcp_oidc_client_secret` | 2026-10-27 | 2027-10-27 | 333 |
+| `vault_mcp_oidc_client_secret_hash` | 2026-08-04 | 2027-07-21 | 235 |
 
 ## external
 

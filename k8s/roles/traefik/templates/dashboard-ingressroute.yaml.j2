@@ -35,10 +35,10 @@ spec:
       # non-functional as a result. `api@internal`'s `/api/http/routers`
       # prints every router's `rule` string verbatim — Traefik v3.7.11 does not redact it —
       # and the file-provider routers in livesync-gate-secret.yaml.j2 embed
-      # `livesync_sync_token` and the `homelab_mcp_token` and `vault_mcp_token` bearers in
-      # `Header()` matchers. A Host-only match with no PathPrefix at all routes that same `/api`
-      # surface, which is how the livesync and homelab-mcp credentials were once readable
-      # behind a one_factor Authelia session.
+      # `livesync_sync_token` and the `homelab_mcp_token` bearer in `Header()` matchers. A
+      # Host-only match with no PathPrefix at all routes that same `/api` surface, which is how
+      # the livesync and homelab-mcp credentials were once readable behind a one_factor
+      # Authelia session.
       # The upstream-documented form
       # `(PathPrefix(`/dashboard`) || PathPrefix(`/api`))` is rejected for the same reason.
       # This route exists only so `traefik.local.<domain>` does not fall through to a

@@ -37,7 +37,8 @@ how that sync behaves.
   A slice heading (the first heading inside a `data-status` element) carries its status as a
   dot. A section whose text differs from the version the reader last scrolled to carries a
   blue dot, which the browser's `localStorage` tracks per page, and a first visit only
-  records. A hovered heading shows a `#` button that copies a link to it.
+  records. A hovered heading shows a `#` button that copies a link to it. Each h2 with h3s
+  under it folds them away, singly or with "Collapse all", and the page remembers which.
 - **The star button counts down to the prune.** `/api/star` answers `prunes_at`
   (`artifact_server.py:prunes_at`): the file's mtime plus `artifacts_retention_days`. The
   button shows the days left once seven or fewer remain. Only a tree in

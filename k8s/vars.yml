@@ -179,6 +179,9 @@ k8s_node_client_ip: "{{ hosts['daniel-box'].server_ip }}"
 # play);
 # hosts/tests/k3s/test_coredns_metrics_port_agrees.py keeps them equal.
 k8s_node_dns_metrics_port: 9253
+# Global because the authelia role grants it as the vault-mcp client's token audience, and the
+# vault-mcp server requires it as `aud`. It is the URL the claude.ai connector is added with.
+vault_mcp_connector_url: "https://vault-mcp.{{ domain }}/mcp"
 # PUSH from builder pods via the Service name (`localhost` is the pod); PULL by containerd via a
 # loopback hostPort (a host process resolves no cluster names). Global for k3s-server.
 k8s_registry_port: 5000

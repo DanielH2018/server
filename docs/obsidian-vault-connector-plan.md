@@ -13,8 +13,8 @@ one issue per slice.
 | 0 | Duet calls a claude.ai custom connector | Operator check, [#10531](https://github.com/DanielH2018/server/issues/10531) |
 | 1 | The vault mirrored into the cluster as markdown | Landed: [#10329](https://github.com/DanielH2018/server/pull/10329), [#10529](https://github.com/DanielH2018/server/pull/10529) |
 | 1b | `livesync-data` backed up to weekly B2 | [#10532](https://github.com/DanielH2018/server/issues/10532) |
-| 2 | A read-only MCP server on the LAN | [#10533](https://github.com/DanielH2018/server/issues/10533) |
-| 3 | Authelia OAuth and the public route, so claude.ai and Duet connect | [#10534](https://github.com/DanielH2018/server/issues/10534), blocked by #10533 |
+| 2 | A read-only MCP server on the LAN | Landed: [#10669](https://github.com/DanielH2018/server/pull/10669) |
+| 3 | Authelia OAuth and the public route, so claude.ai and Duet connect | [#10534](https://github.com/DanielH2018/server/issues/10534), waiting on the operator's `sops` step |
 | 4 | Write tools, with no delete | [#10535](https://github.com/DanielH2018/server/issues/10535), blocked by #10534 |
 | 5 | An ADR, and this plan archived | [#10537](https://github.com/DanielH2018/server/issues/10537), blocked by #10534 |
 
@@ -86,6 +86,22 @@ pod vault-mcp ─┬─ livesync-cli daemon ──▶ /vault (plaintext, no back
 - **The bridge restarts until netpol-baseline applies.** netpol-baseline applies after every
   other tag, so on first start the pod ran before its fence existed. It failed initial
   replication three times, then synced.
+
+## What slice 3 settled
+
+- **The connector URL is `https://vault-mcp.<domain>/mcp`, and three readers must agree on
+  it.** The `resource` in the metadata, the `aud` the server requires and the Authelia client's
+  `audience` all read `k8s/vars.yml:vault_mcp_connector_url`. claude.ai sends that URL as the
+  RFC 8707 `resource`, and Authelia grants only an audience the client lists.
+- **claude.ai posts the client secret in the form body.** It sends `client_secret_post` and
+  never falls back to Basic
+  ([anthropics/claude-ai-mcp#667](https://github.com/anthropics/claude-ai-mcp/issues/667)).
+- **No CrowdSec allowlist for Anthropic's range.** `160.79.104.0/21` is shared by every
+  claude.ai user's connectors, and the trusted-remote whitelist keeps to `/32` exits. A
+  connector sends one unauthenticated request per sign-in, then a few metadata reads. The
+  first live sign-in is the check that CrowdSec and Cloudflare let it through.
+- **The LAN bearer route is gone.** A client that sent the slice 2 token gets 401 and must
+  sign in through OAuth.
 
 ## Folders hidden from Claude
 
