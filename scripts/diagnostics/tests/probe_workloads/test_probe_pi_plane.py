@@ -203,14 +203,6 @@ def test_run_targets_prints_the_count(capsys):
     assert capsys.readouterr().out == "1/1 targets up\n"
 
 
-def test_run_targets_reads_a_json_null_body_as_unreadable():
-    class Ns:
-        pi = False
-
-    code = pi_plane.run_targets(Ns(), fetch_json=lambda url, resolve=None: (None, None))
-    assert code == pi_plane.PROBE_UNREADABLE
-
-
 def _run_targets_one_down(scaled):
     """Run plain `targets` on one down `terraria-stats` target; `scaled` is the lookup's answer."""
     target = _target("terraria-stats", health="down", last_error="refused")

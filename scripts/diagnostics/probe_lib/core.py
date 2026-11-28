@@ -436,16 +436,19 @@ def fetch_json(url, resolve=None, timeout=None):
     """fetch(url) parsed as JSON.
 
     Returns (data, None) on success, or (None, PROBE_UNREADABLE) after printing the raw body
-    to stderr — the JSONDecodeError guard a plain `core.fetch()` call needs before its response
-    can be trusted as JSON. A body that is not JSON is a source the probe could not read.
+    to stderr. A body that is not a JSON object, such as `null`, is a source the probe could
+    not read, so a caller that sees no error can read `data` as a dict.
     """
     # `timeout` is forwarded only when set, so `fetch` keeps its own default.
     body = fetch(url, resolve=resolve, **({"timeout": timeout} if timeout else {}))
     try:
-        return json.loads(body), None
+        data = json.loads(body)
     except json.JSONDecodeError:
+        data = None
+    if not isinstance(data, dict):
         print(body.strip(), file=_sys.stderr)
         return None, PROBE_UNREADABLE
+    return data, None
 
 
 def k8s_namespace():
