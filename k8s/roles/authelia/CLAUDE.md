@@ -71,7 +71,9 @@ a connector added with the secret left blank uses the client ID as a public clie
 **Without a secret, consent and 2FA are the only guards against a tricked approval.** Anyone can
 add a claude.ai connector with the client ID `vault-mcp`. It shares the one redirect URI, so the
 consent page looks the same whoever started the sign-in. The operator must approve only a
-sign-in they started themselves. S256 PKCE binds each code to the client that started its flow.
+sign-in they started themselves. A browser that holds a live `two_factor` session, which
+`remember_me: '1M'` keeps for a month, asks for no 2FA, so there the consent page is the only
+guard. S256 PKCE binds each code to the client that started its flow.
 A dynamic-registration proxy would be no stronger, because it would register any caller too.
 
 **A refreshing connector never asks for 2FA again.** The `vault_mcp` lifespan gives a refresh
