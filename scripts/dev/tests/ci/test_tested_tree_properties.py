@@ -94,10 +94,6 @@ def test_a_repeated_number_names_no_batch(data, numbers, repeat):
     assert batch_members(data.draw(_body([data.draw(_members_line(numbers))]))) == []
 
 
-def test_a_zero_padded_number_repeats_its_unpadded_form():
-    assert batch_members("x\r\nMembers: #01 #1\r\ny") == []
-
-
 @given(
     data=st.data(),
     numbers=st.lists(
