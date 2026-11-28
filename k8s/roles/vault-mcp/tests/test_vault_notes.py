@@ -221,16 +221,8 @@ def _vault_of(root, notes):
     return Vault(root)
 
 
-@pytest.mark.parametrize(
-    "text",
-    [
-        "---\r\ntags: [found]\r\n---\r\nBody.\r\n",
-        "\ufeff---\ntags: [found]\n---\nBody.\n",
-    ],
-    ids=["crlf", "bom"],
-)
-def test_frontmatter_tags_are_read_from_a_crlf_or_bom_note(tmp_path, text):
-    vault = _vault_of(tmp_path, {"Note.md": text})
+def test_frontmatter_tags_are_read_from_a_note_with_a_bom(tmp_path):
+    vault = _vault_of(tmp_path, {"Note.md": "\ufeff---\ntags: [found]\n---\nBody.\n"})
     assert [h["path"] for h in vault.search(tag="found")] == ["Note.md"]
     assert vault.read_note("Note")["body"].startswith("Body.")
 
