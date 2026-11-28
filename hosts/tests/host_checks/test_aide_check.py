@@ -130,7 +130,7 @@ def test_the_check_logs_its_verdict_and_still_runs_without_a_credential(tmp_path
     """No unit loads a credential, so a run has no token and still reports."""
     _, verdict, _, ran = _run_check(tmp_path, CLEAN_REPORT, rc=0)
     assert ran, "aide did not run"
-    assert verdict is not None and verdict[0] == "up", verdict
+    assert verdict and verdict[0] == "up", verdict
 
 
 def test_a_long_report_is_capped_with_a_line_saying_so(tmp_path):
