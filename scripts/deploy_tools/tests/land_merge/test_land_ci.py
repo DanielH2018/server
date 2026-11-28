@@ -6,7 +6,7 @@ Run: uv run pytest scripts/deploy_tools/tests/land_merge/test_land_ci.py
 import pytest
 from ci_verdict import CheckRun
 
-from _land_fakes import Fakes
+from _land_fakes import FIRST_PARENT, MERGE_SHA, Fakes
 from deploy_tools.land_lib import ci
 from deploy_tools.land_lib.outcome import Outcome
 from deploy_tools.land_lib.tools import CiVerdict
@@ -260,3 +260,38 @@ def test_an_unproven_merge_commit_ends_ci_unproven_and_names_the_way_out(landing
         f"no CI verdict can arrive: {line} (this PR's tags: grafana,loki) "
         "— land.sh deployed nothing itself"
     )
+
+
+def _result(out: str) -> str:
+    return next(line for line in out.splitlines() if line.startswith("LAND-RESULT:"))
+
+
+def test_a_red_master_this_pr_turned_red_needs_a_fix(land_run):
+    fakes = Fakes(
+        await_ci=[(1, "01234567: CI RED")],
+        ci_passed={MERGE_SHA: False, FIRST_PARENT: True},
+    )
+    rc, out, _, _, _ = land_run([], fakes)
+    assert rc == 1
+    assert "verdict=ci-red cause=own-red " in _result(out)
+    assert _result(out).endswith(" next=fix-and-rerun")
+    assert "this PR's change turned it red" in out
+
+
+def test_a_red_master_this_pr_inherited_waits_for_it_to_clear(land_run):
+    for passed in (
+        {MERGE_SHA: False, FIRST_PARENT: False},
+        {FIRST_PARENT: True},
+    ):
+        fakes = Fakes(await_ci=[(1, "fedcba98: CI RED")], ci_passed=passed)
+        _, out, _, _, _ = land_run([], fakes)
+        assert "verdict=ci-red cause=- " in _result(out)
+        assert _result(out).endswith(" next=wait:landing-clear")
+
+
+def test_an_unproven_merge_commit_s_next_action_is_a_dispatch(land_run):
+    from lib.exit_codes import CI_UNPROVEN
+
+    _, out, _, _, _ = land_run([], Fakes(await_ci=[(CI_UNPROVEN, "no run")]))
+    assert "verdict=ci-unproven " in _result(out)
+    assert _result(out).endswith(" next=dispatch-and-rerun")

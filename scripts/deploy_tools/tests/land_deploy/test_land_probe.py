@@ -92,6 +92,17 @@ def test_a_promote_timeout_cause_gave_up_without_its_note(tmp_path):
     assert land_probe.read(log)["state"] == "gave-up"
 
 
+def test_a_host_deferral_whose_updater_is_not_due_gave_up(tmp_path):
+    """Starting the updater needs the operator, so the wait does not end as a plain deferral."""
+    log = landing(
+        tmp_path,
+        "LAND-RESULT: verdict=deferred cause=updater-not-due exit=75 pr=939 sha=- tags=0\n"
+        "VERDICT: deferred (PR #939 — start the updater on daniel-pi)\n",
+        rc=75,
+    )
+    assert land_probe.read(log)["state"] == "gave-up"
+
+
 def test_a_deferral_no_promotion_covered_still_gave_up(tmp_path):
     """A promote timeout may be a publish refusal, which no later tick clears: re-run land.sh."""
     log = landing(

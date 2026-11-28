@@ -8,7 +8,7 @@ from lib.exit_codes import (
     CI_UNPROVEN,
 )
 from deploy_tools.land_lib.landing import Landing
-from deploy_tools.land_lib.outcome import Verdict, disarmed
+from deploy_tools.land_lib.outcome import Cause, Verdict, disarmed
 
 
 def wait_master_ci(ln: Landing, sha: str) -> None:
@@ -18,11 +18,11 @@ def wait_master_ci(ln: Landing, sha: str) -> None:
     if rc == CI_GREEN:
         return
     if rc == CI_RED:
-        ln.die(
-            f"master CI is RED on {sha} — land.sh deployed nothing itself",
-            1,
-            Verdict.CI_RED,
-        )
+        why = f"master CI is RED on {sha}"
+        if _turned_master_red(ln, sha):
+            ln.ledger.cause = Cause.OWN_RED
+            why += ", and green on its first parent, so this PR's change turned it red"
+        ln.die(f"{why} — land.sh deployed nothing itself", 1, Verdict.CI_RED)
     if rc == CI_PENDING:
         ln.die(
             f"no CI verdict inside {ln.opts.ci_timeout}s — land.sh deployed nothing itself",
@@ -40,3 +40,15 @@ def wait_master_ci(ln: Landing, sha: str) -> None:
     if rc == CI_DISARMED:
         ln.die(disarmed("", "land.sh deployed nothing itself"), 1)
     ln.die(f"await_ci failed (exit {rc}) — land.sh deployed nothing itself", 1)
+
+
+def _turned_master_red(ln: Landing, sha: str) -> bool:
+    """Whether master CI is red on the merge commit `sha` itself and green on its first parent.
+
+    The wait's red may be a descendant's or the tip's, which another PR can have caused.
+    """
+    parent = ln.git("rev-parse", "--verify", f"{sha}^1")
+    first = parent.stdout.strip()
+    if parent.returncode or not first:
+        return False
+    return ln.tools.ci_passed(sha) is False and ln.tools.ci_passed(first) is True

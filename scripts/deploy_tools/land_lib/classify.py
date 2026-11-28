@@ -18,7 +18,7 @@ from deploy_tools.land_lib.fresh import (
     grading_argv,
 )
 from deploy_tools.land_lib.own_checkout import OWN_CHECKOUT
-from deploy_tools.land_lib.outcome import Outcome, Verdict, say
+from deploy_tools.land_lib.outcome import Cause, Outcome, Verdict, say
 from deploy_tools.land_lib.land_tags import DeriveSource
 from lib.path_kinds import moves_the_bundle
 from lib.exit_codes import LAND_BAD_ARGS
@@ -112,6 +112,8 @@ def refuse_stale_code_before_merge(ln: Landing) -> None:
             f"a fresh checkout of {base}"
         )
     if reran:
+        if stale:
+            ln.ledger.cause = Cause.MASTER_MOVED
         rerun = (
             f"that checkout of {base} was made for this landing, so master moved again; "
             "re-run the same land.sh command"

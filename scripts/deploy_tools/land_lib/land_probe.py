@@ -28,7 +28,9 @@ cause `promote-timeout` on its `LAND-RESULT:` line stays `gave-up`: no promotion
 Flux applies, and a publish refusal does not clear on its own. So does one with cause
 `gate-unreadable`: the health gate could not read its store, or the promotion wait found no
 kubectl or kubeconfig, and nothing gates health again. So does one with cause
-`gate-stale`: the gate's tree was older than `origin/master`. The cause decides, never the note beside it; a log from before
+`gate-stale`: the gate's tree was older than `origin/master`. So does one with cause
+`updater-not-due`: the host's updater is not armed or not due inside the wait, and starting it
+needs the operator. The cause decides, never the note beside it; a log from before
 `LAND-RESULT:` existed falls back to the notes.
 
 THE NEXT ACTION ENDS THE DETAIL. cc-wait prints only the state and the detail, so a landing whose
