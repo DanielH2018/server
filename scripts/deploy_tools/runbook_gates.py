@@ -92,10 +92,9 @@ def main(argv: list[str] | None = None) -> int:
         print("\nRunbooks:\n  " + "\n  ".join(REGISTRY.render_list()), file=sys.stderr)
         return USAGE_ERROR
     handler = REGISTRY.get(argv[0]).func
-    assert callable(handler)
-    code = handler(argv[1:])
-    assert isinstance(code, int)
-    return code
+    if handler is None:
+        raise LookupError(f"runbook {argv[0]!r} has no callable")
+    return handler(argv[1:])
 
 
 if __name__ == "__main__":
