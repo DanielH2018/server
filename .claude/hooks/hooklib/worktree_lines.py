@@ -15,6 +15,8 @@ from collections import Counter
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
+from _hook_common import primary_checkout
+
 FANOUT_LIVE_FOR = timedelta(hours=24)
 
 
@@ -187,7 +189,44 @@ def _survey_lines(text):
     return [f"  ⚠ the worktree pruner failed: {why}"]
 
 
-def stale_worktree_lines(cwd, start=_start_detached, clock=time.time):
+def stray_entry_lines(primary):
+    """One banner line naming the entries under `<primary>/.claude/worktrees/` that are not trees.
+
+    The pruner removes directories only, so a file a session leaves there stays until someone
+    lists the directory by hand. A symlink counts as stray, even one to a directory. `primary`
+    is None when there is no primary checkout to name, and a missing directory reads as empty.
+    """
+    if primary is None:
+        return []
+    root = Path(primary) / ".claude" / "worktrees"
+    try:
+        with os.scandir(root) as entries:
+            stray = sorted(
+                e.name for e in entries if not e.is_dir(follow_symlinks=False)
+            )
+    except FileNotFoundError:
+        return []
+    if not stray:
+        return []
+    noun = "entry" if len(stray) == 1 else "entries"
+    return [
+        f"  ⚠ {root} holds {len(stray)} non-worktree {noun}, which the pruner never "
+        f"removes because it removes directories only: {', '.join(stray)}"
+    ]
+
+
+def stale_worktree_lines(
+    cwd, start=_start_detached, clock=time.time, primary=primary_checkout
+):
+    """The pruner's removable-worktree survey, then any stray entry beside the worktrees.
+
+    `primary` maps `cwd` to its primary checkout, whose `.claude/worktrees/` holds every
+    tree; a test passes a fake.
+    """
+    return _pruner_survey_lines(cwd, start, clock) + stray_entry_lines(primary(cwd))
+
+
+def _pruner_survey_lines(cwd, start, clock):
     """Merged worktrees this repo can remove, as ready-to-print banner lines.
 
     Claude Code's own worktree keeper reports these too, but each of its lines ends by
@@ -209,8 +248,8 @@ def stale_worktree_lines(cwd, start=_start_detached, clock=time.time):
 
     Args:
         cwd: the checkout the pruner surveys from.
-        start: runs an argv detached in `cwd`; a test passes a recorder.
-        clock: the current time in epoch seconds; a test passes a fixed one.
+        start: runs an argv detached in `cwd`.
+        clock: the current time in epoch seconds.
     """
     pruner = pruner_path()
     if not pruner.is_file():
