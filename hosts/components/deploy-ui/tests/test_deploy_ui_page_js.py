@@ -91,6 +91,7 @@ def test_queue_renders_the_daemons_order_with_each_landings_place_is_clean():
             _row("2", "waiting", 1),
             _row("3", "stepped-out"),
             _row("4", "", alive=False),
+            _row("5", "", alive=None),
         ],
         "landings_unavailable": "",
         "turn": {
@@ -100,7 +101,14 @@ def test_queue_renders_the_daemons_order_with_each_landings_place_is_clean():
         },
     }
     html = page_eval(f"queue({json.dumps(inflight)})")
-    assert re.findall(r"/pull/(\d+)", html) == ["9", "1", "2", "3", "4"]
-    for text in ("holds the turn", "waiting #1", "stepped out", "died", "Queued"):
+    assert re.findall(r"/pull/(\d+)", html) == ["9", "1", "2", "3", "4", "5"]
+    for text in (
+        "holds the turn",
+        "waiting #1",
+        "stepped out",
+        "died",
+        "liveness unknown",
+        "Queued",
+    ):
         assert text in html
     assert "2/3 checks finished" in html and "slots 2/6 in use" in html

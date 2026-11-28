@@ -422,8 +422,10 @@ _QUEUE_WORDS = {"turn": "holds the turn", "stepped-out": "stepped out"}
 
 def queue_line(row: dict) -> str:
     """One landing of deploy-ui's queue: its PR, state, place in the queue and progress."""
-    if not row["alive"]:
+    if row["alive"] is False:
         where = "died"
+    elif row["alive"] is None:
+        where = "liveness unknown"
     elif row["queue"] == "waiting":
         where = f"waiting #{row['position']}"
     else:

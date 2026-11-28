@@ -66,6 +66,7 @@ _QUEUE_OF = {
     "merged": "",
 }
 _QUEUE_RANK = {"turn": 0, "waiting": 1, "stepped-out": 2, "": 3}
+_ALIVE_RANK = {True: 0, None: 1, False: 2}
 
 
 def label(state: str) -> str:
@@ -230,20 +231,25 @@ def landing_rows(
     from 1. The turn goes to whichever landing polls first (`queue_machine.may_take`), so the
     rank is the order they began waiting, not a promise of the order the turn serves them.
 
-    A landing that died is `alive: false` and sorts last, out of the queue. A record's pid
-    belongs to the host that wrote it, so a landing on this host is alive while `proc` holds
-    its pid, and one on another host while its PR lock in `lock_dir` is held: that landing
-    holds the lock through an ssh session the turn host frees once its heartbeat stops
-    (`pr_lock.py`).
+    Only a live landing holds a place in the queue. A record's pid belongs to the host that
+    wrote it, so a landing on this host is `alive: true` while `proc` holds its pid and
+    `alive: false`, died, once it does not. One on another host is `alive: true` while its PR
+    lock in `lock_dir` is held, which it holds through an ssh session the turn host frees once
+    its heartbeat stops (`pr_lock.py`). A free PR lock proves nothing, because a landing goes
+    on without the lock when it cannot take or keep it, so that landing is `alive: null`:
+    out of the queue, but not called dead. Rows sort live, unknown, then died.
     """
     placed = []
     for r in records:
+        alive: bool | None
         if r.host.split(".")[0] == hostname.split(".")[0]:
             alive = (proc / str(r.pid)).exists()
         else:
-            alive = _held(lock_dir, PR_LOCK.format(pr=r.pr), table)
+            alive = True if _held(lock_dir, PR_LOCK.format(pr=r.pr), table) else None
         where, queued_at = r.queue() if alive else ("", r.since)
-        placed.append(((not alive, _QUEUE_RANK[where], queued_at), r, alive, where))
+        placed.append(
+            ((_ALIVE_RANK[alive], _QUEUE_RANK[where], queued_at), r, alive, where)
+        )
     placed.sort(key=lambda p: p[0])
     rows, waiting = [], 0
     for _, r, alive, where in placed:

@@ -144,17 +144,26 @@ def test_a_landing_whose_process_is_gone_here_leaves_the_queue_is_flagged(tmp_pa
     assert (live["alive"], live["queue"], live["position"]) == (True, "waiting", 1)
 
 
-def test_a_landing_on_another_host_is_alive_only_while_its_pr_lock_is_held_is_flagged(
+def test_a_landing_on_another_host_without_its_pr_lock_is_unknown_not_dead_is_flagged(
     tmp_path,
 ):
     # fact: hosts/components/deploy-ui/CLAUDE.md#Landing queue
     _landing(tmp_path, "55", "daniel-server", [(State.HOLDING, NOW - 100)])
+    _landing(tmp_path, "56", "daniel-box", [(State.QUEUED, NOW - 50)])
     records = states.read_records(tmp_path, NOW).records
-    [dead] = states.landing_rows(records, NOW, "daniel-box", tmp_path, {})
-    assert (dead["alive"], dead["queue"]) == (False, "")
+    proc = tmp_path / "proc"
+    (proc / str(os.getpid())).mkdir(parents=True)
+    rows = states.landing_rows(records, NOW, "daniel-box", tmp_path, {}, proc)
+    assert [(r["pr"], r["alive"], r["queue"], r["position"]) for r in rows] == [
+        ("56", True, "waiting", 1),
+        ("55", None, "", None),
+    ]
     table = _held_table(tmp_path, [states.PR_LOCK.format(pr="55")])
-    [live] = states.landing_rows(records, NOW, "daniel-box", tmp_path, table)
-    assert (live["alive"], live["queue"]) == (True, "turn")
+    rows = states.landing_rows(records, NOW, "daniel-box", tmp_path, table, proc)
+    assert [(r["pr"], r["alive"], r["queue"]) for r in rows] == [
+        ("55", True, "turn"),
+        ("56", True, "waiting"),
+    ]
 
 
 def test_the_newest_record_of_a_pr_wins_and_a_verdict_leaves_the_queue_is_flagged(

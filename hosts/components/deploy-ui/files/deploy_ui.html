@@ -64,7 +64,7 @@ const dur=s=>`${Math.floor(s/60)}m ${String(s%60).padStart(2,'0')}s`;
 const procName=args=>{const w=args.split(/\s+/).filter(Boolean);return base(w.find(t=>/\.(py|sh)$/.test(t))||w[0]||'');};
 const prog=p=>p?` <span class="mute">${p.done}/${p.total} ${esc(p.what)}</span>`:'';
 const QUEUE_WORDS={turn:'<b>holds the turn</b>','stepped-out':'stepped out'};
-const queueWord=l=>l.alive===false?'<span class="unavail">died</span>':l.queue==='waiting'?`waiting #${l.position}`:QUEUE_WORDS[l.queue]||'';
+const queueWord=l=>l.alive===false?'<span class="unavail">died</span>':l.alive===null?'<span class="warn-text">liveness unknown</span>':l.queue==='waiting'?`waiting #${l.position}`:QUEUE_WORDS[l.queue]||'';
 function turnLine(t){const serial=!t.serial.held?'free':t.serial.pr?'held by '+prLink(t.serial.pr):'held';
   return `<p class="mute">turn ${t.turn_held?'held':'free'} · serial lock ${serial} · slots ${t.slots.used}/${t.slots.of} in use</p>`;}
 // The rows come in the daemon's queue order: the turn's holder, the waiting in order, the rest.

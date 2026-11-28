@@ -435,15 +435,17 @@ def test_the_landing_queue_from_deploy_ui_reaches_the_snapshot_and_the_text_is_c
         "position": None,
         "progress": {"done": 4, "total": 11, "what": "checks finished"},
     }
+    unknown = {**queued, "pr": "303", "alive": None, "queue": "", "position": None}
     turn = {"turn_held": True, "serial": {"held": False, "pr": ""}}
 
     def get_json(path):
-        return {"runs": [], "landings": [holder, queued], "turn": turn}
+        return {"runs": [], "landings": [holder, queued, unknown], "turn": turn}
 
     snap = {**landing.collect(get_json, fake_run(GREEN)), "claims": None}
-    assert (snap["landings"], snap["turn"]) == ([holder, queued], turn)
+    assert (snap["landings"], snap["turn"]) == ([holder, queued, unknown], turn)
     assert (
         "Landing queue:\n"
         "  PR 101 Testing (holds the turn) 60s 4/11 checks finished\n"
-        "  PR 202 Queued (waiting #1) 60s"
+        "  PR 202 Queued (waiting #1) 60s\n"
+        "  PR 303 Queued (liveness unknown) 60s"
     ) in landing.format_text(snap)

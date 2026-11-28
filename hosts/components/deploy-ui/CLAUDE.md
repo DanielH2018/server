@@ -117,8 +117,11 @@ poll, so it adds no request, and it makes no GitHub call beyond the cached PR ti
   (`hosts/components/deploy-ui/tests/test_deploy_ui_states.py::test_a_landing_whose_process_is_gone_here_leaves_the_queue_is_flagged`).
   A daniel-server landing is alive while its `homelab-land-pr-<n>.lock` on daniel-box is
   held, because it holds that lock over ssh and daniel-box frees it once the heartbeat stops
-  (`scripts/deploy_tools/land_lib/pr_lock.py`;
-  `hosts/components/deploy-ui/tests/test_deploy_ui_states.py::test_a_landing_on_another_host_is_alive_only_while_its_pr_lock_is_held_is_flagged`).
+  (`scripts/deploy_tools/land_lib/pr_lock.py`). A free PR lock does not prove it died: a
+  landing goes on without the lock when it cannot take it or its ssh session ends. So that
+  row shows `liveness unknown` (`alive: null`), leaves the numbered queue so it cannot push
+  a live waiter down, and sorts between the live and the died
+  (`hosts/components/deploy-ui/tests/test_deploy_ui_states.py::test_a_landing_on_another_host_without_its_pr_lock_is_unknown_not_dead_is_flagged`).
 - **Any user can create a file in the line's directory**, so the reader opens a record
   without following a link or blocking, reads only a regular file of at most
   `MAX_RECORD_BYTES`, and skips one that does not decode
