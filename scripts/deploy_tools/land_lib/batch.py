@@ -51,6 +51,9 @@ may move during that wait, so the batch ends with it. While the batch forms, the
 none and lands its PR alone. While it merges, that member and the ones after it land alone.
 The holder's own rate-limit wait keeps the batch, because the holder reads master again after
 it, unless the holder could not take the turn back. The batch then ends the same way.
+A member reads the holder's turn just before its merge (`Landing.turn_lost`). When the ssh
+session that held it has ended, the member gives the turn back the same way, and it and the
+members after it land alone.
 
 A holder whose landing code is older than master's forms its batch from master's code: it hands
 the turn to a landing of its PR from a fresh checkout (`turn.HandOver`), which forms the batch.
@@ -134,7 +137,7 @@ def _wait_without_turn[T](
     """
     holder.without_turn(wait, reason)
     pr = member.opts.pr
-    why = f"a rate-limit wait on PR #{pr}'s reads gave the landing turn back"
+    why = f"PR #{pr}'s merge gave the landing turn back {reason}"
     raise _TurnGivenBack(1, f"PR #{pr} — {why}", error=why)
 
 
@@ -186,6 +189,7 @@ def _member(ln: Landing, pr: str) -> Landing:
     member = Landing(opts, ln.tools, ln.classifier)
     member.transitions = Transitions(pr, None)
     member.step_out_of_turn = partial(_wait_without_turn, ln, member)
+    member.turn_lost = ln.turn_lost
     return member
 
 

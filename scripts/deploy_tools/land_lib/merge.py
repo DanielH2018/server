@@ -395,6 +395,11 @@ def await_merge(ln: Landing, take_turn: TakeTurn = _no_turn) -> None:
     so the landings behind it do not wait out the same limit. Master may have moved while it
     waited, so before its merge a head master moved past gives the turn back and rejoins the
     line as a draft (`stale_base.rejoin_in_turn`).
+
+    Just before the merge call, a landing whose turn was held over an ssh session that has
+    since ended (`turn.SshLock.lost`) does not merge: another landing may hold the turn by
+    then. It gives the turn back and asks for it again, as after a rate-limit wait, and polls
+    on. A batch member reads its holder's turn, so a lost one ends the batch there.
     """
     o, t = ln.opts, ln.tools
     waited = 0
@@ -565,6 +570,11 @@ def await_merge(ln: Landing, take_turn: TakeTurn = _no_turn) -> None:
                     continue
                 if not tested:
                     stale_base.refuse_stale_overlap(ln, head)
+                if ln.turn_lost():
+                    ln.without_turn(
+                        lambda: None, "because the ssh session that held it ended"
+                    )
+                    continue
                 refusal = _merge_directly(ln, head, commits)
                 if not refusal:
                     continue
