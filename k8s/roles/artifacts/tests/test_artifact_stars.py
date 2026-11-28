@@ -14,6 +14,7 @@ from http.server import ThreadingHTTPServer
 import pytest
 
 import artifact_server as srv
+from lib.proc_testing import write_exec
 
 
 @pytest.fixture
@@ -38,11 +39,15 @@ def write(root, host, name, body="<title>T</title>"):
 def serve(root):
     servers = []
 
-    def start(store):
+    def start(store, swept_hosts=frozenset()):
         handler = type(
             "StarHandler",
             (srv.Handler,),
-            {"cache": srv.IndexCache(root, store), "stars": store},
+            {
+                "cache": srv.IndexCache(root, store),
+                "stars": store,
+                "swept_hosts": swept_hosts,
+            },
         )
         server = ThreadingHTTPServer(("127.0.0.1", 0), handler)
         threading.Thread(
@@ -220,6 +225,7 @@ class TestStarOnArtifactPage:
     """The button a served artifact loads: its script tag, its script and its state read."""
 
     PAGE = "<html><body>plan</body></html>"
+    OUTLINE = '<script src="/api/outline.js" defer></script>'
     TAG = (
         '<script src="/api/star.js" data-host="daniel-box" '
         'data-path="plan.html" defer></script>'
@@ -235,15 +241,20 @@ class TestStarOnArtifactPage:
 
         return request
 
-    def test_no_star_list_serves_the_file_byte_for_byte(self, get, root):
-        write(root, "daniel-box", "plan.html", self.PAGE)
-        assert get(None, "/a/daniel-box/plan.html") == (200, self.PAGE.encode())
+    def test_no_star_list_adds_only_the_outline_tag(self, get, root):
+        path = write(root, "daniel-box", "plan.html", self.PAGE)
+        status, body = get(None, "/a/daniel-box/plan.html")
+        assert status == 200
+        assert body.decode() == f"<html><body>plan{self.OUTLINE}</body></html>"
+        assert path.read_text() == self.PAGE
 
     def test_a_star_list_adds_the_tag_and_leaves_the_file_alone(self, get, root, stars):
         path = write(root, "daniel-box", "plan.html", self.PAGE)
         status, body = get(stars, "/a/daniel-box/plan.html")
         assert status == 200
-        assert body.decode() == f"<html><body>plan{self.TAG}</body></html>"
+        assert (
+            body.decode() == f"<html><body>plan{self.OUTLINE}{self.TAG}</body></html>"
+        )
         assert path.read_text() == self.PAGE
 
     def test_a_non_html_artifact_is_served_unchanged(self, get, root, stars):
@@ -251,21 +262,38 @@ class TestStarOnArtifactPage:
         status, body = get(stars, "/a/daniel-box/notes.md")
         assert (status, body) == (200, b"# Notes\n</body>")
 
-    def test_the_script_route_serves_the_button_as_javascript(self, serve, stars):
-        conn = serve(stars)
-        conn.request("GET", "/api/star.js")
+    @pytest.mark.parametrize(
+        ("route", "script"),
+        [("/api/star.js", srv.STAR_JS), ("/api/outline.js", srv.OUTLINE_JS)],
+    )
+    def test_each_script_route_serves_javascript(self, serve, route, script):
+        conn = serve(None)
+        conn.request("GET", route)
         res = conn.getresponse()
         assert res.status == 200
         # X-Content-Type-Options: nosniff makes a browser refuse a script of any other type.
         assert res.getheader("Content-Type") == "text/javascript; charset=utf-8"
-        assert res.read() == srv.STAR_JS.encode()
+        assert res.read() == script.encode()
 
     def test_get_star_reports_the_star_and_that_it_can_change(self, get, root, stars):
         write(root, "daniel-box", "plan.html")
         url = "/api/star?host=daniel-box&path=plan.html"
-        assert json.loads(get(stars, url)[1]) == {"starred": False, "writable": True}
+        assert json.loads(get(stars, url)[1]) == {
+            "starred": False,
+            "writable": True,
+            "prunes_at": None,
+        }
         stars.mark("daniel-box/plan.html", True)
-        assert json.loads(get(stars, url)[1]) == {"starred": True, "writable": True}
+        assert json.loads(get(stars, url)[1])["starred"] is True
+
+    def test_get_star_on_a_swept_tree_reports_the_prune_date(self, serve, root, stars):
+        path = write(root, "daniel-box", "plan.html")
+        os.utime(path, (0, 1_800_000_000))
+        conn = serve(stars, swept_hosts=frozenset({"daniel-box"}))
+        conn.request("GET", "/api/star?host=daniel-box&path=plan.html")
+        body = json.loads(conn.getresponse().read())
+        # 1_800_000_000 is 2027-01-15T08:00:00Z; the default retention adds 30 days.
+        assert body["prunes_at"] == "2027-02-14T08:00:00+00:00"
 
     def test_get_star_on_a_read_only_store_reports_not_writable(self, get, root, stars):
         write(root, "daniel-box", "plan.html")
@@ -273,7 +301,7 @@ class TestStarOnArtifactPage:
         readonly = srv.StarStore(stars.path, writable=False)
         status, body = get(readonly, "/api/star?host=daniel-box&path=plan.html")
         assert status == 200
-        assert json.loads(body) == {"starred": True, "writable": False}
+        assert json.loads(body)["writable"] is False
 
     @pytest.mark.parametrize(
         "query",
@@ -294,13 +322,35 @@ class TestStarOnArtifactPage:
         write(root, "daniel-box", "plan.html")
         assert get(None, "/api/star?host=daniel-box&path=plan.html")[0] == 404
 
-    def test_the_tag_escapes_its_attributes_and_appends_without_a_body_close(self):
-        assert srv.add_star_tag(b"<p>x", "h", 'a"b.html') == (
-            b'<p>x<script src="/api/star.js" data-host="h" '
+    def test_the_tags_escape_their_attributes_and_append_without_a_body_close(self):
+        assert srv.add_page_scripts(b"<p>x", "h", 'a"b.html', star=True) == (
+            b'<p>x<script src="/api/outline.js" defer></script>'
+            b'<script src="/api/star.js" data-host="h" '
             b'data-path="a&quot;b.html" defer></script>'
         )
 
     def test_the_tag_goes_before_the_last_body_close_in_any_case(self):
-        body = srv.add_star_tag(b"<pre></body></pre></BODY>", "h", "p.html")
+        body = srv.add_page_scripts(
+            b"<pre></body></pre></BODY>", "h", "p.html", star=True
+        )
         assert body.startswith(b"<pre></body></pre><script ")
         assert body.endswith(b"</script></BODY>")
+
+
+class TestPrunesAt:
+    """Which artifacts the star button counts down for: only those a sweep would delete."""
+
+    SWEPT = frozenset({"daniel-box"})
+
+    def test_a_tree_no_sweep_prunes_is_never_pruned(self, root):
+        path = write(root, "daniel-server", "plan.html")
+        assert srv.prunes_at("daniel-server", "plan.html", path, self.SWEPT) is None
+
+    def test_an_executable_is_never_pruned(self, root):
+        path = write_exec(root / "daniel-box" / "tool.sh", "true\n")
+        assert srv.prunes_at("daniel-box", "tool.sh", path, self.SWEPT) is None
+
+    def test_a_pinned_page_is_never_pruned(self, root):
+        (root / "daniel-box" / "pinned").mkdir()
+        path = write(root, "daniel-box", "pinned/map.html")
+        assert srv.prunes_at("daniel-box", "pinned/map.html", path, self.SWEPT) is None

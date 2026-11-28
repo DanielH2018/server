@@ -30,6 +30,19 @@ how that sync behaves.
   (`~/.claude/artifacts`, daniel-box's own) and `artifacts_peer_dir`
   (`~/.claude/artifacts-peer`, everything pulled from peers). Stdlib only — no build, no
   extra deps.
+- **Every served HTML artifact gets a contents panel.** `artifact_server.py:add_page_scripts`
+  adds a `/api/outline.js` tag at serve time, and the script (`_gui_html.py:OUTLINE_JS`) lists
+  the page's h2/h3 headings on the left. A page with fewer than three headings, or with
+  `data-outline="off"` on `<html>` or `<body>`, gets none. The file on disk is never changed.
+  A slice heading (the first heading inside a `data-status` element) carries its status as a
+  dot. A section whose text differs from the version the reader last scrolled to carries a
+  blue dot, which the browser's `localStorage` tracks per page, and a first visit only
+  records. A hovered heading shows a `#` button that copies a link to it.
+- **The star button counts down to the prune.** `/api/star` answers `prunes_at`
+  (`artifact_server.py:prunes_at`): the file's mtime plus `artifacts_retention_days`. The
+  button shows the days left once seven or fewer remain. Only a tree in
+  `artifacts_swept_hosts` counts down, because no sweep prunes daniel-server's or the agent
+  user's tree.
 - **This role's deploy creates none of the host directories it mounts.** daniel-box's host
   package creates `artifacts_host_dir`, one peer directory per `artifacts_peer_sources` entry
   and `artifacts_stars_dir`, from
