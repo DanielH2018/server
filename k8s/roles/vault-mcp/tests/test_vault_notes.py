@@ -1,3 +1,4 @@
+import json
 import os
 
 import pytest
@@ -210,3 +211,62 @@ def test_the_rendered_exclude_list_hides_the_operators_folder(vault):
     }
     with pytest.raises(NoteNotFound):
         rendered.read_note("94 Docs/superpowers/Secret.md")
+
+
+def _vault_of(root, notes):
+    for rel, text in notes.items():
+        path = root / rel
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(text.encode())
+    return Vault(root)
+
+
+@pytest.mark.parametrize(
+    "text",
+    ["---\r\ntags: [found]\r\n---\r\nBody.\r\n", "﻿---\ntags: [found]\n---\nBody.\n"],
+    ids=["crlf", "bom"],
+)
+def test_frontmatter_tags_are_read_from_a_crlf_or_bom_note(tmp_path, text):
+    vault = _vault_of(tmp_path, {"Note.md": text})
+    assert [h["path"] for h in vault.search(tag="found")] == ["Note.md"]
+    assert vault.read_note("Note")["body"].startswith("Body.")
+
+
+def test_a_four_dash_line_does_not_close_frontmatter(tmp_path):
+    vault = _vault_of(tmp_path, {"Note.md": "---\nstatus: draft\n----\nText\n"})
+    assert vault.read_note("Note")["frontmatter"] == {}
+
+
+def test_frontmatter_with_a_recursive_alias_reads_as_empty(tmp_path):
+    vault = _vault_of(tmp_path, {"Note.md": "---\nloop: &x [*x]\n---\nBody.\n"})
+    note = vault.read_note("Note")
+    assert note["frontmatter"] == {}
+    json.dumps(note)
+
+
+def test_a_folder_link_resolves_vault_absolute_or_by_shortest_suffix(tmp_path):
+    vault = _vault_of(
+        tmp_path,
+        {
+            "A/Sub/Note.md": "",
+            "Deep/er/Sub/Note.md": "",
+            "Sub/Root.md": "",
+            "A/Sub/Root.md": "",
+            "B/Linker.md": "[[Sub/Note]] [[Sub/Root]]",
+            "C/Absolute.md": "[[/Deep/er/Sub/Note]]",
+        },
+    )
+    assert vault.read_note("B/Linker")["links"] == [
+        {"target": "Sub/Note", "path": "A/Sub/Note.md"},
+        {"target": "Sub/Root", "path": "Sub/Root.md"},
+    ]
+    assert [b["path"] for b in vault.backlinks("A/Sub/Note.md")] == ["B/Linker.md"]
+    assert [b["path"] for b in vault.backlinks("Deep/er/Sub/Note.md")] == [
+        "C/Absolute.md"
+    ]
+
+
+def test_a_snippet_shows_the_match_after_text_casefold_lengthens(tmp_path):
+    vault = _vault_of(tmp_path, {"Note.md": "ß" * 300 + " kettle"})
+    (hit,) = vault.search("kettle")
+    assert "kettle" in hit["snippet"]
