@@ -173,8 +173,8 @@ jobs:
   # The `prek` gate job at the bottom carries the required context, under "prek (lint + validate +
   # tests + secrets)".
   #
-  # Two legs: `validate-alert-rules` alone, and every other hook. That hook ran 118-200 s of a
-  # 166-283 s sweep, and it already spreads its tool calls over the runner's CPUs. A hook added to
+  # Two legs: `validate-alert-rules` alone, and every other hook. That hook is the sweep's longest,
+  # and it already spreads its tool calls over the runner's CPUs. A hook added to
   # prek.toml runs in the second leg. `matrix.checks` puts the same text in both legs' `name:`, so
   # they share the check-run name `ci_verdict.py` lists; a `name:` with no matrix expression would
   # get the leg's values appended.

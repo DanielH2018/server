@@ -2613,53 +2613,6 @@ tests:
                 homelab-claude-dotfiles-mirror.timer` and `journalctl -t
                 claude-dotfiles-mirror`.
               runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#claudedotfilesmirrornotreporting
-
-  - interval: 1h
-    input_series:
-      - series: 'homelab_check_success{check="claude-weekly-summary", instance="daniel-box", job="node", origin="daniel-box"}'
-        values: '0x200'
-      - series: 'homelab_check_last_run_timestamp_seconds{check="claude-weekly-summary", instance="daniel-box", job="node", origin="daniel-box"}'
-        values: '0x200'
-      - series: 'up{instance="daniel-box", job="node", origin="daniel-box"}'
-        values: '1x200'
-    alert_rule_test:
-      - eval_time: 1h
-        alertname: ClaudeWeeklySummaryFailed
-        exp_alerts:
-          - exp_labels:
-              check: claude-weekly-summary
-              instance: daniel-box
-              job: node
-              origin: daniel-box
-              severity: warning
-              service: daniel-box
-            exp_annotations:
-              summary: 'daniel-box: the weekly Claude runs summary did not post, or read a source.'
-              description: >-
-                claude-weekly-summary on daniel-box ended with status=down: the Discord post
-                failed, or a source of run records could not be read. A failed post is retried by
-                the next run. Run `journalctl -t claude-weekly-summary` on daniel-box.
-      - eval_time: 169h
-        alertname: ClaudeWeeklySummaryNotReporting
-        exp_alerts: []
-      - eval_time: 170h
-        alertname: ClaudeWeeklySummaryNotReporting
-        exp_alerts:
-          - exp_labels:
-              check: claude-weekly-summary
-              instance: daniel-box
-              job: node
-              origin: daniel-box
-              severity: warning
-              service: daniel-box
-            exp_annotations:
-              summary: 'daniel-box: the weekly Claude runs summary has stopped reporting.'
-              description: >-
-                No claude-weekly-summary verdict newer than 169 hours from daniel-box, so last
-                week's unattended runs were not summarised. Read `systemctl status
-                homelab-claude-weekly-summary.timer` and `journalctl -t claude-weekly-summary`.
-                If you disabled the timer on purpose, delete this rule.
-              runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#claudeweeklysummarynotreporting
   # KubeletShutdownLockMissing: the lock is missing from minute 0 and kubelet takes it at minute
   # 20. The 15m `for` holds the page through the 14th minute, and the next verdict of 1 resolves
   # it with no silence. The check keeps writing, so NotReporting stays quiet.

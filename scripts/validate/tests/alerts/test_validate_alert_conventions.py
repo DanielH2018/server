@@ -146,6 +146,27 @@ def test_an_alert_fired_only_in_a_second_test_file_is_clean(tmp_path):
     assert _rule_problems(rules_dir, tests_dir) == []
 
 
+def _stretch_first_group(tests):
+    tests["tests"][0]["alert_rule_test"][-1]["eval_time"] = "2000h"
+
+
+def test_a_group_stepping_weeks_at_one_minute_is_flagged(tmp_path):
+    problems = _rule_problems(*_rule_tree(tmp_path, edit_tests=_stretch_first_group))
+    assert len(problems) == 1, problems
+    assert problems[0].startswith(
+        "tests/rules/alerting-meta.test.yaml: test group 1 evaluates"
+    ), problems
+    assert "over the cap of 250000 evaluations" in problems[0]
+
+
+def test_the_same_group_stepping_once_an_hour_is_clean(tmp_path):
+    def stretch_hourly(tests):
+        _stretch_first_group(tests)
+        tests["evaluation_interval"] = "1h"
+
+    assert _rule_problems(*_rule_tree(tmp_path, edit_tests=stretch_hourly)) == []
+
+
 def test_a_second_test_file_with_no_rule_file_is_flagged(tmp_path):
     rules_dir, tests_dir = _rule_tree(tmp_path)
     (tests_dir / "flux.slow.test.yaml").write_text("tests: []\n")
