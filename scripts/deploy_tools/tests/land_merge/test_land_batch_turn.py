@@ -227,3 +227,31 @@ def test_a_holder_whose_own_wait_lost_the_turn_merges_no_member(batch_of, capsys
     assert hub.merged == [OWN]
     assert "7" not in hub.ever_labelled
     assert answers(the_line, "7") == [""]
+
+
+def test_a_holder_whose_ssh_session_ends_after_its_own_merge_merges_no_member(
+    batch_of, capsys
+):
+    session = subprocess.Popen(["sleep", "60"], text=True)
+    ln, hub, the_line = batch_of(drafts=("7", "9"), fakes=Fakes(turn=[session]))
+
+    def gh(*args, **kwargs):
+        done = hub.gh(*args, **kwargs)
+        if hub.merged == [OWN] and session.poll() is None:
+            session.kill()
+            session.wait()
+        return done
+
+    ln.tools = replace(ln.tools, gh=gh)
+    try:
+        land(ln)
+    finally:
+        session.kill()
+        session.wait()
+    assert hub.merged == [OWN]
+    assert hub.full_runs == ["7"]
+    assert answers(the_line, "7", "9") == ["", ""]
+    assert (
+        "PR #7 is not merged (PR #7's merge gave the landing turn back because the ssh "
+        "session that held it ended)" in capsys.readouterr().out
+    )
