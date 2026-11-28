@@ -6,8 +6,14 @@ Every group boots its own containers, and their names differ, but
 the serial runner had every container mount the one `<work>/repo` and `<work>/debs`, and every
 group republishes that repository. So `isolate` gives each group a shallow copy of `Cases` whose
 `work` is `<work>/groups/<name>`, with its own `repo/`, `build/` and a copy of each prepared
-`.deb`, and its own `debs`, `versions`, `passed`, `failed` and `no_verdict`. `secrets_case.seal_pi` rewrites `debs`
-labels such as `pi-head`, so a group never sees another group's sealed build.
+`.deb`, and its own `debs`, `versions`, `passed`, `failed`, `no_verdict` and `case_seconds`.
+`secrets_case.seal_pi` rewrites `debs` labels such as `pi-head`, so a group never sees another
+group's sealed build.
+
+Each group's block ends with a `[DONE]` line holding its wall time. A group that ran more than
+one case through `Cases.case`, such as `upgrade_path`'s chain, also names its three slowest
+cases with their seconds there, because its output reaches the log only when it ends and the
+log's timestamps cannot time a case.
 
 Groups run on threads, not processes, so a group looked up at call time is the one that runs.
 While they run, `sys.stderr` is a `StderrByThread` that holds each group's output until the
@@ -22,6 +28,7 @@ import sys
 import threading
 import time
 import traceback
+from argparse import ArgumentTypeError
 from collections.abc import Callable, Sequence
 from concurrent.futures import ThreadPoolExecutor
 from io import StringIO
@@ -82,6 +89,16 @@ def _node_group(host: str) -> tuple[str, Callable]:
     return f"node_package_case-{host}", lambda group: node_package_case.run(group, host)
 
 
+def shard_arg(text: str) -> tuple[int, int]:
+    """`--shard K/N` as (K, N), refusing anything but 1 <= K <= N."""
+    number, sep, count = text.partition("/")
+    if not (sep and number.isdigit() and count.isdigit()):
+        raise ArgumentTypeError(f"a shard is K/N, not {text!r}")
+    if not 1 <= int(number) <= int(count):
+        raise ArgumentTypeError(f"shard {text} is outside 1/{count}..{count}/{count}")
+    return int(number), int(count)
+
+
 def groups(
     cases_class, shard: tuple[int, int] | None = None
 ) -> list[tuple[str, Callable]]:
@@ -136,6 +153,7 @@ def isolate(cases, name: str):
     group.passed = []
     group.failed = []
     group.no_verdict = []
+    group.case_seconds = {}
     return group
 
 
@@ -144,6 +162,7 @@ def _run_one(
 ) -> tuple[list[str], list[str], list[str], float]:
     stderr.hold()
     start = time.monotonic()
+    slowest = ""
     try:
         group = isolate(cases, name)
         try:
@@ -153,13 +172,22 @@ def _run_one(
             print(f"[FAIL] {name}: raised outside a case: {exc}", file=sys.stderr)
             print(traceback.format_exc(), file=sys.stderr, end="")
         passed, failed, no_verdict = group.passed, group.failed, group.no_verdict
+        slowest = _slowest_cases(group.case_seconds)
     except Exception as exc:
         passed, failed, no_verdict = [], [f"{name}: could not isolate"], []
         print(f"[FAIL] {name}: its scratch directory: {exc}", file=sys.stderr)
     seconds = time.monotonic() - start
-    print(f"[DONE] {name} in {seconds:.0f}s", file=sys.stderr)
+    print(f"[DONE] {name} in {seconds:.0f}s{slowest}", file=sys.stderr)
     stderr.release()
     return passed, failed, no_verdict, seconds
+
+
+def _slowest_cases(case_seconds: dict[str, float]) -> str:
+    """The `[DONE]` line's `; slowest cases: <name> <N>s, ...` tail, or "" for one case or none."""
+    if len(case_seconds) < 2:
+        return ""
+    slowest = sorted(case_seconds.items(), key=lambda item: -item[1])[:3]
+    return "; slowest cases: " + ", ".join(f"{name} {s:.0f}s" for name, s in slowest)
 
 
 def run_groups(

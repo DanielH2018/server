@@ -151,14 +151,14 @@ def test_ci_runs_the_fewest_bootstrap_shards_whose_items_all_start_at_once(tmp_p
 
 
 def test_a_shard_from_one_to_its_count_is_parsed():
-    assert host_package_cases.shard_arg("2/3") == (2, 3)
-    assert host_package_cases.shard_arg("3/3") == (3, 3)
+    assert case_groups.shard_arg("2/3") == (2, 3)
+    assert case_groups.shard_arg("3/3") == (3, 3)
 
 
 @pytest.mark.parametrize("text", ["0/3", "4/3", "2", "a/3", "2/"])
 def test_a_shard_outside_its_count_or_not_k_of_n_is_refused(text):
     with pytest.raises(argparse.ArgumentTypeError):
-        host_package_cases.shard_arg(text)
+        case_groups.shard_arg(text)
 
 
 def _unit_state_run(monkeypatch, tmp_path, host, answers):
