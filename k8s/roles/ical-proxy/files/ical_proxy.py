@@ -25,7 +25,7 @@ import sys
 # Answer --help before the imports below, which need Flask, requests and icalendar installed.
 if __name__ == "__main__":
     if any(arg in ("-h", "--help") for arg in sys.argv[1:]):
-        print(__doc__.strip())
+        print((__doc__ or "").strip())
         sys.exit(0)
 
 from flask import Flask, Response
@@ -33,7 +33,8 @@ import icalendar
 from icalendar.parser import Contentlines
 import requests, threading, time, os, re, hashlib
 
-from datetime import UTC, datetime, timedelta
+from collections.abc import Callable, Iterator
+from datetime import UTC, date, datetime, timedelta
 from itertools import pairwise
 
 app = Flask(__name__)
@@ -57,14 +58,15 @@ TOD_TAG_RE = re.compile(r"\s*#tod/\S+")
 RAW_TODO_TEXT_RE = re.compile(r"(SUMMARY|DESCRIPTION)(?:;[^:]*)?:(.*)")
 
 
-def wire_value(component, name):
+def wire_value(component: icalendar.Component, name: str) -> str:
     """Returns a property's re-serialised value, without parameters, stripped; "" if absent."""
     if name not in component:
         return ""
-    return component[name].to_ical().decode().strip()
+    value = component[name].to_ical()
+    return (value.decode() if isinstance(value, bytes) else value).strip()
 
 
-def series_end_before(dtstart, cut):
+def series_end_before(dtstart: date | datetime, cut: date) -> date | datetime:
     """Returns the UNTIL that ends a series starting at dtstart on the last local day before cut.
 
     UNTIL takes DTSTART's value type, as RFC 5545 requires: a DATE for an all-day series, a
@@ -79,7 +81,7 @@ def series_end_before(dtstart, cut):
     return end if dtstart.tzinfo is None else end.astimezone(UTC)
 
 
-def cap_overlapping_series(calendar):
+def cap_overlapping_series(calendar: icalendar.Calendar) -> None:
     """Caps the earlier of two recurring series that share the same SUMMARY and RRULE.
 
     Ends the earlier series on the day before the later series' local start date, so the
@@ -106,14 +108,14 @@ def cap_overlapping_series(calendar):
             )
 
 
-def process_ics(raw_ics):
+def process_ics(raw_ics: str) -> str:
     """Caps overlapping series in one ICS feed."""
     calendar = icalendar.Calendar.from_ical(raw_ics)
     cap_overlapping_series(calendar)
     return calendar.to_ical().decode()
 
 
-def obsidian_deep_link(uri):
+def obsidian_deep_link(uri: str) -> str:
     """Return a browser-safe obsidian:// link.
 
     The obsidian-ical-plugin leaves a literal '&' in folder names (e.g. the
@@ -129,25 +131,25 @@ def obsidian_deep_link(uri):
     return head + path.replace("&", "%26")
 
 
-def raw_todo_text(raw_ics):
+def raw_todo_text(raw_ics: str) -> Iterator[dict[str, str]]:
     """Yields each VTODO's SUMMARY and DESCRIPTION as the feed wrote them, in feed order.
 
     The values are unfolded but still escaped. icalendar's parsed values are unescaped,
     and re-serialising them escapes a bare ',' or ';' the feed left raw, so only these
     reproduce the text stable_uid has always hashed.
     """
-    values = None
+    values: dict[str, str] | None = None
     for line in Contentlines.from_ical(raw_ics):
         if line == "BEGIN:VTODO":
             values = {}
-        elif line == "END:VTODO":
+        elif line == "END:VTODO" and values is not None:
             yield values
             values = None
         elif values is not None and (match := RAW_TODO_TEXT_RE.match(line)):
             values.setdefault(match[1], match[2].strip())
 
 
-def stable_uid(raw_text):
+def stable_uid(raw_text: dict[str, str]) -> str:
     """Deterministic UID for a VTODO, derived from its note link + summary.
 
     The obsidian-to-ical-plugin (v2.0.1, what this feed uses) emits a fresh random
@@ -165,7 +167,7 @@ def stable_uid(raw_text):
     return hashlib.sha1(f"{description}::{summary}".encode()).hexdigest()
 
 
-def process_obsidian_ics(raw_ics):
+def process_obsidian_ics(raw_ics: str) -> str:
     """Give each Obsidian VTODO a clickable URL, a stable UID, and drop LOCATION.
 
     The obsidian-to-ical-plugin emits the note's deep link only in DESCRIPTION and as
@@ -199,7 +201,9 @@ def process_obsidian_ics(raw_ics):
 MAX_FEED_BYTES = 10 * 1024 * 1024  # 10 MB
 
 
-def refresh_feed(key, url, processor=None):
+def refresh_feed(
+    key: str, url: str, processor: Callable[[str], str] | None = None
+) -> None:
     """Fetches one ICS feed, processes it, and stores the result in cached_ics[key].
 
     Streams the response under a byte ceiling (MAX_FEED_BYTES) rather than reading an
@@ -240,7 +244,7 @@ def refresh_feed(key, url, processor=None):
         print(f"Calendar {key}: error fetching — {e}", file=sys.stderr)
 
 
-def refresh_loop():
+def refresh_loop() -> None:
     """Refreshes every configured feed in a loop, sleeping REFRESH_INTERVAL between passes.
 
     Sets initial_fetch_done after the first full pass over all feeds (or immediately when no
@@ -274,17 +278,17 @@ def refresh_loop():
 
 
 @app.route("/calendar1.ics")
-def serve_ics_1():
+def serve_ics_1() -> Response:
     return Response(cached_ics["1"], mimetype="text/calendar")
 
 
 @app.route("/calendar2.ics")
-def serve_ics_2():
+def serve_ics_2() -> Response:
     return Response(cached_ics["2"], mimetype="text/calendar")
 
 
 @app.route("/calendar4.ics")
-def serve_ics_4():
+def serve_ics_4() -> Response:
     return Response(cached_ics["4"], mimetype="text/calendar")
 
 
