@@ -46,7 +46,7 @@ import threading
 import time
 import urllib.parse
 import urllib.request
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Self
 
@@ -157,7 +157,9 @@ def initial_cursor(
     return stored_cursor
 
 
-def run_cycle(state, store, cursor, end_ns, fetch, apply_fn, page_limit):
+def run_cycle(
+    state, store, cursor: int, end_ns: int, fetch, apply_fn, page_limit: int
+) -> int:
     """One poll: page through new entries from `cursor`, fold, persist. Returns new cursor.
 
     `fetch(start_ns, end_ns, limit) -> [(ts_ns, line)]` returns the earliest `limit`
@@ -253,13 +255,18 @@ class PollState:
     interpreter).
     """
 
-    def __init__(self, initial_state):
+    def __init__(self, initial_state) -> None:
         self.value = initial_state
         self.lock = threading.Lock()
         self.last_poll_ok = 0.0
 
 
-def make_handler(poll_state, render_metrics_fn, health_max_age, clock=time.time):
+def make_handler(
+    poll_state: PollState,
+    render_metrics_fn,
+    health_max_age: float,
+    clock: Callable[[], float] = time.time,
+) -> type[BaseHTTPRequestHandler]:
     """Builds a BaseHTTPRequestHandler serving /metrics and /healthz.
 
     `render_metrics_fn(state, now) -> str` is the per-game exposition renderer. `clock` is
@@ -309,17 +316,17 @@ def start_metrics_server(handler_cls: type[BaseHTTPRequestHandler], port: int) -
 
 
 def poll_forever(
-    poll_state,
+    poll_state: PollState,
     store,
-    cursor,
+    cursor: int,
     fetch,
     apply_fn,
-    page_limit,
-    once,
-    backfill,
-    poll_interval,
+    page_limit: int,
+    once: bool,
+    backfill: bool,
+    poll_interval: float,
     on_poll_ok,
-):
+) -> None:
     """Runs run_cycle in a loop, persisting the cursor and stamping poll_state.last_poll_ok.
 
     Returns after one cycle when `once`/`backfill`; otherwise loops forever at
@@ -454,7 +461,15 @@ def parse_args(argv: Sequence[str]) -> argparse.Namespace:
     return parser.parse_args(argv)
 
 
-def run(config, store, fetch, apply_fn, render_metrics, on_poll_ok, argv=None):
+def run(
+    config: RunConfig,
+    store,
+    fetch,
+    apply_fn,
+    render_metrics,
+    on_poll_ok,
+    argv: Sequence[str] | None = None,
+) -> None:
     """Loads persisted state, starts the metrics server, and runs the poll loop.
 
     Runs a single cycle and returns when `argv` carries --once or --backfill; otherwise
