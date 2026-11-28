@@ -32,7 +32,9 @@ def effective_window_s(uptime_s: float, window_s: float, grace_s: float) -> floa
     return min(window_s, uptime_s - grace_s)
 
 
-def janitorr_errors_ok(count, uptime_s, window_s, grace_s):
+def janitorr_errors_ok(
+    count: int | None, uptime_s: float | None, window_s: float, grace_s: float
+) -> tuple[bool, str]:
     """Pure: decide janitorr scheduled-task health from the post-startup error count. (ok, msg).
 
     - uptime None (no running pod) -> ok. A janitorr that is not running is the k8s Workload

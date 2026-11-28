@@ -141,11 +141,16 @@ def needs_update(existing: dict, desired: dict) -> bool:
     return existing != desired
 
 
-def schema_for(schemas: list[dict]) -> dict:
+def schema_for(schemas: object) -> dict:
     """The Discord entry from `GET /api/<version>/notification/schema`, without its `presets`.
 
     `presets` is UI scaffolding the API rejects on POST.
+
+    Raises:
+        SeedError: The answer is not a list, or it holds no Discord entry.
     """
+    if not isinstance(schemas, list):
+        raise SeedError("GET notification/schema answered no list")
     for entry in schemas:
         if entry.get("implementation") == IMPLEMENTATION:
             entry = deep_copy(entry)
@@ -157,19 +162,26 @@ def schema_for(schemas: list[dict]) -> dict:
     )
 
 
-def find_notification(notifications: list[dict], name: str) -> dict | None:
+def find_notification(notifications: object, name: str) -> dict | None:
     """The live Discord notification carrying `name`, or None.
 
     Matches on implementation AND name: a CustomScript called the same thing is a different
     integration, and overwriting it would silently retire someone's script hook.
+
+    Raises:
+        SeedError: The answer is not a list.
     """
+    if not isinstance(notifications, list):
+        raise SeedError("GET notification answered no list")
     for entry in notifications:
         if entry.get("implementation") == IMPLEMENTATION and entry.get("name") == name:
             return entry
     return None
 
 
-def request(api_url: str, api_key: str, path: str, method: str = "GET", body=None):
+def request(
+    api_url: str, api_key: str, path: str, method: str = "GET", body: dict | None = None
+) -> object:
     """One *arr API call under `api_url`. The key travels as a header, never in the URL."""
     url = f"{api_url}/{path.lstrip('/')}"
     data = json.dumps(body).encode() if body is not None else None
@@ -207,7 +219,7 @@ def env_or_fail(key: str) -> str:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser = argparse.ArgumentParser(description=(__doc__ or "").splitlines()[0])
     parser.add_argument(
         "--test",
         action="store_true",

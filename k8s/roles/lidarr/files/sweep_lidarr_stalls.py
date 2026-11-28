@@ -108,8 +108,14 @@ class Plan:
     untracked: int
 
 
-def parse_torrents(rows: list[dict]) -> list[Torrent]:
-    """Torrents from qBittorrent's `torrents/info` rows."""
+def parse_torrents(rows: object) -> list[Torrent]:
+    """Torrents from qBittorrent's `torrents/info` rows.
+
+    Raises:
+        SweepError: The answer is not a list of rows.
+    """
+    if not isinstance(rows, list):
+        raise SweepError("qBittorrent's torrents/info answered no list")
     return [
         Torrent(
             hash=row["hash"].lower(),
@@ -123,13 +129,15 @@ def parse_torrents(rows: list[dict]) -> list[Torrent]:
     ]
 
 
-def queue_ids(page: dict) -> dict[str, int]:
+def queue_ids(page: object) -> dict[str, int]:
     """{lowercase info-hash: queue record id} from one page of Lidarr's `queue`.
 
     Raises:
-        SweepError: The page holds fewer records than Lidarr's total, so a dead torrent's
-            record could be missing from it.
+        SweepError: The answer is not a page, or the page holds fewer records than Lidarr's
+            total, so a dead torrent's record could be missing from it.
     """
+    if not isinstance(page, dict):
+        raise SweepError("Lidarr's queue answered no page")
     records = page["records"]
     if page["totalRecords"] > len(records):
         raise SweepError(
@@ -160,7 +168,9 @@ def plan(torrents: list[Torrent], ids: dict[str, int], now: float) -> Plan:
     )
 
 
-def request(url: str, headers: dict[str, str], method: str = "GET", body=None):
+def request(
+    url: str, headers: dict[str, str], method: str = "GET", body: dict | None = None
+) -> object:
     """One API call, returning the parsed JSON body, or None for an empty one.
 
     Raises:
@@ -198,6 +208,8 @@ def sweep(env: dict[str, str], now: float) -> int:
     armed = env.get("ARMED") == "true"
 
     transfer = request(f"{env['QBT_URL']}/api/v2/transfer/info", qbt)
+    if not isinstance(transfer, dict):
+        raise SweepError("qBittorrent's transfer/info answered no object")
     if transfer["dht_nodes"] < MIN_DHT_NODES:
         raise SweepError(
             f"qBittorrent reports {transfer['dht_nodes']} DHT nodes, under {MIN_DHT_NODES}; "
@@ -236,7 +248,9 @@ def sweep(env: dict[str, str], now: float) -> int:
 
 def main(argv: list[str] | None = None) -> int:
     """Run the sweep from the Job's environment."""
-    argparse.ArgumentParser(description=__doc__.splitlines()[0]).parse_args(argv)
+    argparse.ArgumentParser(description=(__doc__ or "").splitlines()[0]).parse_args(
+        argv
+    )
     missing = [
         k
         for k in ("LIDARR_URL", "LIDARR_API_KEY", "QBT_URL", "QBT_API_KEY")

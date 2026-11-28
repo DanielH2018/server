@@ -215,6 +215,13 @@ def test_a_schema_without_discord_fails_rather_than_seeding_nothing() -> None:
         seed.schema_for([{"implementation": "Webhook", "fields": []}])
 
 
+def test_an_answer_that_is_no_list_fails_rather_than_seeding() -> None:
+    with pytest.raises(seed.SeedError, match="answered no list"):
+        seed.find_notification(None, NAME)
+    with pytest.raises(seed.SeedError, match="answered no list"):
+        seed.schema_for(None)
+
+
 def test_a_notification_missing_the_webhook_field_fails_the_deploy() -> None:
     # The reject half of set_field. A silent skip would leave the URL unwritten and still
     # report the notification as declared.

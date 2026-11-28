@@ -79,7 +79,9 @@ class Declaration:
         )
 
 
-def call(base_url: str, api_key: str, method: str, path: str, body=None):
+def call(
+    base_url: str, api_key: str, method: str, path: str, body: dict | None = None
+) -> object:
     """One `/api/v5/<path>` call; the key travels as a header and is never printed."""
     data = json.dumps(body).encode() if body is not None else None
     request = Request(f"{base_url}/api/v5/{path}", data=data, method=method)
@@ -98,6 +100,30 @@ def call(base_url: str, api_key: str, method: str, path: str, body=None):
     except OSError as err:
         raise Failed(f"{method} /api/v5/{path} got no answer: {err}") from err
     return json.loads(raw) if raw.strip() else None
+
+
+def call_list(base_url: str, api_key: str, path: str) -> list:
+    """`GET /api/v5/<path>`, whose answer must be a list.
+
+    Raises:
+        Failed: the call failed, or it answered something other than a list.
+    """
+    answer = call(base_url, api_key, "GET", path)
+    if not isinstance(answer, list):
+        raise Failed(f"GET /api/v5/{path} answered no list")
+    return answer
+
+
+def created_id(base_url: str, api_key: str, path: str, body: dict) -> int:
+    """`POST /api/v5/<path>` with `body`, returning the id Sonarr gave the new object.
+
+    Raises:
+        Failed: the call failed, or its answer carries no id.
+    """
+    answer = call(base_url, api_key, "POST", path, body)
+    if not isinstance(answer, dict) or "id" not in answer:
+        raise Failed(f"POST /api/v5/{path} answered no object with an id")
+    return int(answer["id"])
 
 
 def tag_ids(tags: list) -> dict[str, int]:
@@ -160,9 +186,10 @@ def _specification_key(spec: dict) -> tuple:
 def drift(live: dict, desired: dict) -> list[str]:
     """The owned keys whose live value differs from the declaration."""
 
-    def norm(key, value):
+    def norm(key: str, value: object) -> object:
         if key == "specifications":
-            return sorted(_specification_key(s) for s in value or [])
+            specs = value if isinstance(value, list) else []
+            return sorted(_specification_key(s) for s in specs)
         return sorted(value) if isinstance(value, list) else value
 
     return [
@@ -186,14 +213,14 @@ def declare(
     name = desired["name"]
     live = [
         item
-        for item in call(base_url, api_key, "GET", resource)
+        for item in call_list(base_url, api_key, resource)
         if item.get("name") == name
     ]
     if len(live) > 1:
         raise Failed(f"{len(live)} {label}s are named {name!r}")
     if not live:
-        created = call(base_url, api_key, "POST", resource, desired)
-        return f"created {label} {name!r} as id {created['id']}"
+        new_id = created_id(base_url, api_key, resource, desired)
+        return f"created {label} {name!r} as id {new_id}"
     changed = drift(live[0], desired)
     if not changed:
         return None
@@ -211,13 +238,14 @@ def run(env: Mapping[str, str]) -> str:
     """
     base_url, api_key = env["SONARR_URL"].rstrip("/"), env["SONARR_API_KEY"]
     declaration = Declaration.parse(env["SONARR_RELEASE_PROFILE"])
-    ids = tag_ids(call(base_url, api_key, "GET", "tag"))
+    ids = tag_ids(call_list(base_url, api_key, "tag"))
     lines = []
     for series_type in declaration.excluded_series_types:
         if series_type not in ids:
-            created = call(base_url, api_key, "POST", "tag", {"label": series_type})
-            ids[series_type] = int(created["id"])
-            lines.append(f"created tag {series_type!r} as id {created['id']}")
+            ids[series_type] = created_id(
+                base_url, api_key, "tag", {"label": series_type}
+            )
+            lines.append(f"created tag {series_type!r} as id {ids[series_type]}")
     rules_changed = False
     for series_type in declaration.excluded_series_types:
         line = declare(
@@ -246,7 +274,7 @@ def run(env: Mapping[str, str]) -> str:
 
 
 def main(argv: list[str] | None = None, env: Mapping[str, str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser = argparse.ArgumentParser(description=(__doc__ or "").splitlines()[0])
     parser.parse_args(argv)
     env = os.environ if env is None else env
     try:

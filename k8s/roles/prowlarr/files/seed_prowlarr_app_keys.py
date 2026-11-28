@@ -59,7 +59,9 @@ class ApiError(SeedError):
     body = ""
 
 
-def request(api_url: str, api_key: str, path: str, method: str = "GET", body=None):
+def request(
+    api_url: str, api_key: str, path: str, method: str = "GET", body: dict | None = None
+) -> object:
     """One Prowlarr API call under `api_url`, returning the parsed JSON or None.
 
     Raises:
@@ -75,10 +77,10 @@ def request(api_url: str, api_key: str, path: str, method: str = "GET", body=Non
         with open_url(req, timeout=HTTP_TIMEOUT) as resp:
             raw = resp.read().decode()
     except urllib.error.HTTPError as exc:
-        body = exc.read().decode()
-        error = ApiError(f"{method} {path} returned HTTP {exc.code}: {body[:500]}")
+        detail = exc.read().decode()
+        error = ApiError(f"{method} {path} returned HTTP {exc.code}: {detail[:500]}")
         error.code = exc.code
-        error.body = body
+        error.body = detail
         raise error from exc
     except OSError as exc:
         raise SeedError(f"{method} {path} could not reach Prowlarr: {exc}") from exc
@@ -113,8 +115,14 @@ class Failure:
     message: str
 
 
-def parse_applications(rows: list) -> list[Application]:
-    """The entries of `GET /api/v1/applications`."""
+def parse_applications(rows: object) -> list[Application]:
+    """The entries of `GET /api/v1/applications`.
+
+    Raises:
+        SeedError: The answer is not a list.
+    """
+    if not isinstance(rows, list):
+        raise SeedError("GET applications answered no list")
     return [Application(int(r["id"]), str(r["implementation"]), r) for r in rows]
 
 
@@ -237,7 +245,9 @@ def env_or_fail(key: str) -> str:
 
 
 def main(argv: list[str] | None = None) -> int:
-    argparse.ArgumentParser(description=__doc__.splitlines()[0]).parse_args(argv)
+    argparse.ArgumentParser(description=(__doc__ or "").splitlines()[0]).parse_args(
+        argv
+    )
     written = seed(
         f"{env_or_fail('PROWLARR_URL')}/api/v1",
         env_or_fail("PROWLARR_API_KEY"),
