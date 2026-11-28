@@ -22,6 +22,7 @@ from pathlib import Path, PurePosixPath
 from urllib.parse import unquote
 
 import yaml
+from yaml.composer import ComposerError
 
 NOTE_SUFFIX = ".md"
 MAX_RESULTS = 100
@@ -33,6 +34,18 @@ _WIKILINK = re.compile(r"!?\[\[([^\]|#^]*)(?:[#^][^\]|]*)?(?:\|[^\]]*)?\]\]")
 _MDLINK = re.compile(r"!?\[[^\]]*\]\(<?([^)<>\s]+)>?(?:\s+\"[^\"]*\")?\)")
 _INLINE_TAG = re.compile(r"(?<![\w/#&])#([\w/-]*[^\W\d][\w/-]*)")
 _FENCE = re.compile(r"^(```|~~~).*?^\1", re.MULTILINE | re.DOTALL)
+_FRONTMATTER = re.compile(r"\A---[ \t]*\n(.*?\n)?---[ \t]*(?:\n|\Z)", re.DOTALL)
+
+
+class _NoAliasLoader(yaml.BaseLoader):
+    """BaseLoader that refuses YAML aliases, which JSON encoding would expand exponentially."""
+
+    def compose_node(self, parent: yaml.Node | None, index: object) -> yaml.Node | None:
+        if self.check_event(yaml.AliasEvent):
+            raise ComposerError(
+                None, None, "aliases are not allowed", self.peek_event().start_mark
+            )
+        return super().compose_node(parent, index)
 
 
 class NoteNotFound(LookupError):
@@ -103,20 +116,22 @@ class Note:
 def parse_note(path: str, text: str, modified: float = 0.0) -> Note:
     """Split a note's YAML frontmatter from its body, and read its link targets and tags.
 
-    Frontmatter loads with PyYAML's BaseLoader, so every scalar is a string and the result is
-    always JSON-serialisable. Frontmatter that does not parse to a mapping reads as empty.
+    Frontmatter opens on the first line and closes at the next line that is exactly `---`,
+    after an optional BOM. `text` has LF line ends, as text-mode reading gives. It loads with PyYAML's BaseLoader and no
+    aliases, so every scalar is a string and the result is always JSON-serialisable.
+    Frontmatter that does not parse to a mapping reads as empty.
     """
+    text = text.removeprefix("﻿")
     frontmatter: dict = {}
     body = text
-    if text.startswith("---\n"):
-        end = text.find("\n---", 3)
-        if end != -1:
-            try:
-                loaded = yaml.load(text[4:end], Loader=yaml.BaseLoader)
-            except yaml.YAMLError:
-                loaded = None
-            frontmatter = loaded if isinstance(loaded, dict) else {}
-            body = text[end + 4 :].split("\n", 1)[1] if "\n" in text[end + 4 :] else ""
+    match = _FRONTMATTER.match(text)
+    if match:
+        try:
+            loaded = yaml.load(match.group(1) or "", Loader=_NoAliasLoader)
+        except yaml.YAMLError:
+            loaded = None
+        frontmatter = loaded if isinstance(loaded, dict) else {}
+        body = text[match.end() :]
     targets = [m.group(1).strip() for m in _WIKILINK.finditer(body)]
     targets += [
         unquote(m.group(1).split("#", 1)[0])
@@ -149,8 +164,13 @@ def _has_tag(note: Note, tag: str) -> bool:
 
 
 def _snippet(body: str, terms: list[str]) -> str:
-    lowered = body.casefold()
-    hits = [i for i in (lowered.find(t) for t in terms) if i != -1]
+    folded: list[str] = []
+    origin: list[int] = []  # index in `body` of each character of the casefolded body
+    for i, char in enumerate(body):
+        folded.append(char.casefold())
+        origin.extend([i] * len(folded[-1]))
+    lowered = "".join(folded)
+    hits = [origin[i] for i in (lowered.find(t) for t in terms) if i != -1]
     start = max(0, min(hits) - SNIPPET_CHARS // 4) if hits else 0
     return " ".join(body[start : start + SNIPPET_CHARS].split())
 
@@ -336,8 +356,9 @@ class Vault:
 class _LinkIndex:
     """Resolves a link target the way Obsidian does, over the visible notes only.
 
-    A target with a folder resolves against the linking note's folder, then the vault root.
-    A bare name resolves to the note of that name in the linking note's folder, else the one
+    A target opening with `/` is vault-absolute, and one opening with `./` or `../` is relative
+    to the linking note's folder. Any other target with a folder is vault-absolute first, else
+    the note with the shortest path ending in it. A bare name resolves to the note of that name in the linking note's folder, else the one
     with the shortest path. Matching ignores case and the `.md` suffix.
     """
 
@@ -355,14 +376,24 @@ class _LinkIndex:
             else target
         )
         folder = PurePosixPath(source).parent
+        if stem.startswith("/"):
+            key = posixpath.normpath(stem.lstrip("/")).casefold()
+            return self._by_path.get(key)
+        if stem.startswith(("./", "../")):
+            joined = posixpath.normpath((folder / stem).as_posix())
+            return self._by_path.get(joined.casefold())
         if "/" in stem:
-            for base in (folder, PurePosixPath()):
-                joined = posixpath.normpath((base / stem).as_posix())
-                found = self._by_path.get(joined.casefold())
-                if found:
-                    return found
-            return None
+            key = posixpath.normpath(stem).casefold()
+            if key in self._by_path:
+                return self._by_path[key]
+            suffixed = [p for k, p in self._by_path.items() if k.endswith("/" + key)]
+            return min(suffixed, key=_shortest_first, default=None)
         candidates = self._by_stem.get(stem.casefold(), [])
         same_folder = [c for c in candidates if PurePosixPath(c).parent == folder]
-        ranked = same_folder or sorted(candidates, key=lambda c: (c.count("/"), c))
-        return ranked[0] if ranked else None
+        if same_folder:
+            return same_folder[0]
+        return min(candidates, key=_shortest_first, default=None)
+
+
+def _shortest_first(path: str) -> tuple[int, str]:
+    return path.count("/"), path
