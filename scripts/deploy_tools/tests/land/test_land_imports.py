@@ -155,13 +155,13 @@ ALLOWED = {
         "fresh",
     },
     "closing_refs": {"gh_read", "landing", "outcome"},
-    "ci": {"landing", "outcome"},
+    "ci": {"landing", "outcome", "transitions"},
     "deploy": {
         "landing",
         "outcome",
         "promotion",
     },
-    "promotion": {"landing", "outcome"},
+    "promotion": {"landing", "outcome", "transitions"},
     "health_verdict": {"landing", "outcome", "promotion", "health_gate"},
     "own_checkout": set(),
     # Makes a checkout and runs a child land.sh; it imports no phase. `grading_argv` reads Options.

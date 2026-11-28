@@ -1256,7 +1256,8 @@ uv run python scripts/diagnostics/probe.py loki-query '{job="syslog"} |= "event=
 
 Each state a landing enters writes one more line under the same tag,
 `event=land_transition pr=<n> from=<state> to=<state> at=<epoch seconds> verdict=<v>`, and
-rewrites the landing's state record, `/run/lock/homelab-land-line/<pr>.state` on daniel-box.
+rewrites the landing's state record, `/run/lock/homelab-land-line/<pr>.<uid>.state` on
+daniel-box.
 Only the last line names a verdict. `land_lib/transitions.py` holds the state names and the
 record's fields. A landing that hangs or dies therefore leaves its history: read it with
 

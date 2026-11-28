@@ -17,8 +17,9 @@ left for the same PR therefore closes the line to that landing.
 
 The line is not a safety gate. A landing that cannot use it waits for the turn without it.
 
-The directory also holds each landing's state record (`transitions.py`), `<pr>.state`, written
-through the same operations and the same ssh session as a place.
+The directory also holds each landing's state record (`transitions.py`), `<pr>.<uid>.state`,
+written through the same operations and the same ssh session as a place. The uid in the name
+keeps a landing from ever replacing another user's record, which the sticky bit refuses.
 """
 
 import inspect
@@ -61,7 +62,8 @@ def _op(directory: str, op: str, *args: str) -> str:
       fresh and has no answer, and removes this user's stale places.
     - `answer <pr> <head> <what>` writes `what` into the place, if it still names `head`
       and holds no answer yet or `split`. An empty `what` leaves the place unanswered.
-    - `record <pr> <text>` replaces the PR's state record, `<pr>.state`, with `text`.
+    - `record <pr> <text>` replaces this user's state record for the PR, `<pr>.<uid>.state`,
+      with `text`.
 
     Raises:
         ValueError: The PR is not a number, or the operation has no such name.
@@ -100,7 +102,7 @@ def _op(directory: str, op: str, *args: str) -> str:
         replace(pr, " ".join(words) + "\n")
 
     if op == "record":
-        replace(args[0] + ".state", args[1])
+        replace(f"{args[0]}.{os.getuid()}.state", args[1])
         return ""
     if op == "join":
         write(*args)

@@ -83,7 +83,7 @@ from deploy_tools.land_lib import (
 from deploy_tools.land_lib.landing import BRANCH, Landing
 from deploy_tools.land_lib.outcome import Outcome, Verdict, disarmed, say
 from deploy_tools.land_lib.pr_json import CommitMessage
-from deploy_tools.land_lib.transitions import State
+from deploy_tools.land_lib.transitions import CHECKS, State
 
 
 type TakeTurn = Callable[[str], tuple[bool, int]]
@@ -441,6 +441,12 @@ def await_merge(ln: Landing, take_turn: TakeTurn = _no_turn) -> None:
     # The forward-only pins that head bumps, whose land rule is read again before each retry.
     gated_pins: list[str] = []
     watch = stall.Watch()
+    # The last CI read's counts, written once the state they belong to is entered.
+    checks: list[tuple[int, int]] = []
+
+    def count_checks(done: int, total: int) -> None:
+        checks.append((done, total))
+
     # The head whose checks `stuck_checks` reads, and the `waited` of its next read.
     stuck_head = ""
     stuck_read_at = 0
@@ -484,9 +490,10 @@ def await_merge(ln: Landing, take_turn: TakeTurn = _no_turn) -> None:
             continue
         pause, spent = 0, ""
         rc, line = CI_PENDING, ""
+        checks.clear()
         if head:
             try:
-                rc, line = t.await_ci(head, 0)
+                rc, line = t.await_ci(head, 0, count_checks)
             except await_ci.RateLimitedError as exc:
                 pause, spent = exc.wait_s, exc.quota
                 rate_limited(
@@ -497,6 +504,8 @@ def await_merge(ln: Landing, take_turn: TakeTurn = _no_turn) -> None:
             # A head that asked and has no turn stays `no-turn`.
             if rc == CI_PENDING and (in_turn or not asked):
                 ln.transitions.enter(_ci_state(ln, head, in_turn))
+                if checks:
+                    ln.transitions.progress(*checks[-1], CHECKS)
             watch = stall.on_poll(ln, watch, head, stall.of(ci_pending), waited, line)
             if rc == CI_RED:
                 ln.die(

@@ -75,7 +75,9 @@ def broad_landing(monkeypatch, capsys, tmp_path):
         )
         tools, calls = build_tools(fakes)
 
-        def land_wait(sha, services, primary, cap_s, window_grace_s, on_root_alone):
+        def land_wait(
+            sha, services, primary, cap_s, window_grace_s, on_root_alone, on_ready
+        ):
             return promote_wait.land_wait(
                 sim.reads(),
                 M,
@@ -83,6 +85,7 @@ def broad_landing(monkeypatch, capsys, tmp_path):
                 cap_s=cap_s,
                 window_grace_s=window_grace_s,
                 on_root_alone=on_root_alone,
+                on_ready=on_ready,
             )
 
         sick = frozenset({UNHEALTHY} if unhealthy else ())

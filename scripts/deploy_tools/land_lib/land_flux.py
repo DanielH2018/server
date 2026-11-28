@@ -54,6 +54,7 @@ def run_land_wait(
     cap_s: float | None,
     window_grace_s: int,
     on_root_alone: Callable[[], None],
+    on_ready: Callable[[int, int], None],
 ) -> WaitResult:
     """`promote.py land-wait`, in process. Its ancestry reads run in `primary`."""
     reads = live_wait_reads(forge.connect(os.environ), primary)
@@ -64,6 +65,7 @@ def run_land_wait(
         cap_s=cap_s,
         window_grace_s=window_grace_s,
         on_root_alone=on_root_alone,
+        on_ready=on_ready,
     )
 
 
@@ -74,14 +76,24 @@ class FluxReads:
     Attributes:
         land_wait: `run_land_wait`, taking the merge commit, the tags the landing names
             on its own, the primary checkout, the cap in seconds, or None for none, the
-            most the reboot window may add to the cap, and the call land-wait makes once
-            the changed set reads `homelab` alone.
+            most the reboot window may add to the cap, the call land-wait makes once
+            the changed set reads `homelab` alone, and the call that takes each poll's
+            Kustomizations settled of those waited on.
         pins: the pin gate's reads (`pin_reads.PinReads`).
         k8s_tags_at: `k8s_tags_at`.
     """
 
     land_wait: Callable[
-        [str, list[str], Path, float | None, int, Callable[[], None]], WaitResult
+        [
+            str,
+            list[str],
+            Path,
+            float | None,
+            int,
+            Callable[[], None],
+            Callable[[int, int], None],
+        ],
+        WaitResult,
     ] = run_land_wait
     pins: PinReads = field(default_factory=PinReads)
     k8s_tags_at: Callable[[Path, str], set[str]] = k8s_tags_at

@@ -103,8 +103,18 @@ def test_a_settled_landing_leaves_a_state_record_naming_its_verdict_and_history(
     ]
 
 
+def test_the_master_ci_wait_counts_its_checks_in_the_state_record(land_run):
+    fakes = _settles()
+    fakes.checks = (4, 9)
+    _, _, _, calls, _ = land_run(LAND, fakes)
+    assert {
+        "state": "master-ci",
+        "progress": {"done": 4, "total": 9, "what": "checks finished"},
+    } in [{"state": r["state"], "progress": r["progress"]} for r in _records(calls)]
+
+
 def test_a_landing_that_times_out_in_the_turn_ends_on_merge_timeout(land_run):
-    fakes = _fakes([OPEN], await_ci=[(75, "pending")])
+    fakes = _fakes([OPEN], await_ci=[(75, "pending")], checks=(1, 3))
     rc, out, _, calls, _ = land_run(LAND, fakes)
     assert rc == 75 and "VERDICT: merge-timeout" in out, out
     moves = _moves(calls)
@@ -116,11 +126,12 @@ def test_a_landing_that_times_out_in_the_turn_ends_on_merge_timeout(land_run):
         "testing",
         "verdict",
     ]
-    # The record the deploy UI read while the landing waited: its state, entered when.
+    # The record the deploy UI read while the landing waited: its state, entered when, and
+    # the CI read's count, which comes after the state it belongs to.
     waiting = _records(calls)[-2]
     assert waiting["state"] == "testing" and waiting["verdict"] == ""
     assert waiting["since"] == float(moves[-2]["at"])
-    assert waiting["progress"] is None
+    assert waiting["progress"] == {"done": 1, "total": 3, "what": "checks finished"}
 
 
 def test_writers_that_raise_leave_the_verdict_as_it_was(capsys):

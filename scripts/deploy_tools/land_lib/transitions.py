@@ -6,13 +6,14 @@ on what it writes.
 
 Each state change writes two records:
 
-- **A state record**, `<pr>.state` in the line's directory on `TURN_HOST`, replaced by a
-  rename (`line.py`'s `record` operation). A landing on another host writes it through ssh, as
+- **A state record**, `<pr>.<uid>.state` in the line's directory on `TURN_HOST`, replaced by
+  a rename (`line.py`'s `record` operation). A landing on another host writes it through ssh, as
   it writes its place in the line. It is one JSON object: `pr`, `host`, `pid`, `state`,
   `since` (epoch seconds), `history` (each state before it, with its `since`), `progress`
   (`done`, `total` and `what`, or null) and `verdict`. The record stays after the verdict and
   names it. A record whose `pid` is gone and whose state is not `verdict` is a landing that
-  died.
+  died. A PR landed by two users has a record from each, and the newest `since` is the live
+  one.
 - **A transition line**, logfmt through `Tools.logger`:
   `event=land_transition pr=<n> from=<state> to=<state> at=<epoch seconds> verdict=<v>`.
   `from` is empty for the first state, and only the line into `verdict` names a verdict.
@@ -41,6 +42,9 @@ from lib import host_modules  # noqa: F401
 from host_lib import logfmt
 
 EVENT = "land_transition"
+# What a count of progress counts: a CI read's check-runs, `land_wait`'s Kustomizations.
+CHECKS = "checks finished"
+KUSTOMIZATIONS = "Kustomizations ready"
 
 
 class State(StrEnum):
@@ -135,6 +139,10 @@ class Transitions:
             return
         self._progress = now
         self._write()
+
+    def counter(self, what: str) -> Callable[[int, int], None]:
+        """`progress` for `what`, as the `(done, total)` callback a read takes."""
+        return lambda done, total: self.progress(done, total, what)
 
     def _move(self, state: State, verdict: str) -> None:
         tools = self._tools

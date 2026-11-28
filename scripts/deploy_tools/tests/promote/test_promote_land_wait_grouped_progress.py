@@ -84,3 +84,24 @@ def test_a_widened_wait_groups_every_name_by_reason(capsys):
     ]
     assert not named, lines[0]
     assert re.search(rf"\b{BEHIND_COUNT + 1}\b", lines[0]), lines[0]
+
+
+def test_each_poll_reports_the_kustomizations_settled_of_those_waited_on():
+    stuck = kustomization(NOT_READY, f"master@sha1:{M}", ready=False)
+    ready = kustomization(NOT_READY, f"master@sha1:{M}")
+    sim = Sim(
+        polls=[
+            [*at(P, *BEHIND), stuck],
+            [*at(P, *BEHIND), ready],
+            at(M, *BEHIND, NOT_READY),
+        ],
+        published=PUBLISHED,
+    )
+    counts = []
+    result = promote_wait.land_wait(
+        sim.reads(), M, ["bento-pdf"], on_ready=lambda *count: counts.append(count)
+    )
+    assert result.verdict == "settled"
+    # BEHIND, NOT_READY and `homelab`: settled only once applied at M and Ready.
+    total = len(BEHIND) + 2
+    assert counts == [(0, total), (1, total), (total, total)]

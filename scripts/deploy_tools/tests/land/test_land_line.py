@@ -176,15 +176,23 @@ def test_a_landing_on_another_host_stands_in_the_same_line_over_ssh(
     assert not (tmp_path / "line" / "7").exists()
 
 
-def test_a_state_record_replaces_the_last_one_and_takes_no_place(
+def test_a_state_record_replaces_this_users_last_one_and_takes_no_place(
     the_line, tmp_path, ssh_here
 ):
     the_line("join", "7", HEAD)
+    # The name another user's landing of the same PR writes, which the sticky bit would keep
+    # this user from replacing.
+    theirs = tmp_path / "line" / f"7.{os.getuid() + 1}.state"
+    theirs.write_text('{"state": "verdict"}')
     line.over_ssh("turn-host", tmp_path / "line")("record", "7", '{"state": "queued"}')
     the_line("record", "7", '{"state": "holding"}')
-    assert (tmp_path / "line" / "7.state").read_text() == '{"state": "holding"}'
+    mine = tmp_path / "line" / f"7.{os.getuid()}.state"
+    assert mine.read_text() == '{"state": "holding"}'
+    assert theirs.read_text() == '{"state": "verdict"}'
     assert _waiting(the_line) == [f"7 {HEAD}"]
-    assert sorted(os.listdir(tmp_path / "line")) == ["7", "7.state"]
+    assert sorted(os.listdir(tmp_path / "line")) == sorted(
+        ["7", mine.name, theirs.name]
+    )
 
 
 def test_a_turn_host_that_does_not_answer_the_line_raises_oserror(

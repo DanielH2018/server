@@ -63,10 +63,10 @@ def test_master_moving_during_the_batchs_run_leaves_the_holder_to_the_stale_rule
     ln, hub, the_line = batch_of(drafts=("7",))
     real = ln.tools.await_ci
 
-    def master_moves_during_the_run(sha, timeout):
+    def master_moves_during_the_run(sha, timeout, on_checks):
         if sha == hub.branches.get(f"queue/{OWN}"):
             hub.master = "e" * 40
-        return real(sha, timeout)
+        return real(sha, timeout, on_checks)
 
     ln.tools = replace(ln.tools, await_ci=master_moves_during_the_run)
     land(ln)
@@ -84,10 +84,10 @@ def _during_the_run(ln, hub, change) -> None:
     real = ln.tools.await_ci
     done = []
 
-    def await_ci(sha, timeout):
+    def await_ci(sha, timeout, on_checks):
         if sha == hub.branches.get(f"queue/{OWN}") and not done:
             done.append(change())
-        return real(sha, timeout)
+        return real(sha, timeout, on_checks)
 
     ln.tools = replace(ln.tools, await_ci=await_ci)
 
@@ -174,10 +174,10 @@ def test_a_slow_member_leaves_no_budget_for_the_one_behind_it(batch_of):
     pending = [CiVerdict(CI_PENDING, "pending")] * 5
     its_ci = ln.tools.await_ci
 
-    def await_ci(sha, timeout):
+    def await_ci(sha, timeout, on_checks):
         if sha == head_of("7") and not hub.prs["7"]["isDraft"] and pending:
             return pending.pop()
-        return its_ci(sha, timeout)
+        return its_ci(sha, timeout, on_checks)
 
     ln.tools = replace(ln.tools, await_ci=await_ci)
     land(ln)

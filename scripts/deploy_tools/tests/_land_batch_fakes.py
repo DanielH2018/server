@@ -192,7 +192,7 @@ class GitHub:
             return self._tools.gh(*args, **kwargs)
         return subprocess.CompletedProcess(args, 0, "", "")
 
-    def await_ci(self, sha, timeout):
+    def await_ci(self, sha, timeout, on_checks):
         """A ready PR's own head is green, or red if `own_red` names it; a batch follows `run`."""
         pr = self._pr_of(sha)
         if pr:

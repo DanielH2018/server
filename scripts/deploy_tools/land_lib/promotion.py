@@ -35,6 +35,7 @@ from typing import assert_never
 
 
 from deploy_tools.land_lib.landing import Landing
+from deploy_tools.land_lib.transitions import KUSTOMIZATIONS
 from deploy_tools.land_lib.outcome import (
     PROMOTE_TIMEOUT_NOTE,
     Cause,
@@ -173,6 +174,7 @@ def wait_on_promotion(ln: Landing) -> None:
         wait_cap(ln),
         ln.opts.window_grace,
         ln.give_up_slot,
+        ln.transitions.counter(KUSTOMIZATIONS),
     )
     ln.flux_tags += [t for t in _flux_owned(ln, result.tags) if t not in ln.flux_tags]
     # Before any `finish` below, so a failed landing's ledger line names the changed set.

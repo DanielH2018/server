@@ -125,7 +125,7 @@ def _step_3_over_master(
     def sleep(seconds):
         now[0] += seconds
 
-    def real_wait(sha, timeout_s):
+    def real_wait(sha, timeout_s, on_checks):
         return CiVerdict(
             *await_ci.wait(
                 sha,

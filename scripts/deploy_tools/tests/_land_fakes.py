@@ -69,6 +69,8 @@ class Fakes:
     pull_ref_rc: int = 0
     tip: str = MERGE_SHA
     await_ci: list[tuple[int, str]] = field(default_factory=lambda: [(0, "CI green")])
+    # What each CI read counts, (finished, listed); None is a read that lists no check-run.
+    checks: tuple[int, int] | None = None
     # `tools.ci_passed` by SHA: one commit's own CI. A SHA absent here has no verdict.
     ci_passed: dict[str, bool] = field(default_factory=dict)
     # `git diff --name-only <since>..<merge>`: its exit code and the paths it prints.
@@ -344,7 +346,9 @@ def build_tools(f: Fakes) -> tuple[Tools, list]:
 
     await_ci_seq = _seq(f.await_ci, calls, "await_ci")
 
-    def await_ci(sha, timeout):
+    def await_ci(sha, timeout, on_checks):
+        if f.checks:
+            on_checks(*f.checks)
         return CiVerdict(*await_ci_seq(sha, timeout))
 
     def k8s_tags_at(primary, ref):

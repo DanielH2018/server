@@ -81,7 +81,7 @@ from deploy_tools.land_lib import (
 )
 from deploy_tools.land_lib.landing import BRANCH, Landing
 from deploy_tools.land_lib.outcome import Outcome, Verdict, say
-from deploy_tools.land_lib.transitions import State, Transitions
+from deploy_tools.land_lib.transitions import CHECKS, State, Transitions
 from lib.exit_codes import CI_GREEN, CI_PENDING, CI_RED
 from lib.json_types import JsonValue, as_object
 
@@ -366,7 +366,7 @@ def _await_run(ln: Landing, tip: str) -> tuple[int, str]:
     waited = 0
     while True:
         try:
-            rc, said = ln.tools.await_ci(tip, 0)
+            rc, said = ln.tools.await_ci(tip, 0, ln.transitions.counter(CHECKS))
         except await_ci.RateLimitedError as exc:
             rc, said = CI_PENDING, str(exc)
         if rc == CI_GREEN:
