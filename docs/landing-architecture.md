@@ -36,11 +36,13 @@ becomes a named invariant with a test.
 Slice 1 is built: `land_lib/transitions.py` writes the state and transition records.
 Slice 2 is built: `land_lib/core/queue_machine.py` holds `may_take` and `stackable`, which
 `turn._wait` and `batch._members` call. Slice 3 is built: those two functions serve the
-turn by ticket, under *The ticket protocol* below. The first half of slice 4 is built:
+turn by ticket, under *The ticket protocol* below. Slice 4 is built:
 `land_lib/core/landing_state.py` holds `LandingState`, and `land_lib/core/landing_machine.py`
-holds `step` for the merge wait. Nothing calls `step` yet. The characterization traces in
-`scripts/deploy_tools/tests/land_merge/merge_wait_traces.txt` hold it to
-`merge.await_merge`'s loop, which the cutover replaces. Nothing else here is built. The
+holds `step` for the merge wait. `merge.await_merge` is the driver: it carries out each
+action `step` returns (`merge._perform`) and holds no decision. The characterization traces
+in `scripts/deploy_tools/tests/land_merge/merge_wait_traces.txt` were recorded from the
+polling loop the driver replaced, and the driver reproduces each one. Nothing else here is
+built. The
 validation below read the code at master `ce5c3abfa`. The
 milestone is `Landing pipeline state machine`.
 
@@ -339,7 +341,7 @@ every one after every step.
   #10525 and #10288.
 - **No discarded proof.** A green Testing whose base is still master's tip ends in Merging,
   never Rejoining. Held, since #10507, by the `batch_tested` read before
-  `rejoin_in_turn` in `merge.await_merge`.
+  `rejoin_in_turn` in `landing_machine._on_tested`.
 - **No starvation.** A Queued landing reaches Holding within the tickets ahead of it times
   the bound on a turn, or ends with a named reason. Nothing holds it. The only bound is
   `merge_timeout`, after which the landing leaves the queue.
@@ -367,7 +369,11 @@ every one after every step.
   differential test are its whole guard.
 - **Differential test of the driver.** The same random scenario drives the real driver over
   faked I/O and the pure model. The test asserts both produce the same action trace. That
-  ties the code that ships to the model the properties checked.
+  ties the code that ships to the model the properties checked. The model takes the answers
+  the driver built, so both sides run the same `step`: the test fails on a driver that
+  skips, adds or reorders an action, and the characterization traces are what fail on a
+  changed transition
+  (`test_land_merge_wait_machine.py::test_the_driver_and_the_model_take_the_same_actions`).
 - **Replay simulation.** `sim/` replays a day's recorded arrivals, CI durations and outcomes
   through `schedule` under different policies, such as batch size 4 against 6, tickets
   against the race, serial-last, or pipelining. It reports the merges an hour and the wait
@@ -614,7 +620,7 @@ exercise. Order is middle-out: the contract and the model first, then the code b
    place, deferral to an older fresh ticket, and stacking in ticket order. This is the first
    behaviour change. The operator gave the go-ahead on 2026-11-28.
 1. **The landing machine for the pre-merge half, by direct cutover**
-   ([#10570](https://github.com/DanielH2018/server/issues/10570)).
+   ([#10570](https://github.com/DanielH2018/server/issues/10570)), built.
     1. `LandingState`, `step` and the characterization traces land first. Nothing calls
        `step`, and the tests hold it to the traces.
     1. One PR replaces the loop in `merge.await_merge` with the driver and deletes the loop.
