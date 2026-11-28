@@ -23,6 +23,7 @@ Configuration comes from the environment, which deploy-ui.service sets:
   DEPLOY_UI_GAMES_FILE the game registry, JSON rendered from `game_servers` (default: none)
   DEPLOY_UI_NAMESPACE  namespace of the game Deployments (default homelab)
   DEPLOY_UI_LOKI       Loki base URL for the game consoles (default: none)
+  DEPLOY_UI_FANOUT_REMOTES  hosts, space-separated, whose fan-out manifests ssh reads (default: none)
   KUBECONFIG           the read-only kubeconfig `kubectl` reads the games with
   CREDENTIALS_DIRECTORY  systemd's credential dir, holding `games_panel_token` once imported
 """
@@ -45,6 +46,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import ClassVar, override
 
+from deploy_ui_lib.deploy_ui_change_view import ChangeView
 from deploy_ui_lib import deploy_ui_games as game_reads
 from deploy_ui_lib.deploy_ui_game_control import GameControl
 from deploy_ui_lib import deploy_ui_reads as reads
@@ -80,6 +82,9 @@ class Config:
     # Holds the turn, serial and slot locks, and the line's directory of state records.
     land_locks: Path = states.LOCK_DIR
     hostname: str = field(default_factory=socket.gethostname)
+    # Hosts whose own run manifests hold fan-out batches too; this host's are read locally.
+    fanout_remotes: tuple[str, ...] = ()
+    board_cache_s: int = 20
 
     @classmethod
     def from_env(cls) -> "Config":
@@ -106,6 +111,7 @@ class Config:
             namespace=e("DEPLOY_UI_NAMESPACE", "homelab"),
             loki_url=e("DEPLOY_UI_LOKI", "").rstrip("/"),
             credentials_dir=Path(creds) if creds else None,
+            fanout_remotes=tuple(e("DEPLOY_UI_FANOUT_REMOTES", "").split()),
         )
 
 
@@ -124,6 +130,9 @@ class App:
         # Landing logs seen on an in-flight row or spawned here, by name; see `_landing_index`.
         self._seen_lock = threading.Lock()
         self._seen: dict[str, Path] = {}
+        self.change_view = ChangeView(
+            config, self._out, self.prs, self._landing_index, self._pr_titles, now
+        )
 
     # ---- subprocess edge ----
     def _out(
@@ -259,7 +268,7 @@ class App:
                     "pr",
                     "list",
                     "--json",
-                    "number,title,headRefName,isDraft,statusCheckRollup",
+                    reads.PR_FIELDS,
                 ],
                 30,
             )
@@ -387,6 +396,7 @@ class App:
     READS: ClassVar[dict[str, str]] = {
         "/api/inflight": "inflight",
         "/api/prs": "prs",
+        "/api/changes": "change_view.changes",
         "/api/landings": "landings",
         "/api/games": "games.game_servers",
     }

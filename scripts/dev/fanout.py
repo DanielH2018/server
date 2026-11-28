@@ -6,6 +6,7 @@ Usage::
     fanout.py place read
     fanout.py place launch --batch 1345,1386 [--batch 1288] [--host daniel-box] [--no-review]
     fanout.py place status <run-id>
+    fanout.py board
     fanout.py probe [--describe] <run-id>...
     fanout.py headroom [--describe] [--batches N] [--host HOST]
     fanout.py review --batch 1345-1386 --repo DanielH2018/server < .fanout/brief.md
@@ -33,6 +34,7 @@ COMMANDS = {
     "review": "dev.fanout_lib.review_unit",
     "stats": "dev.fanout_lib.review_stats",
     "land-server": "dev.fanout_lib.autoland",
+    "board": "dev.fanout_lib.board",
 }
 
 _HELP = {
@@ -42,6 +44,7 @@ _HELP = {
     "review": "run one `launch --review` batch: implement, review, fix, land",
     "stats": "sum the fan-out review records",
     "land-server": "land the safe PRs of finished daniel-server batches",
+    "board": "each standing batch's state and phase as JSON, for deploy-ui",
 }
 
 

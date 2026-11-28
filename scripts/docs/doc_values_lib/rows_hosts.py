@@ -97,7 +97,7 @@ VALUES = rows(
         "hosts/components/deploy-ui/files/deploy_ui.html": [
             (
                 "hosts/components/deploy-ui/CLAUDE.md",
-                r"polls four panels every (\d+) seconds",
+                r"polls each panel every (\d+) seconds",
                 match(r"setInterval\(refresh,(\d+)\)", per(1000)),
             ),
             (

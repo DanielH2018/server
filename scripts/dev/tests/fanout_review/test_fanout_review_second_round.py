@@ -40,6 +40,7 @@ def _round_one(*left):
 def test_a_medium_leftover_gets_a_second_fix_and_delta_review_that_can_clear_it(
     tmp_path,
 ):
+    # fact: hosts/components/deploy-ui/CLAUDE.md#Changes
     survivor = _finding("still off by one", severity="medium", confidence=0.7)
     reports = _round_one(survivor) + [
         _report(f"Fixed again. {PR}"),
