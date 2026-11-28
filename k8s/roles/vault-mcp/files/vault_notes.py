@@ -40,7 +40,7 @@ _FRONTMATTER = re.compile(r"\A---[ \t]*\n(.*?\n)?---[ \t]*(?:\n|\Z)", re.DOTALL)
 class _NoAliasLoader(yaml.BaseLoader):
     """BaseLoader that refuses YAML aliases, which JSON encoding would expand exponentially."""
 
-    def compose_node(self, parent: yaml.Node | None, index: object) -> yaml.Node | None:
+    def compose_node(self, parent: yaml.Node | None, index: int) -> yaml.Node | None:
         if self.check_event(yaml.AliasEvent):
             raise ComposerError(
                 None, None, "aliases are not allowed", self.peek_event().start_mark
