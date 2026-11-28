@@ -32,21 +32,23 @@ EXTRA_JOB = "blackbox-extra"
 
 # The substring is the port or path the deleted tile named.
 PROBES = {
-    "wg-easy": ("http_2xx", ":51821"),
-    "email-to-rss": ("http_2xx", "/admin/login"),
-    "ical-proxy": ("http_2xx", ":5000/calendar1.ics"),
-    "livesync": ("http_401", "livesync.local."),
-    "scrutiny": ("http_2xx", "/api/health"),
-    "homelab-mcp": ("http_body_ok", "mcp.local."),
-    "traefik": ("http_body_OK", "/.well-known/traefik-edge-selfcheck"),
-    "pihole": ("dns_a_homepage", ":53"),
-    "mosquitto": ("tcp_connect", ":1883"),
-    "jellyfin": ("tcp_connect", ":8096"),
-    "zigbee2mqtt": ("tcp_connect", ":6638"),
-    "nut": ("tcp_connect", ":3493"),
-    "airflow": ("http_2xx", ":8974/health"),
-    # Added after the cutover, with no Kuma tile: the 401 proves the app refuses an anonymous call.
-    "vault-mcp": ("http_401", "vault-mcp.local."),
+    ("wg-easy", "http_2xx"): ":51821",
+    ("email-to-rss", "http_2xx"): "/admin/login",
+    ("ical-proxy", "http_2xx"): ":5000/calendar1.ics",
+    ("livesync", "http_401"): "livesync.local.",
+    ("scrutiny", "http_2xx"): "/api/health",
+    ("homelab-mcp", "http_body_ok"): "mcp.local.",
+    ("traefik", "http_body_OK"): "/.well-known/traefik-edge-selfcheck",
+    ("pihole", "dns_a_homepage"): ":53",
+    ("mosquitto", "tcp_connect"): ":1883",
+    ("jellyfin", "tcp_connect"): ":8096",
+    ("zigbee2mqtt", "tcp_connect"): ":6638",
+    ("nut", "tcp_connect"): ":3493",
+    ("airflow", "http_2xx"): ":8974/health",
+    # Added after the cutover, with no Kuma tile: the 401 proves the app refuses an anonymous
+    # call, and the 2xx that the app still holds Authelia's signing keys.
+    ("vault-mcp", "http_401"): "vault-mcp.local.",
+    ("vault-mcp", "http_2xx"): "/health/jwks",
 }
 TIERED_PROBES = {"mosquitto", "pihole"}
 EDGE_SELFCHECK_PATH = "/.well-known/traefik-edge-selfcheck"
@@ -97,34 +99,40 @@ def pi_containers() -> list[dict]:
     return copy.deepcopy(host_context()["hosts"]["daniel-pi"]["compose_services"])
 
 
-def probe_by_service() -> dict[str, tuple[str, str, str]]:
-    """The `blackbox-extra` targets: service -> (module, address, page_tier)."""
-    return {
-        labels["service"]: (labels["module"], address, labels["page_tier"])
+def extra_probes() -> list[tuple[str, str, str, str]]:
+    """The `blackbox-extra` targets as (service, module, address, page_tier)."""
+    return [
+        (labels["service"], labels["module"], address, labels["page_tier"])
         for address, labels in targets(EXTRA_JOB).items()
+    ]
+
+
+def probe_by_service() -> dict[str, tuple[str, str, str]]:
+    """The `blackbox-extra` targets of a service with one: service -> (module, address, page_tier)."""
+    return {
+        service: (module, address, tier)
+        for service, module, address, tier in extra_probes()
     }
 
 
 def test_each_probe_target_matches_the_tile_it_replaces():
-    probes = probe_by_service()
+    probes = {(s, m): address for s, m, address, _tier in extra_probes()}
+    assert len(probes) == len(extra_probes())
     assert probes.keys() == PROBES.keys()
-    for service, (module, fragment) in PROBES.items():
-        got_module, address, _tier = probes[service]
-        assert got_module == module, service
-        assert fragment in address, service
+    for key, fragment in PROBES.items():
+        assert fragment in probes[key], key
     for module, keyword in KEYWORDS.items():
-        assert module in {m for m, _a, _t in probes.values()}, keyword
+        assert module in {m for _s, m in probes}, keyword
 
 
 def test_the_home_critical_tiles_are_the_critical_tier():
-    probes = probe_by_service()
     box = host_context()["services"]
     expected = {"traefik"} | {
         service
         for service in TIERED_PROBES
         if in_service_tier(box, service, "home-critical")
     }
-    assert {s for s, (_m, _a, tier) in probes.items() if tier == "critical"} == expected
+    assert {s for s, _m, _a, tier in extra_probes() if tier == "critical"} == expected
     assert "traefik" in expected
 
 

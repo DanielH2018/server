@@ -60,8 +60,8 @@ See repo-root `CLAUDE.md` for shared conventions.
   that names the protected-resource metadata, which the app serves at
   `/.well-known/oauth-protected-resource/mcp` and `/.well-known/oauth-protected-resource`.
   The challenge carries `error="invalid_token"` only when the request sent a bearer token.
-- **Only a GET of `/health` or of either metadata path passes without a token.** The match is
-  exact, so `/health/`, `/HEALTH` and `/health/../mcp` get the 401 too.
+- **Only a GET of `/health`, `/health/jwks` or either metadata path passes without a token.**
+  The match is exact, so `/health/`, `/HEALTH` and `/health/../mcp` get the 401 too.
   `k8s/roles/vault-mcp/tests/test_vault_server.py` drives the real ASGI app over these paths.
 - **To cut claude.ai off, set `authelia_k8s_vault_mcp_client: false` in
   `k8s/roles/authelia/defaults/main.yml`, or rotate `vault_mcp_oidc_client_secret` and its
@@ -73,16 +73,20 @@ See repo-root `CLAUDE.md` for shared conventions.
   metadata's `resource`, the `aud` every token must hold, and the Authelia client's only
   `audience`. claude.ai sends it as the RFC 8707 `resource`, and Authelia grants only an
   audience the client lists, so the URL the connector is added with must equal it exactly.
-- **The pod fetches the JWKS from `auth.local.<domain>`, through Traefik, on the first token.**
-  It caches the keys and refetches on an unknown `kid`, at most once per 30 seconds. A JWKS
-  it cannot fetch refuses every token and logs a warning, and `/health` still answers.
+- **A background thread fetches the JWKS from `auth.local.<domain>`, through Traefik.**
+  `k8s/roles/vault-mcp/files/oauth_resource.py:SigningKeys` fetches every 5 minutes, and early
+  on an unknown `kid`, with 30 seconds after each fetch before the next. A token check reads
+  the last fetched keys and never waits on Authelia, so an outage leaves `/health` and request
+  latency alone. A failed fetch keeps the old keys. The log names an unknown `kid` by length
+  and hash only, because a caller writes it.
 - **The server refuses to start without `VAULT_MCP_RESOURCE_URL`, `VAULT_MCP_ISSUER` or
   `VAULT_MCP_JWKS_URL`**, because no token could pass.
 - **The daemon has no probes; the server has two, and blackbox probes its route.** The daemon
   serves nothing, so a crash shows as a restart. The server's readiness probe calls `/health`,
   which the OAuth check exempts. blackbox-extra's `http_401` target calls `/mcp` on the LAN
   name and expects the 401, which proves the route reaches the app and the app refuses an
-  unauthenticated call.
+  unauthenticated call. Its `http_2xx` target calls `/health/jwks`, which answers 503 once
+  the last successful JWKS fetch is 15 minutes old, so a broken fetch fires `ExtraProbeFailed`.
 - **The decisions are in
   `docs/adr/0043-the-vault-is-exposed-through-an-oauth-remote-mcp-server.md`.** The server is
   read-only by the operator's ruling of 2026-11-28, and write tools are deferred.
