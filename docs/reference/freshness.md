@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/freshness.py
-generated_at: 2026-11-28 18:17 UTC
-generated_sha: 23c576cd4
+generated_at: 2026-11-28 18:42 UTC
+generated_sha: 768f2c529
 ---
 
 !!! warning "Generated file — do not edit"
@@ -17,18 +17,18 @@ generated_sha: 23c576cd4
 | Page | Changed | Sources named | Moved since | Most recently moved |
 |---|---|---|---|---|
 | [claude-tooling.md](../claude-tooling.md) | 2026-11-26 | 79 | 24 | `scripts/diagnostics/probe.py` (2026-11-28) |
+| [target-architecture/docs-guard/g5-shrink-root-claude-md.md](../target-architecture/docs-guard/g5-shrink-root-claude-md.md) | 2026-11-26 | 53 | 22 | `pyproject.toml` (2026-11-28) |
 | [github-label-audit.md](../github-label-audit.md) | 2026-11-22 | 24 | 21 | `scripts/dev/findings.py` (2026-11-28) |
 | [claude-agent-user.md](../claude-agent-user.md) | 2026-11-26 | 60 | 21 | `prek.toml` (2026-11-28) |
-| [target-architecture/docs-guard/g5-shrink-root-claude-md.md](../target-architecture/docs-guard/g5-shrink-root-claude-md.md) | 2026-11-26 | 53 | 21 | `pyproject.toml` (2026-11-28) |
 | [python-code-organization.md](../python-code-organization.md) | 2026-11-26 | 45 | 17 | `pyproject.toml` (2026-11-28) |
 | [issue-claiming-and-fanout.md](../issue-claiming-and-fanout.md) | 2026-11-27 | 46 | 16 | `scripts/dev/findings.py` (2026-11-28) |
 | [longhorn-disaster-recovery.md](../longhorn-disaster-recovery.md) | 2026-11-21 | 21 | 15 | `scripts/diagnostics/probe.py` (2026-11-28) |
 | [longhorn-upgrade.md](../longhorn-upgrade.md) | 2026-11-14 | 18 | 14 | `scripts/deploy_tools/runbook_gates.py` (2026-11-28) |
 | [break-glass.md](../break-glass.md) | 2026-11-26 | 50 | 12 | `secrets/secrets.yml` (2026-11-28) |
+| [target-architecture/docs-guard/g2-retire-lock.md](../target-architecture/docs-guard/g2-retire-lock.md) | 2026-11-26 | 38 | 12 | `scripts/dev/fact_status.py` (2026-11-28) |
 | [adr/0030-the-ansible-tree-is-renamed-for-what-it-holds.md](../adr/0030-the-ansible-tree-is-renamed-for-what-it-holds.md) | 2026-11-26 | 20 | 11 | `hosts/components/claude-code/templates/claude-land-approval-paths.j2` (2026-11-28) |
 | [monitor-bridge-checks.md](../monitor-bridge-checks.md) | 2026-11-26 | 47 | 11 | `k8s/roles/monitor-bridge/files/checks/domain_registration.py` (2026-11-28) |
 | [monitor-bridge-internals.md](../monitor-bridge-internals.md) | 2026-11-26 | 38 | 11 | `k8s/roles/observability/templates/prometheus.yaml.j2` (2026-11-28) |
-| [target-architecture/docs-guard/g2-retire-lock.md](../target-architecture/docs-guard/g2-retire-lock.md) | 2026-11-26 | 38 | 11 | `scripts/dev/fact_status.py` (2026-11-28) |
 | [flux-deploy-plane.md](../flux-deploy-plane.md) | 2026-11-27 | 97 | 11 | `k8s/services.yml` (2026-11-28) |
 | [renovate-notify-internals.md](../renovate-notify-internals.md) | 2026-11-23 | 11 | 10 | `renovate.json` (2026-11-28) |
 | [target-architecture/docs-guard/handoff.md](../target-architecture/docs-guard/handoff.md) | 2026-11-25 | 14 | 10 | `scripts/dev/fact_status.py` (2026-11-28) |
@@ -66,7 +66,7 @@ generated_sha: 23c576cd4
 | [adr/0001-mkdocs-site-with-generated-reference.md](../adr/0001-mkdocs-site-with-generated-reference.md) | 2026-11-12 | 4 | 4 | `docs/secret-rotation.md` (2026-11-28) |
 | [adr/0023-fact-support-is-a-diff-notice.md](../adr/0023-fact-support-is-a-diff-notice.md) | 2026-11-13 | 4 | 4 | `.github/workflows/ci.yml` (2026-11-28) |
 | [claude-memory-sync.md](../claude-memory-sync.md) | 2026-11-14 | 4 | 4 | `scripts/dev/findings.py` (2026-11-28) |
-| [target-architecture/docs-guard/g8-memory-resolver-and-replica.md](../target-architecture/docs-guard/g8-memory-resolver-and-replica.md) | 2026-11-14 | 6 | 4 | `k8s/roles/authelia/CLAUDE.md` (2026-11-28) |
+| [target-architecture/docs-guard/g8-memory-resolver-and-replica.md](../target-architecture/docs-guard/g8-memory-resolver-and-replica.md) | 2026-11-14 | 6 | 4 | `docs/archive/README.md` (2026-11-28) |
 | [promote-failure-record.md](../promote-failure-record.md) | 2026-11-21 | 4 | 4 | `docs/landing.md` (2026-11-28) |
 | [adr/0003-sops-with-age-for-secrets-at-rest.md](../adr/0003-sops-with-age-for-secrets-at-rest.md) | 2026-11-25 | 6 | 4 | `secrets/secrets.yml` (2026-11-28) |
 | [crowdsec-waf-record.md](../crowdsec-waf-record.md) | 2026-11-26 | 13 | 4 | `k8s/roles/crowdsec/files/bouncer_prune.py` (2026-11-28) |
@@ -128,15 +128,15 @@ generated_sha: 23c576cd4
 | [adr/0007-backup-tiering-r2-daily-b2-weekly.md](../adr/0007-backup-tiering-r2-daily-b2-weekly.md) | 2026-11-26 | 3 | 0 | — |
 | [adr/0033-game-server-replicas-are-runtime-state.md](../adr/0033-game-server-replicas-are-runtime-state.md) | 2026-11-26 | 2 | 0 | — |
 | [adr/0034-github-quota-is-budgeted-per-session-in-the-wrappers.md](../adr/0034-github-quota-is-budgeted-per-session-in-the-wrappers.md) | 2026-11-26 | 2 | 0 | — |
-| [adr/index.md](../adr/index.md) | 2026-11-26 | 1 | 0 | — |
 | [docker-engine-pins-and-runtime.md](../docker-engine-pins-and-runtime.md) | 2026-11-26 | 9 | 0 | — |
 | [security-tools.md](../security-tools.md) | 2026-11-26 | 12 | 0 | — |
 | [traefik-plugins-and-startup.md](../traefik-plugins-and-startup.md) | 2026-11-26 | 10 | 0 | — |
 | [pi-host-tuning-record.md](../pi-host-tuning-record.md) | 2026-11-27 | 31 | 0 | — |
+| [adr/0043-the-vault-is-exposed-through-an-oauth-remote-mcp-server.md](../adr/0043-the-vault-is-exposed-through-an-oauth-remote-mcp-server.md) | 2026-11-28 | 2 | 0 | — |
+| [adr/index.md](../adr/index.md) | 2026-11-28 | 1 | 0 | — |
 | [ci-throughput.md](../ci-throughput.md) | 2026-11-28 | 35 | 0 | — |
 | [landing-architecture.md](../landing-architecture.md) | 2026-11-28 | 27 | 0 | — |
 | [landing-speed.md](../landing-speed.md) | 2026-11-28 | 20 | 0 | — |
 | [landing.md](../landing.md) | 2026-11-28 | 49 | 0 | — |
 | [longhorn-backup-tiering.md](../longhorn-backup-tiering.md) | 2026-11-28 | 16 | 0 | — |
-| [obsidian-vault-connector-plan.md](../obsidian-vault-connector-plan.md) | 2026-11-28 | 6 | 0 | — |
 | [secret-rotation.md](../secret-rotation.md) | 2026-11-28 | 36 | 0 | — |

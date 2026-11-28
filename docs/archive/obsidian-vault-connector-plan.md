@@ -119,6 +119,8 @@ No tool, search result or `backlinks` result returns a note under either.
 ## Open questions for the operator
 
 1. Does Duet get write access in slice 4, or does the vault stay read-only?
+   The operator ruled on 2026-11-28: "Let's start with read only, but that may change
+   later". The vault is read-only, and slice 4 is deferred.
 
 ## See also
 

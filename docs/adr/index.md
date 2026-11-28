@@ -87,6 +87,7 @@ wrong is worth more than the record of one that did not.
 | [0040](0040-dead-names-copied-tests-and-unused-parameters-are-gated.md) | Dead names, copied tests and unused parameters are gated, and blind excepts are not | Accepted | 2026-11-19 |
 | [0041](0041-b2-weekly-and-r2-etcd-snapshots-are-locked.md) | The B2 weekly bucket and the R2 etcd snapshots are locked, and the R2 daily tier is not | Accepted | 2026-11-20 |
 | [0042](0042-each-variable-lives-with-what-it-describes.md) | Each variable lives with what it describes, and inventory/ is dissolved | Accepted | 2026-11-25 |
+| [0043](0043-the-vault-is-exposed-through-an-oauth-remote-mcp-server.md) | The vault is exposed to Claude through an OAuth-protected remote MCP server, read-only | Accepted | 2026-11-28 |
 
 ## The long-form behind a record
 
