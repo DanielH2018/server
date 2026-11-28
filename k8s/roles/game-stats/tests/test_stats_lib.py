@@ -5,6 +5,7 @@ machine and SQLite schema; this file covers the parts that moved here.
 """
 
 import json
+import sqlite3
 import threading
 from collections import Counter
 from unittest import mock
@@ -157,7 +158,7 @@ def _run_cycles(log, end_points, page_limit):
     cursor = 0
     for end_ns in end_points:
         cursor = stats_lib.run_cycle(
-            None, store, cursor, end_ns, fetch, apply_fn, page_limit
+            _FakeState(), store, cursor, end_ns, fetch, apply_fn, page_limit
         )
     return applied, store, cursor
 
@@ -323,7 +324,7 @@ def test_poll_forever_does_not_reapply_pages_saved_before_a_fetch_failed():
     with mock.patch("stats_lib.time.sleep", side_effect=[None, _Stop]):
         with pytest.raises(_Stop):
             stats_lib.poll_forever(
-                stats_lib.PollState("state"),
+                stats_lib.PollState(_FakeState()),
                 _FakeRunStore(),
                 cursor=0,
                 fetch=fetch,
@@ -415,10 +416,10 @@ class _TinyStore(stats_lib.SqliteStore):
     def load_state(self):
         return _FakeState()
 
-    def save(self, state, cursor_ns, events=()):
-        self.write_events(self.conn, events)
-        self.write_cursor(self.conn, cursor_ns)
-        self.conn.commit()
+    def write_state(self, conn, state):
+        if state == "fail":
+            conn.execute("INSERT INTO players(name) VALUES('p')")
+            raise sqlite3.OperationalError("database or disk is full")
 
 
 def test_sqlite_store_creates_the_shared_and_per_game_tables_and_round_trips_the_cursor(
@@ -439,6 +440,16 @@ def test_sqlite_store_creates_the_shared_and_per_game_tables_and_round_trips_the
         assert store.conn.execute("SELECT COUNT(*) FROM events").fetchone()[0] == 1
     with _TinyStore(db) as reopened:
         assert reopened.get_cursor() == 4_200
+
+
+def test_a_failed_save_leaves_no_row_for_the_next_save_to_commit(tmp_path):
+    with _TinyStore(str(tmp_path / "stats.db")) as store:
+        events = [(1, "p", "join", "raw")]
+        with pytest.raises(sqlite3.OperationalError):
+            store.save("fail", 4_200, events)
+        store.save(None, 4_200, events)
+        assert store.conn.execute("SELECT COUNT(*) FROM events").fetchone()[0] == 1
+        assert store.conn.execute("SELECT COUNT(*) FROM players").fetchone()[0] == 0
 
 
 class _FakeState:
