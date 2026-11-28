@@ -250,7 +250,7 @@ def main(
     now: Callable[[], datetime] = lambda: datetime.now(UTC),
 ) -> int:
     parser = argparse.ArgumentParser(
-        description=__doc__.splitlines()[0],
+        description=(__doc__ or "").partition("\n")[0],
         epilog=__doc__,
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
