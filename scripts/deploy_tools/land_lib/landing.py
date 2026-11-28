@@ -126,6 +126,8 @@ class Landing:
         # Whether the turn this landing holds over ssh has ended unasked; a batch member reads
         # the holder's.
         self.turn_lost: Callable[[], bool] = lambda: False
+        # Whether this landing holds the turn; a batch member reads the holder's.
+        self.holds_turn: Callable[[], bool] = lambda: self.give_back_turn is not None
         # The head `changed_paths` last read the PR's file list at, and that list.
         self._changed: tuple[str, tuple[str, ...]] | None = None
 
@@ -182,7 +184,7 @@ class Landing:
 
         A landing that holds the turn gives it back, so no landing behind it waits through the
         same wait, and asks for it again once `wait` returns, so the work that waited goes on
-        in the turn. It then sets `turn_interrupted`. The log names `reason`, which completes
+        in the turn when that ask takes it (`holds_turn`). It then sets `turn_interrupted`. The log names `reason`, which completes
         "gave the landing turn back".
         """
         if self.step_out_of_turn:
