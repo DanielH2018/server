@@ -219,7 +219,9 @@ class App:
         """
         now = self.now()
         found = states.read_records(self.cfg.land_locks / states.LINE_DIR_NAME, now)
-        rows = states.landing_rows(found.records, now, self.cfg.hostname)
+        rows = states.landing_rows(
+            found.records, now, self.cfg.hostname, self.cfg.land_locks, table
+        )
         for row in rows:
             row["title"] = self._pr_title(row["pr"])
         return {

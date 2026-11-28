@@ -73,6 +73,12 @@ def test_inflight_lists_both_hosts_landings_with_state_progress_and_queue_is_cle
     )
     holder.progress(4, 11, CHECKS)
     _landing(records, "202", "daniel-server", [(State.QUEUED, NOW - 60)])
+    remote_lock = lock_dir / states.PR_LOCK.format(pr="202")
+    remote_lock.touch()
+    maj, mnr, ino = reads.lock_key(str(remote_lock))
+    (lock_dir.parent / "proc_locks").write_text(
+        f"9: FLOCK  ADVISORY  WRITE 4242 {maj:02x}:{mnr:02x}:{ino} 0 EOF\n"
+    )
     got = [
         {k: row[k] for k in ("pr", "host", "state", "in_state_s", "progress", "queue")}
         | {"position": row["position"], "passed": [h["state"] for h in row["history"]]}
@@ -106,17 +112,17 @@ def test_waiting_landings_rank_by_when_they_queued_then_the_stepped_out_is_clean
     tmp_path,
 ):
     # fact: hosts/components/deploy-ui/CLAUDE.md#Landing queue
-    _landing(tmp_path, "30", "daniel-server", [(State.QUEUED, NOW - 10)])
-    _landing(tmp_path, "10", "daniel-server", [(State.QUEUED, NOW - 50)])
+    _landing(tmp_path, "30", "daniel-box", [(State.QUEUED, NOW - 10)])
+    _landing(tmp_path, "10", "daniel-box", [(State.QUEUED, NOW - 50)])
     _landing(
         tmp_path,
         "40",
-        "daniel-server",
+        "daniel-box",
         [(State.HOLDING, NOW - 90), (State.YIELDED, NOW - 80)],
     )
-    _landing(tmp_path, "20", "daniel-server", [(State.QUEUED, NOW - 30)])
+    _landing(tmp_path, "20", "daniel-box", [(State.QUEUED, NOW - 30)])
     rows = states.landing_rows(
-        states.read_records(tmp_path, NOW).records, NOW, "daniel-box"
+        states.read_records(tmp_path, NOW).records, NOW, "daniel-box", tmp_path, {}
     )
     assert [(r["pr"], r["queue"], r["position"]) for r in rows] == [
         ("10", "waiting", 1),
@@ -132,10 +138,23 @@ def test_a_landing_whose_process_is_gone_here_leaves_the_queue_is_flagged(tmp_pa
     records = states.read_records(tmp_path, NOW).records
     proc = tmp_path / "proc"
     proc.mkdir()
-    [dead] = states.landing_rows(records, NOW, "daniel-box", proc)
+    [dead] = states.landing_rows(records, NOW, "daniel-box", tmp_path, {}, proc)
     assert (dead["alive"], dead["queue"], dead["position"]) == (False, "", None)
-    [live] = states.landing_rows(records, NOW, "daniel-box")
+    [live] = states.landing_rows(records, NOW, "daniel-box", tmp_path, {})
     assert (live["alive"], live["queue"], live["position"]) == (True, "waiting", 1)
+
+
+def test_a_landing_on_another_host_is_alive_only_while_its_pr_lock_is_held_is_flagged(
+    tmp_path,
+):
+    # fact: hosts/components/deploy-ui/CLAUDE.md#Landing queue
+    _landing(tmp_path, "55", "daniel-server", [(State.HOLDING, NOW - 100)])
+    records = states.read_records(tmp_path, NOW).records
+    [dead] = states.landing_rows(records, NOW, "daniel-box", tmp_path, {})
+    assert (dead["alive"], dead["queue"]) == (False, "")
+    table = _held_table(tmp_path, [states.PR_LOCK.format(pr="55")])
+    [live] = states.landing_rows(records, NOW, "daniel-box", tmp_path, table)
+    assert (live["alive"], live["queue"]) == (True, "turn")
 
 
 def test_the_newest_record_of_a_pr_wins_and_a_verdict_leaves_the_queue_is_flagged(
@@ -173,6 +192,24 @@ def test_an_unreadable_record_is_named_and_the_others_still_show_is_flagged(
     assert got["landings_unavailable"] == (
         f"1 state record(s) in {states.LINE_DIR_NAME} cannot be read"
     )
+
+
+def test_a_link_a_fifo_or_undecodable_bytes_at_a_records_name_is_skipped_is_flagged(
+    app, lock_dir
+):
+    # fact: hosts/components/deploy-ui/CLAUDE.md#Landing queue
+    records = lock_dir / states.LINE_DIR_NAME
+    _landing(records, "11", "daniel-box", [(State.QUEUED, NOW - 30)])
+    elsewhere = lock_dir / "elsewhere.json"
+    record = json.loads((records / f"11.{os.getuid()}.state").read_text())
+    elsewhere.write_text(json.dumps({**record, "pr": "12"}))
+    (records / "12.1000.state").symlink_to(elsewhere)
+    os.mkfifo(records / "13.1000.state")
+    (records / "14.1000.state").write_bytes(b"\xff\xfe")
+    (records / "15.1000.state").write_bytes(b" " * (states.MAX_RECORD_BYTES + 1))
+    got = json.loads(app.get("/api/inflight")[1])
+    assert [r["pr"] for r in got["landings"]] == ["11"]
+    assert got["landings_unavailable"] == ""
 
 
 def test_every_landing_state_has_a_label_is_clean():

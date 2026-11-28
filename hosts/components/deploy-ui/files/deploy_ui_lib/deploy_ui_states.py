@@ -12,7 +12,9 @@ name.
 """
 
 import json
+import os
 import re
+import stat
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -28,6 +30,8 @@ SLOT_LOCKS = tuple(f"homelab-land-slot-{n}.lock" for n in range(6))
 # A record left this long ago is not shown, whatever its state.
 WINDOW_S = 24 * 3600
 VERDICT = "verdict"
+# A record is a few hundred bytes; a larger file is not one.
+MAX_RECORD_BYTES = 64 * 1024
 _RECORD_NAME = re.compile(r"\d+\.\d+\.state")
 
 STATE_LABELS: dict[str, str] = {
@@ -159,12 +163,14 @@ def read_records(directory: Path, now: float) -> Records:
     unreadable = 0
     for path in names:
         try:
-            text = path.read_text(encoding="utf-8")
-        except OSError:
+            raw = _read(path)
+        except PermissionError:
             unreadable += 1
             continue
+        except OSError:
+            continue
         try:
-            record = Record.parse(json.loads(text))
+            record = Record.parse(json.loads(raw.decode("utf-8")))
         except KeyError, TypeError, ValueError, AttributeError:
             continue
         if now - record.since > WINDOW_S:
@@ -179,34 +185,65 @@ def read_records(directory: Path, now: float) -> Records:
     )
 
 
-def _alive(record: Record, hostname: str, proc: Path) -> bool | None:
-    """Whether the landing's process runs; None when it ran on another host."""
-    if record.host.split(".")[0] != hostname.split(".")[0]:
-        return None
-    return (proc / str(record.pid)).exists()
+def _read(path: Path) -> bytes:
+    """The first bytes of the regular file at `path`, never following a link or blocking.
+
+    Any user can create a file in the line's sticky directory, so a link, a FIFO or a device
+    at a record's name is refused rather than read.
+
+    Raises:
+        PermissionError: this user cannot read the file.
+        OSError: the file is a link, is not a regular file, is too large, or is gone.
+    """
+    fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+    try:
+        if not stat.S_ISREG(os.fstat(fd).st_mode):
+            raise OSError(f"{path.name} is not a regular file")
+        data = os.read(fd, MAX_RECORD_BYTES + 1)
+    finally:
+        os.close(fd)
+    if len(data) > MAX_RECORD_BYTES:
+        raise OSError(f"{path.name} is larger than a state record")
+    return data
+
+
+def _held(lock_dir: Path, name: str, table: dict[LockKey, FileLock]) -> bool:
+    """Whether a process holds the lock file `name` in `lock_dir`; a missing file is free."""
+    try:
+        lock = table.get(lock_key(str(lock_dir / name)))
+    except OSError:
+        return False
+    return bool(lock and lock.held)
 
 
 def landing_rows(
     records: list[Record],
     now: float,
     hostname: str,
+    lock_dir: Path,
+    table: dict[LockKey, FileLock],
     proc: Path = Path("/proc"),
 ) -> list[dict]:
     """One row per landing: the turn's holder, the waiting in order, then the rest.
 
     The waiting landings rank by the time each entered `queued`, and `position` numbers them
     from 1. The turn goes to whichever landing polls first (`queue_machine.may_take`), so the
-    rank is the order they began waiting, not a promise of the order the turn serves them. A
-    landing whose process is gone on this host is `alive: false` and sorts last, out of the
-    queue. A landing on another host is `alive: null`.
+    rank is the order they began waiting, not a promise of the order the turn serves them.
+
+    A landing that died is `alive: false` and sorts last, out of the queue. A record's pid
+    belongs to the host that wrote it, so a landing on this host is alive while `proc` holds
+    its pid, and one on another host while its PR lock in `lock_dir` is held: that landing
+    holds the lock through an ssh session the turn host frees once its heartbeat stops
+    (`pr_lock.py`).
     """
     placed = []
     for r in records:
-        alive = _alive(r, hostname, proc)
-        where, queued_at = r.queue() if alive is not False else ("", r.since)
-        placed.append(
-            ((alive is False, _QUEUE_RANK[where], queued_at), r, alive, where)
-        )
+        if r.host.split(".")[0] == hostname.split(".")[0]:
+            alive = (proc / str(r.pid)).exists()
+        else:
+            alive = _held(lock_dir, PR_LOCK.format(pr=r.pr), table)
+        where, queued_at = r.queue() if alive else ("", r.since)
+        placed.append(((not alive, _QUEUE_RANK[where], queued_at), r, alive, where))
     placed.sort(key=lambda p: p[0])
     rows, waiting = [], 0
     for _, r, alive, where in placed:
@@ -241,11 +278,7 @@ def turn_locks(lock_dir: Path, table: dict[LockKey, FileLock]) -> dict:
     """
 
     def held(name: str) -> bool:
-        try:
-            lock = table.get(lock_key(str(lock_dir / name)))
-        except OSError:
-            return False
-        return bool(lock and lock.held)
+        return _held(lock_dir, name, table)
 
     serial_pr = ""
     if held(SERIAL_LOCK):

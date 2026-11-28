@@ -420,7 +420,7 @@ def test_the_landing_queue_from_deploy_ui_reaches_the_snapshot_and_the_text_is_c
     queued = {
         "pr": "202",
         "label": "Queued",
-        "alive": None,
+        "alive": True,
         "queue": "waiting",
         "position": 1,
         "in_state_s": 60,

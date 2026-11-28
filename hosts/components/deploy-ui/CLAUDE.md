@@ -111,10 +111,18 @@ poll, so it adds no request, and it makes no GitHub call beyond the cached PR ti
   polls first (`scripts/deploy_tools/land_lib/core/queue_machine.py:may_take`), so a position is the order the
   landings began waiting, not the order the turn serves them
   (`hosts/components/deploy-ui/tests/test_deploy_ui_states.py::test_waiting_landings_rank_by_when_they_queued_then_the_stepped_out_is_clean`).
-- **A landing whose process is gone** on daniel-box shows `died` and sorts last
+- **A landing that died** shows `died`, leaves the queue and sorts last. A record's pid
+  belongs to the host that wrote it. A daniel-box landing is alive while its pid is in
+  `/proc`
   (`hosts/components/deploy-ui/tests/test_deploy_ui_states.py::test_a_landing_whose_process_is_gone_here_leaves_the_queue_is_flagged`).
-  A record's pid belongs to the host that wrote it, so a daniel-server landing's liveness is
-  unknown (`alive: null`) and its row stays in the queue.
+  A daniel-server landing is alive while its `homelab-land-pr-<n>.lock` on daniel-box is
+  held, because it holds that lock over ssh and daniel-box frees it once the heartbeat stops
+  (`scripts/deploy_tools/land_lib/pr_lock.py`;
+  `hosts/components/deploy-ui/tests/test_deploy_ui_states.py::test_a_landing_on_another_host_is_alive_only_while_its_pr_lock_is_held_is_flagged`).
+- **Any user can create a file in the line's directory**, so the reader opens a record
+  without following a link or blocking, reads only a regular file of at most
+  `MAX_RECORD_BYTES`, and skips one that does not decode
+  (`hosts/components/deploy-ui/tests/test_deploy_ui_states.py::test_a_link_a_fifo_or_undecodable_bytes_at_a_records_name_is_skipped_is_flagged`).
 - **The turn's locks** show above the table: the turn lock, the serial lock and the PR in
   `homelab-land-serial.holder` while that PR's own lock is held, and the slots in use, all from
   `/proc/locks` (`turn`;
