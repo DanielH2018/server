@@ -41,7 +41,7 @@ scripts/diagnostics/tests/probe_landing/test_postflight.py 9
 scripts/diagnostics/tests/probe_landing/test_postflight_runner.py 3
 scripts/diagnostics/tests/probe_workloads/test_probe_b2_ledger.py 7
 scripts/diagnostics/tests/probe_workloads/test_probe_ha.py 3
-scripts/diagnostics/tests/probe_workloads/test_probe_pi_plane.py 5
+scripts/diagnostics/tests/probe_workloads/test_probe_pi_plane.py 4
 scripts/diagnostics/tests/ui_smoke/test_ui_smoke_helpers.py 2
 scripts/docs/tests/test_build_docs.py 12
 scripts/docs/tests/test_gen_reference_backlog.py 1

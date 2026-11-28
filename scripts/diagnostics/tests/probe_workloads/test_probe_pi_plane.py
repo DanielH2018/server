@@ -7,9 +7,11 @@ equivalent.
 
 import json
 
+import pytest
 
 from diagnostics import probe
 from diagnostics.probe_lib import core, pi_plane
+from lib.exit_codes import PROBE_UNREADABLE
 from lib.kubectl import WrongCluster
 
 
@@ -138,10 +140,14 @@ def test_format_pi_containers_empty_is_a_failure_not_a_pass():
     assert code == 1
 
 
-def test_run_pi_targets_dry_run_prints_the_curl(monkeypatch, capsys):
+@pytest.fixture
+def prom_endpoint(monkeypatch):
+    """Pin `pi_plane.prom_endpoint` to a fixed domain and VIP, so no SOPS or inventory read runs."""
     monkeypatch.setattr(core, "domain", lambda: "example.test")
     monkeypatch.setattr(core, "metallb_vip", lambda: "10.0.0.240")
 
+
+def test_run_pi_targets_dry_run_prints_the_curl(prom_endpoint, capsys):
     class Ns:
         dry_run = True
 
@@ -159,10 +165,9 @@ def test_run_pi_containers_dry_run_prints_the_ssh_argv(capsys):
     assert out.strip() == " ".join(pi_plane.pi_containers_argv())
 
 
-def test_run_pi_targets_end_to_end_reports_a_missing_job(monkeypatch, capsys):
-    monkeypatch.setattr(core, "domain", lambda: "example.test")
-    monkeypatch.setattr(core, "metallb_vip", lambda: "10.0.0.240")
-
+def test_run_pi_targets_end_to_end_reports_a_missing_job(
+    prom_endpoint, monkeypatch, capsys
+):
     def fake_fetch(url, resolve=None):
         return json.dumps({"data": {"activeTargets": [_target("node-pi")]}})
 
@@ -174,6 +179,17 @@ def test_run_pi_targets_end_to_end_reports_a_missing_job(monkeypatch, capsys):
     assert pi_plane.run_pi_targets(Ns()) == 1
     out = capsys.readouterr().out
     assert "alloy-pi: MISSING" in out
+
+
+def test_run_pi_targets_reads_a_body_with_no_data_and_no_error_as_unreadable(
+    prom_endpoint, monkeypatch
+):
+    monkeypatch.setattr(core, "fetch_json", lambda url, resolve=None: (None, None))
+
+    class Ns:
+        dry_run = False
+
+    assert pi_plane.run_pi_targets(Ns()) == PROBE_UNREADABLE
 
 
 def test_format_targets_all_up_is_clean():
