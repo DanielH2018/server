@@ -342,8 +342,10 @@ def _detached(
     The landing inherits `lock`, the PR lock this process took, and holds it to its end.
     """
     log = detach.log_path(opts.pr, Path(opts.log_dir) if opts.log_dir else None)
-    pid = tools.fork(log, landing, f"land{opts.pr}", keep=lock.keep if lock else ())
-    if lock:
+    if not lock:
+        pid = tools.fork(log, landing, f"land{opts.pr}", keep=())
+    else:
+        pid = tools.fork(log, lock.for_fork(landing), f"land{opts.pr}", keep=lock.keep)
         lock.pass_on(pid, log)
     detach.announce(pid, log, opts.pr)
     return 0

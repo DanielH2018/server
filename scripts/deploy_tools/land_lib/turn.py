@@ -266,14 +266,37 @@ def hold_over_ssh(
     return answer, session, release
 
 
-def _heartbeat(stdin: IO[str], stop: threading.Event, beat: float) -> None:
-    """Write a byte into `stdin` every `beat` seconds until `stop` is set or the pipe breaks."""
-    while not stop.wait(beat):
-        try:
-            stdin.write("\n")
-            stdin.flush()
-        except OSError, ValueError:
-            return
+def start_heartbeat(stdin: IO[str], beat: float) -> Callable[[], None]:
+    """Write a blank line into `stdin` at once and every `beat` seconds after, from a thread.
+
+    The thread ends when the pipe breaks or the call this returns is made. A process forked
+    from this one inherits no thread, so it keeps a lock held over ssh only by starting its
+    own heartbeat on the descriptor it inherits.
+
+    Returns:
+        The call that stops the heartbeat. It returns once the thread has ended, so a fork
+        made after it copies no write in progress.
+    """
+    stop = threading.Event()
+
+    def beats() -> None:
+        while True:
+            try:
+                stdin.write("\n")
+                stdin.flush()
+            except OSError, ValueError:
+                return
+            if stop.wait(beat):
+                return
+
+    thread = threading.Thread(target=beats, daemon=True)
+    thread.start()
+
+    def end() -> None:
+        stop.set()
+        thread.join()
+
+    return end
 
 
 def try_take_over_ssh(
@@ -303,13 +326,10 @@ def try_take_over_ssh(
     )
     if answer == "held":
         assert session.stdin
-        stop = threading.Event()
-        threading.Thread(
-            target=_heartbeat, args=(session.stdin, stop, beat), daemon=True
-        ).start()
+        stop = start_heartbeat(session.stdin, beat)
 
         def release() -> None:
-            stop.set()
+            stop()
             end()
 
         return release

@@ -15,7 +15,8 @@ from pathlib import Path
 import pytest
 
 from _land_fakes import Fakes
-from deploy_tools.land_lib import fresh, line, pr_lock, turn
+from deploy_tools import land
+from deploy_tools.land_lib import detach, fresh, line, pr_lock, turn
 from lib.proc_testing import fake_bin, path_with
 
 HEAD = "a" * 40
@@ -120,7 +121,9 @@ def test_a_landing_off_the_turn_host_reaches_the_line_over_ssh(tmp_path, monkeyp
 
 
 @pytest.mark.parametrize(
-    "source", [turn._HOLD, line._REMOTE], ids=["the-turn", "the-line"]
+    "source",
+    [turn._HOLD, line._REMOTE, pr_lock._HOLD],
+    ids=["the-turn", "the-line", "the-pr-lock"],
 )
 def test_what_runs_on_the_turn_host_compiles_under_a_hosts_own_python(source):
     """The repo's Python is newer than a host's, and the formatter writes its syntax."""
@@ -318,6 +321,80 @@ def test_a_landing_on_another_host_holds_the_same_pr_lock_over_ssh(
         away.release()
     assert isinstance(holder, pr_lock.Holder)
     assert (holder.host, holder.pid) == ("daniel-server", str(os.getpid()))
+
+
+def test_a_pr_lock_hold_whose_client_stops_writing_frees_the_lock_with_its_stdin_open(
+    tmp_path, monkeypatch
+):
+    """A client host that loses power sends no close, so its session's stdin never ends."""
+    monkeypatch.delenv(turn.TURN_DIR_ENV)
+    monkeypatch.setenv(pr_lock.HELD_ENV, "")
+    lock = tmp_path / pr_lock.lock_name("7")
+    beat = 0.2
+    hold = subprocess.Popen(
+        [sys.executable, "-c", pr_lock._HOLD, str(beat), str(lock)],
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        text=True,
+    )
+    try:
+        assert hold.stdout and hold.stdout.readline().strip() == "held"
+        assert isinstance(pr_lock.take("7", "daniel-box", tmp_path), pr_lock.Holder)
+        started = time.monotonic()
+        assert hold.wait(timeout=30) == 0
+        assert time.monotonic() - started < 3 * beat + 2
+        free = pr_lock.take("7", "daniel-box", tmp_path)
+        assert isinstance(free, pr_lock.Held)
+        free.release()
+    finally:
+        hold.kill()
+        hold.communicate()
+
+
+# The threads are the xdist worker's; `land.sh --detach` forks single-threaded. The ssh
+# session passes to the fork, so this process never waits for it to end.
+@pytest.mark.filterwarnings(
+    "ignore:This process .* is multi-threaded:DeprecationWarning",
+    "ignore:subprocess .* is still running:ResourceWarning",
+)
+def test_a_detached_landing_holds_its_pr_lock_over_ssh_past_three_heartbeats(
+    tmp_path, ssh_here, landing, monkeypatch, capsys
+):
+    monkeypatch.delenv(turn.TURN_DIR_ENV)
+    monkeypatch.setenv(pr_lock.HELD_ENV, "")
+    # Refused so the fork creates no real scope when this suite runs inside a fan-out unit.
+    fake_bin(tmp_path / "bin", busctl="#!/bin/sh\nexit 1\n")
+    beat = 0.2
+    done = tmp_path / "done"
+
+    def until_done() -> int:
+        deadline = time.monotonic() + 60
+        while not done.exists() and time.monotonic() < deadline:
+            time.sleep(0.05)
+        return 0
+
+    ln, _ = landing(Fakes())
+    opts = replace(ln.opts, pr="7", log_dir=str(tmp_path / "logs"))
+    tools = replace(ln.tools, fork=detach.fork)
+    lock = pr_lock.take("7", "daniel-server", tmp_path, beat)
+    assert isinstance(lock, pr_lock.Held)
+    try:
+        # The fork closes the descriptor of pytest's capture, which the landing would print to.
+        with capsys.disabled():
+            assert land._detached(opts, tools, until_done, lock) == 0
+        time.sleep(10 * beat)
+        holder = pr_lock.take("7", "daniel-box", tmp_path)
+        assert isinstance(holder, pr_lock.Holder)
+        assert holder.pid == str(detach.recorded_pid(Path(holder.log)))
+    finally:
+        done.touch()
+    deadline = time.monotonic() + 30
+    while not isinstance(
+        free := pr_lock.take("7", "daniel-box", tmp_path), pr_lock.Held
+    ):
+        assert time.monotonic() < deadline, "the lock outlived its detached landing"
+        time.sleep(0.05)
+    free.release()
 
 
 def test_a_turn_host_that_does_not_answer_lets_the_landing_go_on_without_the_pr_lock(
