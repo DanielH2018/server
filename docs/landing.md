@@ -981,7 +981,14 @@ A field the landing never reached reads `-`.
 
 - `verdict`, `cause` and `exit` are the landing's verdict, its cause and its exit code.
   Cause `landing-live` beside `refused` and exit 75 means no landing started, because
-  another landing of the PR is live (*One landing of a PR at a time*).
+  another landing of the PR is live (*One landing of a PR at a time*). Three more causes
+  exist only to change `next`:
+    - `updater-not-due` beside `deferred`: a host's updater timer is not armed, or its next
+      fire is more than 45 minutes away, so the detail names the updater's start command.
+    - `own-red` beside `ci-red`: master CI is red on the merge commit itself and green on
+      its first parent, so this PR's change turned master red.
+    - `master-moved` beside `refused` and exit 1: the landing already re-ran from a fresh
+      checkout, and master moved past its landing code again before the merge.
 - `sha` is the merge commit's first 8 characters, and `merge` is the whole commit. A landing
   that merged nothing prints `-` for both.
 - `tags` counts the tags the landing waited on. After the promotion wait that is every tag
@@ -1002,9 +1009,14 @@ A field the landing never reached reads `-`.
     - `follow:land`: another landing of the PR is live. Wait on it with the `cc-wait land`
       command its verdict prints, and do not re-run `land.sh`.
     - `fix-and-rerun`: change what the detail names, then re-run.
+    - `dispatch-and-rerun`: dispatch the workflow runs the `ci-unproven` detail names, then
+      re-run. The PR needs no change.
+    - `fix-builder-and-rerun`: repair the host package builder the `unbuilt` detail names
+      (`probe.py builder`), then re-run. The PR needs no change.
     - `apply-by-hand`: apply what the remediation lines name. A re-run ends the same way.
     - `operator`: the next step needs the operator, such as a `sudo` command or a soak
-      failure to triage. Report it and stop.
+      failure to triage. Report it and stop. A verdict with no `NEXT` row reads `operator`
+      too, rather than ending the landing in a traceback with no `VERDICT:` line.
 
 Only `land-wait` can compute `hold_owner`. It holds the raw hold value and the PR's own
 services together. The ledger's tags are widened with every tag the promotion carried before

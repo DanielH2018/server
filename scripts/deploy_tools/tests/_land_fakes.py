@@ -32,6 +32,8 @@ from deploy_tools.land_lib.tools import Classifier, CiVerdict, Tools
 from deploy_tools.land_lib.land_tags import Derivation, DeriveSource
 
 MERGE_SHA = "0123456789abcdef0123456789abcdef01234567"
+# What `git rev-parse --verify <MERGE_SHA>^1` prints.
+FIRST_PARENT = "89abcdef0123456789abcdef0123456789abcdef"
 # The commit `last-good` names unless a test says otherwise.
 LAST_GOOD = "1" * 40
 # Where every faked pin lives; the gate reads only the value.
@@ -65,6 +67,8 @@ class Fakes:
     pull_ref_rc: int = 0
     tip: str = MERGE_SHA
     await_ci: list[tuple[int, str]] = field(default_factory=lambda: [(0, "CI green")])
+    # `tools.ci_passed` by SHA: one commit's own CI. A SHA absent here has no verdict.
+    ci_passed: dict[str, bool] = field(default_factory=dict)
     # `git diff --name-only <since>..<merge>`: its exit code and the paths it prints.
     changed: str = ""
     changed_rc: int = 0
@@ -287,6 +291,8 @@ def build_tools(f: Fakes) -> tuple[Tools, list]:
             return _cp(f.pull_ref_rc)
         if args[0] == "fetch":
             return _cp(fetch_rc())
+        if args == ("rev-parse", "--verify", f"{MERGE_SHA}^1"):
+            return _cp(0, FIRST_PARENT + "\n")
         if args == ("rev-parse", "FETCH_HEAD"):
             return _cp(0, "prhead\n")
         if args[0] == "ls-tree":
@@ -431,6 +437,7 @@ def build_tools(f: Fakes) -> tuple[Tools, list]:
         gh=gh_run,
         git=git_run,
         await_ci=await_ci,
+        ci_passed=lambda sha: f.ci_passed.get(sha),
         tested_base=lambda head: f.tested_base.get(head),
         gate=gate,
         snapshot=snapshot,

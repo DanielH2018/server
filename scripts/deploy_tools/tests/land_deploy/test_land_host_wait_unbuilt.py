@@ -17,6 +17,7 @@ from types import SimpleNamespace
 from _land_fakes import make_landing
 from deploy_tools.land_lib import host_wait
 from deploy_tools.land_lib.host_wait import HostReads, HostTarget
+from deploy_tools.land_lib.ledger import result_line
 from deploy_tools.land_lib.outcome import Outcome, Verdict
 from lib.repo_paths import REPO
 from diagnostics.probe_lib.builder import fetch_deadline_s
@@ -224,3 +225,36 @@ def test_a_builder_that_never_fetches_again_ends_unbuilt_past_its_fetch_deadline
     past = _at(12, 0) + fetch_deadline_s() + 1
     outcome, _ = _wait_counting_sleeps(never, _clock(_at(12, 0), past))
     assert outcome is not None and outcome.verdict == Verdict.UNBUILT
+
+
+def _result_line(target: HostTarget, fetch, clock) -> str:
+    """The `LAND-RESULT:` line the host wait's end prints."""
+    ln, _ = make_landing()
+    reads = HostReads(fetch=fetch, git=_git, clock=clock, sleep=lambda s: None)
+    try:
+        host_wait.wait_for_hosts(ln, [target], MERGE, reads=reads)
+    except Outcome as outcome:
+        return result_line(ln.ledger, outcome)
+    raise AssertionError("the host wait ended without an outcome")
+
+
+def test_a_deferral_naming_the_updater_s_start_command_needs_the_operator():
+    built = _fetch([_published("homelab-daniel-pi", AFTER)])
+    line = _result_line(_pi(PI_DROPIN), built, _clock(_at(12, 0)))
+    assert "verdict=deferred cause=updater-not-due " in line
+    assert line.endswith(" next=operator")
+
+
+def test_a_deferral_past_the_host_s_deadline_is_done():
+    built = _fetch([_published("homelab-daniel-pi", AFTER)])
+    clock = _clock(_at(12, 0), _at(12, 30), _at(12, 32))
+    line = _result_line(_pi(QUARTER_HOUR_DROPIN), built, clock)
+    assert "verdict=deferred cause=- " in line
+    assert line.endswith(" next=done")
+
+
+def test_an_unbuilt_host_s_next_action_is_a_builder_repair():
+    stale = _fetch([_published("homelab-daniel-pi", BEFORE)])
+    line = _result_line(_pi(PI_DROPIN), stale, _clock(_at(12, 0)))
+    assert "verdict=unbuilt cause=- " in line
+    assert line.endswith(" next=fix-builder-and-rerun")

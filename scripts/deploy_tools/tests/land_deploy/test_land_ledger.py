@@ -10,6 +10,7 @@ Run: uv run pytest scripts/deploy_tools/tests/land_deploy/test_land_ledger.py
 import pytest
 
 from deploy_tools.land_lib.ledger import Ledger, annotation_line, result_line
+from deploy_tools.land_lib import outcome
 from deploy_tools.land_lib.outcome import CAUSES, Cause, Outcome
 
 SHA = "0123456789abcdef0123456789abcdef01234567"
@@ -129,3 +130,10 @@ def test_the_result_line_counts_tags_and_fills_unreached_fields():
         "LAND-RESULT: verdict=- cause=- exit=64 pr=7 sha=- tags=0 "
         "hold_sha=- hold_owner=- merge=- next=-"
     )
+
+
+def test_a_verdict_with_no_next_row_still_prints_a_result_line(monkeypatch):
+    monkeypatch.delitem(outcome.NEXT, (outcome.Verdict.SETTLED, None))
+    line = result_line(_filled(), Outcome(0, "x", verdict="settled"))
+    assert line.startswith("LAND-RESULT: verdict=settled ")
+    assert line.endswith(" next=operator")
