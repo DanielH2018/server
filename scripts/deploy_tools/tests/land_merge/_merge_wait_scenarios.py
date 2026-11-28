@@ -112,9 +112,10 @@ class Scenario:
 def scenario(rng: random.Random) -> Scenario:
     """One scenario, every choice drawn from `rng`.
 
-    Most draw every answer at random. Two kinds a random draw rarely reaches get a share of
-    their own: a pinned head the landing's own branch update moves, and a green head GitHub
-    refuses to merge until its checks are read for one that never finishes.
+    Most draw every answer at random. Three kinds a random draw rarely reaches get a share of
+    their own: a pinned head the landing's own branch update moves, a green head GitHub
+    refuses to merge until its checks are read for one that never finishes, and a head a
+    batch tested that reaches its merge after a wait out of the turn.
     """
 
     def some[T](choices: list[T] | tuple[T, ...], most: int) -> list[T]:
@@ -194,6 +195,21 @@ def scenario(rng: random.Random) -> Scenario:
             merge_timeout=1800,
             merge_poll=300,
         )
+    if kind < 0.45:
+        # A head a batch tested on master's tip reaches its merge, some after a wait out of
+        # the turn: whether that wait throws the batch's proof away.
+        return replace(
+            drawn,
+            polls=[("OPEN", "MERGEABLE", HEAD), ("MERGED", "UNKNOWN", HEAD)],
+            ci=[(CI_GREEN, "CI green")],
+            merge_rc=[0],
+            compare=[False],
+            turn=[True],
+            held=True,
+            direct=True,
+            tested=True,
+            interrupted=rng.random() < 0.7,
+        )
     return drawn
 
 
@@ -254,6 +270,9 @@ def landing(sc: Scenario) -> tuple[Landing, list]:
         reads[0] += 1
         if reads[0] > MAX_READS:
             raise RuntimeError(f"more than {MAX_READS} GitHub reads")
+        if args[1].endswith("/git/ref/heads/master"):
+            calls.append(("gh:master", (), {}))
+            return {"sha": MERGE_SHA}
         return gh_json(*args, **kwargs)
 
     ln.tools = replace(ln.tools, gh_json=bounded, await_ci=_CiRead(sc.ci))

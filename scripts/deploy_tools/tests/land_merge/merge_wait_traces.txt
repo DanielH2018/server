@@ -117,7 +117,7 @@ logger "event=land_transition pr=999 from=queued to=holding at=1764000061.000 ve
 line "leave" "999"
 gh:isDraft,state,mergeable,headRefOid
 gh:head-runs "api" "repos/{owner}/{repo}/actions/workflows/ci.yml/runs?head_sha=aaaaaaaaaa&event=pull_request" "--jq" "[.workflow_runs[] | {id, status, conclusion}]"
-say "  the batch's run no longer stands for PR #999: master is unreadable (tuple.index(x): x not in tuple), not the 01234567 the batch stacked it on; the stale-base rules judge it"
+gh:master
 gh:state,mergeable,headRefOid
 release_turn
 outcome rc=1 verdict=refused error=the CI gate is disarmed at aaaaaaaa — await_ci requires no CI contexts, so it reports no verdict; PR #999 not merged. To re-arm it, set REQUIRED_CONTEXTS in scripts/deploy_tools/await_ci.py to ci_required_contexts in estate/vars.yml
@@ -160,20 +160,16 @@ line "stand" "999" "aaaaaaaaaa" "1"
 say "  took the landing turn after 0s"
 logger "event=land_transition pr=999 from=queued to=holding at=1764000001.000 verdict="
 line "leave" "999"
-say "  the batch's run no longer stands for PR #999: master is unreadable (tuple.index(x): x not in tuple), not the 01234567 the batch stacked it on; the stale-base rules judge it"
-gh:compare "api" "repos/{owner}/{repo}/compare/aaaaaaaaaa...master" "--jq" "[.files[]? | .filename, (.previous_filename // empty)]"
-say "  master changed 1 path(s) since PR #999's base (docs/other.md); updating its branch so CI tests it against master before the merge"
-gh "api" "-X" "PUT" "repos/{owner}/{repo}/pulls/999/update-branch" "-f" "expected_head_sha=aaaaaaaaaa"
-gh:state,mergeable,headRefOid
-sleep 3
-gh:state,mergeable,headRefOid
+gh:master
 gh "pr" "ready" "999"
 say "  PR #999 was a draft; marked it ready"
 gh:state,mergeable,headRefOid
+logger "event=land_transition pr=999 from=holding to=proving at=1764000001.000 verdict="
+say "  aaaaaaaa: pending: every CI run on it skipped the gate because the PR was a draft, or was cancelled; waiting up to 180s for a ready run"
 sleep 300
 gh:state,mergeable,headRefOid
 release_turn
-outcome rc=75 verdict=merge-timeout error=PR #999 still OPEN after 300s — not being merged; look at its checks
+outcome rc=1 verdict=refused error=PR #999's head moved from aaaaaaaa to bbbbbbbb after the landing policy checked it; re-run so the new head is checked
 # seed 9
 {"polls": [["OPEN", "MERGEABLE", "aaaaaaaaaa"]], "start_draft": false, "ci": [[0, "CI green"]], "turn": [true, false, true], "merge_rc": [1], "refusal": "boom", "compare": [true], "runs": 1, "check_runs": 1, "turn_lost": [true, false, true, false], "merge_timeout": 1800, "merge_poll": 300, "direct": true, "held": false, "pinned": false, "tested": false, "batched_s": 0, "interrupted": false}
 gh:isDraft,state,mergeable,headRefOid
@@ -332,17 +328,34 @@ gh "pr" "ready" "999"
 release_turn
 outcome rc=1 verdict=refused error=PR #999 is a draft and could not be marked ready (2 of 2 required status checks are in progress.); run `gh pr ready 999`, then re-run this
 # seed 14
-{"polls": [["OPEN", "MERGEABLE", "bbbbbbbbbb"], ["OPEN", "MERGEABLE", ""], ["MERGED", "UNKNOWN", "aaaaaaaaaa"]], "start_draft": false, "ci": [[-1, "900"], [9, "CI green"], [1, "CI pending"]], "turn": [true, true], "merge_rc": [0, 1], "refusal": "Required status check \"renovate config validator\" is failing.", "compare": [false, false, true], "runs": 1, "check_runs": 0, "turn_lost": [false, true, false], "merge_timeout": 1800, "merge_poll": 30, "direct": true, "held": true, "pinned": false, "tested": true, "batched_s": 0, "interrupted": false}
+{"polls": [["OPEN", "MERGEABLE", "aaaaaaaaaa"], ["MERGED", "UNKNOWN", "aaaaaaaaaa"]], "start_draft": false, "ci": [[0, "CI green"]], "turn": [true], "merge_rc": [0], "refusal": "Required status check \"renovate config validator\" is failing.", "compare": [false], "runs": 1, "check_runs": 0, "turn_lost": [false, true, false], "merge_timeout": 1800, "merge_poll": 30, "direct": true, "held": true, "pinned": false, "tested": true, "batched_s": 0, "interrupted": true}
 gh:isDraft,state,mergeable,headRefOid
-gh:head-runs "api" "repos/{owner}/{repo}/actions/workflows/ci.yml/runs?head_sha=bbbbbbbbbb&event=pull_request" "--jq" "[.workflow_runs[] | {id, status, conclusion}]"
+gh:head-runs "api" "repos/{owner}/{repo}/actions/workflows/ci.yml/runs?head_sha=aaaaaaaaaa&event=pull_request" "--jq" "[.workflow_runs[] | {id, status, conclusion}]"
 gh:state,mergeable,headRefOid
-say "  bbbbbbbb: GitHub rate limit; the quota frees in 900s; the merge wait backs off until it does"
-sleep 900
+gh:compare "api" "repos/{owner}/{repo}/compare/aaaaaaaaaa...master" "--jq" "[.files[]? | .filename, (.previous_filename // empty)]"
+gh:files,headRefOid
+logger "event=land_transition pr=999 from= to=queued at=1764000001.000 verdict="
+line "join" "999" "-" ""
+try_turn
+line "stand" "999" "-" "1"
+say "  took the landing turn after 0s"
+logger "event=land_transition pr=999 from=queued to=holding at=1764000001.000 verdict="
+line "leave" "999"
+logger "event=land_transition pr=999 from=holding to=merging at=1764000001.000 verdict="
+try_serial 1
+release_serial
+git "fetch" "-q" "--no-write-fetch-head" "origin" "refs/pull/999/head" "master" cwd="<primary>"
+git "merge-base" "origin/master" "aaaaaaaaaa" cwd="<primary>"
+pins_at "prbase"
+pins_at "aaaaaaaaaa"
+gh:commits
+gh:master
+gh "api" "-X" "PUT" "repos/{owner}/{repo}/pulls/999/merge" "-f" "merge_method=squash" "-f" "sha=aaaaaaaaaa" "-f" "commit_title=Land it"
+say "  merged directly at the checked head: Land it"
 gh:state,mergeable,headRefOid
-sleep 30
-gh:state,mergeable,headRefOid
-logger "event=land_transition pr=999 from= to=merged at=1764000931.000 verdict="
-say "  merged after 930s"
+logger "event=land_transition pr=999 from=merging to=merged at=1764000001.000 verdict="
+say "  merged after 0s"
+release_turn
 merged
 # seed 15
 {"polls": [["OPEN", "MERGEABLE", "aaaaaaaaaa"]], "start_draft": false, "ci": [[0, "CI green"]], "turn": [true, true], "merge_rc": [1], "refusal": "boom", "compare": [false, true], "runs": 1, "check_runs": 1, "turn_lost": [true, false], "merge_timeout": 1800, "merge_poll": 300, "direct": true, "held": true, "pinned": false, "tested": false, "batched_s": 0, "interrupted": false}
@@ -500,16 +513,16 @@ line "stand" "999" "aaaaaaaaaa" "1"
 say "  took the landing turn after 0s"
 logger "event=land_transition pr=999 from=queued to=holding at=1764000001.000 verdict="
 line "leave" "999"
-say "  the batch's run no longer stands for PR #999: master is unreadable (tuple.index(x): x not in tuple), not the 01234567 the batch stacked it on; the stale-base rules judge it"
-gh:compare "api" "repos/{owner}/{repo}/compare/aaaaaaaaaa...master" "--jq" "[.files[]? | .filename, (.previous_filename // empty)]"
-say "  master changed 1 path(s) since PR #999's base (docs/other.md); updating its branch so CI tests it against master before the merge"
-gh "api" "-X" "PUT" "repos/{owner}/{repo}/pulls/999/update-branch" "-f" "expected_head_sha=aaaaaaaaaa"
-gh:state,mergeable,headRefOid
-sleep 3
-gh:state,mergeable,headRefOid
+gh:master
 gh "pr" "ready" "999"
+say "  PR #999 was a draft; marked it ready"
+gh:state,mergeable,headRefOid
+logger "event=land_transition pr=999 from=holding to=proving at=1764000001.000 verdict="
+say "  aaaaaaaa: pending: every CI run on it finished with no verdict, and none is running; waiting up to 180s for a run to start before re-running its cancelled one"
+sleep 300
+gh:state,mergeable,headRefOid
 release_turn
-outcome rc=1 verdict=refused error=PR #999 is a draft and could not be marked ready (Required status check "renovate config validator" is failing.); run `gh pr ready 999`, then re-run this
+outcome rc=1 verdict=refused error=PR #999's head moved from aaaaaaaa to bbbbbbbb after the landing policy checked it; re-run so the new head is checked
 # seed 20
 {"polls": [["OPEN", "MERGEABLE", "aaaaaaaaaa"], ["OPEN", "MERGEABLE", "bbbbbbbbbb"], ["OPEN", "UNKNOWN", "aaaaaaaaaa"], ["OPEN", "MERGEABLE", ""], ["OPEN", "MERGEABLE", ""], ["MERGED", "UNKNOWN", "aaaaaaaaaa"]], "start_draft": true, "ci": [[75, "2 checks still running"]], "turn": [true], "merge_rc": [0, 0], "refusal": "boom", "compare": [true], "runs": 0, "check_runs": 0, "turn_lost": [false, false, false, false], "merge_timeout": 1800, "merge_poll": 300, "direct": true, "held": true, "pinned": true, "tested": true, "batched_s": 120, "interrupted": false}
 gh:isDraft,state,mergeable,headRefOid
@@ -522,26 +535,15 @@ line "stand" "999" "aaaaaaaaaa" "1"
 say "  took the landing turn after 0s"
 logger "event=land_transition pr=999 from=queued to=holding at=1764000001.000 verdict="
 line "leave" "999"
-say "  the batch's run no longer stands for PR #999: master is unreadable (tuple.index(x): x not in tuple), not the 01234567 the batch stacked it on; the stale-base rules judge it"
-gh:compare "api" "repos/{owner}/{repo}/compare/aaaaaaaaaa...master" "--jq" "[.files[]? | .filename, (.previous_filename // empty)]"
-say "  master changed 1 path(s) since PR #999's base (docs/other.md); updating its branch so CI tests it against master before the merge"
-gh "api" "-X" "PUT" "repos/{owner}/{repo}/pulls/999/update-branch" "-f" "expected_head_sha=aaaaaaaaaa"
-gh:state,mergeable,headRefOid
-sleep 3
-gh:state,mergeable,headRefOid
+gh:master
 gh "pr" "ready" "999"
 say "  PR #999 was a draft; marked it ready"
 gh:state,mergeable,headRefOid
+logger "event=land_transition pr=999 from=holding to=proving at=1764000001.000 verdict="
 sleep 300
 gh:state,mergeable,headRefOid
-sleep 300
-gh:state,mergeable,headRefOid
-sleep 300
-gh:state,mergeable,headRefOid
-logger "event=land_transition pr=999 from=holding to=merged at=1764000904.000 verdict="
-say "  merged after 900s, 120s of it on its batch's run"
 release_turn
-merged
+outcome rc=1 verdict=refused error=PR #999's head moved from aaaaaaaa to bbbbbbbb after the landing policy checked it; re-run so the new head is checked
 # seed 21
 {"polls": [["OPEN", "CONFLICTING", "aaaaaaaaaa"], ["OPEN", "MERGEABLE", ""], ["OPEN", "CONFLICTING", "aaaaaaaaaa"], ["MERGED", "UNKNOWN", "aaaaaaaaaa"]], "start_draft": false, "ci": [[2, "pending: every CI run on it finished with no verdict, and none is running"]], "turn": [true], "merge_rc": [0, 0, 0], "refusal": "boom", "compare": [false, true, true], "runs": 3, "check_runs": 0, "turn_lost": [false, true, true, false], "merge_timeout": 300, "merge_poll": 300, "direct": true, "held": true, "pinned": false, "tested": false, "batched_s": 0, "interrupted": true}
 gh:isDraft,state,mergeable,headRefOid
@@ -627,16 +629,25 @@ line "stand" "999" "aaaaaaaaaa" "1"
 say "  took the landing turn after 0s"
 logger "event=land_transition pr=999 from=queued to=holding at=1764000001.000 verdict="
 line "leave" "999"
-say "  the batch's run no longer stands for PR #999: master is unreadable (tuple.index(x): x not in tuple), not the 01234567 the batch stacked it on; the stale-base rules judge it"
-gh:compare "api" "repos/{owner}/{repo}/compare/aaaaaaaaaa...master" "--jq" "[.files[]? | .filename, (.previous_filename // empty)]"
-say "  master changed 1 path(s) since PR #999's base (docs/other.md); updating its branch so CI tests it against master before the merge"
-gh "api" "-X" "PUT" "repos/{owner}/{repo}/pulls/999/update-branch" "-f" "expected_head_sha=aaaaaaaaaa"
-gh:state,mergeable,headRefOid
-sleep 3
-gh:state,mergeable,headRefOid
+gh:master
 gh "pr" "ready" "999"
+say "  PR #999 was a draft; marked it ready"
+gh:state,mergeable,headRefOid
+say "  aaaaaaaa: GitHub rate limit; the quota frees in 30s; the merge wait backs off until it does"
 release_turn
-outcome rc=1 verdict=refused error=PR #999 is a draft and could not be marked ready (Required status check "renovate config validator" is failing.); run `gh pr ready 999`, then re-run this
+say "  gave the landing turn back to wait out GitHub's rate limit"
+logger "event=land_transition pr=999 from=holding to=yielded at=1764000001.000 verdict="
+sleep 30
+logger "event=land_transition pr=999 from=yielded to=queued at=1764000031.000 verdict="
+line "join" "999" "-" "1"
+try_turn
+line "stand" "999" "-" "1"
+say "  took the landing turn after 0s"
+logger "event=land_transition pr=999 from=queued to=holding at=1764000031.000 verdict="
+line "leave" "999"
+gh:state,mergeable,headRefOid
+release_turn
+outcome rc=1 verdict=refused error=PR #999's head moved from aaaaaaaa to bbbbbbbb after the landing policy checked it; re-run so the new head is checked
 # seed 25
 {"polls": [["OPEN", "MERGEABLE", "aaaaaaaaaa"], ["OPEN", "MERGEABLE", "bbbbbbbbbb"], ["OPEN", "MERGEABLE", "aaaaaaaaaa"], ["OPEN", "MERGEABLE", "aaaaaaaaaa"], ["OPEN", "UNKNOWN", "aaaaaaaaaa"], ["OPEN", "MERGEABLE", ""], ["OPEN", "CONFLICTING", "aaaaaaaaaa"], ["OPEN", "MERGEABLE", "aaaaaaaaaa"], ["OPEN", "UNKNOWN", "aaaaaaaaaa"]], "start_draft": true, "ci": [[75, "pending: every CI run on it finished with no verdict, and none is running"], [2, "CI pending"], [2, "pending: every CI run on it finished with no verdict, and none is running"], [-1, "30"], [0, "pending: every CI run on it finished with no verdict, and none is running"]], "turn": [true], "merge_rc": [0, 0, 1], "refusal": "2 of 2 required status checks are in progress.", "compare": [true], "runs": 0, "check_runs": 0, "turn_lost": [false, false, true, false], "merge_timeout": 300, "merge_poll": 300, "direct": true, "held": true, "pinned": true, "tested": false, "batched_s": 0, "interrupted": false}
 gh:isDraft,state,mergeable,headRefOid
@@ -875,15 +886,34 @@ gh:state,mergeable,headRefOid
 release_turn
 outcome rc=1 verdict=refused error=PR #999 was closed without merging — nothing to land
 # seed 31
-{"polls": [["OPEN", "CONFLICTING", "aaaaaaaaaa"], ["MERGED", "UNKNOWN", "aaaaaaaaaa"]], "start_draft": false, "ci": [[75, "prek failed"], [75, "CI pending"], [0, "prek failed"], [0, "CI pending"], [75, "pending: every CI run on it finished with no verdict, and none is running"]], "turn": [true, true, false], "merge_rc": [0], "refusal": "boom", "compare": [false], "runs": 3, "check_runs": 1, "turn_lost": [true, false], "merge_timeout": 60, "merge_poll": 30, "direct": true, "held": true, "pinned": false, "tested": false, "batched_s": 0, "interrupted": false}
+{"polls": [["OPEN", "MERGEABLE", "aaaaaaaaaa"], ["MERGED", "UNKNOWN", "aaaaaaaaaa"]], "start_draft": false, "ci": [[0, "CI green"]], "turn": [true], "merge_rc": [0], "refusal": "boom", "compare": [false], "runs": 3, "check_runs": 1, "turn_lost": [true, false], "merge_timeout": 60, "merge_poll": 30, "direct": true, "held": true, "pinned": false, "tested": true, "batched_s": 0, "interrupted": true}
 gh:isDraft,state,mergeable,headRefOid
 gh:head-runs "api" "repos/{owner}/{repo}/actions/workflows/ci.yml/runs?head_sha=aaaaaaaaaa&event=pull_request" "--jq" "[.workflow_runs[] | {id, status, conclusion}]"
 gh:state,mergeable,headRefOid
-logger "event=land_transition pr=999 from= to=own-run at=1764000001.000 verdict="
-sleep 30
+gh:compare "api" "repos/{owner}/{repo}/compare/aaaaaaaaaa...master" "--jq" "[.files[]? | .filename, (.previous_filename // empty)]"
+gh:files,headRefOid
+logger "event=land_transition pr=999 from= to=queued at=1764000001.000 verdict="
+line "join" "999" "-" ""
+try_turn
+line "stand" "999" "-" "1"
+say "  took the landing turn after 0s"
+logger "event=land_transition pr=999 from=queued to=holding at=1764000001.000 verdict="
+line "leave" "999"
+logger "event=land_transition pr=999 from=holding to=merging at=1764000001.000 verdict="
+try_serial 1
+release_serial
+git "fetch" "-q" "--no-write-fetch-head" "origin" "refs/pull/999/head" "master" cwd="<primary>"
+git "merge-base" "origin/master" "aaaaaaaaaa" cwd="<primary>"
+pins_at "prbase"
+pins_at "aaaaaaaaaa"
+gh:commits
+gh:master
+gh "api" "-X" "PUT" "repos/{owner}/{repo}/pulls/999/merge" "-f" "merge_method=squash" "-f" "sha=aaaaaaaaaa" "-f" "commit_title=Land it"
+say "  merged directly at the checked head: Land it"
 gh:state,mergeable,headRefOid
-logger "event=land_transition pr=999 from=own-run to=merged at=1764000031.000 verdict="
-say "  merged after 30s"
+logger "event=land_transition pr=999 from=merging to=merged at=1764000001.000 verdict="
+say "  merged after 0s"
+release_turn
 merged
 # seed 32
 {"polls": [["OPEN", "MERGEABLE", "aaaaaaaaaa"], ["OPEN", "MERGEABLE", "bbbbbbbbbb"], ["OPEN", "MERGEABLE", "aaaaaaaaaa"], ["OPEN", "MERGEABLE", "aaaaaaaaaa"], ["MERGED", "UNKNOWN", "aaaaaaaaaa"]], "start_draft": true, "ci": [[2, "CI green"], [-1, "900"], [0, "pending: every CI run on it finished with no verdict, and none is running"], [75, "pending: every CI run on it finished with no verdict, and none is running"], [0, "pending: every CI run on it skipped the gate because the PR was a draft, or was cancelled"]], "turn": [true], "merge_rc": [0, 1, 0, 0], "refusal": "boom", "compare": [true], "runs": 0, "check_runs": 0, "turn_lost": [true, false], "merge_timeout": 1800, "merge_poll": 30, "direct": true, "held": true, "pinned": true, "tested": false, "batched_s": 0, "interrupted": false}
@@ -1107,8 +1137,7 @@ git "merge-base" "origin/master" "aaaaaaaaaa" cwd="<primary>"
 pins_at "prbase"
 pins_at "aaaaaaaaaa"
 gh:commits
-say "  the batch's run no longer stands for PR #999: master is unreadable (tuple.index(x): x not in tuple), not the 01234567 the batch stacked it on; the stale-base rules judge it"
-gh:compare "api" "repos/{owner}/{repo}/compare/aaaaaaaaaa...master" "--jq" "[.files[]? | .filename, (.previous_filename // empty)]"
+gh:master
 gh "api" "-X" "PUT" "repos/{owner}/{repo}/pulls/999/merge" "-f" "merge_method=squash" "-f" "sha=aaaaaaaaaa" "-f" "commit_title=Land it"
 say "  merge refused at aaaaaaaa: boom; waiting"
 sleep 300
@@ -1116,19 +1145,19 @@ gh:state,mergeable,headRefOid
 try_serial 1
 release_serial
 gh:commits
-gh:compare "api" "repos/{owner}/{repo}/compare/aaaaaaaaaa...master" "--jq" "[.files[]? | .filename, (.previous_filename // empty)]"
+gh:master
 gh:state,mergeable,headRefOid
 try_serial 1
 release_serial
 gh:commits
-gh:compare "api" "repos/{owner}/{repo}/compare/aaaaaaaaaa...master" "--jq" "[.files[]? | .filename, (.previous_filename // empty)]"
+gh:master
 gh "api" "-X" "PUT" "repos/{owner}/{repo}/pulls/999/merge" "-f" "merge_method=squash" "-f" "sha=aaaaaaaaaa" "-f" "commit_title=Land it"
 sleep 300
 gh:state,mergeable,headRefOid
 try_serial 1
 release_serial
 gh:commits
-gh:compare "api" "repos/{owner}/{repo}/compare/aaaaaaaaaa...master" "--jq" "[.files[]? | .filename, (.previous_filename // empty)]"
+gh:master
 gh "api" "-X" "PUT" "repos/{owner}/{repo}/pulls/999/merge" "-f" "merge_method=squash" "-f" "sha=aaaaaaaaaa" "-f" "commit_title=Land it"
 gh:check-runs "api" "repos/{owner}/{repo}/commits/aaaaaaaaaa/check-runs?per_page=100" "--jq" ".check_runs"
 gh:check-suites "api" "repos/{owner}/{repo}/commits/aaaaaaaaaa/check-suites?per_page=100" "--jq" ".check_suites"
@@ -1145,20 +1174,12 @@ line "stand" "999" "aaaaaaaaaa" "1"
 say "  took the landing turn after 0s"
 logger "event=land_transition pr=999 from=queued to=holding at=1764000001.000 verdict="
 line "leave" "999"
-say "  the batch's run no longer stands for PR #999: master is unreadable (tuple.index(x): x not in tuple), not the 01234567 the batch stacked it on; the stale-base rules judge it"
-gh:compare "api" "repos/{owner}/{repo}/compare/aaaaaaaaaa...master" "--jq" "[.files[]? | .filename, (.previous_filename // empty)]"
-say "  master changed 1 path(s) since PR #999's base (docs/other.md); updating its branch so CI tests it against master before the merge"
-gh "api" "-X" "PUT" "repos/{owner}/{repo}/pulls/999/update-branch" "-f" "expected_head_sha=aaaaaaaaaa"
-gh:state,mergeable,headRefOid
-sleep 3
-gh:state,mergeable,headRefOid
+gh:master
 gh "pr" "ready" "999"
 say "  PR #999 was a draft; marked it ready"
 gh:state,mergeable,headRefOid
-sleep 300
-gh:state,mergeable,headRefOid
 release_turn
-outcome rc=75 verdict=merge-timeout error=PR #999 still OPEN after 300s — not being merged; look at its checks
+outcome rc=1 verdict=refused error=the CI gate is disarmed at aaaaaaaa — await_ci requires no CI contexts, so it reports no verdict; PR #999 not merged. To re-arm it, set REQUIRED_CONTEXTS in scripts/deploy_tools/await_ci.py to ci_required_contexts in estate/vars.yml
 # seed 39
 {"polls": [["OPEN", "UNKNOWN", "aaaaaaaaaa"], ["OPEN", "CONFLICTING", "aaaaaaaaaa"], ["OPEN", "MERGEABLE", "aaaaaaaaaa"], ["OPEN", "MERGEABLE", "aaaaaaaaaa"], ["CLOSED", "UNKNOWN", "aaaaaaaaaa"]], "start_draft": true, "ci": [[0, "2 checks still running"], [0, "2 checks still running"]], "turn": [true, true], "merge_rc": [0, 1], "refusal": "boom", "compare": [true, true], "runs": 0, "check_runs": 1, "turn_lost": [false, true, false, false], "merge_timeout": 300, "merge_poll": 30, "direct": true, "held": true, "pinned": false, "tested": false, "batched_s": 0, "interrupted": false}
 gh:isDraft,state,mergeable,headRefOid
@@ -1309,10 +1330,7 @@ git "merge-base" "origin/master" "aaaaaaaaaa" cwd="<primary>"
 pins_at "prbase"
 pins_at "aaaaaaaaaa"
 gh:commits
-say "  the batch's run no longer stands for PR #999: master is unreadable (tuple.index(x): x not in tuple), not the 01234567 the batch stacked it on; the stale-base rules judge it"
-gh:compare "api" "repos/{owner}/{repo}/compare/aaaaaaaaaa...master" "--jq" "[.files[]? | .filename, (.previous_filename // empty)]"
-gh:compare "api" "repos/{owner}/{repo}/compare/aaaaaaaaaa...master" "--jq" "[.files[]? | .filename, (.previous_filename // empty)]"
-gh:files "api" "--paginate" "--slurp" "repos/{owner}/{repo}/pulls/999/files"
+gh:master
 gh "api" "-X" "PUT" "repos/{owner}/{repo}/pulls/999/merge" "-f" "merge_method=squash" "-f" "sha=aaaaaaaaaa" "-f" "commit_title=Land it"
 say "  merge refused at aaaaaaaa: boom; waiting"
 sleep 300
@@ -1320,16 +1338,14 @@ gh:state,mergeable,headRefOid
 try_serial 1
 release_serial
 gh:commits
-gh:compare "api" "repos/{owner}/{repo}/compare/aaaaaaaaaa...master" "--jq" "[.files[]? | .filename, (.previous_filename // empty)]"
-gh:files "api" "--paginate" "--slurp" "repos/{owner}/{repo}/pulls/999/files"
+gh:master
 gh "api" "-X" "PUT" "repos/{owner}/{repo}/pulls/999/merge" "-f" "merge_method=squash" "-f" "sha=aaaaaaaaaa" "-f" "commit_title=Land it"
 sleep 300
 gh:state,mergeable,headRefOid
 try_serial 1
 release_serial
 gh:commits
-gh:compare "api" "repos/{owner}/{repo}/compare/aaaaaaaaaa...master" "--jq" "[.files[]? | .filename, (.previous_filename // empty)]"
-gh:files "api" "--paginate" "--slurp" "repos/{owner}/{repo}/pulls/999/files"
+gh:master
 gh "api" "-X" "PUT" "repos/{owner}/{repo}/pulls/999/merge" "-f" "merge_method=squash" "-f" "sha=aaaaaaaaaa" "-f" "commit_title=Land it"
 gh:check-runs "api" "repos/{owner}/{repo}/commits/aaaaaaaaaa/check-runs?per_page=100" "--jq" ".check_runs"
 gh:check-suites "api" "repos/{owner}/{repo}/commits/aaaaaaaaaa/check-suites?per_page=100" "--jq" ".check_suites"
@@ -1476,9 +1492,7 @@ git "merge-base" "origin/master" "aaaaaaaaaa" cwd="<primary>"
 pins_at "prbase"
 pins_at "aaaaaaaaaa"
 gh:commits
-say "  the batch's run no longer stands for PR #999: master is unreadable (tuple.index(x): x not in tuple), not the 01234567 the batch stacked it on; the stale-base rules judge it"
-gh:compare "api" "repos/{owner}/{repo}/compare/aaaaaaaaaa...master" "--jq" "[.files[]? | .filename, (.previous_filename // empty)]"
-gh:files "api" "--paginate" "--slurp" "repos/{owner}/{repo}/pulls/999/files"
+gh:master
 gh "api" "-X" "PUT" "repos/{owner}/{repo}/pulls/999/merge" "-f" "merge_method=squash" "-f" "sha=aaaaaaaaaa" "-f" "commit_title=Land it"
 say "  merge refused at aaaaaaaa: boom; waiting"
 sleep 30
@@ -1486,8 +1500,7 @@ gh:state,mergeable,headRefOid
 try_serial 1
 release_serial
 gh:commits
-gh:compare "api" "repos/{owner}/{repo}/compare/aaaaaaaaaa...master" "--jq" "[.files[]? | .filename, (.previous_filename // empty)]"
-gh:files "api" "--paginate" "--slurp" "repos/{owner}/{repo}/pulls/999/files"
+gh:master
 gh "api" "-X" "PUT" "repos/{owner}/{repo}/pulls/999/merge" "-f" "merge_method=squash" "-f" "sha=aaaaaaaaaa" "-f" "commit_title=Land it"
 sleep 30
 gh:state,mergeable,headRefOid
@@ -1503,12 +1516,22 @@ gh:files,headRefOid
 gh:state,mergeable,headRefOid
 outcome rc=1 verdict=pr-ci-red error=PR #999 cannot merge — its own CI is red (aaaaaaaa: pending: every CI run on it skipped the gate because the PR was a draft, or was cancelled); fix it, push, and re-run this
 # seed 48
-{"polls": [["OPEN", "MERGEABLE", "aaaaaaaaaa"], ["OPEN", "MERGEABLE", "bbbbbbbbbb"], ["OPEN", "MERGEABLE", ""], ["OPEN", "MERGEABLE", "bbbbbbbbbb"], ["OPEN", "UNKNOWN", "aaaaaaaaaa"], ["OPEN", "MERGEABLE", "bbbbbbbbbb"]], "start_draft": false, "ci": [[0, "pending: every CI run on it skipped the gate because the PR was a draft, or was cancelled"], [75, "CI pending"], [75, "pending: every CI run on it skipped the gate because the PR was a draft, or was cancelled"], [75, "CI green"], [0, "pending: every CI run on it skipped the gate because the PR was a draft, or was cancelled"], [0, "CI pending"]], "turn": [true], "merge_rc": [1, 0, 1], "refusal": "boom", "compare": [true, true, true], "runs": 0, "check_runs": 0, "turn_lost": [false, false], "merge_timeout": 300, "merge_poll": 30, "direct": true, "held": false, "pinned": false, "tested": false, "batched_s": 0, "interrupted": false}
+{"polls": [["OPEN", "MERGEABLE", "aaaaaaaaaa"], ["MERGED", "UNKNOWN", "aaaaaaaaaa"]], "start_draft": false, "ci": [[0, "CI green"]], "turn": [true], "merge_rc": [0], "refusal": "boom", "compare": [false], "runs": 0, "check_runs": 0, "turn_lost": [false, false], "merge_timeout": 300, "merge_poll": 30, "direct": true, "held": true, "pinned": false, "tested": true, "batched_s": 0, "interrupted": true}
 gh:isDraft,state,mergeable,headRefOid
 gh:head-runs "api" "repos/{owner}/{repo}/actions/workflows/ci.yml/runs?head_sha=aaaaaaaaaa&event=pull_request" "--jq" "[.workflow_runs[] | {id, status, conclusion}]"
 gh:files,headRefOid
+logger "event=land_transition pr=999 from= to=queued at=1764000001.000 verdict="
+line "join" "999" "-" ""
+try_turn
+line "stand" "999" "-" "1"
+say "  took the landing turn after 0s"
+logger "event=land_transition pr=999 from=queued to=holding at=1764000001.000 verdict="
+line "leave" "999"
+gh:isDraft,state,mergeable,headRefOid
+gh:head-runs "api" "repos/{owner}/{repo}/actions/workflows/ci.yml/runs?head_sha=aaaaaaaaaa&event=pull_request" "--jq" "[.workflow_runs[] | {id, status, conclusion}]"
+gh:master
 gh:state,mergeable,headRefOid
-logger "event=land_transition pr=999 from= to=merging at=1764000001.000 verdict="
+logger "event=land_transition pr=999 from=holding to=merging at=1764000001.000 verdict="
 try_serial 1
 release_serial
 git "fetch" "-q" "--no-write-fetch-head" "origin" "refs/pull/999/head" "master" cwd="<primary>"
@@ -1516,95 +1539,14 @@ git "merge-base" "origin/master" "aaaaaaaaaa" cwd="<primary>"
 pins_at "prbase"
 pins_at "aaaaaaaaaa"
 gh:commits
-gh:compare "api" "repos/{owner}/{repo}/compare/aaaaaaaaaa...master" "--jq" "[.files[]? | .filename, (.previous_filename // empty)]"
-gh:files "api" "--paginate" "--slurp" "repos/{owner}/{repo}/pulls/999/files"
+gh:master
 gh "api" "-X" "PUT" "repos/{owner}/{repo}/pulls/999/merge" "-f" "merge_method=squash" "-f" "sha=aaaaaaaaaa" "-f" "commit_title=Land it"
-say "  merge refused at aaaaaaaa: boom; waiting"
-sleep 30
-gh:state,mergeable,headRefOid
-sleep 30
-gh:state,mergeable,headRefOid
-sleep 30
-gh:state,mergeable,headRefOid
-say "  bbbbbbbb: pending: every CI run on it skipped the gate because the PR was a draft, or was cancelled; waiting up to 180s for a ready run"
-sleep 30
-gh:state,mergeable,headRefOid
-sleep 30
-gh:state,mergeable,headRefOid
-gh:files,headRefOid
-gh:files,headRefOid
-try_serial 1
-release_serial
-git "fetch" "-q" "--no-write-fetch-head" "origin" "refs/pull/999/head" "master" cwd="<primary>"
-git "merge-base" "origin/master" "bbbbbbbbbb" cwd="<primary>"
-pins_at "prbase"
-pins_at "bbbbbbbbbb"
-gh:commits
-gh:compare "api" "repos/{owner}/{repo}/compare/bbbbbbbbbb...master" "--jq" "[.files[]? | .filename, (.previous_filename // empty)]"
-gh:files "api" "--paginate" "--slurp" "repos/{owner}/{repo}/pulls/999/files"
-gh "api" "-X" "PUT" "repos/{owner}/{repo}/pulls/999/merge" "-f" "merge_method=squash" "-f" "sha=bbbbbbbbbb" "-f" "commit_title=Land it"
 say "  merged directly at the checked head: Land it"
 gh:state,mergeable,headRefOid
-gh:files,headRefOid
-gh:files,headRefOid
-try_serial 1
-release_serial
-gh:commits
-gh:compare "api" "repos/{owner}/{repo}/compare/bbbbbbbbbb...master" "--jq" "[.files[]? | .filename, (.previous_filename // empty)]"
-gh:files "api" "--paginate" "--slurp" "repos/{owner}/{repo}/pulls/999/files"
-gh "api" "-X" "PUT" "repos/{owner}/{repo}/pulls/999/merge" "-f" "merge_method=squash" "-f" "sha=bbbbbbbbbb" "-f" "commit_title=Land it"
-say "  merge refused at bbbbbbbb: boom; waiting"
-sleep 30
-gh:state,mergeable,headRefOid
-gh:files,headRefOid
-gh:files,headRefOid
-try_serial 1
-release_serial
-gh:commits
-gh:compare "api" "repos/{owner}/{repo}/compare/bbbbbbbbbb...master" "--jq" "[.files[]? | .filename, (.previous_filename // empty)]"
-gh:files "api" "--paginate" "--slurp" "repos/{owner}/{repo}/pulls/999/files"
-gh "api" "-X" "PUT" "repos/{owner}/{repo}/pulls/999/merge" "-f" "merge_method=squash" "-f" "sha=bbbbbbbbbb" "-f" "commit_title=Land it"
-sleep 30
-gh:state,mergeable,headRefOid
-gh:files,headRefOid
-gh:files,headRefOid
-try_serial 1
-release_serial
-gh:commits
-gh:compare "api" "repos/{owner}/{repo}/compare/bbbbbbbbbb...master" "--jq" "[.files[]? | .filename, (.previous_filename // empty)]"
-gh:files "api" "--paginate" "--slurp" "repos/{owner}/{repo}/pulls/999/files"
-gh "api" "-X" "PUT" "repos/{owner}/{repo}/pulls/999/merge" "-f" "merge_method=squash" "-f" "sha=bbbbbbbbbb" "-f" "commit_title=Land it"
-sleep 30
-gh:state,mergeable,headRefOid
-gh:files,headRefOid
-gh:files,headRefOid
-try_serial 1
-release_serial
-gh:commits
-gh:compare "api" "repos/{owner}/{repo}/compare/bbbbbbbbbb...master" "--jq" "[.files[]? | .filename, (.previous_filename // empty)]"
-gh:files "api" "--paginate" "--slurp" "repos/{owner}/{repo}/pulls/999/files"
-gh "api" "-X" "PUT" "repos/{owner}/{repo}/pulls/999/merge" "-f" "merge_method=squash" "-f" "sha=bbbbbbbbbb" "-f" "commit_title=Land it"
-sleep 30
-gh:state,mergeable,headRefOid
-gh:files,headRefOid
-gh:files,headRefOid
-try_serial 1
-release_serial
-gh:commits
-gh:compare "api" "repos/{owner}/{repo}/compare/bbbbbbbbbb...master" "--jq" "[.files[]? | .filename, (.previous_filename // empty)]"
-gh:files "api" "--paginate" "--slurp" "repos/{owner}/{repo}/pulls/999/files"
-gh "api" "-X" "PUT" "repos/{owner}/{repo}/pulls/999/merge" "-f" "merge_method=squash" "-f" "sha=bbbbbbbbbb" "-f" "commit_title=Land it"
-sleep 30
-gh:state,mergeable,headRefOid
-gh:files,headRefOid
-gh:files,headRefOid
-try_serial 1
-release_serial
-gh:commits
-gh:compare "api" "repos/{owner}/{repo}/compare/bbbbbbbbbb...master" "--jq" "[.files[]? | .filename, (.previous_filename // empty)]"
-gh:files "api" "--paginate" "--slurp" "repos/{owner}/{repo}/pulls/999/files"
-gh "api" "-X" "PUT" "repos/{owner}/{repo}/pulls/999/merge" "-f" "merge_method=squash" "-f" "sha=bbbbbbbbbb" "-f" "commit_title=Land it"
-outcome rc=75 verdict=merge-timeout error=PR #999 still OPEN after 300s — not being merged; look at its checks
+logger "event=land_transition pr=999 from=merging to=merged at=1764000001.000 verdict="
+say "  merged after 0s"
+release_turn
+merged
 # seed 49
 {"polls": [["OPEN", "UNKNOWN", "aaaaaaaaaa"], ["OPEN", "CONFLICTING", "aaaaaaaaaa"], ["CLOSED", "UNKNOWN", "aaaaaaaaaa"]], "start_draft": true, "ci": [[75, "pending: every CI run on it skipped the gate because the PR was a draft, or was cancelled"], [0, "prek failed"], [75, "pending: every CI run on it finished with no verdict, and none is running"]], "turn": [true, true], "merge_rc": [0], "refusal": "boom", "compare": [false, false, true], "runs": 3, "check_runs": 1, "turn_lost": [true, false, true, false], "merge_timeout": 300, "merge_poll": 30, "direct": true, "held": false, "pinned": false, "tested": false, "batched_s": 0, "interrupted": false}
 gh:isDraft,state,mergeable,headRefOid
@@ -1670,7 +1612,7 @@ sleep 30
 gh:state,mergeable,headRefOid
 outcome rc=1 verdict=merge-conflict error=PR #999 conflicts with master — rebase it, push, then re-run this
 # seed 54
-{"polls": [["OPEN", "CONFLICTING", "aaaaaaaaaa"], ["OPEN", "MERGEABLE", "bbbbbbbbbb"], ["OPEN", "UNKNOWN", "aaaaaaaaaa"], ["MERGED", "UNKNOWN", "aaaaaaaaaa"]], "start_draft": true, "ci": [[75, "CI green"], [-1, "900"], [0, "pending: every CI run on it finished with no verdict, and none is running"], [2, "pending: every CI run on it finished with no verdict, and none is running"], [1, "pending: every CI run on it skipped the gate because the PR was a draft, or was cancelled"], [1, "pending: every CI run on it finished with no verdict, and none is running"]], "turn": [true, true, true], "merge_rc": [0, 0, 0, 0], "refusal": "2 of 2 required status checks are in progress.", "compare": [true], "runs": 0, "check_runs": 1, "turn_lost": [true, true, false], "merge_timeout": 300, "merge_poll": 30, "direct": true, "held": true, "pinned": false, "tested": false, "batched_s": 120, "interrupted": false}
+{"polls": [["OPEN", "MERGEABLE", "aaaaaaaaaa"], ["MERGED", "UNKNOWN", "aaaaaaaaaa"]], "start_draft": true, "ci": [[0, "CI green"]], "turn": [true], "merge_rc": [0], "refusal": "2 of 2 required status checks are in progress.", "compare": [false], "runs": 0, "check_runs": 1, "turn_lost": [true, true, false], "merge_timeout": 300, "merge_poll": 30, "direct": true, "held": true, "pinned": false, "tested": true, "batched_s": 120, "interrupted": false}
 gh:isDraft,state,mergeable,headRefOid
 gh:head-runs "api" "repos/{owner}/{repo}/actions/workflows/ci.yml/runs?head_sha=aaaaaaaaaa&event=pull_request" "--jq" "[.workflow_runs[] | {id, status, conclusion}]"
 gh:files,headRefOid
@@ -1681,26 +1623,11 @@ line "stand" "999" "aaaaaaaaaa" "1"
 say "  took the landing turn after 0s"
 logger "event=land_transition pr=999 from=queued to=holding at=1764000001.000 verdict="
 line "leave" "999"
+gh:master
 gh "pr" "ready" "999"
 say "  PR #999 was a draft; marked it ready"
 gh:state,mergeable,headRefOid
-logger "event=land_transition pr=999 from=holding to=testing at=1764000001.000 verdict="
-sleep 30
-gh:state,mergeable,headRefOid
-say "  bbbbbbbb: GitHub rate limit; the quota frees in 900s; the merge wait backs off until it does"
-release_turn
-say "  gave the landing turn back to wait out GitHub's rate limit"
-logger "event=land_transition pr=999 from=testing to=yielded at=1764000031.000 verdict="
-sleep 270
-logger "event=land_transition pr=999 from=yielded to=queued at=1764000301.000 verdict="
-line "join" "999" "-" "1"
-try_turn
-line "stand" "999" "-" "1"
-say "  took the landing turn after 0s"
-logger "event=land_transition pr=999 from=queued to=holding at=1764000301.000 verdict="
-line "leave" "999"
-gh:state,mergeable,headRefOid
-logger "event=land_transition pr=999 from=holding to=merging at=1764000301.000 verdict="
+logger "event=land_transition pr=999 from=holding to=merging at=1764000001.000 verdict="
 try_serial 1
 release_serial
 git "fetch" "-q" "--no-write-fetch-head" "origin" "refs/pull/999/head" "master" cwd="<primary>"
@@ -1708,16 +1635,13 @@ git "merge-base" "origin/master" "aaaaaaaaaa" cwd="<primary>"
 pins_at "prbase"
 pins_at "aaaaaaaaaa"
 gh:commits
-gh:compare "api" "repos/{owner}/{repo}/compare/aaaaaaaaaa...master" "--jq" "[.files[]? | .filename, (.previous_filename // empty)]"
-gh "pr" "ready" "--undo" "999"
-gh "api" "-X" "PUT" "repos/{owner}/{repo}/pulls/999/update-branch" "-f" "expected_head_sha=aaaaaaaaaa"
-say "  master changed 1 path(s) since the master PR #999's run tested; converted it to draft and updated its branch, so it waits in the line for a run on the master of its turn"
-release_turn
-say "  gave the landing turn back to wait in the line as a draft"
-logger "event=land_transition pr=999 from=merging to=rejoining at=1764000301.000 verdict="
+gh:master
+gh "api" "-X" "PUT" "repos/{owner}/{repo}/pulls/999/merge" "-f" "merge_method=squash" "-f" "sha=aaaaaaaaaa" "-f" "commit_title=Land it"
+say "  merged directly at the checked head: Land it"
 gh:state,mergeable,headRefOid
-logger "event=land_transition pr=999 from=rejoining to=merged at=1764000301.000 verdict="
-say "  merged after 300s, 120s of it on its batch's run"
+logger "event=land_transition pr=999 from=merging to=merged at=1764000001.000 verdict="
+say "  merged after 0s, 120s of it on its batch's run"
+release_turn
 merged
 # seed 55
 {"polls": [["OPEN", "MERGEABLE", "aaaaaaaaaa"]], "start_draft": false, "ci": [[0, "CI green"]], "turn": [false, true, false], "merge_rc": [1], "refusal": "boom", "compare": [false], "runs": 1, "check_runs": 1, "turn_lost": [false, false, false], "merge_timeout": 1800, "merge_poll": 300, "direct": true, "held": true, "pinned": false, "tested": true, "batched_s": 0, "interrupted": false}
@@ -1747,8 +1671,7 @@ git "merge-base" "origin/master" "aaaaaaaaaa" cwd="<primary>"
 pins_at "prbase"
 pins_at "aaaaaaaaaa"
 gh:commits
-say "  the batch's run no longer stands for PR #999: master is unreadable (tuple.index(x): x not in tuple), not the 01234567 the batch stacked it on; the stale-base rules judge it"
-gh:compare "api" "repos/{owner}/{repo}/compare/aaaaaaaaaa...master" "--jq" "[.files[]? | .filename, (.previous_filename // empty)]"
+gh:master
 gh "api" "-X" "PUT" "repos/{owner}/{repo}/pulls/999/merge" "-f" "merge_method=squash" "-f" "sha=aaaaaaaaaa" "-f" "commit_title=Land it"
 say "  merge refused at aaaaaaaa: boom; waiting"
 sleep 300
@@ -1756,14 +1679,14 @@ gh:state,mergeable,headRefOid
 try_serial 1
 release_serial
 gh:commits
-gh:compare "api" "repos/{owner}/{repo}/compare/aaaaaaaaaa...master" "--jq" "[.files[]? | .filename, (.previous_filename // empty)]"
+gh:master
 gh "api" "-X" "PUT" "repos/{owner}/{repo}/pulls/999/merge" "-f" "merge_method=squash" "-f" "sha=aaaaaaaaaa" "-f" "commit_title=Land it"
 sleep 300
 gh:state,mergeable,headRefOid
 try_serial 1
 release_serial
 gh:commits
-gh:compare "api" "repos/{owner}/{repo}/compare/aaaaaaaaaa...master" "--jq" "[.files[]? | .filename, (.previous_filename // empty)]"
+gh:master
 gh "api" "-X" "PUT" "repos/{owner}/{repo}/pulls/999/merge" "-f" "merge_method=squash" "-f" "sha=aaaaaaaaaa" "-f" "commit_title=Land it"
 gh:check-runs "api" "repos/{owner}/{repo}/commits/aaaaaaaaaa/check-runs?per_page=100" "--jq" ".check_runs"
 gh:check-suites "api" "repos/{owner}/{repo}/commits/aaaaaaaaaa/check-suites?per_page=100" "--jq" ".check_suites"
@@ -1776,17 +1699,35 @@ gh:head-runs "api" "repos/{owner}/{repo}/actions/workflows/ci.yml/runs?head_sha=
 gh:state,mergeable,headRefOid
 outcome rc=1 verdict=pr-ci-red error=PR #999 cannot merge — its own CI is red (aaaaaaaa: pending: every CI run on it finished with no verdict, and none is running); fix it, push, and re-run this
 # seed 57
-{"polls": [["OPEN", "UNKNOWN", "aaaaaaaaaa"]], "start_draft": false, "ci": [[9, "CI green"], [75, "pending: every CI run on it finished with no verdict, and none is running"], [2, "pending: every CI run on it skipped the gate because the PR was a draft, or was cancelled"], [9, "CI green"]], "turn": [false, false, true], "merge_rc": [0, 1], "refusal": "2 of 2 required status checks are in progress.", "compare": [false, false], "runs": 1, "check_runs": 1, "turn_lost": [false, false, false, false], "merge_timeout": 1800, "merge_poll": 30, "direct": true, "held": false, "pinned": false, "tested": false, "batched_s": 0, "interrupted": false}
+{"polls": [["OPEN", "MERGEABLE", "aaaaaaaaaa"], ["MERGED", "UNKNOWN", "aaaaaaaaaa"]], "start_draft": false, "ci": [[0, "CI green"]], "turn": [true], "merge_rc": [0], "refusal": "2 of 2 required status checks are in progress.", "compare": [false], "runs": 1, "check_runs": 1, "turn_lost": [false, false, false, false], "merge_timeout": 1800, "merge_poll": 30, "direct": true, "held": true, "pinned": false, "tested": true, "batched_s": 0, "interrupted": true}
 gh:isDraft,state,mergeable,headRefOid
 gh:head-runs "api" "repos/{owner}/{repo}/actions/workflows/ci.yml/runs?head_sha=aaaaaaaaaa&event=pull_request" "--jq" "[.workflow_runs[] | {id, status, conclusion}]"
 gh:state,mergeable,headRefOid
-sleep 30
+gh:compare "api" "repos/{owner}/{repo}/compare/aaaaaaaaaa...master" "--jq" "[.files[]? | .filename, (.previous_filename // empty)]"
+gh:files,headRefOid
+logger "event=land_transition pr=999 from= to=queued at=1764000001.000 verdict="
+line "join" "999" "-" ""
+try_turn
+line "stand" "999" "-" "1"
+say "  took the landing turn after 0s"
+logger "event=land_transition pr=999 from=queued to=holding at=1764000001.000 verdict="
+line "leave" "999"
+logger "event=land_transition pr=999 from=holding to=merging at=1764000001.000 verdict="
+try_serial 1
+release_serial
+git "fetch" "-q" "--no-write-fetch-head" "origin" "refs/pull/999/head" "master" cwd="<primary>"
+git "merge-base" "origin/master" "aaaaaaaaaa" cwd="<primary>"
+pins_at "prbase"
+pins_at "aaaaaaaaaa"
+gh:commits
+gh:master
+gh "api" "-X" "PUT" "repos/{owner}/{repo}/pulls/999/merge" "-f" "merge_method=squash" "-f" "sha=aaaaaaaaaa" "-f" "commit_title=Land it"
+say "  merged directly at the checked head: Land it"
 gh:state,mergeable,headRefOid
-logger "event=land_transition pr=999 from= to=own-run at=1764000031.000 verdict="
-say "  aaaaaaaa: pending: every CI run on it finished with no verdict, and none is running; waiting up to 180s for a run to start before re-running its cancelled one"
-sleep 30
-gh:state,mergeable,headRefOid
-outcome rc=1 verdict=refused error=the CI gate is disarmed at aaaaaaaa — await_ci requires no CI contexts, so it reports no verdict; PR #999 not merged. To re-arm it, set REQUIRED_CONTEXTS in scripts/deploy_tools/await_ci.py to ci_required_contexts in estate/vars.yml
+logger "event=land_transition pr=999 from=merging to=merged at=1764000001.000 verdict="
+say "  merged after 0s"
+release_turn
+merged
 # seed 58
 {"polls": [["OPEN", "MERGEABLE", "aaaaaaaaaa"], ["OPEN", "MERGEABLE", "bbbbbbbbbb"], ["OPEN", "MERGEABLE", "aaaaaaaaaa"], ["OPEN", "MERGEABLE", ""], ["OPEN", "MERGEABLE", ""], ["OPEN", "MERGEABLE", "aaaaaaaaaa"]], "start_draft": true, "ci": [[-1, "900"], [1, "pending: every CI run on it finished with no verdict, and none is running"], [0, "CI green"]], "turn": [true], "merge_rc": [0, 0, 1], "refusal": "2 of 2 required status checks are in progress.", "compare": [true], "runs": 0, "check_runs": 2, "turn_lost": [false, false, false], "merge_timeout": 60, "merge_poll": 30, "direct": true, "held": true, "pinned": true, "tested": false, "batched_s": 120, "interrupted": false}
 gh:isDraft,state,mergeable,headRefOid
@@ -1916,8 +1857,7 @@ git "merge-base" "origin/master" "aaaaaaaaaa" cwd="<primary>"
 pins_at "prbase"
 pins_at "aaaaaaaaaa"
 gh:commits
-say "  the batch's run no longer stands for PR #999: master is unreadable (tuple.index(x): x not in tuple), not the 01234567 the batch stacked it on; the stale-base rules judge it"
-gh:compare "api" "repos/{owner}/{repo}/compare/aaaaaaaaaa...master" "--jq" "[.files[]? | .filename, (.previous_filename // empty)]"
+gh:master
 gh "api" "-X" "PUT" "repos/{owner}/{repo}/pulls/999/merge" "-f" "merge_method=squash" "-f" "sha=aaaaaaaaaa" "-f" "commit_title=Land it"
 say "  merged directly at the checked head: Land it"
 gh:state,mergeable,headRefOid
@@ -2025,12 +1965,37 @@ logger "event=land_transition pr=999 from= to=merged at=1764000061.000 verdict="
 say "  merged after 60s"
 merged
 # seed 71
-{"polls": [["OPEN", "MERGEABLE", "bbbbbbbbbb"], ["OPEN", "MERGEABLE", "bbbbbbbbbb"], ["OPEN", "MERGEABLE", "aaaaaaaaaa"], ["OPEN", "UNKNOWN", "aaaaaaaaaa"], ["OPEN", "MERGEABLE", "aaaaaaaaaa"], ["OPEN", "MERGEABLE", "aaaaaaaaaa"], ["MERGED", "UNKNOWN", "aaaaaaaaaa"]], "start_draft": true, "ci": [[2, "pending: every CI run on it skipped the gate because the PR was a draft, or was cancelled"], [75, "2 checks still running"], [75, "CI green"], [2, "pending: every CI run on it finished with no verdict, and none is running"], [0, "pending: every CI run on it skipped the gate because the PR was a draft, or was cancelled"], [75, "CI pending"]], "turn": [true, true], "merge_rc": [0, 0, 1], "refusal": "2 of 2 required status checks are in progress.", "compare": [false], "runs": 1, "check_runs": 0, "turn_lost": [true, false], "merge_timeout": 60, "merge_poll": 300, "direct": false, "held": true, "pinned": false, "tested": false, "batched_s": 0, "interrupted": false}
+{"polls": [["OPEN", "MERGEABLE", "aaaaaaaaaa"], ["MERGED", "UNKNOWN", "aaaaaaaaaa"]], "start_draft": true, "ci": [[0, "CI green"]], "turn": [true], "merge_rc": [0], "refusal": "2 of 2 required status checks are in progress.", "compare": [false], "runs": 1, "check_runs": 0, "turn_lost": [true, false], "merge_timeout": 60, "merge_poll": 300, "direct": true, "held": true, "pinned": false, "tested": true, "batched_s": 0, "interrupted": true}
+gh:isDraft,state,mergeable,headRefOid
+gh:head-runs "api" "repos/{owner}/{repo}/actions/workflows/ci.yml/runs?head_sha=aaaaaaaaaa&event=pull_request" "--jq" "[.workflow_runs[] | {id, status, conclusion}]"
+gh "pr" "ready" "999"
+say "  PR #999 was a draft; marked it ready"
 gh:state,mergeable,headRefOid
-sleep 300
+gh:compare "api" "repos/{owner}/{repo}/compare/aaaaaaaaaa...master" "--jq" "[.files[]? | .filename, (.previous_filename // empty)]"
+gh:files,headRefOid
+logger "event=land_transition pr=999 from= to=queued at=1764000001.000 verdict="
+line "join" "999" "-" ""
+try_turn
+line "stand" "999" "-" "1"
+say "  took the landing turn after 0s"
+logger "event=land_transition pr=999 from=queued to=holding at=1764000001.000 verdict="
+line "leave" "999"
+logger "event=land_transition pr=999 from=holding to=merging at=1764000001.000 verdict="
+try_serial 1
+release_serial
+git "fetch" "-q" "--no-write-fetch-head" "origin" "refs/pull/999/head" "master" cwd="<primary>"
+git "merge-base" "origin/master" "aaaaaaaaaa" cwd="<primary>"
+pins_at "prbase"
+pins_at "aaaaaaaaaa"
+gh:commits
+gh:master
+gh "api" "-X" "PUT" "repos/{owner}/{repo}/pulls/999/merge" "-f" "merge_method=squash" "-f" "sha=aaaaaaaaaa" "-f" "commit_title=Land it"
+say "  merged directly at the checked head: Land it"
 gh:state,mergeable,headRefOid
-logger "event=land_transition pr=999 from= to=own-run at=1764000301.000 verdict="
-outcome rc=75 verdict=merge-timeout error=PR #999 still OPEN after 300s — not being merged; its head has no CI verdict (bbbbbbbb: 2 checks still running); if its run was cancelled, none arrives on its own: re-run it with `gh run rerun <run-id>`, or push
+logger "event=land_transition pr=999 from=merging to=merged at=1764000001.000 verdict="
+say "  merged after 0s"
+release_turn
+merged
 # seed 72
 {"polls": [["OPEN", "MERGEABLE", "aaaaaaaaaa"], ["OPEN", "MERGEABLE", "bbbbbbbbbb"], ["OPEN", "MERGEABLE", "bbbbbbbbbb"], ["OPEN", "MERGEABLE", ""]], "start_draft": true, "ci": [[75, "prek failed"], [2, "CI pending"], [9, "CI pending"], [0, "prek failed"], [75, "pending: every CI run on it skipped the gate because the PR was a draft, or was cancelled"], [0, "pending: every CI run on it skipped the gate because the PR was a draft, or was cancelled"]], "turn": [true], "merge_rc": [0, 0, 1, 1], "refusal": "Required status check \"renovate config validator\" is failing.", "compare": [true], "runs": 0, "check_runs": 1, "turn_lost": [true, false, false, false], "merge_timeout": 300, "merge_poll": 30, "direct": true, "held": true, "pinned": true, "tested": true, "batched_s": 120, "interrupted": false}
 gh:isDraft,state,mergeable,headRefOid
@@ -2043,43 +2008,15 @@ line "stand" "999" "aaaaaaaaaa" "1"
 say "  took the landing turn after 0s"
 logger "event=land_transition pr=999 from=queued to=holding at=1764000001.000 verdict="
 line "leave" "999"
-say "  the batch's run no longer stands for PR #999: master is unreadable (tuple.index(x): x not in tuple), not the 01234567 the batch stacked it on; the stale-base rules judge it"
-gh:compare "api" "repos/{owner}/{repo}/compare/aaaaaaaaaa...master" "--jq" "[.files[]? | .filename, (.previous_filename // empty)]"
-say "  master changed 1 path(s) since PR #999's base (docs/other.md); updating its branch so CI tests it against master before the merge"
-gh "api" "-X" "PUT" "repos/{owner}/{repo}/pulls/999/update-branch" "-f" "expected_head_sha=aaaaaaaaaa"
-gh:state,mergeable,headRefOid
-sleep 3
-gh:state,mergeable,headRefOid
+gh:master
 gh "pr" "ready" "999"
 say "  PR #999 was a draft; marked it ready"
 gh:state,mergeable,headRefOid
-say "  checking the landing policy again on the updated head bbbbbbbb"
-gh:headRefOid,headRefName,baseRefName,isCrossRepository
-gh:headRefOid
-say "  landing policy passed at bbbbbbbb"
-gh:state,mergeable,headRefOid
-sleep 30
-gh:state,mergeable,headRefOid
-sleep 30
-gh:state,mergeable,headRefOid
-sleep 30
-gh:state,mergeable,headRefOid
-sleep 30
-gh:state,mergeable,headRefOid
-sleep 30
-gh:state,mergeable,headRefOid
-sleep 30
-gh:state,mergeable,headRefOid
-sleep 30
-gh:state,mergeable,headRefOid
-sleep 30
-gh:state,mergeable,headRefOid
-sleep 30
-gh:state,mergeable,headRefOid
+logger "event=land_transition pr=999 from=holding to=proving at=1764000001.000 verdict="
 sleep 30
 gh:state,mergeable,headRefOid
 release_turn
-outcome rc=75 verdict=merge-timeout error=PR #999 still OPEN after 300s — not being merged; look at its checks
+outcome rc=1 verdict=refused error=PR #999's head moved from aaaaaaaa to bbbbbbbb after the landing policy checked it; re-run so the new head is checked
 # seed 73
 {"polls": [["OPEN", "MERGEABLE", "aaaaaaaaaa"], ["OPEN", "MERGEABLE", "bbbbbbbbbb"], ["OPEN", "CONFLICTING", "aaaaaaaaaa"], ["OPEN", "MERGEABLE", "bbbbbbbbbb"], ["OPEN", "MERGEABLE", "aaaaaaaaaa"], ["MERGED", "UNKNOWN", "aaaaaaaaaa"]], "start_draft": false, "ci": [[1, "pending: every CI run on it skipped the gate because the PR was a draft, or was cancelled"]], "turn": [true], "merge_rc": [0, 1, 0, 0], "refusal": "Required status check \"renovate config validator\" is failing.", "compare": [true, true, true], "runs": 1, "check_runs": 0, "turn_lost": [true, true, false], "merge_timeout": 300, "merge_poll": 300, "direct": true, "held": false, "pinned": false, "tested": false, "batched_s": 0, "interrupted": false}
 gh:isDraft,state,mergeable,headRefOid
@@ -2492,20 +2429,34 @@ say "  PR #999 was a draft; marked it ready"
 gh:state,mergeable,headRefOid
 outcome rc=1 verdict=refused error=the CI gate is disarmed at bbbbbbbb — await_ci requires no CI contexts, so it reports no verdict; PR #999 not merged. To re-arm it, set REQUIRED_CONTEXTS in scripts/deploy_tools/await_ci.py to ci_required_contexts in estate/vars.yml
 # seed 90
-{"polls": [["OPEN", "MERGEABLE", ""], ["OPEN", "MERGEABLE", "aaaaaaaaaa"], ["OPEN", "CONFLICTING", "aaaaaaaaaa"], ["OPEN", "MERGEABLE", ""], ["MERGED", "UNKNOWN", "aaaaaaaaaa"]], "start_draft": false, "ci": [[75, "CI green"], [9, "2 checks still running"], [-1, "30"], [75, "pending: every CI run on it finished with no verdict, and none is running"], [75, "CI green"]], "turn": [true], "merge_rc": [1, 0, 0], "refusal": "2 of 2 required status checks are in progress.", "compare": [false, false], "runs": 0, "check_runs": 2, "turn_lost": [false, false, false, false], "merge_timeout": 300, "merge_poll": 30, "direct": true, "held": true, "pinned": false, "tested": false, "batched_s": 0, "interrupted": false}
+{"polls": [["OPEN", "MERGEABLE", "aaaaaaaaaa"], ["MERGED", "UNKNOWN", "aaaaaaaaaa"]], "start_draft": false, "ci": [[0, "CI green"]], "turn": [true], "merge_rc": [0], "refusal": "2 of 2 required status checks are in progress.", "compare": [false], "runs": 0, "check_runs": 2, "turn_lost": [false, false, false, false], "merge_timeout": 300, "merge_poll": 30, "direct": true, "held": true, "pinned": false, "tested": true, "batched_s": 0, "interrupted": false}
 gh:isDraft,state,mergeable,headRefOid
+gh:head-runs "api" "repos/{owner}/{repo}/actions/workflows/ci.yml/runs?head_sha=aaaaaaaaaa&event=pull_request" "--jq" "[.workflow_runs[] | {id, status, conclusion}]"
+gh:files,headRefOid
+logger "event=land_transition pr=999 from= to=queued at=1764000001.000 verdict="
+line "join" "999" "-" ""
+try_turn
+line "stand" "999" "-" "1"
+say "  took the landing turn after 0s"
+logger "event=land_transition pr=999 from=queued to=holding at=1764000001.000 verdict="
+line "leave" "999"
+gh:master
 gh:state,mergeable,headRefOid
-sleep 30
+logger "event=land_transition pr=999 from=holding to=merging at=1764000001.000 verdict="
+try_serial 1
+release_serial
+git "fetch" "-q" "--no-write-fetch-head" "origin" "refs/pull/999/head" "master" cwd="<primary>"
+git "merge-base" "origin/master" "aaaaaaaaaa" cwd="<primary>"
+pins_at "prbase"
+pins_at "aaaaaaaaaa"
+gh:commits
+gh:master
+gh "api" "-X" "PUT" "repos/{owner}/{repo}/pulls/999/merge" "-f" "merge_method=squash" "-f" "sha=aaaaaaaaaa" "-f" "commit_title=Land it"
+say "  merged directly at the checked head: Land it"
 gh:state,mergeable,headRefOid
-logger "event=land_transition pr=999 from= to=own-run at=1764000031.000 verdict="
-sleep 30
-gh:state,mergeable,headRefOid
-sleep 30
-gh:state,mergeable,headRefOid
-sleep 30
-gh:state,mergeable,headRefOid
-logger "event=land_transition pr=999 from=own-run to=merged at=1764000121.000 verdict="
-say "  merged after 120s"
+logger "event=land_transition pr=999 from=merging to=merged at=1764000001.000 verdict="
+say "  merged after 0s"
+release_turn
 merged
 # seed 91
 {"polls": [["OPEN", "MERGEABLE", "aaaaaaaaaa"], ["OPEN", "MERGEABLE", "bbbbbbbbbb"], ["OPEN", "MERGEABLE", "bbbbbbbbbb"], ["OPEN", "MERGEABLE", "aaaaaaaaaa"]], "start_draft": true, "ci": [[75, "pending: every CI run on it finished with no verdict, and none is running"], [2, "pending: every CI run on it skipped the gate because the PR was a draft, or was cancelled"]], "turn": [true], "merge_rc": [0, 0, 0, 1], "refusal": "boom", "compare": [true], "runs": 0, "check_runs": 1, "turn_lost": [false, false, false, false], "merge_timeout": 1800, "merge_poll": 30, "direct": true, "held": true, "pinned": true, "tested": false, "batched_s": 120, "interrupted": false}
@@ -2667,16 +2618,22 @@ line "stand" "999" "aaaaaaaaaa" "1"
 say "  took the landing turn after 0s"
 logger "event=land_transition pr=999 from=queued to=holding at=1764000001.000 verdict="
 line "leave" "999"
-say "  the batch's run no longer stands for PR #999: master is unreadable (tuple.index(x): x not in tuple), not the 01234567 the batch stacked it on; the stale-base rules judge it"
-gh:compare "api" "repos/{owner}/{repo}/compare/aaaaaaaaaa...master" "--jq" "[.files[]? | .filename, (.previous_filename // empty)]"
-say "  master changed 1 path(s) since PR #999's base (docs/other.md); updating its branch so CI tests it against master before the merge"
-gh "api" "-X" "PUT" "repos/{owner}/{repo}/pulls/999/update-branch" "-f" "expected_head_sha=aaaaaaaaaa"
-gh:state,mergeable,headRefOid
-sleep 3
-gh:state,mergeable,headRefOid
+gh:master
 gh "pr" "ready" "999"
+say "  PR #999 was a draft; marked it ready"
+gh:state,mergeable,headRefOid
+logger "event=land_transition pr=999 from=holding to=merging at=1764000001.000 verdict="
+try_serial 1
+release_serial
+git "fetch" "-q" "--no-write-fetch-head" "origin" "refs/pull/999/head" "master" cwd="<primary>"
+git "merge-base" "origin/master" "aaaaaaaaaa" cwd="<primary>"
+pins_at "prbase"
+pins_at "aaaaaaaaaa"
+gh:commits
+gh:master
+gh "api" "-X" "PUT" "repos/{owner}/{repo}/pulls/999/merge" "-f" "merge_method=squash" "-f" "sha=aaaaaaaaaa" "-f" "commit_title=Land it"
 release_turn
-outcome rc=1 verdict=refused error=PR #999 is a draft and could not be marked ready (Required status check "renovate config validator" is failing.); run `gh pr ready 999`, then re-run this
+outcome rc=1 verdict=pr-ci-red error=PR #999 cannot merge — required check renovate config validator failed at aaaaaaaa; fix it, push, and re-run this
 # seed 93
 {"polls": [["OPEN", "MERGEABLE", "bbbbbbbbbb"], ["OPEN", "MERGEABLE", ""], ["OPEN", "UNKNOWN", "aaaaaaaaaa"], ["OPEN", "MERGEABLE", "aaaaaaaaaa"], ["OPEN", "MERGEABLE", "aaaaaaaaaa"], ["OPEN", "UNKNOWN", "aaaaaaaaaa"], ["OPEN", "MERGEABLE", "aaaaaaaaaa"], ["OPEN", "MERGEABLE", "aaaaaaaaaa"], ["MERGED", "UNKNOWN", "aaaaaaaaaa"]], "start_draft": false, "ci": [[0, "prek failed"], [0, "prek failed"], [75, "CI pending"], [-1, "30"]], "turn": [true, true, true], "merge_rc": [0, 0, 1, 0], "refusal": "Required status check \"renovate config validator\" is failing.", "compare": [false], "runs": 0, "check_runs": 0, "turn_lost": [true, false, true, false], "merge_timeout": 1800, "merge_poll": 30, "direct": false, "held": true, "pinned": false, "tested": false, "batched_s": 0, "interrupted": false}
 gh:state,mergeable,headRefOid
@@ -2830,16 +2787,12 @@ line "stand" "999" "aaaaaaaaaa" "1"
 say "  took the landing turn after 0s"
 logger "event=land_transition pr=999 from=queued to=holding at=1764000001.000 verdict="
 line "leave" "999"
-say "  the batch's run no longer stands for PR #999: master is unreadable (tuple.index(x): x not in tuple), not the 01234567 the batch stacked it on; the stale-base rules judge it"
-gh:compare "api" "repos/{owner}/{repo}/compare/aaaaaaaaaa...master" "--jq" "[.files[]? | .filename, (.previous_filename // empty)]"
-say "  master changed 1 path(s) since PR #999's base (docs/other.md); updating its branch so CI tests it against master before the merge"
-gh "api" "-X" "PUT" "repos/{owner}/{repo}/pulls/999/update-branch" "-f" "expected_head_sha=aaaaaaaaaa"
-gh:state,mergeable,headRefOid
-sleep 3
-gh:state,mergeable,headRefOid
+gh:master
 gh "pr" "ready" "999"
+say "  PR #999 was a draft; marked it ready"
+gh:state,mergeable,headRefOid
 release_turn
-outcome rc=1 verdict=refused error=PR #999 is a draft and could not be marked ready (Required status check "renovate config validator" is failing.); run `gh pr ready 999`, then re-run this
+outcome rc=1 verdict=pr-ci-red error=PR #999 cannot merge — its own CI is red (aaaaaaaa: CI green); fix it, push, and re-run this
 # seed 101
 {"polls": [["OPEN", "MERGEABLE", "bbbbbbbbbb"], ["OPEN", "UNKNOWN", "aaaaaaaaaa"], ["OPEN", "CONFLICTING", "aaaaaaaaaa"], ["OPEN", "MERGEABLE", "aaaaaaaaaa"]], "start_draft": false, "ci": [[-1, "30"], [1, "CI pending"], [75, "CI green"]], "turn": [true, true, true], "merge_rc": [1, 0, 1], "refusal": "Required status check \"renovate config validator\" is failing.", "compare": [true], "runs": 3, "check_runs": 0, "turn_lost": [false, true, false], "merge_timeout": 60, "merge_poll": 30, "direct": true, "held": true, "pinned": false, "tested": false, "batched_s": 120, "interrupted": false}
 gh:isDraft,state,mergeable,headRefOid
@@ -2878,24 +2831,37 @@ gh "api" "-X" "PUT" "repos/{owner}/{repo}/pulls/999/merge" "-f" "merge_method=sq
 release_turn
 outcome rc=1 verdict=pr-ci-red error=PR #999 cannot merge — required check renovate config validator failed at bbbbbbbb; fix it, push, and re-run this
 # seed 103
-{"polls": [["OPEN", "MERGEABLE", ""], ["OPEN", "MERGEABLE", ""], ["OPEN", "MERGEABLE", ""], ["OPEN", "MERGEABLE", "aaaaaaaaaa"], ["OPEN", "MERGEABLE", ""], ["OPEN", "MERGEABLE", "aaaaaaaaaa"], ["OPEN", "MERGEABLE", "bbbbbbbbbb"], ["OPEN", "MERGEABLE", ""]], "start_draft": true, "ci": [[-1, "30"]], "turn": [true, true, true], "merge_rc": [1, 1], "refusal": "boom", "compare": [false, true, false], "runs": 3, "check_runs": 2, "turn_lost": [false, false, false], "merge_timeout": 1800, "merge_poll": 300, "direct": true, "held": true, "pinned": false, "tested": false, "batched_s": 120, "interrupted": false}
+{"polls": [["OPEN", "MERGEABLE", "aaaaaaaaaa"], ["MERGED", "UNKNOWN", "aaaaaaaaaa"]], "start_draft": true, "ci": [[0, "CI green"]], "turn": [true], "merge_rc": [0], "refusal": "boom", "compare": [false], "runs": 3, "check_runs": 2, "turn_lost": [false, false, false], "merge_timeout": 1800, "merge_poll": 300, "direct": true, "held": true, "pinned": false, "tested": true, "batched_s": 120, "interrupted": true}
 gh:isDraft,state,mergeable,headRefOid
+gh:head-runs "api" "repos/{owner}/{repo}/actions/workflows/ci.yml/runs?head_sha=aaaaaaaaaa&event=pull_request" "--jq" "[.workflow_runs[] | {id, status, conclusion}]"
+gh "pr" "ready" "999"
+say "  PR #999 was a draft; marked it ready"
 gh:state,mergeable,headRefOid
-sleep 300
+gh:compare "api" "repos/{owner}/{repo}/compare/aaaaaaaaaa...master" "--jq" "[.files[]? | .filename, (.previous_filename // empty)]"
+gh:files,headRefOid
+logger "event=land_transition pr=999 from= to=queued at=1764000001.000 verdict="
+line "join" "999" "-" ""
+try_turn
+line "stand" "999" "-" "1"
+say "  took the landing turn after 0s"
+logger "event=land_transition pr=999 from=queued to=holding at=1764000001.000 verdict="
+line "leave" "999"
+logger "event=land_transition pr=999 from=holding to=merging at=1764000001.000 verdict="
+try_serial 1
+release_serial
+git "fetch" "-q" "--no-write-fetch-head" "origin" "refs/pull/999/head" "master" cwd="<primary>"
+git "merge-base" "origin/master" "aaaaaaaaaa" cwd="<primary>"
+pins_at "prbase"
+pins_at "aaaaaaaaaa"
+gh:commits
+gh:master
+gh "api" "-X" "PUT" "repos/{owner}/{repo}/pulls/999/merge" "-f" "merge_method=squash" "-f" "sha=aaaaaaaaaa" "-f" "commit_title=Land it"
+say "  merged directly at the checked head: Land it"
 gh:state,mergeable,headRefOid
-sleep 300
-gh:state,mergeable,headRefOid
-sleep 300
-gh:state,mergeable,headRefOid
-say "  aaaaaaaa: GitHub rate limit; the quota frees in 30s; the merge wait backs off until it does"
-sleep 300
-gh:state,mergeable,headRefOid
-sleep 300
-gh:state,mergeable,headRefOid
-sleep 300
-gh:state,mergeable,headRefOid
-say "  bbbbbbbb: GitHub rate limit; the quota frees in 30s; the merge wait backs off until it does"
-outcome rc=75 verdict=merge-timeout error=PR #999 still OPEN after 1800s — not being merged; GitHub refused its CI read for the rate; the quota frees in 30s
+logger "event=land_transition pr=999 from=merging to=merged at=1764000001.000 verdict="
+say "  merged after 0s, 120s of it on its batch's run"
+release_turn
+merged
 # seed 104
 {"polls": [["OPEN", "MERGEABLE", "aaaaaaaaaa"], ["MERGED", "UNKNOWN", "aaaaaaaaaa"]], "start_draft": false, "ci": [[0, "CI pending"], [0, "CI green"]], "turn": [true, false], "merge_rc": [0, 0], "refusal": "boom", "compare": [true], "runs": 3, "check_runs": 1, "turn_lost": [true, false], "merge_timeout": 1800, "merge_poll": 30, "direct": true, "held": true, "pinned": false, "tested": false, "batched_s": 120, "interrupted": false}
 gh:isDraft,state,mergeable,headRefOid
@@ -2997,15 +2963,19 @@ logger "event=land_transition pr=999 from=queued to=holding at=1764000301.000 ve
 line "leave" "999"
 gh:isDraft,state,mergeable,headRefOid
 gh:head-runs "api" "repos/{owner}/{repo}/actions/workflows/ci.yml/runs?head_sha=aaaaaaaaaa&event=pull_request" "--jq" "[.workflow_runs[] | {id, status, conclusion}]"
-say "  the batch's run no longer stands for PR #999: master is unreadable (tuple.index(x): x not in tuple), not the 01234567 the batch stacked it on; the stale-base rules judge it"
-gh:compare "api" "repos/{owner}/{repo}/compare/aaaaaaaaaa...master" "--jq" "[.files[]? | .filename, (.previous_filename // empty)]"
-say "  master changed 1 path(s) since PR #999's base (docs/other.md); updating its branch so CI tests it against master before the merge"
-gh "api" "-X" "PUT" "repos/{owner}/{repo}/pulls/999/update-branch" "-f" "expected_head_sha=aaaaaaaaaa"
+gh:master
 gh:state,mergeable,headRefOid
+logger "event=land_transition pr=999 from=holding to=proving at=1764000301.000 verdict="
+say "  aaaaaaaa: pending: every CI run on it skipped the gate because the PR was a draft, or was cancelled; waiting up to 180s for a ready run"
 sleep 300
 gh:state,mergeable,headRefOid
+gh:isDraft
+gh:head-runs "api" "repos/{owner}/{repo}/actions/workflows/ci.yml/runs?head_sha=aaaaaaaaaa&event=pull_request" "--jq" "[.workflow_runs[] | {id, status, conclusion}]"
+say "  PR #999 is ready but aaaaaaaa's CI skipped as a draft or was cancelled; converting it to draft and back"
+gh "pr" "ready" "--undo" "999"
+gh "pr" "ready" "999"
 release_turn
-outcome rc=75 verdict=merge-timeout error=PR #999 still OPEN after 600s — not being merged; look at its checks
+outcome rc=75 verdict=merge-timeout error=PR #999 is ready, but every CI run on aaaaaaaa either ran while it was a draft and skipped every job, or was cancelled, and GitHub started no other run; a re-run of the draft run replays the draft event and skips again. Converting it back to ready failed (Required status check "renovate config validator" is failing.); PR #999 is left as a draft; run `gh pr ready 999`, then re-run this
 # seed 110
 {"polls": [["OPEN", "MERGEABLE", "bbbbbbbbbb"], ["OPEN", "MERGEABLE", "aaaaaaaaaa"], ["OPEN", "CONFLICTING", "aaaaaaaaaa"], ["OPEN", "CONFLICTING", "aaaaaaaaaa"], ["OPEN", "MERGEABLE", ""], ["OPEN", "UNKNOWN", "aaaaaaaaaa"], ["OPEN", "MERGEABLE", ""]], "start_draft": false, "ci": [[0, "CI pending"]], "turn": [false], "merge_rc": [1, 1], "refusal": "Required status check \"renovate config validator\" is failing.", "compare": [false, true, true], "runs": 2, "check_runs": 1, "turn_lost": [true, false, false], "merge_timeout": 1800, "merge_poll": 30, "direct": false, "held": false, "pinned": false, "tested": false, "batched_s": 0, "interrupted": false}
 gh:state,mergeable,headRefOid
@@ -3229,22 +3199,39 @@ gh "pr" "ready" "999"
 release_turn
 outcome rc=1 verdict=refused error=PR #999 is a draft and could not be marked ready (Required status check "renovate config validator" is failing.); run `gh pr ready 999`, then re-run this
 # seed 122
-{"polls": [["OPEN", "MERGEABLE", "bbbbbbbbbb"], ["OPEN", "UNKNOWN", "aaaaaaaaaa"], ["OPEN", "MERGEABLE", "aaaaaaaaaa"], ["OPEN", "MERGEABLE", ""], ["CLOSED", "UNKNOWN", "aaaaaaaaaa"]], "start_draft": true, "ci": [[9, "pending: every CI run on it skipped the gate because the PR was a draft, or was cancelled"], [75, "2 checks still running"]], "turn": [true, true], "merge_rc": [0, 0, 1], "refusal": "boom", "compare": [true, false, true], "runs": 2, "check_runs": 1, "turn_lost": [true, false, false, false], "merge_timeout": 1800, "merge_poll": 30, "direct": true, "held": false, "pinned": false, "tested": false, "batched_s": 0, "interrupted": false}
+{"polls": [["OPEN", "MERGEABLE", "aaaaaaaaaa"], ["MERGED", "UNKNOWN", "aaaaaaaaaa"]], "start_draft": true, "ci": [[0, "CI green"]], "turn": [true], "merge_rc": [0], "refusal": "boom", "compare": [false], "runs": 2, "check_runs": 1, "turn_lost": [true, false, false, false], "merge_timeout": 1800, "merge_poll": 30, "direct": true, "held": true, "pinned": false, "tested": true, "batched_s": 0, "interrupted": true}
 gh:isDraft,state,mergeable,headRefOid
-gh:head-runs "api" "repos/{owner}/{repo}/actions/workflows/ci.yml/runs?head_sha=bbbbbbbbbb&event=pull_request" "--jq" "[.workflow_runs[] | {id, status, conclusion}]"
+gh:head-runs "api" "repos/{owner}/{repo}/actions/workflows/ci.yml/runs?head_sha=aaaaaaaaaa&event=pull_request" "--jq" "[.workflow_runs[] | {id, status, conclusion}]"
 gh:files,headRefOid
+logger "event=land_transition pr=999 from= to=queued at=1764000001.000 verdict="
+line "join" "999" "aaaaaaaaaa" ""
+try_turn
+line "stand" "999" "aaaaaaaaaa" "1"
+say "  took the landing turn after 0s"
+logger "event=land_transition pr=999 from=queued to=holding at=1764000001.000 verdict="
+line "leave" "999"
+gh:isDraft,state,mergeable,headRefOid
+gh:head-runs "api" "repos/{owner}/{repo}/actions/workflows/ci.yml/runs?head_sha=aaaaaaaaaa&event=pull_request" "--jq" "[.workflow_runs[] | {id, status, conclusion}]"
+gh:master
 gh "pr" "ready" "999"
 say "  PR #999 was a draft; marked it ready"
 gh:state,mergeable,headRefOid
-sleep 30
+logger "event=land_transition pr=999 from=holding to=merging at=1764000001.000 verdict="
+try_serial 1
+release_serial
+git "fetch" "-q" "--no-write-fetch-head" "origin" "refs/pull/999/head" "master" cwd="<primary>"
+git "merge-base" "origin/master" "aaaaaaaaaa" cwd="<primary>"
+pins_at "prbase"
+pins_at "aaaaaaaaaa"
+gh:commits
+gh:master
+gh "api" "-X" "PUT" "repos/{owner}/{repo}/pulls/999/merge" "-f" "merge_method=squash" "-f" "sha=aaaaaaaaaa" "-f" "commit_title=Land it"
+say "  merged directly at the checked head: Land it"
 gh:state,mergeable,headRefOid
-sleep 30
-gh:state,mergeable,headRefOid
-sleep 30
-gh:state,mergeable,headRefOid
-sleep 30
-gh:state,mergeable,headRefOid
-outcome rc=1 verdict=refused error=PR #999 was closed without merging — nothing to land
+logger "event=land_transition pr=999 from=merging to=merged at=1764000001.000 verdict="
+say "  merged after 0s"
+release_turn
+merged
 # seed 123
 {"polls": [["OPEN", "UNKNOWN", "aaaaaaaaaa"], ["CLOSED", "UNKNOWN", "aaaaaaaaaa"]], "start_draft": true, "ci": [[2, "CI green"], [75, "CI pending"], [2, "pending: every CI run on it finished with no verdict, and none is running"]], "turn": [true], "merge_rc": [0], "refusal": "boom", "compare": [false, true], "runs": 0, "check_runs": 0, "turn_lost": [false, false, false], "merge_timeout": 300, "merge_poll": 300, "direct": true, "held": false, "pinned": false, "tested": true, "batched_s": 0, "interrupted": true}
 gh:isDraft,state,mergeable,headRefOid
@@ -3307,42 +3294,29 @@ line "stand" "999" "aaaaaaaaaa" "1"
 say "  took the landing turn after 0s"
 logger "event=land_transition pr=999 from=queued to=holding at=1764000001.000 verdict="
 line "leave" "999"
-say "  the batch's run no longer stands for PR #999: master is unreadable (tuple.index(x): x not in tuple), not the 01234567 the batch stacked it on; the stale-base rules judge it"
-gh:compare "api" "repos/{owner}/{repo}/compare/aaaaaaaaaa...master" "--jq" "[.files[]? | .filename, (.previous_filename // empty)]"
-say "  master changed 1 path(s) since PR #999's base (docs/other.md); updating its branch so CI tests it against master before the merge"
-gh "api" "-X" "PUT" "repos/{owner}/{repo}/pulls/999/update-branch" "-f" "expected_head_sha=aaaaaaaaaa"
-gh:state,mergeable,headRefOid
-sleep 3
-gh:state,mergeable,headRefOid
+gh:master
 gh "pr" "ready" "999"
 say "  PR #999 was a draft; marked it ready"
 gh:state,mergeable,headRefOid
+logger "event=land_transition pr=999 from=holding to=proving at=1764000001.000 verdict="
+say "  aaaaaaaa: pending: every CI run on it skipped the gate because the PR was a draft, or was cancelled; waiting up to 180s for a ready run"
 sleep 30
 gh:state,mergeable,headRefOid
-say "  checking the landing policy again on the updated head bbbbbbbb"
-gh:headRefOid,headRefName,baseRefName,isCrossRepository
-gh:headRefOid
-say "  landing policy passed at bbbbbbbb"
-gh:state,mergeable,headRefOid
-sleep 30
-gh:state,mergeable,headRefOid
-logger "event=land_transition pr=999 from=holding to=testing at=1764000064.000 verdict="
-say "  bbbbbbbb: pending: every CI run on it skipped the gate because the PR was a draft, or was cancelled; waiting up to 180s for a ready run"
 release_turn
-outcome rc=75 verdict=merge-timeout error=PR #999 still OPEN after 60s — not being merged; its head has no CI verdict (bbbbbbbb: pending: every CI run on it skipped the gate because the PR was a draft, or was cancelled)
+outcome rc=1 verdict=refused error=PR #999's head moved from aaaaaaaa to bbbbbbbb after the landing policy checked it; re-run so the new head is checked
 # seed 126
-{"polls": [["OPEN", "MERGEABLE", "bbbbbbbbbb"], ["CLOSED", "UNKNOWN", "aaaaaaaaaa"]], "start_draft": true, "ci": [[0, "prek failed"], [1, "pending: every CI run on it finished with no verdict, and none is running"], [75, "2 checks still running"], [75, "pending: every CI run on it skipped the gate because the PR was a draft, or was cancelled"]], "turn": [true, true], "merge_rc": [0, 1, 0, 0], "refusal": "Required status check \"renovate config validator\" is failing.", "compare": [false, false], "runs": 2, "check_runs": 0, "turn_lost": [false, false, false], "merge_timeout": 60, "merge_poll": 300, "direct": true, "held": true, "pinned": false, "tested": false, "batched_s": 0, "interrupted": false}
+{"polls": [["OPEN", "MERGEABLE", "aaaaaaaaaa"], ["MERGED", "UNKNOWN", "aaaaaaaaaa"]], "start_draft": true, "ci": [[0, "CI green"]], "turn": [true], "merge_rc": [0], "refusal": "Required status check \"renovate config validator\" is failing.", "compare": [false], "runs": 2, "check_runs": 0, "turn_lost": [false, false, false], "merge_timeout": 60, "merge_poll": 300, "direct": true, "held": true, "pinned": false, "tested": true, "batched_s": 0, "interrupted": false}
 gh:isDraft,state,mergeable,headRefOid
-gh:head-runs "api" "repos/{owner}/{repo}/actions/workflows/ci.yml/runs?head_sha=bbbbbbbbbb&event=pull_request" "--jq" "[.workflow_runs[] | {id, status, conclusion}]"
+gh:head-runs "api" "repos/{owner}/{repo}/actions/workflows/ci.yml/runs?head_sha=aaaaaaaaaa&event=pull_request" "--jq" "[.workflow_runs[] | {id, status, conclusion}]"
 gh:files,headRefOid
 logger "event=land_transition pr=999 from= to=queued at=1764000001.000 verdict="
-line "join" "999" "bbbbbbbbbb" ""
+line "join" "999" "aaaaaaaaaa" ""
 try_turn
-line "stand" "999" "bbbbbbbbbb" "1"
+line "stand" "999" "aaaaaaaaaa" "1"
 say "  took the landing turn after 0s"
 logger "event=land_transition pr=999 from=queued to=holding at=1764000001.000 verdict="
 line "leave" "999"
-gh:compare "api" "repos/{owner}/{repo}/compare/bbbbbbbbbb...master" "--jq" "[.files[]? | .filename, (.previous_filename // empty)]"
+gh:master
 gh "pr" "ready" "999"
 say "  PR #999 was a draft; marked it ready"
 gh:state,mergeable,headRefOid
@@ -3350,14 +3324,18 @@ logger "event=land_transition pr=999 from=holding to=merging at=1764000001.000 v
 try_serial 1
 release_serial
 git "fetch" "-q" "--no-write-fetch-head" "origin" "refs/pull/999/head" "master" cwd="<primary>"
-git "merge-base" "origin/master" "bbbbbbbbbb" cwd="<primary>"
+git "merge-base" "origin/master" "aaaaaaaaaa" cwd="<primary>"
 pins_at "prbase"
-pins_at "bbbbbbbbbb"
+pins_at "aaaaaaaaaa"
 gh:commits
-gh:compare "api" "repos/{owner}/{repo}/compare/bbbbbbbbbb...master" "--jq" "[.files[]? | .filename, (.previous_filename // empty)]"
-gh "api" "-X" "PUT" "repos/{owner}/{repo}/pulls/999/merge" "-f" "merge_method=squash" "-f" "sha=bbbbbbbbbb" "-f" "commit_title=Land it"
+gh:master
+gh "api" "-X" "PUT" "repos/{owner}/{repo}/pulls/999/merge" "-f" "merge_method=squash" "-f" "sha=aaaaaaaaaa" "-f" "commit_title=Land it"
+say "  merged directly at the checked head: Land it"
+gh:state,mergeable,headRefOid
+logger "event=land_transition pr=999 from=merging to=merged at=1764000001.000 verdict="
+say "  merged after 0s"
 release_turn
-outcome rc=1 verdict=pr-ci-red error=PR #999 cannot merge — required check renovate config validator failed at bbbbbbbb; fix it, push, and re-run this
+merged
 # seed 127
 {"polls": [["OPEN", "MERGEABLE", "aaaaaaaaaa"], ["OPEN", "MERGEABLE", "bbbbbbbbbb"], ["OPEN", "MERGEABLE", "bbbbbbbbbb"]], "start_draft": true, "ci": [[75, "2 checks still running"], [1, "pending: every CI run on it skipped the gate because the PR was a draft, or was cancelled"], [0, "2 checks still running"], [1, "pending: every CI run on it finished with no verdict, and none is running"]], "turn": [true], "merge_rc": [0, 0, 1], "refusal": "boom", "compare": [true], "runs": 0, "check_runs": 0, "turn_lost": [false, false], "merge_timeout": 300, "merge_poll": 30, "direct": true, "held": true, "pinned": true, "tested": false, "batched_s": 0, "interrupted": false}
 gh:isDraft,state,mergeable,headRefOid
@@ -3673,36 +3651,12 @@ line "stand" "999" "aaaaaaaaaa" "1"
 say "  took the landing turn after 0s"
 logger "event=land_transition pr=999 from=queued to=holding at=1764000001.000 verdict="
 line "leave" "999"
-say "  the batch's run no longer stands for PR #999: master is unreadable (tuple.index(x): x not in tuple), not the 01234567 the batch stacked it on; the stale-base rules judge it"
-gh:compare "api" "repos/{owner}/{repo}/compare/aaaaaaaaaa...master" "--jq" "[.files[]? | .filename, (.previous_filename // empty)]"
-say "  master changed 1 path(s) since PR #999's base (docs/other.md); updating its branch so CI tests it against master before the merge"
-gh "api" "-X" "PUT" "repos/{owner}/{repo}/pulls/999/update-branch" "-f" "expected_head_sha=aaaaaaaaaa"
-gh:state,mergeable,headRefOid
-sleep 3
-gh:state,mergeable,headRefOid
+gh:master
 gh "pr" "ready" "999"
 say "  PR #999 was a draft; marked it ready"
 gh:state,mergeable,headRefOid
-sleep 30
-gh:state,mergeable,headRefOid
-sleep 30
-gh:state,mergeable,headRefOid
-sleep 30
-gh:state,mergeable,headRefOid
-sleep 30
-gh:state,mergeable,headRefOid
-sleep 30
-gh:state,mergeable,headRefOid
-sleep 30
-gh:state,mergeable,headRefOid
-sleep 30
-gh:state,mergeable,headRefOid
-sleep 30
-gh:state,mergeable,headRefOid
-logger "event=land_transition pr=999 from=holding to=merged at=1764000244.000 verdict="
-say "  merged after 240s"
 release_turn
-merged
+outcome rc=1 verdict=pr-ci-red error=PR #999 cannot merge — its own CI is red (aaaaaaaa: CI pending); fix it, push, and re-run this
 # seed 145
 {"polls": [["OPEN", "MERGEABLE", "aaaaaaaaaa"], ["OPEN", "MERGEABLE", "bbbbbbbbbb"], ["OPEN", "MERGEABLE", "bbbbbbbbbb"], ["OPEN", "MERGEABLE", "aaaaaaaaaa"], ["OPEN", "CONFLICTING", "aaaaaaaaaa"], ["OPEN", "MERGEABLE", "aaaaaaaaaa"], ["OPEN", "MERGEABLE", ""], ["OPEN", "UNKNOWN", "aaaaaaaaaa"], ["OPEN", "MERGEABLE", ""], ["CLOSED", "UNKNOWN", "aaaaaaaaaa"]], "start_draft": true, "ci": [[0, "pending: every CI run on it finished with no verdict, and none is running"], [1, "2 checks still running"], [1, "pending: every CI run on it skipped the gate because the PR was a draft, or was cancelled"], [75, "prek failed"]], "turn": [true], "merge_rc": [0, 1, 1, 0, 0], "refusal": "boom", "compare": [true], "runs": 0, "check_runs": 1, "turn_lost": [false, false, false], "merge_timeout": 1800, "merge_poll": 300, "direct": true, "held": true, "pinned": true, "tested": false, "batched_s": 0, "interrupted": false}
 gh:isDraft,state,mergeable,headRefOid
@@ -3746,9 +3700,7 @@ git "merge-base" "origin/master" "aaaaaaaaaa" cwd="<primary>"
 pins_at "prbase"
 pins_at "aaaaaaaaaa"
 gh:commits
-say "  the batch's run no longer stands for PR #999: master is unreadable (tuple.index(x): x not in tuple), not the 01234567 the batch stacked it on; the stale-base rules judge it"
-gh:compare "api" "repos/{owner}/{repo}/compare/aaaaaaaaaa...master" "--jq" "[.files[]? | .filename, (.previous_filename // empty)]"
-gh:files "api" "--paginate" "--slurp" "repos/{owner}/{repo}/pulls/999/files"
+gh:master
 gh "api" "-X" "PUT" "repos/{owner}/{repo}/pulls/999/merge" "-f" "merge_method=squash" "-f" "sha=aaaaaaaaaa" "-f" "commit_title=Land it"
 say "  merge refused at aaaaaaaa: boom; waiting"
 sleep 300
@@ -3756,16 +3708,14 @@ gh:state,mergeable,headRefOid
 try_serial 1
 release_serial
 gh:commits
-gh:compare "api" "repos/{owner}/{repo}/compare/aaaaaaaaaa...master" "--jq" "[.files[]? | .filename, (.previous_filename // empty)]"
-gh:files "api" "--paginate" "--slurp" "repos/{owner}/{repo}/pulls/999/files"
+gh:master
 gh "api" "-X" "PUT" "repos/{owner}/{repo}/pulls/999/merge" "-f" "merge_method=squash" "-f" "sha=aaaaaaaaaa" "-f" "commit_title=Land it"
 sleep 300
 gh:state,mergeable,headRefOid
 try_serial 1
 release_serial
 gh:commits
-gh:compare "api" "repos/{owner}/{repo}/compare/aaaaaaaaaa...master" "--jq" "[.files[]? | .filename, (.previous_filename // empty)]"
-gh:files "api" "--paginate" "--slurp" "repos/{owner}/{repo}/pulls/999/files"
+gh:master
 gh "api" "-X" "PUT" "repos/{owner}/{repo}/pulls/999/merge" "-f" "merge_method=squash" "-f" "sha=aaaaaaaaaa" "-f" "commit_title=Land it"
 gh:check-runs "api" "repos/{owner}/{repo}/commits/aaaaaaaaaa/check-runs?per_page=100" "--jq" ".check_runs"
 gh:check-suites "api" "repos/{owner}/{repo}/commits/aaaaaaaaaa/check-suites?per_page=100" "--jq" ".check_suites"
@@ -3946,24 +3896,67 @@ gh:state,mergeable,headRefOid
 release_turn
 outcome rc=75 verdict=merge-timeout error=PR #999 still OPEN after 300s — not being merged; look at its checks
 # seed 152
-{"polls": [["OPEN", "MERGEABLE", ""], ["OPEN", "MERGEABLE", "aaaaaaaaaa"], ["OPEN", "CONFLICTING", "aaaaaaaaaa"], ["OPEN", "MERGEABLE", "aaaaaaaaaa"], ["OPEN", "MERGEABLE", "aaaaaaaaaa"], ["OPEN", "MERGEABLE", "bbbbbbbbbb"], ["OPEN", "MERGEABLE", "aaaaaaaaaa"], ["MERGED", "UNKNOWN", "aaaaaaaaaa"]], "start_draft": false, "ci": [[75, "pending: every CI run on it skipped the gate because the PR was a draft, or was cancelled"], [75, "CI pending"], [0, "2 checks still running"], [0, "pending: every CI run on it finished with no verdict, and none is running"], [1, "pending: every CI run on it finished with no verdict, and none is running"]], "turn": [true, true], "merge_rc": [1], "refusal": "Required status check \"renovate config validator\" is failing.", "compare": [true], "runs": 0, "check_runs": 0, "turn_lost": [false, false], "merge_timeout": 60, "merge_poll": 30, "direct": true, "held": true, "pinned": false, "tested": true, "batched_s": 0, "interrupted": true}
+{"polls": [["OPEN", "MERGEABLE", "aaaaaaaaaa"], ["MERGED", "UNKNOWN", "aaaaaaaaaa"]], "start_draft": false, "ci": [[0, "CI green"]], "turn": [true], "merge_rc": [0], "refusal": "Required status check \"renovate config validator\" is failing.", "compare": [false], "runs": 0, "check_runs": 0, "turn_lost": [false, false], "merge_timeout": 60, "merge_poll": 30, "direct": true, "held": true, "pinned": false, "tested": true, "batched_s": 0, "interrupted": true}
 gh:isDraft,state,mergeable,headRefOid
+gh:head-runs "api" "repos/{owner}/{repo}/actions/workflows/ci.yml/runs?head_sha=aaaaaaaaaa&event=pull_request" "--jq" "[.workflow_runs[] | {id, status, conclusion}]"
+gh:files,headRefOid
+logger "event=land_transition pr=999 from= to=queued at=1764000001.000 verdict="
+line "join" "999" "-" ""
+try_turn
+line "stand" "999" "-" "1"
+say "  took the landing turn after 0s"
+logger "event=land_transition pr=999 from=queued to=holding at=1764000001.000 verdict="
+line "leave" "999"
+gh:isDraft,state,mergeable,headRefOid
+gh:head-runs "api" "repos/{owner}/{repo}/actions/workflows/ci.yml/runs?head_sha=aaaaaaaaaa&event=pull_request" "--jq" "[.workflow_runs[] | {id, status, conclusion}]"
+gh:master
 gh:state,mergeable,headRefOid
-sleep 30
+logger "event=land_transition pr=999 from=holding to=merging at=1764000001.000 verdict="
+try_serial 1
+release_serial
+git "fetch" "-q" "--no-write-fetch-head" "origin" "refs/pull/999/head" "master" cwd="<primary>"
+git "merge-base" "origin/master" "aaaaaaaaaa" cwd="<primary>"
+pins_at "prbase"
+pins_at "aaaaaaaaaa"
+gh:commits
+gh:master
+gh "api" "-X" "PUT" "repos/{owner}/{repo}/pulls/999/merge" "-f" "merge_method=squash" "-f" "sha=aaaaaaaaaa" "-f" "commit_title=Land it"
+say "  merged directly at the checked head: Land it"
 gh:state,mergeable,headRefOid
-logger "event=land_transition pr=999 from= to=own-run at=1764000031.000 verdict="
-say "  aaaaaaaa: pending: every CI run on it skipped the gate because the PR was a draft, or was cancelled; waiting up to 180s for a ready run"
-sleep 30
-gh:state,mergeable,headRefOid
-outcome rc=75 verdict=merge-timeout error=PR #999 still OPEN after 60s — not being merged; its head has no CI verdict (aaaaaaaa: CI pending); if its run was cancelled, none arrives on its own: re-run it with `gh run rerun <run-id>`, or push
+logger "event=land_transition pr=999 from=merging to=merged at=1764000001.000 verdict="
+say "  merged after 0s"
+release_turn
+merged
 # seed 153
-{"polls": [["OPEN", "MERGEABLE", "aaaaaaaaaa"], ["OPEN", "MERGEABLE", "aaaaaaaaaa"], ["OPEN", "UNKNOWN", "aaaaaaaaaa"], ["OPEN", "MERGEABLE", ""], ["OPEN", "CONFLICTING", "aaaaaaaaaa"], ["OPEN", "MERGEABLE", "bbbbbbbbbb"], ["OPEN", "MERGEABLE", "bbbbbbbbbb"], ["OPEN", "MERGEABLE", "bbbbbbbbbb"]], "start_draft": false, "ci": [[75, "pending: every CI run on it skipped the gate because the PR was a draft, or was cancelled"], [0, "prek failed"]], "turn": [true], "merge_rc": [0, 0, 1, 1], "refusal": "2 of 2 required status checks are in progress.", "compare": [false, true], "runs": 3, "check_runs": 2, "turn_lost": [false, true, true, false], "merge_timeout": 300, "merge_poll": 300, "direct": false, "held": true, "pinned": false, "tested": true, "batched_s": 0, "interrupted": false}
+{"polls": [["OPEN", "MERGEABLE", "aaaaaaaaaa"], ["MERGED", "UNKNOWN", "aaaaaaaaaa"]], "start_draft": false, "ci": [[0, "CI green"]], "turn": [true], "merge_rc": [0], "refusal": "2 of 2 required status checks are in progress.", "compare": [false], "runs": 3, "check_runs": 2, "turn_lost": [false, true, true, false], "merge_timeout": 300, "merge_poll": 300, "direct": true, "held": true, "pinned": false, "tested": true, "batched_s": 0, "interrupted": true}
+gh:isDraft,state,mergeable,headRefOid
+gh:head-runs "api" "repos/{owner}/{repo}/actions/workflows/ci.yml/runs?head_sha=aaaaaaaaaa&event=pull_request" "--jq" "[.workflow_runs[] | {id, status, conclusion}]"
 gh:state,mergeable,headRefOid
-logger "event=land_transition pr=999 from= to=own-run at=1764000001.000 verdict="
-say "  aaaaaaaa: pending: every CI run on it skipped the gate because the PR was a draft, or was cancelled; waiting up to 180s for a ready run"
-sleep 300
+gh:compare "api" "repos/{owner}/{repo}/compare/aaaaaaaaaa...master" "--jq" "[.files[]? | .filename, (.previous_filename // empty)]"
+gh:files,headRefOid
+logger "event=land_transition pr=999 from= to=queued at=1764000001.000 verdict="
+line "join" "999" "-" ""
+try_turn
+line "stand" "999" "-" "1"
+say "  took the landing turn after 0s"
+logger "event=land_transition pr=999 from=queued to=holding at=1764000001.000 verdict="
+line "leave" "999"
+logger "event=land_transition pr=999 from=holding to=merging at=1764000001.000 verdict="
+try_serial 1
+release_serial
+git "fetch" "-q" "--no-write-fetch-head" "origin" "refs/pull/999/head" "master" cwd="<primary>"
+git "merge-base" "origin/master" "aaaaaaaaaa" cwd="<primary>"
+pins_at "prbase"
+pins_at "aaaaaaaaaa"
+gh:commits
+gh:master
+gh "api" "-X" "PUT" "repos/{owner}/{repo}/pulls/999/merge" "-f" "merge_method=squash" "-f" "sha=aaaaaaaaaa" "-f" "commit_title=Land it"
+say "  merged directly at the checked head: Land it"
 gh:state,mergeable,headRefOid
-outcome rc=75 verdict=merge-timeout error=PR #999 still OPEN after 300s — not being merged; look at its checks
+logger "event=land_transition pr=999 from=merging to=merged at=1764000001.000 verdict="
+say "  merged after 0s"
+release_turn
+merged
 # seed 154
 {"polls": [["OPEN", "MERGEABLE", "aaaaaaaaaa"], ["OPEN", "MERGEABLE", "bbbbbbbbbb"], ["OPEN", "CONFLICTING", "aaaaaaaaaa"], ["OPEN", "CONFLICTING", "aaaaaaaaaa"], ["OPEN", "MERGEABLE", "aaaaaaaaaa"], ["OPEN", "CONFLICTING", "aaaaaaaaaa"]], "start_draft": true, "ci": [[0, "prek failed"], [-1, "30"], [9, "prek failed"], [9, "prek failed"], [-1, "900"], [0, "2 checks still running"]], "turn": [true], "merge_rc": [0, 0, 1], "refusal": "Required status check \"renovate config validator\" is failing.", "compare": [true], "runs": 0, "check_runs": 0, "turn_lost": [false, false, false], "merge_timeout": 1800, "merge_poll": 30, "direct": true, "held": true, "pinned": true, "tested": true, "batched_s": 0, "interrupted": false}
 gh:isDraft,state,mergeable,headRefOid
@@ -3976,20 +3969,24 @@ line "stand" "999" "aaaaaaaaaa" "1"
 say "  took the landing turn after 0s"
 logger "event=land_transition pr=999 from=queued to=holding at=1764000001.000 verdict="
 line "leave" "999"
-say "  the batch's run no longer stands for PR #999: master is unreadable (tuple.index(x): x not in tuple), not the 01234567 the batch stacked it on; the stale-base rules judge it"
-gh:compare "api" "repos/{owner}/{repo}/compare/aaaaaaaaaa...master" "--jq" "[.files[]? | .filename, (.previous_filename // empty)]"
-say "  master changed 1 path(s) since PR #999's base (docs/other.md); updating its branch so CI tests it against master before the merge"
-gh "api" "-X" "PUT" "repos/{owner}/{repo}/pulls/999/update-branch" "-f" "expected_head_sha=aaaaaaaaaa"
-gh:state,mergeable,headRefOid
-sleep 3
-gh:state,mergeable,headRefOid
+gh:master
 gh "pr" "ready" "999"
 say "  PR #999 was a draft; marked it ready"
 gh:state,mergeable,headRefOid
-sleep 30
+logger "event=land_transition pr=999 from=holding to=merging at=1764000001.000 verdict="
+try_serial 1
+release_serial
+git "fetch" "-q" "--no-write-fetch-head" "origin" "refs/pull/999/head" "master" cwd="<primary>"
+git "merge-base" "origin/master" "aaaaaaaaaa" cwd="<primary>"
+pins_at "prbase"
+pins_at "aaaaaaaaaa"
+gh:commits
+gh:master
+gh "api" "-X" "PUT" "repos/{owner}/{repo}/pulls/999/merge" "-f" "merge_method=squash" "-f" "sha=aaaaaaaaaa" "-f" "commit_title=Land it"
+say "  merged directly at the checked head: Land it"
 gh:state,mergeable,headRefOid
 release_turn
-outcome rc=1 verdict=merge-conflict error=PR #999 conflicts with master — rebase it, push, then re-run this
+outcome rc=1 verdict=refused error=PR #999's head moved from aaaaaaaa to bbbbbbbb after the landing policy checked it; re-run so the new head is checked
 # seed 155
 {"polls": [["OPEN", "MERGEABLE", "aaaaaaaaaa"], ["OPEN", "MERGEABLE", "bbbbbbbbbb"], ["OPEN", "MERGEABLE", ""], ["OPEN", "CONFLICTING", "aaaaaaaaaa"], ["OPEN", "MERGEABLE", "bbbbbbbbbb"], ["OPEN", "MERGEABLE", "bbbbbbbbbb"], ["OPEN", "CONFLICTING", "aaaaaaaaaa"], ["MERGED", "UNKNOWN", "aaaaaaaaaa"]], "start_draft": true, "ci": [[0, "CI green"], [0, "pending: every CI run on it finished with no verdict, and none is running"], [75, "2 checks still running"], [0, "prek failed"], [-1, "30"], [0, "pending: every CI run on it finished with no verdict, and none is running"]], "turn": [true], "merge_rc": [0, 0, 1, 0], "refusal": "boom", "compare": [true], "runs": 0, "check_runs": 2, "turn_lost": [false, true, false, false], "merge_timeout": 1800, "merge_poll": 30, "direct": true, "held": true, "pinned": true, "tested": false, "batched_s": 0, "interrupted": false}
 gh:isDraft,state,mergeable,headRefOid
@@ -4153,8 +4150,7 @@ git "merge-base" "origin/master" "aaaaaaaaaa" cwd="<primary>"
 pins_at "prbase"
 pins_at "aaaaaaaaaa"
 gh:commits
-say "  the batch's run no longer stands for PR #999: master is unreadable (tuple.index(x): x not in tuple), not the 01234567 the batch stacked it on; the stale-base rules judge it"
-gh:compare "api" "repos/{owner}/{repo}/compare/aaaaaaaaaa...master" "--jq" "[.files[]? | .filename, (.previous_filename // empty)]"
+gh:master
 gh "api" "-X" "PUT" "repos/{owner}/{repo}/pulls/999/merge" "-f" "merge_method=squash" "-f" "sha=aaaaaaaaaa" "-f" "commit_title=Land it"
 say "  merge refused at aaaaaaaa: boom; waiting"
 sleep 300
@@ -4162,19 +4158,19 @@ gh:state,mergeable,headRefOid
 try_serial 1
 release_serial
 gh:commits
-gh:compare "api" "repos/{owner}/{repo}/compare/aaaaaaaaaa...master" "--jq" "[.files[]? | .filename, (.previous_filename // empty)]"
+gh:master
 gh:state,mergeable,headRefOid
 try_serial 1
 release_serial
 gh:commits
-gh:compare "api" "repos/{owner}/{repo}/compare/aaaaaaaaaa...master" "--jq" "[.files[]? | .filename, (.previous_filename // empty)]"
+gh:master
 gh "api" "-X" "PUT" "repos/{owner}/{repo}/pulls/999/merge" "-f" "merge_method=squash" "-f" "sha=aaaaaaaaaa" "-f" "commit_title=Land it"
 sleep 300
 gh:state,mergeable,headRefOid
 try_serial 1
 release_serial
 gh:commits
-gh:compare "api" "repos/{owner}/{repo}/compare/aaaaaaaaaa...master" "--jq" "[.files[]? | .filename, (.previous_filename // empty)]"
+gh:master
 gh "api" "-X" "PUT" "repos/{owner}/{repo}/pulls/999/merge" "-f" "merge_method=squash" "-f" "sha=aaaaaaaaaa" "-f" "commit_title=Land it"
 gh:check-runs "api" "repos/{owner}/{repo}/commits/aaaaaaaaaa/check-runs?per_page=100" "--jq" ".check_runs"
 gh:check-suites "api" "repos/{owner}/{repo}/commits/aaaaaaaaaa/check-suites?per_page=100" "--jq" ".check_suites"
@@ -4527,35 +4523,16 @@ logger "event=land_transition pr=999 from=queued to=holding at=1764000001.000 ve
 line "leave" "999"
 gh:isDraft,state,mergeable,headRefOid
 gh:head-runs "api" "repos/{owner}/{repo}/actions/workflows/ci.yml/runs?head_sha=aaaaaaaaaa&event=pull_request" "--jq" "[.workflow_runs[] | {id, status, conclusion}]"
-say "  the batch's run no longer stands for PR #999: master is unreadable (tuple.index(x): x not in tuple), not the 01234567 the batch stacked it on; the stale-base rules judge it"
-gh:compare "api" "repos/{owner}/{repo}/compare/aaaaaaaaaa...master" "--jq" "[.files[]? | .filename, (.previous_filename // empty)]"
-say "  master changed 1 path(s) since PR #999's base (docs/other.md); updating its branch so CI tests it against master before the merge"
-gh "api" "-X" "PUT" "repos/{owner}/{repo}/pulls/999/update-branch" "-f" "expected_head_sha=aaaaaaaaaa"
-gh:state,mergeable,headRefOid
-sleep 3
-gh:state,mergeable,headRefOid
+gh:master
 gh "pr" "ready" "999"
 say "  PR #999 was a draft; marked it ready"
 gh:state,mergeable,headRefOid
-sleep 30
-gh:state,mergeable,headRefOid
-sleep 30
-gh:state,mergeable,headRefOid
-sleep 30
-gh:state,mergeable,headRefOid
-say "  checking the landing policy again on the updated head bbbbbbbb"
-gh:headRefOid,headRefName,baseRefName,isCrossRepository
-gh:headRefOid
-say "  landing policy passed at bbbbbbbb"
-gh:state,mergeable,headRefOid
-logger "event=land_transition pr=999 from=holding to=testing at=1764000094.000 verdict="
-say "  bbbbbbbb: pending: every CI run on it skipped the gate because the PR was a draft, or was cancelled; waiting up to 180s for a ready run"
-sleep 30
-gh:state,mergeable,headRefOid
+logger "event=land_transition pr=999 from=holding to=proving at=1764000001.000 verdict="
+say "  aaaaaaaa: pending: every CI run on it skipped the gate because the PR was a draft, or was cancelled; waiting up to 180s for a ready run"
 sleep 30
 gh:state,mergeable,headRefOid
 release_turn
-outcome rc=1 verdict=refused error=PR #999 was closed without merging — nothing to land
+outcome rc=1 verdict=refused error=PR #999's head moved from aaaaaaaa to bbbbbbbb after the landing policy checked it; re-run so the new head is checked
 # seed 174
 {"polls": [["OPEN", "MERGEABLE", "aaaaaaaaaa"]], "start_draft": false, "ci": [[0, "CI green"]], "turn": [false, false], "merge_rc": [1], "refusal": "boom", "compare": [true, true, true], "runs": 1, "check_runs": 1, "turn_lost": [false, false, false], "merge_timeout": 1800, "merge_poll": 300, "direct": true, "held": false, "pinned": false, "tested": false, "batched_s": 0, "interrupted": false}
 gh:isDraft,state,mergeable,headRefOid
@@ -4781,7 +4758,7 @@ logger "event=land_transition pr=999 from=own-run to=merged at=1764000061.000 ve
 say "  merged after 60s, 120s of it on its batch's run"
 merged
 # seed 182
-{"polls": [["OPEN", "UNKNOWN", "aaaaaaaaaa"], ["OPEN", "MERGEABLE", "aaaaaaaaaa"], ["OPEN", "MERGEABLE", "aaaaaaaaaa"], ["OPEN", "UNKNOWN", "aaaaaaaaaa"], ["OPEN", "UNKNOWN", "aaaaaaaaaa"], ["OPEN", "UNKNOWN", "aaaaaaaaaa"], ["OPEN", "MERGEABLE", "aaaaaaaaaa"], ["OPEN", "MERGEABLE", ""], ["MERGED", "UNKNOWN", "aaaaaaaaaa"]], "start_draft": true, "ci": [[0, "prek failed"], [0, "CI pending"], [75, "pending: every CI run on it finished with no verdict, and none is running"]], "turn": [true, false, true], "merge_rc": [0, 1, 1], "refusal": "2 of 2 required status checks are in progress.", "compare": [false, true], "runs": 1, "check_runs": 1, "turn_lost": [true, false, false], "merge_timeout": 300, "merge_poll": 30, "direct": true, "held": false, "pinned": false, "tested": false, "batched_s": 0, "interrupted": false}
+{"polls": [["OPEN", "MERGEABLE", "aaaaaaaaaa"], ["MERGED", "UNKNOWN", "aaaaaaaaaa"]], "start_draft": true, "ci": [[0, "CI green"]], "turn": [true], "merge_rc": [0], "refusal": "2 of 2 required status checks are in progress.", "compare": [false], "runs": 1, "check_runs": 1, "turn_lost": [true, false, false], "merge_timeout": 300, "merge_poll": 30, "direct": true, "held": true, "pinned": false, "tested": true, "batched_s": 0, "interrupted": true}
 gh:isDraft,state,mergeable,headRefOid
 gh:head-runs "api" "repos/{owner}/{repo}/actions/workflows/ci.yml/runs?head_sha=aaaaaaaaaa&event=pull_request" "--jq" "[.workflow_runs[] | {id, status, conclusion}]"
 gh "pr" "ready" "999"
@@ -4789,7 +4766,14 @@ say "  PR #999 was a draft; marked it ready"
 gh:state,mergeable,headRefOid
 gh:compare "api" "repos/{owner}/{repo}/compare/aaaaaaaaaa...master" "--jq" "[.files[]? | .filename, (.previous_filename // empty)]"
 gh:files,headRefOid
-logger "event=land_transition pr=999 from= to=merging at=1764000001.000 verdict="
+logger "event=land_transition pr=999 from= to=queued at=1764000001.000 verdict="
+line "join" "999" "-" ""
+try_turn
+line "stand" "999" "-" "1"
+say "  took the landing turn after 0s"
+logger "event=land_transition pr=999 from=queued to=holding at=1764000001.000 verdict="
+line "leave" "999"
+logger "event=land_transition pr=999 from=holding to=merging at=1764000001.000 verdict="
 try_serial 1
 release_serial
 git "fetch" "-q" "--no-write-fetch-head" "origin" "refs/pull/999/head" "master" cwd="<primary>"
@@ -4797,61 +4781,31 @@ git "merge-base" "origin/master" "aaaaaaaaaa" cwd="<primary>"
 pins_at "prbase"
 pins_at "aaaaaaaaaa"
 gh:commits
-gh:compare "api" "repos/{owner}/{repo}/compare/aaaaaaaaaa...master" "--jq" "[.files[]? | .filename, (.previous_filename // empty)]"
-gh:files "api" "--paginate" "--slurp" "repos/{owner}/{repo}/pulls/999/files"
-gh:state,mergeable,headRefOid
-try_serial 1
-release_serial
-gh:commits
-gh:compare "api" "repos/{owner}/{repo}/compare/aaaaaaaaaa...master" "--jq" "[.files[]? | .filename, (.previous_filename // empty)]"
-gh:files "api" "--paginate" "--slurp" "repos/{owner}/{repo}/pulls/999/files"
+gh:master
 gh "api" "-X" "PUT" "repos/{owner}/{repo}/pulls/999/merge" "-f" "merge_method=squash" "-f" "sha=aaaaaaaaaa" "-f" "commit_title=Land it"
-gh:rules/branches "api" "repos/{owner}/{repo}/rules/branches/master" "--jq" "[.[] | select(.type == \"required_status_checks\") | .parameters.required_status_checks[].context]"
-gh:check-runs "api" "repos/{owner}/{repo}/commits/aaaaaaaaaa/check-runs?per_page=100" "--jq" ".check_runs"
-say "  merge refused at aaaaaaaa: 2 of 2 required status checks are in progress.; waiting"
-sleep 30
+say "  merged directly at the checked head: Land it"
 gh:state,mergeable,headRefOid
-say "  aaaaaaaa: pending: every CI run on it finished with no verdict, and none is running; waiting up to 180s for a run to start before re-running its cancelled one"
-sleep 30
-gh:state,mergeable,headRefOid
-sleep 30
-gh:state,mergeable,headRefOid
-sleep 30
-gh:state,mergeable,headRefOid
-sleep 30
-gh:state,mergeable,headRefOid
-sleep 30
-gh:state,mergeable,headRefOid
-sleep 30
-gh:state,mergeable,headRefOid
-logger "event=land_transition pr=999 from=merging to=merged at=1764000211.000 verdict="
-say "  merged after 210s"
+logger "event=land_transition pr=999 from=merging to=merged at=1764000001.000 verdict="
+say "  merged after 0s"
+release_turn
 merged
 # seed 183
-{"polls": [["OPEN", "MERGEABLE", "aaaaaaaaaa"], ["OPEN", "MERGEABLE", ""], ["MERGED", "UNKNOWN", "aaaaaaaaaa"]], "start_draft": false, "ci": [[0, "CI green"]], "turn": [false, false, true], "merge_rc": [0], "refusal": "2 of 2 required status checks are in progress.", "compare": [false, true, false], "runs": 0, "check_runs": 2, "turn_lost": [false, false, false], "merge_timeout": 300, "merge_poll": 30, "direct": true, "held": true, "pinned": false, "tested": true, "batched_s": 0, "interrupted": false}
+{"polls": [["OPEN", "MERGEABLE", "aaaaaaaaaa"], ["MERGED", "UNKNOWN", "aaaaaaaaaa"]], "start_draft": false, "ci": [[0, "CI green"]], "turn": [true], "merge_rc": [0], "refusal": "2 of 2 required status checks are in progress.", "compare": [false], "runs": 0, "check_runs": 2, "turn_lost": [false, false, false], "merge_timeout": 300, "merge_poll": 30, "direct": true, "held": true, "pinned": false, "tested": true, "batched_s": 0, "interrupted": true}
 gh:isDraft,state,mergeable,headRefOid
 gh:head-runs "api" "repos/{owner}/{repo}/actions/workflows/ci.yml/runs?head_sha=aaaaaaaaaa&event=pull_request" "--jq" "[.workflow_runs[] | {id, status, conclusion}]"
 gh:files,headRefOid
 logger "event=land_transition pr=999 from= to=queued at=1764000001.000 verdict="
 line "join" "999" "-" ""
 try_turn
-say "  waiting for the landing turn: another landing is between its CI run and its merge (`probe.py landing` lists the landings in flight)"
-sleep 30
 line "stand" "999" "-" "1"
-try_turn
-sleep 30
-line "stand" "999" "-" "1"
-try_turn
-line "stand" "999" "-" "1"
-say "  took the landing turn after 60s"
-logger "event=land_transition pr=999 from=queued to=holding at=1764000061.000 verdict="
+say "  took the landing turn after 0s"
+logger "event=land_transition pr=999 from=queued to=holding at=1764000001.000 verdict="
 line "leave" "999"
 gh:isDraft,state,mergeable,headRefOid
 gh:head-runs "api" "repos/{owner}/{repo}/actions/workflows/ci.yml/runs?head_sha=aaaaaaaaaa&event=pull_request" "--jq" "[.workflow_runs[] | {id, status, conclusion}]"
-say "  the batch's run no longer stands for PR #999: master is unreadable (tuple.index(x): x not in tuple), not the 01234567 the batch stacked it on; the stale-base rules judge it"
-gh:compare "api" "repos/{owner}/{repo}/compare/aaaaaaaaaa...master" "--jq" "[.files[]? | .filename, (.previous_filename // empty)]"
+gh:master
 gh:state,mergeable,headRefOid
-logger "event=land_transition pr=999 from=holding to=merging at=1764000061.000 verdict="
+logger "event=land_transition pr=999 from=holding to=merging at=1764000001.000 verdict="
 try_serial 1
 release_serial
 git "fetch" "-q" "--no-write-fetch-head" "origin" "refs/pull/999/head" "master" cwd="<primary>"
@@ -4859,15 +4813,12 @@ git "merge-base" "origin/master" "aaaaaaaaaa" cwd="<primary>"
 pins_at "prbase"
 pins_at "aaaaaaaaaa"
 gh:commits
-gh:compare "api" "repos/{owner}/{repo}/compare/aaaaaaaaaa...master" "--jq" "[.files[]? | .filename, (.previous_filename // empty)]"
-gh:files "api" "--paginate" "--slurp" "repos/{owner}/{repo}/pulls/999/files"
+gh:master
 gh "api" "-X" "PUT" "repos/{owner}/{repo}/pulls/999/merge" "-f" "merge_method=squash" "-f" "sha=aaaaaaaaaa" "-f" "commit_title=Land it"
 say "  merged directly at the checked head: Land it"
 gh:state,mergeable,headRefOid
-sleep 30
-gh:state,mergeable,headRefOid
-logger "event=land_transition pr=999 from=merging to=merged at=1764000091.000 verdict="
-say "  merged after 90s, 60s of it waiting for the landing turn"
+logger "event=land_transition pr=999 from=merging to=merged at=1764000001.000 verdict="
+say "  merged after 0s"
 release_turn
 merged
 # seed 184
@@ -4917,9 +4868,7 @@ git "merge-base" "origin/master" "aaaaaaaaaa" cwd="<primary>"
 pins_at "prbase"
 pins_at "aaaaaaaaaa"
 gh:commits
-say "  the batch's run no longer stands for PR #999: master is unreadable (tuple.index(x): x not in tuple), not the 01234567 the batch stacked it on; the stale-base rules judge it"
-gh:compare "api" "repos/{owner}/{repo}/compare/aaaaaaaaaa...master" "--jq" "[.files[]? | .filename, (.previous_filename // empty)]"
-gh:files "api" "--paginate" "--slurp" "repos/{owner}/{repo}/pulls/999/files"
+gh:master
 gh "api" "-X" "PUT" "repos/{owner}/{repo}/pulls/999/merge" "-f" "merge_method=squash" "-f" "sha=aaaaaaaaaa" "-f" "commit_title=Land it"
 say "  merged directly at the checked head: Land it"
 gh:state,mergeable,headRefOid
@@ -4986,19 +4935,35 @@ sleep 30
 gh:state,mergeable,headRefOid
 outcome rc=1 verdict=pr-ci-red error=PR #999 cannot merge — its own CI is red (aaaaaaaa: 2 checks still running); fix it, push, and re-run this
 # seed 190
-{"polls": [["OPEN", "MERGEABLE", "aaaaaaaaaa"], ["OPEN", "UNKNOWN", "aaaaaaaaaa"], ["CLOSED", "UNKNOWN", "aaaaaaaaaa"]], "start_draft": false, "ci": [[0, "pending: every CI run on it finished with no verdict, and none is running"], [0, "pending: every CI run on it finished with no verdict, and none is running"], [2, "prek failed"], [1, "pending: every CI run on it skipped the gate because the PR was a draft, or was cancelled"], [0, "prek failed"]], "turn": [true, true, true], "merge_rc": [0, 0, 0], "refusal": "2 of 2 required status checks are in progress.", "compare": [true], "runs": 3, "check_runs": 2, "turn_lost": [false, false, false], "merge_timeout": 300, "merge_poll": 300, "direct": true, "held": true, "pinned": false, "tested": true, "batched_s": 0, "interrupted": false}
+{"polls": [["OPEN", "MERGEABLE", "aaaaaaaaaa"], ["MERGED", "UNKNOWN", "aaaaaaaaaa"]], "start_draft": false, "ci": [[0, "CI green"]], "turn": [true], "merge_rc": [0], "refusal": "2 of 2 required status checks are in progress.", "compare": [false], "runs": 3, "check_runs": 2, "turn_lost": [false, false, false], "merge_timeout": 300, "merge_poll": 300, "direct": true, "held": true, "pinned": false, "tested": true, "batched_s": 0, "interrupted": true}
 gh:isDraft,state,mergeable,headRefOid
 gh:head-runs "api" "repos/{owner}/{repo}/actions/workflows/ci.yml/runs?head_sha=aaaaaaaaaa&event=pull_request" "--jq" "[.workflow_runs[] | {id, status, conclusion}]"
 gh:state,mergeable,headRefOid
 gh:compare "api" "repos/{owner}/{repo}/compare/aaaaaaaaaa...master" "--jq" "[.files[]? | .filename, (.previous_filename // empty)]"
-gh "pr" "ready" "--undo" "999"
-gh "api" "-X" "PUT" "repos/{owner}/{repo}/pulls/999/update-branch" "-f" "expected_head_sha=aaaaaaaaaa"
-say "  master changed 1 path(s) since the master PR #999's run tested; converted it to draft and updated its branch, so it waits in the line for a run on the master of its turn"
-logger "event=land_transition pr=999 from= to=rejoining at=1764000001.000 verdict="
+gh:files,headRefOid
+logger "event=land_transition pr=999 from= to=queued at=1764000001.000 verdict="
+line "join" "999" "-" ""
+try_turn
+line "stand" "999" "-" "1"
+say "  took the landing turn after 0s"
+logger "event=land_transition pr=999 from=queued to=holding at=1764000001.000 verdict="
+line "leave" "999"
+logger "event=land_transition pr=999 from=holding to=merging at=1764000001.000 verdict="
+try_serial 1
+release_serial
+git "fetch" "-q" "--no-write-fetch-head" "origin" "refs/pull/999/head" "master" cwd="<primary>"
+git "merge-base" "origin/master" "aaaaaaaaaa" cwd="<primary>"
+pins_at "prbase"
+pins_at "aaaaaaaaaa"
+gh:commits
+gh:master
+gh "api" "-X" "PUT" "repos/{owner}/{repo}/pulls/999/merge" "-f" "merge_method=squash" "-f" "sha=aaaaaaaaaa" "-f" "commit_title=Land it"
+say "  merged directly at the checked head: Land it"
 gh:state,mergeable,headRefOid
-sleep 300
-gh:state,mergeable,headRefOid
-outcome rc=1 verdict=refused error=PR #999 was closed without merging — nothing to land
+logger "event=land_transition pr=999 from=merging to=merged at=1764000001.000 verdict="
+say "  merged after 0s"
+release_turn
+merged
 # seed 191
 {"polls": [["OPEN", "CONFLICTING", "aaaaaaaaaa"], ["OPEN", "MERGEABLE", ""], ["OPEN", "MERGEABLE", ""], ["MERGED", "UNKNOWN", "aaaaaaaaaa"]], "start_draft": true, "ci": [[0, "prek failed"], [75, "2 checks still running"], [0, "pending: every CI run on it finished with no verdict, and none is running"], [2, "CI green"], [1, "2 checks still running"], [2, "CI pending"]], "turn": [false, false, false], "merge_rc": [0, 1, 0, 0], "refusal": "boom", "compare": [true], "runs": 3, "check_runs": 2, "turn_lost": [false, false, false], "merge_timeout": 60, "merge_poll": 30, "direct": true, "held": true, "pinned": false, "tested": false, "batched_s": 0, "interrupted": true}
 gh:isDraft,state,mergeable,headRefOid
@@ -5087,8 +5052,7 @@ logger "event=land_transition pr=999 from=queued to=holding at=1764000001.000 ve
 line "leave" "999"
 gh:isDraft,state,mergeable,headRefOid
 gh:head-runs "api" "repos/{owner}/{repo}/actions/workflows/ci.yml/runs?head_sha=aaaaaaaaaa&event=pull_request" "--jq" "[.workflow_runs[] | {id, status, conclusion}]"
-say "  the batch's run no longer stands for PR #999: master is unreadable (tuple.index(x): x not in tuple), not the 01234567 the batch stacked it on; the stale-base rules judge it"
-gh:compare "api" "repos/{owner}/{repo}/compare/aaaaaaaaaa...master" "--jq" "[.files[]? | .filename, (.previous_filename // empty)]"
+gh:master
 gh "pr" "ready" "999"
 say "  PR #999 was a draft; marked it ready"
 gh:state,mergeable,headRefOid
@@ -5106,7 +5070,7 @@ logger "event=land_transition pr=999 from=own-run to=merged at=1764000061.000 ve
 say "  merged after 60s"
 merged
 # seed 195
-{"polls": [["OPEN", "MERGEABLE", "aaaaaaaaaa"], ["OPEN", "MERGEABLE", ""], ["OPEN", "MERGEABLE", "aaaaaaaaaa"], ["OPEN", "MERGEABLE", ""], ["OPEN", "MERGEABLE", "aaaaaaaaaa"], ["OPEN", "CONFLICTING", "aaaaaaaaaa"], ["OPEN", "MERGEABLE", "aaaaaaaaaa"], ["MERGED", "UNKNOWN", "aaaaaaaaaa"]], "start_draft": true, "ci": [[0, "pending: every CI run on it finished with no verdict, and none is running"], [9, "prek failed"]], "turn": [true], "merge_rc": [1, 1, 1], "refusal": "2 of 2 required status checks are in progress.", "compare": [false], "runs": 0, "check_runs": 0, "turn_lost": [true, false], "merge_timeout": 60, "merge_poll": 300, "direct": true, "held": true, "pinned": false, "tested": true, "batched_s": 0, "interrupted": false}
+{"polls": [["OPEN", "MERGEABLE", "aaaaaaaaaa"], ["MERGED", "UNKNOWN", "aaaaaaaaaa"]], "start_draft": true, "ci": [[0, "CI green"]], "turn": [true], "merge_rc": [0], "refusal": "2 of 2 required status checks are in progress.", "compare": [false], "runs": 0, "check_runs": 0, "turn_lost": [true, false], "merge_timeout": 60, "merge_poll": 300, "direct": true, "held": true, "pinned": false, "tested": true, "batched_s": 0, "interrupted": true}
 gh:isDraft,state,mergeable,headRefOid
 gh:head-runs "api" "repos/{owner}/{repo}/actions/workflows/ci.yml/runs?head_sha=aaaaaaaaaa&event=pull_request" "--jq" "[.workflow_runs[] | {id, status, conclusion}]"
 gh:files,headRefOid
@@ -5117,11 +5081,28 @@ line "stand" "999" "aaaaaaaaaa" "1"
 say "  took the landing turn after 0s"
 logger "event=land_transition pr=999 from=queued to=holding at=1764000001.000 verdict="
 line "leave" "999"
-say "  the batch's run no longer stands for PR #999: master is unreadable (tuple.index(x): x not in tuple), not the 01234567 the batch stacked it on; the stale-base rules judge it"
-gh:compare "api" "repos/{owner}/{repo}/compare/aaaaaaaaaa...master" "--jq" "[.files[]? | .filename, (.previous_filename // empty)]"
+gh:isDraft,state,mergeable,headRefOid
+gh:head-runs "api" "repos/{owner}/{repo}/actions/workflows/ci.yml/runs?head_sha=aaaaaaaaaa&event=pull_request" "--jq" "[.workflow_runs[] | {id, status, conclusion}]"
+gh:master
 gh "pr" "ready" "999"
+say "  PR #999 was a draft; marked it ready"
+gh:state,mergeable,headRefOid
+logger "event=land_transition pr=999 from=holding to=merging at=1764000001.000 verdict="
+try_serial 1
+release_serial
+git "fetch" "-q" "--no-write-fetch-head" "origin" "refs/pull/999/head" "master" cwd="<primary>"
+git "merge-base" "origin/master" "aaaaaaaaaa" cwd="<primary>"
+pins_at "prbase"
+pins_at "aaaaaaaaaa"
+gh:commits
+gh:master
+gh "api" "-X" "PUT" "repos/{owner}/{repo}/pulls/999/merge" "-f" "merge_method=squash" "-f" "sha=aaaaaaaaaa" "-f" "commit_title=Land it"
+say "  merged directly at the checked head: Land it"
+gh:state,mergeable,headRefOid
+logger "event=land_transition pr=999 from=merging to=merged at=1764000001.000 verdict="
+say "  merged after 0s"
 release_turn
-outcome rc=1 verdict=refused error=PR #999 is a draft and could not be marked ready (2 of 2 required status checks are in progress.); run `gh pr ready 999`, then re-run this
+merged
 # seed 196
 {"polls": [["OPEN", "MERGEABLE", "aaaaaaaaaa"], ["CLOSED", "UNKNOWN", "aaaaaaaaaa"]], "start_draft": true, "ci": [[75, "pending: every CI run on it finished with no verdict, and none is running"]], "turn": [false, true], "merge_rc": [1, 1, 0, 0], "refusal": "2 of 2 required status checks are in progress.", "compare": [false, true], "runs": 2, "check_runs": 0, "turn_lost": [true, false, false], "merge_timeout": 60, "merge_poll": 300, "direct": true, "held": true, "pinned": false, "tested": true, "batched_s": 0, "interrupted": false}
 gh:isDraft,state,mergeable,headRefOid
@@ -5140,8 +5121,7 @@ logger "event=land_transition pr=999 from=queued to=holding at=1764000301.000 ve
 line "leave" "999"
 gh:isDraft,state,mergeable,headRefOid
 gh:head-runs "api" "repos/{owner}/{repo}/actions/workflows/ci.yml/runs?head_sha=aaaaaaaaaa&event=pull_request" "--jq" "[.workflow_runs[] | {id, status, conclusion}]"
-say "  the batch's run no longer stands for PR #999: master is unreadable (tuple.index(x): x not in tuple), not the 01234567 the batch stacked it on; the stale-base rules judge it"
-gh:compare "api" "repos/{owner}/{repo}/compare/aaaaaaaaaa...master" "--jq" "[.files[]? | .filename, (.previous_filename // empty)]"
+gh:master
 gh "pr" "ready" "999"
 release_turn
 outcome rc=1 verdict=refused error=PR #999 is a draft and could not be marked ready (2 of 2 required status checks are in progress.); run `gh pr ready 999`, then re-run this
@@ -5166,16 +5146,36 @@ gh:state,mergeable,headRefOid
 release_turn
 outcome rc=1 verdict=refused error=PR #999 was closed without merging — nothing to land
 # seed 198
-{"polls": [["OPEN", "MERGEABLE", "bbbbbbbbbb"], ["MERGED", "UNKNOWN", "aaaaaaaaaa"]], "start_draft": true, "ci": [[9, "CI green"], [-1, "900"]], "turn": [false], "merge_rc": [0, 1, 1, 0], "refusal": "2 of 2 required status checks are in progress.", "compare": [false], "runs": 1, "check_runs": 1, "turn_lost": [false, true, false], "merge_timeout": 1800, "merge_poll": 30, "direct": true, "held": true, "pinned": false, "tested": true, "batched_s": 0, "interrupted": false}
+{"polls": [["OPEN", "MERGEABLE", "aaaaaaaaaa"], ["MERGED", "UNKNOWN", "aaaaaaaaaa"]], "start_draft": true, "ci": [[0, "CI green"]], "turn": [true], "merge_rc": [0], "refusal": "2 of 2 required status checks are in progress.", "compare": [false], "runs": 1, "check_runs": 1, "turn_lost": [false, true, false], "merge_timeout": 1800, "merge_poll": 30, "direct": true, "held": true, "pinned": false, "tested": true, "batched_s": 0, "interrupted": true}
 gh:isDraft,state,mergeable,headRefOid
-gh:head-runs "api" "repos/{owner}/{repo}/actions/workflows/ci.yml/runs?head_sha=bbbbbbbbbb&event=pull_request" "--jq" "[.workflow_runs[] | {id, status, conclusion}]"
+gh:head-runs "api" "repos/{owner}/{repo}/actions/workflows/ci.yml/runs?head_sha=aaaaaaaaaa&event=pull_request" "--jq" "[.workflow_runs[] | {id, status, conclusion}]"
 gh "pr" "ready" "999"
 say "  PR #999 was a draft; marked it ready"
 gh:state,mergeable,headRefOid
-sleep 30
+gh:compare "api" "repos/{owner}/{repo}/compare/aaaaaaaaaa...master" "--jq" "[.files[]? | .filename, (.previous_filename // empty)]"
+gh:files,headRefOid
+logger "event=land_transition pr=999 from= to=queued at=1764000001.000 verdict="
+line "join" "999" "-" ""
+try_turn
+line "stand" "999" "-" "1"
+say "  took the landing turn after 0s"
+logger "event=land_transition pr=999 from=queued to=holding at=1764000001.000 verdict="
+line "leave" "999"
+logger "event=land_transition pr=999 from=holding to=merging at=1764000001.000 verdict="
+try_serial 1
+release_serial
+git "fetch" "-q" "--no-write-fetch-head" "origin" "refs/pull/999/head" "master" cwd="<primary>"
+git "merge-base" "origin/master" "aaaaaaaaaa" cwd="<primary>"
+pins_at "prbase"
+pins_at "aaaaaaaaaa"
+gh:commits
+gh:master
+gh "api" "-X" "PUT" "repos/{owner}/{repo}/pulls/999/merge" "-f" "merge_method=squash" "-f" "sha=aaaaaaaaaa" "-f" "commit_title=Land it"
+say "  merged directly at the checked head: Land it"
 gh:state,mergeable,headRefOid
-logger "event=land_transition pr=999 from= to=merged at=1764000031.000 verdict="
-say "  merged after 30s"
+logger "event=land_transition pr=999 from=merging to=merged at=1764000001.000 verdict="
+say "  merged after 0s"
+release_turn
 merged
 # seed 199
 {"polls": [["OPEN", "MERGEABLE", ""], ["OPEN", "CONFLICTING", "aaaaaaaaaa"], ["OPEN", "UNKNOWN", "aaaaaaaaaa"], ["OPEN", "MERGEABLE", ""], ["OPEN", "MERGEABLE", ""], ["OPEN", "UNKNOWN", "aaaaaaaaaa"], ["CLOSED", "UNKNOWN", "aaaaaaaaaa"]], "start_draft": true, "ci": [[9, "CI green"], [9, "pending: every CI run on it skipped the gate because the PR was a draft, or was cancelled"], [75, "pending: every CI run on it skipped the gate because the PR was a draft, or was cancelled"]], "turn": [false, true, true], "merge_rc": [0], "refusal": "2 of 2 required status checks are in progress.", "compare": [true, true], "runs": 0, "check_runs": 1, "turn_lost": [true, false, false, false], "merge_timeout": 60, "merge_poll": 30, "direct": true, "held": true, "pinned": false, "tested": false, "batched_s": 0, "interrupted": false}
