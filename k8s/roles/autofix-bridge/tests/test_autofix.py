@@ -272,14 +272,15 @@ def test_dry_run_enabled_false_for_explicit_disable_values():
     assert autofix._dry_run_enabled("FALSE") is False
 
 
-def _configure_sonarr_only(monkeypatch, delivered=True):
-    """Points the cycle at Sonarr alone; returns the list its Discord posts land in."""
+def _configure_sonarr_only(monkeypatch, request, delivered=True):
+    """Points the cycle at Sonarr alone, answered by `request`; returns its Discord posts."""
     posts = []
 
     def post(msg):
         posts.append(msg)
         return delivered
 
+    monkeypatch.setattr(autofix, "_request", request)
     monkeypatch.setattr(autofix, "post_discord", post)
     monkeypatch.setattr(autofix, "SONARR_API_KEY", "sonarr-key")
     monkeypatch.setattr(autofix, "RADARR_API_KEY", "")
@@ -305,8 +306,7 @@ def _fake_request(records, calls):
 def test_run_once_dry_run_makes_zero_mutating_calls(monkeypatch):
     item = _item(status="error", download_id=None, qid=7, series_id=42)
     calls = []
-    monkeypatch.setattr(autofix, "_request", _fake_request([item], calls))
-    _configure_sonarr_only(monkeypatch)
+    _configure_sonarr_only(monkeypatch, _fake_request([item], calls))
     monkeypatch.setattr(autofix, "DRY_RUN", True)
 
     key = autofix.item_key("Sonarr", item)
@@ -320,8 +320,7 @@ def test_run_once_dry_run_makes_zero_mutating_calls(monkeypatch):
 def test_run_once_live_deletes_then_searches_in_order(monkeypatch):
     item = _item(status="error", download_id=None, qid=7, series_id=42)
     calls = []
-    monkeypatch.setattr(autofix, "_request", _fake_request([item], calls))
-    _configure_sonarr_only(monkeypatch)
+    _configure_sonarr_only(monkeypatch, _fake_request([item], calls))
     monkeypatch.setattr(autofix, "DRY_RUN", False)
 
     key = autofix.item_key("Sonarr", item)
@@ -348,8 +347,7 @@ def test_run_once_held_branch_makes_zero_mutating_calls(monkeypatch, delivered):
         for i in range(n)
     ]
     calls = []
-    monkeypatch.setattr(autofix, "_request", _fake_request(items, calls))
-    posts = _configure_sonarr_only(monkeypatch, delivered)
+    posts = _configure_sonarr_only(monkeypatch, _fake_request(items, calls), delivered)
     monkeypatch.setattr(autofix, "DRY_RUN", False)
 
     streaks = {autofix.item_key("Sonarr", it): autofix.GRACE_CYCLES - 1 for it in items}
@@ -362,6 +360,13 @@ def test_run_once_held_branch_makes_zero_mutating_calls(monkeypatch, delivered):
     assert msg.startswith("Holding")
     # A delivered hold alert stays quiet the next cycle; an undelivered one is retried.
     assert posts == ([msg] if delivered else [msg, msg])
+
+
+def test_a_queue_poll_with_no_body_raises_naming_the_app(monkeypatch):
+    _configure_sonarr_only(monkeypatch, lambda url, **kwargs: None)
+
+    with pytest.raises(ValueError, match="Sonarr queue returned no JSON object"):
+        autofix.run_once(autofix.CycleState())
 
 
 def test_an_unchanged_held_set_is_not_a_change():
