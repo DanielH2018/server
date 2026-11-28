@@ -409,6 +409,7 @@ def land_wait(
     poll_s: int = POLL_S,
     cap_s: float | None = None,
     window_grace_s: int = 0,
+    on_root_alone: Callable[[], None] = lambda: None,
 ) -> WaitResult:
     """Poll until a promotion covers `merge`, DEPLOY_HOLD holds, or `timeout_s` passes.
 
@@ -425,6 +426,9 @@ def land_wait(
             or None for no cap. `land.sh` passes what its own deadline leaves.
         window_grace_s: the most the reboot's no-promotion window may add to `cap_s`. The
             first poll inside the window adds the window's remaining seconds, up to this.
+        on_root_alone: called on each poll that reads M's changed set as `homelab` alone,
+            unwidened, with no `services`, so the wait gates no tag. The wait goes on after
+            the call, and still ends `deploy-failed` on a hold.
     """
     started = reads.clock()
     deadline = started + timeout_s
@@ -461,6 +465,8 @@ def land_wait(
             # own.
             own = tags if not cs.widened else sorted(services)
             widened, paused = cs.widened, expected.suspended(tags)
+            if not (cs.widened or cs.names or services):
+                on_root_alone()
             # Every tag the wait covers is suspended, so nothing of M is left to wait on.
             all_paused = bool(paused) and set(paused) == set(tags)
             # `soak` reads Ready only once its Job has judged, so the wait reads R's `flux/soak`

@@ -109,6 +109,8 @@ class Landing:
         self.lands_alone = False
         self.split_members: list[Any] = []
         self.serial_lock: Callable[[], None] | None = None
+        # Frees this landing's slot before its verdict; `slots.held` sets it while one is held.
+        self.give_up_slot: Callable[[], None] = lambda: None
         # Set only while this landing holds the turn, so never for a batch member.
         self.give_back_turn: Callable[[], None] | None = None
         self.step_out_of_turn: Callable[[Callable[[], Any], str], Any] | None = None
