@@ -34,7 +34,8 @@ becomes a named invariant with a test.
   rule in one function, so slice 5 can move it into `schedule` unchanged.
 
 Slice 1 is built: `land_lib/transitions.py` writes the state and transition records.
-Nothing else here is built. The validation below read the code at master `ce5c3abfa`. The
+Slice 2 is built: `land_lib/core/queue_machine.py` holds `may_take` and `stackable`, which
+`turn._wait` and `batch._members` call, under the race's rules. Nothing else here is built. The validation below read the code at master `ce5c3abfa`. The
 milestone is `Landing pipeline state machine`.
 
 ## What the pipeline is, validated against the code
@@ -120,7 +121,8 @@ and no batch may carry it.
 ```text
 land_lib/
   core/                      pure: no I/O, no clock, no sleep
-    state.py                 LandingState, QueueState: frozen dataclasses, one per state
+    landing_state.py         LandingState: frozen dataclasses, one per state
+    queue_state.py           Place, Queue: the queue as its decisions read it
     landing_machine.py       step(LandingState, Observation) -> (LandingState, [Action])
     queue_machine.py         schedule(QueueState) -> [Grant]: order, batches, serial rule
     invariants.py            each named invariant as a predicate over states
@@ -136,10 +138,9 @@ out through `ln.tools`, which already puts every process boundary behind one fak
 is added: a `github.py` that only renamed `Tools` would fail the deletion test.
 
 `scripts/deploy_tools/tests/land/test_land_imports.py` requires its `MODULES` list to equal
-`land_lib/*.py`, and
-its glob does not descend. A module under `land_lib/core/` would fall outside the
-import-direction guard without any error. The slice that creates `core/` extends the guard to
-it, with a non-vacuity assertion that names its members.
+every module under `land_lib/`, those in `core/` included. It names the members of `core/` in
+`CORE`, and refuses a module there that imports anything but its siblings and the stdlib
+modules in `PURE_STDLIB`.
 
 ## The landing state machine
 
@@ -510,19 +511,19 @@ costs a turn. Its result is advisory, by ADR-0032.
 ## The deploy UI reads the machine's state
 
 `hosts/components/deploy-ui/` is the one browser view of landings in progress, by the
-operator's ruling of 2026-11-06. `probe.py landing` reads its API. It learns a landing's
-phase by matching the `== N/M` step headers in the landing's log and showing the last line
-under the newest one. Its tests hold those strings to a hand-written fixture, not to the
-code that prints them.
+operator's ruling of 2026-11-06. `probe.py landing` reads its API. The page reads each
+landing's state record, described below, and the turn, serial and slot locks. It shows the
+landings of both hosts in queue order, each with its state, its time in that state and its
+progress. Its log viewer still groups a log's lines by their `== N/M` step headers, but no
+state comes from a log sentence. `hosts/components/deploy-ui/CLAUDE.md`, *Landing queue*, has
+the rules.
 
-It cannot show:
+Two gaps remain:
 
-- which of Queued, Holding, Yielded or Proving a landing is in, unless a sentence says so;
-- how long a landing has been in a state, because the log has no times;
-- who holds the turn, who waits and in what order, the slots or the serial lock, because
-  it watches the git-tree lock only;
-- a landing on daniel-server, because it reads log files on daniel-box;
-- progress inside a state.
+- A yielded landing's record does not say what it waits for, because `step_out` enters
+  `yielded` with no progress.
+- Nothing removes old records. The page hides a record older than a day, and the sticky
+  directory lets only the writing user remove its own.
 
 ### One state record for each live landing
 

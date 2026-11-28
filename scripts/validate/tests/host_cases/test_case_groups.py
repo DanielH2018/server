@@ -156,6 +156,6 @@ def test_a_chained_groups_done_line_names_its_three_slowest_cases(tmp_path, caps
         if "[DONE]" in line
     ]
     assert done == [
-        "[DONE] chain; slowest cases: kill 90s, remove 60s, upgrade 30s",
+        "[DONE] chain; slowest: kill 90s, remove 60s, upgrade 30s",
         "[DONE] single",
     ]

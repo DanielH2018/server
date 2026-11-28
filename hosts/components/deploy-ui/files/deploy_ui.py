@@ -33,13 +33,14 @@ import json
 import operator
 import os
 import re
+import socket
 import subprocess
 import sys
 import threading
 import time
 import urllib.parse
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import ClassVar, override
@@ -47,6 +48,7 @@ from typing import ClassVar, override
 from deploy_ui_lib import deploy_ui_games as game_reads
 from deploy_ui_lib.deploy_ui_game_control import GameControl
 from deploy_ui_lib import deploy_ui_reads as reads
+from deploy_ui_lib import deploy_ui_states as states
 from deploy_ui_lib import deploy_ui_writes as writes
 from deploy_ui_lib.deploy_ui_reads import Unavailable
 from host_lib import logfmt
@@ -75,6 +77,9 @@ class Config:
     credentials_dir: Path | None = None
     # A restart waits this long for the game's pods to go before it gives up, stopped.
     restart_wait_s: int = 300
+    # Holds the turn, serial and slot locks, and the line's directory of state records.
+    land_locks: Path = states.LOCK_DIR
+    hostname: str = field(default_factory=socket.gethostname)
 
     @classmethod
     def from_env(cls) -> "Config":
@@ -107,8 +112,10 @@ class Config:
 class App:
     """Routing plus the subprocess edges. `run` is `subprocess.run` or a test double."""
 
-    def __init__(self, config: Config, run=subprocess.run, sleep=time.sleep) -> None:
-        self.cfg, self.run, self.sleep = config, run, sleep
+    def __init__(
+        self, config: Config, run=subprocess.run, sleep=time.sleep, now=time.time
+    ) -> None:
+        self.cfg, self.run, self.sleep, self.now = config, run, sleep, now
         self.games = GameControl(config, self._out, sleep=sleep)
         # A concurrent cache miss collapses to a single `gh` fetch.
         self._prs_lock = threading.Lock()
@@ -198,24 +205,30 @@ class App:
         for r in runs:
             if r["kind"] == "land" and r["log"]:
                 self._remember(Path(r["log"]))
-            r["step"] = self._step(r["log"]) if r["kind"] == "land" else None
-        return {"runs": runs, "locks_watched": [os.path.basename(p) for p in paths]}
+        return {
+            "runs": runs,
+            "locks_watched": [os.path.basename(p) for p in paths],
+            **self._landings(table),
+        }
 
-    def _step(self, log: str) -> dict | None:
-        """The landing's current step from its whole log; None when it has no readable one.
+    def _landings(self, table: dict[reads.LockKey, reads.FileLock]) -> dict:
+        """Each landing's state from its record, and the turn's locks.
 
-        A failed read never makes the panel unavailable: `cancel` reads this panel for its pids.
+        A failed read of the records is named in `landings_unavailable` rather than failing
+        the panel, because `cancel` reads this panel for its pids.
         """
-        path = Path(log)
-        if not log or not reads.landing_log(
-            path, self.cfg.landing_window_s, time.time()
-        ):
-            return None
-        try:
-            with path.open(encoding="utf-8", errors="replace") as f:
-                return reads.landing_step(f)
-        except OSError:
-            return None
+        now = self.now()
+        found = states.read_records(self.cfg.land_locks / states.LINE_DIR_NAME, now)
+        rows = states.landing_rows(
+            found.records, now, self.cfg.hostname, self.cfg.land_locks, table
+        )
+        for row in rows:
+            row["title"] = self._pr_title(row["pr"])
+        return {
+            "landings": rows,
+            "landings_unavailable": found.unavailable,
+            "turn": states.turn_locks(self.cfg.land_locks, table),
+        }
 
     def _pr_title(self, pr: str) -> str:
         """The PR's title, cached for the daemon's life; "" while `gh` cannot answer.

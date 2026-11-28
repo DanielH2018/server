@@ -14,7 +14,11 @@ the landing, so both hosts take turns with each other. Either way the lock ends 
 landing's process, so a landing that dies gives the turn up. sshd on `TURN_HOST` never probes
 a client, so a host that loses power or its network sends no close. A landing on another host
 therefore writes a heartbeat into the session every `HEARTBEAT_S`, and the script on
-`TURN_HOST` frees the lock once three intervals pass without one.
+`TURN_HOST` frees the lock once three intervals pass without one. A landing that is alive but
+silent for that long loses the lock, and its session ends within the same three intervals:
+the script exits, or the ssh client's own keepalives fail. So before each merge, a landing that
+holds the turn over ssh reads whether its session has ended (`SshLock.lost`), and when it has,
+it gives the turn back and asks for it again (`merge.await_merge`).
 
 A landing asks for the turn when it is ready to use it (`merge.await_merge`): before the one
 run of a head that has had none, and otherwise once its head is green. It never holds the
@@ -22,6 +26,8 @@ turn while a run that started before it finishes, nor through a rate-limit wait:
 turn back for the wait's length and asks for it again before it goes on
 (`Landing.without_turn`). A draft that has not been marked ready asks again with its head,
 so it keeps its place in the line and a holder can still stack it.
+
+Whether a waiting landing may try a free turn is `core/queue_machine.py`'s `may_take`.
 
 A landing that waits with a draft stands in the line beside the lock (`line.py`), so the
 landing that holds the turn can test that draft's head with its own. A landing whose place
@@ -61,6 +67,7 @@ from typing import IO, NoReturn
 from pathlib import Path as _Path
 
 from deploy_tools.land_lib import line
+from deploy_tools.land_lib.core import queue_machine, queue_state
 from deploy_tools.land_lib.fresh import TURN_FD_ENV
 from deploy_tools.land_lib.landing import Landing
 from deploy_tools.land_lib.outcome import Verdict, say
@@ -80,8 +87,9 @@ LOCK = LOCK_DIR / "homelab-land-turn.lock"
 _SSH_EXIT_S = 10
 # DECIDED: 5.0 s, three missed heartbeats free an ssh-held lock (operator, 2026-11-28). A landing
 # on another host that stays alive but silent that long (a stopped process, or a network stall
-# between the hosts) loses its lock unaware, so a second landing can take the turn. The turn is
-# not a safety gate: the merge keeps its head-SHA pin and its stale_base check.
+# between the hosts) loses its lock, so a second landing can take the turn. Its ssh session ends
+# then too, and the landing reads that before its merge (`SshLock.lost`). The turn is not a
+# safety gate: the merge keeps its head-SHA pin and its stale_base check.
 HEARTBEAT_S = 5.0
 
 
@@ -172,6 +180,31 @@ class LocalTurn:
         # Unlocks before closing: the landing that handed this turn over keeps its copy open.
         fcntl.flock(self.fd, fcntl.LOCK_UN)
         os.close(self.fd)
+
+
+class SshLock:
+    """A lock on `TURN_HOST` held through an ssh session; calling it gives the lock up.
+
+    Attributes:
+        session: The ssh client process. The lock lasts no longer than it does.
+    """
+
+    def __init__(
+        self, session: subprocess.Popen[str], release: Callable[[], None]
+    ) -> None:
+        self.session = session
+        self._release = release
+
+    def __call__(self) -> None:
+        self._release()
+
+    def lost(self) -> bool:
+        """Whether the session has ended, which frees the lock on `TURN_HOST`.
+
+        It ends when `TURN_HOST` reads no heartbeat for three intervals, and when the ssh
+        client's keepalives go unanswered for the same time.
+        """
+        return self.session.poll() is not None
 
 
 class HandOver(Exception):
@@ -307,7 +340,7 @@ def try_take_over_ssh(
     cap: int = 1,
     host: str = TURN_HOST,
     beat: float = HEARTBEAT_S,
-) -> Callable[[], None] | None:
+) -> SshLock | None:
     """`lock_below(paths, cap)` on `host` without waiting, through an ssh session.
 
     The session holds the lock until the call it returns closes it, or until `host` reads no
@@ -319,7 +352,7 @@ def try_take_over_ssh(
         beat: the seconds between heartbeats; a test shortens it.
 
     Returns:
-        The call that gives the lock up, or None while other landings hold `cap` of the files.
+        The lock, or None while other landings hold `cap` of the files.
 
     Raises:
         OSError: `host` did not answer, or could not open a lock file.
@@ -335,7 +368,7 @@ def try_take_over_ssh(
             stop()
             end()
 
-        return release
+        return SshLock(session, release)
     end()
     if answer == "busy":
         return None
@@ -396,6 +429,8 @@ def _wait(ln: Landing, draft: str) -> tuple[Callable[[], None] | None, int]:
     o = ln.opts
     try_turn = ln.tools.try_turn or _taker(ln.tools.hostname())
     place = line.Place(line_of(ln), o.pr, draft, say)
+    me = queue_state.Place(o.pr, draft)
+    queue = queue_state.Queue((me,))
     waiting = OnChange(say)
     waited = 0
     before = ln.ledger.turn_wait = ln.ledger.turn_wait or 0
@@ -403,7 +438,7 @@ def _wait(ln: Landing, draft: str) -> tuple[Callable[[], None] | None, int]:
     try:
         while True:
             try:
-                release = try_turn()
+                release = try_turn() if queue_machine.may_take(queue, me) else None
             except OSError as exc:
                 say(
                     f"could not open the landing turn's lock ({exc}); going on without a "
@@ -471,8 +506,9 @@ def held(ln: Landing) -> Generator[Callable[[str], tuple[bool, int]]]:
         that call waited. It asks once: a later call answers at once with what the first one
         got, until `ln.give_back_turn` gives the turn up and the next call asks again.
         `ln.give_back_turn` and `ln.step_out_of_turn` are set only while this landing holds
-        the turn. A step out of the turn asks again with `ln.line_head`, so a draft keeps its
-        place in the line through the wait, unless the landing lands alone.
+        the turn, and `ln.turn_lost` reads whether the turn it holds over ssh has ended. A
+        step out of the turn asks again with `ln.line_head`, so a draft keeps its place in
+        the line through the wait, unless the landing lands alone.
 
     Raises:
         HandOver: from `ln.hand_over_turn`, which leaves the turn locked for the caller.
@@ -511,6 +547,9 @@ def held(ln: Landing) -> Generator[Callable[[str], tuple[bool, int]]]:
         ln.turn_interrupted = True
         return got
 
+    def lost() -> bool:
+        return isinstance(release, SshLock) and release.lost()
+
     def hand_over(why: str) -> None:
         if adopted or ln.opts.policy_active or not isinstance(release, LocalTurn):
             return
@@ -518,6 +557,7 @@ def held(ln: Landing) -> Generator[Callable[[str], tuple[bool, int]]]:
 
     offer()
     ln.hand_over_turn = hand_over
+    ln.turn_lost = lost
     try:
         yield take
     except HandOver:
@@ -525,5 +565,6 @@ def held(ln: Landing) -> Generator[Callable[[str], tuple[bool, int]]]:
         raise
     finally:
         ln.give_back_turn = ln.step_out_of_turn = ln.hand_over_turn = None
+        ln.turn_lost = lambda: False
         if release:
             release()

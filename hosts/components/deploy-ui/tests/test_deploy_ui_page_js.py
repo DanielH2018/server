@@ -48,22 +48,6 @@ def page_eval(expr: str):
     return json.loads(out.stdout)
 
 
-def _land(pr: str, elapsed_s: int, step: dict | None) -> dict:
-    return {
-        "kind": "land",
-        "pr": pr,
-        "tag": "",
-        "title": "",
-        "elapsed_s": elapsed_s,
-        "log": "",
-        "step": step,
-    }
-
-
-def _at(step: str, verdict: str = "") -> dict:
-    return {"step": step, "of": 5, "label": "", "latest": "", "verdict": verdict}
-
-
 def test_elapsed_reads_as_minutes_and_seconds_is_clean():
     # fact: hosts/components/deploy-ui/CLAUDE.md#Landing queue
     assert page_eval("[dur(5), dur(3243), dur(7510)]") == [
@@ -82,15 +66,49 @@ def test_process_names_the_script_not_its_interpreter_is_clean():
     ) == ["land.py", "land.py", "flock"]
 
 
-def test_queue_lists_the_furthest_step_first_then_the_longest_running_is_clean():
+def _row(pr: str, queue: str, position=None, alive=True) -> dict:
+    return {
+        "pr": pr,
+        "host": "daniel-server",
+        "state": "queued",
+        "label": "Queued",
+        "in_state_s": 65,
+        "history": [{"state": "armed", "label": "Armed", "since": 0}],
+        "progress": {"done": 2, "total": 3, "what": "checks finished"},
+        "alive": alive,
+        "queue": queue,
+        "position": position,
+        "title": "",
+    }
+
+
+def test_queue_renders_the_daemons_order_with_each_landings_place_is_clean():
     # fact: hosts/components/deploy-ui/CLAUDE.md#Landing queue
-    runs = [
-        _land("1", 900, _at("0")),
-        _land("2", 60, _at("3")),
-        _land("3", 30, _at("5", verdict="settled")),
-        _land("4", 999, None),
-        _land("5", 1200, _at("0")),
-        {**_land("6", 5000, None), "kind": "lock"},
-    ]
-    html = page_eval(f"queue({json.dumps(runs)})")
-    assert re.findall(r"/pull/(\d+)", html) == ["3", "2", "5", "1", "4"]
+    inflight = {
+        "runs": [],
+        "landings": [
+            _row("1", "turn"),
+            _row("2", "waiting", 1),
+            _row("3", "stepped-out"),
+            _row("4", "", alive=False),
+            _row("5", "", alive=None),
+        ],
+        "landings_unavailable": "",
+        "turn": {
+            "turn_held": True,
+            "serial": {"held": True, "pr": "9"},
+            "slots": {"used": 2, "of": 6},
+        },
+    }
+    html = page_eval(f"queue({json.dumps(inflight)})")
+    assert re.findall(r"/pull/(\d+)", html) == ["9", "1", "2", "3", "4", "5"]
+    for text in (
+        "holds the turn",
+        "waiting #1",
+        "stepped out",
+        "died",
+        "liveness unknown",
+        "Queued",
+    ):
+        assert text in html
+    assert "2/3 checks finished" in html and "slots 2/6 in use" in html

@@ -123,6 +123,9 @@ class Landing:
         # PR is marked ready, or for a head that is no draft.
         self.line_head = ""
         self.hand_over_turn: Callable[[str], None] | None = None
+        # Whether the turn this landing holds over ssh has ended unasked; a batch member reads
+        # the holder's.
+        self.turn_lost: Callable[[], bool] = lambda: False
         # The head `changed_paths` last read the PR's file list at, and that list.
         self._changed: tuple[str, tuple[str, ...]] | None = None
 

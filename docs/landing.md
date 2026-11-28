@@ -467,6 +467,11 @@ jobs. Every landing that merges its PR directly takes the turn.
   lock once three intervals pass without one. The turn, the landing slots, the serial lock and
   the PR lock (`pr_lock.py`) are held this way. A detached landing inherits the PR lock
   without its caller's heartbeat thread, so it starts its own (`pr_lock.Held.for_fork`).
+- A landing on daniel-server that stops or stalls for three heartbeat intervals loses the
+  turn, and its ssh session ends within the same time. Just before each merge, the holder
+  reads whether that session has ended (`turn.SshLock.lost`). When it has, the holder gives
+  the turn back and asks for it again instead of merging in a turn another landing may have
+  taken. A batch member reads its holder's session, and a lost one ends the batch there.
 - The turn is not a safety gate. A landing that waits `merge_timeout` for it, or that cannot
   reach daniel-box, goes on without it, marks its draft ready and merges.
 - The wait for the turn counts as waited. The merge wait gets one `merge_timeout` after it,

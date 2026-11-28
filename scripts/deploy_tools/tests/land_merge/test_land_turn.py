@@ -3,6 +3,7 @@
 Run: uv run pytest scripts/deploy_tools/tests/land_merge/test_land_turn.py
 """
 
+import subprocess
 from dataclasses import replace
 
 import pytest
@@ -197,6 +198,27 @@ def test_a_lock_that_cannot_be_opened_does_not_stop_the_landing(landing, capsys)
     land_in_turn(ln)
     assert call_order(calls)[-1] == "merge"
     assert "(denied); going on without a turn" in capsys.readouterr().out
+
+
+def test_a_turn_whose_ssh_session_ended_is_taken_again_before_the_merge(
+    landing, capsys
+):
+    ended = subprocess.Popen(["true"], text=True)
+    ended.wait()
+    ln, calls = turn_landing(landing, polls=(OPEN, OPEN, MERGED), turn=[ended, True])
+    land_in_turn(ln)
+    turns = ("try_turn", "release_turn", "merge")
+    assert [name for name in call_order(calls) if name in turns] == [
+        "try_turn",
+        "release_turn",
+        "try_turn",
+        "merge",
+        "release_turn",
+    ]
+    out = capsys.readouterr().out
+    assert (
+        "gave the landing turn back because the ssh session that held it ended" in out
+    )
 
 
 def test_the_turn_is_given_up_when_the_landing_ends_without_merging(landing):

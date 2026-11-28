@@ -94,6 +94,14 @@ def test_a_line_longer_than_a_batch_leaves_the_rest_waiting(batch_of):
     assert hub.labels["9"] == set()
 
 
+def test_a_full_batch_checks_no_draft_past_its_cap(batch_of, capsys):
+    ln, _, _ = batch_of(drafts=("2", "3", "5", "7", "8", "9"))
+    land(ln)
+    out = capsys.readouterr().out
+    assert "checking PR #8 from the line" in out
+    assert "checking PR #9 from the line" not in out
+
+
 def test_a_landing_with_nobody_in_the_line_lands_its_draft_alone(batch_of, capsys):
     ln, hub, _ = batch_of()
     land(ln)

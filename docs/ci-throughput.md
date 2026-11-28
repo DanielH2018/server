@@ -353,8 +353,9 @@ plus about 10 s.
 `node_package_case-daniel-box` 179 s on run 46135097191, so the cases step falls by only
 10 to 13 s. The 330 s target needs the node case shortened, or the cases legs started before
 `host_packages_build` ends ([#10644](https://github.com/DanielH2018/server/issues/10644)).
-The node case runs no step through `Cases.case`, so its `[DONE]` line names no slowest
-step.
+`node_package_case` times each install step into `case_seconds`, so its `[DONE]` line names
+the three slowest steps with their seconds; the next host-change run's log says which step to
+shorten.
 
 The split adds one runner's setup to each job. A run with no host change gains one job and
 about 35 runner-seconds. A run with a host change gains two jobs and about 120

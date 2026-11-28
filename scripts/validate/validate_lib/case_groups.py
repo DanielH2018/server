@@ -10,10 +10,11 @@ group republishes that repository. So `isolate` gives each group a shallow copy 
 `secrets_case.seal_pi` rewrites `debs` labels such as `pi-head`, so a group never sees another
 group's sealed build.
 
-Each group's block ends with a `[DONE]` line holding its wall time. A group that ran more than
-one case through `Cases.case`, such as `upgrade_path`'s chain, also names its three slowest
-cases with their seconds there, because its output reaches the log only when it ends and the
-log's timestamps cannot time a case.
+Each group's block ends with a `[DONE]` line holding its wall time. A group that timed more than
+one entry in `case_seconds` also names its three slowest with their seconds there, because its
+output reaches the log only when it ends and the log's timestamps cannot time one. An entry is
+a case that ran through `Cases.case`, such as one of `upgrade_path`'s chain, or a step of
+`node_package_case`.
 
 Groups run on threads, not processes, so a group looked up at call time is the one that runs.
 While they run, `sys.stderr` is a `StderrByThread` that holds each group's output until the
@@ -184,11 +185,11 @@ def _run_one(
 
 
 def _slowest_cases(case_seconds: dict[str, float]) -> str:
-    """The `[DONE]` line's `; slowest cases: <name> <N>s, ...` tail, or "" for one case or none."""
+    """The `[DONE]` line's `; slowest: <name> <N>s, ...` tail, or "" for one timing or none."""
     if len(case_seconds) < 2:
         return ""
     slowest = sorted(case_seconds.items(), key=lambda item: -item[1])[:3]
-    return "; slowest cases: " + ", ".join(f"{name} {s:.0f}s" for name, s in slowest)
+    return "; slowest: " + ", ".join(f"{name} {s:.0f}s" for name, s in slowest)
 
 
 def run_groups(

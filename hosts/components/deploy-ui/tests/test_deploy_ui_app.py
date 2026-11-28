@@ -98,6 +98,7 @@ def app(tmp_path, lock_dir):
         port=0,
         tree_lock=lock_dir / TREE_LOCK_NAME,
         proc_locks=tmp_path / "proc_locks",
+        land_locks=tmp_path / "run_lock",
     )
     return deploy_ui.App(cfg, run=FakeRun(_table(lock_dir)))
 
@@ -179,7 +180,9 @@ def test_inflight_ignores_other_lock_files_in_the_tree_locks_directory_is_flagge
     monkeypatch.setenv("DEPLOY_UI_TREE_LOCK", str(lock_dir / TREE_LOCK_NAME))
     monkeypatch.setenv("DEPLOY_UI_LOCKS", str(lock_dir))
     cfg = dataclasses.replace(
-        deploy_ui.Config.from_env(), proc_locks=tmp_path / "proc_locks"
+        deploy_ui.Config.from_env(),
+        proc_locks=tmp_path / "proc_locks",
+        land_locks=tmp_path / "run_lock",
     )
     run = FakeRun(_table(lock_dir))
     b = body(deploy_ui.App(cfg, run=run).get("/api/inflight"))
@@ -201,6 +204,7 @@ def test_inflight_with_no_lock_files_says_so_is_flagged(tmp_path):
         port=0,
         tree_lock=empty / TREE_LOCK_NAME,
         proc_locks=tmp_path / "proc_locks",
+        land_locks=tmp_path / "run_lock",
     )
     run = FakeRun(dict(TABLE))
     b = body(deploy_ui.App(cfg, run=run).get("/api/inflight"))
@@ -217,6 +221,7 @@ def test_inflight_unreadable_proc_locks_is_unavailable_is_flagged(tmp_path, lock
         port=0,
         tree_lock=lock_dir / TREE_LOCK_NAME,
         proc_locks=tmp_path / "missing",
+        land_locks=tmp_path / "run_lock",
     )
     b = body(deploy_ui.App(cfg, run=FakeRun(_table(lock_dir))).get("/api/inflight"))
     assert "missing" in b["unavailable"]

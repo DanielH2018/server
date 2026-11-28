@@ -42,7 +42,8 @@ because the daemon's `homelab-games` token can change the replica count of the D
 
 ## In flight
 
-The panel reads the git-tree lock only. The unit passes its path in as
+The lock panel reads the git-tree lock only; the turn's locks are the *Landing queue*'s. The
+unit passes its path in as
 `DEPLOY_UI_TREE_LOCK`, and the panel lists no other lock file
 (`hosts/components/deploy-ui/tests/test_deploy_ui_app.py::test_inflight_ignores_other_lock_files_in_the_tree_locks_directory_is_flagged`).
 A missing file leaves `locks_watched` empty, which the page renders as its own state rather
@@ -84,28 +85,70 @@ The daemon runs outside the venv. The unit renders `DEPLOY_UI_TREE_LOCK` from
 
 ## Landing queue
 
-The *Landing queue* table opens the page. It lists each `land` row of `/api/inflight` with the
-step that landing is at: the step boxes, the newest `== arm` or `== <n>/<of>` header, and the
-newest line under it. That line names the sub-state, such as "waiting for the landing turn" or
-the promotion wait. The page renders the queue from the in-flight poll, so it adds no request.
+The *Landing queue* table opens the page. It reads each landing's state record, the file
+`scripts/deploy_tools/land_lib/transitions.py` rewrites at each change of state, and nothing on
+it comes from a log sentence. The records sit in `/run/lock/homelab-land-line/` on daniel-box,
+the turn host, and a landing on daniel-server writes its record there through ssh, so the
+table shows the landings of both hosts. `files/deploy_ui_lib/deploy_ui_states.py` reads them,
+and `/api/inflight` carries them as `landings`. The page renders the table from the in-flight
+poll, so it adds no request, and it makes no GitHub call beyond the cached PR title.
 
-`reads.landing_step` finds the step, and `App._step` feeds it every line of the log. The viewer's
-`read_log` keeps only the first `MAX_LOG_BYTES`, and the current step is the last header
-(`hosts/components/deploy-ui/tests/test_deploy_ui_landings.py::test_inflight_step_comes_from_past_the_viewer_cap_is_flagged`).
-A row whose log is not a readable landing log carries `step: null`, and a failed read never
-makes the panel unavailable, because `cancel` reads the panel for its pids
-(`hosts/components/deploy-ui/tests/test_deploy_ui_landings.py::test_inflight_unreadable_log_leaves_step_blank_and_panel_up_is_flagged`).
+- **Each row** is one PR's newest record: its state, by the label `STATE_LABELS` gives it, the
+  time in that state, the states it passed through, and its progress (`done`/`total` `what`).
+  `STATE_LABELS` holds a label for every member of `transitions.State`
+  (`hosts/components/deploy-ui/tests/test_deploy_ui_states.py::test_every_landing_state_has_a_label_is_clean`),
+  and a state it does not know renders by its raw name
+  (`hosts/components/deploy-ui/tests/test_deploy_ui_states.py::test_a_state_the_page_does_not_know_renders_by_its_raw_name_is_flagged`).
+  A record that names its verdict, or that is older than a day, is not shown, and a PR landed
+  by two users shows the newer record
+  (`hosts/components/deploy-ui/tests/test_deploy_ui_states.py::test_the_newest_record_of_a_pr_wins_and_a_verdict_leaves_the_queue_is_flagged`).
+- **The order** is the landing that holds the turn, then each waiting landing with its
+  position, then the landings that stepped out, then the rest
+  (`hosts/components/deploy-ui/tests/test_deploy_ui_states.py::test_inflight_lists_both_hosts_landings_with_state_progress_and_queue_is_clean`).
+  The newest of `queued`, `holding`, `yielded`, `no-turn`, `rejoining` and `merged` in a
+  record's history places it: `holding` holds the turn, `queued` waits and `yielded` stepped
+  out. The waiting rank by the time each entered `queued`. The turn goes to whichever landing
+  polls first (`scripts/deploy_tools/land_lib/core/queue_machine.py:may_take`), so a position is the order the
+  landings began waiting, not the order the turn serves them
+  (`hosts/components/deploy-ui/tests/test_deploy_ui_states.py::test_waiting_landings_rank_by_when_they_queued_then_the_stepped_out_is_clean`).
+- **A landing that died** shows `died`, leaves the queue and sorts last. A record's pid
+  belongs to the host that wrote it. A daniel-box landing is alive while its pid is in
+  `/proc`
+  (`hosts/components/deploy-ui/tests/test_deploy_ui_states.py::test_a_landing_whose_process_is_gone_here_leaves_the_queue_is_flagged`).
+  A daniel-server landing is alive while its `homelab-land-pr-<n>.lock` on daniel-box is
+  held, because it holds that lock over ssh and daniel-box frees it once the heartbeat stops
+  (`scripts/deploy_tools/land_lib/pr_lock.py`). A free PR lock does not prove it died: a
+  landing goes on without the lock when it cannot take it or its ssh session ends. So that
+  row shows `liveness unknown` (`alive: null`), leaves the numbered queue so it cannot push
+  a live waiter down, and sorts between the live and the died
+  (`hosts/components/deploy-ui/tests/test_deploy_ui_states.py::test_a_landing_on_another_host_without_its_pr_lock_is_unknown_not_dead_is_flagged`).
+- **Any user can create a file in the line's directory**, so the reader opens a record
+  without following a link or blocking, reads only a regular file of at most
+  `MAX_RECORD_BYTES`, and skips one that does not decode
+  (`hosts/components/deploy-ui/tests/test_deploy_ui_states.py::test_a_link_a_fifo_or_undecodable_bytes_at_a_records_name_is_skipped_is_flagged`).
+- **The turn's locks** show above the table: the turn lock, the serial lock and the PR in
+  `homelab-land-serial.holder` while that PR's own lock is held, and the slots in use, all from
+  `/proc/locks` (`turn`;
+  `hosts/components/deploy-ui/tests/test_deploy_ui_states.py::test_turn_locks_name_the_serial_holder_and_count_the_slots_is_clean`).
+  The daemon cannot import land_lib, so the file names are copies, held to land_lib's by
+  `hosts/components/deploy-ui/tests/test_deploy_ui_states.py::test_the_lock_names_are_land_libs_is_clean`.
+- A records directory or a record that cannot be read sets `landings_unavailable`, which the
+  page shows in red, and leaves the rest of the panel up, because `cancel` reads the panel for
+  its pids
+  (`hosts/components/deploy-ui/tests/test_deploy_ui_states.py::test_an_unreadable_record_is_named_and_the_others_still_show_is_flagged`).
+  A landing writes its record with the writer's umask, so a record another user leaves at
+  `0660` is one the daemon's user cannot read.
+- A daniel-box landing's row links its log, joined to its `land` row by PR number: the record's
+  pid is the landing's python, and the `land` row's is its family root.
 
-The rows sort furthest step first, then longest running
-(`hosts/components/deploy-ui/tests/test_deploy_ui_page_js.py::test_queue_lists_the_furthest_step_first_then_the_longest_running_is_clean`).
+`test_deploy_ui_page_js.py` runs the page's own script under node against a stubbed DOM, so
+it tests the code the browser loads; it skips where node is absent
+(`hosts/components/deploy-ui/tests/test_deploy_ui_page_js.py::test_queue_renders_the_daemons_order_with_each_landings_place_is_clean`).
 Both tables show elapsed time as minutes and seconds, `54m 03s`, and keep counting minutes past
 the hour
 (`hosts/components/deploy-ui/tests/test_deploy_ui_page_js.py::test_elapsed_reads_as_minutes_and_seconds_is_clean`).
-`test_deploy_ui_page_js.py` runs the page's own script under node against a stubbed DOM, so
-it tests the code the browser loads; it skips where node is absent.
-That is a display order, not a turn order. The landing turn and slot locks are taken by
-polling, not FIFO, so the page numbers no positions. The queue reads only the logs; the lock
-panel still watches the tree lock alone.
+`probe.py landing` carries `landings` and `turn` from the same read, and prints one line per
+landing (`scripts/diagnostics/probe_lib/landing_blockers.py:queue_line`).
 
 ## Writes
 

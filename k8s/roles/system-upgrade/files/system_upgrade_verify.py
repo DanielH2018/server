@@ -22,6 +22,7 @@ Run: python3 system_upgrade_verify.py (in the Job; it takes no arguments)
 """
 
 import argparse
+import functools
 import hashlib
 import json
 import os
@@ -103,14 +104,11 @@ def main(
     env: Mapping[str, str] | None = None,
     read: Callable[[str], dict] | None = None,
 ) -> int:
-    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser = argparse.ArgumentParser(description=(__doc__ or "").splitlines()[0])
     parser.parse_args(argv)
     env = os.environ if env is None else env
     if read is None:
-        token = Path(TOKEN_FILE).read_text().strip()
-
-        def read(name: str) -> dict:
-            return read_node(name, token)
+        read = functools.partial(read_node, token=Path(TOKEN_FILE).read_text().strip())
 
     try:
         line = check(read(env["NODE_NAME"]), env)
