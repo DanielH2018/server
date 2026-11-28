@@ -363,6 +363,24 @@ def test_a_pr_lock_hold_whose_client_stops_writing_frees_the_lock_with_its_stdin
         hold.communicate()
 
 
+def test_a_landing_holds_its_pr_lock_over_ssh_past_three_heartbeats(
+    tmp_path, ssh_here, monkeypatch
+):
+    monkeypatch.delenv(turn.TURN_DIR_ENV)
+    beat = 0.2
+    lock = _live_landing("7", hostname="daniel-server", directory=tmp_path, beat=beat)
+    try:
+        time.sleep(10 * beat)
+        holder = pr_lock.take("7", "daniel-box", tmp_path)
+        assert isinstance(holder, pr_lock.Holder)
+        assert holder.pid == str(os.getpid())
+    finally:
+        lock.release()
+    free = pr_lock.take("7", "daniel-box", tmp_path)
+    assert isinstance(free, pr_lock.Held)
+    free.release()
+
+
 # The threads are the xdist worker's; `land.sh --detach` forks single-threaded. The ssh
 # session passes to the fork, so this process never waits for it to end.
 @pytest.mark.filterwarnings(
