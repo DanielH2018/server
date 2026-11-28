@@ -23,9 +23,11 @@ The checkout's `land.sh` is a child process, not an exec, so this process outliv
 first and runs this inside the fork, so the checkout lives until the landing ends.
 
 The checkout lives under `checkouts_root()`, on disk: `/tmp` on daniel-box is a tmpfs, where
-each 353 MB checkout held RAM. SIGTERM unwinds through the `finally` too. A landing killed
-outright leaves its checkout behind, so each checkout carries an `flock` that this process and
-the child landing hold, and every fresh landing first removes the checkouts no process holds.
+each 353 MB checkout held RAM. SIGTERM unwinds through the `finally` too. This process first
+passes the signal to the child landing and waits for it to end, so the child neither keeps the
+landing turn nor runs on in a removed checkout. A landing killed outright leaves its checkout
+behind, so each checkout carries an `flock` that this process and the child landing hold, and
+every fresh landing first removes the checkouts no process holds.
 """
 
 import contextlib
@@ -51,6 +53,8 @@ TURN_FD_ENV = "LAND_TURN_FD"
 CHILD_ENV = "LAND_FRESH_CHILD"
 # Each git step is a fetch or a local worktree change; ten minutes bounds a hung remote.
 GIT_TIMEOUT_S = 600
+# How long a stopped landing waits for its child to record its stop before killing it.
+STOP_WAIT_S = 60
 CHECKOUT_PREFIX = "land-fresh-"
 
 
@@ -96,6 +100,18 @@ class CheckoutFailed(Exception):
     """The fresh checkout's `land.sh` never started: the checkout or the exec failed."""
 
 
+class Stopped(KeyboardInterrupt):
+    """A SIGTERM or SIGINT that `dies_on_a_signal` turned into an unwind.
+
+    Attributes:
+      signum: the signal's number.
+    """
+
+    def __init__(self, signum: int) -> None:
+        super().__init__(f"signal {signum}")
+        self.signum = signum
+
+
 def grading_argv(opts: Options, since: str) -> list[str]:
     """`argv` that grades the merged PR `opts` names, with no flag that merges or forks.
 
@@ -115,7 +131,7 @@ def land_fresh(
     argv: list[str],
     turn_fd: int | None = None,
     git: Callable[..., subprocess.CompletedProcess[str]] = _git,
-    run: Callable[..., subprocess.CompletedProcess] = subprocess.run,
+    popen: Callable[..., subprocess.Popen] = subprocess.Popen,
 ) -> int:
     """Run `land.sh argv` from a new detached worktree of the primary at origin/master.
 
@@ -130,6 +146,8 @@ def land_fresh(
 
     Raises:
       CheckoutFailed: no child landing started, so nothing printed or recorded a verdict.
+      Stopped: a SIGTERM or SIGINT arrived. The child got the same signal and has ended, or
+        was killed after `STOP_WAIT_S`, before the checkout is removed.
     """
     root = checkouts_root()
     root.mkdir(parents=True, exist_ok=True)
@@ -156,18 +174,35 @@ def land_fresh(
         if turn_fd is not None:
             inherit["pass_fds"] = (lock_fd, turn_fd)
             inherit["env"][TURN_FD_ENV] = str(turn_fd)
-        try:
-            with dies_on_a_signal():
-                return run(
-                    [str(path / LAND_SH), *argv], check=False, **inherit
-                ).returncode
-        except OSError as exc:
-            raise CheckoutFailed(
-                f"--fresh could not start {LAND_SH} in its checkout ({exc})"
-            ) from exc
+        with dies_on_a_signal():
+            try:
+                child = popen([str(path / LAND_SH), *argv], **inherit)
+            except OSError as exc:
+                raise CheckoutFailed(
+                    f"--fresh could not start {LAND_SH} in its checkout ({exc})"
+                ) from exc
+            try:
+                return child.wait()
+            except Stopped as stop:
+                _stop_child(child, stop.signum)
+                raise
     finally:
         _remove(primary, path, git)
         os.close(lock_fd)
+
+
+def _stop_child(child: subprocess.Popen, signum: int) -> None:
+    """Pass `signum` to `child` and wait for it to unwind; kill it after `STOP_WAIT_S`.
+
+    The child is `land.sh`, which execs `uv run`, and `uv run` passes SIGTERM on to the
+    landing. A SIGKILL here would instead orphan that landing with the turn's descriptor.
+    """
+    child.send_signal(signum)
+    try:
+        child.wait(timeout=STOP_WAIT_S)
+    except subprocess.TimeoutExpired:
+        child.kill()
+        child.wait()
 
 
 def sweep_dead_checkouts(
@@ -232,16 +267,15 @@ def dies_on_a_signal() -> Generator[None]:
 
     Default SIGTERM disposition terminates the interpreter outright, skipping every `finally`
     -- which for `land_fresh` and `tools.gate_snapshot` leaves a worktree registered in the
-    primary that nothing collects. `KeyboardInterrupt` rather than a new exception type:
-    `land.py` catches neither (its own `finally` suppresses `Exception` only, so this
-    propagates through it after the ledger row is written), and reusing it keeps a SIGTERM'd
-    landing and a Ctrl-C'd one on one path. `subprocess.run` kills its child on the way out.
-    The previous handlers are restored on the way out, because the test suite runs this in
-    pytest's main thread.
+    primary that nothing collects. It raises `Stopped`, a `KeyboardInterrupt`: `land.py`
+    catches no `KeyboardInterrupt` (its own `finally` suppresses `Exception` only, so this
+    propagates through it after the ledger row is written), and a SIGTERM'd landing and a
+    Ctrl-C'd one stay on one path. The previous handlers are restored on the way out, because
+    the test suite runs this in pytest's main thread.
     """
 
     def raise_it(signum, _frame):
-        raise KeyboardInterrupt(f"signal {signum}")
+        raise Stopped(signum)
 
     previous = {s: signal.getsignal(s) for s in (signal.SIGTERM, signal.SIGINT)}
     for sig in previous:

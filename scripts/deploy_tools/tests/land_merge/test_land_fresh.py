@@ -8,6 +8,7 @@ import fcntl
 import os
 import signal
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -35,19 +36,29 @@ def cache_home(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     return tmp_path / "home" / ".cache"
 
 
+class _Exited:
+    """A child landing that has already ended with `rc`."""
+
+    def __init__(self, rc: int) -> None:
+        self.rc = rc
+
+    def wait(self, timeout: float | None = None) -> int:
+        return self.rc
+
+
 def _child(seen: list):
-    def run(argv, check, env, **_inherit):
+    def popen(argv, env, **_inherit):
         checkout = Path(argv[0]).parents[2]
         assert env[fresh.CHILD_ENV]
         seen.append((argv, (checkout / "reader.py").read_text(), checkout))
-        return subprocess.CompletedProcess(argv, 75)
+        return _Exited(75)
 
-    return run
+    return popen
 
 
 def test_a_fresh_landing_runs_land_sh_from_a_checkout_of_the_fetched_tip(primary):
     seen: list = []
-    rc = fresh.land_fresh(primary, ["--pr", "7"], run=_child(seen))
+    rc = fresh.land_fresh(primary, ["--pr", "7"], popen=_child(seen))
     ((argv, reader, checkout),) = seen
     assert rc == 75
     assert argv[1:] == ["--pr", "7"] and argv[0].endswith(fresh.LAND_SH)
@@ -60,11 +71,11 @@ def test_a_fresh_landing_runs_land_sh_from_a_checkout_of_the_fetched_tip(primary
 def test_a_fresh_landing_handed_the_turn_inherits_its_descriptor(primary):
     seen: list = []
 
-    def run(argv, check, **inherit):
+    def popen(argv, **inherit):
         seen.append(inherit)
-        return subprocess.CompletedProcess(argv, 0)
+        return _Exited(0)
 
-    fresh.land_fresh(primary, ["--pr", "7"], turn_fd=9, run=run)
+    fresh.land_fresh(primary, ["--pr", "7"], turn_fd=9, popen=popen)
     [inherit] = seen
     assert 9 in inherit["pass_fds"]
     assert inherit["env"][fresh.TURN_FD_ENV] == "9"
@@ -72,23 +83,49 @@ def test_a_fresh_landing_handed_the_turn_inherits_its_descriptor(primary):
 
 def test_the_fresh_checkout_goes_in_the_cache_on_disk_not_tmp(primary, cache_home):
     seen: list = []
-    fresh.land_fresh(primary, ["--pr", "7"], run=_child(seen))
+    fresh.land_fresh(primary, ["--pr", "7"], popen=_child(seen))
     ((_, _, checkout),) = seen
     assert checkout.parent == cache_home / "homelab" / "land-fresh"
 
 
-def test_a_landing_stopped_by_sigterm_still_removes_its_checkout(primary):
-    seen: list = []
+# Stands in for the checkout's landing: it traps SIGTERM, sends SIGTERM to the landing that
+# started it once that landing is waiting on it, and records whether its checkout still existed
+# when the signal came back.
+_STOPPED_CHILD = """
+import os, signal, sys, time
+checkout, record = sys.argv[1], sys.argv[2]
 
-    def run(argv, check, **inherit):
-        seen.append(Path(argv[0]).parents[2])
-        os.kill(os.getpid(), signal.SIGTERM)
-        raise AssertionError("SIGTERM did not unwind the landing")
+def stop(signum, _frame):
+    open(record, "w").write(f"{signal.Signals(signum).name} {os.path.isdir(checkout)}")
+    sys.exit(7)
+
+signal.signal(signal.SIGTERM, stop)
+time.sleep(0.5)
+os.kill(os.getppid(), signal.SIGTERM)
+time.sleep(30)
+"""
+
+
+def test_a_stopped_landing_passes_the_signal_to_its_child_before_removing_its_checkout(
+    primary, tmp_path
+):
+    record = tmp_path / "child-stop"
+    started: list = []
+
+    def popen(argv, **inherit):
+        checkout = Path(argv[0]).parents[2]
+        child = subprocess.Popen(
+            [sys.executable, "-c", _STOPPED_CHILD, str(checkout), str(record)]
+        )
+        started.append((checkout, child))
+        return child
 
     before = signal.getsignal(signal.SIGTERM)
-    with pytest.raises(KeyboardInterrupt):
-        fresh.land_fresh(primary, ["--pr", "7"], run=run)
-    [checkout] = seen
+    with pytest.raises(fresh.Stopped):
+        fresh.land_fresh(primary, ["--pr", "7"], popen=popen)
+    [(checkout, child)] = started
+    assert record.read_text() == "SIGTERM True"
+    assert child.returncode == 7
     assert not checkout.exists()
     assert signal.getsignal(signal.SIGTERM) is before
 
@@ -124,7 +161,7 @@ def test_a_checkout_git_could_not_make_lands_nothing(tmp_path):
     not_a_repo.mkdir()
     seen: list = []
     with pytest.raises(fresh.CheckoutFailed, match="git fetch"):
-        fresh.land_fresh(not_a_repo, ["--pr", "7"], run=_child(seen))
+        fresh.land_fresh(not_a_repo, ["--pr", "7"], popen=_child(seen))
     assert seen == []
 
 
