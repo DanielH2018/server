@@ -163,7 +163,7 @@ def test_a_wait_whose_retake_of_the_turn_fails_reads_no_turn():
     assert s.in_turn is False
 
 
-def test_a_batch_member_proves_its_head_in_the_turn_its_holder_holds():
+def test_a_batch_member_reads_its_holders_turn_not_its_own():
     member = Scenario(
         polls=[("OPEN", "MERGEABLE", HEAD), ("MERGED", "UNKNOWN", HEAD)],
         ci=[(CI_PENDING, "CI pending"), (CI_GREEN, "CI green")],
