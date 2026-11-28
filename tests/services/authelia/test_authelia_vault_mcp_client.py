@@ -1,8 +1,9 @@
 """Authelia's `vault-mcp` OIDC client admits the operator alone, behind 2FA, PKCE and consent.
 
 The client is the only way into the vault connector on its public route, so its policy and
-grant settings are the gate. `authelia_k8s_vault_mcp_client` is the switch that cuts the
-connector off.
+grant settings are the gate. It is a public client with no secret, so S256 PKCE, explicit
+consent and the operator-only `two_factor` policy are all that stand between a sign-in and the
+vault. `authelia_k8s_vault_mcp_client` is the switch that cuts the connector off.
 """
 
 from lib import yaml_fast
@@ -36,25 +37,30 @@ def test_the_vault_mcp_client_admits_only_the_operator_at_two_factor():
     }
 
 
+def test_the_vault_mcp_client_is_public_and_holds_no_secret():
+    (client,) = _vault_mcp_clients(_config()["identity_providers"]["oidc"])
+    assert client["public"] is True
+    assert client["token_endpoint_auth_method"] == "none"
+    assert "client_secret" not in client
+
+
 def test_the_vault_mcp_client_needs_s256_pkce_and_explicit_consent():
     (client,) = _vault_mcp_clients(_config()["identity_providers"]["oidc"])
     assert {
         key: client[key]
         for key in (
-            "public",
             "require_pkce",
             "pkce_challenge_method",
             "grant_types",
-            "token_endpoint_auth_method",
             "consent_mode",
+            "redirect_uris",
         )
     } == {
-        "public": False,
         "require_pkce": True,
         "pkce_challenge_method": "S256",
         "grant_types": ["authorization_code", "refresh_token"],
-        "token_endpoint_auth_method": "client_secret_post",
         "consent_mode": "explicit",
+        "redirect_uris": ["https://claude.ai/api/mcp/auth_callback"],
     }
 
 

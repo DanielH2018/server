@@ -376,20 +376,16 @@ before deciding what is due. Examples:
 - `authelia_oidc_hmac_secret` / `*_password_hash`: re-issues OIDC — re-pair jellyfin (the
   live OIDC client; beszel's client is provisioned but parked in `archive/`, re-pair only
   if reactivated).
-- `vault_mcp_oidc_client_secret` / `vault_mcp_oidc_client_secret_hash`: the claude.ai vault
-  connector's client secret and its digest, which rotate together. To mint both, run
-  `authelia crypto hash generate pbkdf2 --variant sha512 --random --random.length 72
-  --random.charset alphanumeric`, which prints the secret and its digest. Store both with
-  `sops`, run `cluster_vars.py write`, and land the PR. Then paste the new secret into the
-  connector's OAuth client settings on claude.ai. Until that paste, the connector's token
-  refreshes fail with `invalid_client`.
-- To cut claude.ai off from the vault, rotate both keys as above and skip the paste. The
-  connector's refreshes then fail with `invalid_client`. An access token Authelia already
-  issued stays valid for up to its 1h lifespan, because the vault-mcp server checks tokens
-  offline against the JWKS and does not introspect. Setting
-  `k8s/roles/authelia/defaults/main.yml:authelia_k8s_vault_mcp_client` to `false` has the same
-  effect without `sops`, and setting it back to `true` restores the client under its existing
-  secret. Either change takes effect once its PR lands.
+- `vault_mcp_oidc_client_secret` / `vault_mcp_oidc_client_secret_hash`: no rotation. The
+  claude.ai vault connector's Authelia client is public, with no secret, by the operator's
+  ruling of 2026-11-28, and no template reads either key (`k8s/roles/authelia/CLAUDE.md`,
+  *OIDC clients*). Both keys wait for removal from `secrets/secrets.yml`.
+- To cut claude.ai off from the vault, set
+  `k8s/roles/authelia/defaults/main.yml:authelia_k8s_vault_mcp_client` to `false`. No secret
+  rotation can revoke a public client. The change takes effect once its PR lands, and the
+  connector's sign-ins and refreshes then fail. An access token Authelia already issued stays
+  valid for up to its 1h lifespan, because the vault-mcp server checks tokens offline against
+  the JWKS and does not introspect. Setting the switch back to `true` restores the client.
 
 ### Authelia user passwords — mint the digest, then store both
 

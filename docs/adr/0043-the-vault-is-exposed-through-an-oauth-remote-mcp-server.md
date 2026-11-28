@@ -87,9 +87,13 @@ pod vault-mcp --+-- livesync-cli daemon --> /vault (plaintext, no backup)
   `secrets/secrets.yml`, so git cannot merge two such edits even when their keys differ.
 - **The plaintext lives in a PVC without a backup.** A lost `vault-mcp-vault` claim rebuilds
   from CouchDB, and a lost CouchDB rebuilds from an Obsidian device.
-- **claude.ai posts the client secret in the form body.** It sends `client_secret_post` and
-  never falls back to Basic
-  ([anthropics/claude-ai-mcp#667](https://github.com/anthropics/claude-ai-mcp/issues/667)).
+- **The static client is public, with no secret.** As a confidential client, claude.ai's token
+  calls failed, although the stored secret validated against its digest. Authelia answered "The
+  provided client secret did not match the registered client secret." The operator ruled on
+  2026-11-28 to make the client public. Explicit consent and the operator-only `two_factor` policy are then
+  the guards against a tricked approval, and S256 PKCE binds each code to its flow. A
+  dynamic-registration proxy would be no stronger. `k8s/roles/authelia/CLAUDE.md` (*OIDC
+  clients*) holds the evidence.
 
 The remaining traps the build hit are in `k8s/roles/vault-mcp/CLAUDE.md`.
 
