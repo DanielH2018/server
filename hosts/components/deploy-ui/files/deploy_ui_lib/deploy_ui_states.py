@@ -15,7 +15,7 @@ import json
 import os
 import re
 import stat
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from deploy_ui_lib.deploy_ui_reads import FileLock, LockKey, lock_key
@@ -140,10 +140,12 @@ class Records:
     Attributes:
         records: Each PR's newest readable record that has no verdict and is in the window.
         unavailable: Why the directory or some records could not be read; "" when all could.
+        ended: Each PR's newest record in the window that names its verdict.
     """
 
     records: list[Record]
     unavailable: str
+    ended: list[Record] = field(default_factory=list)
 
 
 def read_records(directory: Path, now: float) -> Records:
@@ -183,6 +185,7 @@ def read_records(directory: Path, now: float) -> Records:
         f"{unreadable} state record(s) in {directory.name} cannot be read"
         if unreadable
         else "",
+        [r for r in newest.values() if r.state == VERDICT],
     )
 
 

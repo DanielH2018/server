@@ -151,6 +151,55 @@ the hour
 `probe.py landing` carries `landings` and `turn` from the same read, and prints one line per
 landing (`scripts/diagnostics/probe_lib/landing_blockers.py:queue_line`).
 
+## Changes
+
+The *Changes* table shows one row for each open change, keyed by its PR, or by its fan-out
+batch before the batch has a PR. Each row names its stage, its state within the stage, the
+time in that state and what it waits on. `/api/changes` carries the rows, and
+`hosts/components/deploy-ui/files/deploy_ui_lib/deploy_ui_changes.py:change_rows` is the one mapping from the sources to
+a stage (`hosts/components/deploy-ui/tests/test_deploy_ui_changes.py::test_a_batch_its_pr_and_its_landing_are_one_row_in_the_landing_stage_is_clean`).
+Each stage's state comes from the tool that owns it:
+
+- **Implementation and review:** the batch's running phase, which the review pipeline writes to
+  `.fanout/phase`. `fanout.py board` reads it with the unit's state, one read per host and
+  no GitHub call (`scripts/dev/fanout_lib/batch_board.py:board`).
+- **Waiting to land:** the PR's draft flag and CI, from the PR list `/api/prs` caches for 60
+  seconds. The view adds no GitHub call.
+- **Landing and deploying:** the landing's state record, split at the merge.
+- **Ended:** the record's verdict, and what the change waits on from the `next` field of the
+  newest `LAND-RESULT:` line this host can read: the batch's own landing log, then the logs of
+  *Landing logs*
+  (`hosts/components/deploy-ui/tests/test_deploy_ui_changes.py::test_an_ended_landing_names_the_next_action_its_land_result_gives_is_clean`).
+  A merged change whose `next` is `done` or unreadable shows its verdict for
+  `hosts/components/deploy-ui/files/deploy_ui_lib/deploy_ui_changes.py:FINISHED_S`, and any
+  other verdict for the records' window.
+
+The newest source decides a change's stage. A live landing beats a running batch, because a
+review batch's unit stays active through its own landing. A running batch beats a verdict
+older than its phase, because the pipeline resumes the implementer after some verdicts.
+
+The daemon cannot import land_lib or fanout_lib, so the landing states and the `next` actions
+are copies. A test holds each landing state in exactly one of the landing and deploying sets,
+and the `next` labels to `scripts/deploy_tools/land_lib/outcome.py:Next`
+(`hosts/components/deploy-ui/tests/test_deploy_ui_changes.py::test_every_stage_and_state_name_the_page_shows_is_its_owners_is_clean`).
+The review phase is the literal the review pipeline writes, which the fan-out's own tests
+assert
+(`scripts/dev/tests/fanout_review/test_fanout_review_second_round.py::test_a_medium_leftover_gets_a_second_fix_and_delta_review_that_can_clear_it`).
+The batch states are shown as `fanout.py board` names them, and the daemon branches only on its
+`running` flag. The page renders the names the daemon sends and holds no list of its own.
+
+`hosts/components/deploy-ui/files/deploy_ui_lib/deploy_ui_change_view.py:ChangeView` does the
+reads. It runs `fanout.py board` in the primary checkout here, and over ssh on each host in
+`DEPLOY_UI_FANOUT_REMOTES`, because an orchestrator keeps its run manifests in its own home. It
+caches the batches for `board_cache_s`, so every open tab shares one read. A read that fails
+is named in `batches_unavailable` and leaves the rows the other sources give, with their batch
+column blank
+(`hosts/components/deploy-ui/tests/test_deploy_ui_changes.py::test_a_failed_batch_read_is_named_and_leaves_the_pr_row_is_flagged`).
+A host that does not answer for its batches is named the same way, and blanks the batch state
+of its rows.
+A batch that stopped more than a day ago with no open PR and no landing is not shown. A merge
+drops a PR from the PR list, so the daemon remembers each branch's PR for its life.
+
 ## Writes
 
 Land spawns `land.sh` detached and logs to `~/.local/state/deploy-ui/`
@@ -274,7 +323,7 @@ A client that closes the connection mid-response adds a line,
 other than `request`, so the count below does not see the request twice
 (`hosts/components/deploy-ui/tests/test_deploy_ui_app.py::test_client_closing_mid_response_logs_one_line_no_traceback_is_flagged`).
 
-The page polls four panels every 10 seconds, an open game console polls too, and an open
+The page polls each panel every 10 seconds, an open game console polls too, and an open
 landing viewer polls `/api/log` every 2 seconds (`hosts/components/deploy-ui/files/deploy_ui.html`).
 Those polls show a tab was open, not that anyone used it, so they write no line. Count page
 loads and writes:

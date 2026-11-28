@@ -41,6 +41,7 @@ td.t{white-space:nowrap}td.at{max-width:560px}.latest{font:12px/1.5 ui-monospace
 <h2>Landing queue</h2><div id="inflight"></div>
 <section id="viewer" hidden><h2>Landing log <span class="mute" style="font-size:12px;font-weight:400">[ and ] switch</span></h2><div id="vtabs" class="tabs"></div><div id="vhead" class="vhead"></div><div id="vsteps" class="steps"></div>
 <div id="logbody"></div><div id="vverdict"></div><div id="vbar" class="bar"></div></section>
+<h2>Changes</h2><div id="changes"></div>
 <h2>Recently finished landings <button id="finToggle" class="link" onclick="setFin({hidden:!fin.hidden})"></button></h2><div id="landings"></div>
 <h2>Open pull requests</h2><div id="prs"></div>
 <h2>Game servers</h2><div id="games"></div>
@@ -93,6 +94,10 @@ function landings(b){lastLandings=b;const done=b.landings.filter(l=>!running.has
   const shown=fin.all?done:done.slice(0,FIN_SHOWN);
   const more=done.length>FIN_SHOWN?`<tr><td colspan="4"><button class="link" onclick="setFin({all:${!fin.all}})">${fin.all?'show the latest '+FIN_SHOWN:'show all '+done.length}</button></td></tr>`:'';
   return '<table><tr><th>PR</th><th>ended</th><th>verdict</th><th></th></tr>'+shown.map(l=>`<tr><td>${l.pr?prLink(l.pr):'<span class="mute">no PR</span>'}${l.title?`<br><span class="mute">${esc(l.title)}</span>`:''}</td><td>${ago(l.mtime)}</td><td>${l.verdict?`<span class="chip tone-${esc(l.verdict.tone)}">${esc(l.verdict.verdict)}</span>`:'<span class="mute">ended without a verdict</span>'}</td><td><button onclick="openLog('${esc(l.name)}')">log</button></td></tr>`).join('')+more+'</table>';}
+// Every stage and state name comes from the daemon; the page copies no list of them.
+function changes(b){const notes=['prs','landings','batches'].map(k=>b[k+'_unavailable']?`<p class="unavail">${k} unavailable: ${esc(b[k+'_unavailable'])}</p>`:'').join('');
+  if(!b.changes.length)return notes+'<p class="mute">no open changes</p>';
+  return notes+'<table><tr><th>change</th><th>stage</th><th>state</th><th>in state</th><th>waits on</th><th>batch</th></tr>'+b.changes.map(c=>`<tr><td>${c.pr?prLink(c.pr):'batch '+esc(c.batch.id)}${c.title?`<br><span class="mute">${esc(c.title)}</span>`:''}</td><td class="t">${esc(c.stage)}</td><td><b>${esc(c.label)}</b></td><td class="t">${c.in_state_s==null?'':dur(c.in_state_s)}</td><td>${esc(c.waits_on)}</td><td>${c.batch?`${esc(c.batch.id)}<br><span class="mute">${esc(c.batch.host)}${c.batch.state?' · '+esc(c.batch.state):''}</span>`:''}</td></tr>`).join('')+'</table>';}
 function prs(b){if(!b.prs.length)return '<p class="mute">no open PRs</p>';
   return '<table><tr><th>#</th><th>title</th><th>CI</th><th></th></tr>'+b.prs.map(p=>`<tr><td>${prLink(p.number)}</td><td>${esc(p.title)}${p.draft?' <span class="mute">draft</span>':''}<br><span class="mute">${esc(p.branch)}</span></td><td>${p.ci}</td><td><button onclick="{const s=prompt('--since SHA (master before the merge)');if(s)post('/api/land',{pr:'${p.number}',since:s})}">land</button></td></tr>`).join('')+'</table>';}
 
@@ -179,7 +184,7 @@ async function pollConsole(){if(!consoleGame)return;const old=document.getElemen
   const atBottom=!old||old.scrollTop+old.clientHeight>=old.scrollHeight-24;
   await panel('conbody',`/api/game-console?game=${encodeURIComponent(consoleGame)}`,consoleView);
   const el=document.getElementById('conlines');if(el&&atBottom)el.scrollTop=el.scrollHeight;}
-function refresh(){panel('games','/api/games',gameServers);pollConsole();panel('inflight','/api/inflight',inflight).then(()=>{if(!fin.hidden)panel('landings','/api/landings',landings);});panel('prs','/api/prs',prs);}
+function refresh(){panel('games','/api/games',gameServers);pollConsole();panel('inflight','/api/inflight',inflight).then(()=>{if(!fin.hidden)panel('landings','/api/landings',landings);});panel('prs','/api/prs',prs);panel('changes','/api/changes',changes);}
 document.getElementById('finToggle').textContent=fin.hidden?'show':'hide';document.getElementById('landings').hidden=fin.hidden;
 function fromHash(){const m=location.hash.match(/^#log\/(.+)$/);if(m&&decodeURIComponent(m[1])!==view.name)openLog(decodeURIComponent(m[1]));}
 window.addEventListener('hashchange',fromHash);fromHash();
