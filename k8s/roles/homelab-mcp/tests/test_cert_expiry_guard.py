@@ -56,9 +56,15 @@ def app(monkeypatch):
         "httpx",
         _stub("httpx", Client=lambda *a, **k: object(), Timeout=lambda *a, **k: None),
     )
-    recorder = _stub("obs_api", **vars(obs_api))
-    recorder.seen = []
-    recorder.get_json = lambda url: recorder.seen.append(url) or {}
+    seen: list[str] = []
+    recorder = _stub(
+        "obs_api",
+        **{
+            **vars(obs_api),
+            "seen": seen,
+            "get_json": lambda url: seen.append(url) or {},
+        },
+    )
     monkeypatch.setitem(sys.modules, "obs_api", recorder)
     monkeypatch.setitem(sys.modules, "starlette", _stub("starlette"))
     monkeypatch.setitem(

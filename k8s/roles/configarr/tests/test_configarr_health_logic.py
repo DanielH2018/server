@@ -9,7 +9,14 @@ HOUR = 3600.0
 MAX_AGE = 26 * HOUR
 
 
-def job(name, *, succeeded=1, completion=None, failed_at=None, label="configarr"):
+def job(
+    name,
+    *,
+    succeeded=1,
+    completion=None,
+    failed_at=None,
+    label: str | None = "configarr",
+):
     status = {}
     if succeeded:
         status["succeeded"] = succeeded
@@ -91,12 +98,18 @@ def test_empty_logs_are_down_not_a_clean_sync():
     assert "no logs" in msg
 
 
+def _latest_name(jobs):
+    latest = latest_finished(jobs, "configarr")
+    assert latest is not None
+    return latest["metadata"]["name"]
+
+
 def test_latest_finished_picks_by_finish_time_not_list_order():
     jobs = [
         job("configarr-new", completion="2026-08-08T04:30:12Z"),
         job("configarr-old", completion="2026-08-07T04:30:12Z"),
     ]
-    assert latest_finished(jobs, "configarr")["metadata"]["name"] == "configarr-new"
+    assert _latest_name(jobs) == "configarr-new"
 
 
 def test_unfinished_and_foreign_jobs_are_ignored():
@@ -106,16 +119,14 @@ def test_unfinished_and_foreign_jobs_are_ignored():
         job("other-cron-1", completion="2026-08-08T06:00:00Z", label="janitorr"),
         job("configarr-done", completion="2026-08-08T04:30:12Z"),
     ]
-    assert latest_finished(jobs, "configarr")["metadata"]["name"] == "configarr-done"
+    assert _latest_name(jobs) == "configarr-done"
 
 
 def test_a_deploy_triggered_job_counts_even_though_the_cronjob_does_not_own_it():
     # `kubectl create job --from=cronjob/configarr` copies jobTemplate.metadata but sets no
     # ownerReference. Selecting on the owner would ignore every deploy-time reconcile.
     manual = job("configarr-deploy", completion="2026-08-08T09:00:00Z")
-    assert (
-        latest_finished([manual], "configarr")["metadata"]["name"] == "configarr-deploy"
-    )
+    assert _latest_name([manual]) == "configarr-deploy"
 
 
 def test_latest_finished_is_none_when_only_a_run_is_in_flight():
