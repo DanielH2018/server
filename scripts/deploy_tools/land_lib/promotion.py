@@ -162,8 +162,10 @@ def wait_on_promotion(ln: Landing) -> None:
     # `homelab` alone gives its slot up and waits on to its verdict, so a serial PR's drain
     # stops waiting for it. The accepted cost: it can still be in flight while a serial PR
     # promotes, and if that promotion fails it ends `deploy-failed` for a hold it did not
-    # cause. Without a slot it still reads DEPLOY_HOLD once a poll: 120 core calls an hour
-    # each, 720 at six. The host wait and the health gate after it read no GitHub.
+    # cause. Without a slot it still reads DEPLOY_HOLD once a poll, 120 core calls an hour each,
+    # and nothing bounds how many such landings poll: each slot one frees lets the next landing
+    # in, so the count of 1 under a low core quota (`slots._cap`) does not bound them either.
+    # The host wait and the health gate after the promotion wait read no GitHub.
     result = ln.tools.flux.land_wait(
         sha,
         list(ln.flux_tags),

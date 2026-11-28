@@ -16,7 +16,8 @@ fewer than the cap of them (`turn.lock_below`), so a cap below `COUNT` counts ev
 dies frees its slot, and a slot held over ssh ends when its host stops writing the heartbeat
 (`turn.HEARTBEAT_S`).
 
-The count drops to 1 while the core quota runs low (`live_limit.low_quota`). When the turn host
+The count drops to 1 while the core quota runs low (`live_limit.low_quota`). It bounds only the
+landings that hold a slot: one that gave its slot up keeps polling outside it. When the turn host
 does not answer, a landing takes one of `FALLBACK_COUNT` slots on its own host instead, so each
 host is bounded on its own until the turn host answers again.
 
