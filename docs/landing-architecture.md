@@ -511,19 +511,19 @@ costs a turn. Its result is advisory, by ADR-0032.
 ## The deploy UI reads the machine's state
 
 `hosts/components/deploy-ui/` is the one browser view of landings in progress, by the
-operator's ruling of 2026-11-06. `probe.py landing` reads its API. It learns a landing's
-phase by matching the `== N/M` step headers in the landing's log and showing the last line
-under the newest one. Its tests hold those strings to a hand-written fixture, not to the
-code that prints them.
+operator's ruling of 2026-11-06. `probe.py landing` reads its API. The page reads each
+landing's state record, described below, and the turn, serial and slot locks. It shows the
+landings of both hosts in queue order, each with its state, its time in that state and its
+progress. Its log viewer still groups a log's lines by their `== N/M` step headers, but no
+state comes from a log sentence. `hosts/components/deploy-ui/CLAUDE.md`, *Landing queue*, has
+the rules.
 
-It cannot show:
+Two gaps remain:
 
-- which of Queued, Holding, Yielded or Proving a landing is in, unless a sentence says so;
-- how long a landing has been in a state, because the log has no times;
-- who holds the turn, who waits and in what order, the slots or the serial lock, because
-  it watches the git-tree lock only;
-- a landing on daniel-server, because it reads log files on daniel-box;
-- progress inside a state.
+- A yielded landing's record does not say what it waits for, because `step_out` enters
+  `yielded` with no progress.
+- Nothing removes old records. The page hides a record older than a day, and the sticky
+  directory lets only the writing user remove its own.
 
 ### One state record for each live landing
 
