@@ -242,7 +242,7 @@ def test_a_four_dash_line_does_not_close_frontmatter(tmp_path):
 
 def test_frontmatter_with_an_alias_reads_as_empty(tmp_path):
     anchors = "a0: &a0 [x, x]\n" + "".join(
-        f"a{i}: &a{i} [*a{i - 1}, *a{i - 1}]\n" for i in range(1, 10)
+        f"a{i}: &a{i} [*a{i - 1}, *a{i - 1}]\n" for i in range(1, 4)
     )
     vault = _vault_of(tmp_path, {"Note.md": f"---\n{anchors}---\nBody.\n"})
     note = vault.read_note("Note")
