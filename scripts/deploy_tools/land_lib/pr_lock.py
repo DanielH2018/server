@@ -217,20 +217,19 @@ class Held:
         self._drop()
         self._end = lambda: None
 
-    def for_fork(self, landing: Callable[[], int]) -> Callable[[], int]:
-        """`landing`, for a process forked from this one to run while it holds the lock.
+    def for_fork(self) -> Callable[[], None]:
+        """The call a process forked from this one makes first, to go on holding the lock.
 
         Call it just before the fork. It stops this process's heartbeat, so the fork copies no
-        thread that is partway through a write. The fork inherits `keep` but no thread, so the
-        call this returns starts the fork's own heartbeat before it runs `landing`.
+        thread. The fork inherits `keep` but no thread, so the call this returns starts the
+        fork's own heartbeat.
         """
         self._stop_beat()
 
-        def run() -> int:
+        def start() -> None:
             self._beat()
-            return landing()
 
-        return run
+        return start
 
 
 # The descriptors to keep, then the calls that write a record, end the lock, and drop this

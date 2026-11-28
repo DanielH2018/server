@@ -96,6 +96,18 @@ def test_a_lock_held_over_ssh_outlasts_many_heartbeats(tmp_path, ssh_here):
     free()
 
 
+def test_a_lock_whose_ssh_session_died_is_given_up_without_raising(
+    tmp_path, monkeypatch
+):
+    """A session ends unasked when the network drops or the host frees a silent lock."""
+    stubs = fake_bin(tmp_path / "bin", ssh="#!/usr/bin/env bash\necho held\n")
+    monkeypatch.setenv("PATH", path_with(stubs))
+    give_up = turn.try_take_over_ssh([tmp_path / "turn.lock"], beat=0.05)
+    assert give_up is not None
+    time.sleep(0.5)
+    give_up()
+
+
 def test_a_turn_host_that_does_not_answer_raises_oserror(tmp_path, monkeypatch):
     stubs = fake_bin(
         tmp_path / "bin",

@@ -274,16 +274,17 @@ def start_heartbeat(stdin: IO[str], beat: float) -> Callable[[], None]:
     own heartbeat on the descriptor it inherits.
 
     Returns:
-        The call that stops the heartbeat. It returns once the thread has ended, so a fork
-        made after it copies no write in progress.
+        The call that stops the heartbeat. It returns once the thread has ended, so `stdin`
+        can be closed after it, and a fork made after it copies no thread.
     """
     stop = threading.Event()
 
     def beats() -> None:
         while True:
             try:
-                stdin.write("\n")
-                stdin.flush()
+                # Unbuffered: a line left in the buffer by a broken pipe would raise again
+                # from `stdin.close()`.
+                os.write(stdin.fileno(), b"\n")
             except OSError, ValueError:
                 return
             if stop.wait(beat):
