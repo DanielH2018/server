@@ -361,6 +361,8 @@ ignore_names = [
   "expiry",
   # Dataclass fields serialised with asdict() into the fan-out review record.
   "base_error", "ci_rerun_jobs",
+  # A deploy-ui ChangeRow field serialised with asdict() into /api/changes.
+  "in_state_s",
   # A Batch field the run manifest records for whoever reads the file; no code reads it back.
   "excused_paths",
   # Read by test_host_census.py and named in docs/host-packages.md.

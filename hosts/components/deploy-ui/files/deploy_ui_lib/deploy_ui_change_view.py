@@ -6,6 +6,7 @@ manifests in its own home. They are cached for `Config.board_cache_s`, so every 
 shares one read.
 """
 
+import dataclasses
 import json
 import threading
 import time
@@ -79,12 +80,11 @@ class ChangeView:
             batches,
             dict(self._branch_prs),
             self._land_results(),
+            self._titles,
             now,
         )
-        for row in rows:
-            row["title"] = row["title"] or self._titles.get(row["pr"], "")
         return {
-            "changes": rows,
+            "changes": [dataclasses.asdict(r) for r in rows],
             "prs_unavailable": prs_unavailable,
             "landings_unavailable": found.unavailable,
             "batches_unavailable": batches_unavailable,

@@ -162,7 +162,7 @@ Each stage's state comes from the tool that owns it:
 
 - **Implementation and review:** the batch's running phase, which the review pipeline writes to
   `.fanout/phase`. `fanout.py board` reads it with the unit's state, one read per host and
-  no GitHub call (`scripts/dev/fanout_lib/board.py:board`).
+  no GitHub call (`scripts/dev/fanout_lib/batch_board.py:board`).
 - **Waiting to land:** the PR's draft flag and CI, from the PR list `/api/prs` caches for 60
   seconds. The view adds no GitHub call.
 - **Landing and deploying:** the landing's state record, split at the merge.

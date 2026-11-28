@@ -16,7 +16,7 @@ from deploy_tools.land_lib import line
 from deploy_tools.land_lib.core.landing_state import State
 from deploy_tools.land_lib.outcome import Next
 from deploy_tools.land_lib.transitions import Transitions
-from dev.fanout_lib import board
+from dev.fanout_lib import batch_board
 from dev.fanout_lib.manifest import Batch, Manifest, save
 from dev.fanout_lib.transport import Tools
 
@@ -62,7 +62,7 @@ def _board(manifests: Path, reply: str) -> subprocess.CompletedProcess:
     host = lambda *_a, **_k: subprocess.CompletedProcess([], 0, reply, "")
     out = io.StringIO()
     with contextlib.redirect_stdout(out):
-        rc = board.main(["--manifest-root", str(manifests)], Tools(run=host))
+        rc = batch_board.main(["--manifest-root", str(manifests)], Tools(run=host))
     return subprocess.CompletedProcess([], rc, out.getvalue(), "")
 
 

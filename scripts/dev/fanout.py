@@ -34,7 +34,7 @@ COMMANDS = {
     "review": "dev.fanout_lib.review_unit",
     "stats": "dev.fanout_lib.review_stats",
     "land-server": "dev.fanout_lib.autoland",
-    "board": "dev.fanout_lib.board",
+    "board": "dev.fanout_lib.batch_board",
 }
 
 _HELP = {

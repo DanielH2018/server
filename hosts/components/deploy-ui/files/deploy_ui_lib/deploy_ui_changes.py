@@ -140,26 +140,73 @@ def _epoch(value) -> float | None:
     return None if value in (None, "") else float(value)
 
 
-def _row(
-    stage: Stage,
-    state: str,
-    label: str,
-    since: float | None,
-    waits_on: str,
-    now: float,
-) -> dict:
-    return {
-        "stage": str(stage),
-        "state": state,
-        "label": label,
-        "since": since,
-        "in_state_s": None if since is None else max(0, int(now - since)),
-        "waits_on": waits_on,
-    }
+@dataclass(frozen=True)
+class Place:
+    """Where a change stands: its stage, the owner's word for its state, and what it waits on.
+
+    Attributes:
+        label: the state as the page shows it.
+        since: the epoch second the change entered `state`, or None when no source says.
+        next: the `next` action of the landing that ended it, or "".
+    """
+
+    stage: Stage
+    state: str
+    label: str
+    since: float | None
+    waits_on: str
+    next: str = ""
 
 
-def _landing_row(landing: dict, now: float) -> dict:
-    """A live landing's row from its `deploy_ui_states.landing_rows` row."""
+@dataclass(frozen=True)
+class BatchCell:
+    """The batch column; `state` is "" while its host's read is unavailable."""
+
+    id: str
+    host: str
+    state: str
+
+
+@dataclass(frozen=True)
+class ChangeRow:
+    """One change, as `/api/changes` serializes it."""
+
+    key: str
+    pr: str
+    title: str
+    stage: str
+    state: str
+    label: str
+    since: float | None
+    in_state_s: int | None
+    waits_on: str
+    next: str
+    batch: BatchCell | None
+
+
+def _change(
+    key: str, pr: str, title: str, place: Place, b: BatchRow | None, now: float
+) -> ChangeRow:
+    since = place.since
+    return ChangeRow(
+        key=key,
+        pr=pr,
+        title=title,
+        stage=str(place.stage),
+        state=place.state,
+        label=place.label,
+        since=since,
+        in_state_s=None if since is None else max(0, int(now - since)),
+        waits_on=place.waits_on,
+        next=place.next,
+        batch=None
+        if b is None
+        else BatchCell(b.batch, b.host, "" if b.running is None else b.state),
+    )
+
+
+def _landing_place(landing: dict) -> Place:
+    """A live landing's place, from its `deploy_ui_states.landing_rows` row."""
     state, progress = landing["state"], landing["progress"]
     if landing["alive"] is False:
         waits = "nothing: its landing process is gone; re-run land.sh"
@@ -171,38 +218,31 @@ def _landing_row(landing: dict, now: float) -> dict:
         waits = f"{progress['done']}/{progress['total']} {progress['what']}"
     else:
         waits = f"its {states.label(state)} step"
-    return _row(
-        landing_stage(state), state, states.label(state), landing["since"], waits, now
-    )
+    label = states.label(state)
+    return Place(landing_stage(state), state, label, landing["since"], waits)
 
 
-def _ended_row(record: states.Record, next_action: str, now: float) -> dict:
+def _ended_place(record: states.Record, next_action: str) -> Place:
     waits = NEXT_LABELS.get(next_action, next_action) or (
         "its LAND-RESULT line, which this host cannot read"
     )
-    return _row(
-        Stage.ENDED, record.verdict, record.verdict, record.since, waits, now
-    ) | {"next": next_action}
+    verdict = record.verdict
+    return Place(Stage.ENDED, verdict, verdict, record.since, waits, next_action)
 
 
-def _batch_row(b: BatchRow, now: float) -> dict:
+def _batch_place(b: BatchRow) -> Place:
     if b.running:
         stage = Stage.REVIEW if b.phase == REVIEW_PHASE else Stage.IMPLEMENTATION
         # A `--no-review` batch runs one session and writes no phase.
         state = b.phase or b.state
         since = b.phase_since or b.launched_at
-        return _row(stage, state, state, since, f"its {state} session", now)
-    return _row(
-        Stage.ENDED,
-        b.state,
-        b.state,
-        b.ended_at,
-        "its orchestrator, which reads the batch's final message",
-        now,
-    )
+        return Place(stage, state, state, since, f"its {state} session")
+    waits = "its orchestrator, which reads the batch's final message"
+    return Place(Stage.ENDED, b.state, b.state, b.ended_at, waits)
 
 
-def _waiting_row(pr: dict, batch: BatchRow | None, now: float) -> dict:
+def _waiting_place(pr: dict, batch: BatchRow | None) -> Place:
+    """An open PR's place, from its `deploy_ui_reads.parse_prs` row."""
     ready = "draft" if pr["draft"] else "ready"
     if pr["ci"] == CIVerdict.FAIL:
         waits = "a fix for its red CI"
@@ -213,7 +253,7 @@ def _waiting_row(pr: dict, batch: BatchRow | None, now: float) -> dict:
     else:
         waits = "a land.sh run"
     since = batch.ended_at if batch and batch.ended_at else pr.get("created")
-    return _row(Stage.WAITING, ready, f"{ready}, CI {pr['ci']}", since, waits, now)
+    return Place(Stage.WAITING, ready, f"{ready}, CI {pr['ci']}", since, waits)
 
 
 def change_rows(
@@ -223,8 +263,9 @@ def change_rows(
     batches: Sequence[BatchRow] | None,
     branch_prs: Mapping[str, str],
     results: Mapping[str, str],
+    titles: Mapping[str, str],
     now: float,
-) -> list[dict]:
+) -> list[ChangeRow]:
     """One row per open change, ordered by stage, then by how long it has been in its state.
 
     Args:
@@ -237,12 +278,12 @@ def change_rows(
             a batch keeps its PR after the merge drops the PR from the list.
         results: each PR's `next` action from the newest `LAND-RESULT:` line this host
             can read.
+        titles: PR titles already fetched, for a PR the open list no longer holds.
         now: the epoch second the rows are measured at.
 
     Returns:
-        Rows carrying `key`, `pr`, `title`, `batch` (id, host and state, or None), and the
-        stage fields `_row` writes. A change's newest source decides its stage: a live
-        landing beats a running batch, which beats a verdict older than its phase.
+        A change's newest source decides its stage: a live landing beats a running batch,
+        which beats a verdict older than its phase.
     """
     open_prs = {str(p["number"]): p for p in prs or ()}
     live = {r["pr"]: r for r in landings}
@@ -260,54 +301,32 @@ def change_rows(
     for pr in sorted({*open_prs, *live, *verdicts, *by_pr}, key=int):
         b, verdict = by_pr.get(pr), verdicts.get(pr)
         if pr in live:
-            row = _landing_row(live[pr], now)
+            place = _landing_place(live[pr])
         elif b and b.running and not (verdict and verdict.since > (b.phase_since or 0)):
-            row = _batch_row(b, now)
+            place = _batch_place(b)
         elif verdict:
             next_action = b.next if b and b.next else results.get(pr, "")
             finished = next_action in (DONE, "") and pr not in open_prs
             if finished and now - verdict.since > FINISHED_S:
                 continue
-            row = _ended_row(verdict, next_action, now)
+            place = _ended_place(verdict, next_action)
         elif pr in open_prs:
-            row = _waiting_row(open_prs[pr], b, now)
+            place = _waiting_place(open_prs[pr], b)
         elif b and b.running is not None and _recent(b, now):
-            row = _batch_row(b, now)
+            place = _batch_place(b)
         else:
             continue
-        title = (open_prs.get(pr) or {}).get("title") or (live.get(pr) or {}).get(
-            "title", ""
-        )
-        rows.append(
-            {"key": f"pr:{pr}", "pr": pr, "title": title, **row, "batch": _batch(b)}
-        )
+        title = (open_prs.get(pr) or {}).get("title") or titles.get(pr, "")
+        rows.append(_change(f"pr:{pr}", pr, title, place, b, now))
     for b in lone:
         # A batch whose host did not answer has no stage to show until it does.
         if b.running is not None and _recent(b, now):
-            rows.append(
-                {
-                    "key": f"batch:{b.host}:{b.batch}",
-                    "pr": "",
-                    "title": "",
-                    **_batch_row(b, now),
-                    "batch": _batch(b),
-                }
-            )
-    rows.sort(key=lambda r: (_STAGE_RANK[Stage(r["stage"])], r["since"] or now))
+            key = f"batch:{b.host}:{b.batch}"
+            rows.append(_change(key, "", "", _batch_place(b), b, now))
+    rows.sort(key=lambda r: (_STAGE_RANK[Stage(r.stage)], r.since or now))
     return rows
 
 
 def _recent(b: BatchRow, now: float) -> bool:
     seen = b.last_seen()
     return bool(b.running) or (seen is not None and now - seen <= WINDOW_S)
-
-
-def _batch(b: BatchRow | None) -> dict | None:
-    """The batch column; its state is "" while its host's read is unavailable."""
-    if b is None:
-        return None
-    return {
-        "id": b.batch,
-        "host": b.host,
-        "state": "" if b.running is None else b.state,
-    }

@@ -1,12 +1,12 @@
 """`fanout.py board`: each standing batch read from its host alone, for the deploy UI.
 
-Run: uv run pytest scripts/dev/tests/fanout_status/test_fanout_board.py
+Run: uv run pytest scripts/dev/tests/fanout_status/test_fanout_batch_board.py
 """
 
 import json
 import subprocess
 
-from dev.fanout_lib.board import main
+from dev.fanout_lib.batch_board import main
 from dev.fanout_lib.manifest import Batch, Manifest, save
 from _fanout_fakes import fake_tools, ok
 
