@@ -56,8 +56,9 @@ server.** The server accepts only an RS256 access token whose `aud` holds
 authorization policy admits the operator alone, at `two_factor`, and every sign-in shows the
 consent page (`consent_mode: 'explicit'`).
 `tests/services/authelia/test_authelia_vault_mcp_client.py` holds the policy, PKCE, grant types
-and consent. claude.ai sends the secret as `client_secret_post` and never falls back to Basic,
-so `token_endpoint_auth_method` must stay that value.
+and consent. The client uses `client_secret_basic`: claude.ai's own-client sign-in failed at the
+token endpoint with `client_secret_post` while the secret was proven correct, so
+`token_endpoint_auth_method` is that value.
 `k8s/roles/vault-mcp/tests/test_oauth_resource.py::test_authelia_grants_the_audience_and_issuer_the_rendered_server_requires`
 holds the client and the server to the same URL and issuer.
 

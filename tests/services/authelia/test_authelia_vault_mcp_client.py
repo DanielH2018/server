@@ -53,7 +53,7 @@ def test_the_vault_mcp_client_needs_s256_pkce_and_explicit_consent():
         "require_pkce": True,
         "pkce_challenge_method": "S256",
         "grant_types": ["authorization_code", "refresh_token"],
-        "token_endpoint_auth_method": "client_secret_post",
+        "token_endpoint_auth_method": "client_secret_basic",
         "consent_mode": "explicit",
     }
 

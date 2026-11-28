@@ -93,9 +93,11 @@ pod vault-mcp ─┬─ livesync-cli daemon ──▶ /vault (plaintext, no back
   it.** The `resource` in the metadata, the `aud` the server requires and the Authelia client's
   `audience` all read `k8s/vars.yml:vault_mcp_connector_url`. claude.ai sends that URL as the
   RFC 8707 `resource`, and Authelia grants only an audience the client lists.
-- **claude.ai posts the client secret in the form body.** It sends `client_secret_post` and
-  never falls back to Basic
-  ([anthropics/claude-ai-mcp#667](https://github.com/anthropics/claude-ai-mcp/issues/667)).
+- **The client authenticates with `client_secret_basic`.** The slice registered
+  `client_secret_post`, on the strength of
+  [anthropics/claude-ai-mcp#667](https://github.com/anthropics/claude-ai-mcp/issues/667), and
+  claude.ai's own-client sign-in then failed at the token endpoint while the secret was proven
+  correct.
 - **No CrowdSec allowlist for Anthropic's range.** `160.79.104.0/21` is shared by every
   claude.ai user's connectors, and the trusted-remote whitelist keeps to `/32` exits. A
   connector sends one unauthenticated request per sign-in, then a few metadata reads. The
