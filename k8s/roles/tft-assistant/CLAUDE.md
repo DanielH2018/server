@@ -76,13 +76,16 @@ keep a later edit from widening it.
 
 - **Schedule.** One cycle an hour, started by the process itself. No CronJob runs.
 - **Writes, and nothing else.** Files on the role's two volumes: the match store, a cache of
-  Community Dragon's static data and the built page on the data volume, and the comp ids on
+  Community Dragon's static data, a copy of TFT Academy's tier list page and the built page on
+  the data volume, and the comp ids on
   the kept volume. The built page is a site: the page, its icons, and one file of boards for
   each selection, which the page's Explorer tab reads. It never writes the notes. It writes nothing in the cluster and has no
   use for the Kubernetes API.
 - **Calls out.** Riot's API, on the `americas`, `europe` and `asia` routing hosts and the
   `na1`, `euw1` and `kr` platform hosts, and `raw.communitydragon.org`. It stays under the
-  key's rate limit of 100 requests per two minutes per routing host.
+  key's rate limit of 100 requests per two minutes per routing host. From image 0.2.40 it also
+  reads one page of `tftacademy.com`, the comp tier list, at most once in six hours, for the
+  augments and the advice of each comp's guide. A failed read keeps the last copy.
 - **Reads.** One Secret key, `RIOT_API_KEY`.
 
 ## Editing
