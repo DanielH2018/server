@@ -281,5 +281,5 @@ def main(argv: list[str] | None = None) -> int:
             return gate_runner.EX_USAGE
         only, argv = int(argv[1]), argv[2:]
     return gate_runner.cli(
-        __doc__, argv, lambda snapshot: run_gates(snapshot, only=only), takes=1
+        __doc__ or "", argv, lambda snapshot: run_gates(snapshot, only=only), takes=1
     )

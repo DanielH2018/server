@@ -40,6 +40,7 @@ def _promote_from(world, prod_cluster, target_cluster, *messages):
     """
     world.set_prod(world.commits[0], files=_files(prod_cluster))
     world.set_last_good(world.commits[0])
+    target = world.commits[0]
     for message in messages:
         target = world.commit(message)
     world.publish(target, files=_files(target_cluster))

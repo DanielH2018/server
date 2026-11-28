@@ -440,6 +440,7 @@ def land_wait(
     paused, all_paused = [], False
     tags = own = sorted(set(services))
     while True:
+        line = ""
         try:
             items = reads.kustomizations()
         except KubectlSetupError as err:

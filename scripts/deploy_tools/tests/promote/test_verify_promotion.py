@@ -491,7 +491,7 @@ def test_a_failed_verdict_exits_1_after_writing_the_outputs(tmp_path):
 def test_a_verdict_outside_the_set_is_refused_where_it_is_built():
     """`report` would otherwise exit 1 on a misspelt `good` and write it for `settle`."""
     with pytest.raises(ValueError, match="goood"):
-        vp.Verdict("goood")  # ty: ignore[invalid-argument-type]
+        vp.Verdict("goood")  # ty: ignore[invalid-argument-type]  # pyright: ignore[reportArgumentType]
 
 
 def test_verify_without_a_zoned_move_time_is_a_usage_error(tmp_path, capsys):
