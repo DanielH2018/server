@@ -322,28 +322,25 @@ def test_a_holder_stacks_the_oldest_ticket_first_and_a_place_with_none_before_it
 
 
 @pytest.mark.parametrize(
-    ("other", "takes"),
+    ("mine", "other", "takes"),
     [
-        pytest.param(None, True, id="no-other-place-is_clean"),
-        pytest.param(("8", 6), True, id="a-younger-ticket-is_clean"),
-        pytest.param(("8", 5), True, id="an-equal-ticket-of-a-later-pr-is_clean"),
-        pytest.param(("6", 5), False, id="an-equal-ticket-of-an-earlier-pr-is_flagged"),
-        pytest.param(("8", 4), False, id="an-older-ticket-is_flagged"),
-        pytest.param(("8", 0), False, id="a-place-with-no-ticket-is_flagged"),
+        pytest.param(5, None, True, id="no-other-place-is_clean"),
+        pytest.param(5, ("8", 6), True, id="a-younger-ticket-is_clean"),
+        pytest.param(5, ("8", 5), True, id="an-equal-ticket-of-a-later-pr-is_clean"),
+        pytest.param(0, ("6", 1), True, id="no-ticket-of-its-own-is_clean"),
+        pytest.param(
+            5, ("6", 5), False, id="an-equal-ticket-of-an-earlier-pr-is_flagged"
+        ),
+        pytest.param(5, ("8", 4), False, id="an-older-ticket-is_flagged"),
+        pytest.param(5, ("8", 0), False, id="a-place-with-no-ticket-is_flagged"),
     ],
 )
-def test_may_take(other, takes):
-    me = queue_state.Place("7", ticket=5)
+def test_may_take(mine, other, takes):
+    me = queue_state.Place("7", ticket=mine)
     places = (
         (me,) if other is None else (queue_state.Place(other[0], ticket=other[1]), me)
     )
     assert queue_machine.may_take(queue_state.Queue(places), me) is takes
-
-
-def test_a_landing_with_no_ticket_defers_to_none():
-    me = queue_state.Place("7")
-    others = (queue_state.Place("6", ticket=1), me)
-    assert queue_machine.may_take(queue_state.Queue(others), me)
 
 
 def test_stackable_asks_lands_alone_of_no_place_past_what_its_caller_takes():
