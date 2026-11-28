@@ -49,7 +49,6 @@ _KNOWN_CLAIMS = {
     ("homelab", "pihole-etc-2"): ("longhorn-nobackup", "2Gi"),
     ("homelab", "traefik-acme"): ("longhorn", "128Mi"),
     ("homelab", "wg-easy-config"): ("longhorn", "1Gi"),
-    ("homelab", "livesync-data"): ("longhorn", "2Gi"),
     ("homelab", "media-data"): ("media-local", "400Gi"),
     # A render that dropped `namespace` would create empty claims in homelab beside the live ones.
     ("observability", "loki-data"): ("longhorn-nobackup", "10Gi"),

@@ -98,7 +98,7 @@ listed here.
   CouchDB store behind Obsidian LiveSync, and LiveSync's end-to-end encryption leaves only
   ciphertext in it, so its B2 copy is the one off-site copy of the vault that leaks nothing.
   The `vault-mcp` claims hold the decrypted mirror and stay on the no-backup list. The claim
-  moved from `longhorn-nobackup` by the runbook in *Moving `livesync-data` onto the weekly
+  moves from `longhorn-nobackup` by the runbook in *Moving `livesync-data` onto the weekly
   tier* below.
 - `scrutiny-influxdb-data` (no backup): kopia excluded `scrutiny/influxdb2/`, and the volume
   IS the TSDB (single mount, verified).
@@ -506,10 +506,22 @@ already gone.
 
 A bound claim's `storageClassName` is immutable, and both Longhorn classes reclaim with
 `Delete`. So the move to `longhorn` recreates the claim, and deleting the old claim would delete
-the vault's server copy with it. The change that moves it lands with `flux_suspend: true` in
-`k8s/roles/livesync/defaults/main.yml`, which keeps Flux off `livesync` and
-`livesync-snapshot` until the operator has recreated the claim. A Flux apply of the new class
-to the old claim fails as immutable, and a failed `livesync` revision writes the stateful hold.
+the vault's server copy with it. A Flux apply of the new class to the old claim fails as
+immutable, and a failed `livesync` revision writes the stateful hold. So the move takes two PRs
+with an operator cutover between them:
+
+- The first PR declares the claim's weekly shard in `k8s/services.yml` and sets
+  `flux_suspend: true` in `k8s/roles/livesync/defaults/main.yml`. It keeps the
+  `longhorn-nobackup` class, so its render matches the live claim. The suspend keeps Flux off
+  `livesync` and `livesync-snapshot` while the operator works.
+- The resume PR, the cutover's last step, sets `livesync_k8s_storage_class: longhorn` and
+  removes `flux_suspend` in one commit. By then the live claim is on `longhorn`, so Flux
+  applies a matching spec. The suspend and the class change never land together, because
+  nothing orders the root's write of `spec.suspend` before the `livesync` Kustomization
+  reconciles the same revision.
+
+Run the cutover soon after the first PR lands. `FluxSuspended` warns after 24 hours, and arm 5
+of the render-diff gates refuses any other PR whose render reaches `livesync` until the resume.
 
 The longhorn-reconcile job leaves the old volume alone meanwhile. The volume sits in the
 `no-backup` group, and the job moves a weekly claim into its shard only from `default`
@@ -526,7 +538,7 @@ cutover inside the Sunday no-promotion window, because the last step lands a PR.
 1. Check that the suspend took hold. `uv run python scripts/diagnostics/probe.py landing` shows
    `last-good` at or past the merge that set `flux_suspend`, and its `suspended (Flux):` line
    names `livesync` and `livesync-snapshot`. A reset to an older `last-good` would resume
-   `livesync` with the old class.
+   `livesync` in the middle of the cutover.
 1. Scale `deploy/livesync` to zero, and wait for its volume to detach:
 
     ```bash
@@ -551,8 +563,11 @@ cutover inside the Sunday no-promotion window, because the last step lands a PR.
     The old volume is the fallback until the last step. It survives every step before that,
     so no separate snapshot is needed.
 1. Create two claims. `livesync-data-old` binds the old volume, and `livesync-data` is a new,
-   empty volume on `longhorn` with the spec the render carries. Write this to a file and apply
-   it with `sudo k3s kubectl apply -f <file>`:
+   empty volume on `longhorn` with the spec the resume PR renders. Do not create it between
+   03:17 and 03:30 UTC. A new `longhorn` volume sits in the daily group until the hourly
+   reconcile at :17 moves it, and the daily job at 03:30 would leave a B2 backup that no
+   job's retain prunes. Write this to a file and apply it with
+   `sudo k3s kubectl apply -f <file>`:
 
     ```yaml
     apiVersion: v1
@@ -591,7 +606,7 @@ cutover inside the Sunday no-promotion window, because the last step lands a PR.
 
     The two `du` totals should match, and the files should keep the CouchDB uid.
 1. Check the new volume. Its `spec.backupBlockSize` reads `16777216`. Within the hour,
-   longhorn-reconcile labels it `recurring-job-group.longhorn.io/weekly-backup-d5`:
+   longhorn-reconcile labels it `recurring-job-group.longhorn.io/weekly-backup-d0`:
 
     ```bash
     kubectl -n homelab get pvc livesync-data -o jsonpath='{.spec.volumeName}'
@@ -599,10 +614,12 @@ cutover inside the Sunday no-promotion window, because the last step lands a PR.
       -o jsonpath='{.spec.backupBlockSize} {.metadata.labels}'
     ```
 
-1. Resume `livesync` with a PR that removes `flux_suspend` from
-   `k8s/roles/livesync/defaults/main.yml`, and land it with `land.sh`. Flux applies a claim that
-   matches the live one, restores `replicas: 1`, and the `livesync-snapshot` Job snapshots the
-   new volume first. Open Obsidian on one device and confirm that it syncs.
+1. Resume `livesync` with a PR that edits `k8s/roles/livesync/defaults/main.yml`: it sets
+   `livesync_k8s_storage_class: longhorn` and removes `flux_suspend`. The same PR adds
+   `("homelab", "livesync-data"): ("longhorn", "2Gi")` to `_KNOWN_CLAIMS` in
+   `tests/k8s/workloads/test_k8s_claims.py`. Land it with `land.sh`. Flux applies a claim that
+   matches the live one and restores `replicas: 1`, and the `livesync-snapshot` Job snapshots
+   the new volume first. Open Obsidian on one device and confirm that it syncs.
 1. Delete the old volume. Set its reclaim policy back to `Delete`, then delete its claim, which
    deletes the PV and the Longhorn volume:
 
@@ -613,7 +630,7 @@ cutover inside the Sunday no-promotion window, because the last step lands a PR.
     ```
 
 The move is finished once `probe.py b2-spend` and the backup-health check show
-`livesync-data` on shard 5 and its first Friday backup has completed.
+`livesync-data` on shard 0 and its first Sunday backup has completed.
 
 If the copy fails, the old volume is untouched under `livesync-data-old`. Every client still
 holds the vault, so LiveSync's "Rebuild everything" from one client is the last fallback.

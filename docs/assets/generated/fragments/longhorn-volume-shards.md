@@ -8,6 +8,7 @@
 | `vaultwarden-data` | Daily | R2 | every day |
 | `airflow-postgres-data` | Daily | R2 | every day |
 | `code-server-workspace` | Weekly | B2 | Sunday |
+| `livesync-data` | Weekly | B2 | Sunday |
 | `n8n-data` | Weekly | B2 | Sunday |
 | `terraria-stats-data` | Weekly | B2 | Sunday |
 | `jellyfin-config` | Weekly | B2 | Monday |
@@ -25,7 +26,6 @@
 | `wg-easy-config` | Weekly | B2 | Thursday |
 | `bazarr-config` | Weekly | B2 | Friday |
 | `freshrss-config` | Weekly | B2 | Friday |
-| `livesync-data` | Weekly | B2 | Friday |
 | `n8n-files` | Weekly | B2 | Friday |
 | `lidarr-config` | Weekly | B2 | Saturday |
 | `pi-peer-backup-data` | Weekly | B2 | Saturday |
