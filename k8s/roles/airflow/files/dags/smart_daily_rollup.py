@@ -16,15 +16,12 @@ from homelab_warehouse import smart_history as sh
 from homelab_warehouse.warehouse import (
     check_day,
     ensure_schema,
+    interval_day,
     replace_partition,
 )
 
 WAREHOUSE_CONN = "warehouse"
 SMART_DAILY = Asset("warehouse://smart/attribute_daily")
-
-
-def _day(data_interval_start):
-    return data_interval_start.astimezone(timezone.utc).date()
 
 
 @dag(
@@ -36,10 +33,10 @@ def _day(data_interval_start):
     default_args={"retries": 2, "retry_delay": timedelta(minutes=10)},
     tags=["warehouse", "smart"],
 )
-def smart_daily_rollup():
+def smart_daily_rollup() -> None:
     @task(outlets=[SMART_DAILY])
-    def load(data_interval_start=None) -> dict:
-        day = _day(data_interval_start)
+    def load(data_interval_start: datetime | None = None) -> dict:
+        day = interval_day(data_interval_start)
         if not sh.is_complete(day, datetime.now(timezone.utc)):
             raise AirflowSkipException(f"{day} has not ended")
         devices = sh.active_devices(sh.fetch_summary())
@@ -58,8 +55,8 @@ def smart_daily_rollup():
         return {"rows": inserted}
 
     @task
-    def check(data_interval_start=None) -> None:
-        day = _day(data_interval_start)
+    def check(data_interval_start: datetime | None = None) -> None:
+        day = interval_day(data_interval_start)
         devices = sh.active_devices(sh.fetch_summary())
         check_day(
             PostgresHook(postgres_conn_id=WAREHOUSE_CONN).get_conn,

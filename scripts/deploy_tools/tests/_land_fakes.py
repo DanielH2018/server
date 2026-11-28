@@ -139,7 +139,8 @@ class Fakes:
     core_quota: tuple[int, int] = (5000, 0)
     # The stderr of a `gh` call that `gh_merge_rc` fails.
     gh_stderr: str = "boom"
-    # Only `join` and `stand` return theirs.
+    # The answer each `join` and `stand` reads, then any `\n<pr> <ticket>` rows of other
+    # places. The fake gives this landing ticket 1.
     line: list[str | Exception] = field(default_factory=lambda: [""])
     head_runs: Any = field(
         default_factory=lambda: [
@@ -447,7 +448,7 @@ def build_tools(f: Fakes) -> tuple[Tools, list]:
         answer = line_seq(op, *args)
         if isinstance(answer, Exception):
             raise answer
-        return answer if op in ("join", "stand") else ""
+        return f"1 {answer}".rstrip(" ") if op in ("join", "stand") else ""
 
     tools = Tools(
         try_turn=try_turn,

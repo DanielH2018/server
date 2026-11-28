@@ -17,15 +17,12 @@ from homelab_warehouse import prom_rollup as pr
 from homelab_warehouse.warehouse import (
     check_day,
     ensure_schema,
+    interval_day,
     replace_partition,
 )
 
 WAREHOUSE_CONN = "warehouse"
 EDGE_COUNTS_DAILY = Asset("warehouse://edge/counts_daily")
-
-
-def _day(data_interval_start):
-    return data_interval_start.astimezone(timezone.utc).date()
 
 
 @dag(
@@ -37,10 +34,10 @@ def _day(data_interval_start):
     default_args={"retries": 2, "retry_delay": timedelta(minutes=10)},
     tags=["warehouse", "edge"],
 )
-def edge_daily_rollup():
+def edge_daily_rollup() -> None:
     @task(outlets=[EDGE_COUNTS_DAILY])
-    def load(data_interval_start=None) -> dict:
-        day = _day(data_interval_start)
+    def load(data_interval_start: datetime | None = None) -> dict:
+        day = interval_day(data_interval_start)
         oldest = pr.oldest_sample(pr.PROM_URL)
         if not pr.in_backfill_window(
             day, datetime.now(timezone.utc), oldest + ec.BASELINE_SPAN
@@ -79,8 +76,8 @@ def edge_daily_rollup():
         return {"rows": inserted}
 
     @task
-    def check(data_interval_start=None) -> None:
-        day = _day(data_interval_start)
+    def check(data_interval_start: datetime | None = None) -> None:
+        day = interval_day(data_interval_start)
         check_day(
             PostgresHook(postgres_conn_id=WAREHOUSE_CONN).get_conn,
             "edge_daily_rollup",

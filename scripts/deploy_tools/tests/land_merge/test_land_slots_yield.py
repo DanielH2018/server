@@ -7,6 +7,7 @@ from dataclasses import replace
 
 import pytest
 
+from _land_batch_fakes import ticket_of
 from _land_turn_fakes import HEAD, UPDATED, call_order
 from deploy_tools.land_lib import line, slots
 from test_land_slots import _SERIAL, _land, _merging, _names
@@ -15,9 +16,9 @@ _WAITER = "1001"
 
 
 def _waiter_in_the_line(ln, tmp_path, leaves_after=None):
-    """Stand PR 1001 in a real line for `ln`; it leaves at sleep number `leaves_after`."""
+    """Stand PR 1001, which asked after `ln`, in a real line; it leaves at sleep `leaves_after`."""
     the_line = line.here(tmp_path)
-    the_line("join", _WAITER, UPDATED)
+    the_line("join", _WAITER, UPDATED, ticket_of(_WAITER))
     sleep, slept = ln.tools.sleep, []
 
     def poll(seconds):

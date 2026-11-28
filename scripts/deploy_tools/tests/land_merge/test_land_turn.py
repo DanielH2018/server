@@ -72,10 +72,12 @@ def test_the_merge_wait_gets_a_whole_budget_after_the_wait_for_the_turn(landing)
 def test_a_draft_stands_in_the_line_while_it_waits_and_leaves_with_the_turn(landing):
     ln, calls = turn_landing(landing, turn=[False, False, True])
     land_in_turn(ln)
+    # Each poll stands before it tries the lock, and reads its answer again once it holds it.
     assert line_calls(calls) == [
-        ("join", "999", HEAD),
-        ("stand", "999", HEAD),
-        ("stand", "999", HEAD),
+        ("join", "999", HEAD, ""),
+        ("stand", "999", HEAD, "1"),
+        ("stand", "999", HEAD, "1"),
+        ("stand", "999", HEAD, "1"),
         ("leave", "999"),
     ]
     # It left before it used the turn, so it is not in the line it reads as the holder.
@@ -89,13 +91,41 @@ def test_a_draft_stands_in_the_line_while_it_waits_and_leaves_with_the_turn(land
         pytest.param({"start": {**OPEN, "isDraft": False}}, id="a-ready-pr"),
     ],
 )
-def test_a_head_that_is_no_untested_draft_waits_for_the_turn_outside_the_line(
-    landing, case
-):
+def test_a_head_that_is_no_untested_draft_holds_a_place_no_holder_stacks(landing, case):
     ln, calls = turn_landing(landing, turn=[False, True], **case)
     land_in_turn(ln)
     assert call_order(calls).count("try_turn") == 2
-    assert line_calls(calls) == []
+    stood = [args for args in line_calls(calls) if args[0] != "leave"]
+    assert stood and {args[2] for args in stood} == {line.NO_HEAD}
+
+
+def test_a_landing_tries_the_lock_only_once_no_older_ticket_waits(landing, capsys):
+    # The first two polls read #7's older ticket; the third finds #7 gone.
+    ln, calls = turn_landing(landing, turn=[True], line=["\n7 0", "\n7 0", ""])
+    land_in_turn(ln)
+    assert call_order(calls).count("try_turn") == 1
+    assert ln.ledger.turn_wait == 2 * ln.opts.merge_poll
+    out = capsys.readouterr().out
+    assert out.count("a landing that asked for it before this one goes first") == 1
+
+
+def test_a_waiter_that_loses_the_turn_host_goes_on_without_the_turn(landing, capsys):
+    ln, calls = turn_landing(
+        landing,
+        turn=[OSError("ssh daniel-box: no route")],
+        line=["\n7 0", OSError("ssh daniel-box: no route")],
+    )
+    land_in_turn(ln)
+    # The first poll defers. The lost line reads no ticket, so the second tries the lock,
+    # which fails too, and the landing merges with no turn to give up.
+    order = call_order(calls)
+    assert order.count("try_turn") == 1
+    assert order[-1] == "merge"
+    assert "release_turn" not in order
+    assert ln.ledger.turn_wait == ln.opts.merge_poll
+    out = capsys.readouterr().out
+    assert out.count("a landing that asked for it before this one goes first") == 1
+    assert "(ssh daniel-box: no route); going on without a turn" in out
 
 
 def test_a_draft_the_holder_of_the_turn_merged_stops_waiting_and_merges_nothing(
@@ -111,7 +141,7 @@ def test_a_draft_the_holder_of_the_turn_merged_stops_waiting_and_merges_nothing(
     )
     land_in_turn(ln)
     # No ready flip, no merge and no turn to give up: the holder did all three.
-    assert call_order(calls) == ["try_turn", "try_turn"]
+    assert call_order(calls) == ["try_turn"]
     assert line_calls(calls)[-1] == ("leave", "999")
     out = capsys.readouterr().out
     assert "the landing that holds the turn merged PR #999 with its own" in out
@@ -119,20 +149,21 @@ def test_a_draft_the_holder_of_the_turn_merged_stops_waiting_and_merges_nothing(
 
 
 @pytest.mark.parametrize(
-    ("turns", "calls_made"),
+    ("turns", "answers", "calls_made"),
     [
-        pytest.param([False, False], ["try_turn", "try_turn"], id="while-it-waits"),
+        pytest.param([False], ["", line.CONFLICT], ["try_turn"], id="while-it-waits"),
         pytest.param(
             [False, True],
+            ["", "", line.CONFLICT],
             ["try_turn", "try_turn", "release_turn"],
             id="as-the-turn-frees",
         ),
     ],
 )
 def test_a_draft_the_holder_found_conflicting_ends_merge_conflict(
-    landing, turns, calls_made
+    landing, turns, answers, calls_made
 ):
-    ln, calls = turn_landing(landing, turn=turns, line=["", line.CONFLICT])
+    ln, calls = turn_landing(landing, turn=turns, line=answers)
     with pytest.raises(Outcome) as ended:
         land_in_turn(ln)
     assert ended.value.verdict == Verdict.MERGE_CONFLICT
@@ -150,7 +181,7 @@ def test_a_draft_merged_by_the_holder_that_frees_the_turn_gives_it_straight_back
         polls=(MERGED,),
         start=(OPEN, MERGED),
         turn=[False, True],
-        line=["", line.MERGED],
+        line=["", "", line.MERGED],
     )
     with turn.held(ln) as take_turn:
         assert take_turn(HEAD)[0] is False
@@ -160,18 +191,22 @@ def test_a_draft_merged_by_the_holder_that_frees_the_turn_gives_it_straight_back
     assert "took the landing turn" not in out
 
 
-def test_a_draft_told_to_land_alone_waits_on_for_the_turn_outside_the_line(landing):
+def test_a_draft_told_to_land_alone_stands_on_with_no_head_and_its_ticket(landing):
     ln, calls = turn_landing(
-        landing, turn=[False, False, False, True], line=["", line.ALONE]
+        landing, turn=[False, False, False, True], line=["", line.ALONE, ""]
     )
     land_in_turn(ln)
     assert call_order(calls)[-2:] == ["merge", "release_turn"]
-    # It gives its place up at once and does not take it again on the third poll.
-    assert line_calls(calls) == [
-        ("join", "999", HEAD),
-        ("stand", "999", HEAD),
-        ("leave", "999"),
+    # It takes its place anew at once with no head, so no holder stacks it again, and
+    # keeps the ticket it first took.
+    stood = line_calls(calls)
+    assert stood[:3] == [
+        ("join", "999", HEAD, ""),
+        ("stand", "999", HEAD, "1"),
+        ("join", "999", line.NO_HEAD, "1"),
     ]
+    assert {args[2:] for args in stood[3:-1]} == {(line.NO_HEAD, "1")}
+    assert stood[-1] == ("leave", "999")
 
 
 def test_a_line_that_fails_leaves_the_landing_waiting_for_the_turn(landing, capsys):
@@ -181,16 +216,30 @@ def test_a_line_that_fails_leaves_the_landing_waiting_for_the_turn(landing, caps
     land_in_turn(ln)
     assert call_order(calls)[-2:] == ["merge", "release_turn"]
     # One failure ends the landing's use of the line, so it is reported once.
-    assert line_calls(calls) == [("join", "999", HEAD)]
+    assert line_calls(calls) == [("join", "999", HEAD, "")]
     out = capsys.readouterr().out
     assert out.count("(no route); waiting for the turn without it") == 1
 
 
-def test_a_draft_that_takes_the_turn_at_once_never_touches_the_line(landing):
+def test_a_line_that_failed_in_one_wait_is_tried_again_in_the_next(landing):
+    ln, calls = turn_landing(
+        landing, turn=[True], line=["", OSError("ssh daniel-box: no route"), ""]
+    )
+    with turn.held(ln) as take_turn:
+        assert take_turn(HEAD)[0]
+        ln.step_out_of_turn(lambda: None, "for a test")
+    # The answer read after the first take failed; the wait after the step-out stands again
+    # with the ticket the first wait took.
+    assert ("join", "999", HEAD, "1") in line_calls(calls)
+
+
+def test_a_draft_reads_the_line_before_it_tries_a_free_turn(landing):
     ln, calls = turn_landing(landing)
     land_in_turn(ln)
-    assert call_order(calls)[0] == "try_turn"
-    assert line_calls(calls) == []
+    assert calls.index(("line", ("join", "999", HEAD, ""), {})) < next(
+        i for i, call in enumerate(calls) if call[0] == "try_turn"
+    )
+    assert line_calls(calls)[-1] == ("leave", "999")
 
 
 def test_a_lock_that_cannot_be_opened_does_not_stop_the_landing(landing, capsys):

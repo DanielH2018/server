@@ -4,8 +4,9 @@ The machine drives `queue_machine.may_take` and `queue_machine.stackable`, the f
 `turn._wait` and `batch._members` call, through arrivals, polls, releases, step-outs and
 deaths, and checks the predicates in `core/invariants.py` after every step. It stands in for
 the I/O around those functions: one holder slot for the `flock`, a poll every `MERGE_POLL_S`,
-and a place that stays in the line for `line.FRESH_S` after its landing dies. Each call
-builds its `Queue` the way its caller in `land_lib` does. The seed and the example count come
+a ticket from the machine's clock at each arrival, and a place that stays in the line for
+`line.FRESH_S` after its landing dies. Each call builds its `Queue` the way its caller in
+`land_lib` does. The seed and the example count come
 from `tests/hypothesis_profiles.py`; only the sequence length is set here.
 
 Run: uv run pytest scripts/deploy_tools/tests/land_merge/test_land_queue_machine.py
@@ -35,6 +36,7 @@ BATCH_FULL = "a batch held every PR it may"
 SERIAL_LEFT = "a holder left a serial draft in the line"
 DEAD_STACKED = "a holder stacked a dead landing's fresh place"
 STEPPED_OUT = "a holder stepped out of the turn"
+DEFERRED_TO_DEAD = "a landing left a free turn to a dead landing's ticket"
 
 
 @dataclass
@@ -42,6 +44,7 @@ class Waiter:
     """One landing that waits for the turn, or holds it.
 
     Attributes:
+        place: Its place, whose ticket is its arrival and stays through every step-out.
         ready_since: When it could last use the turn: its arrival, or the end of a wait
             outside the turn. Later than the machine's clock during that wait, while the
             landing stands nowhere.
@@ -68,8 +71,10 @@ class Landings:
         self.now = 0
         self.holder: Waiter | None = None
         self.free_since = 0
+        self.last_death = -line.FRESH_S
         self.waiting: dict[str, Waiter] = {}
         self.batches: list[list[str]] = []
+        self.overtakes = 0
 
     def _fresh(self, w: Waiter) -> bool:
         return w.died_at is None or self.now - w.died_at < line.FRESH_S
@@ -82,16 +87,23 @@ class Landings:
             if w.died_at is None and w.ready_since <= self.now
         ]
 
-    def _line(self) -> queue_state.Queue:
-        """The queue `batch._members` builds from the fresh places the line lists."""
-        places = tuple(
+    def _places(self) -> tuple[queue_state.Place, ...]:
+        """The fresh places in the line: every waiter's but one out of the turn for a wait."""
+        return tuple(
             w.place
             for w in self.waiting.values()
-            if w.place.head and w.ready_since <= self.now and self._fresh(w)
+            if w.ready_since <= self.now and self._fresh(w)
         )
+
+    def _line(self) -> queue_state.Queue:
+        """The queue `batch._members` builds from the drafts' places the line lists."""
+        places = tuple(p for p in self._places() if p.head)
         return queue_state.Queue(places, lambda p: self.waiting[p.pr].serial)
 
     def _grant(self, w: Waiter) -> None:
+        others = [o.place for o in self.ready() if o is not w]
+        if not invariants.no_overtaking(w.place, others):
+            self.overtakes += 1
         del self.waiting[w.place.pr]
         self.holder = w
         members: list[queue_state.Place] = []
@@ -109,17 +121,25 @@ class Landings:
         self.batches.append([w.place.pr, *(p.pr for p in members)])
 
     def _poll(self, w: Waiter) -> None:
-        # As `turn._wait` asks: with a queue of the landing's own place.
-        mine = queue_state.Queue((w.place,))
-        if self.holder is None and self.may_take(mine, w.place):
+        # As `turn._wait` asks: with the fresh places its stand reads, its own among them.
+        queue = queue_state.Queue(self._places())
+        if self.holder is None and self.may_take(queue, w.place):
             self._grant(w)
-        else:
-            w.next_poll = self.now + MERGE_POLL_S
+            return
+        if self.holder is None:
+            older = [
+                p
+                for p in queue.places
+                if not self.may_take(queue_state.Queue((p,)), w.place)
+            ]
+            if older and all(self.waiting[p.pr].died_at is not None for p in older):
+                self.record(DEFERRED_TO_DEAD)
+        w.next_poll = self.now + MERGE_POLL_S
 
     def arrive(self, pr: str, draft: bool, serial: bool) -> None:
         """A landing asks for the turn, and takes it at once if it may."""
         w = Waiter(
-            queue_state.Place(pr, f"head-{pr}" if draft else ""),
+            queue_state.Place(pr, f"head-{pr}" if draft else "", self.now),
             serial,
             self.now,
             self.now,
@@ -142,7 +162,7 @@ class Landings:
 
     def die(self, pr: str) -> None:
         """A waiting landing's process ends without leaving the line."""
-        self.waiting[pr].died_at = self.now
+        self.waiting[pr].died_at = self.last_death = self.now
 
     def tick(self, seconds: int) -> None:
         """Let `seconds` pass, running each poll that falls due, in time order."""
@@ -214,14 +234,20 @@ class TurnQueue(RuleBasedStateMachine):
         self.landings.die(live[which % len(live)])
 
     @invariant()
-    def a_free_turn_goes_to_a_waiting_landing_within_one_poll(self):
+    def a_free_turn_goes_to_a_waiting_landing_within_one_poll_of_the_last_dead_ticket(
+        self,
+    ):
         if self.landings.holder is None:
             assert invariants.free_turn_is_taken(
-                self.landings.free_since,
+                max(self.landings.free_since, self.landings.last_death + line.FRESH_S),
                 self.landings.now,
                 [w.ready_since for w in self.landings.ready()],
                 MERGE_POLL_S,
             )
+
+    @invariant()
+    def no_landing_that_can_use_the_turn_sees_a_later_arrival_take_it(self):
+        assert self.landings.overtakes == 0
 
     @invariant()
     def a_batch_holds_no_serial_pr(self):
@@ -242,10 +268,18 @@ class StacksASerialPr(TurnQueue):
 
 
 class NeverTakesTheTurn(TurnQueue):
-    may_take = staticmethod(lambda _queue, _me: False)
+    may_take = staticmethod(lambda queue, me: False)
 
 
-@pytest.mark.parametrize("machine", [StacksASerialPr, NeverTakesTheTurn])
+class RacesForTheTurn(TurnQueue):
+    """Every landing tries a free turn, so the first poll after a release takes it."""
+
+    may_take = staticmethod(lambda queue, me: True)
+
+
+@pytest.mark.parametrize(
+    "machine", [StacksASerialPr, NeverTakesTheTurn, RacesForTheTurn]
+)
 def test_the_machine_fails_a_rule_that_breaks_an_invariant(machine):
     with pytest.raises(AssertionError):
         run_state_machine_as_test(machine, settings=STEPS)
@@ -260,20 +294,53 @@ def test_the_generated_queues_reach_every_event():
             seen.add(event)
 
     run_state_machine_as_test(Recording, settings=STEPS)
-    assert seen == {BATCH_FULL, SERIAL_LEFT, DEAD_STACKED, STEPPED_OUT}
+    assert seen == {
+        BATCH_FULL,
+        SERIAL_LEFT,
+        DEAD_STACKED,
+        STEPPED_OUT,
+        DEFERRED_TO_DEAD,
+    }
 
 
-def test_a_holder_stacks_in_the_order_the_line_lists_its_places(tmp_path):
+def test_a_holder_stacks_the_oldest_ticket_first_and_a_place_with_none_before_it(
+    tmp_path,
+):
     places = line.here(tmp_path / "line")
-    for pr in ("10465", "9998", "10458"):
-        places("join", pr, f"head-{pr}")
+    for pr, ticket in (("10465", "3"), ("9998", "1"), ("10458", "2")):
+        places("join", pr, f"head-{pr}", ticket)
+    # A place a landing on older code wrote, with no ticket.
+    (tmp_path / "line" / "10470").write_text("head-10470\n")
     listed = [
-        queue_state.Place(*row.split())
-        for row in places("waiting", str(line.FRESH_S)).splitlines()
+        queue_state.Place(pr, head, int(ticket))
+        for pr, head, ticket in (
+            row.split() for row in places("waiting", str(line.FRESH_S)).splitlines()
+        )
     ]
-    queue = queue_state.Queue(tuple(reversed(listed)))
-    assert list(queue_machine.stackable(queue)) == listed
-    assert [p.pr for p in listed] == ["10458", "10465", "9998"]
+    stacked = queue_machine.stackable(queue_state.Queue(tuple(listed)))
+    assert [p.pr for p in stacked] == ["10470", "9998", "10458", "10465"]
+
+
+@pytest.mark.parametrize(
+    ("mine", "other", "takes"),
+    [
+        pytest.param(5, None, True, id="no-other-place-is_clean"),
+        pytest.param(5, ("8", 6), True, id="a-younger-ticket-is_clean"),
+        pytest.param(5, ("8", 5), True, id="an-equal-ticket-of-a-later-pr-is_clean"),
+        pytest.param(0, ("6", 1), True, id="no-ticket-of-its-own-is_clean"),
+        pytest.param(
+            5, ("6", 5), False, id="an-equal-ticket-of-an-earlier-pr-is_flagged"
+        ),
+        pytest.param(5, ("8", 4), False, id="an-older-ticket-is_flagged"),
+        pytest.param(5, ("8", 0), False, id="a-place-with-no-ticket-is_flagged"),
+    ],
+)
+def test_may_take(mine, other, takes):
+    me = queue_state.Place("7", ticket=mine)
+    places = (
+        (me,) if other is None else (queue_state.Place(other[0], ticket=other[1]), me)
+    )
+    assert queue_machine.may_take(queue_state.Queue(places), me) is takes
 
 
 def test_stackable_asks_lands_alone_of_no_place_past_what_its_caller_takes():
