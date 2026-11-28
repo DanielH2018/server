@@ -1,6 +1,6 @@
 # DIGEST-PINNED — see k8s/roles/ical-proxy/templates/Dockerfile.j2 for why a version tag alone is
 # not a pin. Same base, same digest: Renovate groups the two into one PR, so they stay in step.
-FROM python:3.15-slim@sha256:63bb298d2b7b88f176f51b5189f54ce6535c997682ea70885d2132f5d473a8a5
+FROM python:3.15-slim@sha256:08a4c22c92b79ec821a7ad49768480039ee5b7accac3955228e75366e30abc8e
 WORKDIR /app
 # mcp stays on 1.x: 2.0.0 removed mcp.server.fastmcp and crash-loops the container. Lift it
 # only with an app.py port to the 2.x API. All three packages are pinned exact, because a range
