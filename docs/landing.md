@@ -439,8 +439,9 @@ jobs. Every landing that merges its PR directly takes the turn.
 - A lock held over ssh also ends when daniel-server vanishes. sshd on daniel-box never probes a
   client, so a host that loses power or its network sends no close. The landing writes a
   heartbeat into the session every `turn.HEARTBEAT_S`, and the script on daniel-box frees the
-  lock once three intervals pass without one. The turn, the landing slots and the serial lock
-  are held this way; the PR lock (`pr_lock.py`) is not.
+  lock once three intervals pass without one. The turn, the landing slots, the serial lock and
+  the PR lock (`pr_lock.py`) are held this way. A detached landing inherits the PR lock
+  without its caller's heartbeat thread, so it starts its own (`pr_lock.Held.for_fork`).
 - The turn is not a safety gate. A landing that waits `merge_timeout` for it, or that cannot
   reach daniel-box, goes on without it, marks its draft ready and merges.
 - The wait for the turn counts as waited. The merge wait gets one `merge_timeout` after it,
