@@ -107,9 +107,10 @@ poll, so it adds no request, and it makes no GitHub call beyond the cached PR ti
   (`hosts/components/deploy-ui/tests/test_deploy_ui_states.py::test_inflight_lists_both_hosts_landings_with_state_progress_and_queue_is_clean`).
   The newest of `queued`, `holding`, `yielded`, `no-turn`, `rejoining` and `merged` in a
   record's history places it: `holding` holds the turn, `queued` waits and `yielded` stepped
-  out. The waiting rank by the time each entered `queued`. The turn goes to whichever landing
-  polls first (`scripts/deploy_tools/land_lib/core/queue_machine.py:may_take`), so a position is the order the
-  landings began waiting, not the order the turn serves them
+  out. The waiting rank by the time each entered `queued`. The turn goes to the landing with
+  the oldest ticket, the time it first asked
+  (`scripts/deploy_tools/land_lib/core/queue_machine.py:may_take`). A landing back from a
+  step-out keeps its ticket, so the turn can serve it before landings the page ranks above it
   (`hosts/components/deploy-ui/tests/test_deploy_ui_states.py::test_waiting_landings_rank_by_when_they_queued_then_the_stepped_out_is_clean`).
 - **A landing that died** shows `died`, leaves the queue and sorts last. A record's pid
   belongs to the host that wrote it. A daniel-box landing is alive while its pid is in
