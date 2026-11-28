@@ -29,6 +29,8 @@ Prometheus. `rule_problems` holds the role's rule files to the conventions in
   `alertmanager.yml` is outside this, because it carries placeholders by design;
 - a test case fires every alert and asserts its `service` and `severity`. The cases of
   `<stem>.test.yaml` and of any `<stem>.<part>.test.yaml` count together (`rule_test_stem`);
+- no test group costs more than `MAX_GROUP_EVALUATIONS` rule evaluations, its steps times its
+  rule file's rules (`evaluation_problems`);
 - each test file whose rule file holds an alert has a case with no input series that fires an
   alert other than the Watchdog. A family whose series vanish otherwise evaluates to nothing
   and stays quiet, and the Watchdog fires on any input, so it proves nothing about the family.
@@ -44,8 +46,9 @@ from pathlib import Path
 
 import yaml
 
-from lib import yaml_fast
+from lib import prom_duration, yaml_fast
 from lib.repo_paths import K8S_ROLES
+from validate.validate_lib.rule_test_parts import group_cost
 
 ROLE_DIR = K8S_ROLES / "observability"
 RULES_DIR = ROLE_DIR / "files" / "rules"
@@ -55,6 +58,8 @@ RULE_TESTS_DIR = ROLE_DIR / "tests" / "rules"
 RULES_CONFIGMAP = "prometheus-rules"
 GROUP_FLOOR = frozenset({"alerting-meta"})
 RULE_TEST_SUFFIX = ".test.yaml"
+# Rule evaluations per test group: about 70s of promtool on a 4-CPU runner.
+MAX_GROUP_EVALUATIONS = 250_000
 
 SEVERITIES = frozenset({"critical", "warning", "info"})
 
@@ -297,6 +302,16 @@ def _alerts(doc: object) -> list[tuple[str | None, dict]]:
     ]
 
 
+def _rule_count(doc: object) -> int:
+    """How many rules, alerting and recording, a parsed rule file holds."""
+    groups = doc.get("groups") if isinstance(doc, dict) else None
+    return sum(
+        len(group.get("rules") or [])
+        for group in groups or []
+        if isinstance(group, dict)
+    )
+
+
 def group_list_problems(
     stems: set[str],
     groups: list[str],
@@ -501,6 +516,34 @@ def rule_test_problems(
     return problems
 
 
+def evaluation_problems(name: str, doc: object, rules: int) -> list[str]:
+    """A problem for each test group costing more than `MAX_GROUP_EVALUATIONS` rule evaluations.
+
+    promtool evaluates every rule in `rule_files` at each `evaluation_interval` step up to a
+    group's last eval time, and `split_rule_test` never splits a group, so the costliest group
+    sets the hook's wall time.
+
+    Args:
+        name: The test file's name.
+        doc: The parsed test file.
+        rules: How many rules its rule file holds.
+    """
+    if not isinstance(doc, dict):
+        return []
+    interval = prom_duration.seconds(str(doc.get("evaluation_interval", "1m"))) or 60
+    problems = []
+    for index, group in enumerate(doc.get("tests") or []):
+        steps = int(group_cost(group) // interval)
+        if steps * rules > MAX_GROUP_EVALUATIONS:
+            problems.append(
+                f"tests/rules/{name}: test group {index + 1} evaluates {rules} rules at "
+                f"{steps} steps, over the cap of {MAX_GROUP_EVALUATIONS} evaluations. Move a "
+                "case whose deadline runs to days into a `<stem>.weekly.test.yaml` that steps "
+                "once an hour."
+            )
+    return problems
+
+
 def rule_test_stem(path: Path) -> str:
     """The stem of the rule file a test file covers.
 
@@ -561,6 +604,7 @@ def rule_problems(
         else:
             cases = (doc.get("tests") if isinstance(doc, dict) else None) or []
             tests.setdefault(stem, {"tests": []})["tests"] += cases
+            problems += evaluation_problems(path.name, doc, _rule_count(docs.get(stem)))
     jobs = service_jobs(prometheus_yml)
     for stem, doc in docs.items():
         problems += rule_file_problems(stem, doc, jobs)
