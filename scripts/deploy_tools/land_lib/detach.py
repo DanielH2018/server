@@ -37,7 +37,10 @@ line at all (`tests/land_deploy/test_land_broad_fallback_verdict.py` covers a tr
 landing-policy refusal leaves only its `land:` line, which `error_in` reads), and a
 waiter that ended on the grep alone would either race the last flush or wait out its whole budget
 on a run that had already finished. A landing that dies without writing the file -- SIGKILL, OOM
--- is reported as exactly that, through the pid `fork` records in `<log stem>.pid`.
+-- is reported as exactly that, through the pid `fork` records in `<log stem>.pid`. A SIGTERM or
+SIGINT does not kill it outright: `until_stopped` unwinds the landing through its `finally`
+blocks, so it still writes its annotation, prints a `land: stopped by <signal>` line and records
+128 plus the signal's number.
 
 THE LOG AND THE PID FILE EXIST BEFORE `land.sh --detach` RETURNS. The grandchild opens the log
 itself, so without the parent's own `touch` a wait started straight after the return could find
@@ -48,6 +51,7 @@ import contextlib
 import os
 import pwd
 import re
+import signal
 import sys
 import time
 import traceback
@@ -55,6 +59,7 @@ from collections.abc import Callable, Iterable
 from datetime import UTC, datetime
 from pathlib import Path
 
+from deploy_tools.land_lib import fresh
 from lib.detach_fork import (  # noqa: F401 -- the record readers are this module's API too
     START_GRACE_S,
     alive,
@@ -216,7 +221,7 @@ def _run_landing(
         moved = leave_unit_cgroup(scope_prefix)
         if moved:
             print(moved, flush=True)
-        code = landing()
+        code = until_stopped(landing)
     except SystemExit as stop:
         code = stop.code if isinstance(stop.code, int) else 1
     except Exception:
@@ -229,6 +234,21 @@ def _run_landing(
         # After the flush, so a reader that sees the code also sees the last log line.
         record_code(log, code)
         os._exit(code)
+
+
+def until_stopped(landing: Callable[[], int]) -> int:
+    """`landing()`'s exit code, or 128 plus the signal's number when SIGTERM or SIGINT stops it.
+
+    The signal unwinds the landing through its `finally` blocks, so it still writes its
+    annotation, and the `land:` line printed here is the reason `error_in` reports.
+    """
+    try:
+        with fresh.dies_on_a_signal():
+            return landing()
+    except fresh.Stopped as stop:
+        name = signal.Signals(stop.signum).name
+        print(f"land: stopped by {name} before it reached a verdict", file=sys.stderr)
+        return 128 + stop.signum
 
 
 def wait_command(pr: str, log: Path) -> str:
