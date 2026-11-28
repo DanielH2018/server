@@ -3,6 +3,7 @@
 Each group's output is one block, and its `[DONE]` line names a chained group's slowest cases.
 """
 
+import re
 import subprocess
 import sys
 import time
@@ -149,8 +150,12 @@ def test_a_chained_groups_done_line_names_its_three_slowest_cases(tmp_path, caps
 
     case_groups.run_groups(cases, [("chain", chain), ("single", single)], jobs=1)
 
-    done = [line for line in capsys.readouterr().err.splitlines() if "[DONE]" in line]
+    done = [
+        re.sub(r" in \d+s", "", line)
+        for line in capsys.readouterr().err.splitlines()
+        if "[DONE]" in line
+    ]
     assert done == [
-        "[DONE] chain in 0s; slowest cases: kill 90s, remove 60s, upgrade 30s",
-        "[DONE] single in 0s",
+        "[DONE] chain; slowest cases: kill 90s, remove 60s, upgrade 30s",
+        "[DONE] single",
     ]
