@@ -414,3 +414,38 @@ def test_another_hosts_record_that_cannot_be_read_is_not_an_empty_one():
 
     with pytest.raises(core.Unreadable):
         landing_verdicts.read_other("daniel-server", read_host)
+
+
+def test_the_landing_queue_from_deploy_ui_reaches_the_snapshot_and_the_text_is_clean():
+    queued = {
+        "pr": "202",
+        "label": "Queued",
+        "alive": True,
+        "queue": "waiting",
+        "position": 1,
+        "in_state_s": 60,
+        "progress": None,
+    }
+    holder = {
+        **queued,
+        "pr": "101",
+        "label": "Testing",
+        "alive": True,
+        "queue": "turn",
+        "position": None,
+        "progress": {"done": 4, "total": 11, "what": "checks finished"},
+    }
+    unknown = {**queued, "pr": "303", "alive": None, "queue": "", "position": None}
+    turn = {"turn_held": True, "serial": {"held": False, "pr": ""}}
+
+    def get_json(path):
+        return {"runs": [], "landings": [holder, queued, unknown], "turn": turn}
+
+    snap = {**landing.collect(get_json, fake_run(GREEN)), "claims": None}
+    assert (snap["landings"], snap["turn"]) == ([holder, queued, unknown], turn)
+    assert (
+        "Landing queue:\n"
+        "  PR 101 Testing (holds the turn) 60s 4/11 checks finished\n"
+        "  PR 202 Queued (waiting #1) 60s\n"
+        "  PR 303 Queued (liveness unknown) 60s"
+    ) in landing.format_text(snap)
