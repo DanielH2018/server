@@ -220,6 +220,18 @@ def test_a_line_that_fails_leaves_the_landing_waiting_for_the_turn(landing, caps
     assert out.count("(no route); waiting for the turn without it") == 1
 
 
+def test_a_line_that_failed_in_one_wait_is_tried_again_in_the_next(landing):
+    ln, calls = turn_landing(
+        landing, turn=[True], line=["", OSError("ssh daniel-box: no route"), ""]
+    )
+    with turn.held(ln) as take_turn:
+        assert take_turn(HEAD)[0]
+        ln.step_out_of_turn(lambda: None, "for a test")
+    # The answer read after the first take failed; the wait after the step-out stands again
+    # with the ticket the first wait took.
+    assert ("join", "999", HEAD, "1") in line_calls(calls)
+
+
 def test_a_draft_reads_the_line_before_it_tries_a_free_turn(landing):
     ln, calls = turn_landing(landing)
     land_in_turn(ln)

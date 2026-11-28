@@ -62,8 +62,8 @@ type Line = Callable[..., str]
 def _op(directory: str, op: str, *args: str) -> str:
     """Run one operation on the line kept in `directory`.
 
-    It names nothing but `os`, `time` and `FRESH_S`, and uses no syntax newer than Python
-    3.10, because `over_ssh` runs this source under the turn host's own `python3`.
+    It names nothing but `os`, `time`, `FRESH_S` and `NO_HEAD`, and uses no syntax newer than
+    Python 3.10, because `over_ssh` runs this source under the turn host's own `python3`.
 
     A place holds its head, then `@<ticket>` when its landing has a ticket, then the answer,
     if any.
@@ -174,7 +174,7 @@ def _op(directory: str, op: str, *args: str) -> str:
                 # A landing left the line between the listing and this read.
                 continue
             head, ticket, answer = parse(words(name))
-            if head not in ("", "-") and not answer:
+            if head not in ("", NO_HEAD) and not answer:
                 found.append(f"{name} {head} {ticket or 0}")
         return "\n".join(found)
     pr, head, what = args
@@ -204,6 +204,7 @@ def at_turn_host(hostname: str, directory: Path = DIR) -> Line:
 
 _REMOTE = f"""import os, sys, time
 FRESH_S = {FRESH_S}
+NO_HEAD = {NO_HEAD!r}
 {inspect.getsource(_op)}
 print(_op(*sys.argv[1:]))
 """
@@ -248,15 +249,17 @@ class Place:
     """One landing's place in the line, and the ticket it keeps for as long as it lives.
 
     The first stand takes a ticket from the turn host's clock. Every later one, after a leave
-    too, writes the same ticket back. A landing whose line has failed has a place that does
-    nothing and reads no other ticket.
+    too, writes the same ticket back. A line that fails leaves the place doing nothing and
+    reading no other ticket until the leave that ends the wait, and the next wait tries the
+    line again.
 
     Attributes:
         ticket: The ticket the turn host gave this landing, or 0 before its first stand.
     """
 
     def __init__(self, line: Line | None, pr: str, say: Callable[[str], None]) -> None:
-        self._line, self._pr, self._say = line, pr, say
+        self._line = self._reach = line
+        self._pr, self._say = pr, say
         self.ticket = 0
         self._head: str | None = None
 
@@ -302,7 +305,8 @@ class Place:
         return self.stand(self._head)[0] if self._head is not None else ""
 
     def leave(self) -> None:
-        """Give the place up, keeping the ticket for the next stand."""
+        """Give the place up, keeping the ticket for the next stand and trying a failed line again."""
         if self._head is not None:
             self._head = None
             self._run("leave", self._pr)
+        self._line = self._reach
