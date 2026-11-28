@@ -88,6 +88,7 @@ def test_gate_serves_every_token_router():
     assert "Header(`Authorization`" in vault_rule, (
         "vault-mcp-local lost the bearer predicate — the gate would forward ungated"
     )
+    assert f"Host(`vault-mcp.{DOMAIN}`)" not in vault_rule
     # The mcp probe router is the one ungated path: asserted exact Path (not a PathPrefix, which
     # would open /health-anything) and LAN-only.
     probe_rule = routers["homelab-mcp-probe"]["rule"]

@@ -4,7 +4,7 @@ import pytest
 import yaml
 from _k8s_render import render_role_template
 
-from vault_notes import NoteNotFound, Vault
+from vault_notes import NoteNotFound, Vault, exclude_paths_from_env
 
 NOTES = {
     "Projects/Alpha.md": (
@@ -20,6 +20,7 @@ NOTES = {
 HIDDEN = {
     ".obsidian/workspace.md": "kettle [[Alpha]]\n",
     "Projects/.trash/Old.md": "kettle [[Alpha]]\n",
+    "Projects/.draft.md": "kettle [[Alpha]]\n",
     "94 Docs/superpowers/Secret.md": "kettle [[Alpha]]\n",
     "94 Docs/superpowers/deep/Deeper.md": "kettle [[Alpha]]\n",
 }
@@ -75,7 +76,7 @@ def test_read_note_returns_body_frontmatter_tags_and_resolved_links(vault):
     ]
 
 
-@pytest.mark.parametrize("path", [*HIDDEN, "../outside.md", "/etc/passwd"])
+@pytest.mark.parametrize("path", [*HIDDEN, "../outside.md"])
 def test_read_note_refuses_a_hidden_or_escaping_path(vault, path):
     with pytest.raises(NoteNotFound):
         vault.read_note(path)
@@ -86,6 +87,25 @@ def test_read_note_refuses_a_symlink_into_a_hidden_folder(vault):
     link.symlink_to(vault.root / "94 Docs" / "superpowers" / "Secret.md")
     with pytest.raises(NoteNotFound):
         vault.read_note("Projects/Alias.md")
+
+
+def test_read_note_refuses_a_symlink_out_of_the_vault(tmp_path):
+    (tmp_path / "outside.md").write_text("kettle outside the vault\n")
+    (tmp_path / "vault" / "Projects").mkdir(parents=True)
+    (tmp_path / "vault" / "Projects" / "Out.md").symlink_to(tmp_path / "outside.md")
+    with pytest.raises(NoteNotFound):
+        Vault(tmp_path / "vault").read_note("Projects/Out.md")
+
+
+def test_no_walk_returns_a_symlinked_note_or_its_text(vault):
+    target = vault.root / "94 Docs" / "superpowers" / "Plan.md"
+    target.write_text("zephyr [[Alpha]]\n")
+    (vault.root / "Projects" / "Alias.md").symlink_to(target)
+    assert vault.search("zephyr") == []
+    assert "Projects/Alias.md" not in {n["path"] for n in vault.recent_notes(100)}
+    assert "Projects/Alias.md" not in {
+        b["path"] for b in vault.backlinks("Projects/Alpha.md")
+    }
 
 
 def test_list_folder_lists_visible_entries_folders_first(vault):
@@ -121,7 +141,7 @@ def test_backlinks_names_only_visible_linking_notes(vault):
 
 
 @pytest.mark.parametrize(
-    "entry", ["94 Docs/superpowers", "94 docs/SUPERPOWERS/", "./94 Docs//superpowers"]
+    "entry", ["94 Docs/superpowers", "94 docs/SUPERPOWERS/", "94 Docs//superpowers"]
 )
 def test_an_exclude_path_matches_by_segment_whatever_its_spelling(tmp_path, entry):
     (tmp_path / "94 Docs" / "superpowers").mkdir(parents=True)
@@ -130,13 +150,62 @@ def test_an_exclude_path_matches_by_segment_whatever_its_spelling(tmp_path, entr
     assert vault.search("kettle") == []
 
 
+def test_an_exclude_path_matches_whatever_its_unicode_normal_form(tmp_path):
+    (tmp_path / "Café").mkdir()
+    (tmp_path / "Café" / "Menu.md").write_text("kettle")
+    vault = Vault(tmp_path, ["Café/"])
+    assert vault.search("kettle") == []
+
+
+@pytest.mark.parametrize("entry", ["./94 Docs/superpowers", "94 Docs/../Projects"])
+def test_an_exclude_path_with_a_dot_segment_is_refused(tmp_path, entry):
+    with pytest.raises(ValueError, match="segment"):
+        Vault(tmp_path, [entry])
+
+
+def test_an_unset_exclude_list_refuses_to_start():
+    with pytest.raises(SystemExit, match="VAULT_MCP_EXCLUDE_PATHS is unset"):
+        exclude_paths_from_env(None)
+
+
+def test_an_empty_exclude_list_is_allowed_with_a_warning(caplog):
+    assert exclude_paths_from_env("") == []
+    assert "VAULT_MCP_EXCLUDE_PATHS is empty" in caplog.text
+
+
+def test_a_note_removed_mid_walk_is_skipped(vault, monkeypatch):
+    real_walk = os.walk
+
+    def walk_with_a_vanished_note(top):
+        for dirpath, dirnames, filenames in real_walk(top):
+            yield dirpath, dirnames, [*filenames, "Vanished.md"]
+
+    monkeypatch.setattr(os, "walk", walk_with_a_vanished_note)
+    assert [h["path"] for h in vault.search("brews")] == ["Projects/Alpha.md"]
+
+
+@pytest.mark.parametrize(
+    "call",
+    [
+        lambda v: v.read_note("Projects/Al\0pha"),
+        lambda v: v.list_folder("Proj\0ects"),
+        lambda v: v.search(path="Proj\0ects"),
+    ],
+)
+def test_a_path_with_a_nul_byte_is_not_found(vault, call):
+    with pytest.raises(NoteNotFound):
+        call(vault)
+
+
 def test_the_rendered_exclude_list_hides_the_operators_folder(vault):
     pod = yaml.safe_load(render_role_template("vault-mcp", "deployment.yaml.j2"))[
         "spec"
     ]["template"]
     (server,) = [c for c in pod["spec"]["containers"] if c["name"] == "vault-mcp"]
     env = {e["name"]: e.get("value") for e in server["env"]}
-    rendered = Vault(vault.root, env["VAULT_MCP_EXCLUDE_PATHS"].splitlines())
+    rendered = Vault(
+        vault.root, exclude_paths_from_env(env.get("VAULT_MCP_EXCLUDE_PATHS"))
+    )
     assert {h["path"] for h in rendered.search("kettle", path="94 Docs")} == {
         "94 Docs/Visible.md",
         "94 Docs/superpowers-x/Kept.md",

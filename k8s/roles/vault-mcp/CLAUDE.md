@@ -41,9 +41,14 @@ See repo-root `CLAUDE.md` for shared conventions.
 - **`k8s/roles/vault-mcp/files/vault_notes.py:Vault` owns what Claude may not see.** A path
   segment that starts with `.` is hidden at any depth, whatever the list says. Each
   `k8s/roles/vault-mcp/defaults/main.yml:vault_mcp_exclude_paths` entry hides its folder by
-  whole path segments, ignoring case. A hidden path raises the same `NoteNotFound` as a
-  missing one, and no walk follows a symlink. Every tool reads through `Vault`, so a tool that
-  read `/vault` directly would skip the rule.
+  whole path segments, ignoring case and Unicode normal form. An entry with a `.` or `..`
+  segment raises ValueError when `Vault` is built. A hidden path raises the same
+  `NoteNotFound` as a missing one, and no walk follows a symlink. Every tool reads through
+  `Vault`, so a tool that read `/vault` directly would skip the rule.
+- **The server refuses to start without `VAULT_MCP_EXCLUDE_PATHS`.** An unset variable
+  would show the excluded folders, so
+  `k8s/roles/vault-mcp/files/vault_notes.py:exclude_paths_from_env` exits. An empty value
+  hides no folder and logs a warning.
 - **The route is `vault-mcp.local.<domain>`, LAN-only, behind a bearer token.** The
   `vault-mcp-local` router lives in traefik's file-provider gate Secret
   (`k8s/roles/traefik/templates/livesync-gate-secret.yaml.j2`), as homelab-mcp's does, so the

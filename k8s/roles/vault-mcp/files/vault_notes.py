@@ -10,9 +10,11 @@ Stdlib and PyYAML only; vault_server.py is the MCP wiring.
 
 from __future__ import annotations
 
+import logging
 import os
 import posixpath
 import re
+import unicodedata
 from collections.abc import Iterable, Iterator
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -24,6 +26,8 @@ import yaml
 NOTE_SUFFIX = ".md"
 MAX_RESULTS = 100
 SNIPPET_CHARS = 160
+
+_log = logging.getLogger(__name__)
 
 _WIKILINK = re.compile(r"!?\[\[([^\]|#^]*)(?:[#^][^\]|]*)?(?:\|[^\]]*)?\]\]")
 _MDLINK = re.compile(r"!?\[[^\]]*\]\(<?([^)<>\s]+)>?(?:\s+\"[^\"]*\")?\)")
@@ -43,7 +47,32 @@ def _parts(path: str) -> tuple[str, ...]:
 
 
 def _folded(parts: Iterable[str]) -> tuple[str, ...]:
-    return tuple(p.casefold() for p in parts)
+    return tuple(unicodedata.normalize("NFC", p).casefold() for p in parts)
+
+
+def _exclude_entry(entry: str) -> tuple[str, ...]:
+    if any(segment in (".", "..") for segment in entry.split("/")):
+        raise ValueError(
+            f"exclude path {entry!r} has a '.' or '..' segment; "
+            "name the folder from the vault root"
+        )
+    return _folded(_parts(entry))
+
+
+def exclude_paths_from_env(value: str | None) -> list[str]:
+    """The exclude list from the raw `VAULT_MCP_EXCLUDE_PATHS` value, one folder a line.
+
+    Unset fails closed: it raises SystemExit, so a pod that lost the variable never starts
+    with the operator's folders visible. An empty value is a deliberate empty list, logged.
+    """
+    if value is None:
+        raise SystemExit(
+            "VAULT_MCP_EXCLUDE_PATHS is unset; set it to the folders to hide, "
+            "or to an empty string to hide none"
+        )
+    if not value.strip():
+        _log.warning("VAULT_MCP_EXCLUDE_PATHS is empty: no folder is excluded")
+    return value.splitlines()
 
 
 @dataclass(frozen=True)
@@ -145,7 +174,7 @@ class Vault:
     def __post_init__(self) -> None:
         self.root = Path(self.root).resolve()
         self._excluded = tuple(
-            _folded(parts) for parts in map(_parts, self.exclude_paths) if parts
+            parts for parts in map(_exclude_entry, self.exclude_paths) if parts
         )
 
     def hidden(self, parts: tuple[str, ...]) -> bool:
@@ -158,11 +187,12 @@ class Vault:
     def resolve(self, path: str) -> tuple[Path, str]:
         """The absolute path and vault-relative POSIX path a caller's `path` names.
 
-        Raises NoteNotFound for a path that is absent, hidden, climbs out with `..`, or
-        resolves through a symlink to somewhere outside the vault or hidden inside it.
+        Raises NoteNotFound for a path that is absent, hidden, climbs out with `..`, holds a
+        NUL byte, or resolves through a symlink to somewhere outside the vault or hidden
+        inside it.
         """
         parts = _parts(path)
-        if ".." in parts or self.hidden(parts):
+        if "\0" in path or ".." in parts or self.hidden(parts):
             raise NoteNotFound(path)
         full = self.root.joinpath(*parts).resolve()
         if not full.is_relative_to(self.root) or not full.exists():
@@ -191,11 +221,13 @@ class Vault:
                     or full.is_symlink()
                 ):
                     continue
-                rel = PurePosixPath(*rel_dir, name).as_posix()
+                try:
+                    text = full.read_text(encoding="utf-8", errors="replace")
+                    modified = full.stat().st_mtime
+                except FileNotFoundError:
+                    continue
                 yield parse_note(
-                    rel,
-                    full.read_text(encoding="utf-8", errors="replace"),
-                    full.stat().st_mtime,
+                    PurePosixPath(*rel_dir, name).as_posix(), text, modified
                 )
 
     def note(self, path: str) -> Note:

@@ -17,7 +17,9 @@ Environment:
     VAULT_MCP_TOKEN          bearer token every request must carry (required; exits without it)
     VAULT_MCP_ROOT           the vault directory (default /vault)
     VAULT_MCP_EXCLUDE_PATHS  newline-separated folders hidden from every tool, beside the
-                             hidden-segment rule vault_notes.py builds in
+                             hidden-segment rule vault_notes.py builds in (required; exits
+                             without it, and an empty value hides no folder and logs a
+                             warning)
     MCP_PUBLIC_HOST          external hostname Traefik forwards, allowlisted for the transport
     PORT                     TCP port to listen on (default 8000)
 """
@@ -54,7 +56,7 @@ TOKEN = os.environ.get("VAULT_MCP_TOKEN", "")
 PUBLIC_HOST = os.environ.get("MCP_PUBLIC_HOST", "")
 VAULT = vault_notes.Vault(
     Path(os.environ.get("VAULT_MCP_ROOT", "/vault")),
-    os.environ.get("VAULT_MCP_EXCLUDE_PATHS", "").splitlines(),
+    vault_notes.exclude_paths_from_env(os.environ.get("VAULT_MCP_EXCLUDE_PATHS")),
 )
 
 _hosts, _origins = safe_reads.allowed_hosts_and_origins(PUBLIC_HOST)
