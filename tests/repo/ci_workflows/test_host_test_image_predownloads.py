@@ -13,7 +13,7 @@ from pathlib import Path
 
 from _helpers import REPO
 from lib import yaml_fast
-from validate.validate_lib.node_package_case import NODES, SERVER_PACKAGES
+from validate.validate_lib.node_package_case import BUS_PACKAGES, NODES, SERVER_PACKAGES
 
 HOSTS = REPO / "hosts"
 DOCKERFILE = HOSTS / "lib" / "tests" / "container" / "Dockerfile"
@@ -40,6 +40,7 @@ def case_depends(specs=SPECS) -> dict[str, str]:
     """Each Depends a case installs, mapped to the spec that brought it in."""
     found = {name: "the renderer" for name in RENDERER_DEPENDS}
     found |= dict.fromkeys(SERVER_PACKAGES, "node_package_case.SERVER_PACKAGES")
+    found |= dict.fromkeys(BUS_PACKAGES, "node_package_case.BUS_PACKAGES")
     for spec in specs:
         data = yaml_fast.safe_load(spec.read_text(encoding="utf-8")) or {}
         where = str(spec.relative_to(REPO) if spec.is_relative_to(REPO) else spec)
