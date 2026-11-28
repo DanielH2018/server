@@ -26,7 +26,7 @@ hosts/components/deploy-ui/tests/test_deploy_ui_app.py 3
 hosts/components/fake-remux/tests/test_fake_remux_replace_logic.py 2
 hosts/components/renovate-notify/tests/test_pending_soak_wiring.py 5
 k8s/roles/artifacts/tests/test_artifact_server.py 1
-k8s/roles/autofix-bridge/tests/test_autofix.py 12
+k8s/roles/autofix-bridge/tests/test_autofix.py 10
 scripts/backup/tests/test_longhorn_reap_delete_transport.py 5
 scripts/deploy_tools/tests/conftest.py 1
 scripts/deploy_tools/tests/land/test_land_pipeline.py 3

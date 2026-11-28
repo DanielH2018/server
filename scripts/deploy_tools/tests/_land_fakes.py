@@ -21,7 +21,7 @@ from typing import Any
 
 from deploy_tools.land_lib.health_gate import GateResult
 from deploy_tools.land_lib import fresh, landing as landing_mod
-from deploy_tools.land_lib import pr_json, slots
+from deploy_tools.land_lib import pr_json, slots, turn
 from _land_host_fakes import host_fakes
 from deploy_tools.land_lib.options import Options
 from deploy_tools.land_lib.land_flux import FluxReads
@@ -126,7 +126,10 @@ class Fakes:
     compare: list[list[str] | Exception] = field(default_factory=lambda: [[]])
     # What `closing_refs`' GraphQL read answers, one entry per call.
     closing_refs: list[dict | Exception] = field(default_factory=lambda: [{}])
-    turn: list[bool | Exception] = field(default_factory=lambda: [True])
+    # What each try for the turn answers; a process is a turn held over that ssh session.
+    turn: list[bool | subprocess.Popen[str] | Exception] = field(
+        default_factory=lambda: [True]
+    )
     slot: list[bool | Exception] = field(default_factory=lambda: [True])
     # The same, for each call on the serial lock.
     serial: list[bool | Exception] = field(default_factory=lambda: [True])
@@ -398,11 +401,16 @@ def build_tools(f: Fakes) -> tuple[Tools, list]:
 
     turn_seq = _seq(f.turn, calls, "try_turn")
 
+    def release_turn() -> None:
+        calls.append(("release_turn", (), {}))
+
     def try_turn():
         answer = turn_seq()
         if isinstance(answer, Exception):
             raise answer
-        return (lambda: calls.append(("release_turn", (), {}))) if answer else None
+        if isinstance(answer, subprocess.Popen):
+            return turn.SshLock(answer, release_turn)
+        return release_turn if answer else None
 
     slot_seq = _seq(f.slot, calls, "try_slot")
     serial_seq = _seq(f.serial, calls, "try_serial")

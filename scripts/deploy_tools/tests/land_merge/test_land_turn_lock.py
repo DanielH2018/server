@@ -108,6 +108,16 @@ def test_a_lock_whose_ssh_session_died_is_given_up_without_raising(
     give_up()
 
 
+def test_a_lock_held_over_ssh_reads_lost_once_its_session_ends(tmp_path, ssh_here):
+    held = turn.try_take_over_ssh([tmp_path / "turn.lock"], beat=0.1)
+    assert held is not None
+    assert not held.lost()
+    held.session.kill()
+    held.session.wait(5)
+    assert held.lost()
+    held()
+
+
 def test_a_turn_host_that_does_not_answer_raises_oserror(tmp_path, monkeypatch):
     stubs = fake_bin(
         tmp_path / "bin",

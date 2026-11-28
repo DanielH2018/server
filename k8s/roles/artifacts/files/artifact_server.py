@@ -244,11 +244,10 @@ def build_index(
             "mtime": datetime.fromtimestamp(st.st_mtime, timezone.utc).isoformat(),
             "starred": f"{host}/{rel}" in starred,
         }
+        body = ""
         if suffix in PARSEABLE:
-            try:
+            with contextlib.suppress(OSError):
                 body = path.read_text(encoding="utf-8", errors="replace")
-            except OSError:
-                body = ""
             entry.update(parse_html(body) if suffix != ".md" else parse_markdown(body))
         entry.setdefault("title", slug_title(path.name))
         entry.setdefault("summary", "")
@@ -514,6 +513,6 @@ def main() -> None:
 
 if __name__ == "__main__":
     if any(arg in ("-h", "--help") for arg in sys.argv[1:]):
-        print(__doc__.strip())
+        print((__doc__ or "").strip())
         sys.exit(0)
     main()
