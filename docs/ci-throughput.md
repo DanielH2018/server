@@ -300,6 +300,17 @@ Before the split, two runs measured these figures:
   at once. In its `hooks` job `validate-alert-rules` took 118 s of a 166 s sweep.
   `host_packages` started 114 s in and ran 417 s, 375 s of it in the updater cases.
 
+**The `validate-alert-rules` leg ended with one `promtool` test group.** After the split, that
+leg's sweep ran 126 to 217 s, and the other leg's ran 46 to 87 s, in runs 46091529761,
+46092769387, 46095300744, 46095864569 and 46096647966. `split_rule_test` never splits a test
+group. One group of `host-checks.test.yaml` ran `ClaudeWeeklySummaryNotReporting` to 170 h at
+the file's 1 m step: 10,200 steps over 107 rules, six times the next-costliest group. That
+group sits in `host-checks.weekly.test.yaml`, which steps once an hour.
+`alert_conventions.evaluation_problems` fails a group that costs more than
+`MAX_GROUP_EVALUATIONS` rule evaluations, its steps times its rule file's rules, so the next
+days-long case goes to a weekly file too. On four CPUs of daniel-server, under the same load,
+the hook fell from 163 s to 110 s, and its longest `promtool` call from 150 s to 69 s.
+
 The updater cases' group wall times on the 26.04 legs of runs 46065308899, 46070619651,
 46077939789 and 46082772420 were these:
 
