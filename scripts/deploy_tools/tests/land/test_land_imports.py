@@ -137,7 +137,7 @@ ALLOWED = {
     # The lock files that bound the landings polling GitHub after their merge, beside the turn.
     "slots": {"landing", "outcome", "live_limit", "pin_gate", "turn", "serial_lock"},
     # The drafts whose landings wait for the turn, which its holder reads; boundaries only.
-    "line": {"serial_lock"},
+    "line": {"serial_lock", "core/queue_state"},
     # The writer of a landing's state record and transition line, light for the deploy UI.
     "transitions": {"line", "outcome"},
     # The drafts in the line, tested with the turn holder's own in one run, then merged.
@@ -231,7 +231,7 @@ ALLOWED = {
     # The turn's ordering decisions: pure, so the queue's state machine drives them as is.
     "core/queue_state": set(),
     "core/queue_machine": {"core/queue_state"},
-    "core/invariants": set(),
+    "core/invariants": {"core/queue_state"},
 }
 
 

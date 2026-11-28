@@ -229,10 +229,10 @@ is waited out first, as the bullets below say. A refused landing exits 75 with
   asks for the turn again and reads the rules once more. Its log prints `yielding the
   landing turn to the landings in the line`. The wait ends once the landing's merge budgets
   leave one `merge_timeout`, the length the merge wait gets after the turn, and the PR then
-  takes the turn whoever stands in the line. The line holds only drafts that have had no CI
-  run, so the rule does not see a green ready head that waits for the turn, a landing that
-  lands alone, a landing out of the turn for a wait, or a landing that runs as another UNIX
-  user. A line that cannot be read yields nothing, and inside the no-promotion window a
+  takes the turn whoever stands in the line. The rule reads only the places of drafts that
+  have had no CI run, so it does not see a green ready head that waits for the turn, a
+  landing that lands alone, a landing out of the turn for a wait, or a landing that runs as
+  another UNIX user. A line that cannot be read yields nothing, and inside the no-promotion window a
   serial PR does not yield. The serial PR still lands alone and still drains, as the next
   bullet says. The operator ruled this on 2026-11-27
   ([#10284](https://github.com/DanielH2018/server/issues/10284),
@@ -389,12 +389,20 @@ jobs. Every landing that merges its PR directly takes the turn.
   which the update's push cancelled after minutes on the runners.
 - A landing that stood in line reads its PR again before it acts, because the PR may have
   moved or merged in the meantime.
-- A landing that waits with a draft that has had no CI run stands in the line for the turn:
-  a file named for its PR in `/run/lock/homelab-land-line` on daniel-box, holding the head
-  it would test (`land_lib/line.py`). The holder of the turn reads the line to test those
-  drafts with its own, which is slice B3 of [CI throughput](ci-throughput.md). A landing
-  whose place reads `merged` stops waiting, because the holder merged its PR. The line is
-  no gate: a landing that cannot reach it waits for the turn without it.
+- Every landing that waits for the turn stands in the line: a file named for its PR in
+  `/run/lock/homelab-land-line` on daniel-box (`land_lib/line.py`). The file holds the
+  landing's ticket, the time on daniel-box's clock when the landing first asked for the
+  turn. A draft that has had no CI run also names the head it would test.
+- The turn is served first come, first served. A landing tries the lock only when no fresh
+  place holds an older ticket (`land_lib/core/queue_machine.py:may_take`), and its log
+  prints `a landing that asked for it before this one goes first` while it defers. A
+  landing keeps its ticket through a wait out of the turn. A waiter that dies stops
+  deferring others once its place goes stale, after `line.FRESH_S`, 120 s. The `flock`
+  stays the only mutual exclusion.
+- The holder of the turn reads the line to test the drafts with its own, oldest ticket
+  first, which is slice B3 of [CI throughput](ci-throughput.md). A landing whose place reads
+  `merged` stops waiting, because the holder merged its PR. The line is no gate: a landing
+  that cannot reach it waits for the turn without it.
 - A landing that takes the turn with a draft tests the drafts in the line with its own in
   one CI run and merges them behind its own PR (`land_lib/batch.py`). `LAND_BATCH=0` turns
   that off for one landing. Its log names each PR it stacks, each one it leaves out with

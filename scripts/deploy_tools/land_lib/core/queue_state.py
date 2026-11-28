@@ -1,8 +1,8 @@
 """The queue for the landing turn, as the turn's ordering decisions read it.
 
 `queue_machine` decides over these records and does no I/O. The landing builds them from what
-it holds: `turn._wait` from its own PR and draft head, `batch._members` from the places the
-line lists (`line.py`).
+it reads: `turn._wait` from its own place and the fresh tickets its stand reads,
+`batch._members` from the drafts' places the line lists (`line.py`).
 """
 
 from collections.abc import Callable
@@ -17,10 +17,13 @@ class Place:
         pr: Its PR's number, as the line names the PR's file.
         head: The head of its draft that has had no CI run, which a holder can stack, or ""
             for a landing with nothing to stack.
+        ticket: When its landing first asked for the turn, in nanoseconds on the turn host's
+            clock. 0 for a place a landing on older code wrote, which holds no ticket.
     """
 
     pr: str
     head: str = ""
+    ticket: int = 0
 
 
 def _stacks(_place: Place) -> bool:

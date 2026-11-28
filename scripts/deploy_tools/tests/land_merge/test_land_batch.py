@@ -12,7 +12,7 @@ from dataclasses import replace
 import pytest
 
 from dev import tested_tree
-from _land_batch_fakes import GREEN, OWN, answers, head_of, land
+from _land_batch_fakes import GREEN, OWN, answers, head_of, land, standing, ticket_of
 from _land_fakes import Fakes
 from deploy_tools.land_lib import batch, line, live_limit, turn
 from deploy_tools.land_lib.outcome import Outcome, Verdict
@@ -76,7 +76,7 @@ def test_a_holder_that_stepped_out_of_the_turn_before_its_batch_merges_the_green
 
 def test_another_landing_of_the_holders_own_pr_is_not_stacked_behind_it(batch_of):
     ln, hub, the_line = batch_of(drafts=("7",))
-    the_line("join", OWN, head_of(OWN))
+    the_line("join", OWN, head_of(OWN), ticket_of(OWN))
     land(ln)
     assert hub.stacked[f"queue/{OWN}"] == [head_of(OWN), head_of("7")]
     assert hub.merged == [OWN, "7"]
@@ -325,8 +325,9 @@ def test_a_batch_that_is_not_green_is_split_by_the_holders_own_run(
         seen == [line.SPLIT, line.SPLIT] for seen in while_own_run
     )
     # Only a red run of the holder's own PR clears the members: they go back to the line.
-    waiting = the_line("waiting", str(line.FRESH_S)).split()
-    assert waiting == ([] if told else ["7", head_of("7"), "9", head_of("9")])
+    assert standing(the_line) == (
+        [] if told else [("7", head_of("7")), ("9", head_of("9"))]
+    )
     assert answers(the_line, "7", "9") == [told, told]
 
 
@@ -355,7 +356,7 @@ def test_a_landing_told_to_land_alone_forms_no_batch_of_its_own(batch_of, turn, 
     assert hub.stacked == {} and hub.batch_prs == []
     # Its own PR gets a run of its own, with no label, and the other draft waits on.
     assert hub.merged == [OWN] and hub.labels_at_ready == {OWN: set()}
-    assert the_line("waiting", str(line.FRESH_S)).split() == ["7", head_of("7")]
+    assert standing(the_line) == [("7", head_of("7"))]
 
 
 def test_the_batchs_run_counts_as_waited(batch_of, capsys):
@@ -396,7 +397,7 @@ def test_landing_code_older_than_masters_hands_the_turn_to_a_fresh_landing(
         land(ln)
     os.close(handed.value.fd)
     assert hub.stacked == {} and hub.batch_prs == [] and hub.merged == []
-    assert the_line("waiting", str(line.FRESH_S)).split() == ["7", head_of("7")]
+    assert standing(the_line) == [("7", head_of("7"))]
 
 
 def test_older_landing_code_with_a_turn_it_cannot_hand_over_forms_no_batch(batch_of):
@@ -406,7 +407,7 @@ def test_older_landing_code_with_a_turn_it_cannot_hand_over_forms_no_batch(batch
     land(ln)
     assert hub.stacked == {} and hub.batch_prs == []
     assert hub.merged == [OWN]
-    assert the_line("waiting", str(line.FRESH_S)).split() == ["7", head_of("7")]
+    assert standing(the_line) == [("7", head_of("7"))]
 
 
 def test_a_bug_in_the_batch_leaves_the_landing_its_own_pr(batch_of, capsys):

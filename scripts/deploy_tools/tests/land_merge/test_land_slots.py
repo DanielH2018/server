@@ -240,13 +240,15 @@ def _line_during_a_serial_step_out(landing, tmp_path, lands_alone):
 def test_a_draft_that_steps_out_for_the_serial_landing_keeps_its_place_in_the_line(
     landing, tmp_path
 ):
-    assert f"999 {HEAD}" in _line_during_a_serial_step_out(landing, tmp_path, False)
+    seen = _line_during_a_serial_step_out(landing, tmp_path, False)
+    assert any(f"999 {HEAD} " in read for read in seen)
 
 
 def test_a_draft_that_lands_alone_steps_out_without_rejoining_the_line(
     landing, tmp_path
 ):
-    assert f"999 {HEAD}" not in _line_during_a_serial_step_out(landing, tmp_path, True)
+    seen = _line_during_a_serial_step_out(landing, tmp_path, True)
+    assert not any(f"999 {HEAD} " in read for read in seen)
 
 
 def test_a_draft_the_holder_merges_while_it_steps_out_is_not_marked_ready(
