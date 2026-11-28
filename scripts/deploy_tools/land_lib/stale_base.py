@@ -285,8 +285,12 @@ def refuse_conflict(ln: Landing, why: str) -> None:
 
 
 def ready_again(ln: Landing) -> None:
-    """Mark the PR's draft ready; die when GitHub refuses, because a draft never merges."""
+    """Mark the PR's draft ready; die when GitHub refuses, because a draft never merges.
+
+    A later step out of the turn then waits outside the line (`turn.held`).
+    """
     pr = str(ln.opts.pr)
+    ln.line_head = ""
     try:
         ln.tools.gh("pr", "ready", pr)
     except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as again:

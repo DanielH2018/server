@@ -12,7 +12,7 @@ import pytest
 
 from _land_fakes import Fakes
 from _land_turn_fakes import HEAD, MERGED, OPEN, START_VIEW, UPDATED, call_order
-from deploy_tools.land_lib import batch, serial_lock, slots, turn
+from deploy_tools.land_lib import batch, line, serial_lock, slots, turn
 from deploy_tools.land_lib.outcome import Outcome, Verdict
 from deploy_tools.promote_lib.wait import WaitResult, WaitVerdict
 from lib.proc_testing import fake_bin, path_with
@@ -210,6 +210,57 @@ def test_the_ledger_counts_the_serial_wait_and_the_wait_to_take_the_turn_back(la
     _land(ln)
     poll = ln.opts.merge_poll
     assert (ln.ledger.serial_wait, ln.ledger.turn_wait) == (2 * poll, poll)
+
+
+def _in_a_real_line(ln, tmp_path, at_each_poll):
+    """Give `ln` a line kept in `tmp_path`, and call `at_each_poll(the_line)` at each sleep."""
+    the_line = line.here(tmp_path)
+
+    def sleep(seconds):
+        at_each_poll(the_line)
+
+    ln.tools = replace(ln.tools, line=the_line, sleep=sleep)
+
+
+@pytest.mark.parametrize(
+    ("lands_alone", "stood"), [(False, True), (True, False)], ids=["a-draft", "alone"]
+)
+def test_a_draft_that_steps_out_for_the_serial_landing_keeps_its_place_in_the_line(
+    landing, tmp_path, lands_alone, stood
+):
+    ln, calls = _merging(
+        landing, _SCRIPT, draft=True, serial=[False, True], turn=[True, False, True]
+    )
+    ln.lands_alone = lands_alone
+    seen = []
+    _in_a_real_line(
+        ln, tmp_path, lambda the_line: seen.append(the_line("waiting", "120"))
+    )
+    _land(ln)
+    assert (f"999 {HEAD}" in seen) is stood
+    assert "merge" in call_order(calls)
+
+
+def test_a_draft_the_holder_merges_while_it_steps_out_is_not_marked_ready(
+    landing, tmp_path
+):
+    ln, calls = _merging(
+        landing,
+        _SCRIPT,
+        draft=True,
+        views={
+            START_VIEW: [{"isDraft": True, **OPEN}, {"isDraft": True, **MERGED}],
+            "state,mergeable,headRefOid": [MERGED],
+        },
+        serial=[False, True],
+        turn=[True, False],
+    )
+    _in_a_real_line(
+        ln, tmp_path, lambda the_line: the_line("answer", "999", HEAD, line.MERGED)
+    )
+    _land(ln)
+    assert "pr ready" not in call_order(calls)
+    assert "merge" not in call_order(calls)
 
 
 def test_a_landing_waits_for_the_serial_landing_past_drain_s_while_its_budgets_last(
