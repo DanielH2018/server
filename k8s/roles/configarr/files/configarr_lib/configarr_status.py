@@ -20,11 +20,11 @@ import re
 _ERROR_LINE = re.compile(r"(?im)^[^\w]*(?:error|fatal)\b")
 
 
-def has_error_line(output) -> bool:
+def has_error_line(output: str | None) -> bool:
     return bool(_ERROR_LINE.search(output or ""))
 
 
-def summarize(output, maxlen: int = 200) -> str:
+def summarize(output: str | None, maxlen: int = 200) -> str:
     """Returns the last meaningful line of configarr's output, collapsed and length-capped.
 
     The useful tail for a one-line verdict message: on a clean run that is configarr's Execution
@@ -38,7 +38,7 @@ def summarize(output, maxlen: int = 200) -> str:
     return tail[: maxlen - 3] + "..." if len(tail) > maxlen else tail
 
 
-def evaluate(returncode, output):
+def evaluate(returncode: int, output: str | None) -> tuple[bool, str]:
     """Whether a configarr sync run succeeded, as (ok, msg) for the {ts,ok,msg} state file.
 
     ok=False on a nonzero exit OR an error-level line in the output (a soft content failure that

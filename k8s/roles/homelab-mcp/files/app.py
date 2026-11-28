@@ -27,6 +27,8 @@ Environment:
     CERT_EXPIRY_DOMAINS, CERT_EXPIRY_PORTS   zone suffixes and ports the cert_expiry tool may dial
 """
 
+# pyright: reportMissingImports=false
+
 from __future__ import annotations
 
 import os
@@ -34,11 +36,12 @@ import socket
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 # Answer --help before the imports below, which need httpx and mcp installed.
 if __name__ == "__main__":
     if any(arg in ("-h", "--help") for arg in sys.argv[1:]):
-        print(__doc__.strip())
+        print((__doc__ or "").strip())
         sys.exit(0)
 
 import httpx
@@ -50,6 +53,12 @@ from starlette.responses import JSONResponse, PlainTextResponse
 import k8s_reads
 import obs_api
 import safe_reads
+
+if TYPE_CHECKING:
+    from starlette.applications import Starlette
+    from starlette.middleware.base import RequestResponseEndpoint
+    from starlette.requests import Request
+    from starlette.responses import Response
 
 TOKEN = os.environ.get("HOMELAB_MCP_TOKEN", "")
 HA_TOKEN = os.environ.get("HOMELAB_HA_TOKEN", "")
@@ -114,7 +123,7 @@ def _docker_base() -> str:
 _kube_client: httpx.Client | None = None
 
 
-def _kube_get(path: str, params: dict | None = None, raw: bool = False):
+def _kube_get(path: str, params: dict | None = None) -> httpx.Response:
     """GET a Kubernetes API path as the pod's ServiceAccount.
 
     The client is built lazily (the SA dir only exists in-pod) and the token is
@@ -122,18 +131,19 @@ def _kube_get(path: str, params: dict | None = None, raw: bool = False):
     stale after an hour.
     """
     global _kube_client
-    if _kube_client is None:
-        _kube_client = httpx.Client(
+    client = _kube_client
+    if client is None:
+        client = _kube_client = httpx.Client(
             timeout=httpx.Timeout(15.0), verify=str(_SA_DIR / "ca.crt")
         )
     token = (_SA_DIR / "token").read_text().strip()
-    r = _kube_client.get(
+    r = client.get(
         f"{KUBE_API}{path}",
         params=params,
         headers={"Authorization": f"Bearer {token}"},
     )
     r.raise_for_status()
-    return r.text if raw else r.json()
+    return r
 
 
 def _prom_rows(promql: str) -> list[dict]:
@@ -193,22 +203,22 @@ def list_pods(namespace: str = "") -> list[dict]:
         path = f"/api/v1/namespaces/{namespace}/pods"
     else:
         path = "/api/v1/pods"
-    return k8s_reads.parse_pod_list(_kube_get(path))
+    return k8s_reads.parse_pod_list(_kube_get(path).json())
 
 
 @mcp.tool()
 def workload_status() -> list[dict]:
     """Every Deployment and DaemonSet with ready/desired counts and images."""
     return k8s_reads.parse_workloads(
-        _kube_get("/apis/apps/v1/deployments"),
-        _kube_get("/apis/apps/v1/daemonsets"),
+        _kube_get("/apis/apps/v1/deployments").json(),
+        _kube_get("/apis/apps/v1/daemonsets").json(),
     )
 
 
 @mcp.tool()
 def list_nodes() -> list[dict]:
     """Cluster nodes: Ready condition, schedulable, kubelet version."""
-    return k8s_reads.parse_nodes(_kube_get("/api/v1/nodes"))
+    return k8s_reads.parse_nodes(_kube_get("/api/v1/nodes").json())
 
 
 @mcp.tool()
@@ -222,8 +232,7 @@ def pod_logs(name: str, namespace: str = "homelab", tail: int = 100) -> str:
         _kube_get(
             f"/api/v1/namespaces/{namespace}/pods/{name}/log",
             params={"tailLines": str(tail), "limitBytes": str(256 * 1024)},
-            raw=True,
-        )
+        ).text
     )
 
 
@@ -461,7 +470,9 @@ def list_files(directory: str = ".") -> list[dict]:
 
 
 class _BearerAuth(BaseHTTPMiddleware):
-    async def dispatch(self, request, call_next):
+    async def dispatch(
+        self, request: Request, call_next: RequestResponseEndpoint
+    ) -> Response:
         if request.url.path == "/health":
             return await call_next(request)
         if not safe_reads.bearer_token_valid(
@@ -471,7 +482,7 @@ class _BearerAuth(BaseHTTPMiddleware):
         return await call_next(request)
 
 
-def build_app():
+def build_app() -> Starlette:
     app = mcp.streamable_http_app()
     app.add_middleware(_BearerAuth)
     app.add_route("/health", lambda request: PlainTextResponse("ok"), methods=["GET"])
