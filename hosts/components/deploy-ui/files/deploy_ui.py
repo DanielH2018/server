@@ -211,7 +211,7 @@ class App:
             **self._landings(table),
         }
 
-    def _landings(self, table: dict) -> dict:
+    def _landings(self, table: dict[reads.LockKey, reads.FileLock]) -> dict:
         """Each landing's state from its record, and the turn's locks.
 
         A failed read of the records directory is named in `landings_unavailable` rather than
