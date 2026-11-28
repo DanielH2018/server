@@ -369,11 +369,16 @@ every one after every step.
   differential test are its whole guard.
 - **Differential test of the driver.** The same random scenario drives the real driver over
   faked I/O and the pure model. The test asserts both produce the same action trace. That
-  ties the code that ships to the model the properties checked. The model takes the answers
-  the driver built, so both sides run the same `step`: the test fails on a driver that
-  skips, adds or reorders an action, and the characterization traces are what fail on a
-  changed transition
-  (`test_land_merge_wait_machine.py::test_the_driver_and_the_model_take_the_same_actions`).
+  ties the code that ships to the model the properties checked. The driver and the model
+  both run `step`, so the two agree on a changed transition, whether the model takes its
+  answers from the driver or from the scenario. The side that does not run `step` is the
+  recorded trace. Over the corpus the test therefore asserts three things agree: the
+  driver's calls equal the recorded trace, and the model returns the actions the driver
+  carried out
+  (`test_land_merge_wait_machine.py::test_the_driver_and_the_model_take_the_actions_the_recorded_wait_took`).
+  It fails on a changed transition and on a driver that skips, adds or reorders an action.
+  A fresh Hypothesis scenario has no recorded trace, so there the test holds the driver to
+  `step` alone.
 - **Replay simulation.** `sim/` replays a day's recorded arrivals, CI durations and outcomes
   through `schedule` under different policies, such as batch size 4 against 6, tickets
   against the race, serial-last, or pipelining. It reports the merges an hour and the wait

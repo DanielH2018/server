@@ -42,11 +42,18 @@ def _first_difference(want: list, got: list) -> str:
     return f"line {at}: recorded {want[at : at + 1]}, got {got[at : at + 1]}"
 
 
-def _runs(sc: Scenario) -> list[Run]:
-    """Every merge wait the driver runs for `sc`."""
+def _driven(sc: Scenario) -> tuple[list[str], list[Run]]:
+    """The trace of `sc`, and every merge wait the driver ran to produce it."""
     with performed() as runs:
-        trace(sc)
-    return runs
+        lines = trace(sc)
+    return lines, runs
+
+
+def _assert_the_model_takes_the_drivers_actions(runs: list[Run], where: str) -> None:
+    assert runs, where
+    for run in runs:
+        want = modelled(run)
+        assert run.actions == want, f"{where}{_first_difference(want, run.actions)}"
 
 
 @pytest.fixture(scope="module")
@@ -66,25 +73,29 @@ def test_the_corpus_holds_every_seed(recorded):
         assert not lines[-1].startswith("raised "), f"seed {seed}: {lines[-1]}"
 
 
-def test_the_driver_reproduces_every_recorded_trace(recorded):
+def test_the_driver_and_the_model_take_the_actions_the_recorded_wait_took(recorded):
+    """The differential test, over the corpus.
+
+    The driver and the model both run `step`, so they agree on a changed transition. The
+    recorded trace is the side that does not run `step`: the driver's actions must make its
+    calls, and the model must return those actions.
+    """
     for seed, sc, want in recorded:
-        got = trace(sc)
+        got, runs = _driven(sc)
         assert got == want, f"seed {seed}, {_first_difference(want, got)}"
+        _assert_the_model_takes_the_drivers_actions(runs, f"seed {seed}, ")
 
 
 @given(st.randoms(use_true_random=False))
-def test_the_driver_and_the_model_take_the_same_actions(rng):
-    """The driver carries out what `step` returns for its answers: all of it, in its order."""
-    runs = _runs(scenario(rng))
-    assert runs
-    for run in runs:
-        want = modelled(run)
-        assert run.actions == want, _first_difference(want, run.actions)
+def test_the_driver_carries_out_what_step_returns_for_a_fresh_scenario(rng):
+    """No recorded trace covers a fresh scenario, so this holds the driver to `step` alone."""
+    _, runs = _driven(scenario(rng))
+    _assert_the_model_takes_the_drivers_actions(runs, "")
 
 
 def test_the_corpus_reaches_every_action_and_every_end(recorded):
     """Non-vacuity: a corpus that never reached a call could not show the driver makes it."""
-    done = [x for _, sc, _ in recorded for run in _runs(sc) for x in run.actions]
+    done = [x for _, sc, _ in recorded for run in _driven(sc)[1] for x in run.actions]
     seen = {f"end {x.end}" if isinstance(x, a.Die) else type(x).__name__ for x in done}
     actions = {kind.__name__ for kind in a.Action.__value__.__args__} - {"Die"}
     ends = {f"end {end}" for end in a.End}
