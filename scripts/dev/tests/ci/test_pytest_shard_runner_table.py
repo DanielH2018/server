@@ -300,7 +300,7 @@ def test_a_master_run_that_skipped_pytest_is_read_through_the_run_that_tested_it
 
 
 def test_a_run_that_tested_several_master_commits_counts_once():
-    """A landing batch's run stands behind up to four commits and is still one reading."""
+    """A landing batch's run stands behind up to six commits and is still one reading."""
     gh, _ = _fake_gh(
         [7, 6, 5],
         {7: _SKIPPED, 6: _SKIPPED, 5: _SKIPPED, 41: _LEG},
