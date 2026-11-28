@@ -26,7 +26,7 @@ and frozen; `plane` is a read-only property over it:
 | `classify.classify` | `merge_sha`, `opts.since`, `opts.primary` | `classification` (frozen: the plane note and its inputs), `resolved_tags`, `needs_diff` |
 | `classify.reaches_host_inputs` (in step 1) | `classification`, `needs_diff` | `host_candidate` |
 | `classify.shortcut_if_nothing` | `resolved_tags`, `plane`, `classification`, `needs_diff`, `host_candidate` | -- |
-| `slots.held` (from step 2 to the verdict) | `opts.merge_timeout`, `opts.merge_poll`, `ledger.t_start` | -- |
+| `slots.held` (from step 2 to the verdict, or to a promotion that gates no tag) | `opts.merge_timeout`, `opts.merge_poll`, `ledger.t_start` | `give_up_slot` |
 | `ci.wait_master_ci` | `merge_sha`, `opts.ci_timeout` | `ledger.t_ci` |
 | `host_wait.host_targets` (in step 2, only when `host_candidate`) | `host_candidate`, `merge_sha`, `opts.primary` | `host_targets`, and `host_candidate` cleared when none differ |
 | `deploy.deploy_phase` | `resolved_tags`, `needs_diff`, `host_targets`, `classification`, `opts.since`, `merge_sha` | `resolved_tags`, `named_k8s_tags`, `flux_tags`, `suspended_tags`, `deployed_at`, `ledger.tags_label`, `ledger.cause`, `ledger.t_deploy` |
