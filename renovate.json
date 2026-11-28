@@ -246,12 +246,14 @@
     },
     {
       "customType": "regex",
-      "description": "The dotfiles commit the CI pytest job checks out (`DOTFILES_SHA` in .github/actions/pytest-tools/action.yml, #2812). A pin rather than `main` keeps an unrelated dotfiles commit from turning server CI red, and a person reads each bump's CI run before merging. The bump is half done: the `claude-worktree` rev in pyproject.toml's [tool.uv.sources] must move to the same SHA, with `uv lock`, or the `pytest-tools-dotfiles-pin-is-the-type-checkers-pin` census row fails.",
+      "description": "The dotfiles commit the CI pytest job checks out (`DOTFILES_SHA` in .github/actions/pytest-tools/action.yml, #2812), and the `claude-worktree` rev in pyproject.toml's [tool.uv.sources], which the `pytest-tools-dotfiles-pin-is-the-type-checkers-pin` census row holds to the same commit. A pin rather than `main` keeps an unrelated dotfiles commit from turning server CI red, and a person reads each bump's CI run before merging. Both matches share one depName, so one branch moves both literals. uv.lock still needs `uv lock` on that branch, and the `uv-lock-check` prek hook fails until it has run.",
       "managerFilePatterns": [
-        "/(^|/)\\.github/actions/pytest-tools/action\\.yml$/"
+        "/(^|/)\\.github/actions/pytest-tools/action\\.yml$/",
+        "/^pyproject\\.toml$/"
       ],
       "matchStrings": [
-        "DOTFILES_SHA:\\s*(?<currentDigest>[a-f0-9]{40})"
+        "DOTFILES_SHA:\\s*(?<currentDigest>[a-f0-9]{40})",
+        "claude-worktree = \\{ git = \"https://github\\.com/DanielH2018/dotfiles\", rev = \"(?<currentDigest>[a-f0-9]{40})\""
       ],
       "depNameTemplate": "DanielH2018/dotfiles",
       "packageNameTemplate": "https://github.com/DanielH2018/dotfiles",
