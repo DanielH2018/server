@@ -187,7 +187,7 @@ def main(
 
 if __name__ == "__main__":
     if any(arg in ("-h", "--help") for arg in sys.argv[1:]):
-        print(__doc__.strip())
+        print((__doc__ or "").strip())
         sys.exit(0)
     try:
         sys.exit(main())
