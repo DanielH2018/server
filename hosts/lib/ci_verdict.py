@@ -93,7 +93,10 @@ def _leg_number(leg: str) -> int:
 CI_PYTEST_LEGS = _legs("pytest (shard ")
 CI_SKIPPED_MATRIX_JOBS = {
     "pytest (shard ${{ matrix.shard }})": CI_PYTEST_LEGS,
-    "host_packages": _legs("host_packages ("),
+    "hooks (${{ matrix.checks }})": _legs("hooks ("),
+    "host_packages (${{ matrix.release }}, ${{ matrix.python }})": _legs(
+        "host_packages ("
+    ),
     "host_packages_bootstrap (${{ matrix.release }}, ${{ matrix.python }})": _legs(
         "host_packages_bootstrap ("
     ),

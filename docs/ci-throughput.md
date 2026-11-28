@@ -274,6 +274,48 @@ A pull request that edits the test image's Dockerfile builds the image in each b
 In run 45069920787 that build took about 120 s of a 230 s leg, while the case step took 88 to
 91 s.
 
+## The `hooks` and `host_packages` jobs run two legs each
+
+**A run lasts as long as its slowest job, so each of the two slowest jobs runs as two legs.**
+Each pair of legs shares one check-run name, which `hosts/lib/ci_verdict.py` lists, and
+`ci_verdict` takes the worst outcome per name.
+
+- **`hooks` runs `validate-alert-rules` in one leg and every other hook in the other.** The
+  matrix's `hooks` value is the leg's hook selection. A hook added to `prek.toml` runs in the
+  second leg. The `ci-hooks-legs-run-each-hook-once` row of
+  `tests/repo/census_rows/test_census_rows_workflows.py` fails when a hook runs in no leg or
+  in both.
+- **`host_packages` runs two shards of `case_groups.groups`.** A shard takes every second
+  group of a longest-first list, and `node_package_case` is one group per node.
+
+Before the split, two runs measured these figures:
+
+- Run 46054678957, with no host change, took 358 s, 1,666 runner-seconds and at most 11 jobs
+  at once. Its `hooks` job ran 335 s. `validate-alert-rules` took 200 s of the job's 283 s
+  sweep, and every other hook took 83 s. The slowest `pytest` leg ended 242 s in.
+- Run 46065308899, with a host change, took 555 s, 1,844 runner-seconds and at most 9 jobs
+  at once. In its `hooks` job `validate-alert-rules` took 118 s of a 166 s sweep.
+  `host_packages` started 114 s in and ran 417 s, 375 s of it in the updater cases.
+
+The updater cases' group wall times on the 26.04 legs of runs 46065308899, 46070619651,
+46077939789 and 46082772420 were these:
+
+- `node_package_case`, both nodes in turn: 340 to 372 s;
+- `upgrade_path`: 217 to 224 s;
+- `bootstrap_age_case`: 193 to 199 s;
+- `engine_case`: 81 to 91 s;
+- the other eight groups: 7 to 77 s each.
+
+**The first shard ends with `upgrade_path`, and no shard count shortens it.** The group is
+one chain of cases on one container. A run with a host change therefore lasts about 400 s:
+114 s for the build, 39 s of leg setup, about 220 s of cases and the gate
+([#10591](https://github.com/DanielH2018/server/issues/10591)).
+
+The split adds one runner's setup to each job. A run with no host change gains one job and
+about 35 runner-seconds. A run with a host change gains two jobs and about 120
+runner-seconds. Both figures are projected from the runs above, so the runs after the merge
+are the measurement.
+
 ## The plan
 
 The phases run in order, and each slice is one pull request.
