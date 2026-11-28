@@ -47,7 +47,7 @@ def test_gate_serves_every_token_router():
     """The gate must serve every token router, and every router must reach its service.
 
     A token router and an Authelia'd /_utils carve-out per livesync name form, the LAN-only probe
-    router, and the homelab-mcp and vault-mcp bearer routers. Losing a token predicate would forward PAST the gate.
+    router, and the homelab-mcp bearer router. Losing a token predicate would forward PAST the gate.
     """
     gate = _gate_config()
     routers = gate["http"]["routers"]
@@ -60,7 +60,6 @@ def test_gate_serves_every_token_router():
         "livesync-probe",
         "homelab-mcp-local",
         "homelab-mcp-probe",
-        "vault-mcp-local",
     }
     assert set(routers) == expected, f"gate routers drifted: {sorted(routers)}"
     for name, router in routers.items():
@@ -83,12 +82,6 @@ def test_gate_serves_every_token_router():
         "homelab-mcp-local lost the bearer predicate — the gate would forward ungated"
     )
     assert f"Host(`mcp.{DOMAIN}`)" not in mcp_rule
-    vault_rule = routers["vault-mcp-local"]["rule"]
-    assert f"Host(`vault-mcp.local.{DOMAIN}`)" in vault_rule
-    assert "Header(`Authorization`" in vault_rule, (
-        "vault-mcp-local lost the bearer predicate — the gate would forward ungated"
-    )
-    assert f"Host(`vault-mcp.{DOMAIN}`)" not in vault_rule
     # The mcp probe router is the one ungated path: asserted exact Path (not a PathPrefix, which
     # would open /health-anything) and LAN-only.
     probe_rule = routers["homelab-mcp-probe"]["rule"]

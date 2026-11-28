@@ -376,6 +376,13 @@ before deciding what is due. Examples:
 - `authelia_oidc_hmac_secret` / `*_password_hash`: re-issues OIDC — re-pair jellyfin (the
   live OIDC client; beszel's client is provisioned but parked in `archive/`, re-pair only
   if reactivated).
+- `vault_mcp_oidc_client_secret` / `vault_mcp_oidc_client_secret_hash`: the claude.ai vault
+  connector's client secret and its digest, which rotate together. To mint both, run
+  `authelia crypto hash generate pbkdf2 --variant sha512 --random --random.length 72
+  --random.charset alphanumeric`, which prints the secret and its digest. Store both with
+  `sops`, run `cluster_vars.py write`, and land the PR. Then paste the new secret into the
+  connector's OAuth client settings on claude.ai. Until that paste, the connector's token
+  refreshes fail with `invalid_client`.
 
 ### Authelia user passwords — mint the digest, then store both
 

@@ -1,8 +1,8 @@
 """Traefik must render without the LiveSync token gate for a cluster that has no backends for it.
 
-Every router in `livesync-gate-secret.yaml.j2` routes to CouchDB, homelab-mcp or vault-mcp,
-and none is in the staging subset. The Secret also reads `homelab_mcp_token`,
-`vault_mcp_token` and `livesync_sync_token`, which staging's secrets file does not carry —
+Every router in `livesync-gate-secret.yaml.j2` routes to CouchDB or homelab-mcp, and neither
+is in the staging subset. The Secret also reads `homelab_mcp_token` and
+`livesync_sync_token`, which staging's secrets file does not carry —
 those are the ONLY variables left unaccounted for once ACME and CrowdSec are gated, so this
 flag is what lets Traefik deploy to a staging cluster at all.
 

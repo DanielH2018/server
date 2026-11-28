@@ -43,12 +43,21 @@ the wildcard by omission. ENFORCED:
 
 ## OIDC clients
 
-Three relying parties, in `templates/config-secret.yaml.j2` behind `authelia_k8s_manage_oidc`:
-`jellyfin`, `grafana` and `headlamp`. **Grafana must stay `one_factor`** — `two_factor` stalls the
+Four relying parties, in `templates/config-secret.yaml.j2` behind `authelia_k8s_manage_oidc`:
+`jellyfin`, `grafana`, `headlamp` and `vault-mcp`. **Grafana must stay `one_factor`** — `two_factor` stalls the
 headless `-m ui` browser on a TOTP prompt no test can answer. **Headlamp's relying party is the KUBERNETES API SERVER**, not the app, so its
 `claims_policy` serves the API server's mappings in `hosts/components/k3s-server/templates/authentication-config.yaml.j2` and both of this portal's
 issuers must be trusted there. Each client's secret is stored hashed, so one that needs the
 plaintext too takes two SOPS keys that rotate together.
+
+**`vault-mcp` is the claude.ai custom connector, and its relying party is the vault-mcp
+server.** The server accepts only an RS256 access token whose `aud` holds
+`k8s/vars.yml:vault_mcp_connector_url`, the client's only `audience`. Its `vault_mcp`
+authorization policy admits the operator alone, at `two_factor`, and its `vault_mcp` lifespan
+keeps a refresh token for 30 days. claude.ai sends the secret as `client_secret_post` and
+never falls back to Basic, so `token_endpoint_auth_method` must stay that value.
+`k8s/roles/vault-mcp/tests/test_oauth_resource.py::test_authelia_grants_the_audience_and_issuer_the_rendered_server_requires`
+holds the client and the server to the same URL and issuer.
 
 The signing key has a Secret of its own, `authelia-oidc-jwk` from
 `templates/oidc-jwk-secret.yaml.j2`, because Flux strips the newlines from a placeholder's value

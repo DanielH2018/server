@@ -380,9 +380,8 @@ def _dashboard_route_match() -> str:
 def _assert_dashboard_match_does_not_serve_api(match: str) -> None:
     """`api@internal` answers `/api/http/routers` with every router's `rule` string verbatim
     — the file-provider routers in livesync-gate-secret.yaml.j2 embed
-    `livesync_sync_token` and the `homelab_mcp_token` and `vault_mcp_token` bearers in
-    `Header()` matchers, so a match that routes `/api` behind this Authelia session reads every
-    credential back.
+    `livesync_sync_token` and the `homelab_mcp_token` bearer in `Header()` matchers, so a
+    match that routes `/api` behind this Authelia session reads every credential back.
     """
     assert "PathPrefix(`/dashboard`)" in match, (
         f"dashboard route match {match!r} does not scope to /dashboard"

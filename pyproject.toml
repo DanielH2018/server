@@ -72,6 +72,7 @@ dev = [                              # `dev` is uv's default group for `uv run`/
   "hypothesis>=6.170",              # property tests; profiles in tests/hypothesis_profiles.py
   "icalendar",                      # ical-proxy ical_proxy.py parses and writes every feed with it (test_app.py)
   "import-linter>=2.17",            # [tool.importlinter] contracts (test_scripts_import_direction.py)
+  "pyjwt[crypto]",                  # vault-mcp oauth_resource.py checks Authelia's RS256 tokens (test_oauth_resource.py)
 ]
 # Local test reruns only, absent from `default-groups`, so CI never installs it. docs/ci-throughput.md
 # says how to run it. The cap keeps testmon below 2.4.0, which has not been measured here.
