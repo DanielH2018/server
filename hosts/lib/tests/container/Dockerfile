@@ -43,8 +43,8 @@ ENV container=docker
 # They download in a transaction of their own: in the one above, netplan.io changes what apt
 # resolves, and the Pi package's makedev drops out of the cache.
 # `validate_lib/node_package_case.py` installs each cluster node's real package, so the rest of
-# each node's Depends downloads in that node's own transaction, as the case resolves it. Only an
-# amd64 leg runs the case, so the arm64 image skips these.
+# each node's Depends downloads in that node's own transaction, without Recommends, as the case
+# resolves it. Only an amd64 leg runs the case, so the arm64 image skips these.
 # tests/repo/ci_workflows/test_host_test_image_predownloads.py fails on a case Depends this list lacks. `age` generates the throwaway key the
 # secrets-unit case encrypts to (H4.1c). `git`, `gnupg` and `curl` are on an Ubuntu server
 # install, and bootstrap-host.sh calls each before it installs anything (H7.15a). `gcc`,
@@ -74,13 +74,15 @@ RUN --mount=type=secret,id=runner-ca,target=/run/runner-ca.crt,mode=0444 \
         gh; \
     apt-get install -y --download-only nut-client netplan.io; \
     if [ "$(dpkg --print-architecture)" = amd64 ]; then \
-        apt-get install -y --download-only nftables openssh-client; \
-        apt-get install -y --download-only acl apparmor libvirt-clients libvirt-daemon-system \
-            multipath-tools netcat-openbsd nfs-common open-iscsi qemu-system-x86 qemu-utils \
-            virtinst xorriso zsh; \
-        apt-get install -y --download-only acl apparmor apt-utils bat btop chafa fd-find ffmpeg \
-            gron lua5.4 mkvtoolnix multipath-tools netcat-openbsd nfs-common open-iscsi \
-            shellcheck squid-openssl strace zsh zsh-autosuggestions zsh-syntax-highlighting; \
+        apt-get install -y --no-install-recommends --download-only nftables openssh-client \
+            dbus libpam-systemd; \
+        apt-get install -y --no-install-recommends --download-only acl apparmor \
+            libvirt-clients libvirt-daemon-system multipath-tools netcat-openbsd nfs-common \
+            open-iscsi qemu-system-x86 qemu-utils virtinst xorriso zsh; \
+        apt-get install -y --no-install-recommends --download-only acl apparmor apt-utils bat \
+            btop chafa fd-find ffmpeg gron lua5.4 mkvtoolnix multipath-tools netcat-openbsd \
+            nfs-common open-iscsi shellcheck squid-openssl strace zsh zsh-autosuggestions \
+            zsh-syntax-highlighting; \
     fi
 
 # linux-raspi has no amd64 candidate and wireguard pulls a kernel: an empty package stands in, since
