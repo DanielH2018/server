@@ -102,7 +102,7 @@ class ChangeView:
                 at, cached, why = self._board_cache
                 if time.monotonic() - at < self.cfg.board_cache_s:
                     return cached, why
-            sources = {self.cfg.hostname: list(BOARD)}
+            sources: dict[str, list[str]] = {self.cfg.hostname: list(BOARD)}
             for host in self.cfg.fanout_remotes:
                 ssh = ["ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=5", host]
                 sources[host] = [*ssh, f"cd {self.cfg.repo} && {' '.join(BOARD)}"]

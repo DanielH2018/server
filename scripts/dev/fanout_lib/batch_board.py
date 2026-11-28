@@ -99,14 +99,14 @@ def board(batches: Sequence[Batch], tools: Tools) -> list[BoardRow]:
     for host in sorted({b.host for b in batches}):
         mine = [b for b in batches if b.host == host]
         try:
-            proc = tools.run(host, board_command(mine), STATUS_TIMEOUT_S, None)
-            facts = _facts(proc.stdout)
+            stdout = tools.run(host, board_command(mine), STATUS_TIMEOUT_S, None).stdout
         except subprocess.TimeoutExpired:
-            facts = {}
+            stdout = ""
+        facts = _facts(stdout)
         if not facts:
             rows.extend(_row(b, None, {}) for b in mine)
             continue
-        parsed = parse_status(mine, proc.stdout)
+        parsed = parse_status(mine, stdout)
         rows.extend(
             _row(b, s, facts.get(b.batch, {}))
             for b, s in zip(mine, parsed, strict=True)

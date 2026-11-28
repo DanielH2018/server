@@ -94,6 +94,9 @@ lint = [
   # change an inference and turn master red on an unrelated PR.
   # Renovate raises the bump as its own PR, which is where the
   # new diagnostics get read.
+  "pyright[nodejs]==1.1.414",       # second type gate (the `pyright` prek hook), pinned exactly for
+  # ty's reason. The nodejs extra installs Node as a locked wheel,
+  # so the hook downloads no Node at run time.
   "vulture>=2.16",                  # dead-name gate (prek hook); [tool.vulture] holds its ignore list
   "claude-worktree",                # signatures for ty and pyright only; scripts/lib/_claude_worktree.py
   # refuses this copy at runtime. Pinned in [tool.uv.sources] below.
@@ -502,6 +505,8 @@ extra-paths = [
   "scripts/renderer/tests/host",
   "scripts/secrets_mgmt/tests",
   "scripts/tests",
+  "scripts/validate/tests/host_cases",
+  "hosts/components/deploy-ui/tests",
 ]
 
 [tool.ty.src]
@@ -591,7 +596,9 @@ include = [
 [tool.ty.overrides.rules]
 import-not-found = "ignore"
 
-# Pylance in VS Code reads this table. Pyright has no per-file rule overrides, so each file a
+# The `pyright` prek hook reads this table and fails on any error; a warning does not fail it.
+# CI's hooks job runs that hook, and the `pyright-red-proof` hook proves it can fail. Pylance in
+# VS Code reads this table too. Pyright has no per-file rule overrides, so each file a
 # [[tool.ty.overrides]] block above exempts from import-not-found carries a `# pyright:` comment
 # instead: a `reportMissingImports=false` file line, or a line ignore where the renderer's size
 # ceiling counts the file's lines.
@@ -681,6 +688,8 @@ extraPaths = [
   "scripts/renderer/tests/host",
   "scripts/secrets_mgmt/tests",
   "scripts/tests",
+  "scripts/validate/tests/host_cases",
+  "hosts/components/deploy-ui/tests",
 ]
 
 # Airflow and the kubernetes client exist only in the role's image, so the DAGs resolve them

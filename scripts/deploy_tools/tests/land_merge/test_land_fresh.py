@@ -38,14 +38,9 @@ def cache_home(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     return tmp_path / "home" / ".cache"
 
 
-class _Exited:
-    """A child landing that has already ended with `rc`."""
-
-    def __init__(self, rc: int) -> None:
-        self.rc = rc
-
-    def wait(self, timeout: float | None = None) -> int:
-        return self.rc
+def _exits(rc: int) -> subprocess.Popen:
+    """A started child landing that ends with `rc`."""
+    return subprocess.Popen([sys.executable, "-c", f"raise SystemExit({rc})"])
 
 
 def _child(seen: list):
@@ -53,7 +48,7 @@ def _child(seen: list):
         checkout = Path(argv[0]).parents[2]
         assert env[fresh.CHILD_ENV]
         seen.append((argv, (checkout / "reader.py").read_text(), checkout))
-        return _Exited(75)
+        return _exits(75)
 
     return popen
 
@@ -75,7 +70,7 @@ def test_a_fresh_landing_handed_the_turn_inherits_its_descriptor(primary):
 
     def popen(argv, **inherit):
         seen.append(inherit)
-        return _Exited(0)
+        return _exits(0)
 
     fresh.land_fresh(primary, ["--pr", "7"], turn_fd=9, popen=popen)
     [inherit] = seen

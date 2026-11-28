@@ -9,18 +9,16 @@ import io
 import json
 import subprocess
 from pathlib import Path
-from types import SimpleNamespace
 
 import pytest
-from deploy_tools.land_lib import line
 from deploy_tools.land_lib.core.landing_state import State
 from deploy_tools.land_lib.outcome import Next
-from deploy_tools.land_lib.transitions import Transitions
 from dev.fanout_lib import batch_board
 from dev.fanout_lib.manifest import Batch, Manifest, save
 from dev.fanout_lib.transport import Tools
 
 import deploy_ui
+from test_deploy_ui_states import _landing
 from deploy_ui_lib import deploy_ui_changes as changes
 from deploy_ui_lib import deploy_ui_states as states
 
@@ -40,21 +38,6 @@ PR_ROW = {
     "statusCheckRollup": [],
     "createdAt": "2025-11-28T00:00:00Z",
 }
-
-
-def _landing(directory, pr, entered):
-    clock = SimpleNamespace(t=0.0)
-    tools = SimpleNamespace(
-        now=lambda: clock.t,
-        logger=lambda _text: None,
-        hostname=lambda: "daniel-box",
-        line=line.here(directory),
-    )
-    writer = Transitions(pr, tools)
-    for state, at in entered:
-        clock.t = at
-        writer.enter(state)
-    return writer
 
 
 def _board(manifests: Path, reply: str) -> subprocess.CompletedProcess:
@@ -128,6 +111,7 @@ def test_a_batch_its_pr_and_its_landing_are_one_row_in_the_landing_stage_is_clea
     _landing(
         _records(tmp_path),
         "4242",
+        "daniel-box",
         [
             (State.QUEUED, NOW - 300),
             (State.HOLDING, NOW - 200),
@@ -168,7 +152,9 @@ def test_an_ended_landing_names_the_next_action_its_land_result_gives_is_clean(
     tmp_path, make_app
 ):
     # fact: hosts/components/deploy-ui/CLAUDE.md#Changes
-    _landing(_records(tmp_path), "4242", [(State.TESTING, NOW - 400)]).end("pr-ci-red")
+    _landing(
+        _records(tmp_path), "4242", "daniel-box", [(State.TESTING, NOW - 400)]
+    ).end("pr-ci-red")
     (tmp_path / "logs").mkdir()
     (tmp_path / "logs" / "land-20251128-120000.log").write_text(
         "VERDICT: pr-ci-red (PR #4242)\n"

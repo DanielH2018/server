@@ -45,7 +45,7 @@ def _two_orders(draw):
     return reviews, draw(st.permutations(reviews))
 
 
-def _approval(state, commit, at=_STAMPS[0]):
+def _approval(state: str, commit: str, at: str | None = _STAMPS[0]):
     return parse_review(
         {
             "user": {"login": APPROVER},

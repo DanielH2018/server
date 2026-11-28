@@ -23,6 +23,7 @@ STEP = "Fail on a missing binary the suite skips without"
 ABSENT = {
     "strace": "the hosted image ships none; the traced record runs on the hosts",
     "actionlint": "it is in the `lint` group, which the pytest job leaves out",
+    "pyright": "it is in the `lint` group, which the pytest job leaves out",
 }
 # Gates the census must find, so a reworded skip cannot leave it reading nothing.
 KNOWN_GATES = frozenset(

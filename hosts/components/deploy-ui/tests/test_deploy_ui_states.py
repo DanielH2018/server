@@ -3,7 +3,8 @@
 import json
 import os
 import subprocess
-from types import SimpleNamespace
+from collections.abc import Callable
+from dataclasses import dataclass
 
 import pytest
 from deploy_tools.land_lib import line, serial_lock, slots, turn
@@ -17,18 +18,30 @@ from deploy_ui_lib import deploy_ui_states as states
 NOW = 1_764_300_000.0
 
 
+@dataclass
+class _Tools:
+    """The `Boundaries` of a landing on `host`, whose clock reads `t`."""
+
+    host: str
+    line: Callable[..., str] | None
+    t: float = 0.0
+
+    def now(self) -> float:
+        return self.t
+
+    def logger(self, _text: str, /) -> None:
+        pass
+
+    def hostname(self) -> str:
+        return self.host
+
+
 def _landing(directory, pr, host, entered):
     """A landing on `host` that entered each `(state, at)` in turn, through `Transitions`."""
-    clock = SimpleNamespace(t=0.0)
-    tools = SimpleNamespace(
-        now=lambda: clock.t,
-        logger=lambda _text: None,
-        hostname=lambda: host,
-        line=line.here(directory),
-    )
+    tools = _Tools(host, line.here(directory))
     writer = Transitions(pr, tools)
     for state, at in entered:
-        clock.t = at
+        tools.t = at
         writer.enter(state)
     return writer
 

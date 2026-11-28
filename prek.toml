@@ -652,6 +652,26 @@ language = "system"
 pass_filenames = false
 files = "(\\.py$|^(pyproject\\.toml|uv\\.lock)$)"
 
+# Pyright in standard mode, over the whole project as [tool.pyright] sets it: an error fails the
+# commit and a warning does not. About 70 s on daniel-server, against seconds for ty.
+[[repos.hooks]]
+id = "pyright"
+name = "Type-check first-party Python (pyright)"
+entry = "uv run --frozen pyright"
+language = "system"
+pass_filenames = false
+files = "(\\.py$|^(pyproject\\.toml|uv\\.lock)$)"
+
+# The red proof runs pyright, which only the `lint` group installs. CI's pytest shards skip that
+# group and so skip the tests; this hook runs them in the hooks job, which has it.
+[[repos.hooks]]
+id = "pyright-red-proof"
+name = "The pyright hook fails on an error and passes a warning"
+entry = "uv run --frozen pytest -q -n0 -p no:cacheprovider tests/repo/ci_workflows/test_pyright_hook.py"
+language = "system"
+pass_filenames = false
+files = "^(tests/repo/ci_workflows/test_pyright_hook\\.py|scripts/lib/repo_paths\\.py|prek\\.toml|pyproject\\.toml|uv\\.lock)$"
+
 # A name is dead only against every caller in the tree, so this runs over the whole project.
 [[repos.hooks]]
 id = "vulture"

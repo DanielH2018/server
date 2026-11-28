@@ -66,7 +66,9 @@ def test_process_names_the_script_not_its_interpreter_is_clean():
     ) == ["land.py", "land.py", "flock"]
 
 
-def _row(pr: str, queue: str, position=None, alive=True) -> dict:
+def _row(
+    pr: str, queue: str, position: int | None = None, alive: bool | None = True
+) -> dict:
     return {
         "pr": pr,
         "host": "daniel-server",
