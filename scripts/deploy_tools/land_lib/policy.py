@@ -328,7 +328,15 @@ def head_tree(ln: Landing, head: str) -> dict[str, str]:
 
 
 def approval_problem(reviews: list[PrReview], approver: str, head: str) -> str:
-    """Why `approver` has not approved `head`; empty when their latest verdict approves it."""
+    """Why `approver` has not approved `head`; empty when their latest verdict approves it.
+
+    Verdicts that tie on `submitted_at` pass only when each one approves `head`. The answer
+    is the same for every order of `reviews`, so GitHub's listing order decides nothing.
+    """
+
+    def approves_head(r: PrReview) -> bool:
+        return r.get("state") == "APPROVED" and r.get("commit_id") == head
+
     theirs = sorted(
         (
             r
@@ -336,7 +344,12 @@ def approval_problem(reviews: list[PrReview], approver: str, head: str) -> str:
             if (r.get("user") or {}).get("login") == approver
             and r.get("state") in VERDICT_STATES
         ),
-        key=lambda r: r.get("submitted_at") or "",
+        key=lambda r: (
+            r.get("submitted_at") or "",
+            not approves_head(r),
+            r.get("state", ""),
+            r.get("commit_id", ""),
+        ),
     )
     if not theirs:
         return f"{approver} has not approved it"
