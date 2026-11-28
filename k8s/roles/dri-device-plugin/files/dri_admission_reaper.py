@@ -110,7 +110,7 @@ class Kube:
         opener: Opens a `Request`; `open_url` unless a test passes its own.
     """
 
-    def __init__(self, base: str, token: str, opener: Callable = open_url):
+    def __init__(self, base: str, token: str, opener: Callable = open_url) -> None:
         self.base = base
         self.token = token
         self.opener = opener
@@ -146,7 +146,7 @@ def _parse(raw: bytes) -> dict:
 
 
 def _checked(
-    kube: Kube, what: str, method: str, path: str, body=None
+    kube: Kube, what: str, method: str, path: str, body: Mapping | None = None
 ) -> tuple[int, dict]:
     try:
         return kube.call(method, path, body)
@@ -193,7 +193,7 @@ def main(
     kube: Kube | None = None,
 ) -> int:
     parser = argparse.ArgumentParser(
-        description=__doc__.splitlines()[0],
+        description=(__doc__ or "").splitlines()[0],
         epilog=__doc__,
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )

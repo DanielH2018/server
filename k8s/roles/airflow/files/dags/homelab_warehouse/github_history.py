@@ -56,7 +56,7 @@ Get = Callable[[str, Mapping[str, object]], Mapping]
 class GitHub:
     """Authenticated GETs against GitHub's REST API."""
 
-    def __init__(self, token: str, opener: Callable = urllib.request.urlopen):
+    def __init__(self, token: str, opener: Callable = urllib.request.urlopen) -> None:
         self._token = token
         self._opener = opener
 

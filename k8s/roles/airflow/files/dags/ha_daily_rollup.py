@@ -17,15 +17,12 @@ from homelab_warehouse import ha_rollup as ha
 from homelab_warehouse.warehouse import (
     check_day,
     ensure_schema,
+    interval_day,
     replace_partition,
 )
 
 WAREHOUSE_CONN = "warehouse"
 HA_SENSOR_DAILY = Asset("warehouse://ha/sensor_daily")
-
-
-def _day(data_interval_start):
-    return data_interval_start.astimezone(timezone.utc).date()
 
 
 @dag(
@@ -37,10 +34,10 @@ def _day(data_interval_start):
     default_args={"retries": 2, "retry_delay": timedelta(minutes=10)},
     tags=["warehouse", "home-assistant"],
 )
-def ha_daily_rollup():
+def ha_daily_rollup() -> None:
     @task(outlets=[HA_SENSOR_DAILY])
-    def load(data_interval_start=None) -> dict:
-        day = _day(data_interval_start)
+    def load(data_interval_start: datetime | None = None) -> dict:
+        day = interval_day(data_interval_start)
         if not ha.in_backfill_window(day, datetime.now(timezone.utc)):
             raise AirflowSkipException(
                 f"{day}: the recorder keeps only {ha.HA_KEEP_DAYS} days"
@@ -65,8 +62,8 @@ def ha_daily_rollup():
         return {"rows": inserted}
 
     @task
-    def check(data_interval_start=None) -> None:
-        day = _day(data_interval_start)
+    def check(data_interval_start: datetime | None = None) -> None:
+        day = interval_day(data_interval_start)
         check_day(
             PostgresHook(postgres_conn_id=WAREHOUSE_CONN).get_conn,
             "ha_daily_rollup",
