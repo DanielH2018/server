@@ -98,8 +98,8 @@ listed here.
   CouchDB store behind Obsidian LiveSync, and LiveSync's end-to-end encryption leaves only
   ciphertext in it, so its B2 copy is the one off-site copy of the vault that leaks nothing.
   The `vault-mcp` claims hold the decrypted mirror and stay on the no-backup list. The claim
-  moves from `longhorn-nobackup` by the runbook in *Moving `livesync-data` onto the weekly
-  tier* below.
+  moved from `longhorn-nobackup` to `longhorn` by the runbook in *Moving `livesync-data` onto
+  the weekly tier* below.
 - `scrutiny-influxdb-data` (no backup): kopia excluded `scrutiny/influxdb2/`, and the volume
   IS the TSDB (single mount, verified).
 - `crowdsec-db` (no backup): Docker's `crowdsec-db` named volume was deliberately outside

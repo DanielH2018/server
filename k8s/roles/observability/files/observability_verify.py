@@ -25,6 +25,7 @@ Run: python3 observability_verify.py (in the Job; it takes no arguments)
 """
 
 import argparse
+import functools
 import json
 import os
 import sys
@@ -120,13 +121,12 @@ def main(
     env: Mapping[str, str] | None = None,
     read: Callable[[str, str], dict] | None = None,
 ) -> int:
-    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser = argparse.ArgumentParser(description=(__doc__ or "").splitlines()[0])
     parser.parse_args(argv)
     if read is None:
-        token = Path(TOKEN_FILE).read_text().strip()
-
-        def read(namespace: str, name: str) -> dict:
-            return read_daemonset(namespace, name, token)
+        read = functools.partial(
+            read_daemonset, token=Path(TOKEN_FILE).read_text().strip()
+        )
 
     try:
         lines = run(os.environ if env is None else env, read)

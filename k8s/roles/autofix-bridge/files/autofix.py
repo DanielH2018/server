@@ -41,6 +41,7 @@ import sys
 import time
 import urllib.parse
 import urllib.request
+from collections.abc import Callable, Iterable
 
 import bridge.common
 import jobs_metrics
@@ -60,7 +61,7 @@ RADARR_URL = _env("RADARR_URL", "http://radarr:7878").rstrip("/")
 RADARR_API_KEY = _env("RADARR_API_KEY", "")
 
 
-def _dry_run_enabled(val):
+def _dry_run_enabled(val: object) -> bool:
     """Fail-safe dry-run: enabled UNLESS explicitly disabled (0/false/no)."""
     return str(val).strip().lower() not in ("0", "false", "no")
 
@@ -82,7 +83,7 @@ HARD_BAD_STATE = frozenset({"importBlocked", "importFailed"})
 
 
 # pure decision core
-def item_messages(item):
+def item_messages(item: dict) -> list[str]:
     """All statusMessage strings for a queue item, flattened."""
     out = []
     for sm in item.get("statusMessages") or []:
@@ -90,14 +91,14 @@ def item_messages(item):
     return out
 
 
-def dangerous(messages, patterns):
+def dangerous(messages: list[str], patterns: list[str]) -> bool:
     """True if any statusMessage matches a known-dangerous substring (case-insensitive)."""
     low = [m.lower() for m in messages]
     pats = [p.lower() for p in patterns]
     return any(p in m for p in pats for m in low)
 
 
-def is_candidate(item, patterns):
+def is_candidate(item: dict, patterns: list[str]) -> bool:
     """Returns whether a queue item is an auto-block candidate (hard-bad or malware-signature).
 
     - malware-signature (warning + dangerous statusMessage) -> candidate.
@@ -122,7 +123,7 @@ def is_candidate(item, patterns):
     return False
 
 
-def item_key(app_name, item):
+def item_key(app_name: str, item: dict) -> str:
     """Stable identity across cycles: the download-client hash, falling back to the queue id.
 
     App-scoped (prefixed with `app_name`) because Sonarr and Radarr number their queue `id`s
@@ -140,7 +141,7 @@ def item_key(app_name, item):
     return "%s:id:%s" % (app_name, item.get("id"))
 
 
-def item_reason(item):
+def item_reason(item: dict) -> str:
     """Human reason for the action log: the statusMessages, else the status/state."""
     msgs = item_messages(item)
     return (
@@ -151,7 +152,9 @@ def item_reason(item):
     )
 
 
-def eligible(candidate_keys, streaks, grace, max_actions):
+def eligible(
+    candidate_keys: set[str], streaks: dict[str, int], grace: int, max_actions: int
+) -> tuple[list[str], list[str]]:
     """Pure grace + blast-radius decision. MUTATES `streaks` in place.
 
     - increments the streak of each key that is a candidate THIS cycle;
@@ -172,7 +175,7 @@ def eligible(candidate_keys, streaks, grace, max_actions):
     return met, []
 
 
-def search_command(app_name, item):
+def search_command(app_name: str, item: dict) -> dict | None:
     """The /api/v3/command body to re-search the series/movie of a queue item, or None.
 
     Series/movie granularity (robust for season packs — a queue record's episodeId may not
@@ -189,7 +192,9 @@ def search_command(app_name, item):
     return None
 
 
-def format_action(dry_run, app_name, title, reason, streak, grace):
+def format_action(
+    dry_run: bool, app_name: str, title: str, reason: str, streak: int, grace: int
+) -> str:
     """Formats one action-log / Discord line for an autoblock decision.
 
     Args:
@@ -217,7 +222,7 @@ def format_action(dry_run, app_name, title, reason, streak, grace):
 HOLD_TITLES_SHOWN = 3
 
 
-def format_hold(held, cap):
+def format_hold(held: list[tuple[str, str]], cap: int) -> str:
     """Formats the alert for a cycle that holds every grace-met item because more than `cap` met.
 
     Args:
@@ -250,20 +255,25 @@ class CycleState:
           empties it, so a hold that recurs alerts again.
     """
 
-    def __init__(self, streaks=None):
+    def __init__(self, streaks: dict[str, int] | None = None) -> None:
         self.streaks = {} if streaks is None else streaks
-        self.posted_hold = frozenset()
+        self.posted_hold: frozenset[str] = frozenset()
 
-    def hold_changed(self, held):
+    def hold_changed(self, held: Iterable[str]) -> bool:
         """Records `held` as this cycle's held keys; True when they differ from the last cycle's."""
-        held = frozenset(held)
-        changed = held != self.posted_hold
-        self.posted_hold = held
+        held_keys = frozenset(held)
+        changed = held_keys != self.posted_hold
+        self.posted_hold = held_keys
         return changed
 
 
 # I/O
-def _request(url, method="GET", headers=None, data=None):
+def _request(
+    url: str,
+    method: str = "GET",
+    headers: dict[str, str] | None = None,
+    data: dict | None = None,
+) -> object:
     """One HTTP call. Always sends a User-Agent (Discord Cloudflare 1010-403s without one)."""
     hdrs = {"User-Agent": "autofix-bridge"}
     if headers:
@@ -278,7 +288,7 @@ def _request(url, method="GET", headers=None, data=None):
         return json.loads(raw) if raw else None
 
 
-def post_discord(msg):
+def post_discord(msg: str) -> bool:
     """Posts `msg` to the *arr Discord webhook; True when it was delivered. Never raises."""
     if not DISCORD_WEBHOOK_URL:
         bridge.common.log("WARN: no Discord webhook set; skipping report:", msg)
@@ -294,7 +304,7 @@ def post_discord(msg):
     return True
 
 
-def run_once(state):
+def run_once(state: CycleState) -> tuple[bool, str]:
     """One poll+decide+act cycle over `state`, the `CycleState` the loop carries between cycles.
 
     A held set posts to Discord once delivered, and again only when its membership changes.
@@ -323,6 +333,8 @@ def run_once(state):
     candidates = {}  # item_key -> (app_name, base, key, item)
     for app_name, base, url, key in configured:
         data = _request(url, headers={"X-Api-Key": key})
+        if not isinstance(data, dict):
+            raise ValueError("%s queue returned no JSON object" % app_name)
         for item in data.get("records", []):
             if is_candidate(item, DANGEROUS_MSG_PATTERNS):
                 candidates[item_key(app_name, item)] = (app_name, base, key, item)
@@ -379,7 +391,13 @@ def run_once(state):
     return True, "queue clean (%s)" % ", ".join(a[0] for a in configured)
 
 
-def start_exporter(port, interval, factory=jobs_metrics.Exposition):
+def start_exporter(
+    port: int,
+    interval: int,
+    factory: Callable[
+        [dict[str, int]], jobs_metrics.Exposition
+    ] = jobs_metrics.Exposition,
+) -> jobs_metrics.Exposition | None:
     """Starts the check exporter on `port` and returns it, or returns None when `port` is 0.
 
     The one `check` is covered by a deadline of DEADLINE_CYCLES intervals. `factory` is the
@@ -392,7 +410,9 @@ def start_exporter(port, interval, factory=jobs_metrics.Exposition):
     return exposition
 
 
-def cycle_verdict(state, run=None):
+def cycle_verdict(
+    state: CycleState, run: Callable[[CycleState], tuple[bool, str]] | None = None
+) -> tuple[bool, str]:
     """Returns `(ok, msg)` for one cycle; a cycle that raises is a DOWN naming the error.
 
     An unreachable *arr or a failed mutation must not kill the loop. `run` defaults to
@@ -404,17 +424,19 @@ def cycle_verdict(state, run=None):
         return False, "autofix-bridge error: %s" % e
 
 
-def report_cycle(exposition, ok, msg):
+def report_cycle(
+    exposition: jobs_metrics.Exposition | None, ok: bool, msg: str
+) -> None:
     """Logs a cycle's verdict and records it to the exporter, which `--once` never starts."""
     bridge.common.log("OK  " if ok else "DOWN", msg)
     if exposition:
         exposition.record(CHECK, ok, time.time())
 
 
-def parse_args(argv):
+def parse_args(argv: list[str]) -> argparse.Namespace:
     """Parses the bridge's flags, exiting non-zero on an unknown one."""
     parser = argparse.ArgumentParser(
-        description=__doc__.strip().split("\n\n")[0], allow_abbrev=False
+        description=(__doc__ or "").strip().split("\n\n")[0], allow_abbrev=False
     )
     parser.add_argument(
         "--once", action="store_true", help="run a single cycle and exit"
@@ -422,7 +444,7 @@ def parse_args(argv):
     return parser.parse_args(argv)
 
 
-def main(argv):
+def main(argv: list[str]) -> None:
     """Runs the poll+decide+act loop, reporting each cycle's verdict.
 
     Loops forever at INTERVAL seconds unless invoked with --once, in which case it runs a
