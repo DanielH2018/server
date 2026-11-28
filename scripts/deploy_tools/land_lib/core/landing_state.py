@@ -159,7 +159,8 @@ class LandingState:
         wait_ends_at: The `waited` at which the wait ends.
         batched: Whether a landing batch's run counted toward `waited`, which caps
             `wait_ends_at` at two merge budgets from the start.
-        in_turn: Whether this landing holds the landing turn.
+        in_turn: Whether this landing holds the landing turn. An answer whose call ended
+            without the turn clears it (`landing_actions._Answered`).
         asked: Whether this landing has asked for the turn.
         queued: The seconds it stood in line for the turn.
         tested_head: The head a landing batch tested, whose pending run is Proving.

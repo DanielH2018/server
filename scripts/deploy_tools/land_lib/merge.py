@@ -61,6 +61,7 @@ import contextlib
 import re
 import subprocess
 from collections.abc import Callable
+from dataclasses import replace
 from functools import partial
 from typing import cast
 
@@ -483,9 +484,12 @@ def await_merge(ln: Landing, take_turn: TakeTurn = _no_turn) -> None:
 
     A landing that holds the turn gives it back for the length of any rate-limit wait, its CI
     read's or a gh read's, and asks for it again before it goes on (`Landing.without_turn`),
-    so the landings behind it do not wait out the same limit. Master may have moved while it
-    waited, so before its merge a head master moved past gives the turn back and rejoins the
-    line as a draft (`stale_base.rejoin_in_turn`).
+    so the landings behind it do not wait out the same limit. That ask can end without the
+    turn. Every answer reports whether the landing still holds it (`Landing.holds_turn`), so
+    the wait then goes on as a landing with no turn: a pending head enters neither `testing`
+    nor `proving`, and a green head asks for the turn before its merge. Master may have moved
+    while it waited, so before its merge a head master moved past gives the turn back and
+    rejoins the line as a draft (`stale_base.rejoin_in_turn`).
 
     Just before the merge call, a landing whose turn was held over an ssh session that has
     since ended (`turn.SshLock.lost`) does not merge: another landing may hold the turn by
@@ -541,8 +545,14 @@ def _perform(ln: Landing, take_turn: TakeTurn, action: act.Action) -> act.Observ
     """Carry out one action through the module that owns it.
 
     Returns:
-        The answer `step` takes next. An action that only reports answers `Done`.
+        The answer `step` takes next, with whether the landing holds the turn once the action
+        returned. An action that only reports answers `Done`.
     """
+    return replace(_call(ln, take_turn, action), holds_turn=ln.holds_turn())
+
+
+def _call(ln: Landing, take_turn: TakeTurn, action: act.Action) -> act.Observation:
+    """`_perform`'s call for `action`, and its answer before the turn is read."""
     t = ln.tools
     match action:
         case act.StartRun(rejoined=rejoined, drafted=drafted):

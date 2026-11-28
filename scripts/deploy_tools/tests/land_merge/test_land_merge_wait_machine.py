@@ -19,16 +19,18 @@ import pytest
 from hypothesis import given
 from hypothesis import strategies as st
 
-from _merge_wait_scenarios import Scenario, TurnBy, scenario
+from _merge_wait_scenarios import HEAD, Scenario, TurnBy, scenario
 from _merge_wait_traces import SEEDS, Run, corpus, modelled, performed, record, trace
 from deploy_tools.land_lib.core import landing_actions as a
 from deploy_tools.land_lib.core import landing_machine
+from lib.exit_codes import CI_GREEN, CI_PENDING
 from deploy_tools.land_lib.core.landing_state import (
     Ci,
     LandingState,
     Point,
     Poll,
     Setup,
+    State,
 )
 
 _SETUP = Setup(pr="1", merge_timeout=300, merge_poll=30, direct=True, stuck_after_s=600)
@@ -125,3 +127,48 @@ def test_an_untested_head_rejoins_after_a_step_out_of_the_turn():
         _green_in_turn(), a.Tested(tested=False, interrupted=True)
     )
     assert actions == [a.RejoinInTurn("h1", conflicting=False)]
+
+
+# A draft takes the turn for its run, then reads CI refused for the rate. The wait out of the
+# turn asks for it again and gets no answer but no, so it goes on without one.
+_RETAKE_FAILS = Scenario(
+    polls=[("OPEN", "MERGEABLE", HEAD)],
+    start_draft=True,
+    ci=[(-1, "30"), (CI_PENDING, "CI pending")],
+    turn=[True, False],
+    merge_timeout=60,
+    merge_poll=30,
+    turn_by=TurnBy.HELD,
+)
+
+
+def test_a_wait_whose_retake_of_the_turn_fails_enters_no_state_of_the_turn():
+    lines, _ = _driven(_RETAKE_FAILS)
+    moves = [line.split(" to=")[1].split()[0] for line in lines if " to=" in line]
+    assert moves[moves.index("yielded") :] == ["yielded", "queued", "no-turn"]
+
+
+def test_a_wait_whose_retake_of_the_turn_fails_reads_no_turn():
+    _, runs = _driven(_RETAKE_FAILS)
+    run = runs[0]
+    s, todo = landing_machine.start(run.first)
+    done = len(todo)
+    held = []
+    while not isinstance(todo[-1], a.WaitOutRateLimit):
+        held.append(s.in_turn)
+        s, todo = landing_machine.step(s, run.answers[done - 1])
+        done += len(todo)
+    s, _ = landing_machine.step(s, run.answers[done - 1])
+    assert True in held, "the wait never held the turn"
+    assert s.in_turn is False
+
+
+def test_a_batch_member_reads_its_holders_turn_not_its_own():
+    member = Scenario(
+        polls=[("OPEN", "MERGEABLE", HEAD), ("MERGED", "UNKNOWN", HEAD)],
+        ci=[(CI_PENDING, "CI pending"), (CI_GREEN, "CI green")],
+        turn_by=TurnBy.MEMBER,
+        tested=True,
+    )
+    _, runs = _driven(member)
+    assert a.Enter(State.PROVING) in runs[0].actions

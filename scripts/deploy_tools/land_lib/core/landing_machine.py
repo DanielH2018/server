@@ -118,9 +118,14 @@ def _poll(s: LandingState, *said: Action) -> Step:
 def step(s: LandingState, answer: Observation) -> Step:
     """The next state and actions, given the answer to the last action `step` returned.
 
+    A call that stepped out of the turn and could not take it back clears `in_turn` before
+    `answer` is read, so no transition after it acts on a turn the landing no longer holds.
+
     Raises:
         TypeError: `answer` is not the kind the awaited call returns.
     """
+    if not answer.holds_turn:
+        s = replace(s, in_turn=False)
     handler = _HANDLERS[s.awaiting]
     return handler(s, answer)
 
@@ -131,7 +136,7 @@ def _on_start(s: LandingState, a: Observation) -> Step:
     s = replace(
         s,
         updated_from=a.updated_from,
-        in_turn=a.in_turn,
+        in_turn=a.in_turn and a.holds_turn,
         queued=a.in_line,
         waited=a.in_line,
         asked=s.asked or a.asked,
@@ -183,7 +188,7 @@ def _on_restart(s: LandingState, a: Observation) -> Step:
     s = replace(
         s,
         updated_from=a.updated_from or s.updated_from,
-        in_turn=a.in_turn,
+        in_turn=a.in_turn and a.holds_turn,
         queued=s.queued + a.in_line,
         waited=waited,
         wait_ends_at=_bounded(s, waited),
@@ -265,7 +270,7 @@ def _on_rejoin_line(s: LandingState, a: Observation) -> Step:
 def _on_ask(s: LandingState, a: Observation) -> Step:
     if not isinstance(a, TurnAnswered):
         raise TypeError(a)
-    s = replace(s, in_turn=a.in_turn, tested_head=a.tested_head)
+    s = replace(s, in_turn=a.in_turn and a.holds_turn, tested_head=a.tested_head)
     if not a.in_line:
         return _merge(s)
     # The PR may have moved while this landing stood in line, so it is read again.

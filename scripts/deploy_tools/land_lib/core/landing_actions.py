@@ -257,8 +257,23 @@ type Action = (
 # -- answers --------------------------------------------------------------------------------
 
 
+@dataclass(frozen=True, kw_only=True)
+class _Answered:
+    """What every answer carries: whether the landing still holds the turn once the call returned.
+
+    Any call can step out of the turn for a rate-limit wait (`Landing.without_turn`), and the
+    ask for the turn after it can end without one. `step` clears `LandingState.in_turn` on an
+    answer that reports the turn gone, and never sets it from this field.
+
+    Attributes:
+        holds_turn: `Landing.holds_turn` after the call; a batch member reads its holder's.
+    """
+
+    holds_turn: bool = True
+
+
 @dataclass(frozen=True)
-class RunStarted:
+class RunStarted(_Answered):
     """What `merge._start_run` returned, and the turn's facts it changed.
 
     Attributes:
@@ -279,7 +294,7 @@ class RunStarted:
 
 
 @dataclass(frozen=True)
-class Viewed:
+class Viewed(_Answered):
     """The PR as one poll read it."""
 
     pr_state: str
@@ -288,14 +303,14 @@ class Viewed:
 
 
 @dataclass(frozen=True)
-class PolicyChecked:
+class PolicyChecked(_Answered):
     """The head the landing policy pinned."""
 
     pinned_head: str
 
 
 @dataclass(frozen=True)
-class CiRead:
+class CiRead(_Answered):
     """One await_ci answer; `stall` is what its line names, and `checks` its last count."""
 
     ci: Ci
@@ -305,7 +320,7 @@ class CiRead:
 
 
 @dataclass(frozen=True)
-class CiRateLimited:
+class CiRateLimited(_Answered):
     """GitHub refused the CI read for its rate."""
 
     wait_s: int
@@ -314,21 +329,21 @@ class CiRateLimited:
 
 
 @dataclass(frozen=True)
-class StallWatched:
+class StallWatched(_Answered):
     """The watch `stall.on_poll` returned."""
 
     watch: Watch
 
 
 @dataclass(frozen=True)
-class Answer:
+class Answer(_Answered):
     """A yes or no: a rejoin made, a turn lost."""
 
     yes: bool
 
 
 @dataclass(frozen=True)
-class TurnAnswered:
+class TurnAnswered(_Answered):
     """What asking for the turn returned, as `RunStarted` names its fields."""
 
     in_turn: bool
@@ -337,21 +352,21 @@ class TurnAnswered:
 
 
 @dataclass(frozen=True)
-class PinsGated:
+class PinsGated(_Answered):
     """The forward-only pins the gated head bumps."""
 
     pins: tuple[str, ...]
 
 
 @dataclass(frozen=True)
-class CommitsRead:
+class CommitsRead(_Answered):
     """The PR's commits, passed on to `Merge` unread."""
 
     commits: tuple[object, ...]
 
 
 @dataclass(frozen=True)
-class Tested:
+class Tested(_Answered):
     """Whether a batch tested the head on master's tip, and whether the turn was stepped out of."""
 
     tested: bool
@@ -359,26 +374,26 @@ class Tested:
 
 
 @dataclass(frozen=True)
-class MergeAnswered:
+class MergeAnswered(_Answered):
     """GitHub's refusal of the merge, or "" for a merge it took."""
 
     refusal: str
 
 
 @dataclass(frozen=True)
-class Names:
+class Names(_Answered):
     """The checks a read named."""
 
     names: tuple[str, ...]
 
 
 @dataclass(frozen=True)
-class Done:
+class Done(_Answered):
     """A call that answers nothing, or ends the landing itself."""
 
 
 @dataclass(frozen=True)
-class Slept:
+class Slept(_Answered):
     """The seconds a sleep took."""
 
     seconds: int

@@ -191,6 +191,7 @@ def _member(ln: Landing, pr: str) -> Landing:
     member.transitions = Transitions(pr, None)
     member.step_out_of_turn = partial(_wait_without_turn, ln, member)
     member.turn_lost = ln.turn_lost
+    member.holds_turn = ln.holds_turn
     return member
 
 
@@ -475,7 +476,7 @@ def form(ln: Landing, head: str) -> int:
     try:
         try:
             base = _master_tip(ln)
-            if ln.give_back_turn is None:
+            if not ln.holds_turn():
                 say(f"no batch: {_TURN_LOST}; PR #{pr} lands alone")
                 return 0
             tip = _stack(ln, branch, base, head, members)
@@ -576,7 +577,7 @@ def _merge_member(ln: Landing, member: Member, before: Landing) -> str:
     labelled = False
     try:
         member.ln.tested_on = _merge_commit(before)
-        if ln.give_back_turn is None:
+        if not ln.holds_turn():
             return _TURN_LOST
         if not member.ln.tested_on:
             return f"PR #{before.opts.pr}'s merge commit could not be read"
@@ -639,7 +640,7 @@ def forming(ln: Landing, take_turn: merge.TakeTurn) -> merge.TakeTurn:
             # Before the draft's run, so a PR its merge would be refused spends no run.
             slots.refuse_before_run(ln, draft)
             # A rate-limit wait in those rules can end without the turn (`turn.held`).
-            in_turn = ln.give_back_turn is not None
+            in_turn = ln.holds_turn()
         if in_turn and draft and ln.opts.batch and not ln.lands_alone:
             try:
                 ln.batched_s = form(ln, draft)
@@ -649,7 +650,7 @@ def forming(ln: Landing, take_turn: merge.TakeTurn) -> merge.TakeTurn:
                 # DECIDED: a batch never fails the landing that forms it.
                 say(f"the landing batch failed ({exc!r}); PR #{ln.opts.pr} lands alone")
                 ln.tested_on, ln.batch = "", []
-            in_turn = ln.give_back_turn is not None
+            in_turn = ln.holds_turn()
         return in_turn, waited + ln.batched_s
 
     return take
