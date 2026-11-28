@@ -5,7 +5,9 @@ promotion, the hosts and the health gate. The slots bound how many do that at on
 both hosts. Before the merge the landing turn (`turn.py`) is the bound: only the landing that
 holds it polls its PR's CI. So a landing takes a slot after its merge and its step 1, and holds
 it to its verdict. A landing whose step 1 ends it, such as a docs-only PR or one whose grading
-moves to a fresh checkout, takes none.
+moves to a fresh checkout, takes none. A landing whose promotion gates no tag gives its slot up
+before its verdict (`Landing.give_up_slot`, `promotion.wait_on_promotion`) and polls on
+without one, so a serial PR's drain, which reads the slots (`_bar`), does not wait for it.
 
 A slot is one of `COUNT` lock files on `turn.TURN_HOST`, locked the way the turn is: a landing
 there locks a file itself, and a landing on another host locks one through an ssh session that
@@ -157,11 +159,27 @@ def _wait(ln: Landing) -> Release | None:
 
 @contextlib.contextmanager
 def held(ln: Landing) -> Generator[None]:
-    """Wait for a landing slot, hold it while the block runs, and free it however it ends."""
+    """Wait for a landing slot, hold it while the block runs, and free it however it ends.
+
+    Inside the block, `ln.give_up_slot` frees the slot early, and the block's end then frees
+    nothing more. An early release that fails is ignored, so the landing goes on.
+    """
     release = _wait(ln)
+    outside = ln.give_up_slot
+
+    def give_up() -> None:
+        nonlocal release
+        if release:
+            freed, release = release, None
+            with contextlib.suppress(OSError):
+                freed()
+            say("gave up the landing slot: this landing gates no tag")
+
+    ln.give_up_slot = give_up
     try:
         yield
     finally:
+        ln.give_up_slot = outside
         if release:
             release()
 

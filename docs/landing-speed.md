@@ -210,6 +210,19 @@ hold.
    `docs/ci-throughput.md` measured, a batch of four is red 14% to 24% of the time and a batch
    of six 20% to 33%. A red batch splits, and never costs more runs than its members landing
    alone.
+4. **Leave the landings that gate no tag out of a serial PR's drain**
+   ([#10538](https://github.com/DanielH2018/server/issues/10538)). The operator ruled on
+   2026-11-28 to leave them out rather than end them early. A landing gives up its slot once
+   `promote.py land-wait` reads its merge commit's `digests.json` and the changed set reads
+   `homelab` alone. The landing still waits for `homelab` to reach its commit, so it still
+   ends `deploy-failed` on a hold. The retained logs from 2026-11-22 to 2026-11-27 hold 8
+   serial drains, 6600 s in all. About 346 s of that was spent waiting only on landings that
+   gated no tag, and one drain, #10329's 240 s, would not have started. In 7 of the 8 drains
+   a landing that gated a tag lasted to within 2 minutes of the drain's end, both drains
+   cited above included. So the change mostly frees slots, and shortens a drain only when
+   no tag-gating landing is in flight. Of the 346 s, 334 s came from no-tag landings that
+   then waited on a host package. Those give their slot up too, because the host wait reads
+   Prometheus and no GitHub.
 
 ## Options that need the operator, ranked
 
@@ -225,18 +238,13 @@ uses the day's numbers.
    serial PR goes. The 3.9 h of `serial_wait` measured today is the upper bound. Complexity: one rule in `slots._bar_after_waits`
    or `batch._members`, bounded by the serial PR's merge budgets. The cost is the serial PR's
    own latency, and it reorders landings. It weakens no check.
-2. **Exclude from the drain the landings that gate no tag.** 30 `nothing-to-deploy` landings
-   waited a median of 206 s, and up to 1303 s, on the promotion of `homelab` alone. A serial
-   PR's drain waits for them too. Ending them at master CI green would shorten drains and free
-   slots. It weakens a check: such a landing would no longer see a hold or a failed promotion
-   that includes its commit. Ask the operator first.
-3. **Shorten the soak.** A `settled` landing's deploy has a median of 962 s, and the soak's
+2. **Shorten the soak.** A `settled` landing's deploy has a median of 962 s, and the soak's
    window W is 52% of it (*Where a settled deploy's time goes*). The largest single term is
    one 15-minute rule, which holds every `observability` change at W = 1020 s instead of
    240 s ([#10603](https://github.com/DanielH2018/server/issues/10603)). The deploy runs
    after the merge, so a shorter soak frees no turn time except inside a serial drain. It
    weakens a safety check, so it ranks last.
-4. **Narrow which `k8s/services.yml` edits are serial.** The operator ruled on 2026-11-19 that
+3. **Narrow which `k8s/services.yml` edits are serial.** The operator ruled on 2026-11-19 that
    every edit is serial (`live_limit.py`, `DECIDED:`). Nothing measured today reopens that
    ruling. #10458 adds one CronJob and holds the serial lock for it.
 

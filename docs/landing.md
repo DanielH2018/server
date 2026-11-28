@@ -227,7 +227,17 @@ is waited out first, as the bullets below say. A refused landing exits 75 with
   draft's turn its CI run starts anyway. Just before the merge it waits in the turn, up to
   `slots.DRAIN_S`, for the landings past their merge to reach their verdicts. Its log prints
   `waiting in the landing turn for the landings past their merge to reach their verdicts`.
-  No other landing merges while it holds the turn, so those landings only finish. The wait
+  No other landing merges while it holds the turn, so those landings only finish. The drain
+  reads the landing slots, so it waits only for the landings that still hold one. A landing
+  gives its slot up once `promote.py land-wait` reads its merge commit's `digests.json` and
+  the changed set reads `homelab` alone, because it gates no tag. It waits on to its verdict
+  without the slot, and still ends `deploy-failed` on a hold or a failed promotion. A
+  landing whose changed set names a tag, or is not read yet, or is widened because a
+  `digests.json` is missing or unreadable, keeps its slot, and the drain waits for it. The
+  operator ruled this on 2026-11-28
+  ([#10538](https://github.com/DanielH2018/server/issues/10538)). The rule inside the
+  no-promotion window reads the slots too, so a landing that gave its slot up does not count
+  there either. The wait
   ends when the bar clears, when a rule that waiting cannot clear starts to apply, or at the
   cap, and the last two refuse. On 2026-11-18, #9047, #9057 and #9059 were refused three or
   four times each under the rule without the wait, each time after up to 82 minutes in line.
