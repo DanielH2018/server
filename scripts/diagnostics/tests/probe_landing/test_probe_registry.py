@@ -14,7 +14,7 @@ import pytest
 
 
 from diagnostics import probe
-from diagnostics import probe_lib
+import diagnostics.probe_lib as probe_lib
 from diagnostics.probe_lib import subcommands
 from diagnostics.probe_lib.cli_parser import _build_parser
 from lib.cli_registry import Registry, package_entry_points

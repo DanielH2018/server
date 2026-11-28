@@ -198,6 +198,7 @@ class GrafanaPage:
                 # one.
                 if last.ok:
                     return last
+            assert last is not None
             if not last.worth_renavigating:
                 return last
         return last

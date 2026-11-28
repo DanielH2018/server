@@ -50,7 +50,9 @@ def describe() -> dict:
 
 
 def main(argv: list[str] | None = None, read=kubectl_json) -> int:
-    parser = ArgumentParser(prog="flux_wait.py", description=__doc__.splitlines()[0])
+    parser = ArgumentParser(
+        prog="flux_wait.py", description=(__doc__ or "").partition("\n")[0]
+    )
     parser.add_argument("--describe", action="store_true")
     parser.add_argument("name", help="the Kustomization in flux-system, such as sonarr")
     parser.add_argument(

@@ -23,7 +23,7 @@ SIGNED = "a" * 40
 UNSIGNED = "b" * 40
 
 
-def ruleset(name, bypass="never", enforcement="active"):
+def ruleset(name, bypass: str | None = "never", enforcement="active"):
     body = {"name": name, "enforcement": enforcement}
     if bypass is not None:
         body["current_user_can_bypass"] = bypass
