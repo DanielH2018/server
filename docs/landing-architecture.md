@@ -593,7 +593,9 @@ does not depend on Loki to show a landing that is deploying Loki.
   ([#10577](https://github.com/DanielH2018/server/issues/10577)): one row for each open
   change, with its stage and its state within the stage, each read from the tool that owns
   the stage. This is the live half of the read model, and `pipeline_timeline.py` is the
-  half that looks back.
+  half that looks back. `hosts/components/deploy-ui/CLAUDE.md`, *Changes*, has the rules. The
+  stages are implementation, review, waiting to land, landing, deploying and ended, and a
+  landing's record splits at the merge: `merged` and the states after it are deploying.
 
 ### How the page stays current
 

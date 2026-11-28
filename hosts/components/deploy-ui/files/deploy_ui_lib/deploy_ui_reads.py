@@ -11,6 +11,7 @@ import os
 import re
 import stat
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 
 from ci_verdict import checks_verdict, parse_rollup
@@ -207,10 +208,14 @@ def log_path_of(pid: int) -> str:
         return ""
 
 
+PR_FIELDS = "number,title,headRefName,isDraft,statusCheckRollup,createdAt"
+
+
 def parse_prs(raw: str) -> list[dict]:
-    """`gh pr list --json number,title,headRefName,isDraft,statusCheckRollup` to rows.
+    """`gh pr list --json` with `PR_FIELDS` to rows.
 
     A row's `ci` is `none` for a PR with no check, and otherwise the `CIVerdict` word.
+    `created` is the epoch second the PR was opened, or None when GitHub gave no time.
 
     Raises:
         ValueError: the text is not JSON, or a rollup or one of its nodes is malformed.
@@ -218,6 +223,7 @@ def parse_prs(raw: str) -> list[dict]:
     rows = []
     for p in json.loads(raw):
         checks = parse_rollup(p.get("statusCheckRollup"))
+        created = p.get("createdAt")
         rows.append(
             {
                 "number": p["number"],
@@ -225,6 +231,9 @@ def parse_prs(raw: str) -> list[dict]:
                 "branch": p.get("headRefName", ""),
                 "draft": bool(p.get("isDraft")),
                 "ci": str(checks_verdict(checks)) if checks else "none",
+                "created": datetime.fromisoformat(created).timestamp()
+                if created
+                else None,
             }
         )
     return rows
@@ -303,6 +312,20 @@ VERDICT_HINTS: dict[str, tuple[str, str]] = {
         "builder (probe.py builder), then re-run.",
     ),
 }
+
+
+_RESULT_LINE = re.compile(r"^LAND-RESULT: (.*)$", re.MULTILINE)
+
+
+def land_result(text: str) -> dict[str, str]:
+    """The logfmt fields of the last `LAND-RESULT:` line in a landing log, or {} without one.
+
+    Every value on the line is one bare token (`land_lib/ledger.py:result_line`).
+    """
+    lines = _RESULT_LINE.findall(text)
+    if not lines:
+        return {}
+    return dict(pair.split("=", 1) for pair in lines[-1].split() if "=" in pair)
 
 
 def landing_log(path: Path, window_s: float, now: float) -> bool:

@@ -18,6 +18,8 @@ Environment=DEPLOY_UI_GAMES_FILE={{ deploy_ui_dir }}/games.json
 Environment=DEPLOY_UI_NAMESPACE={{ k8s_namespace }}
 Environment=DEPLOY_UI_LOKI=https://loki-homelab.local.{{ domain }}
 Environment=KUBECONFIG=/home/{{ sys_user }}/.kube/config
+# A fan-out orchestrator on daniel-server keeps its run manifests there.
+Environment=DEPLOY_UI_FANOUT_REMOTES=daniel-server
 # A missing token still starts the unit: reads work, only writes refuse.
 ImportCredential=games_panel_token
 # --no-python-downloads makes the interpreter pin enforcement rather than a request.
