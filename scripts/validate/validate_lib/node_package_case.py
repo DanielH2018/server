@@ -212,7 +212,8 @@ def _install(cases, c, host: str, seal_and_build=_seal_and_build) -> None:
     Each step's seconds go to `cases.case_seconds`, which `case_groups` names on the `[DONE]`
     line. `seal_and_build` is the seam a test replaces.
     """
-    mask_gettys(c)
+    with _timed(cases, "mask gettys"):
+        mask_gettys(c)
     with _timed(cases, "seal and build"):
         package, debs = seal_and_build(cases, c, host)
     # The Depends are fetched while names still resolve; the seed takes resolv.conf away.
@@ -230,15 +231,19 @@ def _install(cases, c, host: str, seal_and_build=_seal_and_build) -> None:
         c.sh(f"timeout {STEP_SECONDS} systemctl start homelab-reconcile.service")
     with _timed(cases, "settle"):
         c.ok(f"sleep {SETTLE_SECONDS}")
-    problems = unit_problems(c.ok(f"systemctl show -p {UNIT_PROPERTIES} '*'"))
-    for unit in problems:
-        # Reconcile logs its errors at priority 3, often above the tail's last 40 lines.
-        journal = c.sh(
-            f"journalctl -u {unit} -p warning --no-pager -o short-monotonic;"
-            f" echo '--- the last 40 lines ---';"
-            f" journalctl -u {unit} -n 40 --no-pager -o short-monotonic"
-        )
-        print(f"::group::{unit} journal\n{journal.stdout}::endgroup::", file=sys.stderr)
+    with _timed(cases, "check"):
+        problems = unit_problems(c.ok(f"systemctl show -p {UNIT_PROPERTIES} '*'"))
+        for unit in problems:
+            # Reconcile logs its errors at priority 3, often above the tail's last 40 lines.
+            journal = c.sh(
+                f"journalctl -u {unit} -p warning --no-pager -o short-monotonic;"
+                f" echo '--- the last 40 lines ---';"
+                f" journalctl -u {unit} -n 40 --no-pager -o short-monotonic"
+            )
+            print(
+                f"::group::{unit} journal\n{journal.stdout}::endgroup::",
+                file=sys.stderr,
+            )
     expect(
         not problems,
         "; ".join(f"{unit} {problem}" for unit, problem in problems.items()),
@@ -252,7 +257,8 @@ def run(cases, host: str) -> None:
     as long as the longest other group, so two in turn would be the leg's longest group.
     """
     name = NAME.format(host=host)
-    c = cases.boot(f"node-{host}", hostname=host)
+    with _timed(cases, "boot"):
+        c = cases.boot(f"node-{host}", hostname=host)
     if c is None:
         return
     try:
@@ -263,4 +269,5 @@ def run(cases, host: str) -> None:
     else:
         cases.passed.append(name)
     finally:
-        c.remove()
+        with _timed(cases, "remove"):
+            c.remove()

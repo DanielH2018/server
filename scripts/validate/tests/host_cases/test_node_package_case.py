@@ -10,12 +10,14 @@ from types import SimpleNamespace
 from renderer.renderer_lib import host as host_mode
 from validate import host_package_cases
 from validate.validate_lib import case_groups
+from validate.validate_lib.host_container import CaseFailed
 from validate.validate_lib.node_package_case import (
     NODES,
     STUBBED_ONESHOTS,
     STUBBED_UNITS,
     TIMER_DROPIN,
     _install,
+    run as run_node_case,
     case_dropins,
     unit_problems,
 )
@@ -85,7 +87,8 @@ def test_every_timer_a_node_ships_is_held_off():
 def test_the_host_packages_job_runs_the_case_once_per_node_in_a_group_of_its_own():
     booted = []
     cases = SimpleNamespace(
-        boot=lambda label, hostname: booted.append((label, hostname))
+        boot=lambda label, hostname: booted.append((label, hostname)),
+        case_seconds={},
     )
     names = []
     for name, run in case_groups.groups(host_package_cases.Cases):
@@ -109,10 +112,26 @@ def test_install_records_each_steps_seconds_for_the_done_line():
     _install(cases, c, "daniel-box", lambda *_: (package, "/srv/debs/a.deb"))
 
     assert list(cases.case_seconds) == [
+        "mask gettys",
         "seal and build",
         "download",
         "seed",
         "apt install",
         "reconcile",
         "settle",
+        "check",
     ]
+
+
+def test_run_times_the_boot_and_the_removal_the_install_does_not():
+    def refuse(command):
+        raise CaseFailed("refused")
+
+    c = SimpleNamespace(name="node-daniel-box", ok=refuse, remove=lambda: None)
+    cases = SimpleNamespace(
+        boot=lambda label, hostname: c, case_seconds={}, passed=[], failed=[]
+    )
+
+    run_node_case(cases, "daniel-box")
+
+    assert set(cases.case_seconds) == {"boot", "mask gettys", "remove"}
