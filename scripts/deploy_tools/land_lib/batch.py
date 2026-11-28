@@ -79,7 +79,7 @@ from deploy_tools.land_lib import (
     stale_base,
     turn,
 )
-from deploy_tools.land_lib.core import queue_machine, state
+from deploy_tools.land_lib.core import queue_machine, queue_state
 from deploy_tools.land_lib.landing import BRANCH, Landing
 from deploy_tools.land_lib.outcome import Outcome, Verdict, say
 from deploy_tools.land_lib.transitions import CHECKS, State, Transitions
@@ -264,16 +264,16 @@ def _members(ln: Landing, head: str) -> list[Member]:
         return []
     checked: dict[str, Member] = {}
 
-    def lands_alone(place: state.Place) -> bool:
+    def lands_alone(place: queue_state.Place) -> bool:
         member = checked[place.pr] = Member(_member(ln, place.pr), place.head)
         say(
             f"checking PR #{place.pr} from the line, as this landing checked its own PR"
         )
         return _left_out(ln, member, _why_not(partial(_alone, member.ln, place.head)))
 
-    places = tuple(state.Place(pr, member_head) for pr, member_head in waiting)
+    places = tuple(queue_state.Place(pr, member_head) for pr, member_head in waiting)
     members: list[Member] = []
-    for place in queue_machine.stackable(state.Queue(places, lands_alone)):
+    for place in queue_machine.stackable(queue_state.Queue(places, lands_alone)):
         member = checked[place.pr]
         if _left_out(ln, member, _why_not(partial(_bars, member.ln, member.head))):
             continue

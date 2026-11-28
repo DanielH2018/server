@@ -10,7 +10,7 @@ from pathlib import Path
 
 LIB = Path(__file__).resolve().parents[2] / "land_lib"
 # The pure decisions under `core/`, named as paths from `land_lib/`.
-CORE = frozenset({"core/state", "core/queue_machine", "core/invariants"})
+CORE = frozenset({"core/queue_state", "core/queue_machine", "core/invariants"})
 # What a module under `core/` may import beside its siblings: none of these does I/O.
 PURE_STDLIB = frozenset(
     {"collections.abc", "dataclasses", "enum", "functools", "itertools", "typing"}
@@ -128,7 +128,7 @@ ALLOWED = {
         "serial_lock",
         "transitions",
         "core/queue_machine",
-        "core/state",
+        "core/queue_state",
     },
     # One live landing per PR: a lock beside the turn, taken before a landing forks or merges.
     "pr_lock": {"turn", "serial_lock"},
@@ -154,7 +154,7 @@ ALLOWED = {
         "turn",
         "transitions",
         "core/queue_machine",
-        "core/state",
+        "core/queue_state",
     },
     # The read that ends --await-merge on a check GitHub never finishes.
     "stuck_checks": {"landing", "gh_read"},
@@ -229,8 +229,8 @@ ALLOWED = {
         "transitions",
     },
     # The turn's ordering decisions: pure, so the queue's state machine drives them as is.
-    "core/state": set(),
-    "core/queue_machine": {"core/state"},
+    "core/queue_state": set(),
+    "core/queue_machine": {"core/queue_state"},
     "core/invariants": set(),
 }
 
@@ -315,10 +315,10 @@ def test_the_guards_would_catch_a_core_module_importing_turn_or_os(tmp_path):
         "import os\n"
         "from dataclasses import dataclass\n"
         "from deploy_tools.land_lib import turn\n"
-        "from deploy_tools.land_lib.core.state import Place\n"
+        "from deploy_tools.land_lib.core.queue_state import Place\n"
         "from deploy_tools.land_lib.core import invariants\n"
     )
     assert _impure_imports(p) == {"os", "deploy_tools.land_lib"}
     got = _land_lib_imports(p)
-    assert got == {"turn", "core/state", "core/invariants"}
+    assert got == {"turn", "core/queue_state", "core/invariants"}
     assert got - ALLOWED["core/queue_machine"] == {"turn", "core/invariants"}

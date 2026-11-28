@@ -9,7 +9,7 @@ the race with tickets inside these two functions.
 
 from collections.abc import Iterator
 
-from deploy_tools.land_lib.core.state import Place, Queue
+from deploy_tools.land_lib.core.queue_state import Place, Queue
 
 
 def may_take(_queue: Queue, _me: Place) -> bool:

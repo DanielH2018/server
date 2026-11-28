@@ -121,7 +121,8 @@ and no batch may carry it.
 ```text
 land_lib/
   core/                      pure: no I/O, no clock, no sleep
-    state.py                 LandingState, QueueState: frozen dataclasses, one per state
+    landing_state.py         LandingState: frozen dataclasses, one per state
+    queue_state.py           Place, Queue: the queue as its decisions read it
     landing_machine.py       step(LandingState, Observation) -> (LandingState, [Action])
     queue_machine.py         schedule(QueueState) -> [Grant]: order, batches, serial rule
     invariants.py            each named invariant as a predicate over states

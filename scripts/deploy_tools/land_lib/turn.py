@@ -63,7 +63,7 @@ from typing import IO, NoReturn
 from pathlib import Path as _Path
 
 from deploy_tools.land_lib import line
-from deploy_tools.land_lib.core import queue_machine, state
+from deploy_tools.land_lib.core import queue_machine, queue_state
 from deploy_tools.land_lib.fresh import TURN_FD_ENV
 from deploy_tools.land_lib.landing import Landing
 from deploy_tools.land_lib.outcome import Verdict, say
@@ -399,8 +399,8 @@ def _wait(ln: Landing, draft: str) -> tuple[Callable[[], None] | None, int]:
     o = ln.opts
     try_turn = ln.tools.try_turn or _taker(ln.tools.hostname())
     place = line.Place(line_of(ln), o.pr, draft, say)
-    me = state.Place(o.pr, draft)
-    queue = state.Queue((me,))
+    me = queue_state.Place(o.pr, draft)
+    queue = queue_state.Queue((me,))
     waiting = OnChange(say)
     waited = 0
     before = ln.ledger.turn_wait = ln.ledger.turn_wait or 0

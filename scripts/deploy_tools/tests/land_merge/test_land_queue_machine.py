@@ -27,7 +27,7 @@ from hypothesis.stateful import (
 )
 
 from deploy_tools.land_lib import batch, line
-from deploy_tools.land_lib.core import invariants, queue_machine, state
+from deploy_tools.land_lib.core import invariants, queue_machine, queue_state
 from deploy_tools.land_lib.options import MERGE_POLL_S
 
 STEPS = settings(stateful_step_count=40)
@@ -48,7 +48,7 @@ class Waiter:
         died_at: When its process ended without leaving the line, or None while it lives.
     """
 
-    place: state.Place
+    place: queue_state.Place
     serial: bool
     next_poll: int
     ready_since: int
@@ -61,8 +61,8 @@ class Landings:
     def __init__(
         self,
         record: Callable[[str], None],
-        may_take: Callable[[state.Queue, state.Place], bool],
-        stackable: Callable[[state.Queue], Iterator[state.Place]],
+        may_take: Callable[[queue_state.Queue, queue_state.Place], bool],
+        stackable: Callable[[queue_state.Queue], Iterator[queue_state.Place]],
     ) -> None:
         self.record, self.may_take, self.stackable = record, may_take, stackable
         self.now = 0
@@ -82,19 +82,19 @@ class Landings:
             if w.died_at is None and w.ready_since <= self.now
         ]
 
-    def _line(self) -> state.Queue:
+    def _line(self) -> queue_state.Queue:
         """The queue `batch._members` builds from the fresh places the line lists."""
         places = tuple(
             w.place
             for w in self.waiting.values()
             if w.place.head and w.ready_since <= self.now and self._fresh(w)
         )
-        return state.Queue(places, lambda p: self.waiting[p.pr].serial)
+        return queue_state.Queue(places, lambda p: self.waiting[p.pr].serial)
 
     def _grant(self, w: Waiter) -> None:
         del self.waiting[w.place.pr]
         self.holder = w
-        members: list[state.Place] = []
+        members: list[queue_state.Place] = []
         if w.place.head and not w.serial:
             queue = self._line()
             members = list(islice(self.stackable(queue), batch.MAX_STACKED - 1))
@@ -110,7 +110,7 @@ class Landings:
 
     def _poll(self, w: Waiter) -> None:
         # As `turn._wait` asks: with a queue of the landing's own place.
-        mine = state.Queue((w.place,))
+        mine = queue_state.Queue((w.place,))
         if self.holder is None and self.may_take(mine, w.place):
             self._grant(w)
         else:
@@ -119,7 +119,10 @@ class Landings:
     def arrive(self, pr: str, draft: bool, serial: bool) -> None:
         """A landing asks for the turn, and takes it at once if it may."""
         w = Waiter(
-            state.Place(pr, f"head-{pr}" if draft else ""), serial, self.now, self.now
+            queue_state.Place(pr, f"head-{pr}" if draft else ""),
+            serial,
+            self.now,
+            self.now,
         )
         self.waiting[pr] = w
         self._poll(w)
@@ -230,7 +233,7 @@ TestTurnQueue = TurnQueue.TestCase
 TestTurnQueue.settings = STEPS
 
 
-def _ignores_lands_alone(queue: state.Queue) -> Iterator[state.Place]:
+def _ignores_lands_alone(queue: queue_state.Queue) -> Iterator[queue_state.Place]:
     return iter(sorted((p for p in queue.places if p.head), key=lambda p: p.pr))
 
 
@@ -265,10 +268,10 @@ def test_a_holder_stacks_in_the_order_the_line_lists_its_places(tmp_path):
     for pr in ("10465", "9998", "10458"):
         places("join", pr, f"head-{pr}")
     listed = [
-        state.Place(*row.split())
+        queue_state.Place(*row.split())
         for row in places("waiting", str(line.FRESH_S)).splitlines()
     ]
-    queue = state.Queue(tuple(reversed(listed)))
+    queue = queue_state.Queue(tuple(reversed(listed)))
     assert list(queue_machine.stackable(queue)) == listed
     assert [p.pr for p in listed] == ["10458", "10465", "9998"]
 
@@ -276,18 +279,20 @@ def test_a_holder_stacks_in_the_order_the_line_lists_its_places(tmp_path):
 def test_stackable_asks_lands_alone_of_no_place_past_what_its_caller_takes():
     asked: list[str] = []
 
-    def lands_alone(place: state.Place) -> bool:
+    def lands_alone(place: queue_state.Place) -> bool:
         asked.append(place.pr)
         return place.pr == "2"
 
-    places = tuple(state.Place(pr, f"head-{pr}") for pr in "54321")
-    stacked = islice(queue_machine.stackable(state.Queue(places, lands_alone)), 2)
+    places = tuple(queue_state.Place(pr, f"head-{pr}") for pr in "54321")
+    stacked = islice(queue_machine.stackable(queue_state.Queue(places, lands_alone)), 2)
     assert [p.pr for p in stacked] == ["1", "3"]
     assert asked == ["1", "2", "3"]
 
 
 def test_stackable_leaves_out_a_place_with_no_head():
-    queue = state.Queue((state.Place("1"), state.Place("2", "head-2")))
+    queue = queue_state.Queue(
+        (queue_state.Place("1"), queue_state.Place("2", "head-2"))
+    )
     assert [p.pr for p in queue_machine.stackable(queue)] == ["2"]
 
 
