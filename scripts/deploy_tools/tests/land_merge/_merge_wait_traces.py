@@ -19,7 +19,7 @@ from pathlib import Path
 from typing import cast
 
 from _land_fakes import PRIMARY
-from _merge_wait_scenarios import Scenario, TurnBy, arm, landing, scenario
+from _merge_wait_scenarios import Scenario, TurnBy, arm_member, landing, scenario
 from deploy_tools import await_ci
 from deploy_tools.land_lib import (
     batch,
@@ -96,7 +96,7 @@ def _offered(ln: Landing, sc: Scenario, wait: Wait) -> None:
         else:
             take_turn("")
             member = batch._member(ln, MEMBER_PR)
-            arm(member, sc)
+            arm_member(member, sc)
             wait(member, lambda _draft: (True, 0))
 
 

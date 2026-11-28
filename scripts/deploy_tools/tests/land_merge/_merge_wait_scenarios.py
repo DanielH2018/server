@@ -3,17 +3,23 @@
 A scenario is the answers every boundary of one merge wait gives: the PR's polls, the CI reads,
 the turn, the merge call and the reads around it. `scenario` draws one from a seeded `Random`,
 so a seed names a scenario for good. `landing` builds the `Landing` over `_land_fakes` that
-answers as a scenario says.
+answers as a scenario says. A scenario with drafts in the line runs over `_land_batch_fakes`'
+model of the repository instead, so the holder's take forms a real batch.
 """
 
+import atexit
 import random
+import tempfile
 from collections.abc import Callable
 from dataclasses import dataclass, field, replace
 from enum import StrEnum
+from pathlib import Path
 from typing import Any
 
+from _land_batch_fakes import GREEN, OWN, GitHub, head_of, ticket_of
 from _land_fakes import MERGE_SHA, Fakes, make_landing
 from deploy_tools import await_ci, ci_stall
+from deploy_tools.land_lib import line
 from deploy_tools.land_lib.landing import Landing
 from lib.exit_codes import CI_DISARMED, CI_GREEN, CI_PENDING, CI_RED
 
@@ -22,6 +28,15 @@ MAX_READS = 2000
 
 HEAD = "a" * 10
 MOVED = "b" * 10
+# The master a batch member's merge wait reads once a merge other than its batch's moved it.
+MOVED_MASTER = "f" * 40
+# The drafts that can stand in the line behind the holder.
+_DRAFTS = ("1001", "1002", "1003")
+# Where each scenario over the repository model keeps its line, removed at exit.
+_LINES = tempfile.TemporaryDirectory(
+    prefix="merge-wait-line-", ignore_cleanup_errors=True
+)
+atexit.register(_LINES.cleanup)
 _CI_LINES = (
     "CI green",
     "CI pending",
@@ -93,6 +108,14 @@ class Scenario:
         tested: Whether a landing batch tested the first head on master's tip.
         batched_s: The seconds of the batch's run the wait counts.
         interrupted: Whether a wait out of the turn came before this one.
+        drafts: The drafts standing in the line behind a batch holder. Any at all runs the
+            scenario over the repository model, and every field above but `turn_by`,
+            `merge_timeout` and `merge_poll` goes unread. For a batch member, `tested` says
+            whether master is still the commit its batch stacked it on.
+        batch_red: Whether the batch's run is red.
+        batch_breaks: Whether forming the batch fails on a bug, which the holder survives.
+        proving: How many reads of the holder's own ready head stay pending before it reads
+            green, as the labelled run after a green batch does while it reports its checks.
     """
 
     polls: list[tuple[str, str, str]]
@@ -113,6 +136,10 @@ class Scenario:
     tested: bool = False
     batched_s: int = 0
     interrupted: bool = False
+    drafts: list[str] = field(default_factory=list)
+    batch_red: bool = False
+    batch_breaks: bool = False
+    proving: int = 0
 
     @classmethod
     def parse(cls, raw: dict[str, Any]) -> "Scenario":
@@ -227,9 +254,22 @@ def scenario(rng: random.Random) -> Scenario:
             tested=True,
             interrupted=rng.random() < 0.7,
         )
+    if kind < 0.5:
+        # A holder whose take forms a batch from the drafts in the line.
+        return replace(
+            drawn,
+            turn_by=TurnBy.BATCH,
+            drafts=rng.sample(_DRAFTS, rng.randint(1, 2)),
+            batch_red=rng.random() < 0.3,
+            batch_breaks=rng.random() < 0.2,
+            proving=rng.randint(0, 2),
+            merge_timeout=1800,
+            merge_poll=30,
+        )
     if drawn.turn_by is TurnBy.MEMBER:
-        # A holder stacks a member only while it holds the turn.
-        return replace(drawn, turn=[True])
+        # A holder stacks a member only while it holds the turn, and most members merge while
+        # master is the commit their batch stacked them on.
+        return replace(drawn, turn=[True], tested=rng.random() < 0.7)
     return drawn
 
 
@@ -250,6 +290,9 @@ class _CiRead:
 
 
 def landing(sc: Scenario) -> tuple[Landing, list]:
+    """The landing whose merge wait `sc` describes, and the record of its calls."""
+    if sc.drafts:
+        return _holder(sc)
     view = [{"state": s, "mergeable": mg, "headRefOid": h} for s, mg, h in sc.polls]
     first = view[0]
     fakes = Fakes(
@@ -298,6 +341,59 @@ def landing(sc: Scenario) -> tuple[Landing, list]:
     ln.tools = replace(ln.tools, gh_json=bounded, await_ci=_CiRead(sc.ci))
     arm(ln, sc)
     return ln, calls
+
+
+def _holder(sc: Scenario) -> tuple[Landing, list]:
+    """A draft's landing over the repository model, with `sc.drafts` in the line behind it."""
+    ln, calls = make_landing(
+        Fakes(),
+        arm_merge=True,
+        await_merge=True,
+        merge_timeout=sc.merge_timeout,
+        merge_poll=sc.merge_poll,
+    )
+    the_line = line.here(Path(tempfile.mkdtemp(dir=_LINES.name)))
+    run = [(CI_RED, "CI RED")] if sc.batch_red else [GREEN]
+    crash = "POST merges" if sc.batch_breaks else ""
+    hub = GitHub(ln.tools, {pr: {} for pr in (OWN, *sc.drafts)}, run, crash=crash)
+    hub.calls = calls
+
+    def gh_json(*args, **kwargs):
+        calls.append(("gh_json", args, {}))
+        if sum(c[0] == "gh_json" for c in calls) > MAX_READS:
+            raise RuntimeError(f"more than {MAX_READS} GitHub reads")
+        return hub.gh_json(*args, **kwargs)
+
+    def gh(*args, **kwargs):
+        calls.append(("gh_write", args, {}))
+        return hub.gh(*args, **kwargs)
+
+    pending = [sc.proving]
+
+    def read_ci(sha: str, timeout: int, on_checks: Callable[[int, int], None]):
+        verdict = hub.await_ci(sha, timeout, on_checks)
+        if sha == head_of(OWN) and verdict[0] == CI_GREEN and pending[0]:
+            pending[0] -= 1
+            return CI_PENDING, "the labelled run's checks are still running"
+        return verdict
+
+    ln.tools = replace(
+        ln.tools, gh_json=gh_json, gh=gh, await_ci=read_ci, line=the_line
+    )
+    ln.direct_merge_subject = "Own"
+    for pr in sc.drafts:
+        the_line("join", pr, head_of(pr), ticket_of(pr))
+    return ln, calls
+
+
+def arm_member(member: Landing, sc: Scenario) -> None:
+    """Set a batch member's fields as `batch.form` and `batch._merge_member` leave them.
+
+    The member's wait ends, and merges nothing, if its head moves from the one stacked.
+    """
+    member.direct_merge_subject = "Land it"
+    member.pinned_head = member.tested_head = HEAD
+    member.tested_on = MERGE_SHA if sc.tested else MOVED_MASTER
 
 
 def arm(ln: Landing, sc: Scenario) -> None:

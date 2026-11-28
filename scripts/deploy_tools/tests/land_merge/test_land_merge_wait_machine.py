@@ -89,6 +89,8 @@ def test_the_corpus_reaches_every_action_and_every_end(recorded):
     ends = {f"end {end}" for end in a.End}
     assert not (actions | ends) - seen, sorted((actions | ends) - seen)
     assert {sc.turn_by for _, sc, _ in recorded} == set(TurnBy)
+    batches = {(sc.batch_red, sc.batch_breaks) for _, sc, _ in recorded if sc.drafts}
+    assert {(False, False), (True, False), (False, True)} <= batches, batches
 
 
 def _green_in_turn() -> LandingState:
