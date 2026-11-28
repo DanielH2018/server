@@ -57,6 +57,44 @@ def test_a_landing_on_another_host_holds_the_same_lock_over_ssh(tmp_path, ssh_he
     here()
 
 
+def test_a_hold_whose_client_stops_writing_frees_the_lock_with_its_stdin_open(
+    tmp_path,
+):
+    """A client host that loses power sends no close, so its session's stdin never ends."""
+    lock = tmp_path / "turn.lock"
+    beat = 0.2
+    hold = subprocess.Popen(
+        [sys.executable, "-c", turn._HOLD, str(beat), "1", str(lock)],
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        text=True,
+    )
+    try:
+        assert hold.stdout and hold.stdout.readline().strip() == "held"
+        assert turn.try_take(lock) is None
+        started = time.monotonic()
+        assert hold.wait(timeout=30) == 0
+        assert time.monotonic() - started < 3 * beat + 2
+        free = turn.try_take(lock)
+        assert free is not None
+        free()
+    finally:
+        hold.kill()
+        hold.communicate()
+
+
+def test_a_lock_held_over_ssh_outlasts_many_heartbeats(tmp_path, ssh_here):
+    lock = tmp_path / "turn.lock"
+    give_up = turn.try_take_over_ssh([lock], beat=0.1)
+    assert give_up is not None
+    time.sleep(1.0)
+    assert turn.try_take(lock) is None
+    give_up()
+    free = turn.try_take(lock)
+    assert free is not None
+    free()
+
+
 def test_a_turn_host_that_does_not_answer_raises_oserror(tmp_path, monkeypatch):
     stubs = fake_bin(
         tmp_path / "bin",
