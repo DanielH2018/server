@@ -77,6 +77,9 @@ routed tenant of the retired Docker edge.
   `safe_reads.py`, `k8s_reads.py` and `obs_api.py` verbatim into the build — they embed PromQL
   whose `{{...}}` braces a Jinja render would otherwise eat. The renderer reads the same list
   for the context it writes.
+- **vault-mcp's image carries `files/safe_reads.py` too**, for `bearer_token_valid` and
+  `allowed_hosts_and_origins` (`k8s/roles/vault-mcp/defaults/main.yml:image_builder_builds`).
+  An edit to it moves both content tags, so the next promotion rebuilds both images.
 - **Every Prometheus and Loki read goes through `obs_api`**, the client probe.py and
   postflight share (`scripts/diagnostics/probe_lib/obs_api.py`, #2860). The image carries it
   flat at `/app/obs_api.py`, so it stays stdlib-only with no first-party import;

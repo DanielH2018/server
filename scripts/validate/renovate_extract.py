@@ -85,6 +85,7 @@ REGISTRY_BUILT_IMAGES = frozenset(
         "pi_peer_backup_k8s_image",
         "terraria_k8s_image",
         "valheim_k8s_mods_image",
+        "vault_mcp_k8s_image",
     }
 )
 

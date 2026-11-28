@@ -87,11 +87,22 @@ pod vault-mcp ─┬─ livesync-cli daemon ──▶ /vault (plaintext, no back
   other tag, so on first start the pod ran before its fence existed. It failed initial
   replication three times, then synced.
 
+## Folders hidden from Claude
+
+The operator ruled on 2026-11-28: "hide any hidden folders from Claude, and the "94
+Docs/superpowers/" folder." Slice 2 holds the ruling in two places.
+
+- A path segment that starts with `.`, such as `.obsidian/` or `.trash/`, is hidden at any
+  depth. `vault_notes.py` builds the rule in, so a hidden folder added later is hidden too,
+  and no list entry can switch it off.
+- `94 Docs/superpowers/` is the one entry of `vault_mcp_exclude_paths` in
+  `k8s/roles/vault-mcp/defaults/main.yml`.
+
+No tool, search result or `backlinks` result returns a note under either.
+
 ## Open questions for the operator
 
-1. Which folders, if any, are off-limits to Claude? They become `vault_mcp_exclude_paths`
-   in slice 2.
-2. Does Duet get write access in slice 4, or does the vault stay read-only?
+1. Does Duet get write access in slice 4, or does the vault stay read-only?
 
 ## See also
 

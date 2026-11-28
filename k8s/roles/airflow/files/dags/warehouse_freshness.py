@@ -44,7 +44,7 @@ HC_PING_KEY = {
     default_args={"retries": 3, "retry_delay": timedelta(minutes=5)},
     tags=["warehouse"],
 )
-def warehouse_freshness():
+def warehouse_freshness() -> None:
     @task(executor_config=HC_PING_KEY)
     def report() -> list[str]:
         conn = PostgresHook(postgres_conn_id=WAREHOUSE_CONN).get_conn()

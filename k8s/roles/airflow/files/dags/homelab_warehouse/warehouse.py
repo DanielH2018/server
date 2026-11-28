@@ -147,6 +147,18 @@ def record_check(
         cursor.close()
 
 
+def interval_day(data_interval_start: datetime | None) -> date:
+    """The UTC day a daily run loads: the day its data interval starts on.
+
+    Raises:
+      ValueError: Airflow passed no `data_interval_start`, as it does to a task run outside a
+        DAG run.
+    """
+    if data_interval_start is None:
+        raise ValueError("the task has no data interval; run it inside a DAG run")
+    return data_interval_start.astimezone(timezone.utc).date()
+
+
 def check_day(
     connect: Callable,
     dag_id: str,

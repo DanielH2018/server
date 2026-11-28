@@ -68,7 +68,7 @@ class PiholeSession:
         base_url: str,
         password: str,
         opener: Callable = urllib.request.urlopen,
-    ):
+    ) -> None:
         self.base_url = base_url
         self._password = password
         self._opener = opener

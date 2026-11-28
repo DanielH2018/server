@@ -97,7 +97,7 @@ def main(
     env: Mapping[str, str] | None = None,
     link: Link = os.link,
 ) -> int:
-    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser = argparse.ArgumentParser(description=(__doc__ or "").splitlines()[0])
     parser.parse_args(argv)
     try:
         lines = run(os.environ if env is None else env, link)

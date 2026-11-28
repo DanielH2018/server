@@ -3,6 +3,7 @@
 # (`repo:tag@sha256:...`) if you pin by digest — a bare `repo@sha256:...` freezes the image
 # with no update signal at all.
 vault_mcp_k8s_livesync_cli_image: ghcr.io/vrtmrz/livesync-cli:1.0.52-cli@sha256:cf9c28ca544e5e84e8825185a81032559c5503ad812c6cd66be4a714bca78a4f
+vault_mcp_k8s_image: "{{ k8s_registry_pull_host }}/vault-mcp:{{ k8s_built_image_tags.get('vault-mcp', 'latest') }}"
 
 # Renovate stance: whether an image bump here may automerge. `promote` deploys what merges.
 k8s_autodeploy: false
@@ -13,8 +14,36 @@ vault_mcp_k8s_mem_limit: 512Mi
 vault_mcp_k8s_cpu_request: "50m"
 vault_mcp_k8s_mem_request: 128Mi
 
+# The MCP server's caps.
+vault_mcp_k8s_server_cpu_limit: "500m"
+vault_mcp_k8s_server_mem_limit: 256Mi
+vault_mcp_k8s_server_cpu_request: "20m"
+vault_mcp_k8s_server_mem_request: 64Mi
+
 # The image's `node` user. The image sets no USER, so without this pin it runs as root.
 vault_mcp_k8s_uid: 1000
+
+# Folders hidden from every MCP tool, search results and backlinks included. Each entry hides
+# that folder and everything under it, matched by whole path segments, ignoring case. Every
+# hidden folder (a segment starting with `.`) is hidden by vault_notes.py whatever this says.
+vault_mcp_exclude_paths:
+  - "94 Docs/superpowers/"
+
+image_builder_builds:
+  - image_builder_name: vault-mcp
+    image_builder_dockerfile: "{{ role_file('templates/Dockerfile.j2') }}"
+    # vault_server.py, not app.py, so it cannot shadow homelab-mcp's app.py in a shared pytest
+    # session; the image runs it as app.py.
+    image_builder_context_files:
+      "{{ role_file('files/vault_server.py') }}": app.py
+      "{{ role_file('files/vault_notes.py') }}": vault_notes.py
+      # The bearer check and the transport allowlist; an edit there rebuilds this image too.
+      "{{ role_file('files/safe_reads.py', role='homelab-mcp') }}": safe_reads.py
+
+render_secrets:
+  - name: vault-mcp-token
+    string_data:
+      VAULT_MCP_TOKEN: vault_mcp_token
 
 # Both claims rebuild from CouchDB. The vault claim holds the decrypted vault, so a backup of it
 # would put plaintext on B2; `livesync-data`, which is ciphertext, is the copy worth backing up.
