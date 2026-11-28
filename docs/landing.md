@@ -1113,9 +1113,10 @@ middleware before the backend is reached, and 19 dead Grafana panels sat behind 
 `land.sh` completes it: no promotion covered the merge commit in time (cause `promote-timeout`),
 a host's package is not yet applied, or the health gate could not read its store (cause
 `gate-unreadable`) or found its tree older than `origin/master` (cause `gate-stale`; see *The
-health gate*). `cc-wait land` ends the wait as `gave-up`, exit 3, for each of those three
-causes, read from the `LAND-RESULT:` line rather than the note beside it. It ends the wait as
-`deferred`, exit 4, for any other.
+health gate*). A host deferral whose updater timer is not armed, or not due inside the wait,
+carries cause `updater-not-due`. `cc-wait land` ends the wait as `gave-up`, exit 3, for each
+of those four causes, read from the `LAND-RESULT:` line rather than the note beside it. It ends
+the wait as `deferred`, exit 4, for any other.
 
 **Read every remediation line, not the first one.** One PR can reach two of these at once, for
 example a rotated secret and a host package, and the verdict then prints one line per half.
