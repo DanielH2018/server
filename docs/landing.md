@@ -76,7 +76,10 @@ Three landings still end `refused` before the merge, with nothing merged:
 - **`--fresh`.** With the flag, `land.sh` fetches `origin/master` in the primary and adds a
   detached worktree of it under `~/.cache/homelab/land-fresh/` (`fresh.checkouts_root`).
   It runs that checkout's `land.sh` with the same arguments, then removes the worktree, on
-  SIGTERM too. The worktree is not under `/tmp`, because on daniel-box `/tmp` is a tmpfs
+  SIGTERM too. A SIGTERM goes on to the checkout's landing first, and the worktree is
+  removed once that landing has ended, so it keeps no landing turn behind. A stopped landing
+  records the exit code 128 plus the signal's number and a `land: stopped by` line
+  (`detach.until_stopped`). The worktree is not under `/tmp`, because on daniel-box `/tmp` is a tmpfs
   and each 353 MB checkout held RAM. A landing killed outright leaves its worktree behind,
   and the next fresh landing removes every worktree whose `flock` no process holds. The
   re-run before the merge, the hand-off after it
