@@ -56,7 +56,8 @@ The first four phases come before the merge, and the time spent on them grows wi
 line. A landing waits in the landing turn and behind the serial lock one at a time, so a wait
 there delays every landing behind it. Master CI and the deploy run after the merge, in up to
 6 landing slots side by side, and delay only their own landing. One exception: a serial PR
-drains every landing past its merge before it merges, so a slow deploy lengthens that drain.
+drains every landing that holds a slot before it merges, so a slow deploy lengthens that
+drain.
 
 ## Why the line grew to 14
 
