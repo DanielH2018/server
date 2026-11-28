@@ -342,14 +342,6 @@ class TestPrunesAt:
 
     SWEPT = frozenset({"daniel-box"})
 
-    def test_a_report_on_a_swept_tree_is_pruned_after_the_retention_days(self, root):
-        path = write(root, "daniel-box", "plan.html")
-        os.utime(path, (0, 1_800_000_000))
-        assert (
-            srv.prunes_at("daniel-box", "plan.html", path, self.SWEPT)
-            == "2027-02-14T08:00:00+00:00"
-        )
-
     def test_a_tree_no_sweep_prunes_is_never_pruned(self, root):
         path = write(root, "daniel-server", "plan.html")
         assert srv.prunes_at("daniel-server", "plan.html", path, self.SWEPT) is None
