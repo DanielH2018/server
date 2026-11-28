@@ -250,8 +250,8 @@ def test_main_names_the_base_for_an_unproven_push_and_none_for_a_proven_one(
     [
         ("Landing batch.\n\nMembers: #7 #8 #9\n", [7, 8, 9]),
         ("Members: #7 #8\r\nmore\r\n", [7, 8]),
-        ("Members: #1 #2 #3 #4", [1, 2, 3, 4]),
-        ("Members: #1 #2 #3 #4 #5", []),
+        ("Members: #1 #2 #3 #4 #5 #6", [1, 2, 3, 4, 5, 6]),
+        ("Members: #1 #2 #3 #4 #5 #6 #7", []),
         ("Members: 7 8", []),
         ("see Members: #7", []),
         ("Members: #7 #8 and more", []),
@@ -259,7 +259,7 @@ def test_main_names_the_base_for_an_unproven_push_and_none_for_a_proven_one(
         ("Members: #7 #7", []),
     ],
     ids=[
-        *["named", "crlf", "four", "five", "bare", "inline", "trailing"],
+        *["named", "crlf", "six", "seven", "bare", "inline", "trailing"],
         *["two-lines", "repeated"],
     ],
 )

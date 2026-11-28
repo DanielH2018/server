@@ -642,6 +642,27 @@ each host's primary checkout only to a green commit, and a parked sync leaves it
 behind. The snapshot costs about 0.1 seconds and 30 MB of temporary space per leg, and adds
 no ssh call. The sweep that the server-batch lander runs (`clean.sweep_runs`) uses the same leg.
 
+### A deep landing queue holds a launch
+
+`launch` refuses a server batch while more landings are in flight than
+`scripts/dev/fanout_lib/launch_gates.py:MAX_LANDINGS_IN_FLIGHT` allows
+(`scripts/dev/fanout_lib/launch_gates.py:over_landing_queue`). It exits 3, places nothing,
+and names `cc-wait fanout-headroom` as the wait. A batch launched into a deep queue waits
+longer for the landing turn and meets a master that moved further. The marker
+`scripts/dev/fanout_lib/launch_gates.py:DECIDED: refuse a launch while more than 6 landings`
+holds the measurement behind the limit.
+
+The gate reads the depth from deploy-ui's `/api/inflight` on daniel-box, one HTTP GET that
+every node can reach, and counts its `land` rows
+(`scripts/dev/fanout_lib/transport.py:landings_in_flight`). The read costs no GitHub call.
+A read that fails holds nothing: `launch` warns and goes ahead, as the landing's own reads
+fail open
+(`scripts/dev/tests/fanout/test_fanout_landing_queue.py::test_a_depth_read_that_fails_holds_nothing`).
+The `fanout-headroom` wait source checks the same gate before its host reads, so it reads
+`full` until the queue drains
+(`scripts/dev/tests/fanout/test_fanout_headroom_probe.py::test_a_deep_landing_queue_reads_full_until_it_drains`).
+A `--repo` launch for another register is not held, because its PR never enters `land.sh`.
+
 ### A batch whose landing conflicts with master
 
 A review batch's landing ends `VERDICT: merge-conflict` when master moved under its PR. That

@@ -92,7 +92,7 @@ def test_from_another_host_the_pi_is_reached_through_the_landing_host():
 def _container(
     name, status="running", health=None, networks=("proxy",), image="x:latest"
 ):
-    state = {"Status": status}
+    state: dict[str, object] = {"Status": status}
     if health:
         state["Health"] = {"Status": health}
     return {

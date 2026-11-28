@@ -64,6 +64,7 @@ def test_latest_owned_job_picks_the_newest_by_creation_time():
         ("configarr-deploy-gate", "2026-08-16T09:00:00Z", 1, 0),
     )
     latest = health_cronjob.latest_owned_job(jobs, "configarr")
+    assert latest is not None
     assert latest["metadata"]["name"] == "configarr-deploy-gate"
 
 
@@ -345,6 +346,7 @@ def test_latest_owned_job_prefers_a_newer_flux_gate_job_over_an_older_scheduled_
         ]
     }
     latest = health_cronjob.latest_owned_job(jobs, "longhorn-reconcile")
+    assert latest is not None
     assert latest["metadata"]["name"] == GATE
 
 
@@ -461,4 +463,5 @@ def test_latest_owned_job_ignores_a_gate_named_job_no_verify_kustomization_appli
     )
     jobs = {"items": [_reconcile_gate(), unlabelled, by_main]}
     latest = health_cronjob.latest_owned_job(jobs, "longhorn-reconcile")
+    assert latest is not None
     assert latest["metadata"]["name"] == GATE

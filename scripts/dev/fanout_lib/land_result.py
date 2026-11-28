@@ -2,25 +2,30 @@
 
 `review_land` reads the landing its own pipeline ran, and `status` reads one the server
 lander ran, so the rule lives outside both. Every decision here comes from the fields of the
-`LAND-RESULT:` line (`docs/landing.md`, *The `LAND-RESULT:` line*), never from a sentence.
+`LAND-RESULT:` line (`docs/landing.md`, *The `LAND-RESULT:` line*), never from a sentence:
+the `next` field where the line has one, which is `land_lib/outcome.py:NEXT`'s row.
 """
 
 import re
 from collections.abc import Mapping
 
-# `deferred` is finished: a host's updater applies its package, and cc-wait ends it with exit 4, not
-# 0.
-FINISHED_VERDICTS = frozenset({"settled", "nothing-to-deploy", "deferred"})
-VERDICT_LINE = re.compile(r"(?m)^VERDICT: (\S+).*$")
-_VERDICT_DETAIL = re.compile(r"^VERDICT: \S+ \((.*)\)$")
-# land.sh's exit code for a stop that a re-run completes, as `LAND-RESULT:` prints it.
-_GAVE_UP = "75"
-# Restated from `promote_lib.wait` and `land_lib.outcome` because a batch's unit runs without the
-# project's dependencies those import.
+# Restated from `land_lib.outcome` and `promote_lib.wait` because a batch's unit runs without
+# the project's dependencies those import. `scripts/dev/tests/fanout/test_fanout_land_result.py`
+# pins each word to its source.
+NEXT_DONE = "done"
+NEXT_RERUN = "rerun"
+NEXT_FOLLOW_LAND = "follow:land"
+REFUSED = "refused"
+PROMOTE_HELD = "promote-held"
 HOLD_OWN = "own"
 HOLD_OTHER = "other"
-PROMOTE_HELD = "promote-held"
-LANDING_LIVE = "landing-live"
+# The verdicts whose `NEXT` row is `done`, for a reader that has a `VERDICT:` line and no
+# `LAND-RESULT:` line with a `next` field. `deferred` is finished: a host's updater applies
+# its package, and cc-wait ends it with exit 4, not 0.
+FINISHED_VERDICTS = frozenset({"settled", "nothing-to-deploy", "deferred"})
+
+VERDICT_LINE = re.compile(r"(?m)^VERDICT: (\S+).*$")
+_VERDICT_DETAIL = re.compile(r"^VERDICT: \S+ \((.*)\)$")
 PARKED = "parked:"
 
 
@@ -35,9 +40,20 @@ def last_verdict(text: str) -> tuple[str, str]:
     return (matches[-1].group(1), matches[-1].group(0)) if matches else ("", "")
 
 
+def finished(result: Mapping[str, str], verdict: str = "") -> bool:
+    """Whether the landing left nothing to do: its `next` is `done`.
+
+    A `LAND-RESULT:` line from before land.sh printed `next`, or no line at all, falls back to
+    `FINISHED_VERDICTS` over the line's verdict, else over `verdict`.
+    """
+    if "next" in result:
+        return result["next"] == NEXT_DONE
+    return (result.get("verdict") or verdict) in FINISHED_VERDICTS
+
+
 def another_has_it(result: Mapping[str, str]) -> bool:
     """Whether `land.sh` started no landing because another landing of the PR is live."""
-    return result.get("cause") == LANDING_LIVE
+    return result.get("next") == NEXT_FOLLOW_LAND
 
 
 def park_line(result: Mapping[str, str], verdict_line: str = "") -> str:
@@ -47,9 +63,10 @@ def park_line(result: Mapping[str, str], verdict_line: str = "") -> str:
     here. Three landings park:
 
     - one that never started, because another landing of the PR is live
-      (`land_lib/pr_lock.py`, exit 75). That landing's verdict is the PR's, and the line
-      quotes the command that waits on it;
-    - one a rule refused before its merge (`land_lib/slots.py`, exit 75), which merged nothing;
+      (`land_lib/pr_lock.py`, `next=follow:land`). That landing's verdict is the PR's, and the
+      line quotes the command that waits on it;
+    - one a rule refused before its merge (`land_lib/slots.py`, `refused` with `next=rerun`),
+      which merged nothing;
     - one that merged and ended `deploy-failed` behind a `DEPLOY_HOLD` whose failed names are
       not this PR's services. A hold that names no failure, or a PR with no service, parks
       too, marked `unattributed` for the root coordinator.
@@ -67,7 +84,7 @@ def park_line(result: Mapping[str, str], verdict_line: str = "") -> str:
         return (
             f"{PARKED} another landing has it, so none started; do not re-land ({why})"
         )
-    if result.get("verdict") == "refused" and result.get("exit") == _GAVE_UP:
+    if result.get("verdict") == REFUSED and result.get("next") == NEXT_RERUN:
         why = detail.group(1) if detail else "a landing rule"
         return (
             f"{PARKED} refused before merge ({why}); re-land with {reland_command(pr)}"

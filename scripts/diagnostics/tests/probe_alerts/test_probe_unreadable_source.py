@@ -53,6 +53,19 @@ def test_a_failed_fetch_exits_temp_fail_with_the_failure_on_stderr(monkeypatch, 
     assert "Could not resolve host" not in captured.out
 
 
+@pytest.mark.parametrize(
+    "argv",
+    [["metric", "up"], ["loki-query", '{app="x"}'], ["targets"], ["targets", "--pi"]],
+)
+def test_a_json_null_body_exits_temp_fail(monkeypatch, argv):
+    def run(cmd, *args, **kwargs):
+        out = "example.test\n" if cmd[0] == "sops" else "null"
+        return subprocess.CompletedProcess(cmd, 0, out, "")
+
+    monkeypatch.setattr(subprocess, "run", run)
+    assert _exit_code(lambda: probe.main(argv)) == TEMP_FAIL
+
+
 def test_a_failed_config_get_exits_temp_fail_with_the_failure_on_stderr(
     monkeypatch, capsys
 ):

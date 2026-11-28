@@ -47,7 +47,8 @@ def test_a_turn_that_never_comes_leaves_a_merge_of_a_ready_pr(landing, capsys):
     assert order[-2:] == ["pr ready", "merge"]
     assert "release_turn" not in order
     assert (
-        "reaching merge_timeout=2s; going on without a turn" in capsys.readouterr().out
+        "s for the landing turn, reaching merge_timeout=2s; going on without a turn"
+        in capsys.readouterr().out
     )
 
 

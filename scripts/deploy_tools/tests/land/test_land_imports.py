@@ -156,7 +156,8 @@ ALLOWED = {
     "own_checkout": set(),
     # Makes a checkout and runs a child land.sh; it imports no phase. `grading_argv` reads Options.
     "fresh": {"options"},
-    "detach": set(),
+    # `fresh.dies_on_a_signal`, so a stopped landing unwinds and records its code.
+    "detach": {"fresh"},
     # A PR's kind and the quota floor: GitHub reads only, nothing that drives a landing.
     "live_limit": set(),
     "handoff": {"options", "outcome"},

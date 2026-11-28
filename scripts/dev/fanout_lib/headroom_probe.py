@@ -11,8 +11,10 @@ answers only for the runs it names.
 ONE DEFINITION OF A PLACEMENT. This reads the hosts with `place.candidate_readings` and
 decides with `place.placement`, the two calls `launch` makes, over `--batches` placeholder
 names. So `room` here and `launch`'s exit 3 cannot disagree on memory headroom, the live-batch
-cap, the ssh budget or the signing gate. The gates that read issue bodies (labels, solo-only,
-shared files, a live claim) are not read: no wait clears them.
+cap, the ssh budget or the signing gate. It reads `launch_gates.over_landing_queue` first, the
+one gate a drained landing queue clears, and a deep queue reads `full` before any ssh or
+`gh api` call. The gates that read issue bodies (labels, solo-only, shared files, a live
+claim) are not read: no wait clears them.
 
 A launch holds `fanout_lib.launch_lock` while it places. A read taken then would count the
 manifests before that launch saved its batches, so the probe reads nothing and reports `full`
@@ -32,8 +34,8 @@ A host that cannot be read drops out, as in launch, and is named in the detail. 
 host, or an unreadable GitHub signing-key list, is a failed read: the probe exits 1 and
 cc-wait retries it.
 
-A FRESH READ EVERY TIME. Each read spends one ssh connection to daniel-server and one `gh api`
-call, at a 120s interval. The source does not declare `remote`, so cc-wait never answers a
+A FRESH READ EVERY TIME. Each read spends one HTTP GET to deploy-ui, one ssh connection to
+daniel-server and one `gh api` call, at a 120s interval. The source does not declare `remote`, so cc-wait never answers a
 wait from another wait's reading. The ssh connection goes through the transport's
 control socket (`transport.mux_opts`), which a `launch` started within `MUX_PERSIST_S` reuses
 rather than opening another against `ufw limit ssh`.
@@ -49,6 +51,7 @@ from pathlib import Path
 from dev.fanout_lib import launch_lock
 from dev.fanout_lib import manifest as manifest_mod
 from dev.fanout_lib import place
+from dev.fanout_lib.launch_gates import over_landing_queue
 from dev.fanout_lib.placement import HostReading
 from dev.fanout_lib.transport import HOSTS, Tools, registered_keys
 from lib.cli_help import ArgumentParser, refuse_help_under_describe
@@ -99,6 +102,15 @@ def read(
     launching = launch_lock.holder(root)
     if launching is not None:
         return {"state": "full", "detail": f"launch lock held by {launching}"}
+    err = io.StringIO()
+    with contextlib.redirect_stderr(err):
+        deep = over_landing_queue(tools)
+    if deep:
+        return {
+            "state": "full",
+            "detail": " | ".join(_messages(err.getvalue(), "error")),
+        }
+    queue_warnings = _messages(err.getvalue(), "warning")
     registered = registered_keys(tools)
     if isinstance(registered, str):
         raise Unreadable(registered)
@@ -107,7 +119,7 @@ def read(
         good = place.candidate_readings(
             tools, registered, [pin] if pin else list(HOSTS), root
         )
-    warnings = _messages(err.getvalue(), "warning")
+    warnings = queue_warnings + _messages(err.getvalue(), "warning")
     if good == FANOUT_PLACE_NO_SIGNING_HOST:
         detail = " | ".join(_messages(err.getvalue(), "error") + warnings)
         return {"state": "no-signing-host", "detail": detail[:600]}

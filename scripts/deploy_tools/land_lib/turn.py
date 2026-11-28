@@ -364,7 +364,7 @@ def _wait(ln: Landing, draft: str) -> tuple[Callable[[], None] | None, int]:
                 return release, waited
             if waited >= o.merge_timeout:
                 say(
-                    f"another landing has held the turn for {waited}s, reaching "
+                    f"waited {waited}s for the landing turn, reaching "
                     f"merge_timeout={o.merge_timeout}s; going on without a turn"
                 )
                 return None, waited

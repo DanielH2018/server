@@ -428,7 +428,7 @@ The slices:
    turn, marks a draft PR ready, updates its branch and merges after that one run
    ([Landing a merged PR](landing.md)). The turn spans both hosts. D9 ruled on the two steps that followed: sessions open their PRs
    as drafts, and a daniel-box fan-out batch lands its PR as a draft.
-1. **B3, landed.** Batches of up to four. The landing that holds the turn opens one pull
+1. **B3, landed.** Batches of up to four, raised to six on 2026-11-27 (`docs/landing-speed.md`). The landing that holds the turn opens one pull
    request that holds the batch's heads stacked on master, and that PR's run is the batch's
    one full run. Its gate rebuilds each stacked tree from master and the heads and records
    it on each head. Each member then merges in turn, and its own run and master's prove the

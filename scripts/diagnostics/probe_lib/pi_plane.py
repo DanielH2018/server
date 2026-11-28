@@ -14,6 +14,7 @@ home: Prometheus target formatting and the Pi's own Docker container inspect.
 import json
 import re
 import subprocess
+from collections.abc import Collection
 
 import sys as _sys
 
@@ -106,7 +107,7 @@ def format_pi_targets(declared, active_targets):
     return text, 1 if missing or down else 0
 
 
-def format_targets(active, scaled_to_zero=frozenset()):
+def format_targets(active, scaled_to_zero: Collection[str] = frozenset()):
     """(text, exit code) for every scrape target: the count, then one line per down target.
 
     A down target whose job is in `scaled_to_zero` prints as `scaled to 0` and does not fail.
@@ -165,8 +166,8 @@ def run_targets(ns, fetch_json=None, scaled_lookup=scaled_to_zero_deployments):
         return run_pi_targets(ns)
     base, pin = prom_endpoint()
     data, err = (fetch_json or core.fetch_json)(prom_targets_url(base), resolve=pin)
-    if err:
-        return err
+    if data is None:
+        return err or PROBE_UNREADABLE
     active = (data.get("data") or {}).get("activeTargets") or []
     scaled = set()
     if any(t.get("health") != "up" for t in active):
@@ -184,8 +185,8 @@ def run_pi_targets(ns):
         return core.print_dry_run(url, resolve=pin)
     declared = declared_pi_job_names(PROMETHEUS_TEMPLATE_PATH.read_text())
     data, err = core.fetch_json(url, resolve=pin)
-    if err:
-        return err
+    if data is None:
+        return err or PROBE_UNREADABLE
     active = (data.get("data") or {}).get("activeTargets") or []
     text, code = format_pi_targets(declared, active)
     print(text)
