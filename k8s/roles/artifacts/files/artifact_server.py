@@ -32,8 +32,9 @@ every file under ROOT. It is not built on a timer: prune-artifacts.sh deletes ar
 after 30 days (CLAUDE_ARTIFACT_RETENTION_DAYS in the dotfiles settings.base.json), so a
 timer-built index serves links to files that are already gone. Building on request cannot. ~50 files parse in single-digit milliseconds.
 
-Two siblings ship beside this one in the same ConfigMap: `artifact_meta.py` holds the
-taxonomy and the metadata parsers, and `_gui_html.py` holds the page served at `/`.
+Three siblings ship beside this one in the same ConfigMap: `artifact_meta.py` holds the
+taxonomy and the metadata parsers, `_gui_html.py` holds the page served at `/`, and
+`_page_scripts.py` holds the scripts every served HTML artifact loads.
 
 Usage:
 
@@ -48,6 +49,10 @@ Environment:
     ARTIFACTS_PORT          TCP port to listen on (default 8080)
     ARTIFACTS_SERVICES_FILE JSON file of known service names, read by artifact_meta.py
     ARTIFACTS_STARS_FILE    the star list; unset turns starring off (default unset)
+    ARTIFACTS_RETENTION_DAYS  days without an update before retention-sweep deletes an
+                            artifact (default 30)
+    ARTIFACTS_SWEPT_HOSTS   comma-separated host trees a sweep prunes; only these show a
+                            prune date on the star button (default none)
 """
 
 from __future__ import annotations
@@ -61,13 +66,14 @@ import sys
 import tempfile
 import threading
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlparse
 
 # Flat sibling modules, so a plain import resolves under both the server and the tests.
-from _gui_html import FAVICON_SVG, GUI_HTML, OUTLINE_JS, STAR_JS
+from _gui_html import FAVICON_SVG, GUI_HTML
+from _page_scripts import OUTLINE_JS, STAR_JS
 from artifact_meta import (
     apply_metadata,
     derive_origin,
@@ -80,6 +86,10 @@ from artifact_meta import (
 ROOT = Path(os.environ.get("ARTIFACTS_ROOT", "/srv/artifacts"))
 PORT = int(os.environ.get("ARTIFACTS_PORT", "8080"))
 STARS_FILE = os.environ.get("ARTIFACTS_STARS_FILE", "")
+RETENTION_DAYS = int(os.environ.get("ARTIFACTS_RETENTION_DAYS", "30"))
+SWEPT_HOSTS = frozenset(
+    h for h in os.environ.get("ARTIFACTS_SWEPT_HOSTS", "").split(",") if h
+)
 # A star request carries one host and one relpath, so anything larger is not one.
 MAX_STAR_BODY = 4096
 
@@ -228,7 +238,7 @@ def build_index(
 
     Returns:
         The index dict, with keys `generated`, `count`, `hosts`, `categories`, `statuses`,
-        `origins`, `star_writable` and `artifacts`.
+        `origins`, `star_writable`, `retention_days` and `artifacts`.
     """
     known = load_known_services() if known_services is None else known_services
     starred = stars.load() if stars else set()
@@ -269,6 +279,7 @@ def build_index(
         "statuses": sorted({e["status"] for e in entries if e.get("status")}),
         "origins": sorted({e["origin"] for e in entries}),
         "star_writable": bool(stars and stars.writable),
+        "retention_days": RETENTION_DAYS,
         "artifacts": entries,
     }
 
@@ -326,6 +337,32 @@ def safe_path(root: Path, host: str, rel: str) -> Path | None:
     return target
 
 
+def prunes_at(
+    host: str, rel: str, path: Path, swept_hosts: frozenset[str]
+) -> str | None:
+    """When retention-sweep deletes this artifact unless it is updated first, as UTC ISO 8601.
+
+    The clock runs from the file's mtime. A star stops it too, which is the caller's to check.
+
+    Args:
+        host: The tree's `/a/<host>/` segment.
+        rel: The artifact's path inside that tree.
+        path: The file itself.
+        swept_hosts: The trees a sweep prunes.
+
+    Returns:
+        None when `host` is not in `swept_hosts`, or when the sweep keeps the file: an
+        executable, or anything under `pinned/`.
+    """
+    if host not in swept_hosts or rel.startswith("pinned/"):
+        return None
+    st = path.stat()
+    if st.st_mode & 0o111:
+        return None
+    mtime = datetime.fromtimestamp(st.st_mtime, timezone.utc)
+    return (mtime + timedelta(days=RETENTION_DAYS)).isoformat()
+
+
 def add_page_scripts(body: bytes, host: str, rel: str, *, star: bool) -> bytes:
     """Inserts the outline's script tag, and the star button's when `star`, into an HTML page.
 
@@ -351,11 +388,13 @@ class Handler(BaseHTTPRequestHandler):
     Attributes:
         cache: The shared IndexCache instance serving /api/index.json.
         stars: The star list POST /api/star changes; None turns starring off.
+        swept_hosts: The host trees whose star button reports a prune date.
     """
 
     server_version = "artifacts/1.0"
     cache: IndexCache  # assigned in main() before the server starts
     stars: StarStore | None = None
+    swept_hosts: frozenset[str] = SWEPT_HOSTS
 
     # `format` is the parameter name log_message declares; renaming breaks the override.
     def log_message(self, format: str, *args: object) -> None:
@@ -469,7 +508,7 @@ class Handler(BaseHTTPRequestHandler):
         return rel
 
     def _get_star(self) -> None:
-        """Answers `{"starred", "writable"}` for the artifact named by ?host=&path=.
+        """Answers `{"starred", "writable", "prunes_at"}` for the artifact named by ?host=&path=.
 
         404 when starring is off or the pair names no artifact, which the star button reads
         as "draw nothing".
@@ -485,7 +524,14 @@ class Handler(BaseHTTPRequestHandler):
         if not host or rel is None:
             self._send(404, b"no such artifact\n", text)
             return
-        body = {"starred": f"{host}/{rel}" in stars.load(), "writable": stars.writable}
+        target = safe_path(self.cache.root, host, rel)
+        body = {
+            "starred": f"{host}/{rel}" in stars.load(),
+            "writable": stars.writable,
+            "prunes_at": (
+                prunes_at(host, rel, target, self.swept_hosts) if target else None
+            ),
+        }
         self._send(200, json.dumps(body).encode("utf-8"), "application/json")
 
     def _serve_artifact(self, rest: str) -> None:

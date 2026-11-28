@@ -43,6 +43,10 @@ spec:
               value: /app/known_services.json
             - name: ARTIFACTS_STARS_FILE
               value: /srv/stars/{{ artifacts_stars_name }}
+            - name: ARTIFACTS_RETENTION_DAYS
+              value: "{{ artifacts_retention_days }}"
+            - name: ARTIFACTS_SWEPT_HOSTS
+              value: "{{ artifacts_swept_hosts | join(',') }}"
             - name: PYTHONUNBUFFERED
               value: "1"
             - name: TZ

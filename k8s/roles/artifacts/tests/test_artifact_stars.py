@@ -14,6 +14,7 @@ from http.server import ThreadingHTTPServer
 import pytest
 
 import artifact_server as srv
+from lib.proc_testing import write_exec
 
 
 @pytest.fixture
@@ -38,11 +39,15 @@ def write(root, host, name, body="<title>T</title>"):
 def serve(root):
     servers = []
 
-    def start(store):
+    def start(store, swept_hosts=frozenset()):
         handler = type(
             "StarHandler",
             (srv.Handler,),
-            {"cache": srv.IndexCache(root, store), "stars": store},
+            {
+                "cache": srv.IndexCache(root, store),
+                "stars": store,
+                "swept_hosts": swept_hosts,
+            },
         )
         server = ThreadingHTTPServer(("127.0.0.1", 0), handler)
         threading.Thread(
@@ -273,9 +278,22 @@ class TestStarOnArtifactPage:
     def test_get_star_reports_the_star_and_that_it_can_change(self, get, root, stars):
         write(root, "daniel-box", "plan.html")
         url = "/api/star?host=daniel-box&path=plan.html"
-        assert json.loads(get(stars, url)[1]) == {"starred": False, "writable": True}
+        assert json.loads(get(stars, url)[1]) == {
+            "starred": False,
+            "writable": True,
+            "prunes_at": None,
+        }
         stars.mark("daniel-box/plan.html", True)
-        assert json.loads(get(stars, url)[1]) == {"starred": True, "writable": True}
+        assert json.loads(get(stars, url)[1])["starred"] is True
+
+    def test_get_star_on_a_swept_tree_reports_the_prune_date(self, serve, root, stars):
+        path = write(root, "daniel-box", "plan.html")
+        os.utime(path, (0, 1_800_000_000))
+        conn = serve(stars, swept_hosts=frozenset({"daniel-box"}))
+        conn.request("GET", "/api/star?host=daniel-box&path=plan.html")
+        body = json.loads(conn.getresponse().read())
+        # 1_800_000_000 is 2027-01-15T08:00:00Z; the default retention adds 30 days.
+        assert body["prunes_at"] == "2027-02-14T08:00:00+00:00"
 
     def test_get_star_on_a_read_only_store_reports_not_writable(self, get, root, stars):
         write(root, "daniel-box", "plan.html")
@@ -283,7 +301,7 @@ class TestStarOnArtifactPage:
         readonly = srv.StarStore(stars.path, writable=False)
         status, body = get(readonly, "/api/star?host=daniel-box&path=plan.html")
         assert status == 200
-        assert json.loads(body) == {"starred": True, "writable": False}
+        assert json.loads(body)["writable"] is False
 
     @pytest.mark.parametrize(
         "query",
@@ -317,3 +335,30 @@ class TestStarOnArtifactPage:
         )
         assert body.startswith(b"<pre></body></pre><script ")
         assert body.endswith(b"</script></BODY>")
+
+
+class TestPrunesAt:
+    """Which artifacts the star button counts down for: only those a sweep would delete."""
+
+    SWEPT = frozenset({"daniel-box"})
+
+    def test_a_report_on_a_swept_tree_is_pruned_after_the_retention_days(self, root):
+        path = write(root, "daniel-box", "plan.html")
+        os.utime(path, (0, 1_800_000_000))
+        assert (
+            srv.prunes_at("daniel-box", "plan.html", path, self.SWEPT)
+            == "2027-02-14T08:00:00+00:00"
+        )
+
+    def test_a_tree_no_sweep_prunes_is_never_pruned(self, root):
+        path = write(root, "daniel-server", "plan.html")
+        assert srv.prunes_at("daniel-server", "plan.html", path, self.SWEPT) is None
+
+    def test_an_executable_is_never_pruned(self, root):
+        path = write_exec(root / "daniel-box" / "tool.sh", "true\n")
+        assert srv.prunes_at("daniel-box", "tool.sh", path, self.SWEPT) is None
+
+    def test_a_pinned_page_is_never_pruned(self, root):
+        (root / "daniel-box" / "pinned").mkdir()
+        path = write(root, "daniel-box", "pinned/map.html")
+        assert srv.prunes_at("daniel-box", "pinned/map.html", path, self.SWEPT) is None

@@ -26,7 +26,9 @@ from lib.repo_paths import K8S_SERVICES
 ROLE = K8S_ROLES / "artifacts"
 FILES = ROLE / "files"
 
-REQUIRED_MODULES = frozenset({"_gui_html.py", "artifact_meta.py", "artifact_server.py"})
+REQUIRED_MODULES = frozenset(
+    {"_gui_html.py", "_page_scripts.py", "artifact_meta.py", "artifact_server.py"}
+)
 
 
 def _configmap() -> dict:

@@ -12,6 +12,7 @@ k8s_autodeploy_reason: "stateless RollingUpdate Deployment, no PVC, readinessPro
 # Each name is a ConfigMap key and a file under `files/`; a module missing here dies at import.
 artifacts_modules:
   - _gui_html.py
+  - _page_scripts.py
   - artifact_meta.py
   - artifact_server.py
 
@@ -34,6 +35,14 @@ artifacts_peer_dir: /home/ubuntu/.claude/artifacts-peer
 # CLAUDE_ARTIFACT_STARS_FILE and claude_code_artifacts_stars_file.
 artifacts_stars_dir: /var/lib/artifact-stars
 artifacts_stars_name: stars.txt
+
+# Days without an update before retention-sweep deletes an artifact; equals the dotfiles'
+# CLAUDE_ARTIFACT_RETENTION_DAYS. The star button counts down to it.
+artifacts_retention_days: 30
+# The /a/<host>/ trees a retention-sweep prunes, so only their star buttons count down. daniel-server
+# and the agent user run no sweep, so their trees keep every artifact.
+artifacts_swept_hosts:
+  - "{{ artifacts_k8s_node }}"
 
 # Its twin claude_code_artifacts_peer_sources must list the same entries.
 artifacts_peer_sources:
