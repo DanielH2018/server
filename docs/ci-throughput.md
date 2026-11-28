@@ -366,11 +366,17 @@ installed each Depends with its Recommends, while `hosts/lib/homelab-updater` in
 `--no-install-recommends`. On 26.04, Recommends double daniel-server's install, from about
 580 MiB to 1,210 MiB, mostly the GTK, Mesa and `gstreamer1.0` stack under `virtinst` and
 `qemu-system-x86`. They add about 300 MiB to daniel-box's 870 MiB. Every apt call in the case
-skips Recommends, and the test image pre-downloads the nodes' Depends the same way. The
-case seeds `dbus` and `libpam-systemd`, which every Ubuntu server has and the minimal image
-lacks, because `claude-agent-setup` runs `loginctl`. The saving is a projection from the
-installed sizes, and the time `dpkg` spends unpacking and running maintainer scripts need not
-scale with size. The first host-change run with the change measures it in the `[DONE]` lines.
+skips Recommends, and the test image pre-downloads the nodes' Depends the same way. Run
+46154743867, the first with the change, measured `apt install` at 78 s on daniel-server and
+81 s on daniel-box. The groups ran 132 s and 142 s.
+
+**The case installs `dbus` with the node package, not in the seed.** Every Ubuntu server has
+`dbus` and `libpam-systemd`, and the minimal image has neither. `claude-agent-setup` runs
+`loginctl`, which needs `systemd-logind` and so the system bus. Without Recommends, nothing pulls `dbus`
+onto daniel-box, so `BUS_PACKAGES` adds both to the package's own apt call. On run 46154743867
+the seed installed them instead. The bus was then running when daniel-server's `polkitd`
+installed, and `polkitd` exited with `Lost the name org.freedesktop.PolicyKit1` until systemd
+stopped restarting it.
 
 The split adds one runner's setup to each job. A run with no host change gains one job and
 about 35 runner-seconds. A run with a host change gains two jobs and about 120

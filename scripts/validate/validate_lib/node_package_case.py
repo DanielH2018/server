@@ -47,9 +47,11 @@ from validate.validate_lib.secrets_case import seal_host
 
 NODES = ("daniel-server", "daniel-box")
 NAME = "install {host}'s real package, and no unit fails"
-# claude-agent-home runs openssh-client's ssh-keygen, and claude-agent-setup's `loginctl` needs
-# logind, which needs dbus.
-SERVER_PACKAGES = ("netplan.io", "nftables", "openssh-client", "dbus", "libpam-systemd")
+# claude-agent-home runs openssh-client's ssh-keygen.
+SERVER_PACKAGES = ("netplan.io", "nftables", "openssh-client")
+# claude-agent-setup's `loginctl` needs logind, which needs dbus. They install in the package's own
+# transaction: a system bus already running when polkitd installs refuses polkitd its name.
+BUS_PACKAGES = ("dbus", "libpam-systemd")
 APT_INSTALL = "apt-get install -y --no-install-recommends"
 # The operator's per-user tools, which the dotfiles repo installs and the package does not.
 DOTFILES_TOOLS = ("/home/ubuntu/.local/bin/uv", "/home/ubuntu/.local/bin/claude")
@@ -221,15 +223,16 @@ def _install(cases, c, host: str, seal_and_build=_seal_and_build) -> None:
         mask_gettys(c)
     with _timed(cases, "seal and build"):
         package, debs = seal_and_build(cases, c, host)
+    installs = f"{debs} {' '.join(BUS_PACKAGES)}"
     # The Depends are fetched while names still resolve; the seed takes resolv.conf away.
     with _timed(cases, "download"):
-        c.ok(f"{APT_INSTALL} --download-only {debs} < /dev/null")
+        c.ok(f"{APT_INSTALL} --download-only {installs} < /dev/null")
     with _timed(cases, "seed"):
         seed_node_host(c, case_dropins(package))
     # A shell timeout under the exec's own, so a hung step still returns what it printed.
     with _timed(cases, "apt install"):
         c.ok(
-            f"DEBIAN_FRONTEND=noninteractive timeout {STEP_SECONDS} {APT_INSTALL} {debs}"
+            f"DEBIAN_FRONTEND=noninteractive timeout {STEP_SECONDS} {APT_INSTALL} {installs}"
             " < /dev/null"
         )
     # Joins the reconcile the postinst queued, and returns once it ends.

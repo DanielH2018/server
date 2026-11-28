@@ -12,6 +12,7 @@ from validate import host_package_cases
 from validate.validate_lib import case_groups
 from validate.validate_lib.host_container import CaseFailed
 from validate.validate_lib.node_package_case import (
+    BUS_PACKAGES,
     NODES,
     STUBBED_ONESHOTS,
     STUBBED_UNITS,
@@ -137,7 +138,8 @@ def test_run_times_the_boot_and_the_removal_the_install_does_not():
     assert set(cases.case_seconds) == {"boot", "mask gettys", "remove"}
 
 
-def test_every_apt_install_skips_recommends_as_the_updater_does():
+def _apt_installs() -> list[str]:
+    """Each `apt-get install` command `_install` runs for daniel-box, in order."""
     commands = []
 
     def ok(command):
@@ -150,6 +152,18 @@ def test_every_apt_install_skips_recommends_as_the_updater_does():
 
     _install(cases, c, "daniel-box", lambda *_: (package, "/srv/debs/a.deb"))
 
-    installs = [command for command in commands if "apt-get install" in command]
+    return [command for command in commands if "apt-get install" in command]
+
+
+def test_every_apt_install_skips_recommends_as_the_updater_does():
+    installs = _apt_installs()
     assert len(installs) == 3, installs
     assert [i for i in installs if "--no-install-recommends" not in i] == []
+
+
+def test_dbus_installs_with_the_package_not_in_the_seed():
+    """A bus the seed started would refuse polkitd its name when libvirt pulls polkitd in."""
+    download, seed, install = _apt_installs()
+    assert "dbus" not in seed.split()
+    assert {"/srv/debs/a.deb", *BUS_PACKAGES} <= set(install.split())
+    assert {"/srv/debs/a.deb", *BUS_PACKAGES} <= set(download.split())
