@@ -327,6 +327,21 @@ one chain of cases on one container. A run with a host change therefore lasts ab
 `host_packages` still ends about 150 s after the slowest `pytest` leg
 ([#10591](https://github.com/DanielH2018/server/issues/10591)).
 
+**Splitting `upgrade_path` alone saves 3 to 10 s, so the chain stays one group.** Each
+shard ends on a group near 200 s, and on shard 1/2 a second group runs within 10 s of
+`upgrade_path`. The two-shard runs
+46091529761, 46095300744 and 46095864569 measured these group wall times:
+
+- shard 1/2: `upgrade_path` 211 to 213 s, `node_package_case-daniel-server` 202 to 210 s;
+- shard 2/2: `bootstrap_age_case` 189 to 194 s, `node_package_case-daniel-box` 174 to 181 s.
+
+A perfect split of the chain therefore leaves a run with a host change near 376 s. The
+cluster-bundle render could leave the build job, but that saves only 14 to 23 s. The 330 s
+target needs those three groups shortened together, or the cases legs started before
+`host_packages_build` ends ([#10644](https://github.com/DanielH2018/server/issues/10644)).
+`case_groups._run_one` names a multi-case group's three slowest cases on its `[DONE]` line.
+That line says where `upgrade_path`'s time goes.
+
 The split adds one runner's setup to each job. A run with no host change gains one job and
 about 35 runner-seconds. A run with a host change gains two jobs and about 120
 runner-seconds. Both figures are projected from the runs above, so the runs after the merge
