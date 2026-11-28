@@ -40,6 +40,7 @@ BUILT_IMAGES = frozenset(
         "pi-peer-backup",
         "terraria",
         "valheim",
+        "vault-mcp",
     }
 )
 # The builder role whose consumer the GHCR ref checks read.

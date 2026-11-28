@@ -41,7 +41,7 @@ def _ctx(role: str, stubs: dict) -> dict:
 
 def test_the_site_census_finds_every_build():
     """Non-vacuity for the parametrisation below; n8n builds two images."""
-    assert len(SITES) == 11
+    assert len(SITES) == 12
     assert {("homelab-mcp", 0), ("n8n", 0), ("n8n", 1)} <= set(SITES)
 
 

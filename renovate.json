@@ -388,10 +388,11 @@
     },
     {
       "customType": "regex",
-      "description": "pip pins inside the two built Dockerfiles that install from PyPI (#2149, #2150): k8s/roles/code-server and k8s/roles/homelab-mcp. ical-proxy is not here, because tests/services/apps/test_ical_proxy_pins_match_uv_lock.py holds its pins to uv.lock. The packageRules below keep every bump manual and cap mcp at <2.",
+      "description": "pip pins inside the built Dockerfiles that install from PyPI (#2149, #2150): k8s/roles/code-server, k8s/roles/homelab-mcp and k8s/roles/vault-mcp. ical-proxy is not here, because tests/services/apps/test_ical_proxy_pins_match_uv_lock.py holds its pins to uv.lock. The packageRules below keep every bump manual and cap mcp at <2.",
       "managerFilePatterns": [
         "/(^|/)k8s/roles/code-server/templates/Dockerfile\\.j2$/",
-        "/(^|/)k8s/roles/homelab-mcp/templates/Dockerfile\\.j2$/"
+        "/(^|/)k8s/roles/homelab-mcp/templates/Dockerfile\\.j2$/",
+        "/(^|/)k8s/roles/vault-mcp/templates/Dockerfile\\.j2$/"
       ],
       "matchStrings": [
         "(?<depName>[A-Za-z0-9._-]+)==(?<currentValue>[0-9][^\\s\"'\\\\]*)"
@@ -721,7 +722,8 @@
         "k8s/roles/n8n/templates/Dockerfile*.j2",
         "k8s/roles/nut/templates/Dockerfile*.j2",
         "k8s/roles/terraria/templates/Dockerfile*.j2",
-        "k8s/roles/valheim/templates/Dockerfile*.j2"
+        "k8s/roles/valheim/templates/Dockerfile*.j2",
+        "k8s/roles/vault-mcp/templates/Dockerfile*.j2"
       ],
       "groupName": "k8s base images (manual — k8s_autodeploy: false, so a person merges it through land.sh; promote rebuilds it)",
       "rebaseWhen": "conflicted",
@@ -1151,7 +1153,27 @@
       "automerge": false
     },
     {
-      "description": "mcp stays on the 1.x line, because 2.0.0 removed mcp.server.fastmcp, which homelab-mcp's app.py imports. Lift the cap together with an app.py port to 2.x. tests/services/apps/test_homelab_mcp_pins.py asserts this rule and the pin agree (#2150).",
+      "description": "vault-mcp's pip pins. No automerge: a merged bump rolls the pod, and a pip bump can break the app at import time, as mcp 2.0.0 did. The group carries `k8s_autodeploy: false` because the role does.",
+      "matchManagers": [
+        "custom.regex"
+      ],
+      "matchFileNames": [
+        "k8s/roles/vault-mcp/templates/Dockerfile.j2"
+      ],
+      "matchDatasources": [
+        "pypi"
+      ],
+      "groupName": "vault-mcp pip deps (manual — built image; promote rebuilds it after merge; k8s_autodeploy: false)",
+      "rebaseWhen": "conflicted",
+      "schedule": [
+        "before 6am on monday"
+      ],
+      "updateNotScheduled": false,
+      "groupSingleUpdates": true,
+      "automerge": false
+    },
+    {
+      "description": "mcp stays on the 1.x line, because 2.0.0 removed mcp.server.fastmcp, which homelab-mcp's app.py and vault-mcp's vault_server.py import. Lift the cap together with a port of both to 2.x. tests/services/apps/test_homelab_mcp_pins.py asserts this rule and the pin agree (#2150).",
       "matchManagers": [
         "custom.regex"
       ],
