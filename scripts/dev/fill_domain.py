@@ -50,7 +50,7 @@ def main(
         tools: the gh boundaries; the real ones when None.
         sleep: the pause between mutations; a test passes a recorder.
     """
-    parser = ArgumentParser(description=__doc__.split("\n\n")[0])
+    parser = ArgumentParser(description=(__doc__ or "").split("\n\n")[0])
     parser.add_argument(
         "--dry-run", action="store_true", help="print the writes, make none"
     )

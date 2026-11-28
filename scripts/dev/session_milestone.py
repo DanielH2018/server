@@ -75,7 +75,7 @@ def main(
     gh: Gh = real_gh,
 ) -> int:
     """Runs `attach-pr` or `close-if-done`; see the module docstring."""
-    parser = ArgumentParser(description=__doc__.splitlines()[0])
+    parser = ArgumentParser(description=(__doc__ or "").partition("\n")[0])
     parser.add_argument("action", choices=["attach-pr", "close-if-done"])
     parser.add_argument("number", help="the PR for attach-pr, the milestone otherwise")
     parser.add_argument("--repo", default=PR_REPO)

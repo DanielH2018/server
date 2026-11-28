@@ -63,7 +63,7 @@ claims are unchanged.
   cutover from the Docker-era DB, on the **weekly** B2 backup tier. It holds the all-time playtime
   SQLite DB — irreplaceable, since Loki keeps 31 days and the exporter backfills only 28.
 - **What is Terraria's own** is `parse_line`, `StatsState`, and `Store`'s schema half — the
-  `players` schema, `load_state` and `save`, over a `stats_lib.SqliteStore` subclass.
+  `players` schema, `load_state` and `write_state`, over a `stats_lib.SqliteStore` subclass.
 - **It runs while the game server does.** Neither Deployment renders `replicas:`; deploy.local's
   Games panel starts and stops each exporter with its server, from the `game_servers` registry
   in `estate/vars.yml` (ADR-0033). The scrape job renders either way, and its
@@ -82,7 +82,7 @@ Added 2026-08-13 with the Valheim reactivation, the same shape as terraria-stats
 - **Storage:** `valheim-stats-data` (`longhorn`, **backed up**), a `k8s_claims` entry
   in `defaults/main.yml`, created empty since there was nothing to seed. Loki keeps 31 days; after that this DB is the only copy of the totals.
 - **What is Valheim's own** is `parse_line`, `StatsState`, and `Store`'s schema half — the
-  `players` + `steam_names` schemas, `load_state` and `save`, over a `stats_lib.SqliteStore`
+  `players` + `steam_names` schemas, `load_state` and `write_state`, over a `stats_lib.SqliteStore`
   subclass.
 - **Read `docs/game-stats-internals.md` before editing the parser.** It carries the
   console lifecycle, the three traps in reading it (patterns are searched, never anchored at
@@ -96,9 +96,12 @@ Added 2026-08-13 with the Valheim reactivation, the same shape as terraria-stats
 and takes every game-specific bit as an argument, so it needs no test doubles patched onto it.
 
 `k8s/roles/game-stats/files/stats_lib.py:SqliteStore` is the one class a game extends rather than calls: it owns the connection
-lifecycle and the `cursor`/`events` tables both games persist identically, and a game's
-`Store` subclasses it to declare its own `players` schema in `_init_game_schema` and to write
-`load_state`/`save`. `run` (`k8s/roles/game-stats/files/stats_lib.py:run`) is the entry point both games' `main()` reduces to, reading its
+lifecycle, the `cursor`/`events` tables both games persist identically, and `save`, the
+one transaction that writes them with the game's rows and rolls back whole on a failure. A
+game's `Store` subclasses it to declare its own `players` schema in `_init_game_schema` and to
+write `load_state`/`write_state`. `run_cycle` (`k8s/roles/game-stats/files/stats_lib.py:run_cycle`)
+restores the in-memory state when a page's fold or save raises, so the retry folds the page
+once. `run` (`k8s/roles/game-stats/files/stats_lib.py:run`) is the entry point both games' `main()` reduces to, reading its
 tunables from a `RunConfig` (`k8s/roles/game-stats/files/stats_lib.py:RunConfig`) the game builds from its own env constants.
 
 ### How it ships

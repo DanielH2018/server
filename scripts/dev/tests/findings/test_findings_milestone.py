@@ -1,9 +1,12 @@
 """`findings_lib/milestone.py` against a fake `gh api`."""
 
+import subprocess
+
 import pytest
 from _findings_fakes import make_issue
 
 from dev.findings_lib.issue_model import parse_issue
+from lib.json_types import JsonValue
 
 from dev.findings_lib.milestone import (
     GROUP_DESCRIPTION,
@@ -34,7 +37,7 @@ def _m(title, branch=WT, number=1, state="open", open_issues=0, description=None
 def _fake(milestones=()):
     writes = []
 
-    def gh_json(*argv, **_kw):
+    def gh_json(*argv, **_kw) -> JsonValue:
         path = argv[1]
         if "?state=" in path:
             state = path.split("state=")[1].split("&")[0]
@@ -42,8 +45,9 @@ def _fake(milestones=()):
         number = int(path.rsplit("/", 1)[1])
         return next(m for m in milestones if m["number"] == number)
 
-    def gh(*argv, **_kw):
+    def gh(*argv, **_kw) -> subprocess.CompletedProcess[str]:
         writes.append(list(argv))
+        return subprocess.CompletedProcess(list(argv), 0, "", "")
 
     return gh_json, gh, writes
 
