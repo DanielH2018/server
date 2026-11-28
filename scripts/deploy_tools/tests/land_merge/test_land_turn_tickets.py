@@ -30,7 +30,7 @@ def _lock() -> Path:
 def _landing(landing, pr: str, **tools):
     ln, _ = landing(Fakes())
     ln.opts = replace(ln.opts, pr=pr)
-    ln.tools = replace(ln.tools, line=None, try_turn=None, **tools)
+    ln.tools = replace(ln.tools, **{"line": None, "try_turn": None, **tools})
     return ln
 
 
@@ -99,17 +99,26 @@ def test_a_dead_waiters_place_stops_deferring_others_once_it_is_stale(landing):
 
 
 def test_a_landing_that_steps_out_of_the_turn_keeps_its_ticket(landing):
-    ln = _landing(landing, "7")
-    stood = []
+    take = turn._taker("daniel-box")
+    place = _turn_dir() / line.DIR.name / "7"
+    tickets, stood = [], []
+
+    def try_turn():
+        # The place as it stands when the landing tries the lock.
+        tickets.append(place.read_text().split()[1] if place.exists() else None)
+        return take()
 
     def wait_outside() -> None:
-        stood.append((_turn_dir() / line.DIR.name / "7").exists())
+        stood.append(place.exists())
         line.here(_turn_dir() / line.DIR.name)("join", "8", HEAD, "")
 
+    ln = _landing(landing, "7", try_turn=try_turn)
     with turn.held(ln) as take_turn:
         assert take_turn(HEAD)[0]
         ln.step_out_of_turn(wait_outside, "for a test")
-        # A ticket taken anew would be younger than #8's, and the landing would defer to it.
+        # #8 asked during the wait; a ticket taken anew would be younger and defer to it.
         assert ln.give_back_turn is not None
+    assert len(tickets) == 2 and tickets[0] is not None
+    assert tickets[1] == tickets[0]
     # It stood nowhere during the wait outside the turn.
     assert stood == [False]

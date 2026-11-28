@@ -146,6 +146,23 @@ def test_the_line_is_a_sticky_directory_every_user_can_write_whatever_the_umask(
     assert (tmp_path / "line").stat().st_mode & 0o7777 == 0o1777
 
 
+def test_every_user_can_read_a_place_whatever_the_writers_umask(the_line, tmp_path):
+    old = os.umask(0o077)
+    try:
+        the_line("join", "7", HEAD, "1")
+        the_line("answer", "7", HEAD, line.SPLIT)
+    finally:
+        os.umask(old)
+    assert (tmp_path / "line" / "7").stat().st_mode & 0o777 == 0o644
+
+
+def test_a_place_whose_ticket_is_not_a_number_is_left_out(the_line, tmp_path):
+    the_line("join", "7", HEAD, "5")
+    (tmp_path / "line" / "8").write_text(f"{HEAD} @abc\n")
+    assert the_line("stand", "7", HEAD, "5").splitlines() == ["5"]
+    assert _waiting(the_line) == [f"7 {HEAD} 5"]
+
+
 def test_an_operation_the_line_does_not_have_is_refused(the_line):
     with pytest.raises(ValueError, match="no such operation on the line: jump"):
         the_line("jump")

@@ -74,7 +74,8 @@ def _op(directory: str, op: str, *args: str) -> str:
       another head or ticket, is written anew.
     - Both return `<ticket> <answer>` on the first line, then a `<pr> <ticket>` line for each
       other PR's place, of any user, that is fresh within `FRESH_S` and whose landing still
-      waits. A place with no ticket reads as ticket 0.
+      waits. A place with no ticket reads as ticket 0, and one whose ticket is not a number is
+      left out, here and in `waiting`.
     - `leave <pr>` removes the place.
     - `waiting <fresh_s>` returns a `<pr> <head> <ticket>` line for each draft's place of this
       user that is fresh and has no answer, and removes this user's stale places.
@@ -127,15 +128,18 @@ def _op(directory: str, op: str, *args: str) -> str:
                 continue
             place = words(name, anyone=True)
             _, theirs, said = parse(place)
-            if place and said not in ("merged", "conflict"):
+            if not place or said in ("merged", "conflict"):
+                continue
+            if not theirs or theirs.isdigit():
                 rows.append(f"{name} {theirs or 0}")
         return "\n".join(rows)
 
     def replace(name: str, text: str) -> None:
         # A reader never finds a half-written file, and a link at its name is replaced, not
-        # followed.
+        # followed. Every user reads every place's ticket, whatever the writer's umask.
         scratch = f"{directory}/.{name}.{os.getpid()}"
         with open(scratch, "x", encoding="utf-8") as handle:
+            os.fchmod(handle.fileno(), 0o644)
             handle.write(text)
         os.replace(scratch, f"{directory}/{name}")
 
@@ -174,7 +178,11 @@ def _op(directory: str, op: str, *args: str) -> str:
                 # A landing left the line between the listing and this read.
                 continue
             head, ticket, answer = parse(words(name))
-            if head not in ("", NO_HEAD) and not answer:
+            if (
+                head not in ("", NO_HEAD)
+                and not answer
+                and (not ticket or ticket.isdigit())
+            ):
                 found.append(f"{name} {head} {ticket or 0}")
         return "\n".join(found)
     pr, head, what = args

@@ -122,9 +122,10 @@ def test_a_waiter_that_loses_the_turn_host_goes_on_without_the_turn(landing, cap
     assert order.count("try_turn") == 1
     assert order[-1] == "merge"
     assert "release_turn" not in order
-    assert (
-        "(ssh daniel-box: no route); going on without a turn" in capsys.readouterr().out
-    )
+    assert ln.ledger.turn_wait == ln.opts.merge_poll
+    out = capsys.readouterr().out
+    assert out.count("a landing that asked for it before this one goes first") == 1
+    assert "(ssh daniel-box: no route); going on without a turn" in out
 
 
 def test_a_draft_the_holder_of_the_turn_merged_stops_waiting_and_merges_nothing(
