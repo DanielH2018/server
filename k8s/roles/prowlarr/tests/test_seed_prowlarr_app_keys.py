@@ -122,6 +122,11 @@ def test_find_application_takes_the_one_entry_of_its_kind():
     assert seed.find_application(entries, "Radarr").id == 2
 
 
+def test_an_applications_answer_that_is_no_list_is_refused():
+    with pytest.raises(seed.SeedError, match="answered no list"):
+        seed.parse_applications(None)
+
+
 @pytest.mark.parametrize("count", [0, 2])
 def test_find_application_refuses_none_or_two(count):
     entries = seed.parse_applications(

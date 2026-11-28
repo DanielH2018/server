@@ -117,7 +117,13 @@ def find_profile(profiles: list[dict], name: str) -> dict | None:
     return None
 
 
-def request(base_url: str, api_key: str, path: str, method: str = "GET", body=None):
+def request(
+    base_url: str,
+    api_key: str,
+    path: str,
+    method: str = "GET",
+    body: dict | None = None,
+) -> object:
     """One Lidarr API call. The key travels as a header, never in the URL."""
     url = f"{base_url}{API_PATH}/{path.lstrip('/')}"
     data = json.dumps(body).encode() if body is not None else None
@@ -149,15 +155,21 @@ def env_or_fail(key: str) -> str:
 
 
 def main(argv: list[str] | None = None) -> int:
-    argparse.ArgumentParser(description=__doc__.splitlines()[0]).parse_args(argv)
+    argparse.ArgumentParser(description=(__doc__ or "").splitlines()[0]).parse_args(
+        argv
+    )
     base_url = env_or_fail("LIDARR_URL").rstrip("/")
     api_key = env_or_fail("LIDARR_API_KEY")
     declared = json.loads(env_or_fail("LIDARR_QUALITY_PROFILES"))
 
     live = request(base_url, api_key, "qualityprofile")
+    if not isinstance(live, list):
+        raise SeedError("GET qualityprofile answered no list")
     for spec in declared:
         existing = find_profile(live, spec["name"])
         base = existing or request(base_url, api_key, "qualityprofile/schema")
+        if not isinstance(base, dict):
+            raise SeedError("GET qualityprofile/schema answered no object")
         desired = declared_body(
             base,
             name=spec["name"],

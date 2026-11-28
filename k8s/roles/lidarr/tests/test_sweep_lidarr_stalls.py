@@ -78,6 +78,12 @@ def test_a_short_queue_page_is_refused():
         sweep.queue_ids(page)
 
 
+@pytest.mark.parametrize("read", [sweep.parse_torrents, sweep.queue_ids])
+def test_an_empty_answer_is_refused(read):
+    with pytest.raises(sweep.SweepError, match="answered no"):
+        read(None)
+
+
 def test_the_script_passes_the_job_census_helper_rules():
     assert script_offence(SCRIPT.name, SCRIPT.read_text()) == []
 
