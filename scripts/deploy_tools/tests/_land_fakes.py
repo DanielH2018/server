@@ -139,8 +139,10 @@ class Fakes:
             {"id": 1, "status": "completed", "conclusion": "skipped"}
         ]
     )
-    pending_checks: Any = field(default_factory=list)
+    check_runs: Any = field(default_factory=list)
     completed_suites: Any = field(default_factory=list)
+    # The contexts master's ruleset requires, as `failing_checks.find` reads them.
+    required_contexts: Any = field(default_factory=list)
     # A ref absent here keeps an entry for every derived tag, so a test retires a tag only by saying
     # so.
     k8s_tags: dict[str, set[str] | Exception] = field(default_factory=dict)
@@ -263,8 +265,9 @@ def build_tools(f: Fakes) -> tuple[Tools, list]:
                 raise runs
             return runs
         for route, answer in (
-            ("/check-runs?", f.pending_checks),
+            ("/check-runs?", f.check_runs),
             ("/check-suites?", f.completed_suites),
+            ("/rules/branches/", f.required_contexts),
         ):
             if args[0] == "api" and route in args[1]:
                 calls.append((f"gh:{route[1:-1]}", args, kwargs))
