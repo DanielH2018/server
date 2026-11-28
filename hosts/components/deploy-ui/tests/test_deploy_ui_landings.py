@@ -66,6 +66,7 @@ def app(tmp_path):
         port=0,
         tree_lock=tmp_path / "locks" / "tree.lock",
         proc_locks=tmp_path / "proc_locks",
+        land_locks=tmp_path / "run_lock",
         cli_log_dir=tmp_path / "cli",
     )
     return deploy_ui.App(cfg, run=Ps())

@@ -121,8 +121,12 @@ poll, so it adds no request, and it makes no GitHub call beyond the cached PR ti
   `hosts/components/deploy-ui/tests/test_deploy_ui_states.py::test_turn_locks_name_the_serial_holder_and_count_the_slots_is_clean`).
   The daemon cannot import land_lib, so the file names are copies, held to land_lib's by
   `hosts/components/deploy-ui/tests/test_deploy_ui_states.py::test_the_lock_names_are_land_libs_is_clean`.
-- A records directory that cannot be read sets `landings_unavailable`, which the page shows in
-  red, and leaves the rest of the panel up, because `cancel` reads the panel for its pids.
+- A records directory or a record that cannot be read sets `landings_unavailable`, which the
+  page shows in red, and leaves the rest of the panel up, because `cancel` reads the panel for
+  its pids
+  (`hosts/components/deploy-ui/tests/test_deploy_ui_states.py::test_an_unreadable_record_is_named_and_the_others_still_show_is_flagged`).
+  A landing writes its record with the writer's umask, so a record another user leaves at
+  `0660` is one the daemon's user cannot read.
 - A daniel-box landing's row links its log, joined to its `land` row by PR number: the record's
   pid is the landing's python, and the `land` row's is its family root.
 

@@ -128,28 +128,55 @@ class Record:
         return "", self.since
 
 
-def read_records(directory: Path, now: float) -> list[Record]:
-    """Each PR's newest record in `directory` that has no verdict and is inside the window.
+@dataclass(frozen=True)
+class Records:
+    """What one read of the records directory found.
+
+    Attributes:
+        records: Each PR's newest readable record that has no verdict and is in the window.
+        unavailable: Why the directory or some records could not be read; "" when all could.
+    """
+
+    records: list[Record]
+    unavailable: str
+
+
+def read_records(directory: Path, now: float) -> Records:
+    """Each PR's newest record in `directory`, and what could not be read.
 
     A PR landed by two users has a record from each, and the newest `since` is the live one.
-    A file that cannot be read or is not a record is skipped, so one bad file never blanks the
-    panel. A missing directory is no landing.
+    A file that is not a record is skipped, so one bad file never blanks the panel. A file
+    that cannot be read is counted in `unavailable`, because a landing whose record this user
+    cannot read would otherwise vanish from the queue. A missing directory is no landing.
     """
     try:
         names = [p for p in directory.iterdir() if _RECORD_NAME.fullmatch(p.name)]
     except FileNotFoundError:
-        return []
+        return Records([], "")
+    except OSError as exc:
+        return Records([], f"{directory.name}: {exc}")
     newest: dict[str, Record] = {}
+    unreadable = 0
     for path in names:
         try:
-            record = Record.parse(json.loads(path.read_text(encoding="utf-8")))
-        except OSError, KeyError, TypeError, ValueError, AttributeError:
+            text = path.read_text(encoding="utf-8")
+        except OSError:
+            unreadable += 1
+            continue
+        try:
+            record = Record.parse(json.loads(text))
+        except KeyError, TypeError, ValueError, AttributeError:
             continue
         if now - record.since > WINDOW_S:
             continue
         if record.pr not in newest or record.since > newest[record.pr].since:
             newest[record.pr] = record
-    return [r for r in newest.values() if r.state != VERDICT]
+    return Records(
+        [r for r in newest.values() if r.state != VERDICT],
+        f"{unreadable} state record(s) in {directory.name} cannot be read"
+        if unreadable
+        else "",
+    )
 
 
 def _alive(record: Record, hostname: str, proc: Path) -> bool | None:

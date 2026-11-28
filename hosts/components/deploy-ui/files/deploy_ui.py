@@ -214,23 +214,17 @@ class App:
     def _landings(self, table: dict[reads.LockKey, reads.FileLock]) -> dict:
         """Each landing's state from its record, and the turn's locks.
 
-        A failed read of the records directory is named in `landings_unavailable` rather than
-        failing the panel, because `cancel` reads this panel for its pids.
+        A failed read of the records is named in `landings_unavailable` rather than failing
+        the panel, because `cancel` reads this panel for its pids.
         """
         now = self.now()
-        try:
-            records = states.read_records(
-                self.cfg.land_locks / states.LINE_DIR_NAME, now
-            )
-            failed = ""
-        except OSError as exc:
-            records, failed = [], f"{states.LINE_DIR_NAME}: {exc}"
-        rows = states.landing_rows(records, now, self.cfg.hostname)
+        found = states.read_records(self.cfg.land_locks / states.LINE_DIR_NAME, now)
+        rows = states.landing_rows(found.records, now, self.cfg.hostname)
         for row in rows:
             row["title"] = self._pr_title(row["pr"])
         return {
             "landings": rows,
-            "landings_unavailable": failed,
+            "landings_unavailable": found.unavailable,
             "turn": states.turn_locks(self.cfg.land_locks, table),
         }
 
