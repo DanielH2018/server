@@ -73,6 +73,14 @@ def test_health_and_the_metadata_answer_a_get_without_a_token(app, path):
     assert status == 200
 
 
+def test_the_jwks_health_answers_without_a_token_by_whether_the_keys_are_fetched(app):
+    assert _request(app, "GET", "/health/jwks")[0] == 503
+    keys = sys.modules["vault_server"].OAUTH.keys
+    keys.fetch = dict
+    assert keys.refresh()
+    assert _request(app, "GET", "/health/jwks")[0] == 200
+
+
 @pytest.mark.parametrize(
     ("method", "path"),
     [
@@ -82,6 +90,8 @@ def test_health_and_the_metadata_answer_a_get_without_a_token(app, path):
         ("POST", "//mcp"),
         ("GET", "/HEALTH"),
         ("GET", "/health/"),
+        ("GET", "/health/jwksx"),
+        ("GET", "/health/jwks/../mcp"),
         ("GET", "/health/../mcp"),
         ("POST", "/health"),
         ("POST", METADATA),
