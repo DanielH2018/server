@@ -158,8 +158,21 @@ def wait_on_promotion(ln: Landing) -> None:
     pr, sha = ln.opts.pr, ln.merge_sha
     named = f" ({','.join(ln.flux_tags)})" if ln.flux_tags else ""
     say(f"waiting until a promotion covers {sha[:12]}{named}")
+    # DECIDED: 2026-11-28, the operator's ruling on #10538. A landing whose changed set reads
+    # `homelab` alone gives its slot up and waits on to its verdict, so a serial PR's drain
+    # stops waiting for it. The accepted cost: it can still be in flight while a serial PR
+    # promotes, and if that promotion fails it ends `deploy-failed` for a hold it did not
+    # cause. Without a slot it still reads DEPLOY_HOLD once a poll, 120 core calls an hour each,
+    # and nothing bounds how many such landings poll: each slot one frees lets the next landing
+    # in, so the count of 1 under a low core quota (`slots._cap`) does not bound them either.
+    # The host wait and the health gate after the promotion wait read no GitHub.
     result = ln.tools.flux.land_wait(
-        sha, list(ln.flux_tags), ln.opts.primary, wait_cap(ln), ln.opts.window_grace
+        sha,
+        list(ln.flux_tags),
+        ln.opts.primary,
+        wait_cap(ln),
+        ln.opts.window_grace,
+        ln.give_up_slot,
     )
     ln.flux_tags += [t for t in _flux_owned(ln, result.tags) if t not in ln.flux_tags]
     # Before any `finish` below, so a failed landing's ledger line names the changed set.
