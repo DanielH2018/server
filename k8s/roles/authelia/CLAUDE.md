@@ -47,27 +47,41 @@ Four relying parties, in `templates/config-secret.yaml.j2` behind `authelia_k8s_
 `jellyfin`, `grafana`, `headlamp` and `vault-mcp`. **Grafana must stay `one_factor`** — `two_factor` stalls the
 headless `-m ui` browser on a TOTP prompt no test can answer. **Headlamp's relying party is the KUBERNETES API SERVER**, not the app, so its
 `claims_policy` serves the API server's mappings in `hosts/components/k3s-server/templates/authentication-config.yaml.j2` and both of this portal's
-issuers must be trusted there. Each client's secret is stored hashed, so one that needs the
-plaintext too takes two SOPS keys that rotate together.
+issuers must be trusted there. Each confidential client's secret is stored hashed, so one that
+needs the plaintext too takes two SOPS keys that rotate together.
 
 **`vault-mcp` is the claude.ai custom connector, and its relying party is the vault-mcp
 server.** The server accepts only an RS256 access token whose `aud` holds
 `k8s/vars.yml:vault_mcp_connector_url`, the client's only `audience`. Its `vault_mcp`
 authorization policy admits the operator alone, at `two_factor`, and every sign-in shows the
 consent page (`consent_mode: 'explicit'`).
-`tests/services/authelia/test_authelia_vault_mcp_client.py` holds the policy, PKCE, grant types
-and consent. claude.ai sends the secret as `client_secret_post` and never falls back to Basic,
-so `token_endpoint_auth_method` must stay that value.
+`tests/services/authelia/test_authelia_vault_mcp_client.py` holds the public client type, the
+policy, PKCE, the redirect URI, grant types and consent.
 `k8s/roles/vault-mcp/tests/test_oauth_resource.py::test_authelia_grants_the_audience_and_issuer_the_rendered_server_requires`
 holds the client and the server to the same URL and issuer.
+
+**`vault-mcp` is a public client, with no secret.** The operator ruled so on 2026-11-28. As a
+confidential client, its token calls from claude.ai failed with "The provided client secret did
+not match the registered client secret." The operator showed that the server side was right in
+three ways. The SOPS plaintext validated against its PBKDF2 digest. The digest Authelia loaded
+was byte-identical to the one in SOPS. A hand-made `client_secret_post` call with that secret
+got invalid_grant, not invalid_client. So claude.ai sent the wrong secret. Its docs say that
+a connector added with the secret left blank uses the client ID as a public client.
+
+**Without a secret, consent and 2FA are the only guards against a tricked approval.** Anyone can
+add a claude.ai connector with the client ID `vault-mcp`. It shares the one redirect URI, so the
+consent page looks the same whoever started the sign-in. The operator must approve only a
+sign-in they started themselves. S256 PKCE binds each code to the client that started its flow.
+A dynamic-registration proxy would be no stronger, because it would register any caller too.
 
 **A refreshing connector never asks for 2FA again.** The `vault_mcp` lifespan gives a refresh
 token 30 days, and Authelia 4.39.28's provider (authelia.com/provider/oauth2 v0.3.2) gives each
 refreshed token a fresh 30 days from the refresh. The 30 days are therefore an idle limit, not a
-login limit, and the provider has no cap on a grant's total age. To cut the connector off, set
-`authelia_k8s_vault_mcp_client: false` or rotate its client secret (`docs/secret-rotation.md`).
-Either one stops new sign-ins and refreshes. An access token already issued stays valid for up
-to its 1h lifespan, because the vault-mcp server does not introspect.
+login limit, and the provider has no cap on a grant's total age. A stolen refresh token works
+without a secret until it idles out. To cut the connector off, set
+`authelia_k8s_vault_mcp_client: false`. That stops new sign-ins and refreshes once it lands. An
+access token already issued stays valid for up to its 1h lifespan, because the vault-mcp server
+does not introspect.
 
 The signing key has a Secret of its own, `authelia-oidc-jwk` from
 `templates/oidc-jwk-secret.yaml.j2`, because Flux strips the newlines from a placeholder's value

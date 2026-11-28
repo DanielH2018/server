@@ -64,11 +64,11 @@ See repo-root `CLAUDE.md` for shared conventions.
   exact, so `/health/`, `/HEALTH` and `/health/../mcp` get the 401 too.
   `k8s/roles/vault-mcp/tests/test_vault_server.py` drives the real ASGI app over these paths.
 - **To cut claude.ai off, set `authelia_k8s_vault_mcp_client: false` in
-  `k8s/roles/authelia/defaults/main.yml`, or rotate `vault_mcp_oidc_client_secret` and its
-  hash (`docs/secret-rotation.md`).** Either one stops new sign-ins and refreshes once it
-  lands. An access token already issued stays valid for up to its 1h lifespan, because this
-  server checks tokens offline against the JWKS and does not introspect. Without one of these,
-  a connector that keeps refreshing never signs in again (`k8s/roles/authelia/CLAUDE.md`).
+  `k8s/roles/authelia/defaults/main.yml`.** The client is public, so no secret rotation can
+  revoke it. The switch stops new sign-ins and refreshes once it lands. An access token already
+  issued stays valid for up to its 1h lifespan, because this server checks tokens offline
+  against the JWKS and does not introspect. Without the switch, a connector that keeps
+  refreshing never signs in again (`k8s/roles/authelia/CLAUDE.md`).
 - **`k8s/vars.yml:vault_mcp_connector_url` is the one copy of the connector URL.** It is the
   metadata's `resource`, the `aud` every token must hold, and the Authelia client's only
   `audience`. claude.ai sends it as the RFC 8707 `resource`, and Authelia grants only an
@@ -90,9 +90,12 @@ See repo-root `CLAUDE.md` for shared conventions.
   every user's connectors, and the trusted-remote whitelist keeps to `/32` exits. A connector
   sends one unauthenticated request per sign-in, then a few metadata reads, so the first live
   sign-in is the check that CrowdSec and Cloudflare let it through.
-- **claude.ai posts the client secret in the form body.** It sends `client_secret_post` and
-  never falls back to Basic
-  ([anthropics/claude-ai-mcp#667](https://github.com/anthropics/claude-ai-mcp/issues/667)).
+- **The connector signs in as a public client, with no secret.** As a confidential client,
+  claude.ai's token calls failed, although the stored secret and its digest agreed. Authelia
+  answered "The provided client secret did not match the registered client secret." The
+  operator ruled on
+  2026-11-28 to make the client public (`k8s/roles/authelia/CLAUDE.md`, *OIDC clients*). To
+  add the connector on claude.ai, give the Client ID `vault-mcp` and leave the secret blank.
 - **The LAN bearer route is gone.** A client that sends the old static token gets 401 and signs
   in through OAuth.
 - **Two open PRs that add a secret always conflict.** SOPS keeps one MAC over the whole of
