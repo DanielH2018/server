@@ -81,7 +81,9 @@ class FakeGh:
                 if line.startswith("a")
             }
             return subprocess.CompletedProcess(argv, 0, json.dumps({"data": data}), "")
-        repository = {"owner": {"projectsV2": {"nodes": [self.board]}}}
+        repository: dict[str, object] = {
+            "owner": {"projectsV2": {"nodes": [self.board]}}
+        }
         for n, issue in self.issues.items():
             if f"i{n}:" in query:
                 repository[f"i{n}"] = issue

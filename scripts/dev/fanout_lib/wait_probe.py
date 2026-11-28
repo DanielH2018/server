@@ -142,7 +142,9 @@ def read(run_ids: list[str], status: StatusReader = read_status) -> dict:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = ArgumentParser(prog="fanout.py probe", description=__doc__.splitlines()[0])
+    parser = ArgumentParser(
+        prog="fanout.py probe", description=(__doc__ or "").partition("\n")[0]
+    )
     parser.add_argument("--describe", action="store_true")
     parser.add_argument("run_ids", nargs="+", metavar="run-id")
     refuse_help_under_describe(parser, argv)

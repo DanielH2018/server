@@ -164,6 +164,7 @@ def test_a_body_carrying_both_trailers_ages_the_claim_from_the_comment_that_open
         operator_comment(claim_comment(WT, None, "t")),
     )
     assert issue.holder == WT
+    assert issue.claim is not None
     assert issue.claim.age_days() is not None
 
 
