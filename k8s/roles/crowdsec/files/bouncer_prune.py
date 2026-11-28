@@ -41,10 +41,11 @@ stdout line says why. `-h` and `--help` print this text and exit 0.
 
 import json
 import subprocess
-import sys
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
+
+import crowdsec_jobs
 
 EDGE_BOUNCER = "k8straefik"
 CSCLI = "/tools/cscli"
@@ -154,18 +155,4 @@ def main(runner: Callable[[list[str]], str] = run, now: datetime | None = None) 
 
 
 if __name__ == "__main__":
-    if any(arg in ("-h", "--help") for arg in sys.argv[1:]):
-        print((__doc__ or "").strip())
-        sys.exit(0)
-    try:
-        sys.exit(main())
-    except subprocess.CalledProcessError as exc:
-        tail = (exc.stderr or exc.stdout or "").strip().splitlines()
-        verb = " ".join(
-            ["cscli", *[w for w in exc.cmd[1:] if not w.startswith("-")]][:3]
-        )
-        print(
-            f"{verb} failed rc={exc.returncode}: {tail[-1] if tail else 'no output'}",
-            file=sys.stderr,
-        )
-        sys.exit(1)
+    crowdsec_jobs.entrypoint(main, __doc__)

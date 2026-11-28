@@ -111,6 +111,33 @@ def test_a_run_past_its_timeout_is_down():
     assert exported == [("crowdsec-remote-allowlist", False)]
 
 
+def test_a_failed_call_in_a_job_names_its_verb_and_never_the_address(
+    monkeypatch, capsys
+):
+    def main():
+        raise subprocess.CalledProcessError(
+            1,
+            [
+                "/tools/cscli",
+                "allowlists",
+                "add",
+                "remote-ips",
+                "203.0.113.9",
+                "-e",
+                "168h",
+            ],
+            stderr="level=info msg=starting\nlevel=fatal msg=database is locked\n",
+        )
+
+    monkeypatch.setattr(sys, "argv", ["remote_allowlist.py"])
+    with pytest.raises(SystemExit) as exited:
+        cj.entrypoint(main, __doc__)
+    assert exited.value.code == 1
+    assert capsys.readouterr().err == (
+        "cscli allowlists add failed rc=1: level=fatal msg=database is locked\n"
+    )
+
+
 def test_the_bouncer_prune_logs_and_exports_nothing():
     _, printed, exported = _run(
         "crowdsec-bouncer-prune", returncode=1, stdout="refused: no live row\n"
