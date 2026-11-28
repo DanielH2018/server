@@ -101,8 +101,25 @@ def test_the_corpus_reaches_every_action_and_every_end(recorded):
     ends = {f"end {end}" for end in a.End}
     assert not (actions | ends) - seen, sorted((actions | ends) - seen)
     assert {sc.turn_by for _, sc, _ in recorded} == set(TurnBy)
-    batches = {(sc.batch_red, sc.batch_breaks) for _, sc, _ in recorded if sc.drafts}
-    assert {(False, False), (True, False), (False, True)} <= batches, batches
+    batches = set().union(*(_batch_takes(lines) for _, _, lines in recorded))
+    assert {"green", "not green", "failed"} <= batches, batches
+
+
+def _batch_takes(lines: list[str]) -> set[str]:
+    """How a recorded trace's take formed a batch: a `green` or `not green` run, or `failed`.
+
+    A run counts only beside the call that opens the batch's pull request, since a take that
+    formed no batch has no run to read.
+    """
+    takes = {"failed"} if any("the landing batch failed" in x for x in lines) else set()
+    opened = '"POST" "repos/{owner}/{repo}/pulls"'
+    if any(opened in x and '"head=queue/' in x for x in lines):
+        runs = {
+            "green": "the batch is green after",
+            "not green": "the batch is not green",
+        }
+        takes |= {take for take, said in runs.items() if any(said in x for x in lines)}
+    return takes
 
 
 def _green_in_turn() -> LandingState:
