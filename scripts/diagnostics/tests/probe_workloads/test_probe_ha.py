@@ -106,6 +106,7 @@ _HA_STATES = [
 
 def test_match_automation_by_entity_slug():
     m = ha.match_automation(_HA_STATES, "bedroom_presence_on")
+    assert m is not None
     assert m["entity_id"] == "automation.bedroom_presence_on"
 
 
@@ -114,16 +115,19 @@ def test_match_automation_by_id_when_alias_differs():
     # fact: .claude/skills/ha-edit-automation/SKILL.md#The live API
     # fact: .claude/skills/ha-edit-automation/SKILL.md#The verification traps
     m = ha.match_automation(_HA_STATES, "bedroom_fan_temperature")
+    assert m is not None
     assert m["entity_id"] == "automation.bedroom_fan_temperature_control"
 
 
 def test_match_automation_by_friendly_name_slug():
     m = ha.match_automation(_HA_STATES, "bedroom_fan_temperature_control")
+    assert m is not None
     assert m["attributes"]["id"] == "bedroom_fan_temperature"
 
 
 def test_match_automation_accepts_full_entity_id():
     m = ha.match_automation(_HA_STATES, "automation.bedroom_presence_on")
+    assert m is not None
     assert m["attributes"]["id"] == "presence_1"
 
 

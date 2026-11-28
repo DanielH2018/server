@@ -83,7 +83,7 @@ PRs arrived faster than the turn could serve them: 46 `ci.yml` pull-request runs
 between 14:00 and 15:00. When a serial landing is live, the turn serves only docs- and
 tests-only PRs, so the line keeps growing until the serial landing ends.
 
-The log line `another landing has held the turn for 5520s, reaching merge_timeout` reports
+The log line `waited 5520s for the landing turn, reaching merge_timeout` reports
 how long the waiting landing waited. Several holders had the turn in that time.
 
 ## Changes built and landed
@@ -104,6 +104,12 @@ hold.
    occurrence. The one occurrence in the 1010 retained logs held the turn about 6 minutes
    before its process ended with no exit recorded. That validator had concluded `failure`,
    and no landing in the logs merged after such a refusal. The change adds 10 lines.
+3. **Let a landing batch hold six PRs, not four** (the PR that adds this item). The operator
+   chose six. In the burst from 16:00 to 18:00 every batch was full at four while 10 or more
+   PRs stood in line, and one turn merges one batch. At the 3.7% to 6.5% per-PR red rate
+   `docs/ci-throughput.md` measured, a batch of four is red 14% to 24% of the time and a batch
+   of six 20% to 33%. A red batch splits, and never costs more runs than its members landing
+   alone.
 
 ## Options that need the operator, ranked
 
@@ -136,6 +142,45 @@ uses the day's numbers.
 - **The fresh checkout and `.venv`.** PRs 10477 and 10487 moved them to disk.
   `docs/worktree-storage.md` measures `git worktree add` at 0.32 s and `uv sync` at 0.25 s.
 - **Master CI.** The tested-tree skip makes the median wait 21 s.
-- **PR CI.** Batching already shares a run among up to 4 PRs. The run's 281 s median is not
-  the bottleneck. GitHub's 20-job cap stays, because the operator ruled out a paid plan and
-  self-hosted runners.
+- **PR CI.** Batching shares a run among up to 6 PRs, 4 before 2026-11-27. The run's 281 s
+  median is not the bottleneck. GitHub's 20-job cap was not binding either: see *Runner use
+  and queue order* below. The operator ruled out a paid plan on 2026-11-20.
+  [ADR-0032](adr/0032-cis-heavy-jobs-may-run-on-runner-pods.md) allows runner pods for CI's
+  two heavy jobs, and none is built.
+
+## Runner use and queue order
+
+These measurements were taken after the first two changes, at the operator's request.
+
+**Runners sat mostly idle during the burst.** Every Actions job from 16:50 to 18:00 UTC was
+read: 217 runs and 1073 jobs across all workflows, all on GitHub-hosted runners.
+
+- A median of 4.5 jobs ran at once against the cap of 20.
+- Fewer than 10 ran 78% of the time, and 15 or more ran 8% of the time.
+- The cap was reached once, and a job waited a median of 2 s to start, at most 17 s.
+- One batch run has 12 to 15 jobs, peaks at 9 to 12 running at once, and uses about 25
+  job-minutes over 4.5 to 6 minutes.
+
+So the landing turn, not the runner pool, set the pace. A second batch run alongside the
+first, which is what pipelining needs, would fit.
+
+**A green batch's members wait little on their own required checks.** Each member is marked
+ready after the batch goes green and merges once the checks outside `ci.yml` pass. This was
+read across every retained log, 2026-11-22 to 2026-11-27:
+
+- 45 member merges took 2610 s in all, a median of 30 s, which is one poll. The p90 was 180 s
+  and the longest 240 s.
+- The holder's own merge met at least 18 refusals in 27 batches, about 9 minutes. The log
+  prints a repeated refusal once, so the count is a lower bound.
+- The checks that cause the waits are `renovate config validator`, `flux-deletion-drill`,
+  and the aggregate `2 of 4 required status checks are in progress`.
+
+That is 1 to 2 minutes of turn per batch, too little to build for.
+
+**The turn has no ordering.** Each waiting landing polls a non-blocking lock every 30 s
+(`turn._wait`), so the first poll after a release takes the turn. The holder stacks drafts in
+PR-number order (`sorted(os.listdir)` in `line.py`), not in arrival order. Three landings ran
+out the 5520 s merge budget while later arrivals took the turn or were stacked. Not every one
+of those waits comes from the ordering: #10482 is serial, so no batch can carry it, and #10449's
+wait includes a serial wait. A proposed architecture, on branch `claude/landing-architecture`,
+models the queue so the effect of the ordering is measured before a change is built.

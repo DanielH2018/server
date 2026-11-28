@@ -16,7 +16,7 @@ from ci_verdict import WorkflowRun
 RUN_URL = "https://github.com/DanielH2018/server/actions/runs/123"
 
 
-def _run(status="completed", conclusion="success"):
+def _run(status="completed", conclusion: str | None = "success"):
     return WorkflowRun.parse(
         {
             "status": status,
@@ -27,7 +27,7 @@ def _run(status="completed", conclusion="success"):
     )
 
 
-def _read(hold="none", run=None):
+def _read(hold: str | None = "none", run=None):
     return landing_clear.read(lambda: hold, lambda: run or _run())
 
 
@@ -126,7 +126,9 @@ def test_a_master_with_no_ci_run_reads_pending():
 
 
 def _hold(directory, name):
-    return turn.try_take(directory / name)
+    release = turn.try_take(directory / name)
+    assert release is not None
+    return release
 
 
 def _serial_landing_of(directory, pr):

@@ -15,6 +15,7 @@ from diagnostics.probe_lib.core import config_get, ha_curl_argv
 from diagnostics.probe_lib.health_docker import resolve_service_ip
 from diagnostics.probe_lib.vip_placement import ready_endpoint_nodes
 
+from lib.json_types import JsonObject, JsonValue
 from lib.kubectl import DEFAULT_CLUSTER, kubectl_json
 
 # Not via k8s_endpoint: Sonarr has no Authelia bypass for /api/*, so a Traefik GET 302s to login.
@@ -122,7 +123,7 @@ def _name_is_sensitive(name):
 # `core.redact_query_params` rather than only the URL-shaped keys.
 
 
-def redact_arr_payload(obj):
+def redact_arr_payload(obj: JsonValue) -> JsonValue:
     """Return `obj` with credential-bearing values replaced by `<redacted>`.
 
     Walks the whole decoded response rather than a path allow-list. The paths notification,
@@ -143,7 +144,7 @@ def redact_arr_payload(obj):
         )
         if sensitive and obj["value"] not in (None, ""):
             return {**obj, "value": REDACTED}
-    out = {}
+    out: JsonObject = {}
     for key, value in obj.items():
         if _name_is_sensitive(key) and value not in (None, "", [], {}):
             out[key] = REDACTED
