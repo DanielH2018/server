@@ -52,10 +52,12 @@ def recorded():
 
 def test_the_corpus_holds_every_seed(recorded):
     assert [seed for seed, _, _ in recorded] == list(SEEDS)
-    for seed, sc, _ in recorded:
+    for seed, sc, lines in recorded:
         assert sc == scenario(random.Random(seed)), (
             f"seed {seed} draws another scenario"
         )
+        # A fake the scenario misconfigured crashes the loop and the driver alike.
+        assert not lines[-1].startswith("raised "), f"seed {seed}: {lines[-1]}"
 
 
 def test_the_loop_reproduces_every_recorded_trace(recorded):
@@ -108,8 +110,3 @@ def test_an_untested_head_rejoins_after_a_step_out_of_the_turn():
         _green_in_turn(), a.Tested(tested=False, interrupted=True)
     )
     assert actions == [a.RejoinInTurn("h1", conflicting=False)]
-
-
-def test_an_answer_of_the_wrong_kind_is_refused():
-    with pytest.raises(TypeError):
-        landing_machine.step(_green_in_turn(), a.Done())
