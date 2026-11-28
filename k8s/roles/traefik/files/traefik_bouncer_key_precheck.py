@@ -65,7 +65,7 @@ def main(
     env: Mapping[str, str] | None = None,
     opener: Callable = open_url,
 ) -> int:
-    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser = argparse.ArgumentParser(description=(__doc__ or "").splitlines()[0])
     parser.parse_args(argv)
     try:
         line = check(os.environ if env is None else env, opener)

@@ -106,7 +106,9 @@ class Upstream:
         timeout: The socket timeout, which also bounds a stalled read.
     """
 
-    def __init__(self, base: str, path: str, headers: dict[str, str], timeout: float):
+    def __init__(
+        self, base: str, path: str, headers: dict[str, str], timeout: float
+    ) -> None:
         self.base = base
         self.path = path
         self.headers = headers
@@ -156,7 +158,7 @@ class Handler(BaseHTTPRequestHandler):
     def proxy(self) -> "ResumeProxy":
         return cast("ResumeProxy", self.server)
 
-    def log_message(self, format: str, *args) -> None:
+    def log_message(self, format: str, *args: object) -> None:
         sys.stderr.write("ghcr-resume: " + (format % args) + "\n")
 
     def _headers(self) -> dict[str, str]:
@@ -307,7 +309,7 @@ class ResumeProxy(ThreadingHTTPServer):
 
     def __init__(
         self, address: tuple[str, int], upstream: str, timeout: float, max_resumes: int
-    ):
+    ) -> None:
         super().__init__(address, Handler)
         self.upstream = upstream.rstrip("/")
         self.read_timeout = timeout
