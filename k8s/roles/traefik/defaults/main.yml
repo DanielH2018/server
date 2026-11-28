@@ -84,8 +84,8 @@ traefik_k8s_manage_crowdsec: true
 traefik_k8s_bouncer_key_precheck: true
 
 # The file-provider token gate (livesync-gate-secret.yaml.j2) and the file provider that
-# reads it. False for a cluster that runs neither CouchDB nor homelab-mcp, which is what
-# every router in that file routes to.
+# reads it. False for a cluster that runs none of CouchDB, homelab-mcp and vault-mcp, which
+# are what every router in that file routes to.
 #
 # DECIDED: a flag, not generated staging tokens. Slice 2a recorded the opposite — that
 # generated values would render harmlessly — and that was wrong twice. The routers name

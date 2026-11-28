@@ -91,6 +91,7 @@ BUILT_IMAGE_TAG_STUBS: dict[str, str] = {
     "pi-peer-backup": "sha-b0cca17e6666",
     "terraria": "sha-7e44a121a777",
     "valheim": "sha-a1de17ab8888",
+    "vault-mcp": "sha-7a017ab09999",
 }
 
 # Anything still missing renders via StubUndefined, which suffices for a structural check.

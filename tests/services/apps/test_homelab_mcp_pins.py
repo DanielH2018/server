@@ -1,9 +1,11 @@
-"""Guard: homelab-mcp's pip deps are exact, and mcp stays on the line Renovate is capped to.
+"""Guard: the MCP images' pip deps are exact, and mcp stays on the line Renovate is capped to.
+
+homelab-mcp and vault-mcp both build FastMCP servers, so each is held to the same rules.
 
 The Dockerfile pins each pip dependency exactly behind a digest-pinned base, so a rebuild
 resolves nothing. The pins are read off the RENDERED Dockerfile, the text k8s/image-builder
-stages for the build. mcp must stay below 2: mcp 2.0.0 removes `mcp.server.fastmcp`, which app.py
-imports, and the container would crash-loop. renovate.json's `allowedVersions: "<2"` rule on
+stages for the build. mcp must stay below 2: mcp 2.0.0 removes `mcp.server.fastmcp`, which both
+servers import, and the container would crash-loop. renovate.json's `allowedVersions: "<2"` rule on
 `mcp` holds that line for Renovate. The two must agree: a pin that crossed the cap by hand, or
 a cap that went missing, each recreates the crash-loop one way or the other.
 
@@ -13,12 +15,17 @@ Run: uv run pytest tests/services/apps/test_homelab_mcp_pins.py
 import json
 import re
 
+import pytest
+
 from _helpers import REPO
 from _k8s_render import rendered_build_text
 
 RENOVATE = REPO / "renovate.json"
 
-KNOWN_DEPS = frozenset({"mcp", "httpx", "uvicorn"})
+KNOWN_DEPS = {
+    "homelab-mcp": frozenset({"mcp", "httpx", "uvicorn"}),
+    "vault-mcp": frozenset({"mcp", "pyyaml", "uvicorn"}),
+}
 
 
 def pip_pins(dockerfile: str) -> dict[str, str | None]:
@@ -42,9 +49,10 @@ def _mcp_cap() -> str | None:
     return None
 
 
-def test_every_pip_package_is_pinned_exactly() -> None:
-    pins = pip_pins(rendered_build_text("homelab-mcp"))
-    missing = KNOWN_DEPS - set(pins)
+@pytest.mark.parametrize("role", sorted(KNOWN_DEPS))
+def test_every_pip_package_is_pinned_exactly(role: str) -> None:
+    pins = pip_pins(rendered_build_text(role))
+    missing = KNOWN_DEPS[role] - set(pins)
     assert not missing, f"pip line lost {sorted(missing)}"
     bare = sorted(name for name, version in pins.items() if version is None)
     assert not bare, f"unpinned pip package(s): {bare}"
@@ -56,11 +64,12 @@ def test_every_pip_package_is_pinned_exactly() -> None:
     assert not ranged, f"pip package(s) not pinned to an exact release: {ranged}"
 
 
-def test_mcp_pin_is_on_the_line_renovate_is_capped_to() -> None:
-    version = pip_pins(rendered_build_text("homelab-mcp"))["mcp"]
+@pytest.mark.parametrize("role", sorted(KNOWN_DEPS))
+def test_mcp_pin_is_on_the_line_renovate_is_capped_to(role: str) -> None:
+    version = pip_pins(rendered_build_text(role))["mcp"]
     assert version, "mcp is not pinned with =="
     assert version.split(".")[0] == "1", (
-        f"mcp=={version} crosses the 2.x line that removed mcp.server.fastmcp — port app.py first"
+        f"mcp=={version} crosses the 2.x line that removed mcp.server.fastmcp — port {role} first"
     )
     assert _mcp_cap() == "<2", (
         "renovate.json must cap mcp with allowedVersions '<2', or Renovate offers the 2.x bump"

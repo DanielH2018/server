@@ -290,6 +290,7 @@ BUILD_ROLES = frozenset(
         "pi-peer-backup",
         "terraria",
         "valheim",
+        "vault-mcp",
     }
 )
 

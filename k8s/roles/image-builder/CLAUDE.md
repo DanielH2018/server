@@ -15,7 +15,7 @@ every caller, where it would drift. See repo-root `CLAUDE.md` for shared convent
   privileged pod). Runs as uid 1000 with no added capabilities
   (`k8s/roles/image-builder/templates/build-job.yaml.j2`).
 - **Callers:** `ical-proxy`, `terraria`, `pi-peer-backup`, `n8n`, `code-server`,
-  `nut`, `homelab-mcp`, `valheim`, `karakeep`
+  `nut`, `homelab-mcp`, `valheim`, `karakeep`, `airflow`, `vault-mcp`
   (`scripts/renderer/renderer_lib/images.py:builder_roles`) — each lists its builds'
   `image_builder_*` vars in its own `image_builder_builds` default.
 - **Renovate does not automerge its bumps**
@@ -31,7 +31,7 @@ every caller, where it would drift. See repo-root `CLAUDE.md` for shared convent
     is every byte the build reads, so no second list of inputs can fall out of step with it,
     and a comment edit in that template does not rebuild the images.
   - The renderer computes `k8s_built_image_tags` (name → tag) for the roles that deploy these
-    images. **All nine `*_k8s_image` pins read it**
+    images. **Every `*_k8s_image` pin of a built image reads it**
     (`tests/k8s/flux/test_built_images_name_the_content_tag.py` requires it).
   - `scripts/lib/render_guard.py:BUILT_IMAGE_TAG_STUBS` seeds one for every rendered-manifest
     guard, which would otherwise check `:latest` while production renders the hash.

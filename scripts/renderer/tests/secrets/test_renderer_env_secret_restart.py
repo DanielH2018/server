@@ -25,7 +25,7 @@ from renderer.renderer_lib.cluster import DEFERRED_SUFFIX
 from lib.repo_paths import K8S_ROLES
 from renderer.renderer_lib.cluster import tag_context
 from renderer.renderer_lib.restart import RESTART_ANNOTATION, pod_template
-from renderer.renderer_lib.restart import outside_secrets, restart_targets
+from renderer.renderer_lib.restart import outside_secrets, restart_targets, sops_secrets
 
 # secretKeyRef on an extra rollout, envFrom.secretRef, a DaemonSet, a workload rendered in a
 # deferred directory, and redis, whose `restart_on: []` leaves it unstamped.
@@ -104,6 +104,14 @@ def _unstamped(out: Path, tags: Iterable[str]) -> list[tuple[str, str]]:
 @pytest.fixture(scope="module")
 def flux_tags() -> set[str]:
     return k8s_tags()
+
+
+@pytest.fixture(scope="module")
+def shipped(flux_tags) -> dict[str, set[str]]:
+    """Each tag's SOPS-manifest Secret names, which the placeholder render leaves out."""
+    keys = homelab_render.secret_keys()
+    sops = placeholder_renderer()(sorted(flux_tags), keys).sops_manifests
+    return {tag: set(sops_secrets(entries, keys)) for tag, entries in sops.items()}
 
 
 @pytest.fixture(scope="module")
@@ -187,8 +195,8 @@ def unhashed_env_secrets(
     """The Secrets `template` reads through env that its `checksum/restart` does not hash.
 
     `restart_values` hashes a Secret only when the target's `restart_on` admits the kind, and
-    only when the tag renders it or lists it in `manifests_outside_secrets`. A SOPS-shipped
-    Secret counts as unhashed here, because the placeholder render leaves it out.
+    only when the tag renders it, ships it as a SOPS manifest, or lists it in
+    `manifests_outside_secrets`. `rendered` holds the first two.
     """
     if "Secret" not in set(admitted):
         return _env_secret_names(template)
@@ -222,7 +230,7 @@ def test_an_outside_env_secret_missing_from_outside_secrets_is_flagged():
 
 
 def test_every_env_secret_a_workload_reads_moves_its_checksum_is_clean(
-    render, flux_tags
+    render, flux_tags, shipped
 ):
     found = {}
     for tag in sorted(flux_tags):
@@ -242,7 +250,10 @@ def test_every_env_secret_a_workload_reads_moves_its_checksum_is_clean(
                 continue
             name = obj["metadata"]["name"]
             found[(tag, name)] = unhashed_env_secrets(
-                template, targets.get(name, ()), rendered, outside
+                template,
+                targets.get(name, ()),
+                rendered | shipped.get(tag, set()),
+                outside,
             )
     assert MEMBERS <= set(found)
     assert {k: v for k, v in found.items() if v} == {}
