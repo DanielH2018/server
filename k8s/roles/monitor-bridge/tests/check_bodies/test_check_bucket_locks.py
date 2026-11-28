@@ -214,7 +214,7 @@ def r2_cfg(cfg):
 
 def _run(r2_cfg, bucket, now=NOON, state=None):
     src = FakeSources(state=state, send=bucket.send)
-    return CheckResult.of(checks.r2.check_r2_etcd_lock(r2_cfg, src, now=now)), src
+    return checks.r2.check_r2_etcd_lock(r2_cfg, src, now=now), src
 
 
 def test_a_refused_delete_of_yesterdays_canary_is_clean(r2_cfg):

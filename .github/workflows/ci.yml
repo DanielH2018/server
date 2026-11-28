@@ -1355,7 +1355,7 @@ jobs:
   #
   # The `name:` leaves the shard out, so a release's shards share the check-run name `ci_verdict.py`
   # lists. Each shard runs `case_groups.groups`'s share: on one runner the groups ran about 150 s
-  # past `upgrade_path`, the longest group, which no shard can split.
+  # past the longest group, and each node's `node_package_case` group is a floor no shard can split.
   host_packages:
     name: host_packages (${{ matrix.release }}, ${{ matrix.python }})
     needs: [prove, host_packages_build]

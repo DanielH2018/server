@@ -14,6 +14,7 @@ import os
 import sys
 import time
 from collections.abc import Callable, Mapping
+from typing import NoReturn
 
 import bridge.common
 import check
@@ -34,7 +35,7 @@ USAGE_ERROR = 64
 class _ArgumentParser(argparse.ArgumentParser):
     """argparse's parser, except that a usage error exits `USAGE_ERROR` rather than 2."""
 
-    def error(self, message):
+    def error(self, message: str) -> NoReturn:
         self.print_usage(sys.stderr)
         self.exit(USAGE_ERROR, f"{self.prog}: error: {message}\n")
 

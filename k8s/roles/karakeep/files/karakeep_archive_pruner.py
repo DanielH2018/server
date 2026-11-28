@@ -35,8 +35,11 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
+from collections.abc import Callable
+from contextlib import AbstractContextManager
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
+from typing import Protocol
 
 # The fields the rules read. A bookmark missing any of them aborts the run.
 REQUIRED_FIELDS = ("id", "archived", "favourited", "modifiedAt", "tags", "assets")
@@ -52,15 +55,24 @@ class Action:
     asset_id: str | None = None
 
 
+class _Response(Protocol):
+    def read(self) -> bytes: ...
+
+
+Opener = Callable[..., AbstractContextManager[_Response]]
+
+
 class Api:
     """A thin Bearer-token client. `opener` is the transport, so a test can record calls."""
 
-    def __init__(self, base_url: str, api_key: str, opener=urllib.request.urlopen):
+    def __init__(
+        self, base_url: str, api_key: str, opener: Opener = urllib.request.urlopen
+    ) -> None:
         self.base_url = base_url.rstrip("/")
         self.api_key = api_key
         self.opener = opener
 
-    def request(self, method: str, path: str, params: dict | None = None):
+    def request(self, method: str, path: str, params: dict | None = None) -> dict:
         url = f"{self.base_url}/{path}"
         if params:
             url += "?" + urllib.parse.urlencode(params)
@@ -69,12 +81,15 @@ class Api:
         )
         with self.opener(req, timeout=30) as resp:
             body = resp.read()
-        return json.loads(body) if body else None
+        return json.loads(body) if body else {}
 
 
 def wait_for_api(
-    api: Api, budget_seconds: int, interval_seconds: int, sleep=time.sleep
-):
+    api: Api,
+    budget_seconds: int,
+    interval_seconds: int,
+    sleep: Callable[[float], None] = time.sleep,
+) -> None:
     """Retry the first call until it answers.
 
     kube-router admits a new pod's source IP a moment after the pod starts, so a Job's first
@@ -83,13 +98,13 @@ def wait_for_api(
     attempts = max(1, budget_seconds // interval_seconds)
     for attempt in range(1, attempts + 1):
         try:
-            return api.request("GET", "users/me")
+            api.request("GET", "users/me")
+            return
         except (urllib.error.URLError, OSError) as e:
             if attempt == attempts:
                 raise
             print(f"karakeep not reachable yet (attempt {attempt}/{attempts}): {e}")
             sleep(interval_seconds)
-    return None
 
 
 def list_archived(api: Api) -> list[dict]:
@@ -183,7 +198,7 @@ def plan(
     screenshot_days: int,
     delete_days: int,
     auto_tags: frozenset[str],
-    has_highlights,
+    has_highlights: Callable[[str], bool],
 ) -> tuple[list[Action], list[str]]:
     """Return the actions to take and one log line per bookmark a protection kept.
 
@@ -257,8 +272,13 @@ def summarise(bookmarks: list[dict], now: datetime, actions: list[Action]) -> No
         print(f"{kind}: {sum(a.kind == kind for a in actions)}")
 
 
-def main(argv=None, opener=urllib.request.urlopen, now=None, sleep=time.sleep) -> int:
-    p = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+def main(
+    argv: list[str] | None = None,
+    opener: Opener = urllib.request.urlopen,
+    now: datetime | None = None,
+    sleep: Callable[[float], None] = time.sleep,
+) -> int:
+    p = argparse.ArgumentParser(description=(__doc__ or "").partition("\n")[0])
     p.add_argument("--screenshot-days", type=int, required=True)
     p.add_argument("--delete-days", type=int, required=True)
     p.add_argument("--auto-tag", action="append", default=[])

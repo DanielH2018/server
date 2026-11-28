@@ -20,6 +20,8 @@ SERVER_LOG = "/var/log/test-repo.log"
 PROM = "/var/lib/node-exporter-textfile/homelab_host.prom"
 LAST_SUCCESS = "/var/lib/homelab-updater/last_success"
 HOLD = "/var/lib/homelab-updater/hold"
+RETRY_DELAY_DROPIN = "/etc/apt/apt.conf.d/90-test-retry-delay"
+RETRY_DELAY_CAP = 'Acquire::Retries::Delay::Maximum "1";'
 
 
 # apt fetches the signed InRelease first, and Release only when that is missing.
@@ -189,6 +191,15 @@ class Container:
 
     def stop_serving(self) -> None:
         self.ok("systemctl stop test-repo.service")
+
+    def cap_apt_retry_delay(self) -> None:
+        """Cap apt's wait between retries at one second, for the rest of the container's life.
+
+        The image's `Acquire::Retries "10"` doubles the wait up to apt's 30-second cap, so a
+        source that refuses every connection costs an `apt-get update` 181 seconds. Capped, it
+        costs about 10, and a flaky mirror still gets all ten retries.
+        """
+        self.ok(f"echo {shlex.quote(RETRY_DELAY_CAP)} > {RETRY_DELAY_DROPIN}")
 
     def log_size(self) -> int:
         return int(self.ok(f"touch {SERVER_LOG}; stat -c %s {SERVER_LOG}"))
