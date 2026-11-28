@@ -346,7 +346,8 @@ that refuses every connection costs an `apt-get update` 181 s. The stopped-serve
 `bootstrap_age_case` each fetch from such a source.
 `host_container.Container.cap_apt_retry_delay` caps the wait at 1 s in both. A refused source
 then costs about 10 s, and the snapshot mirror still gets all ten retries. The projection
-from that run puts `upgrade_path` near 40 s and `bootstrap_age_case` near 18 s.
+from that run puts `upgrade_path` near 40 s, and `bootstrap_age_case` at its snapshot fetch
+plus about 10 s.
 
 **With the cap, the node groups bound each shard.** `node_package_case-daniel-server` ran 201 s and
 `node_package_case-daniel-box` 179 s on run 46135097191, so the cases step falls by only
