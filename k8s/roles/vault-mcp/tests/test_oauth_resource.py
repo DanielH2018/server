@@ -3,6 +3,8 @@ import hashlib
 import hmac
 import io
 import json
+import logging
+import threading
 import time
 import urllib.request
 from dataclasses import replace
@@ -15,7 +17,8 @@ from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 from jwt.algorithms import RSAAlgorithm
 
-from oauth_resource import CLIENT_ID, ResourceServer
+import oauth_resource
+from oauth_resource import CLIENT_ID, ResourceServer, SigningKeys
 
 RESOURCE = "https://vault-mcp.example.com/mcp"
 ISSUER = "https://auth.example.com"
@@ -63,13 +66,19 @@ def _hs256_keyed_with_the_public_key() -> str:
     return f"{signing_input}.{_b64(mac)}"
 
 
+def _fetched(fetch=lambda: {KID: AUTHELIA_KEY.public_key()}, clock=time.monotonic):
+    keys = SigningKeys(fetch, clock)
+    assert keys.refresh()
+    return keys
+
+
+def _unreachable():
+    raise jwt.PyJWKClientConnectionError("connection refused")
+
+
 @pytest.fixture
 def oauth():
-    return ResourceServer(
-        resource=RESOURCE,
-        issuer=ISSUER,
-        signing_key=lambda token: AUTHELIA_KEY.public_key(),
-    )
+    return ResourceServer(resource=RESOURCE, issuer=ISSUER, keys=_fetched())
 
 
 def test_an_access_token_authelia_issued_for_the_connector_is_valid(oauth):
@@ -127,18 +136,99 @@ def test_a_clock_up_to_a_minute_apart_from_authelias_is_tolerated(oauth):
     assert not oauth.token_valid(f"Bearer {_token(iat=now - 3600, exp=now - 120)}")
 
 
-def test_an_unexpected_error_in_the_key_lookup_refuses_the_token(oauth):
-    def broken(token):
-        raise ValueError("malformed JWKS")
+def test_a_token_is_refused_when_authelias_keys_were_never_fetched(oauth):
+    never = replace(oauth, keys=SigningKeys(_unreachable))
+    assert not never.keys.refresh()
+    assert not never.token_valid(f"Bearer {_token()}")
 
-    assert not replace(oauth, signing_key=broken).token_valid(f"Bearer {_token()}")
+
+def test_a_token_check_reads_the_fetched_keys_and_never_fetches(oauth):
+    fetches = []
+
+    def fetch():
+        fetches.append(1)
+        return {KID: AUTHELIA_KEY.public_key()}
+
+    keys = _fetched(fetch)
+    keys.fetch = _unreachable
+    checked = replace(oauth, keys=keys)
+    assert checked.token_valid(f"Bearer {_token()}")
+    unknown = jwt.encode(
+        _claims(),
+        OTHER_KEY,
+        algorithm="RS256",
+        headers={"kid": "rotated", "typ": "at+jwt"},
+    )
+    assert not checked.token_valid(f"Bearer {unknown}")
+    assert fetches == [1]
 
 
-def test_a_token_is_refused_when_authelias_keys_cannot_be_fetched(oauth):
-    def unreachable(token):
-        raise jwt.PyJWKClientConnectionError("connection refused")
+def test_the_last_fetched_keys_outlive_an_authelia_outage(oauth):
+    now = [0.0]
+    keys = _fetched(clock=lambda: now[0])
+    keys.fetch = _unreachable
+    now[0] = 2 * oauth_resource.JWKS_STALE_AFTER_S
+    assert not keys.refresh()
+    assert replace(oauth, keys=keys).token_valid(f"Bearer {_token()}")
 
-    assert not replace(oauth, signing_key=unreachable).token_valid(f"Bearer {_token()}")
+
+def test_the_keys_read_stale_until_fetched_and_once_a_fetch_is_too_old():
+    now = [0.0]
+    keys = SigningKeys(lambda: {KID: AUTHELIA_KEY.public_key()}, lambda: now[0])
+    assert not keys.fresh()
+    assert keys.refresh()
+    now[0] = oauth_resource.JWKS_STALE_AFTER_S - 1
+    assert keys.fresh()
+    keys.fetch = _unreachable
+    assert not keys.refresh()
+    now[0] = oauth_resource.JWKS_STALE_AFTER_S
+    assert not keys.fresh()
+
+
+def _one_cycle(keys, during_cooldown=lambda: None):
+    """The sleeps of one refresher cycle, which must finish within 5s."""
+    sleeps = []
+
+    def sleep(seconds):
+        sleeps.append(seconds)
+        during_cooldown()
+
+    keys.sleep = sleep
+    cycle = threading.Thread(target=keys._cycle, daemon=True)
+    cycle.start()
+    cycle.join(5)
+    assert not cycle.is_alive()
+    return sleeps
+
+
+def test_the_refresher_waits_the_cooldown_after_a_failed_fetch():
+    fetches = []
+
+    def fetch():
+        fetches.append(1)
+        _unreachable()
+
+    assert _one_cycle(SigningKeys(fetch)) == [oauth_resource.JWKS_COOLDOWN_S]
+    assert fetches == [1]
+
+
+def test_an_unknown_kid_ends_the_refreshers_wait_once_the_cooldown_passes():
+    keys = _fetched()
+    sleeps = _one_cycle(keys, during_cooldown=lambda: keys.get("rotated"))
+    assert sleeps == [oauth_resource.JWKS_COOLDOWN_S]
+
+
+def test_an_unknown_kid_is_logged_by_length_and_hash_alone(oauth, caplog):
+    kid = "x\nERROR forged line"
+    token = jwt.encode(
+        _claims(), OTHER_KEY, algorithm="RS256", headers={"kid": kid, "typ": "at+jwt"}
+    )
+    with caplog.at_level(logging.WARNING, logger="oauth_resource"):
+        assert not oauth.token_valid(f"Bearer {token}")
+    (message,) = [r.getMessage() for r in caplog.records]
+    assert "forged" not in message
+    assert "\n" not in message
+    assert f"{len(kid)} chars" in message
 
 
 def test_the_metadata_names_the_connector_and_authelia_at_both_paths(oauth):
@@ -208,6 +298,7 @@ def test_the_server_fetches_authelias_keys_from_the_jwks_url_within_five_seconds
             "VAULT_MCP_JWKS_URL": "https://auth.local.example.com/jwks.json",
         }
     )
+    assert oauth.keys.refresh()
     assert oauth.token_valid(f"Bearer {_token()}")
     assert fetches == [("https://auth.local.example.com/jwks.json", 5)]
 

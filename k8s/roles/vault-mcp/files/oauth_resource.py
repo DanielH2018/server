@@ -9,16 +9,20 @@ It imports PyJWT only, so the tests run without the MCP SDK.
 Typical usage example:
 
     oauth = ResourceServer.from_env()
+    oauth.keys.start()
     if challenge := oauth.challenge(request.headers.get("authorization")):
         ...  # 401 with WWW-Authenticate: challenge
 """
 
 from __future__ import annotations
 
+import hashlib
 import logging
 import os
+import threading
+import time
 from collections.abc import Callable, Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from urllib.parse import urlsplit
 
 import jwt
@@ -35,7 +39,74 @@ CLIENT_ID = "vault-mcp"
 SCOPES = ("openid", "offline_access")
 CLOCK_SKEW_S = 60
 JWKS_TIMEOUT_S = 5
+JWKS_REFRESH_S = 300
+JWKS_COOLDOWN_S = 30
+# Three refresh intervals, so one or two failed fetches do not read as stale.
+JWKS_STALE_AFTER_S = 3 * JWKS_REFRESH_S
 _ENV = ("VAULT_MCP_RESOURCE_URL", "VAULT_MCP_ISSUER", "VAULT_MCP_JWKS_URL")
+
+
+@dataclass
+class SigningKeys:
+    """Authelia's signing keys by `kid`, fetched by a background thread and read without a lock.
+
+    A token check only reads the last fetched keys, so it never waits on Authelia. The thread
+    fetches every `JWKS_REFRESH_S`, and early when a token names a `kid` it lacks. It leaves
+    `JWKS_COOLDOWN_S` after every fetch, failed or not, before the next. A failed fetch keeps
+    the keys it had, so an Authelia outage refuses no token those keys verify.
+
+    Attributes:
+        fetch: Returns the published keys by `kid`. Raises when Authelia cannot be reached.
+        clock: Monotonic seconds, the time `fresh()` reads.
+        sleep: Blocks the refresher thread through each cooldown.
+    """
+
+    fetch: Callable[[], Mapping[str, RSAPublicKey]]
+    clock: Callable[[], float] = time.monotonic
+    sleep: Callable[[float], None] = time.sleep
+    _keys: Mapping[str, RSAPublicKey] = field(default_factory=dict)
+    _fetched_at: float | None = None
+    _wake: threading.Event = field(default_factory=threading.Event)
+
+    def get(self, kid: str) -> RSAPublicKey | None:
+        """The key published under `kid`, or None, which also asks the thread to fetch early."""
+        found = self._keys.get(kid)
+        if found is None:
+            self._wake.set()
+        return found
+
+    def refresh(self) -> bool:
+        """Fetches the keys once and swaps them in; whether the fetch succeeded."""
+        try:
+            fetched = dict(self.fetch())
+        except Exception as err:
+            log.warning("cannot fetch Authelia's JWKS: %s", err)
+            return False
+        self._keys = fetched
+        self._fetched_at = self.clock()
+        return True
+
+    def fresh(self) -> bool:
+        """Whether the last successful fetch is less than `JWKS_STALE_AFTER_S` old."""
+        return (
+            self._fetched_at is not None
+            and self.clock() - self._fetched_at < JWKS_STALE_AFTER_S
+        )
+
+    def start(self) -> None:
+        """Starts the daemon thread that keeps the keys fetched."""
+        threading.Thread(target=self._run, name="jwks-refresh", daemon=True).start()
+
+    def _run(self) -> None:
+        while True:
+            self._cycle()
+
+    def _cycle(self) -> None:
+        self._wake.clear()
+        fetched = self.refresh()
+        self.sleep(JWKS_COOLDOWN_S)
+        if fetched:
+            self._wake.wait(JWKS_REFRESH_S - JWKS_COOLDOWN_S)
 
 
 @dataclass(frozen=True)
@@ -47,20 +118,19 @@ class ResourceServer:
             advertises and the `aud` every token must carry.
         issuer: Authelia's public issuer, the token's `iss` and the metadata's first
             authorization server.
-        signing_key: Returns the key that verifies a token, looked up by the token's `kid`.
-            Raises `jwt.PyJWKClientError` when no published key matches.
+        keys: Authelia's published signing keys. Nothing fetches them until `keys.start()`.
     """
 
     resource: str
     issuer: str
-    signing_key: Callable[[str], RSAPublicKey]
+    keys: SigningKeys
 
     @classmethod
     def from_env(cls, environ: Mapping[str, str] = os.environ) -> ResourceServer:
         """Builds the server from `VAULT_MCP_RESOURCE_URL`, `VAULT_MCP_ISSUER` and `VAULT_MCP_JWKS_URL`.
 
-        The JWKS is fetched on the first token, not here, so a pod that starts before it can
-        reach Authelia still serves `/health`.
+        Nothing is fetched here, so a pod that starts before it can reach Authelia still
+        serves `/health`.
 
         Raises:
             SystemExit: when any of the three is unset or empty, since no token could pass.
@@ -68,11 +138,19 @@ class ResourceServer:
         missing = [name for name in _ENV if not environ.get(name)]
         if missing:
             raise SystemExit(f"{', '.join(missing)} required")
-        keys = jwt.PyJWKClient(environ["VAULT_MCP_JWKS_URL"], timeout=JWKS_TIMEOUT_S)
+        client = jwt.PyJWKClient(
+            environ["VAULT_MCP_JWKS_URL"], cache_jwk_set=False, timeout=JWKS_TIMEOUT_S
+        )
         return cls(
             resource=environ["VAULT_MCP_RESOURCE_URL"],
             issuer=environ["VAULT_MCP_ISSUER"],
-            signing_key=lambda token: keys.get_signing_key_from_jwt(token).key,
+            keys=SigningKeys(
+                lambda: {
+                    jwk.key_id: jwk.key
+                    for jwk in client.get_signing_keys()
+                    if jwk.key_id
+                }
+            ),
         )
 
     def token_valid(self, authorization: str | None) -> bool:
@@ -81,26 +159,31 @@ class ResourceServer:
         The token must be an RS256 access token signed by a key in Authelia's JWKS, issued to
         the `vault-mcp` client, with this resource as an `aud` entry, this issuer as `iss`, and
         `exp`, `nbf` and `iat` within `CLOCK_SKEW_S` of this pod's clock. Any error while
-        checking refuses the token.
+        checking refuses the token, and so does a `kid` the last fetched JWKS lacks.
         """
         token = _bearer_token(authorization)
         if not token:
             return False
         try:
-            if jwt.get_unverified_header(token).get("typ") not in ACCESS_TOKEN_TYPES:
+            header = jwt.get_unverified_header(token)
+            if header.get("typ") not in ACCESS_TOKEN_TYPES:
+                return False
+            kid = header.get("kid") or ""
+            signing_key = self.keys.get(kid)
+            if signing_key is None:
+                log.warning(
+                    "no Authelia signing key for the token's kid (%s)", _digest(kid)
+                )
                 return False
             claims = jwt.decode(
                 token,
-                self.signing_key(token),
+                signing_key,
                 algorithms=["RS256"],
                 audience=self.resource,
                 issuer=self.issuer,
                 leeway=CLOCK_SKEW_S,
                 options={"require": ["exp", "iss", "aud"]},
             )
-        except jwt.PyJWKClientError as err:
-            log.warning("no Authelia signing key for the token: %s", err)
-            return False
         except jwt.PyJWTError:
             return False
         # DECIDED: an error nothing above names refuses the token as a 401, never a 500. The
@@ -147,3 +230,8 @@ def _bearer_token(authorization: str | None) -> str:
     """The token of a `Bearer` `Authorization` header, or "" for no header or another scheme."""
     scheme, _, token = (authorization or "").partition(" ")
     return token.strip() if scheme.lower() == "bearer" else ""
+
+
+def _digest(kid: str) -> str:
+    """The length and a sha256 prefix of a token's `kid`, which any caller can write."""
+    return f"{len(kid)} chars, sha256 {hashlib.sha256(kid.encode()).hexdigest()[:12]}"

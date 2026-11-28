@@ -1,10 +1,11 @@
 """vault-mcp: read-only MCP server over the Obsidian vault livesync-cli mirrors into /vault.
 
 Streamable-HTTP MCP server. Every tool is a read. The vault claim is mounted read-only, so no
-code path here can write a note. Every request except a GET of `/health` or of the
-protected-resource metadata needs an Authelia access token, which oauth_resource.py checks;
-one without gets 401 and the challenge claude.ai's connector follows to sign in. The hide rule and every read live
-in vault_notes.py; this file is the wiring.
+code path here can write a note. Every request except a GET of `/health`, `/health/jwks` or
+the protected-resource metadata needs an Authelia access token, which oauth_resource.py checks;
+one without gets 401 and the challenge claude.ai's connector follows to sign in.
+`/health/jwks` answers 503 while Authelia's signing keys are stale, for blackbox to probe.
+The hide rule and every read live in vault_notes.py; this file is the wiring.
 
 Usage:
 
@@ -117,7 +118,7 @@ def backlinks(path: str) -> list[dict]:
     return VAULT.backlinks(path)
 
 
-_OPEN_PATHS = frozenset({"/health", *OAUTH.metadata_paths()})
+_OPEN_PATHS = frozenset({"/health", "/health/jwks", *OAUTH.metadata_paths()})
 
 
 class _OAuth(BaseHTTPMiddleware):
@@ -126,7 +127,6 @@ class _OAuth(BaseHTTPMiddleware):
     ) -> Response:
         if request.method == "GET" and request.url.path in _OPEN_PATHS:
             return await call_next(request)
-        # The first token fetches the JWKS over the network, so it runs off the event loop.
         challenge = await run_in_threadpool(
             OAUTH.challenge, request.headers.get("authorization")
         )
@@ -139,10 +139,17 @@ class _OAuth(BaseHTTPMiddleware):
         return await call_next(request)
 
 
+def _jwks_health(_request: Request) -> Response:
+    if OAUTH.keys.fresh():
+        return PlainTextResponse("ok")
+    return PlainTextResponse("stale", status_code=503)
+
+
 def build_app() -> Starlette:
     app = mcp.streamable_http_app()
     app.add_middleware(_OAuth)
     app.add_route("/health", lambda request: PlainTextResponse("ok"), methods=["GET"])
+    app.add_route("/health/jwks", _jwks_health, methods=["GET"])
     for path in OAUTH.metadata_paths():
         app.add_route(
             path, lambda request: JSONResponse(OAUTH.metadata()), methods=["GET"]
@@ -153,4 +160,5 @@ def build_app() -> Starlette:
 if __name__ == "__main__":
     import uvicorn
 
+    OAUTH.keys.start()
     uvicorn.run(build_app(), host="0.0.0.0", port=int(os.environ.get("PORT", "8000")))

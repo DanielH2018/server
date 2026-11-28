@@ -73,6 +73,11 @@ def test_health_and_the_metadata_answer_a_get_without_a_token(app, path):
     assert status == 200
 
 
+def test_the_jwks_health_answers_503_without_a_token_while_no_keys_are_fetched(app):
+    status, _ = _request(app, "GET", "/health/jwks")
+    assert status == 503
+
+
 @pytest.mark.parametrize(
     ("method", "path"),
     [
@@ -82,6 +87,7 @@ def test_health_and_the_metadata_answer_a_get_without_a_token(app, path):
         ("POST", "//mcp"),
         ("GET", "/HEALTH"),
         ("GET", "/health/"),
+        ("GET", "/health/jwks/"),
         ("GET", "/health/../mcp"),
         ("POST", "/health"),
         ("POST", METADATA),
