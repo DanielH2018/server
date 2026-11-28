@@ -4,6 +4,8 @@ Used by test_suc_rehearsal_mode.py and test_bootstrap_drill_mode.py. Not a test 
 `virsh` and `qemu-img` stand in for libvirt; `Run` reads what the stubs recorded.
 """
 
+import subprocess
+
 VIRSH = """\
 #!/bin/bash
 echo "virsh $*" >>"$EVENTS"
@@ -25,9 +27,9 @@ LOGGER = "#!/bin/bash\nexit 0\n"
 class Run:
     """One orchestrator run: its exit status and everything the stubs recorded."""
 
-    def __init__(self, tmp_path):
+    def __init__(self, tmp_path, done: subprocess.CompletedProcess[str]):
         self.t = tmp_path
-        self.done = None
+        self.done = done
 
     @property
     def events(self):

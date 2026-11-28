@@ -21,6 +21,7 @@ Run: uv run pytest hosts/tests/pi/test_pi_gz_integrity_sweep.py
 
 import gzip
 import os
+from pathlib import Path
 
 import pytest
 from lib.proc_testing import write_exec
@@ -64,7 +65,7 @@ def sweep(tmp_path, roots, floor=FLOOR):
     return verdict, detail, done.stdout
 
 
-def good_gz(directory, count, start=0):
+def good_gz(directory: Path, count, start=0):
     directory.mkdir(parents=True, exist_ok=True)
     for i in range(start, start + count):
         path = directory / f"log.{i}.gz"

@@ -25,6 +25,7 @@ from lib.service_tiers import resolved_tier_lists
 from _helpers import load_defaults
 from _k8s_render import rendered_docs
 from lib.repo_paths import LONGHORN_RECONCILE_ROLE
+from renderer.renderer_lib.cluster import bundle_ordering
 
 _LONGHORN_CLASS = "longhorn"
 
@@ -133,3 +134,56 @@ def test_an_unrouted_pvc_is_named_in_the_failure():
         "homelab/mystery-data",
     }
     assert _uncovered(declared, lists) == {"homelab/mystery-data"}
+
+
+def backed_up_off_longhorn(
+    classes: dict[str, tuple[str, str]], backed_up: set[str], suspended: frozenset[str]
+) -> set[str]:
+    """Backed-up claims whose class is not `longhorn`, outside a suspended role.
+
+    `classes` maps `namespace/name` to `(role, storageClassName)`. longhorn-reconcile moves a
+    volume into a backup group only from `default`, so a listed claim on `longhorn-nobackup`
+    is never backed up. A suspended role is mid-cutover, which `FluxSuspended` reports.
+    """
+    return {
+        pvc
+        for pvc in backed_up
+        if pvc in classes
+        and classes[pvc][1] != _LONGHORN_CLASS
+        and classes[pvc][0] not in suspended
+    }
+
+
+def test_every_backed_up_claim_is_on_longhorn_or_mid_cutover():
+    tiers = resolved_tier_lists(load_defaults(LONGHORN_RECONCILE_ROLE))
+    backed_up = set(tiers["k3s_longhorn_weekly_volumes"]) | set(
+        tiers["k3s_longhorn_r2_volumes"]
+    )
+    classes = {
+        f"{doc['metadata'].get('namespace')}/{doc['metadata']['name']}": (
+            role,
+            doc["spec"].get("storageClassName"),
+        )
+        for role, _tpl, doc in rendered_docs()
+        if doc.get("kind") == "PersistentVolumeClaim"
+    }
+    assert "homelab/livesync-data" in classes, sorted(classes)
+    stranded = backed_up_off_longhorn(classes, backed_up, bundle_ordering().suspended)
+    assert not stranded, (
+        f"{sorted(stranded)} sit on a backup tier list but not on storageClassName "
+        "`longhorn`, so longhorn-reconcile never moves them into a backup group. Recreate "
+        "the claim on `longhorn` (docs/longhorn-backup-tiering.md, *Moving `livesync-data` "
+        "onto the weekly tier*), or suspend the role while the cutover runs"
+    )
+
+
+def test_a_listed_claim_off_longhorn_is_flagged_unless_its_role_is_suspended():
+    classes = {
+        "homelab/a-data": ("a", "longhorn-nobackup"),
+        "homelab/b-data": ("b", "longhorn-nobackup"),
+        "homelab/c-data": ("c", "longhorn"),
+    }
+    backed_up = {"homelab/a-data", "homelab/b-data", "homelab/c-data"}
+    assert backed_up_off_longhorn(classes, backed_up, frozenset({"b"})) == {
+        "homelab/a-data"
+    }

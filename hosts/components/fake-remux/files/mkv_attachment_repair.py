@@ -154,7 +154,7 @@ def main(argv=None) -> int:
     sweep pages through the state file instead of crashing the cron. Always returns 0 — the exit
     code carries no information, the state file does.
     """
-    ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    ap = argparse.ArgumentParser(description=(__doc__ or "").partition("\n")[0])
     ap.add_argument(
         "--dry-run",
         action="store_true",

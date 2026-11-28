@@ -22,7 +22,7 @@ SUBCOMMANDS = {"scan": fake_remux_scan, "replace": fake_remux_replace}
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     ap = argparse.ArgumentParser(
-        description=__doc__.split("\n\n", 1)[0],
+        description=(__doc__ or "").split("\n\n", 1)[0],
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     sub = ap.add_subparsers(dest="command", required=True, metavar="{scan,replace}")

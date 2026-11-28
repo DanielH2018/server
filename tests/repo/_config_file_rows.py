@@ -8,6 +8,7 @@ one property broken (`_Edited`).
 
 import json
 import re
+from collections.abc import Set as AbstractSet
 
 import yaml
 from _helpers import REPO, image_tag
@@ -65,7 +66,7 @@ _SERVICE_VARIABLE = {
 
 
 def _board(
-    titles=_PANELS,
+    titles: AbstractSet[str] = _PANELS,
     *,
     datasource="prometheus",
     expr=f"sum by (service) ({_FIRING})",

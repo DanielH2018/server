@@ -62,7 +62,7 @@ def test_accepts_genuine_hevc_and_2160p_no_codec_or_res_reject():
     ]
     rel, _ = rl.select_replacement(cands, POLICY)
     # 2160p is a higher tier → chosen; neither is rejected for codec/resolution
-    assert rel["quality"]["quality"]["name"] == "WEBDL-2160p"
+    assert rel is not None and rel["quality"]["quality"]["name"] == "WEBDL-2160p"
 
 
 def test_ranks_cf_then_seeders_within_tier():
@@ -71,7 +71,7 @@ def test_ranks_cf_then_seeders_within_tier():
         _rel("Show S02E13 other", "WEBDL-1080p", 15, 5, 600),
     ]
     rel, _ = rl.select_replacement(cands, POLICY)
-    assert rel["customFormatScore"] == 506  # CF beats seeders within a tier
+    assert rel and rel["customFormatScore"] == 506  # CF beats seeders within a tier
 
 
 def test_av1_depreferenced_below_equal_tier_alternative():
@@ -81,7 +81,7 @@ def test_av1_depreferenced_below_equal_tier_alternative():
     ]
     rel, _ = rl.select_replacement(cands, POLICY)
     assert (
-        "h264" in rel["title"]
+        rel is not None and "h264" in rel["title"]
     )  # non-AV1 wins within the tier despite lower CF/seeders
 
 
@@ -103,7 +103,7 @@ def test_av1_higher_tier_still_beats_lower_tier_non_av1():
         _rel("Show S02E13 h264 1080p", "WEBDL-1080p", 15, 506, 300),
     ]
     rel, _ = rl.select_replacement(cands, POLICY)
-    assert rel["quality"]["quality"]["name"] == "WEBDL-2160p"
+    assert rel is not None and rel["quality"]["quality"]["name"] == "WEBDL-2160p"
 
 
 def test_size_band_passes_an_unknown_size_and_rejects_one_above_the_max():

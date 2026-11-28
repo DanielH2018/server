@@ -30,7 +30,7 @@ def root(tmp_path) -> Path:
     return tmp_path
 
 
-def _round(mode, routes, root, version=VERSION, guard=False, notes=None):
+def _round(mode, routes, root, version: str | None = VERSION, guard=False, notes=None):
     checks = k3s_gates.checks_for(
         mode, fake_get(routes), str(root), version, lambda: NOW, guard, notes or []
     )

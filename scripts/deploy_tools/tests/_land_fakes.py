@@ -404,8 +404,9 @@ def build_tools(f: Fakes) -> tuple[Tools, list]:
             f.during_fresh()
         return f.fresh_rc
 
-    def fork(log, landing, scope_prefix, keep):
+    def fork(log, landing, scope_prefix, keep=(), start=lambda: None):
         calls.append(("fork", (log,), {}))
+        start()
         landing()
         return 4242
 
