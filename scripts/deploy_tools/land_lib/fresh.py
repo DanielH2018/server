@@ -132,6 +132,7 @@ def land_fresh(
     turn_fd: int | None = None,
     git: Callable[..., subprocess.CompletedProcess[str]] = _git,
     popen: Callable[..., subprocess.Popen] = subprocess.Popen,
+    stop_wait_s: float = STOP_WAIT_S,
 ) -> int:
     """Run `land.sh argv` from a new detached worktree of the primary at origin/master.
 
@@ -140,6 +141,7 @@ def land_fresh(
       argv: the arguments for the checkout's `land.sh`, already without `--fresh`.
       turn_fd: the landing turn's locked descriptor, which the child landing inherits; the
         caller closes its own copy once this returns.
+      stop_wait_s: how long a stopped landing waits for its child before killing it.
 
     Returns:
       The child landing's exit code.
@@ -147,7 +149,7 @@ def land_fresh(
     Raises:
       CheckoutFailed: no child landing started, so nothing printed or recorded a verdict.
       Stopped: a SIGTERM or SIGINT arrived. The child got the same signal and has ended, or
-        was killed after `STOP_WAIT_S`, before the checkout is removed.
+        was killed after `stop_wait_s`, before the checkout is removed.
     """
     root = checkouts_root()
     root.mkdir(parents=True, exist_ok=True)
@@ -170,6 +172,8 @@ def land_fresh(
         inherit: dict = {
             "env": {**os.environ, CHILD_ENV: "1"},
             "pass_fds": (lock_fd,),
+            # Its own process group, so `_stop_child` can kill the landing under `uv`.
+            "start_new_session": True,
         }
         if turn_fd is not None:
             inherit["pass_fds"] = (lock_fd, turn_fd)
@@ -184,24 +188,28 @@ def land_fresh(
             try:
                 return child.wait()
             except Stopped as stop:
-                _stop_child(child, stop.signum)
+                with holds_off_signals():
+                    _stop_child(child, stop.signum, stop_wait_s)
                 raise
     finally:
-        _remove(primary, path, git)
-        os.close(lock_fd)
+        with holds_off_signals():
+            _remove(primary, path, git)
+            os.close(lock_fd)
 
 
-def _stop_child(child: subprocess.Popen, signum: int) -> None:
-    """Pass `signum` to `child` and wait for it to unwind; kill it after `STOP_WAIT_S`.
+def _stop_child(child: subprocess.Popen, signum: int, wait_s: float) -> None:
+    """Pass `signum` to `child` and wait `wait_s` for it to unwind, then kill its group.
 
     The child is `land.sh`, which execs `uv run`, and `uv run` passes SIGTERM on to the
-    landing. A SIGKILL here would instead orphan that landing with the turn's descriptor.
+    landing. A SIGKILL of `uv` alone would orphan that landing with the turn's descriptor, so
+    the kill goes to the child's whole process group.
     """
     child.send_signal(signum)
     try:
-        child.wait(timeout=STOP_WAIT_S)
+        child.wait(timeout=wait_s)
     except subprocess.TimeoutExpired:
-        child.kill()
+        with contextlib.suppress(ProcessLookupError):
+            os.killpg(child.pid, signal.SIGKILL)
         child.wait()
 
 
@@ -259,6 +267,31 @@ def _remove(
     )
     shutil.rmtree(path, ignore_errors=True)
     git("worktree", "prune", cwd=primary, check=False, timeout=120)
+
+
+@contextlib.contextmanager
+def holds_off_signals() -> Generator[None]:
+    """SIGTERM and SIGINT wait for the block to end, then raise `Stopped`.
+
+    For a block that must run whole once begun: the wait on a stopped child, or the removal
+    of a checkout a child landing may still be using. A signal during an exception already
+    on its way out adds nothing, so only a block that ends normally raises.
+    """
+    held: list[int] = []
+
+    def hold(signum, _frame):
+        held.append(signum)
+
+    previous = {s: signal.getsignal(s) for s in (signal.SIGTERM, signal.SIGINT)}
+    for sig in previous:
+        signal.signal(sig, hold)
+    try:
+        yield
+    finally:
+        for sig, handler in previous.items():
+            signal.signal(sig, handler)
+    if held:
+        raise Stopped(held[0])
 
 
 @contextlib.contextmanager
