@@ -32,6 +32,9 @@ fails, so a green run never delivers one. Their curl floor is recorded in
 import base64
 import subprocess
 import sys
+import time
+from collections.abc import Generator
+from contextlib import contextmanager
 
 from renderer.renderer_lib import host as host_mode
 from validate.validate_lib.host_container import CaseFailed, Container, expect
@@ -178,8 +181,18 @@ def mask_gettys(c: Container) -> None:
     c.ok(f"systemctl stop {patterns} && systemctl reset-failed {patterns}")
 
 
-def _install(cases, c: Container, host: str) -> None:
-    mask_gettys(c)
+@contextmanager
+def _timed(cases, step: str) -> Generator[None]:
+    """Record the seconds the body takes in `cases.case_seconds` under `step`, even on a raise."""
+    start = time.monotonic()
+    try:
+        yield
+    finally:
+        cases.case_seconds[step] = time.monotonic() - start
+
+
+def _seal_and_build(cases, c: Container, host: str):
+    """Seal node `host`'s package, build it, and return it with the `.deb` paths apt installs."""
     seal_dir = seal_host(cases, c, host)
     head = seal_dir.parent / "head"
     package = host_mode.render_host(host, sops_dir=seal_dir)
@@ -190,16 +203,33 @@ def _install(cases, c: Container, host: str) -> None:
         f"/srv/debs/{cases.debs[label].name}"
         for label in ("updater-head", f"{host}-head", *cases.tools)
     )
+    return package, debs
+
+
+def _install(cases, c, host: str, seal_and_build=_seal_and_build) -> None:
+    """Install node `host`'s package in `c` and assert no unit failed.
+
+    Each step's seconds go to `cases.case_seconds`, which `case_groups` names on the `[DONE]`
+    line. `seal_and_build` is the seam a test replaces.
+    """
+    mask_gettys(c)
+    with _timed(cases, "seal and build"):
+        package, debs = seal_and_build(cases, c, host)
     # The Depends are fetched while names still resolve; the seed takes resolv.conf away.
-    c.ok(f"apt-get install -y --download-only {debs} < /dev/null")
-    seed_node_host(c, case_dropins(package))
+    with _timed(cases, "download"):
+        c.ok(f"apt-get install -y --download-only {debs} < /dev/null")
+    with _timed(cases, "seed"):
+        seed_node_host(c, case_dropins(package))
     # A shell timeout under the exec's own, so a hung step still returns what it printed.
-    c.ok(
-        f"DEBIAN_FRONTEND=noninteractive timeout {STEP_SECONDS} apt-get install -y {debs} < /dev/null"
-    )
+    with _timed(cases, "apt install"):
+        c.ok(
+            f"DEBIAN_FRONTEND=noninteractive timeout {STEP_SECONDS} apt-get install -y {debs} < /dev/null"
+        )
     # Joins the reconcile the postinst queued, and returns once it ends.
-    c.sh(f"timeout {STEP_SECONDS} systemctl start homelab-reconcile.service")
-    c.ok(f"sleep {SETTLE_SECONDS}")
+    with _timed(cases, "reconcile"):
+        c.sh(f"timeout {STEP_SECONDS} systemctl start homelab-reconcile.service")
+    with _timed(cases, "settle"):
+        c.ok(f"sleep {SETTLE_SECONDS}")
     problems = unit_problems(c.ok(f"systemctl show -p {UNIT_PROPERTIES} '*'"))
     for unit in problems:
         # Reconcile logs its errors at priority 3, often above the tail's last 40 lines.

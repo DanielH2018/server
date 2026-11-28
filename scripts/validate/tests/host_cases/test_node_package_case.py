@@ -15,6 +15,7 @@ from validate.validate_lib.node_package_case import (
     STUBBED_ONESHOTS,
     STUBBED_UNITS,
     TIMER_DROPIN,
+    _install,
     case_dropins,
     unit_problems,
 )
@@ -96,3 +97,22 @@ def test_the_host_packages_job_runs_the_case_once_per_node_in_a_group_of_its_own
         "names": [f"node_package_case-{host}" for host in NODES],
         "booted": [(f"node-{host}", host) for host in NODES],
     }
+
+
+def test_install_records_each_steps_seconds_for_the_done_line():
+    c = SimpleNamespace(
+        name="node-daniel-box", ok=lambda command: "", sh=lambda command: None
+    )
+    cases = SimpleNamespace(case_seconds={})
+    package = SimpleNamespace(units=lambda: [], enable_links=lambda: [])
+
+    _install(cases, c, "daniel-box", lambda *_: (package, "/srv/debs/a.deb"))
+
+    assert list(cases.case_seconds) == [
+        "seal and build",
+        "download",
+        "seed",
+        "apt install",
+        "reconcile",
+        "settle",
+    ]
