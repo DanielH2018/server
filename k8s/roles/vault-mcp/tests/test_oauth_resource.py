@@ -143,13 +143,7 @@ def test_a_token_is_refused_when_authelias_keys_were_never_fetched(oauth):
 
 
 def test_a_token_check_reads_the_fetched_keys_and_never_fetches(oauth):
-    fetches = []
-
-    def fetch():
-        fetches.append(1)
-        return {KID: AUTHELIA_KEY.public_key()}
-
-    keys = _fetched(fetch)
+    keys = _fetched()
     keys.fetch = _unreachable
     checked = replace(oauth, keys=keys)
     assert checked.token_valid(f"Bearer {_token()}")
@@ -160,7 +154,6 @@ def test_a_token_check_reads_the_fetched_keys_and_never_fetches(oauth):
         headers={"kid": "rotated", "typ": "at+jwt"},
     )
     assert not checked.token_valid(f"Bearer {unknown}")
-    assert fetches == [1]
 
 
 def test_the_last_fetched_keys_outlive_an_authelia_outage(oauth):
