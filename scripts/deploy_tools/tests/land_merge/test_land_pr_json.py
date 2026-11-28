@@ -56,6 +56,9 @@ def test_a_view_field_no_parser_reads_is_refused():
         {"files": [{"path": None}, "a.yml"]},
         {"mergeCommit": "abc"},
         {"author": ["octocat"]},
+        {"author": {"login": 5}},
+        {"mergeCommit": ["abc"]},
+        {"commits": [5]},
     ],
 )
 def test_a_view_field_of_the_wrong_type_is_refused(obj):
