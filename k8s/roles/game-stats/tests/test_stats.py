@@ -203,16 +203,28 @@ def test_run_cycle_end_to_end(tmp_path):
         assert reopened.get_cursor() == 4_000_000_000
 
 
-class _SaveFailsOnce(stats.Store):
-    def __init__(self, path):
-        super().__init__(path)
+class _CursorWriteFailsOnce:
+    """A connection whose first cursor upsert raises, after the save's other rows are written."""
+
+    def __init__(self, conn):
+        self._conn = conn
         self.failed = False
 
-    def write_state(self, conn, state):
-        super().write_state(conn, state)
-        if not self.failed:
+    def __getattr__(self, name):
+        return getattr(self._conn, name)
+
+    def __enter__(self):
+        self._conn.__enter__()
+        return self
+
+    def __exit__(self, *exc):
+        return self._conn.__exit__(*exc)
+
+    def execute(self, sql, *args):
+        if sql.startswith("INSERT INTO cursor") and not self.failed:
             self.failed = True
             raise sqlite3.OperationalError("database or disk is full")
+        return self._conn.execute(sql, *args)
 
 
 class _Stop(BaseException):
@@ -225,7 +237,8 @@ def test_a_page_whose_save_failed_counts_once_on_the_next_poll(tmp_path):
     def fetch(start_ns, end_ns, limit):
         return [e for e in log if start_ns < e[0] <= end_ns][:limit]
 
-    with _SaveFailsOnce(str(tmp_path / "stats.db")) as store:
+    with stats.Store(str(tmp_path / "stats.db")) as store:
+        store.conn = _CursorWriteFailsOnce(store.conn)
         poll_state = stats_lib.PollState(store.load_state())
         with mock.patch("stats_lib.time.sleep", side_effect=[None, _Stop]):
             with pytest.raises(_Stop):
