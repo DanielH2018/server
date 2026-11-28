@@ -42,7 +42,8 @@ Design contract (mirrors the other hooks here):
 The JSON splits the output by reader. `hookSpecificOutput.additionalContext` carries what the
 agent acts on: the health banner, other live sessions and the unlabelled-worktree prompt.
 `systemMessage` carries the operator's housekeeping, which the model never sees: worktrees ready
-to remove and fan-out batches running on another host.
+to remove, entries under the primary checkout's `.claude/worktrees/` that are not trees, and
+fan-out batches running on another host.
 """
 
 # DECIDED: return [] on any error, so a broken health read never blocks a session start;

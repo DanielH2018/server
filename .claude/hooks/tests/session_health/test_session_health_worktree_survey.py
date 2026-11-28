@@ -101,3 +101,24 @@ def test_the_refresh_writes_the_survey_a_later_start_reads(cache, tmp_path):
     while not cache.exists() and time.monotonic() < deadline:
         time.sleep(0.05)
     assert _survey([]) == BRIEF
+
+
+def test_a_file_beside_the_worktrees_is_named_and_a_tree_is_not(cache, tmp_path):
+    _write(cache, "exit 0\n")
+    worktrees = tmp_path / "primary" / ".claude" / "worktrees"
+    (worktrees / "a-tree").mkdir(parents=True)
+    (worktrees / "mut.sh").write_text("#!/bin/sh\n")
+    (worktrees / "link").symlink_to(worktrees / "a-tree")
+    [line] = worktree_lines.stale_worktree_lines(
+        "/repo",
+        start=lambda argv, cwd: None,
+        clock=lambda: EPOCH,
+        primary=lambda cwd: str(tmp_path / "primary"),
+    )
+    assert line.endswith("directories only: link, mut.sh")
+    assert f"{worktrees} holds 2 non-worktree entries" in line
+
+
+def test_no_primary_or_no_worktrees_directory_names_nothing(tmp_path):
+    assert worktree_lines.stray_entry_lines(None) == []
+    assert worktree_lines.stray_entry_lines(str(tmp_path)) == []
