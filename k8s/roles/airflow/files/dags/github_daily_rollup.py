@@ -17,6 +17,7 @@ from homelab_warehouse import github_history as gh
 from homelab_warehouse.warehouse import (
     check_day,
     ensure_schema,
+    interval_day,
     replace_partition,
 )
 from kubernetes.client import models as k8s
@@ -46,10 +47,6 @@ GITHUB_TOKEN = {
 }
 
 
-def _day(data_interval_start):
-    return data_interval_start.astimezone(timezone.utc).date()
-
-
 @dag(
     dag_id="github_daily_rollup",
     schedule=CronDataIntervalTimetable("0 2 * * *", timezone="UTC"),
@@ -59,10 +56,10 @@ def _day(data_interval_start):
     default_args={"retries": 6, "retry_delay": timedelta(minutes=30)},
     tags=["warehouse", "github"],
 )
-def github_daily_rollup():
+def github_daily_rollup() -> None:
     @task(outlets=[GITHUB_COUNTS_DAILY], executor_config=GITHUB_TOKEN)
-    def load(data_interval_start=None) -> dict:
-        day = _day(data_interval_start)
+    def load(data_interval_start: datetime | None = None) -> dict:
+        day = interval_day(data_interval_start)
         api = gh.GitHub(os.environ["GITHUB_TOKEN"])
         remaining = api.remaining()
         if remaining < gh.MIN_REMAINING:
@@ -83,8 +80,8 @@ def github_daily_rollup():
         return {"rows": inserted}
 
     @task
-    def check(data_interval_start=None) -> None:
-        day = _day(data_interval_start)
+    def check(data_interval_start: datetime | None = None) -> None:
+        day = interval_day(data_interval_start)
         check_day(
             PostgresHook(postgres_conn_id=WAREHOUSE_CONN).get_conn,
             "github_daily_rollup",

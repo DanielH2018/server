@@ -17,6 +17,7 @@ from homelab_warehouse import dns_history as dh
 from homelab_warehouse.warehouse import (
     check_day,
     ensure_schema,
+    interval_day,
     replace_partition,
 )
 from kubernetes.client import models as k8s
@@ -47,10 +48,6 @@ PIHOLE_PASSWORD = {
 }
 
 
-def _day(data_interval_start):
-    return data_interval_start.astimezone(timezone.utc).date()
-
-
 @dag(
     dag_id="dns_daily_rollup",
     schedule=CronDataIntervalTimetable("25 1 * * *", timezone="UTC"),
@@ -60,10 +57,10 @@ def _day(data_interval_start):
     default_args={"retries": 2, "retry_delay": timedelta(minutes=10)},
     tags=["warehouse", "dns"],
 )
-def dns_daily_rollup():
+def dns_daily_rollup() -> None:
     @task(outlets=[DNS_COUNTS_DAILY], executor_config=PIHOLE_PASSWORD)
-    def load(data_interval_start=None) -> dict:
-        day = _day(data_interval_start)
+    def load(data_interval_start: datetime | None = None) -> dict:
+        day = interval_day(data_interval_start)
         if not dh.in_backfill_window(day, datetime.now(timezone.utc)):
             raise AirflowSkipException(f"{day}: Pi-hole no longer holds the whole day")
         rows = []
@@ -83,8 +80,8 @@ def dns_daily_rollup():
         return {"rows": inserted}
 
     @task
-    def check(data_interval_start=None) -> None:
-        day = _day(data_interval_start)
+    def check(data_interval_start: datetime | None = None) -> None:
+        day = interval_day(data_interval_start)
         check_day(
             PostgresHook(postgres_conn_id=WAREHOUSE_CONN).get_conn,
             "dns_daily_rollup",

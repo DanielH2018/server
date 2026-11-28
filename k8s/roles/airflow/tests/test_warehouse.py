@@ -1,13 +1,14 @@
 """`replace_partition` and `read_partition` against sqlite, which shares the DB-API semantics they rely on."""
 
 import sqlite3
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 
 import pytest
 
 from dags.homelab_warehouse.warehouse import (
     CHECK_DDL,
     check_day,
+    interval_day,
     read_partition,
     record_check,
     replace_partition,
@@ -188,3 +189,14 @@ def test_a_recheck_replaces_the_days_record(conn):
     assert conn.execute("SELECT dag_id, day FROM meta.check_log").fetchall() == [
         ("prom_daily_rollup", NOV_17)
     ]
+
+
+def test_a_run_loads_the_utc_day_its_interval_starts_on():
+    los_angeles = timezone(timedelta(hours=-8))
+
+    assert interval_day(datetime(2026, 11, 17, 17, 0, tzinfo=los_angeles)) == NOV_18
+
+
+def test_a_task_run_with_no_data_interval_is_refused():
+    with pytest.raises(ValueError, match="no data interval"):
+        interval_day(None)

@@ -231,7 +231,7 @@ def _bars(member: Landing, head: str) -> str:
 
 
 def _members(ln: Landing, head: str) -> list[Member]:
-    """The drafts in the line this landing may stack behind its own `head`, in line order.
+    """The drafts in the line this landing may stack behind its own `head`, oldest first.
 
     `queue_machine.stackable` decides the order and skips a PR that must land alone. The
     other checks run here, one draft at a time, until the batch holds `MAX_STACKED` PRs.
@@ -275,9 +275,10 @@ def _members(ln: Landing, head: str) -> list[Member]:
         )
         return _left_out(ln, member, _why_not(partial(_alone, member.ln, place.head)))
 
-    places = tuple(queue_state.Place(pr, member_head) for pr, member_head in waiting)
     members: list[Member] = []
-    for place in queue_machine.stackable(queue_state.Queue(places, lands_alone)):
+    for place in queue_machine.stackable(
+        queue_state.Queue(tuple(waiting), lands_alone)
+    ):
         member = checked[place.pr]
         if _left_out(ln, member, _why_not(partial(_bars, member.ln, member.head))):
             continue
@@ -578,7 +579,7 @@ def _merge_member(ln: Landing, member: Member, before: Landing) -> str:
             return _TURN_LOST
         if not member.ln.tested_on:
             return f"PR #{before.opts.pr}'s merge commit could not be read"
-        if (pr, member.head) not in turn.waiting(ln):
+        if not any((p.pr, p.head) == (pr, member.head) for p in turn.waiting(ln)):
             return "its own landing left the line"
         head = member.ln.view("headRefOid").get("headRefOid") or ""
         if not stale_base.batch_tested(member.ln, head):

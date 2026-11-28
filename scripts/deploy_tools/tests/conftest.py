@@ -14,7 +14,7 @@ from pathlib import Path
 import pytest
 
 from _helpers import stub_logger_on_path
-from _land_batch_fakes import GREEN, OWN, GitHub, head_of
+from _land_batch_fakes import GREEN, OWN, GitHub, head_of, ticket_of
 from _land_fakes import (
     PRIMARY,
     Fakes,
@@ -208,7 +208,7 @@ def batch_of(landing, tmp_path):
         )
         ln.direct_merge_subject = "Own"
         for pr in drafts:
-            the_line("join", pr, head_of(pr))
+            the_line("join", pr, head_of(pr), ticket_of(pr))
         return ln, hub, the_line
 
     return build

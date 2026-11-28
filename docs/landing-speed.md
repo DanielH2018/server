@@ -294,9 +294,10 @@ read across every retained log, 2026-11-22 to 2026-11-27:
 
 That is 1 to 2 minutes of turn per batch, too little to build for.
 
-**The turn has no ordering.** Each waiting landing polls a non-blocking lock every 30 s
-(`turn._wait`), so the first poll after a release takes the turn. The holder stacks drafts in
-PR-number order (`sorted(os.listdir)` in `line.py`), not in arrival order. Three landings ran
+**The turn had no ordering on 2026-11-27.** Each waiting landing polled a non-blocking lock
+every 30 s (`turn._wait`), so the first poll after a release took the turn. The holder stacked
+drafts in PR-number order (`sorted(os.listdir)` in `line.py`), not in arrival order. Slice 3
+of [the landing architecture](landing-architecture.md) replaced both with tickets. Three landings ran
 out the 5520 s merge budget while later arrivals took the turn or were stacked. Not every one
 of those waits comes from the ordering: #10482 is serial, so no batch can carry it, and #10449's
 wait includes a serial wait. A proposed architecture, on branch `claude/landing-architecture`,

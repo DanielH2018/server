@@ -266,14 +266,15 @@ def _yields(ln: Landing) -> str:
 
     It yields only before it takes the serial lock, so the landings it yields to never wait
     for it. It stops once its merge budgets leave one `merge_timeout`, the length the merge
-    wait gets after the turn, and then takes the turn whoever stands in the line. The line
-    holds only drafts that have had no run: a green head waiting for the turn, and a landing
-    out of the turn for a wait, are not in it. A line that cannot be read yields nothing.
+    wait gets after the turn, and then takes the turn whoever stands in the line. It reads
+    only the drafts' places (`turn.waiting`): a green head waiting for the turn stands with no
+    head, and a landing out of the turn for a wait stands nowhere. A line that cannot be read
+    yields nothing.
     """
     if ln.serial_lock or _budget_left(ln) <= ln.opts.merge_timeout:
         return ""
     try:
-        prs = [pr for pr, _ in turn.waiting(ln)]
+        prs = [place.pr for place in turn.waiting(ln)]
     except OSError:
         return ""
     if not prs:
