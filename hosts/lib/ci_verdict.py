@@ -447,18 +447,26 @@ class WorkflowRun:
 
 
 def _without_superseded_no_verdicts(check_runs: list[CheckRun]) -> list[CheckRun]:
-    """`check_runs` less each no-verdict run whose name has another run that passed or failed.
+    """`check_runs` less each no-verdict run whose name passed or failed in another suite.
 
     A draft run cancelled beside the ready run on the same head otherwise holds every name it
     shares with that run at pending, after the ready run has decided them. A run still in
-    progress is kept: it may yet fail.
+    progress is kept: it may yet fail. Runs of one name in one suite are matrix legs that share
+    a check-run name, so a leg cancelled by its timeout is never superseded by a sibling that
+    passed. A run with no suite id is superseded by nothing.
     """
     # DECIDED: a skip does not supersede a no-verdict run. A draft run's skip and the proven
     # path's skip look alike, so a cancelled ready run beside a skipped draft run stays pending.
-    decided = {
-        run.name for run in check_runs if run.state in (RunState.PASS, RunState.FAIL)
-    }
-    return [r for r in check_runs if not (r.no_verdict and r.name in decided)]
+    decided: dict[str, set[int | None]] = {}
+    for run in check_runs:
+        if run.state in (RunState.PASS, RunState.FAIL):
+            decided.setdefault(run.name, set()).add(run.suite_id)
+
+    def superseded(run: CheckRun) -> bool:
+        other_suites = decided.get(run.name, set()) - {run.suite_id, None}
+        return run.no_verdict and run.suite_id is not None and bool(other_suites)
+
+    return [r for r in check_runs if not superseded(r)]
 
 
 def jobs_verdict(check_runs: list[CheckRun]) -> CIVerdict:
@@ -480,8 +488,8 @@ def jobs_verdict(check_runs: list[CheckRun]) -> CIVerdict:
     leg has run, a leg numbered past the highest leg with a run of its own was not planned and
     is left out, as the gate's aggregate result leaves it out. A missing leg below it is a gap
     no plan produces, so it stays required and the verdict is `pending`.
-    A cancelled job beside a run of the same job that passed or failed is left out
-    (`_without_superseded_no_verdicts`).
+    A cancelled job beside a run of the same job that passed or failed in another suite is
+    left out (`_without_superseded_no_verdicts`); a cancelled matrix leg is never left out.
     """
     check_runs = _without_superseded_no_verdicts(check_runs)
     states: dict[str, set[str]] = {}
@@ -592,7 +600,8 @@ def ci_verdict(
     `pull_request`), so each name is reduced over all of its runs and the worst outcome wins: any
     outright failure makes the whole verdict `fail`, and a name that is missing, still running, or
     has only no-verdict conclusions holds the verdict at `pending`. A no-verdict run beside a
-    run of its name that passed or failed is left out (`_without_superseded_no_verdicts`). Pending is the safe direction —
+    run of its name that passed or failed in another suite is left out
+    (`_without_superseded_no_verdicts`). Pending is the safe direction —
     the caller defers the tick and retries in 30 minutes.
 
     The gate job's own name is the exception to "missing or still running is pending": while it

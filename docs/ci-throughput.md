@@ -278,7 +278,10 @@ In run 45069920787 that build took about 120 s of a 230 s leg, while the case st
 
 **A run lasts as long as its slowest job, so each of the two slowest jobs runs as two legs.**
 Each pair of legs shares one check-run name, which `hosts/lib/ci_verdict.py` lists, and
-`ci_verdict` takes the worst outcome per name.
+`ci_verdict` takes the worst outcome per name. GitHub reports a leg past its `timeout-minutes`
+as `cancelled`. `ci_verdict` drops a cancelled run only beside a decided run of its name in
+another check suite, so a timed-out leg holds the verdict at pending beside a sibling that
+passed.
 
 - **`hooks` runs `validate-alert-rules` in one leg and every other hook in the other.** The
   matrix's `hooks` value is the leg's hook selection. A hook added to `prek.toml` runs in the
@@ -308,7 +311,9 @@ The updater cases' group wall times on the 26.04 legs of runs 46065308899, 46070
 
 **The first shard ends with `upgrade_path`, and no shard count shortens it.** The group is
 one chain of cases on one container. A run with a host change therefore lasts about 400 s:
-114 s for the build, 39 s of leg setup, about 220 s of cases and the gate
+114 s for the build, 39 s of leg setup, about 220 s of cases and the gate. That misses the
+330 s target of [#10575](https://github.com/DanielH2018/server/issues/10575), and
+`host_packages` still ends about 150 s after the slowest `pytest` leg
 ([#10591](https://github.com/DanielH2018/server/issues/10591)).
 
 The split adds one runner's setup to each job. A run with no host change gains one job and
