@@ -34,7 +34,8 @@ becomes a named invariant with a test.
   rule in one function, so slice 5 can move it into `schedule` unchanged.
 
 Slice 1 is built: `land_lib/transitions.py` writes the state and transition records.
-Nothing else here is built. The validation below read the code at master `ce5c3abfa`. The
+Slice 2 is built: `land_lib/core/queue_machine.py` holds `may_take` and `stackable`, which
+`turn._wait` and `batch._members` call, under the race's rules. Nothing else here is built. The validation below read the code at master `ce5c3abfa`. The
 milestone is `Landing pipeline state machine`.
 
 ## What the pipeline is, validated against the code
@@ -136,10 +137,9 @@ out through `ln.tools`, which already puts every process boundary behind one fak
 is added: a `github.py` that only renamed `Tools` would fail the deletion test.
 
 `scripts/deploy_tools/tests/land/test_land_imports.py` requires its `MODULES` list to equal
-`land_lib/*.py`, and
-its glob does not descend. A module under `land_lib/core/` would fall outside the
-import-direction guard without any error. The slice that creates `core/` extends the guard to
-it, with a non-vacuity assertion that names its members.
+every module under `land_lib/`, those in `core/` included. It names the members of `core/` in
+`CORE`, and refuses a module there that imports anything but its siblings and the stdlib
+modules in `PURE_STDLIB`.
 
 ## The landing state machine
 

@@ -23,6 +23,8 @@ turn back for the wait's length and asks for it again before it goes on
 (`Landing.without_turn`). A draft that has not been marked ready asks again with its head,
 so it keeps its place in the line and a holder can still stack it.
 
+Whether a waiting landing may try a free turn is `core/queue_machine.py`'s `may_take`.
+
 A landing that waits with a draft stands in the line beside the lock (`line.py`), so the
 landing that holds the turn can test that draft's head with its own. A landing whose place
 reads `merged` stops waiting: the holder merged its PR. One whose place reads `alone` leaves
@@ -61,6 +63,7 @@ from typing import IO, NoReturn
 from pathlib import Path as _Path
 
 from deploy_tools.land_lib import line
+from deploy_tools.land_lib.core import queue_machine, state
 from deploy_tools.land_lib.fresh import TURN_FD_ENV
 from deploy_tools.land_lib.landing import Landing
 from deploy_tools.land_lib.outcome import Verdict, say
@@ -396,6 +399,8 @@ def _wait(ln: Landing, draft: str) -> tuple[Callable[[], None] | None, int]:
     o = ln.opts
     try_turn = ln.tools.try_turn or _taker(ln.tools.hostname())
     place = line.Place(line_of(ln), o.pr, draft, say)
+    me = state.Place(o.pr, draft)
+    queue = state.Queue((me,))
     waiting = OnChange(say)
     waited = 0
     before = ln.ledger.turn_wait = ln.ledger.turn_wait or 0
@@ -403,7 +408,7 @@ def _wait(ln: Landing, draft: str) -> tuple[Callable[[], None] | None, int]:
     try:
         while True:
             try:
-                release = try_turn()
+                release = try_turn() if queue_machine.may_take(queue, me) else None
             except OSError as exc:
                 say(
                     f"could not open the landing turn's lock ({exc}); going on without a "

@@ -1,5 +1,7 @@
 """land_lib's dependency direction: phases import the state, never each other's peers or the pipeline.
 
+Modules under `core/` import only each other and the stdlib modules in `PURE_STDLIB`.
+
 Run: uv run pytest scripts/deploy_tools/tests/land/test_land_imports.py
 """
 
@@ -7,6 +9,12 @@ import ast
 from pathlib import Path
 
 LIB = Path(__file__).resolve().parents[2] / "land_lib"
+# The pure decisions under `core/`, named as paths from `land_lib/`.
+CORE = frozenset({"core/state", "core/queue_machine", "core/invariants"})
+# What a module under `core/` may import beside its siblings: none of these does I/O.
+PURE_STDLIB = frozenset(
+    {"collections.abc", "dataclasses", "enum", "functools", "itertools", "typing"}
+)
 MODULES = frozenset(
     {
         "outcome",
@@ -53,6 +61,7 @@ MODULES = frozenset(
         "pin_reads",
         "verdict_log",
         "transitions",
+        *CORE,
     }
 )
 ALLOWED = {
@@ -111,7 +120,16 @@ ALLOWED = {
     "stall": {"landing", "outcome", "gh_read"},
     # What makes a green head stale against master, and the one branch update.
     "stale_base": {"landing", "outcome", "gh_read", "policy", "pr_json"},
-    "turn": {"landing", "outcome", "line", "fresh", "serial_lock", "transitions"},
+    "turn": {
+        "landing",
+        "outcome",
+        "line",
+        "fresh",
+        "serial_lock",
+        "transitions",
+        "core/queue_machine",
+        "core/state",
+    },
     # One live landing per PR: a lock beside the turn, taken before a landing forks or merges.
     "pr_lock": {"turn", "serial_lock"},
     # The stdlib-only read of the serial lock, which `cc-wait landing-clear` runs without the venv.
@@ -135,6 +153,8 @@ ALLOWED = {
         "stale_base",
         "turn",
         "transitions",
+        "core/queue_machine",
+        "core/state",
     },
     # The read that ends --await-merge on a check GitHub never finishes.
     "stuck_checks": {"landing", "gh_read"},
@@ -208,25 +228,51 @@ ALLOWED = {
         "host_wait",
         "transitions",
     },
+    # The turn's ordering decisions: pure, so the queue's state machine drives them as is.
+    "core/state": set(),
+    "core/queue_machine": {"core/state"},
+    "core/invariants": set(),
 }
 
 
 def _land_lib_imports(path: Path) -> set[str]:
+    """The land_lib modules `path` imports, each as a path from `land_lib/` with no suffix."""
     found = set()
     for node in ast.walk(ast.parse(path.read_text())):
-        if isinstance(node, ast.ImportFrom) and node.module == "deploy_tools.land_lib":
-            found.update(a.name for a in node.names)
-        elif (
-            isinstance(node, ast.ImportFrom)
-            and node.module
-            and node.module.startswith("deploy_tools.land_lib.")
+        if not isinstance(node, ast.ImportFrom) or not node.module:
+            continue
+        if node.module != "deploy_tools.land_lib" and not node.module.startswith(
+            "deploy_tools.land_lib."
         ):
-            found.add(node.module.rsplit(".", 1)[1])
+            continue
+        within = node.module.removeprefix("deploy_tools.land_lib").lstrip(".")
+        package = within.replace(".", "/")
+        if (LIB / package).is_dir():
+            found.update(f"{package}/{a.name}".lstrip("/") for a in node.names)
+        else:
+            found.add(package)
     return found
 
 
 def _present() -> set[str]:
-    return {p.stem for p in LIB.glob("*.py")}
+    return {p.relative_to(LIB).with_suffix("").as_posix() for p in LIB.rglob("*.py")}
+
+
+def _impure_imports(path: Path) -> set[str]:
+    """What `path` imports that is neither a module under `core/` nor in `PURE_STDLIB`."""
+    found = set()
+    for node in ast.walk(ast.parse(path.read_text())):
+        if isinstance(node, ast.Import):
+            found.update(a.name for a in node.names)
+        elif isinstance(node, ast.ImportFrom) and node.module:
+            found.add(node.module)
+    return {
+        name
+        for name in found
+        if name not in PURE_STDLIB
+        and name != "deploy_tools.land_lib.core"
+        and not name.startswith("deploy_tools.land_lib.core.")
+    }
 
 
 def test_the_module_set_is_exactly_what_is_on_disk():
@@ -254,3 +300,25 @@ def test_the_guard_would_catch_a_phase_importing_the_pipeline(tmp_path):
         "from deploy_tools.land_lib import pipeline\nfrom deploy_tools.land_lib.deploy import deploy_phase\n"
     )
     assert _land_lib_imports(p) == {"pipeline", "deploy"}
+
+
+def test_core_imports_nothing_that_does_io():
+    present = _present()
+    assert CORE <= present, f"missing under core/: {sorted(CORE - present)}"
+    for name in sorted(n for n in present if n.startswith("core/")):
+        assert not _impure_imports(LIB / f"{name}.py"), name
+
+
+def test_the_guards_would_catch_a_core_module_importing_turn_or_os(tmp_path):
+    p = tmp_path / "x.py"
+    p.write_text(
+        "import os\n"
+        "from dataclasses import dataclass\n"
+        "from deploy_tools.land_lib import turn\n"
+        "from deploy_tools.land_lib.core.state import Place\n"
+        "from deploy_tools.land_lib.core import invariants\n"
+    )
+    assert _impure_imports(p) == {"os", "deploy_tools.land_lib"}
+    got = _land_lib_imports(p)
+    assert got == {"turn", "core/state", "core/invariants"}
+    assert got - ALLOWED["core/queue_machine"] == {"turn", "core/invariants"}
