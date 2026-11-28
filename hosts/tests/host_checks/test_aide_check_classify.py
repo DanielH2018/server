@@ -397,7 +397,7 @@ def test_accept_moves_the_reviewed_database_into_place(tmp_path):
     code, pushed, logged, ran = _run_check(
         tmp_path, CLEAN_REPORT, rc=0, args=("--accept",), pending=True
     )
-    assert code == 0 and not ran and pushed is None
+    assert code == 0 and not ran and pushed == []
     assert (tmp_path / "aide-db" / "aide.db").read_text() == "reviewed\n"
     assert any("baseline accepted by hand" in line for line in logged), logged
 
@@ -407,7 +407,7 @@ def test_accept_refuses_while_a_scan_holds_the_lock(tmp_path):
     code, pushed, _, _ = _run_check(
         tmp_path, CLEAN_REPORT, rc=0, args=("--accept",), pending=True, lock_held=True
     )
-    assert code == 1 and pushed is None
+    assert code == 1 and pushed == []
     assert (tmp_path / "aide-db" / "aide.db").read_text() == "last week\n"
     assert "holds" in (tmp_path / "stderr").read_text()
 

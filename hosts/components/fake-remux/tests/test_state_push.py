@@ -42,6 +42,7 @@ def test_stale_success_is_down():
 def test_missing_state_file_is_a_failure_not_a_skip(tmp_path):
     state, reason = read_state(str(tmp_path / "nope.json"))
     assert state is None
+    assert isinstance(reason, str)
     assert "never ran" in reason
 
 
@@ -50,6 +51,7 @@ def test_unparseable_state_file_is_a_failure(tmp_path):
     p.write_text("{not json")
     state, reason = read_state(str(p))
     assert state is None
+    assert isinstance(reason, str)
     assert "unreadable" in reason
 
 
@@ -58,6 +60,7 @@ def test_state_without_a_timestamp_is_a_failure(tmp_path):
     p.write_text(json.dumps({"ok": True, "msg": "x"}))
     state, reason = read_state(str(p))
     assert state is None
+    assert isinstance(reason, str)
     assert "no usable ts" in reason
 
 

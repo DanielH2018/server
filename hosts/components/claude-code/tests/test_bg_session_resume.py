@@ -18,7 +18,7 @@ def roster(*shorts: str, updated_at: int = FRESH) -> dict:
 
 
 def bg(short: str, pid: int | None = None, state: str = "working") -> dict:
-    session = {"id": short, "kind": "background", "state": state}
+    session: dict[str, str | int] = {"id": short, "kind": "background", "state": state}
     if pid is not None:
         session["pid"] = pid
     return session

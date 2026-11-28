@@ -46,6 +46,7 @@ def test_evidence_prefers_encoder_tag_over_gop():
     ev = frl.reencode_evidence(
         "Bluray-1080p Remux", NTRX_ENCODER, NTRX_KEYFRAMES, 40, 5, MARKERS
     )
+    assert ev is not None
     assert ev.startswith("encoder=")
 
 
@@ -328,7 +329,7 @@ def test_a_held_scan_posts_once_per_held_set_and_clears_the_record(tmp_path):
         {"id": 10 + i, "episodeFileId": i, "monitored": True} for i in range(1, 4)
     ]
 
-    class StubSonarr:
+    class StubSonarr(scan.Sonarr):
         shown = files
 
         def __init__(self, *args):

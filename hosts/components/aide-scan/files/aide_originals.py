@@ -205,7 +205,7 @@ def main(argv: list[str]) -> int:
             edits = json.load(sys.stdin)
             print(judge(Path(state), Path(status), path, Path(file), edits))
             return 0
-    print(__doc__.split("\n\n")[1], file=sys.stderr)
+    print((__doc__ or "").split("\n\n")[1], file=sys.stderr)
     return 2
 
 

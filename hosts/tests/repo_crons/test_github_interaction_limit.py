@@ -119,8 +119,7 @@ def _run(
         for line in (journal.read_text().splitlines() if journal.exists() else [])
     )
     last = [m for m in verdicts if m][-1:]
-    if not last:
-        return proc.returncode, None, None, argv
+    assert last, f"the script logged no status=<up|down> verdict; stderr: {proc.stderr}"
     return proc.returncode, last[0].group(1), last[0].group(2).strip(), argv
 
 

@@ -55,7 +55,11 @@ def _required_check(context, pins):
 
 
 def ruleset_body(
-    contexts, enforcement="active", bypass_actors=(), approvals=0, pins=None
+    contexts,
+    enforcement="active",
+    bypass_actors=(),
+    approvals: int | None = 0,
+    pins=None,
 ):
     """A ruleset payload in the shape the live endpoint returns to an admin token.
 
@@ -321,8 +325,7 @@ def run(
         for line in (journal.read_text().splitlines() if journal.exists() else [])
     )
     last = [m for m in verdicts if m][-1:]
-    if not last:
-        return proc.returncode, None, None
+    assert last, f"the script logged no status=<up|down> verdict; stderr: {proc.stderr}"
     return proc.returncode, last[0].group(1), last[0].group(2).strip()
 
 

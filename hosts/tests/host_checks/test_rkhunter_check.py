@@ -83,7 +83,7 @@ def _run_check(
     The stub prints `stdout`, writes `log` to the log path when it is not None, and exits `rc`.
     `stale_log` is a log already on disk from the previous week's run, the one a failed run leaves behind. Only
     absolute paths are repointed. Returns (exit code, the verdict as a [status, message] pair
-    read from the `status=` line the script logs, or None when it logged none, logged lines,
+    read from the `status=` line the script logs, or [] when it logged none, logged lines,
     whether rkhunter ran).
     """
     body = render_shell_script(
@@ -259,7 +259,7 @@ def test_the_scan_logs_its_verdict_and_still_runs_without_a_credential(tmp_path)
     """No unit loads a credential, so a run has no token and still reports."""
     _, verdict, _, ran = _run_check(tmp_path, "", rc=0, log=_log())
     assert ran, "rkhunter did not run"
-    assert verdict is not None and verdict[0] == "up", verdict
+    assert verdict and verdict[0] == "up", verdict
 
 
 def test_the_timer_runs_a_slot_it_missed():

@@ -94,18 +94,19 @@ def _pod_annotations(workload):
 
 def _mounted_configmaps(workload):
     """ConfigMap names the workload's pod mounts as a volume."""
-    return {
+    names = {
         (volume.get("configMap") or {}).get("name")
         for volume in pod_spec(workload).get("volumes") or []
         if volume.get("configMap")
     }
+    return {name for name in names if name}
 
 
 def _secret_inputs(workload):
     """Secret names the pod reads: a secret volume, a projected volume's secret source, or
     `env.valueFrom.secretKeyRef`."""
     spec = pod_spec(workload)
-    names = set()
+    names: set[str | None] = set()
     for volume in spec.get("volumes") or []:
         names.add((volume.get("secret") or {}).get("secretName"))
         for source in (volume.get("projected") or {}).get("sources") or []:
@@ -121,7 +122,7 @@ def _secret_inputs(workload):
 def _workloads():
     docs = _role_docs()
     return {
-        (doc.get("metadata") or {}).get("name"): doc
+        doc["metadata"]["name"]: doc
         for doc in docs
         if doc.get("kind") in _WORKLOAD_KINDS
     }
