@@ -56,7 +56,7 @@ TOKEN = os.environ.get("VAULT_MCP_TOKEN", "")
 PUBLIC_HOST = os.environ.get("MCP_PUBLIC_HOST", "")
 VAULT = vault_notes.Vault(
     Path(os.environ.get("VAULT_MCP_ROOT", "/vault")),
-    vault_notes.exclude_paths_from_env(os.environ.get("VAULT_MCP_EXCLUDE_PATHS")),
+    vault_notes.exclude_paths_from_env(),
 )
 
 _hosts, _origins = safe_reads.allowed_hosts_and_origins(PUBLIC_HOST)

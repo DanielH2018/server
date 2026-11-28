@@ -165,11 +165,11 @@ def test_an_exclude_path_with_a_dot_segment_is_refused(tmp_path, entry):
 
 def test_an_unset_exclude_list_refuses_to_start():
     with pytest.raises(SystemExit, match="VAULT_MCP_EXCLUDE_PATHS is unset"):
-        exclude_paths_from_env(None)
+        exclude_paths_from_env({})
 
 
 def test_an_empty_exclude_list_is_allowed_with_a_warning(caplog):
-    assert exclude_paths_from_env("") == []
+    assert exclude_paths_from_env({"VAULT_MCP_EXCLUDE_PATHS": ""}) == []
     assert "VAULT_MCP_EXCLUDE_PATHS is empty" in caplog.text
 
 
@@ -203,9 +203,7 @@ def test_the_rendered_exclude_list_hides_the_operators_folder(vault):
     ]["template"]
     (server,) = [c for c in pod["spec"]["containers"] if c["name"] == "vault-mcp"]
     env = {e["name"]: e.get("value") for e in server["env"]}
-    rendered = Vault(
-        vault.root, exclude_paths_from_env(env.get("VAULT_MCP_EXCLUDE_PATHS"))
-    )
+    rendered = Vault(vault.root, exclude_paths_from_env(env))
     assert {h["path"] for h in rendered.search("kettle", path="94 Docs")} == {
         "94 Docs/Visible.md",
         "94 Docs/superpowers-x/Kept.md",

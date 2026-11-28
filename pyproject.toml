@@ -627,6 +627,7 @@ extraPaths = [
   "hosts/components/fake-remux/files",
   "k8s/roles/ical-proxy/files",
   "k8s/roles/homelab-mcp/files",
+  "k8s/roles/vault-mcp/files",
   "k8s/roles/airflow/files",
   "k8s/roles/crowdsec/files",
   "k8s/roles/traefik/files",

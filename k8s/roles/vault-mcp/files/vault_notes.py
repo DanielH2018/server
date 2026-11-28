@@ -15,7 +15,7 @@ import os
 import posixpath
 import re
 import unicodedata
-from collections.abc import Iterable, Iterator
+from collections.abc import Iterable, Iterator, Mapping
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path, PurePosixPath
@@ -59,12 +59,13 @@ def _exclude_entry(entry: str) -> tuple[str, ...]:
     return _folded(_parts(entry))
 
 
-def exclude_paths_from_env(value: str | None) -> list[str]:
-    """The exclude list from the raw `VAULT_MCP_EXCLUDE_PATHS` value, one folder a line.
+def exclude_paths_from_env(environ: Mapping[str, str] = os.environ) -> list[str]:
+    """The exclude list from `VAULT_MCP_EXCLUDE_PATHS`, one folder a line.
 
     Unset fails closed: it raises SystemExit, so a pod that lost the variable never starts
     with the operator's folders visible. An empty value is a deliberate empty list, logged.
     """
+    value = environ.get("VAULT_MCP_EXCLUDE_PATHS")
     if value is None:
         raise SystemExit(
             "VAULT_MCP_EXCLUDE_PATHS is unset; set it to the folders to hide, "
