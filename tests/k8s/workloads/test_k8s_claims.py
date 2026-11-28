@@ -46,6 +46,7 @@ _KNOWN_CLAIMS = {
     ("homelab", "authelia-config"): ("longhorn", "1Gi"),
     ("homelab", "crowdsec-db"): ("longhorn", "1Gi"),
     ("homelab", "pihole-etc"): ("longhorn-nobackup", "2Gi"),
+    ("homelab", "livesync-data"): ("longhorn", "2Gi"),
     ("homelab", "pihole-etc-2"): ("longhorn-nobackup", "2Gi"),
     ("homelab", "traefik-acme"): ("longhorn", "128Mi"),
     ("homelab", "wg-easy-config"): ("longhorn", "1Gi"),
