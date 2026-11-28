@@ -134,8 +134,7 @@ def run(
     ]
     if guest_version:
         args += ["--guest-version", guest_version]
-    result = Run(tmp_path)
-    result.done = subprocess.run(
+    done = subprocess.run(
         ["bash", str(tmp_path / "driver.sh"), *args, *extra_args],
         env={
             **os.environ,
@@ -156,7 +155,7 @@ def run(
         text=True,
         timeout=120,
     )
-    return result
+    return Run(tmp_path, done)
 
 
 @pytest.mark.parametrize(

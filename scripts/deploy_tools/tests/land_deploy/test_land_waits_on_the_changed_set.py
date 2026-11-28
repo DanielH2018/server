@@ -59,10 +59,15 @@ def _land(land_run_main, paths: list[str], sim: Sim, changed_files=None, **kwarg
     )
     tools, calls = build_tools(fakes)
 
-    def land_wait(sha, services, primary, cap_s, window_grace_s):
+    def land_wait(sha, services, primary, cap_s, window_grace_s, on_root_alone):
         calls.append(("land_wait", (sha, services), {}))
         return promote_wait.land_wait(
-            sim.reads(), M, services, cap_s=cap_s, window_grace_s=window_grace_s
+            sim.reads(),
+            M,
+            services,
+            cap_s=cap_s,
+            window_grace_s=window_grace_s,
+            on_root_alone=on_root_alone,
         )
 
     tools = replace(tools, flux=replace(tools.flux, land_wait=land_wait))

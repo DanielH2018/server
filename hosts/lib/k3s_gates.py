@@ -531,7 +531,7 @@ def _default_server() -> str:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
+    parser = argparse.ArgumentParser(description=(__doc__ or "").split("\n\n")[0])
     parser.add_argument("mode", choices=("server", "agent", "host"))
     parser.add_argument(
         "--host-root", default="/host", help="where the node's / is mounted"

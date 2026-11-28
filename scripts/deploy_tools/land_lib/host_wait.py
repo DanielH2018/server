@@ -69,7 +69,7 @@ from deploy_tools.land_lib.host_schedule import (  # noqa: F401
     utc,
 )
 from deploy_tools.land_lib.landing import Landing
-from deploy_tools.land_lib.outcome import Verdict, say
+from deploy_tools.land_lib.outcome import Cause, Verdict, say
 from diagnostics.probe_lib.builder import fetch_deadline_s
 from lib.progress import OnChange
 from deploy_tools.land_lib.tools import gate_snapshot
@@ -589,10 +589,14 @@ def wait_for_hosts(
             green_at = now
             unwaitable = _unwaitable(pending, green_at, deadlines)
             if unwaitable:
-                _defer(ln, head, unwaitable, merge, green_at, reads)
+                _defer(
+                    ln, head, unwaitable, merge, green_at, reads, Cause.UPDATER_NOT_DUE
+                )
         late = [t for t in pending if now > deadlines[t.host]]
         if late:
-            _defer(ln, head, _late(late, states, deadlines), merge, green_at, reads)
+            _defer(
+                ln, head, _late(late, states, deadlines), merge, green_at, reads, None
+            )
         progress(f"waiting for hosts to apply: {', '.join(t.host for t in pending)}")
         reads.sleep(POLL_S)
 
@@ -626,13 +630,15 @@ def _defer(
     merge: str,
     green_at: float,
     reads: HostReads,
+    cause: Cause | None,
 ) -> None:
     """End the landing on `reasons`, keyed by host: `unbuilt` if the builder never got there.
 
     The builder is asked only here, never on a poll: before a deferral, a missing publish is
     the builder still working. A failing reason from a fetch before `green_at`, the wait's
     first query, may predate the merge's fix, so this waits for the builder's next run, up to
-    `probe.py builder`'s fetch deadline. Past it, the reason stands.
+    `probe.py builder`'s fetch deadline. Past it, the reason stands. `cause` rides beside
+    `deferred` only, never beside `unbuilt`.
     """
     hosts, primary = list(reasons), ln.opts.primary
     unbuilt = unbuilt_hosts(hosts, merge, primary, reads, covers, query, green_at)
@@ -647,6 +653,8 @@ def _defer(
         unbuilt = unbuilt_hosts(hosts, merge, primary, reads, covers, query, green_at)
     if unbuilt:
         ln.finish(Verdict.UNBUILT, 75, f"{head} — {'; '.join(unbuilt)}")
+    if cause:
+        ln.ledger.cause = cause
     ln.finish(Verdict.DEFERRED, 75, f"{head} — {'; '.join(reasons.values())}")
 
 

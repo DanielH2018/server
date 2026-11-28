@@ -28,8 +28,10 @@ becomes a named invariant with a test.
   included. *What a turn costs* holds the measurements and the answer.
 - **Asked, 2026-11-27: the deploy UI tracks a change from state to state,** and its progress
   within a state. *The deploy UI reads the machine's state* holds the design.
-- **Open: whether a serial PR yields the turn**
-  ([#10284](https://github.com/DanielH2018/server/issues/10284)). Slice 3 waits on it.
+- **Ruled, 2026-11-27: a serial PR yields the turn** while other landings stand in the
+  line, for at most the first of its two merge budgets
+  ([#10284](https://github.com/DanielH2018/server/issues/10284)). `slots._yields` holds the
+  rule in one function, so slice 5 can move it into `schedule` unchanged.
 
 Nothing here is built. The validation below read the code at master `ce5c3abfa`. The
 milestone is `Landing pipeline state machine`.
@@ -172,8 +174,9 @@ Each state, and the code that implements it:
   and a landing that lands alone, wait with no place.
 - **Holding.** `turn._wait` returned the lock. `slots.refuse_before_run` runs, then
   `batch.form`.
-- **Yielded.** `Landing.without_turn` gives the turn back for a rate-limit wait or for a live
-  serial landing, and asks for it again afterwards.
+- **Yielded.** `Landing.without_turn` gives the turn back for a rate-limit wait, for a live
+  serial landing, or for a serial PR's yield to the line (`slots._yields`), and asks for it
+  again afterwards.
 - **Testing.** One CI run covers a tree stacked on a known base: the batch's run on
   `queue/<pr>` (`batch._await_run`), or the PR's own run.
 - **Split.** A batch that is not green. The holder's own run decides whether the members go
@@ -261,11 +264,12 @@ a burst of arrivals, a poll interval, a release, a step-out and a death.
 So slice 3 is worth building, and its first part is the fix for
 [#10559](https://github.com/DanielH2018/server/issues/10559).
 
-One interaction needs a ruling before slice 3 lands. A serial PR that holds the turn waits
+One interaction needed a ruling before slice 3 lands. A serial PR that holds the turn waits
 there up to `DRAIN_S` for the landings past their merge. Under the race it wins the turn
-rarely. Under tickets it wins in its order, and every landing behind it waits.
-[#10284](https://github.com/DanielH2018/server/issues/10284), the serial PR yielding the
-turn, removes that wait.
+rarely. Under tickets it wins in its order, and every landing behind it waits. The operator
+ruled on 2026-11-27 that the serial PR yields the turn while the line holds a landing
+([#10284](https://github.com/DanielH2018/server/issues/10284)), which removes that wait for
+the drafts in the line. `slots._yields` owns the rule.
 
 ### Who runs `schedule`
 
@@ -319,7 +323,7 @@ every one after every step.
   its reads fails.
 - **Holder progress.** Holding never waits on a condition only a push or a re-run can change.
   No single check holds it. Five bounds approximate it: `stall.step`, `stuck_checks`,
-  `merge._failing_checks`, `batch.RUN_TIMEOUT_S` and `slots.DRAIN_S`. It would have caught
+  `failing_checks.find`, `batch.RUN_TIMEOUT_S` and `slots.DRAIN_S`. It would have caught
   #10525 and #10288.
 - **No discarded proof.** A green Testing whose base is still master's tip ends in Merging,
   never Rejoining. Held, since #10507, by the `batch_tested` read before

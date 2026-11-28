@@ -121,8 +121,10 @@ def _python_writes(text: str) -> list[str]:
     def expand(elts: list[ast.expr]) -> list[ast.expr]:
         out = []
         for item in elts:
-            splat = isinstance(item, ast.Starred) and isinstance(item.value, ast.Name)
-            out += lists.get(item.value.id, [item]) if splat else [item]
+            if isinstance(item, ast.Starred) and isinstance(item.value, ast.Name):
+                out += lists.get(item.value.id, [item])
+            else:
+                out.append(item)
         return out
 
     hits = []

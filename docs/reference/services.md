@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/service_catalog.py
-generated_at: 2026-11-27 06:17 UTC
-generated_sha: f8cc3c595
+generated_at: 2026-11-28 06:17 UTC
+generated_sha: 696c721c2
 ---
 
 !!! warning "Generated file — do not edit"
@@ -12,12 +12,12 @@ generated_sha: f8cc3c595
 
 # Services
 
-72 service(s) declared across 1 host(s).
+73 service(s) declared across 1 host(s).
 
 
 ## daniel-box
 
-72 service(s).
+73 service(s).
 
 | Service | Route | Auth | Backup tier | Auto-deploy |
 |---|---|---|---|---|
@@ -90,10 +90,11 @@ generated_sha: f8cc3c595
 | traefik | no route (infra role) | unknown (use_authelia not declared on this entry) | daily -> R2 | n/a: applied by Flux, through `promote`; `land.sh` gates the rollout |
 | traefik-crds | no route (infra role) | unknown (use_authelia not declared on this entry) | no PVC (stateless) | n/a: applied by Flux, through `promote`; `land.sh` gates the rollout |
 | valheim | no route (infra role) | unknown (use_authelia not declared on this entry) | weekly -> B2 (default target); no backup (StorageClass longhorn-nobackup) | n/a: applied by Flux, through `promote`; `land.sh` gates the rollout |
+| vault-mcp | no route (infra role) | unknown (use_authelia not declared on this entry) | no backup (StorageClass longhorn-nobackup) | n/a: applied by Flux, through `promote`; `land.sh` gates the rollout |
 | vaultwarden | <span class="fqdn" data-host="vaultwarden.local">vaultwarden.local.&lt;domain&gt;</span> (LAN only) | none (public/no-auth) | daily -> R2 | n/a: applied by Flux, through `promote`; `land.sh` gates the rollout |
 | wg-easy | <span class="fqdn" data-host="wg-easy">wg-easy.&lt;domain&gt;</span> · <span class="fqdn" data-host="wg-easy.local">wg-easy.local.&lt;domain&gt;</span> | Authelia one_factor | weekly -> B2 (default target) | n/a: applied by Flux, through `promote`; `land.sh` gates the rollout |
 | zigbee2mqtt | <span class="fqdn" data-host="zigbee2mqtt">zigbee2mqtt.&lt;domain&gt;</span> · <span class="fqdn" data-host="zigbee2mqtt.local">zigbee2mqtt.local.&lt;domain&gt;</span> | Authelia one_factor | daily -> R2 | n/a: applied by Flux, through `promote`; `land.sh` gates the rollout |
 
 ## Underivable facts
 
-32 field(s) read `unknown`. A fact with no machine-readable source prints its reason rather than a guess — see the FIELD NOTES section of `scripts/docs/service_catalog.py` for which facts those are and why.
+33 field(s) read `unknown`. A fact with no machine-readable source prints its reason rather than a guess — see the FIELD NOTES section of `scripts/docs/service_catalog.py` for which facts those are and why.

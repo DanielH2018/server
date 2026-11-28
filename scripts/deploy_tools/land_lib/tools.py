@@ -156,6 +156,20 @@ def await_ci_verdict(
         return CiVerdict(CI_DISARMED, f"await_ci: {exc}")
 
 
+def ci_passed(sha: str) -> bool | None:
+    """Whether `sha`'s own required CI passed, from one read; None for no verdict or no read.
+
+    Unlike `await_ci_verdict`, it never lets a descendant or the master tip answer for `sha`.
+    """
+    try:
+        verdict = await_ci.verdict_for(sha)
+    except await_ci.DisarmedGateError, await_ci.RateLimitedError, OSError, ValueError:
+        return None
+    if verdict is await_ci.CIVerdict.PENDING:
+        return None
+    return verdict is await_ci.CIVerdict.PASS
+
+
 def in_reboot_window() -> bool:
     """Whether now is inside the weekly reboot's no-promotion window."""
     schedule = reboot_window.read_schedule(REPO)
@@ -258,6 +272,7 @@ class Tools:
     git: Callable[..., subprocess.CompletedProcess[str]] = git
     # Above `await_ci:`, whose field name shadows the module for the rest of this class body.
     await_ci: Callable[[str, int], CiVerdict] = await_ci_verdict
+    ci_passed: Callable[[str], bool | None] = ci_passed
     tested_base: Callable[[str], str | None] = land_tested_base.tested_base
     # `cwd` is the checkout the probe renders the deployed role's manifests from; None is this
     # file's own.

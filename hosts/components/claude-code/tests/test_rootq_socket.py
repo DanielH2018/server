@@ -63,7 +63,7 @@ def seam(root: Path) -> dict[str, str]:
 
 
 def exchange(
-    request: bytes, script=NOWHERE, env=None, close_write=True, timeout_s=5
+    request: bytes, script=NOWHERE, env=None, close_write=True, timeout_s: float = 5
 ) -> dict:
     """Send REQUEST to the helper over a socketpair, and return its decoded answer."""
     mine, theirs = socket.socketpair()

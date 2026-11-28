@@ -28,7 +28,7 @@ class Store:
 
     def cache(self, age: int, children: tuple[str, ...] = (), repo: str = REPO) -> str:
         """Cache one manifest `age` days old, an index when it has `children`; return its digest."""
-        body = {"schemaVersion": 2, "age": age}
+        body: dict[str, object] = {"schemaVersion": 2, "age": age}
         if children:
             body["manifests"] = [{"digest": c} for c in children]
         data = json.dumps(body).encode()

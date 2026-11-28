@@ -154,8 +154,8 @@ merge commit. `next` is the next action as one token, the landing's row of
 | `settled` | Exercise the thing you actually changed. The gate sees the workload, not your change. |
 | `needs-manual-apply` | **Read every remediation line, not the first.** One PR can reach two, and each prints its own. |
 | `deferred` | The landing gave up waiting. With cause `promote-timeout`, no promotion covered a flux-owned tag in time: read the `promote` workflow's failed `publish` jobs first, then re-run. With cause `gate-unreadable` or `gate-stale`, the health gate could not read its store or its tree was older than origin/master, so the deploy went ungraded: re-run `land.sh`. |
-| `deferred`, for a host | A PR that changes a host's package waits for that host to apply it. When the line names the updater's start command, the host's timer is not armed yet, or its next fire is more than 45 minutes away. Start the updater on that host, then re-run the same `land.sh` command: its first query finds the host settled. |
-| `refused` | The landing stopped before it deployed anything, and the detail says why: the landing policy, a closed PR, changes requested, a read that failed. Fix what it names, then re-run. When it names landing code older than master's, the landing already re-ran from a fresh checkout and master moved again: re-run the same command. |
+| `deferred`, for a host | A PR that changes a host's package waits for that host to apply it. When the line names the updater's start command (cause `updater-not-due`, `next=operator`), the host's timer is not armed yet, or its next fire is more than 45 minutes away. Starting the updater needs root, so report the command to the operator and stop. Once the operator has started it, re-run the same `land.sh` command: its first query finds the host settled. |
+| `refused` | The landing stopped before it deployed anything, and the detail says why: the landing policy, a closed PR, changes requested, a read that failed. Fix what it names, then re-run. When it names landing code older than master's (cause `master-moved`, `next=rerun`), the landing already re-ran from a fresh checkout and master moved again: re-run the same command. |
 | `ci-unproven` | GitHub never ran CI for the merge commit, and no later master commit can stand in for it, so a re-run alone never converges. The detail names the tip and the way out. When no commit has run CI, dispatch it with `gh workflow run ci.yml --ref master`, dispatch `promote` for the tip once CI is green, and re-run. When a red commit sits between the merge commit and a green one, dispatch `promote` for the tip with the `gh workflow run promote.yml` command it prints. `promote` refuses a commit without green CI, so no route skips CI. |
 | `unbuilt` | A host the landing would defer on has no package published at or after the merge, and the builder reports a failing reason, so no updater fire can apply it. Read `uv run python scripts/diagnostics/probe.py builder`, fix the builder, then re-run the same `land.sh` command. |
 | `handoff-timeout` | The lander unit outlived land.sh's wait and may still be running. Re-run the same command; it waits on the unit again rather than starting a second landing. |
@@ -165,7 +165,10 @@ waits until a promotion covers the merge commit (`promote.py land-wait`) and the
 k8s tags. A `deploy-failed` with cause `promote-held` means `DEPLOY_HOLD` holds
 promotion, and clearing it is **operator-only**: stop and name the hold. To resume once the
 operator clears it or once a red master CI goes green, run `cc-wait landing-clear` in the
-background and re-run the same `land.sh` command when it ends 0. `probe.py landing` names the
+background and re-run the same `land.sh` command when it ends 0. A `ci-red` with cause
+`own-red` is the exception: master is red on the merge commit and was green on its first
+parent, so this PR turned it red and no wait clears it. Fix master in a new PR, then re-run.
+`probe.py landing` names the
 same blockers and exits 1 while one holds. A live serial landing is neither's blocker:
 `land.sh` waits in line behind it. It ends 1 as
 `gh-unauthenticated` when `gh` has no login, which needs the operator, not a retry. Cause

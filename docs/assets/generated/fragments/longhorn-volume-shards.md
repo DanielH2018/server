@@ -8,6 +8,7 @@
 | `vaultwarden-data` | Daily | R2 | every day |
 | `airflow-postgres-data` | Daily | R2 | every day |
 | `code-server-workspace` | Weekly | B2 | Sunday |
+| `livesync-data` | Weekly | B2 | Sunday |
 | `n8n-data` | Weekly | B2 | Sunday |
 | `terraria-stats-data` | Weekly | B2 | Sunday |
 | `jellyfin-config` | Weekly | B2 | Monday |

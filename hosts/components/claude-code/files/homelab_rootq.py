@@ -645,7 +645,7 @@ def dispatch(verb: str, args: list[str], environ: dict[str, str]) -> int:
 
 def main(argv: list[str], environ: dict[str, str]) -> int:
     if argv in (["-h"], ["--help"]):
-        print(__doc__.split("\n\n", 1)[1].rstrip())
+        print((__doc__ or "").split("\n\n", 1)[1].rstrip())
         print("\nPATHS: " + " ".join(f"{d}/{g}" for d, g in PATHS))
         return 0
     try:

@@ -221,4 +221,5 @@ regex	prek.toml	gitleaks/gitleaks	github-releases	-	-
 regex	prek.toml	pre-commit/pre-commit-hooks	github-releases	-	-
 regex	prek.toml	shellcheck-py/shellcheck-py	github-releases	-	-
 regex	prek.toml	shellcheck-py/shellcheck-py	github-tags	-	-
+regex	pyproject.toml	DanielH2018/dotfiles	git-refs	digest	https://github.com/DanielH2018/dotfiles
 regex	scripts/validate/alert_tools.sh	cloudflare/pint	github-releases	-	-

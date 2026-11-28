@@ -403,7 +403,7 @@ def _print_summary(summary: dict, run: dict, spent: float) -> None:
 
 
 def main(argv=None) -> int:
-    p = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
+    p = argparse.ArgumentParser(description=(__doc__ or "").split("\n\n")[0])
     sub = p.add_subparsers(dest="cmd", required=True)
     r = sub.add_parser(
         "rank",
@@ -532,7 +532,7 @@ def main(argv=None) -> int:
         arms = build_arms(args.doc, doc, sections, agent_names)
         subject = f"{args.doc}: baseline, -doc and {len(sections)} section arm(s)"
     else:
-        sections = []
+        doc, sections = "", []
         arms = build_skill_arms(agent_names)
         subject = f"agent and skill bodies: {BASELINE} and {NO_SKILL}"
     print(

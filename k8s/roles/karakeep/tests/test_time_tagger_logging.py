@@ -120,8 +120,9 @@ def _is_stderr(node: ast.AST) -> bool:
 def _flag_branch(node: ast.If, flags: dict[str, bool]) -> list[ast.stmt] | None:
     """The branch a bare `if <flag>:` takes on the deployment's path, or None for other tests."""
     test = node.test
-    negated = isinstance(test, ast.UnaryOp) and isinstance(test.op, ast.Not)
-    if negated:
+    negated = False
+    if isinstance(test, ast.UnaryOp) and isinstance(test.op, ast.Not):
+        negated = True
         test = test.operand
     if isinstance(test, ast.Name) and test.id in flags:
         return node.body if flags[test.id] != negated else node.orelse

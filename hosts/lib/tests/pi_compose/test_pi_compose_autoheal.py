@@ -37,7 +37,8 @@ def autoheal():
 
 
 def _env(environment: list[str]) -> dict[str, str]:
-    return dict(item.partition("=")[::2] for item in environment)
+    pairs = (item.partition("=") for item in environment)
+    return {key: value for key, _, value in pairs}
 
 
 def notification_gaps(environment: list[str]) -> list[str]:

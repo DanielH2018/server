@@ -51,9 +51,10 @@ VERDICTS = frozenset(Verdict)
 
 
 class Cause(StrEnum):
-    """Which deploy failure a `deploy-failed` verdict was, for the board's `by (cause)`.
+    """Which end of its verdict a landing reached, for the board's `by (cause)` and `NEXT`.
 
-    The verdict alone cannot tell a tag nothing applies from a held promotion or a failed soak.
+    The verdict alone cannot tell a tag nothing applies from a held promotion or a failed soak,
+    and each of those needs a different next action.
 
     PROMOTE_* NAME HOW A WAIT ON PROMOTION ENDED (`promote.py land-wait`), for a PR whose tag
     Flux applies. `promote-held` is DEPLOY_HOLD holding, beside `deploy-failed`.
@@ -73,6 +74,17 @@ class Cause(StrEnum):
     `landing-live` rides beside a `refused` with exit 75 that started no landing, because
     another landing of the PR holds its lock (`pr_lock.py`). It is on the `LAND-RESULT:` line
     only: that stop writes no annotation, so the board never counts it.
+
+    `updater-not-due` rides beside `deferred` from the host wait, when a host's updater timer
+    is not armed or its next fire is past the wait's 45 minutes, so the detail names the
+    updater's start command. Starting it needs root.
+
+    `own-red` rides beside `ci-red` when master CI is red on the merge commit itself and green
+    on its first parent: this PR's change turned master red, and no wait clears it.
+
+    `master-moved` rides beside a `refused` with exit 1 from a landing a fresh checkout ran
+    (`fresh.CHILD_ENV`), when master moved past its landing code again before the merge.
+    Nothing merged, and the same command re-runs from a newer checkout.
     """
 
     TAG_MISS = "tag-miss"
@@ -82,6 +94,9 @@ class Cause(StrEnum):
     GATE_STALE = "gate-stale"
     SOAK_FAILED = "soak-failed"
     LANDING_LIVE = "landing-live"
+    UPDATER_NOT_DUE = "updater-not-due"
+    OWN_RED = "own-red"
+    MASTER_MOVED = "master-moved"
     INVALID = "invalid-cause"
 
 
@@ -94,6 +109,9 @@ class Next(StrEnum):
     `wait:<source>` names a `cc-wait` source to wait on before re-running the same `land.sh`
     command. `follow:land` waits on another landing of the PR with `cc-wait land`, and that
     landing's result is this PR's: re-running `land.sh` would only be refused again.
+    `dispatch-and-rerun` dispatches the workflow runs the detail names, then re-runs, and
+    `fix-builder-and-rerun` repairs the host package builder, then re-runs. Neither changes
+    the PR.
     """
 
     DONE = "done"
@@ -101,6 +119,8 @@ class Next(StrEnum):
     WAIT_LANDING_CLEAR = "wait:landing-clear"
     FOLLOW_LAND = "follow:land"
     FIX_AND_RERUN = "fix-and-rerun"
+    DISPATCH_AND_RERUN = "dispatch-and-rerun"
+    FIX_BUILDER_AND_RERUN = "fix-builder-and-rerun"
     APPLY_BY_HAND = "apply-by-hand"
     OPERATOR = "operator"
 
@@ -117,6 +137,7 @@ NEXT: dict[tuple[str, str | int | None], Next] = {
     (Verdict.DEFERRED, Cause.PROMOTE_TIMEOUT): Next.FIX_AND_RERUN,
     (Verdict.DEFERRED, Cause.GATE_UNREADABLE): Next.RERUN,
     (Verdict.DEFERRED, Cause.GATE_STALE): Next.RERUN,
+    (Verdict.DEFERRED, Cause.UPDATER_NOT_DUE): Next.OPERATOR,
     (Verdict.UNHEALTHY, None): Next.FIX_AND_RERUN,
     # Without a cause, a host's reconcile failed, and its `--clear-hold` needs sudo.
     (Verdict.DEPLOY_FAILED, None): Next.OPERATOR,
@@ -128,28 +149,32 @@ NEXT: dict[tuple[str, str | int | None], Next] = {
     (Verdict.PR_CI_RED, None): Next.FIX_AND_RERUN,
     (Verdict.MERGE_TIMEOUT, None): Next.RERUN,
     (Verdict.CI_RED, None): Next.WAIT_LANDING_CLEAR,
+    (Verdict.CI_RED, Cause.OWN_RED): Next.FIX_AND_RERUN,
     (Verdict.CI_TIMEOUT, None): Next.RERUN,
-    (Verdict.CI_UNPROVEN, None): Next.FIX_AND_RERUN,
+    (Verdict.CI_UNPROVEN, None): Next.DISPATCH_AND_RERUN,
     (Verdict.REFUSED, None): Next.FIX_AND_RERUN,
     # A landing rule refused before the merge (`slots.py`), and a re-run waits in line again.
     (Verdict.REFUSED, LAND_GAVE_UP): Next.RERUN,
     (Verdict.REFUSED, Cause.LANDING_LIVE): Next.FOLLOW_LAND,
+    (Verdict.REFUSED, Cause.MASTER_MOVED): Next.RERUN,
     (Verdict.HANDOFF_TIMEOUT, None): Next.RERUN,
-    (Verdict.UNBUILT, None): Next.FIX_AND_RERUN,
+    (Verdict.UNBUILT, None): Next.FIX_BUILDER_AND_RERUN,
 }
 
 
 def next_action(verdict: str | None, cause: str, rc: int) -> Next | None:
     """The `NEXT` row for a landing that ended `verdict`, beside `cause`, with exit `rc`.
 
-    Returns None for a landing that named no verdict, such as a usage error.
+    Returns None for a landing that named no verdict, such as a usage error, and `operator`
+    for a verdict with no row: `result_line` runs just above the `VERDICT:` line, which a
+    raise here would leave unprinted.
     """
     if verdict is None:
         return None
     for key in ((verdict, cause), (verdict, rc), (verdict, None)):
         if key in NEXT:
             return NEXT[key]
-    raise KeyError(f"no next action for verdict {verdict!r}")
+    return Next.OPERATOR
 
 
 class Outcome(Exception):

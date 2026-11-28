@@ -183,7 +183,8 @@ is waited out first, as the bullets below say. A refused landing exits 75 with
 - A PR that changes a k8s role, and every serial PR, is refused while `DEPLOY_HOLD` reads
   anything but `none`.
 - A serial PR is refused while another landing holds a slot, and waits while another landing
-  holds the serial lock, as the bullet on the serial lock's wait says. Otherwise it takes the
+  holds the serial lock, as the bullet on the serial lock's wait says. Otherwise, once it
+  stops yielding the turn to the line, it takes the
   serial lock, `/run/lock/homelab-land-serial.lock` on daniel-box, and keeps it
   until its process ends, so every other PR waits meanwhile. `live_limit.kind` decides
   which PR is serial. A serial PR changes the `longhorn` or `metallb` role, which hold the
@@ -223,11 +224,35 @@ is waited out first, as the bullets below say. A refused landing exits 75 with
   verdicts 76 and 115 minutes after the refusal. The times are from each host's
   `landing-verdicts.jsonl` and GitHub's merge times. The measurement records what the
   2026-11-19 decision costs. It does not reopen the decision.
+- A serial PR yields the landing turn while other landings stand in the line, before it
+  takes the serial lock. It gives the turn back and waits until the line is empty, then
+  asks for the turn again and reads the rules once more. Its log prints `yielding the
+  landing turn to the landings in the line`. The wait ends once the landing's merge budgets
+  leave one `merge_timeout`, the length the merge wait gets after the turn, and the PR then
+  takes the turn whoever stands in the line. The line holds only drafts that have had no CI
+  run, so the rule does not see a green ready head that waits for the turn, a landing that
+  lands alone, a landing out of the turn for a wait, or a landing that runs as another UNIX
+  user. A line that cannot be read yields nothing, and inside the no-promotion window a
+  serial PR does not yield. The serial PR still lands alone and still drains, as the next
+  bullet says. The operator ruled this on 2026-11-27
+  ([#10284](https://github.com/DanielH2018/server/issues/10284),
+  `scripts/deploy_tools/land_lib/slots.py:DECIDED: 2026-11-27, the operator ruled that a serial PR yields`).
+  On 2026-11-26 the waits behind serial landings totalled 6.3 hours across 17 waits.
 - A serial PR that holds the turn waits for those landings instead of refusing. At the
   draft's turn its CI run starts anyway. Just before the merge it waits in the turn, up to
   `slots.DRAIN_S`, for the landings past their merge to reach their verdicts. Its log prints
   `waiting in the landing turn for the landings past their merge to reach their verdicts`.
-  No other landing merges while it holds the turn, so those landings only finish. The wait
+  No other landing merges while it holds the turn, so those landings only finish. The drain
+  reads the landing slots, so it waits only for the landings that still hold one. A landing
+  gives its slot up once `promote.py land-wait` reads its merge commit's `digests.json` and
+  the changed set reads `homelab` alone, because it gates no tag. It waits on to its verdict
+  without the slot, and still ends `deploy-failed` on a hold or a failed promotion. A
+  landing whose changed set names a tag, or is not read yet, or is widened because a
+  `digests.json` is missing or unreadable, keeps its slot, and the drain waits for it. The
+  operator ruled this on 2026-11-28
+  ([#10538](https://github.com/DanielH2018/server/issues/10538)). The rule inside the
+  no-promotion window reads the slots too, so a landing that gave its slot up does not count
+  there either. The wait
   ends when the bar clears, when a rule that waiting cannot clear starts to apply, or at the
   cap, and the last two refuse. On 2026-11-18, #9047, #9057 and #9059 were refused three or
   four times each under the rule without the wait, each time after up to 82 minutes in line.
@@ -439,8 +464,9 @@ jobs. Every landing that merges its PR directly takes the turn.
 - A lock held over ssh also ends when daniel-server vanishes. sshd on daniel-box never probes a
   client, so a host that loses power or its network sends no close. The landing writes a
   heartbeat into the session every `turn.HEARTBEAT_S`, and the script on daniel-box frees the
-  lock once three intervals pass without one. The turn, the landing slots and the serial lock
-  are held this way; the PR lock (`pr_lock.py`) is not.
+  lock once three intervals pass without one. The turn, the landing slots, the serial lock and
+  the PR lock (`pr_lock.py`) are held this way. A detached landing inherits the PR lock
+  without its caller's heartbeat thread, so it starts its own (`pr_lock.Held.for_fork`).
 - The turn is not a safety gate. A landing that waits `merge_timeout` for it, or that cannot
   reach daniel-box, goes on without it, marks its draft ready and merges.
 - The wait for the turn counts as waited. The merge wait gets one `merge_timeout` after it,
@@ -628,7 +654,10 @@ registers; that is the grace period, so no landing is cut short for polling befo
 **A merge GitHub refuses because a required check is failing ends the wait too**, with
 `VERDICT: pr-ci-red` naming the check. `await_ci.py` reads `ci.yml`'s checks, and the ruleset
 also requires checks from other workflows, such as `renovate config validator`. A refusal for a
-check that is in progress or queued keeps the wait going. A failing check turns green only on a
+check that is in progress or queued keeps the wait going. GitHub also refuses with one line that
+names no check, `N of M required status checks are <state>.`. For that form the wait reads the
+ruleset's required contexts and the head's latest check runs, and ends `pr-ci-red` when one of
+them has failed (`land_lib/failing_checks.py:find`). A failing check turns green only on a
 push or a re-run, so waiting held the landing turn for nothing: on 2026-11-27 the serial landing
 of [#10458](https://github.com/DanielH2018/server/pull/10458) held the turn this way while
 other landings waited.
@@ -955,7 +984,14 @@ A field the landing never reached reads `-`.
 
 - `verdict`, `cause` and `exit` are the landing's verdict, its cause and its exit code.
   Cause `landing-live` beside `refused` and exit 75 means no landing started, because
-  another landing of the PR is live (*One landing of a PR at a time*).
+  another landing of the PR is live (*One landing of a PR at a time*). Three more causes
+  exist only to change `next`:
+    - `updater-not-due` beside `deferred`: a host's updater timer is not armed, or its next
+      fire is more than 45 minutes away, so the detail names the updater's start command.
+    - `own-red` beside `ci-red`: master CI is red on the merge commit itself and green on
+      its first parent, so this PR's change turned master red.
+    - `master-moved` beside `refused` and exit 1: the landing already re-ran from a fresh
+      checkout, and master moved past its landing code again before the merge.
 - `sha` is the merge commit's first 8 characters, and `merge` is the whole commit. A landing
   that merged nothing prints `-` for both.
 - `tags` counts the tags the landing waited on. After the promotion wait that is every tag
@@ -976,9 +1012,14 @@ A field the landing never reached reads `-`.
     - `follow:land`: another landing of the PR is live. Wait on it with the `cc-wait land`
       command its verdict prints, and do not re-run `land.sh`.
     - `fix-and-rerun`: change what the detail names, then re-run.
+    - `dispatch-and-rerun`: dispatch the workflow runs the `ci-unproven` detail names, then
+      re-run. The PR needs no change.
+    - `fix-builder-and-rerun`: repair the host package builder the `unbuilt` detail names
+      (`probe.py builder`), then re-run. The PR needs no change.
     - `apply-by-hand`: apply what the remediation lines name. A re-run ends the same way.
     - `operator`: the next step needs the operator, such as a `sudo` command or a soak
-      failure to triage. Report it and stop.
+      failure to triage. Report it and stop. A verdict with no `NEXT` row reads `operator`
+      too, rather than ending the landing in a traceback with no `VERDICT:` line.
 
 Only `land-wait` can compute `hold_owner`. It holds the raw hold value and the PR's own
 services together. The ledger's tags are widened with every tag the promotion carried before
@@ -1075,9 +1116,10 @@ middleware before the backend is reached, and 19 dead Grafana panels sat behind 
 `land.sh` completes it: no promotion covered the merge commit in time (cause `promote-timeout`),
 a host's package is not yet applied, or the health gate could not read its store (cause
 `gate-unreadable`) or found its tree older than `origin/master` (cause `gate-stale`; see *The
-health gate*). `cc-wait land` ends the wait as `gave-up`, exit 3, for each of those three
-causes, read from the `LAND-RESULT:` line rather than the note beside it. It ends the wait as
-`deferred`, exit 4, for any other.
+health gate*). A host deferral whose updater timer is not armed, or not due inside the wait,
+carries cause `updater-not-due`. `cc-wait land` ends the wait as `gave-up`, exit 3, for each
+of those four causes, read from the `LAND-RESULT:` line rather than the note beside it. It ends
+the wait as `deferred`, exit 4, for any other.
 
 **Read every remediation line, not the first one.** One PR can reach two of these at once, for
 example a rotated secret and a host package, and the verdict then prints one line per half.

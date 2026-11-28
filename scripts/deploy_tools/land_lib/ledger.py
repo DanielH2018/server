@@ -3,11 +3,13 @@
 This is the only record of where a landing's time goes: how long the merge took to arrive,
 how long master CI took after it, the deploy.
 
-`cause` is a one-token reason beside a `deploy-failed` verdict. One exit-75 verdict carries one
-too: `deferred`, with `promote-timeout` for a promotion wait that no promotion covered in time,
-or with `gate-unreadable` or `gate-stale` for a health gate that graded nothing, and
-`gate-unreadable` also for a promotion wait on a host with no kubectl or kubeconfig. Every
-other verdict leaves it empty. The Landings board's cause panel selects `cause!=""`, so it
+`cause` is a one-token reason beside a `deploy-failed` verdict. Three other verdicts carry one
+too. `deferred` carries `promote-timeout` for a promotion wait that no promotion covered in
+time, `gate-unreadable` or `gate-stale` for a health gate that graded nothing,
+`gate-unreadable` also for a promotion wait on a host with no kubectl or kubeconfig, and
+`updater-not-due` for a host whose updater the operator must start. `ci-red` carries `own-red`,
+and `refused` carries `landing-live` or `master-moved`. `outcome.Cause` says what each means.
+Every other verdict leaves it empty. The Landings board's cause panel selects `cause!=""`, so it
 counts those beside the `deploy-failed` causes. The verdict alone cannot tell
 a tag nothing applies from a held promotion, so `cause` lets the board split
 them. Its vocabulary is `outcome.Cause` and it is checked HERE, on assignment,

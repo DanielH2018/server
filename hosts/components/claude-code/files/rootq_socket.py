@@ -98,7 +98,7 @@ def decode(data: bytes) -> tuple[int, str, str] | None:
 
 def main(argv: list[str], environ: dict[str, str]) -> int:
     if argv in (["-h"], ["--help"]):
-        print(__doc__.split("\n\n", 1)[1].rstrip())
+        print((__doc__ or "").split("\n\n", 1)[1].rstrip())
         return 0
     args = list(argv)
     if args[:1] == ["matches"] and len(args) == 3:

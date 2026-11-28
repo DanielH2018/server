@@ -190,6 +190,12 @@ def _events(feed):
     return icalendar.Calendar.from_ical(feed).walk("VEVENT")
 
 
+def _rrule(event) -> icalendar.vRecur:
+    rule = event["RRULE"]
+    assert isinstance(rule, icalendar.vRecur)
+    return rule
+
+
 def test_an_override_of_the_first_occurrence_keeps_the_master():
     feed = _calendar(
         _event(
@@ -226,7 +232,7 @@ def test_the_earlier_of_two_matching_series_ends_the_day_before_the_later_starts
             "SUMMARY:Gym",
         ),
     )
-    rules = {str(e["UID"]): e["RRULE"] for e in _events(app.process_ics(feed))}
+    rules = {str(e["UID"]): _rrule(e) for e in _events(app.process_ics(feed))}
     assert rules["old"]["UNTIL"] == [date(2026, 2, 28)]
     assert "UNTIL" not in rules["new"]
 
@@ -237,7 +243,7 @@ def test_a_folded_rrule_keeps_every_part_when_capped():
         _event("UID:old", "DTSTART;VALUE=DATE:20250101", *folded, "SUMMARY:Gym"),
         _event("UID:new", "DTSTART;VALUE=DATE:20260301", *folded, "SUMMARY:Gym"),
     )
-    rules = {str(e["UID"]): e["RRULE"] for e in _events(app.process_ics(feed))}
+    rules = {str(e["UID"]): _rrule(e) for e in _events(app.process_ics(feed))}
     assert rules["old"]["INTERVAL"] == [2]
     assert rules["old"]["UNTIL"] == [date(2026, 2, 28)]
 
@@ -257,4 +263,4 @@ def test_series_with_different_rules_are_not_capped():
             "SUMMARY:Gym",
         ),
     )
-    assert all("UNTIL" not in e["RRULE"] for e in _events(app.process_ics(feed)))
+    assert all("UNTIL" not in _rrule(e) for e in _events(app.process_ics(feed)))

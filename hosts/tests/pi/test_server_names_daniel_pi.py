@@ -44,7 +44,8 @@ def _ssh_dropin_names(pkg) -> dict[str, str]:
             if key == "host":
                 hosts = fields[1:]
             elif key == "hostname":
-                names.update(dict.fromkeys(hosts, fields[1]))
+                for host in hosts:
+                    names[host] = fields[1]
     return names
 
 

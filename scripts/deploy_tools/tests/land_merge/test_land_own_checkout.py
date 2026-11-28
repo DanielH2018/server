@@ -343,6 +343,9 @@ def test_a_rerun_that_finds_master_moved_again_refuses(land_run, monkeypatch):
     rc, out, _, calls, _ = land_run(_BEFORE_MERGE, fakes)
     assert rc == 1 and "VERDICT: refused" in out
     assert "master moved again; re-run the same land.sh command" in out
+    [result] = [line for line in out.splitlines() if line.startswith("LAND-RESULT:")]
+    assert "verdict=refused cause=master-moved exit=1 " in result
+    assert result.endswith(" next=rerun")
     assert not _merges(calls)
     assert not [c for c in calls if c[0] == "fresh_landing"]
 

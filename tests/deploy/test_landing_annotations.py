@@ -13,7 +13,7 @@ import re
 import pytest
 from _helpers import REPO as _REPO
 from deploy_tools.land_lib.ledger import Ledger, annotation_line
-from deploy_tools.land_lib.outcome import Cause, Verdict
+from deploy_tools.land_lib.outcome import NEXT, Cause, Verdict
 
 _BOARD = _REPO / "k8s/roles/observability/files/dashboards/Infrastructure/landings.json"
 
@@ -126,12 +126,14 @@ def _cause_expr() -> str:
     return expr
 
 
-# No table in outcome.py pairs these verdicts with their causes.
-_CAUSE_BESIDE_ANOTHER_VERDICT = [
-    (Verdict.DEFERRED, Cause.PROMOTE_TIMEOUT),
-    (Verdict.DEFERRED, Cause.GATE_UNREADABLE),
-    (Verdict.DEFERRED, Cause.GATE_STALE),
-]
+# `landing-live` is left out: that stop writes no annotation.
+_CAUSE_BESIDE_ANOTHER_VERDICT = sorted(
+    (Verdict(verdict), cause)
+    for verdict, cause in NEXT
+    if isinstance(cause, Cause)
+    and verdict != Verdict.DEPLOY_FAILED
+    and cause != Cause.LANDING_LIVE
+)
 
 _LABEL_FILTER = re.compile(r'^(\w+)\s*(=~|!~|!=|=)\s*"((?:[^"\\]|\\.)*)"$')
 

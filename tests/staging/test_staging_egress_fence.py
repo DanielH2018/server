@@ -122,7 +122,7 @@ def test_the_filter_pins_its_uuid():
 
 
 def test_the_fence_drops_rather_than_accepts():
-    actions = {r.get("action") for r in _rules()}
+    actions = {r.get("action", "") for r in _rules()}
     assert actions == {"drop"}, (
         f"{NWFILTER_TEMPLATE} declares rule actions {sorted(actions)}. Every rule here must "
         f"be 'drop': an 'accept' rule in a root-chain filter short-circuits the traffic it "
@@ -131,7 +131,7 @@ def test_the_fence_drops_rather_than_accepts():
 
 
 def test_the_fence_filters_traffic_leaving_the_guest():
-    directions = {r.get("direction") for r in _rules()}
+    directions = {r.get("direction", "") for r in _rules()}
     assert directions == {"out"}, (
         f"{NWFILTER_TEMPLATE} declares rule directions {sorted(directions)}. libvirt reads "
         f"'out' as leaving the guest, which is the hazard; 'in' would block production "

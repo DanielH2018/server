@@ -321,11 +321,12 @@ _EARLIEST = datetime.min.replace(tzinfo=UTC)
 
 
 def _moment(value: object) -> datetime:
-    """An ISO 8601 time, or the earliest time when missing or malformed."""
+    """An ISO 8601 time, or the earliest time when missing, malformed or without an offset."""
     try:
-        return datetime.fromisoformat(str(value))
+        moment = datetime.fromisoformat(str(value))
     except ValueError:
         return _EARLIEST
+    return moment if moment.tzinfo is not None else _EARLIEST
 
 
 @dataclass(frozen=True)

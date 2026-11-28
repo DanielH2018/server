@@ -5,7 +5,9 @@ promotion, the hosts and the health gate. The slots bound how many do that at on
 both hosts. Before the merge the landing turn (`turn.py`) is the bound: only the landing that
 holds it polls its PR's CI. So a landing takes a slot after its merge and its step 1, and holds
 it to its verdict. A landing whose step 1 ends it, such as a docs-only PR or one whose grading
-moves to a fresh checkout, takes none.
+moves to a fresh checkout, takes none. A landing whose promotion gates no tag gives its slot up
+before its verdict (`Landing.give_up_slot`, `promotion.wait_on_promotion`) and polls on
+without one, so a serial PR's drain, which reads the slots (`_bar`), does not wait for it.
 
 A slot is one of `COUNT` lock files on `turn.TURN_HOST`, locked the way the turn is: a landing
 there locks a file itself, and a landing on another host locks one through an ssh session that
@@ -14,7 +16,8 @@ fewer than the cap of them (`turn.lock_below`), so a cap below `COUNT` counts ev
 dies frees its slot, and a slot held over ssh ends when its host stops writing the heartbeat
 (`turn.HEARTBEAT_S`).
 
-The count drops to 1 while the core quota runs low (`live_limit.low_quota`). When the turn host
+The count drops to 1 while the core quota runs low (`live_limit.low_quota`). It bounds only the
+landings that hold a slot: one that gave its slot up keeps polling outside it. When the turn host
 does not answer, a landing takes one of `FALLBACK_COUNT` slots on its own host instead, so each
 host is bounded on its own until the turn host answers again.
 
@@ -157,11 +160,27 @@ def _wait(ln: Landing) -> Release | None:
 
 @contextlib.contextmanager
 def held(ln: Landing) -> Generator[None]:
-    """Wait for a landing slot, hold it while the block runs, and free it however it ends."""
+    """Wait for a landing slot, hold it while the block runs, and free it however it ends.
+
+    Inside the block, `ln.give_up_slot` frees the slot early, and the block's end then frees
+    nothing more. An early release that fails is ignored, so the landing goes on.
+    """
     release = _wait(ln)
+    outside = ln.give_up_slot
+
+    def give_up() -> None:
+        nonlocal release
+        if release:
+            freed, release = release, None
+            with contextlib.suppress(OSError):
+                freed()
+            say("gave up the landing slot: this landing gates no tag")
+
+    ln.give_up_slot = give_up
     try:
         yield
     finally:
+        ln.give_up_slot = outside
         if release:
             release()
 
@@ -203,6 +222,13 @@ class Clears(Enum):
     # A landing waits for the serial landing's process end with the turn given back, because the
     # serial landing may need the turn before its merge.
     SERIAL_ENDS = "serial-ends"
+    # A serial PR gives the turn to the landings in the line, and waits with it given back
+    # until the line empties or its merge budgets leave one `merge_timeout` (`_yields`).
+    LINE_EMPTIES = "line-empties"
+
+
+# The bars a landing waits out with the turn given back (`Landing.without_turn`).
+_OUT_OF_TURN = (Clears.SERIAL_ENDS, Clears.LINE_EMPTIES)
 
 
 @dataclass(frozen=True)
@@ -219,11 +245,43 @@ _WAITING = {
         "verdicts"
     ),
     Clears.SERIAL_ENDS: "waiting in line for the serial landing to end",
+    Clears.LINE_EMPTIES: "yielding the landing turn to the landings in the line",
 }
 _CLEARED = {
     Clears.VERDICTS: "the landings past their merge reached their verdicts",
     Clears.SERIAL_ENDS: "the serial landing ended",
+    Clears.LINE_EMPTIES: "stopped yielding the landing turn",
 }
+# Each completes "gave the landing turn back".
+_REASONS = {
+    Clears.SERIAL_ENDS: "to wait in line for the serial landing to end",
+    Clears.LINE_EMPTIES: "to the landings in the line before this serial PR",
+}
+
+
+# DECIDED: 2026-11-27, the operator ruled that a serial PR yields the turn while landings
+# stand in the line, for at most the first of its two merge budgets.
+def _yields(ln: Landing) -> str:
+    """Why `ln`'s serial PR gives the turn to the landings in the line; "" when it does not.
+
+    It yields only before it takes the serial lock, so the landings it yields to never wait
+    for it. It stops once its merge budgets leave one `merge_timeout`, the length the merge
+    wait gets after the turn, and then takes the turn whoever stands in the line. The line
+    holds only drafts that have had no run: a green head waiting for the turn, and a landing
+    out of the turn for a wait, are not in it. A line that cannot be read yields nothing.
+    """
+    if ln.serial_lock or _budget_left(ln) <= ln.opts.merge_timeout:
+        return ""
+    try:
+        prs = [pr for pr, _ in turn.waiting(ln)]
+    except OSError:
+        return ""
+    if not prs:
+        return ""
+    return (
+        f"this PR changes {live_limit.SERIAL_WHAT}, and other landings stand in the line "
+        f"(#{', #'.join(prs)})"
+    )
 
 
 def _bar(ln: Landing, kind: str, lock: Locker) -> Bar | None:
@@ -243,6 +301,9 @@ def _bar(ln: Landing, kind: str, lock: Locker) -> Bar | None:
         kind in _RENDERS and live_limit.fail_open(ln.tools.in_reboot_window)
     )
     if kind == live_limit.SERIAL:
+        yields = "" if in_window else _yields(ln)
+        if yields:
+            return Bar(yields, Clears.LINE_EMPTIES)
         if _keep_serial(ln, lock):
             return Bar(
                 f"another {_SERIAL_LIVE}", _unless(in_window, Clears.SERIAL_ENDS)
@@ -303,8 +364,12 @@ def _wait_out(ln: Landing, kind: str, lock: Locker, bar: Bar) -> Bar | None:
     the latest, because no other landing merges while it lasts. A wait for the serial landing
     gives the turn back, so it holds nothing another landing needs, and only the budgets
     bound it: the serial lock is held from the serial draft's turn, through its CI run, its
-    merge and its deploy, which is longer than `DRAIN_S` measures. No holder of the turn
-    reads such a landing's head, so that wait reads its own PR's mergeability
+    merge and its deploy, which is longer than `DRAIN_S` measures. A serial PR's yield to the
+    line gives the turn back too, and ends once `_yields` names no reason. It reads no other
+    rule, because the line empties when the next landing takes the turn, and a serial lock
+    taken then would bar that landing's merge. The rules run again once the turn is taken
+    back. No holder of the
+    turn reads the head of a landing in either wait, so both read its own PR's mergeability
     (`_conflict_reads`). Each poll of a wait for the serial landing adds its seconds to
     `ln.ledger.serial_wait` as it passes, so a landing that ends during the wait records it.
 
@@ -313,15 +378,15 @@ def _wait_out(ln: Landing, kind: str, lock: Locker, bar: Bar) -> Bar | None:
         soon as one applies, and `Clears.NEVER` with the reason when time ran out.
 
     Raises:
-        Outcome: `merge-conflict`, when the PR conflicts with master during a wait for the
-            serial landing.
+        Outcome: `merge-conflict`, when the PR conflicts with master during a wait with the
+            turn given back.
     """
     o = ln.opts
     budget = _budget_left(ln)
     if bar.clears is Clears.VERDICTS:
         budget = min(DRAIN_S, budget)
     serial = bar.clears is Clears.SERIAL_ENDS
-    conflicts = _conflict_reads(ln) if serial else None
+    conflicts = _conflict_reads(ln) if bar.clears in _OUT_OF_TURN else None
     waiting = OnChange(say)
     waited = 0
     while waited + o.merge_poll <= budget:
@@ -332,7 +397,11 @@ def _wait_out(ln: Landing, kind: str, lock: Locker, bar: Bar) -> Bar | None:
         waited += o.merge_poll
         if serial:
             ln.ledger.serial_wait += o.merge_poll
-        now = _bar(ln, kind, lock)
+        if bar.clears is Clears.LINE_EMPTIES:
+            why = _yields(ln)
+            now = Bar(why, bar.clears) if why else None
+        else:
+            now = _bar(ln, kind, lock)
         if now is None:
             say(f"{_CLEARED[bar.clears]} after {waited}s")
             return None
@@ -345,8 +414,9 @@ def _wait_out(ln: Landing, kind: str, lock: Locker, bar: Bar) -> Bar | None:
 def _bar_after_waits(ln: Landing, head: str, in_turn_waits: bool) -> Bar | None:
     """The bar on `ln`'s PR at `head` once every wait that can clear it has run.
 
-    A live serial landing is waited out with the turn given back, and asked for again before
-    the bar is read once more (`Landing.without_turn`). With `in_turn_waits`, a landing that
+    A live serial landing, and a serial PR's yield to the line, are waited out with the turn
+    given back, which is asked for again before the bar is read once more
+    (`Landing.without_turn`). With `in_turn_waits`, a landing that
     holds the turn waits there for the landings past their merge to reach their verdicts.
 
     Returns:
@@ -355,10 +425,9 @@ def _bar_after_waits(ln: Landing, head: str, in_turn_waits: bool) -> Bar | None:
     kind, lock = _kind(ln, head), _lock_of(ln)
     bar = _bar(ln, kind, lock)
     while bar is not None:
-        if bar.clears is Clears.SERIAL_ENDS:
+        if bar.clears in _OUT_OF_TURN:
             bar = ln.without_turn(
-                partial(_wait_out, ln, kind, lock, bar),
-                "to wait in line for the serial landing to end",
+                partial(_wait_out, ln, kind, lock, bar), _REASONS[bar.clears]
             ) or _bar(ln, kind, lock)
         elif bar.clears is Clears.VERDICTS and in_turn_waits and ln.give_back_turn:
             bar = _wait_out(ln, kind, lock, bar)
@@ -409,7 +478,8 @@ def _refuse(ln: Landing, why: str) -> NoReturn:
 def refuse_before_run(ln: Landing, head: str) -> None:
     """End the landing of a draft that takes the turn while a rule bars it, before its run.
 
-    A live serial landing is waited out first, so the draft spends no run beside it. A bar
+    A live serial landing is waited out first, so the draft spends no run beside it, and so
+    is a serial draft's yield to the line, so the drafts in the line run before it. A bar
     that the landings past their merge clear (`_bar`) lets the run start: the turn keeps
     other merges out during the run, and `refuse_before_merge` waits out the rest.
     """
@@ -432,6 +502,10 @@ def refuse_before_merge(ln: Landing, head: str) -> None:
       back, for that landing to end, and refuses only once its merge budgets run out. A PR
       that conflicts with master during that wait ends `merge-conflict` there. A
       quiet PR waits on no promotion, so the serial landing's cannot fail it;
+    - outside the no-promotion window, a serial PR yields the landing turn while other
+      landings stand in the line, before it takes the serial lock. It waits with the turn
+      given back until the line empties or its merge budgets leave one `merge_timeout`,
+      then takes the turn whoever stands there (`_yields`);
     - a serial PR waits while another landing holds a slot, and keeps the serial lock until
       its process ends, a fresh grading included, so every other PR waits for it. While it
       holds the landing turn (`ln.give_back_turn`), it waits up to `DRAIN_S` for those

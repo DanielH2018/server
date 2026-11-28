@@ -32,6 +32,8 @@ from deploy_tools.land_lib.tools import Classifier, CiVerdict, Tools
 from deploy_tools.land_lib.land_tags import Derivation, DeriveSource
 
 MERGE_SHA = "0123456789abcdef0123456789abcdef01234567"
+# What `git rev-parse --verify <MERGE_SHA>^1` prints.
+FIRST_PARENT = "89abcdef0123456789abcdef0123456789abcdef"
 # The commit `last-good` names unless a test says otherwise.
 LAST_GOOD = "1" * 40
 # Where every faked pin lives; the gate reads only the value.
@@ -65,6 +67,8 @@ class Fakes:
     pull_ref_rc: int = 0
     tip: str = MERGE_SHA
     await_ci: list[tuple[int, str]] = field(default_factory=lambda: [(0, "CI green")])
+    # `tools.ci_passed` by SHA: one commit's own CI. A SHA absent here has no verdict.
+    ci_passed: dict[str, bool] = field(default_factory=dict)
     # `git diff --name-only <since>..<merge>`: its exit code and the paths it prints.
     changed: str = ""
     changed_rc: int = 0
@@ -135,8 +139,10 @@ class Fakes:
             {"id": 1, "status": "completed", "conclusion": "skipped"}
         ]
     )
-    pending_checks: Any = field(default_factory=list)
+    check_runs: Any = field(default_factory=list)
     completed_suites: Any = field(default_factory=list)
+    # The contexts master's ruleset requires, as `failing_checks.find` reads them.
+    required_contexts: Any = field(default_factory=list)
     # A ref absent here keeps an entry for every derived tag, so a test retires a tag only by saying
     # so.
     k8s_tags: dict[str, set[str] | Exception] = field(default_factory=dict)
@@ -259,8 +265,9 @@ def build_tools(f: Fakes) -> tuple[Tools, list]:
                 raise runs
             return runs
         for route, answer in (
-            ("/check-runs?", f.pending_checks),
+            ("/check-runs?", f.check_runs),
             ("/check-suites?", f.completed_suites),
+            ("/rules/branches/", f.required_contexts),
         ):
             if args[0] == "api" and route in args[1]:
                 calls.append((f"gh:{route[1:-1]}", args, kwargs))
@@ -287,6 +294,8 @@ def build_tools(f: Fakes) -> tuple[Tools, list]:
             return _cp(f.pull_ref_rc)
         if args[0] == "fetch":
             return _cp(fetch_rc())
+        if args == ("rev-parse", "--verify", f"{MERGE_SHA}^1"):
+            return _cp(0, FIRST_PARENT + "\n")
         if args == ("rev-parse", "FETCH_HEAD"):
             return _cp(0, "prhead\n")
         if args[0] == "ls-tree":
@@ -377,6 +386,10 @@ def build_tools(f: Fakes) -> tuple[Tools, list]:
         t[0] += 1.0
         return t[0]
 
+    def sleep(seconds: float) -> None:
+        t[0] += seconds
+        calls.append(("sleep", (seconds,), {}))
+
     turn_seq = _seq(f.turn, calls, "try_turn")
 
     def try_turn():
@@ -404,8 +417,9 @@ def build_tools(f: Fakes) -> tuple[Tools, list]:
             f.during_fresh()
         return f.fresh_rc
 
-    def fork(log, landing, scope_prefix, keep):
+    def fork(log, landing, scope_prefix, keep=(), start=lambda: None):
         calls.append(("fork", (log,), {}))
+        start()
         landing()
         return 4242
 
@@ -426,6 +440,7 @@ def build_tools(f: Fakes) -> tuple[Tools, list]:
         gh=gh_run,
         git=git_run,
         await_ci=await_ci,
+        ci_passed=lambda sha: f.ci_passed.get(sha),
         tested_base=lambda head: f.tested_base.get(head),
         gate=gate,
         snapshot=snapshot,
@@ -437,7 +452,7 @@ def build_tools(f: Fakes) -> tuple[Tools, list]:
         **host_fakes(f, calls),
         hostname=lambda: f.hostname,
         logger=lambda line: calls.append(("logger", (line,), {})),
-        sleep=lambda s: calls.append(("sleep", (s,), {})),
+        sleep=sleep,
         clock=clock,
     )
     return tools, calls

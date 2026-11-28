@@ -6,7 +6,7 @@ run on.
 """
 
 from jinja2 import FileSystemLoader
-from jinja2.nativetypes import NativeEnvironment
+from jinja2.nativetypes import NativeEnvironment, NativeTemplate
 
 from lib.guard_jinja_env import register_ansible_filters
 from lib.repo_paths import SHARED_TPL
@@ -31,4 +31,6 @@ def jinja_env() -> NativeEnvironment:
 
 def render_expr(expression: str, **context):
     """Render a Jinja expression through `jinja_env()`."""
-    return jinja_env().from_string(expression).render(**context)
+    template = jinja_env().from_string(expression)
+    assert isinstance(template, NativeTemplate)
+    return template.render(**context)
