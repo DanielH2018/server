@@ -5,9 +5,11 @@ The case itself runs only in CI's `host_packages` job, once per Ubuntu release.
 Run: uv run pytest scripts/validate/tests/host_cases/test_node_package_case.py
 """
 
+from types import SimpleNamespace
+
 from renderer.renderer_lib import host as host_mode
 from validate import host_package_cases
-from validate.validate_lib import case_groups, node_package_case
+from validate.validate_lib import case_groups
 from validate.validate_lib.node_package_case import (
     NODES,
     STUBBED_ONESHOTS,
@@ -79,6 +81,18 @@ def test_every_timer_a_node_ships_is_held_off():
         assert {t for t in timers if dropins.get(t) != TIMER_DROPIN} == set()
 
 
-def test_the_host_packages_job_runs_the_case():
-    runs = [run for _, run in case_groups.groups(host_package_cases.Cases)]
-    assert node_package_case.run in runs
+def test_the_host_packages_job_runs_the_case_once_per_node_in_a_group_of_its_own():
+    booted = []
+    cases = SimpleNamespace(
+        boot=lambda label, hostname: booted.append((label, hostname))
+    )
+    names = []
+    for name, run in case_groups.groups(host_package_cases.Cases):
+        if name.startswith("node_package_case"):
+            names.append(name)
+            run(cases)
+
+    assert {"names": names, "booted": booted} == {
+        "names": [f"node_package_case-{host}" for host in NODES],
+        "booted": [(f"node-{host}", host) for host in NODES],
+    }

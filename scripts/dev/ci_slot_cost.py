@@ -5,7 +5,7 @@ Run: uv run python scripts/dev/ci_slot_cost.py RUN_ID [RUN_ID ...]
      uv run python scripts/dev/ci_slot_cost.py --recent 20   # newest green master runs
      uv run python scripts/dev/ci_slot_cost.py --recent 20 --pull-requests
 
-WHY. The account runs at most 20 hosted jobs at once, and a full sweep of ci.yml asks for 23.
+WHY. The account runs at most 20 hosted jobs at once, and a full sweep of ci.yml asks for 25.
 One run's wall in isolation therefore misses what an extra job costs: every job holds a runner
 slot for its whole duration, setup included, and every other run queued behind the pool waits
 for that slot. The shard counts in ci.yml are chosen on the two numbers this prints,

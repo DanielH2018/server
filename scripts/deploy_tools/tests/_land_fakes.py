@@ -13,7 +13,7 @@ import atexit
 import contextlib
 import subprocess
 import tempfile
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
 from pathlib import Path
 from deploy_tools.promote_lib.wait import WaitResult, WaitVerdict
@@ -26,6 +26,7 @@ from _land_host_fakes import host_fakes
 from deploy_tools.land_lib.options import Options
 from deploy_tools.land_lib.land_flux import FluxReads
 from deploy_tools.land_lib.pin_reads import PinReads
+from lib.json_types import JsonValue
 from validate.cluster_pins import Pin
 from deploy_tools.land_lib.tools import Classifier, CiVerdict, Tools
 from deploy_tools.land_lib.land_tags import Derivation, DeriveSource
@@ -155,6 +156,11 @@ class Fakes:
     )
 
 
+def _page(rows: Iterable[JsonValue]) -> JsonValue:
+    """`gh api --paginate --slurp`'s answer for one page of `rows`."""
+    return [list(rows)]
+
+
 def _seq(values: list, calls: list, name: str):
     it = iter(values)
     last = values[-1]
@@ -221,7 +227,7 @@ def build_tools(f: Fakes) -> tuple[Tools, list]:
     compare_seq = _seq(f.compare, calls, "gh:compare")
     closing_refs_seq = _seq(f.closing_refs, calls, "gh:closing-refs")
 
-    def gh_json(*args, **kwargs):
+    def gh_json(*args, **kwargs) -> JsonValue:
         if args[:2] == ("api", "graphql"):
             answer = closing_refs_seq(*args, **kwargs)
             if isinstance(answer, Exception):
@@ -235,10 +241,10 @@ def build_tools(f: Fakes) -> tuple[Tools, list]:
             return f.repo
         if args[0] == "api" and args[-1].endswith("/files"):
             calls.append(("gh:files", args, kwargs))
-            return [f.pr_files]
+            return _page(f.pr_files)
         if args[0] == "api" and args[-1].endswith("/reviews"):
             calls.append(("gh:reviews", args, kwargs))
-            return [f.pr_reviews]
+            return _page(f.pr_reviews)
         if args[0] == "api" and "/compare/" in args[1]:
             answer = compare_seq(*args, **kwargs)
             if isinstance(answer, Exception):
@@ -246,7 +252,7 @@ def build_tools(f: Fakes) -> tuple[Tools, list]:
             return answer
         if args[0] == "api" and "/workflows/ci.yml/runs?head_sha=" in args[1]:
             calls.append(("gh:head-runs", args, kwargs))
-            runs = f.head_runs
+            runs: Any = f.head_runs
             if callable(runs):
                 runs = runs(args[1].split("head_sha=")[1].split("&")[0])
             if isinstance(runs, Exception):

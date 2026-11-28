@@ -12,7 +12,7 @@ Run: uv run pytest scripts/deploy_tools/tests/land_deploy/test_land_broad_log_na
 """
 
 import re
-import types
+import subprocess
 from dataclasses import replace
 
 import pytest
@@ -36,17 +36,21 @@ def _probe(argv, unhealthy: frozenset[str]):
     """`probe.py health <tag>` as the gate runs it: SKIPPED has no workload."""
     tag = argv[argv.index("health") + 1]
     if tag == SKIPPED:
-        return types.SimpleNamespace(
+        return subprocess.CompletedProcess(
+            argv,
             returncode=PROBE_NOT_APPLICABLE,
             stdout=f"{tag}: the role declares no rollout-checkable workload",
             stderr="",
         )
     if tag in unhealthy:
-        return types.SimpleNamespace(
-            returncode=1, stdout=f"{tag}: 0/1 ready — rollout incomplete", stderr=""
+        return subprocess.CompletedProcess(
+            argv,
+            returncode=1,
+            stdout=f"{tag}: 0/1 ready — rollout incomplete",
+            stderr="",
         )
-    return types.SimpleNamespace(
-        returncode=0, stdout=f"{tag}: all 1 workload healthy", stderr=""
+    return subprocess.CompletedProcess(
+        argv, returncode=0, stdout=f"{tag}: all 1 workload healthy", stderr=""
     )
 
 

@@ -8,6 +8,7 @@ Run: uv run pytest scripts/deploy_tools/tests/release/test_bundle_gates.py
 """
 
 from collections.abc import Mapping
+from collections.abc import Set as AbstractSet
 
 import pytest
 from _bundle_fixtures import bundle, route
@@ -106,7 +107,7 @@ def test_a_substituting_tag_with_no_cluster_vars_kind_is_flagged(tmp_path, input
     ]
 
 
-def _deferring(substitutes=frozenset()):
+def _deferring(substitutes: AbstractSet[str] = frozenset()):
     """bento-pdf with a deferred directory holding `${email}`: the second document of
     `flux/bento-pdf.yaml` is `bento-pdf-deferred`, judged against its own directory."""
     deferred = {"configmap.yaml": CONFIGMAP.format(value='"${email}"')}

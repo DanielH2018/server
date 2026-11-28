@@ -432,7 +432,7 @@ def test_a_host_settled_on_the_first_query_never_waits():
 def test_a_held_host_ends_deploy_failed_naming_the_clear_hold_command():
     fetch, _ = _prom(_series(sha="c" * 12, ok="0"))
     outcome, _ = _wait(_pi(), fetch, [_at(12, 0)])
-    assert (outcome.verdict, outcome.rc) == ("deploy-failed", 1)
+    assert outcome and (outcome.verdict, outcome.rc) == ("deploy-failed", 1)
     assert "daniel-pi" in outcome.detail
     assert "sudo /usr/lib/homelab/homelab-updater --clear-hold" in outcome.detail
 
@@ -440,7 +440,7 @@ def test_a_held_host_ends_deploy_failed_naming_the_clear_hold_command():
 def test_a_first_parent_with_no_enable_link_ends_deferred_naming_the_start_command():
     fetch, _ = _prom(_series(sha="c" * 12))
     outcome, sleeps = _wait(_pi(armed=False), fetch, [_at(12, 0)])
-    assert (outcome.verdict, outcome.rc) == ("deferred", 75)
+    assert outcome and (outcome.verdict, outcome.rc) == ("deferred", 75)
     assert "no timer is armed" in outcome.detail
     assert "sudo systemctl start homelab-updater.service" in outcome.detail
     assert sleeps == []
@@ -463,7 +463,7 @@ def test_a_merge_in_the_pi_quiet_hours_ends_deferred_naming_the_next_fire():
     # 22:50 is the last fire before the 23:00 to 00:59 gap, so the second fire is 01:20.
     fetch, _ = _prom(_series(sha="c" * 12))
     outcome, sleeps = _wait(_pi(), fetch, [_at(22, 55)])
-    assert (outcome.verdict, outcome.rc) == ("deferred", 75)
+    assert outcome and (outcome.verdict, outcome.rc) == ("deferred", 75)
     assert "next updater fire is at 2026-10-18 01:05 UTC" in outcome.detail
     assert sleeps == []
 
@@ -471,7 +471,7 @@ def test_a_merge_in_the_pi_quiet_hours_ends_deferred_naming_the_next_fire():
 def test_a_mid_day_merge_on_the_pi_daily_schedule_ends_deferred_naming_the_next_fire():
     fetch, _ = _prom(_series(sha="c" * 12))
     outcome, sleeps = _wait(_pi(dropin=PI_DROPIN), fetch, [_at(12, 0)])
-    assert (outcome.verdict, outcome.rc) == ("deferred", 75)
+    assert outcome and (outcome.verdict, outcome.rc) == ("deferred", 75)
     assert "next updater fire is at 2026-10-18 03:05 UTC" in outcome.detail
     assert "sudo systemctl start homelab-updater.service" in outcome.detail
     assert sleeps == []
@@ -499,7 +499,7 @@ def test_a_mid_day_merge_on_the_pi_with_its_poll_armed_waits_until_the_host_appl
 def test_a_host_unsettled_past_its_deadline_ends_deferred_with_its_last_success():
     fetch, _ = _prom(_series(sha="c" * 12, success=str(int(_at(9, 35)))))
     outcome, sleeps = _wait(_pi(), fetch, [_at(12, 0), _at(12, 30), _at(12, 32)])
-    assert (outcome.verdict, outcome.rc) == ("deferred", 75)
+    assert outcome and (outcome.verdict, outcome.rc) == ("deferred", 75)
     assert "not applied it by 2026-10-17 12:31 UTC" in outcome.detail
     assert "last update success was at 2026-10-17 09:35 UTC" in outcome.detail
     assert len(sleeps) == 2
@@ -533,6 +533,6 @@ def test_an_unknown_schedule_waits_the_full_cap_rather_than_skipping():
     target = replace(_pi(), triggers=None)
     fetch, _ = _prom(_series(sha="c" * 12))
     outcome, sleeps = _wait(target, fetch, [_at(12, 0), _at(12, 44), _at(12, 46)])
-    assert (outcome.verdict, outcome.rc) == ("deferred", 75)
+    assert outcome and (outcome.verdict, outcome.rc) == ("deferred", 75)
     assert "by 2026-10-17 12:45 UTC" in outcome.detail
     assert len(sleeps) == 2
