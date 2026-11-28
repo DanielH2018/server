@@ -20,7 +20,7 @@ def _item(
     status=None,
     state=None,
     messages=None,
-    download_id="d1",
+    download_id: str | None = "d1",
     qid=1,
     series_id=None,
     movie_id=None,

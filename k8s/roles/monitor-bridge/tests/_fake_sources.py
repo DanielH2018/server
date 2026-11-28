@@ -30,9 +30,11 @@ return values, which a fixture would have to wrap in a factory, and the name is 
 """
 
 from collections.abc import Callable
+from typing import cast
 
 from bridge.sources import Sources
 from bridge.streaks import State
+from bridge.types import JsonValue
 
 _METHODS = (
     "prom_scalar",
@@ -81,35 +83,45 @@ class FakeSources(Sources):
         """The first argument of every `method` call: the PromQL, LogQL or URL sent."""
         return [args[0] for m, args in self.calls if m == method]
 
-    def prom_scalar(self, promql):
-        return self._answer("prom_scalar", promql)
+    def prom_scalar(self, promql: str) -> float | None:
+        return cast("float | None", self._answer("prom_scalar", promql))
 
-    def prom_vector(self, promql):
-        return self._answer("prom_vector", promql)
+    def prom_vector(self, promql: str) -> list[tuple[dict[str, str], float]]:
+        return cast(
+            "list[tuple[dict[str, str], float]]", self._answer("prom_vector", promql)
+        )
 
-    def loki_count(self, selector, window):
-        return self._answer("loki_count", selector, window)
+    def loki_count(self, selector: str, window: str) -> float | None:
+        return cast("float | None", self._answer("loki_count", selector, window))
 
-    def get_json(self, url, headers=None):
+    def get_json(self, url: str, headers: dict[str, str] | None = None) -> JsonValue:
         if headers is None:
-            return self._answer("get_json", url)
-        return self._answer("get_json", url, headers=headers)
+            return cast("JsonValue", self._answer("get_json", url))
+        return cast("JsonValue", self._answer("get_json", url, headers=headers))
 
-    def get_json_cached(self, url, headers):
-        return self._answer("get_json_cached", url, headers=headers)
+    def get_json_cached(self, url: str, headers: dict[str, str]) -> JsonValue:
+        return cast("JsonValue", self._answer("get_json_cached", url, headers=headers))
 
-    def get_bytes(self, url, headers=None):
+    def get_bytes(self, url: str, headers: dict[str, str] | None = None) -> bytes:
         if headers is None:
-            return self._answer("get_bytes", url)
-        return self._answer("get_bytes", url, headers=headers)
+            return cast("bytes", self._answer("get_bytes", url))
+        return cast("bytes", self._answer("get_bytes", url, headers=headers))
 
-    def post_json(self, url, payload, headers=None):
+    def post_json(
+        self, url: str, payload: dict, headers: dict[str, str] | None = None
+    ) -> JsonValue:
         if headers is None:
-            return self._answer("post_json", url, payload)
-        return self._answer("post_json", url, payload, headers=headers)
+            return cast("JsonValue", self._answer("post_json", url, payload))
+        return cast(
+            "JsonValue", self._answer("post_json", url, payload, headers=headers)
+        )
 
-    def send(self, method, url, headers, body=None):
-        return self._answer("send", method, url, headers=headers, body=body)
+    def send(
+        self, method: str, url: str, headers: dict[str, str], body: bytes | None = None
+    ) -> bytes:
+        return cast(
+            "bytes", self._answer("send", method, url, headers=headers, body=body)
+        )
 
 
 class FakeExport:
@@ -146,11 +158,12 @@ def as_body(result):
     """A check body returning `result`, or raising it when it is an Exception."""
     if isinstance(result, Exception):
 
-        def _body(_cfg, _src):
+        def _raise(_cfg, _src):
             raise result
-    else:
 
-        def _body(_cfg, _src):
-            return result
+        return _raise
 
-    return _body
+    def _return(_cfg, _src):
+        return result
+
+    return _return

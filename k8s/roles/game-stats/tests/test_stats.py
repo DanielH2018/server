@@ -237,8 +237,10 @@ def test_a_page_whose_save_failed_counts_once_on_the_next_poll(tmp_path):
     def fetch(start_ns, end_ns, limit):
         return [e for e in log if start_ns < e[0] <= end_ns][:limit]
 
-    with stats.Store(str(tmp_path / "stats.db")) as store:
-        store.conn = _CursorWriteFailsOnce(store.conn)
+    with (
+        stats.Store(str(tmp_path / "stats.db")) as store,
+        mock.patch.object(store, "conn", _CursorWriteFailsOnce(store.conn)),
+    ):
         poll_state = stats_lib.PollState(store.load_state())
         with mock.patch("stats_lib.time.sleep", side_effect=[None, _Stop]):
             with pytest.raises(_Stop):
