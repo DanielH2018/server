@@ -364,6 +364,17 @@ def line_of(ln: Landing) -> line.Line:
     return ln.tools.line or _line(ln.tools.hostname())
 
 
+def waiting(ln: Landing) -> list[tuple[str, str]]:
+    """The PR and head of each draft standing in the line, in line order, but `ln`'s own PR.
+
+    Raises:
+        OSError: The line cannot be read.
+    """
+    rows = line_of(ln)("waiting", str(line.FRESH_S)).splitlines()
+    places = [row.split() for row in rows]
+    return [(p[0], p[1]) for p in places if len(p) == 2 and p[0] != ln.opts.pr]
+
+
 def _conflicts(ln: Landing) -> NoReturn:
     ln.die(
         f"the landing that holds the turn found PR #{ln.opts.pr}'s head conflicts with "
