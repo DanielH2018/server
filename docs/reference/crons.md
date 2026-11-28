@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/crons.py
-generated_at: 2026-11-26 06:17 UTC
-generated_sha: f2e8e29f8
+generated_at: 2026-11-28 06:17 UTC
+generated_sha: 696c721c2
 ---
 
 !!! warning "Generated file — do not edit"
@@ -12,7 +12,7 @@ generated_sha: f2e8e29f8
 
 # Scheduled jobs
 
-67 job(s) scheduled by the host packages' timers.
+68 job(s) scheduled by the host packages' timers.
 
 !!! warning "The state column is a heuristic"
     It is judged from the command text, and nothing in a unit declares its own blast radius. A job that runs a wrapper script reads as "read the script" rather than being guessed at. Treat it as a pointer, not an authority.
@@ -42,6 +42,7 @@ generated_sha: f2e8e29f8
 | homelab-claude-rc-restart.timer | `OnCalendar=weekly` | daniel-box, daniel-server (no enable link) | `root` | yes (restart) | `hosts/components/claude-code/templates/claude-rc-restart.timer.j2` |
 | homelab-claude-triage-poll.timer | `OnBootSec=5min, OnUnitActiveSec=2min` | daniel-box | `claude-triage-ctl` | read the script | `hosts/components/claude-code/templates/claude-triage-poll.timer.j2` |
 | homelab-claude-weekly-summary.timer | `OnCalendar=Mon *-*-* 09:00:00 UTC, OnActiveSec=10min` | daniel-box | `root` | read the script | `hosts/components/claude-code/units/homelab-claude-weekly-summary.timer.j2` |
+| homelab-claude-worktree-sweep.timer | `OnBootSec=1h, OnUnitActiveSec=10080min` | daniel-box, daniel-server | `claude` | read the script | `hosts/components/claude-code/templates/claude-worktree-sweep.timer.j2` |
 | homelab-crowdsec-probe.timer | `OnBootSec=1min, OnUnitActiveSec=1min` | daniel-pi | `ubuntu` | read the script | `hosts/components/crowdsec-probe/units/homelab-crowdsec-probe.timer` |
 | homelab-disk-health.timer | `OnCalendar=*:00/10` | daniel-box | `ubuntu` | read the script | `hosts/components/k3s-host-checks/units/homelab-disk-health.timer.j2` |
 | homelab-docker-engine.timer | `OnCalendar=*-*-* 00:30:00` | daniel-pi | `root` | yes (apply) | `hosts/components/pi-docker/units/homelab-docker-engine.timer` |

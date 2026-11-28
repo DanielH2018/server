@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/backlog.py
-generated_at: 2026-11-27 18:17 UTC
-generated_sha: 1e9fa52cb
+generated_at: 2026-11-28 06:17 UTC
+generated_sha: 696c721c2
 ---
 
 !!! warning "Generated file — do not edit"
@@ -17,17 +17,28 @@ Findings Claude confirmed and did not fix in the session that found them, filed 
 | # | Severity | Kind | Domain | Finding | First seen | Re-observed | Claim | Verify-by |
 |---|---|---|---|---|---|---|---|---|
 | [#10126](https://github.com/DanielH2018/server/issues/10126) | high | gap | container | k3s is the only plane on daniel-box the kernel can swap out when the Claude fleet fills memory — *no vetted remediation* | 2026-11-25 | 1 | - | ✓ |
-| [#10474](https://github.com/DanielH2018/server/issues/10474) | high | gap | backup-observability | k3s on daniel-box exits 1 with no fatal log under memory pressure, 503ing every API client | 2026-11-27 | 0 | - | - |
 | [#9667](https://github.com/DanielH2018/server/issues/9667) | medium | improvement | cicd | The landing turn takes 80% of a landing's time from arm to merge under load | 2026-11-20 | 0 | - | ✓ |
 | [#9725](https://github.com/DanielH2018/server/issues/9725) | medium | improvement | container | Roll out the kubelet's default seccomp profile to daniel-box, then census explicit Unconfined | 2026-11-21 | 0 | - | ✓ |
-| [#10119](https://github.com/DanielH2018/server/issues/10119) | medium | gap | - | k3s on daniel-box exited three times under session load on 2026-11-25, after #9060's fix — *no vetted remediation* | 2026-11-25 | 0 | claude/hungry-lewin-d348d8 | ✓ |
-| [#10140](https://github.com/DanielH2018/server/issues/10140) | medium | gap | container | daniel-pi's pacct no longer rotates since Ubuntu 26.04, and /var/log is 82% full — *no vetted remediation* | 2026-11-25 | 0 | claude/hungry-lewin-d348d8 | ✓ |
+| [#10119](https://github.com/DanielH2018/server/issues/10119) | medium | gap | - | k3s on daniel-box exited three times under session load on 2026-11-25, after #9060's fix — *no vetted remediation* | 2026-11-25 | 0 | - | ✓ |
+| [#10140](https://github.com/DanielH2018/server/issues/10140) | medium | gap | container | daniel-pi's pacct no longer rotates since Ubuntu 26.04, and /var/log is 82% full — *no vetted remediation* | 2026-11-25 | 0 | - | ✓ |
 | [#10141](https://github.com/DanielH2018/server/issues/10141) | medium | gap | container | An unattended kernel upgrade on daniel-pi saturates the SD card for 20 to 35 minutes — *no vetted remediation* | 2026-11-25 | 0 | - | ✓ |
-| [#10153](https://github.com/DanielH2018/server/issues/10153) | medium | improvement | container | willfarrell/autoheal:latest merges a digest bump almost every day — *no vetted remediation* | 2026-11-25 | 0 | claude/hungry-lewin-d348d8 | ✓ |
+| [#10153](https://github.com/DanielH2018/server/issues/10153) | medium | improvement | container | willfarrell/autoheal:latest merges a digest bump almost every day — *no vetted remediation* | 2026-11-25 | 0 | - | ✓ |
 | [#10157](https://github.com/DanielH2018/server/issues/10157) | medium | improvement | security | AIDE and rkhunter took 13 repairs in a month and still alert on benign changes — *no vetted remediation* | 2026-11-25 | 0 | - | ✓ |
 | [#10167](https://github.com/DanielH2018/server/issues/10167) | medium | gap | cicd | The offline bootstrap kit needs pydantic-core wheels for amd64 and arm64 | 2026-11-25 | 0 | - | ✓ |
 | [#10338](https://github.com/DanielH2018/server/issues/10338) | medium | gap | - | daniel-pi still resets near 06:00 after the watchdog load limits rose to 24 | 2026-11-26 | 0 | - | ✓ |
-| [#10462](https://github.com/DanielH2018/server/issues/10462) | medium | gap | backup-observability | Nothing ages Claude scratchpads and pytest trees out of daniel-box's /tmp tmpfs, which holds RAM | 2026-11-27 | 0 | - | - |
+| [#10519](https://github.com/DanielH2018/server/issues/10519) | medium | gap | backup-observability | No alert fires when k3s on daniel-box exits on its own and systemd restarts it | 2026-11-27 | 0 | - | ✓ |
+| [#10531](https://github.com/DanielH2018/server/issues/10531) | medium | gap | - | Check that Claude Duet can call a claude.ai custom connector | 2026-11-27 | 0 | - | - |
+| [#10532](https://github.com/DanielH2018/server/issues/10532) | medium | gap | backup-observability | Back up livesync-data, the encrypted vault, to the weekly B2 tier | 2026-11-27 | 0 | claude/vault-connector-coord-f23e2d | - |
+| [#10561](https://github.com/DanielH2018/server/issues/10561) | medium | feature | cicd | Landing slice 1: write a state record and a transition record for each state change | 2026-11-27 | 0 | - | ✓ |
+| [#10562](https://github.com/DanielH2018/server/issues/10562) | medium | feature | cicd | Landing slice 2: move the turn's ordering decisions into pure functions the code calls | 2026-11-27 | 0 | - | ✓ |
+| [#10564](https://github.com/DanielH2018/server/issues/10564) | medium | feature | cicd | Landing slice 3: serve the landing turn first come, first served, by ticket | 2026-11-27 | 0 | - | ✓ |
+| [#10570](https://github.com/DanielH2018/server/issues/10570) | medium | feature | cicd | Landing slice 4: replace the merge wait's loop with a state machine, by direct cutover | 2026-11-27 | 0 | - | ✓ |
+| [#10571](https://github.com/DanielH2018/server/issues/10571) | medium | feature | cicd | Landing slice 5: one schedule function owns batch formation, the serial rule and slot grants | 2026-11-27 | 0 | - | ✓ |
+| [#10573](https://github.com/DanielH2018/server/issues/10573) | medium | feature | cicd | The deploy UI shows each landing's state, queue position and progress from its state record | 2026-11-27 | 0 | - | ✓ |
+| [#10574](https://github.com/DanielH2018/server/issues/10574) | medium | improvement | cicd | The landing that holds the turn polls faster than a landing that waits | 2026-11-27 | 0 | - | ✓ |
+| [#10575](https://github.com/DanielH2018/server/issues/10575) | medium | improvement | cicd | A batch's CI run lasts as long as its one slowest job: split hooks and the host-package updater cases | 2026-11-27 | 0 | claude/landing-machine-coordinator-0cd9e6 | ✓ |
+| [#10605](https://github.com/DanielH2018/server/issues/10605) | medium | gap | cicd | A landing that holds the turn over ssh does not check its session is alive before it merges | 2026-11-28 | 0 | - | - |
+| [#10618](https://github.com/DanielH2018/server/issues/10618) | medium | gap | backup-observability | Cut livesync-data over to the longhorn class and resume livesync | 2026-11-28 | 0 | - | - |
 | [#7220](https://github.com/DanielH2018/server/issues/7220) | low | improvement | docs | Delete the lock-retired lint rule once no branch predates the G2 flip | 2026-11-05 | 0 | - | ✓ |
 | [#8080](https://github.com/DanielH2018/server/issues/8080) | low | gap | cicd | Confirm hosted Renovate regenerates actions.lock on its first Actions bump | 2026-11-12 | 0 | - | ✓ |
 | [#8193](https://github.com/DanielH2018/server/issues/8193) | low | feature | container | Turn on navidrome scrobbling and Lidarr import lists for music discovery | 2026-11-12 | 0 | - | - |
@@ -42,20 +53,20 @@ Findings Claude confirmed and did not fix in the session that found them, filed 
 | [#9390](https://github.com/DanielH2018/server/issues/9390) | low | improvement | cicd | Re-measure the share of rework that removes wrong-shape code, 30 days after the 2026-11-19 gates | 2026-11-19 | 0 | - | ✓ |
 | [#9394](https://github.com/DanielH2018/server/issues/9394) | low | improvement | cicd | Give the next multi-PR migration a retirement manifest that fails while a retired name remains | 2026-11-19 | 0 | - | ✓ |
 | [#9750](https://github.com/DanielH2018/server/issues/9750) | low | gap | backup-observability | The restore drill's Postgres check has not yet run against a live airflow-postgres-data restore | 2026-11-21 | 0 | - | ✓ |
-| [#9944](https://github.com/DanielH2018/server/issues/9944) | low | gap | cicd | GitHub REST readers left beyond the gh-quota ledger: the deploy-pipeline exporter, github-checks and renovate-notify | 2026-11-22 | 0 | claude/hungry-lewin-d348d8 | ✓ |
+| [#9944](https://github.com/DanielH2018/server/issues/9944) | low | gap | cicd | GitHub REST readers left beyond the gh-quota ledger: the deploy-pipeline exporter, github-checks and renovate-notify | 2026-11-22 | 0 | - | ✓ |
 | [#10000](https://github.com/DanielH2018/server/issues/10000) | low | improvement | backup-observability | Decide on 2026-12-06 whether user.slice gets a systemd-oomd pressure kill | 2026-11-22 | 0 | - | ✓ |
 | [#10096](https://github.com/DanielH2018/server/issues/10096) | low | - | cicd | Compare improving the renderer in place, Helm and Python builders on three roles | 2026-11-25 | 0 | - | ✓ |
 | [#10099](https://github.com/DanielH2018/server/issues/10099) | low | improvement | container | Pilot Zot as the one registry in place of three registry:3 processes | 2026-11-25 | 0 | - | ✓ |
-| [#10104](https://github.com/DanielH2018/server/issues/10104) | low | improvement | cicd | Run the nightly pytest sweep in random order | 2026-11-25 | 0 | claude/hungry-lewin-d348d8 | ✓ |
+| [#10104](https://github.com/DanielH2018/server/issues/10104) | low | improvement | cicd | Run the nightly pytest sweep in random order | 2026-11-25 | 0 | - | ✓ |
 | [#10111](https://github.com/DanielH2018/server/issues/10111) | low | improvement | - | Make the fan-out batch state a StrEnum with an exhaustive match | 2026-11-25 | 0 | - | ✓ |
 | [#10112](https://github.com/DanielH2018/server/issues/10112) | low | improvement | network | Test gluetun as the shared VPN sidecar for qbittorrent and slskd | 2026-11-25 | 0 | - | ✓ |
-| [#10113](https://github.com/DanielH2018/server/issues/10113) | low | improvement | backup-observability | Check the Airflow scheduler through the blackbox exporter | 2026-11-25 | 0 | claude/hungry-lewin-d348d8 | ✓ |
+| [#10113](https://github.com/DanielH2018/server/issues/10113) | low | improvement | backup-observability | Check the Airflow scheduler through the blackbox exporter | 2026-11-25 | 0 | - | ✓ |
 | [#10114](https://github.com/DanielH2018/server/issues/10114) | low | improvement | security | Move every in-cluster secret to native SOPS manifests, hardest three first — *no vetted remediation* | 2026-11-25 | 0 | - | ✓ |
 | [#10117](https://github.com/DanielH2018/server/issues/10117) | low | improvement | security | Pilot a ValidatingAdmissionPolicy that limits the restore drill to its own PVs and pods | 2026-11-25 | 0 | - | ✓ |
 | [#10123](https://github.com/DanielH2018/server/issues/10123) | low | gap | backup-observability | The 26.04 upgrade's *.dpkg-dist copies are unreviewed, and the ucf-dist check passes over them | 2026-11-25 | 0 | - | ✓ |
-| [#10135](https://github.com/DanielH2018/server/issues/10135) | low | improvement | cicd | Use datetime.fromisoformat for the RFC 3339 reads outside monitor-bridge | 2026-11-25 | 0 | claude/hungry-lewin-d348d8 | ✓ |
+| [#10135](https://github.com/DanielH2018/server/issues/10135) | low | improvement | cicd | Use datetime.fromisoformat for the RFC 3339 reads outside monitor-bridge | 2026-11-25 | 0 | - | ✓ |
 | [#10137](https://github.com/DanielH2018/server/issues/10137) | low | improvement | cicd | Fold fanout.py's COMMANDS and _HELP into one table | 2026-11-25 | 0 | - | ✓ |
-| [#10138](https://github.com/DanielH2018/server/issues/10138) | low | improvement | cicd | Name the fields of worktree_facts, r2_query_usage and the lander grade | 2026-11-25 | 0 | claude/hungry-lewin-d348d8 | ✓ |
+| [#10138](https://github.com/DanielH2018/server/issues/10138) | low | improvement | cicd | Name the fields of worktree_facts, r2_query_usage and the lander grade | 2026-11-25 | 0 | - | ✓ |
 | [#10150](https://github.com/DanielH2018/server/issues/10150) | low | improvement | cicd | Parse arguments outside main in eight large scripts, starting with b2_drain | 2026-11-25 | 0 | - | ✓ |
 | [#10151](https://github.com/DanielH2018/server/issues/10151) | low | improvement | cicd | Type the cc-wait probes' states as StrEnums | 2026-11-25 | 0 | - | ✓ |
 | [#10155](https://github.com/DanielH2018/server/issues/10155) | low | gap | cicd | place runs keeps a sweep-stopped row for a worktree that no longer exists — *no vetted remediation* | 2026-11-25 | 0 | - | ✓ |
@@ -65,24 +76,38 @@ Findings Claude confirmed and did not fix in the session that found them, filed 
 | [#10219](https://github.com/DanielH2018/server/issues/10219) | low | gap | docs | Find which issue changes move updated_at | 2026-11-26 | 0 | - | ✓ |
 | [#10226](https://github.com/DanielH2018/server/issues/10226) | low | improvement | cicd | affected_tests.json: measure 30 days of packed growth, and whether missing can be stored as import names — *no vetted remediation* | 2026-11-26 | 0 | - | ✓ |
 | [#10240](https://github.com/DanielH2018/server/issues/10240) | low | improvement | cicd | Eight modules still test a flag by membership in argv | 2026-11-26 | 0 | - | ✓ |
-| [#10284](https://github.com/DanielH2018/server/issues/10284) | low | improvement | cicd | Let a serial PR yield the landing turn while other landings wait in line | 2026-11-26 | 0 | - | - |
-| [#10312](https://github.com/DanielH2018/server/issues/10312) | low | improvement | container | Drop the Z replacement from four role payloads, one role per PR | 2026-11-26 | 0 | claude/hungry-lewin-d348d8 | ✓ |
-| [#10323](https://github.com/DanielH2018/server/issues/10323) | low | gap | cicd | A test run on daniel-box wrote 2,601 phantom core calls into the real gh-quota ledger directory | 2026-11-26 | 0 | claude/hungry-lewin-d348d8 | ✓ |
-| [#10369](https://github.com/DanielH2018/server/issues/10369) | low | improvement | container | Give export_verdict one owner across the configarr and janitorr health readers | 2026-11-27 | 0 | claude/hungry-lewin-d348d8 | - |
+| [#10312](https://github.com/DanielH2018/server/issues/10312) | low | improvement | container | Drop the Z replacement from four role payloads, one role per PR | 2026-11-26 | 0 | - | ✓ |
+| [#10323](https://github.com/DanielH2018/server/issues/10323) | low | gap | cicd | A test run on daniel-box wrote 2,601 phantom core calls into the real gh-quota ledger directory | 2026-11-26 | 0 | - | ✓ |
 | [#10371](https://github.com/DanielH2018/server/issues/10371) | low | improvement | security | Give the crowdsec allowlist scripts one CalledProcessError handler | 2026-11-27 | 0 | - | - |
-| [#10373](https://github.com/DanielH2018/server/issues/10373) | low | improvement | container | Merge or justify the small duplicated blocks in the arr-notification, lidarr, karakeep, sonarr and homelab-mcp roles | 2026-11-27 | 0 | claude/hungry-lewin-d348d8 | - |
 | [#10374](https://github.com/DanielH2018/server/issues/10374) | low | improvement | cicd | Decide whether a duplicated-block check joins CI, and whether the two Prometheus envelope parsers stay split | 2026-11-27 | 0 | - | - |
-| [#10383](https://github.com/DanielH2018/server/issues/10383) | low | improvement | container | Move the janitorr health reader onto the shared export_verdict | 2026-11-27 | 0 | - | - |
 | [#10386](https://github.com/DanielH2018/server/issues/10386) | low | improvement | cicd | Move prowlarr's verify Job onto flux_job_verify | 2026-11-27 | 0 | - | - |
 | [#10388](https://github.com/DanielH2018/server/issues/10388) | low | improvement | cicd | Move n8n's verify Job onto flux_job_verify | 2026-11-27 | 0 | - | - |
 | [#10389](https://github.com/DanielH2018/server/issues/10389) | low | improvement | cicd | Move registry's verify Job onto flux_job_verify | 2026-11-27 | 0 | - | - |
 | [#10390](https://github.com/DanielH2018/server/issues/10390) | low | improvement | cicd | Move the jellyfin, netpol-baseline, sonarr and tdarr verify mains onto flux_job_verify.main | 2026-11-27 | 0 | - | - |
-| [#10395](https://github.com/DanielH2018/server/issues/10395) | low | improvement | container | Merge bridge/common.py's duplicated _int and _num | 2026-11-27 | 0 | claude/hungry-lewin-d348d8 | - |
-| [#10423](https://github.com/DanielH2018/server/issues/10423) | low | gap | cicd | The revert rule's footprints_match passes a failed name that no digests.json keys | 2026-11-27 | 0 | claude/hungry-lewin-d348d8 | - |
 | [#10455](https://github.com/DanielH2018/server/issues/10455) | low | improvement | cicd | settled_reason reads the newest close reason from gh's order, not createdAt | 2026-11-27 | 0 | - | ✓ |
-| [#10457](https://github.com/DanielH2018/server/issues/10457) | low | gap | container | game-stats counts a page twice when saving it fails | 2026-11-27 | 0 | - | ✓ |
 | [#10467](https://github.com/DanielH2018/server/issues/10467) | low | improvement | container | karakeep archive pruner retries HTTP errors in its own connect loop instead of using flux_job_connect | 2026-11-27 | 0 | - | - |
 | [#10470](https://github.com/DanielH2018/server/issues/10470) | low | improvement | cicd | A landing without the turn marks its draft ready with no branch update, so its one run tests a stale master | 2026-11-27 | 0 | - | ✓ |
+| [#10511](https://github.com/DanielH2018/server/issues/10511) | low | gap | container | ical-proxy's series cap can extend a series that already ended | 2026-11-27 | 0 | - | ✓ |
+| [#10533](https://github.com/DanielH2018/server/issues/10533) | low | feature | - | Serve the vault read-only over MCP on the LAN (vault connector slice 2) | 2026-11-27 | 0 | - | - |
+| [#10534](https://github.com/DanielH2018/server/issues/10534) | low | feature | security | Put the vault MCP server behind Authelia OAuth on a public route for claude.ai (vault connector slice 3) | 2026-11-27 | 0 | - | - |
+| [#10535](https://github.com/DanielH2018/server/issues/10535) | low | feature | - | Let Claude edit vault notes through the connector, with no delete (vault connector slice 4) | 2026-11-27 | 0 | - | - |
+| [#10537](https://github.com/DanielH2018/server/issues/10537) | low | improvement | docs | Record the vault connector's design in an ADR and archive its plan (vault connector slice 5) | 2026-11-27 | 0 | - | - |
+| [#10539](https://github.com/DanielH2018/server/issues/10539) | low | improvement | - | Confirm alert_tools.sh removed the six superseded tool versions after 2026-12-03 | 2026-11-27 | 0 | - | ✓ |
+| [#10553](https://github.com/DanielH2018/server/issues/10553) | low | improvement | container | Fix the pyright errors in 30 roles' shipped files/, about five roles per PR | 2026-11-27 | 0 | - | - |
+| [#10554](https://github.com/DanielH2018/server/issues/10554) | low | improvement | cicd | Annotate the production function signatures outside tests | 2026-11-27 | 0 | - | - |
+| [#10555](https://github.com/DanielH2018/server/issues/10555) | low | gap | cicd | Gate pyright 1.1.414 standard mode in prek and CI once the count reaches zero | 2026-11-27 | 0 | - | - |
+| [#10556](https://github.com/DanielH2018/server/issues/10556) | low | improvement | cicd | Remove the type and lint exclusions a fix at the cause makes unnecessary | 2026-11-27 | 0 | - | - |
+| [#10563](https://github.com/DanielH2018/server/issues/10563) | low | gap | - | The infra map places a service on every node where a workload its name prefixes runs | 2026-11-27 | 0 | - | ✓ |
+| [#10572](https://github.com/DanielH2018/server/issues/10572) | low | feature | cicd | Landing slice 8: the post-merge phases as states, with the verdicts each may end in | 2026-11-27 | 0 | - | ✓ |
+| [#10576](https://github.com/DanielH2018/server/issues/10576) | low | feature | cicd | Landing slice 6: replay a recorded day through schedule to compare policies | 2026-11-27 | 0 | - | ✓ |
+| [#10577](https://github.com/DanielH2018/server/issues/10577) | low | feature | cicd | The deploy UI follows a change through the stages before and after its landing | 2026-11-27 | 0 | - | ✓ |
+| [#10578](https://github.com/DanielH2018/server/issues/10578) | low | feature | cicd | Landing slice 7: start the next batch's CI run before the turn frees, if the simulator shows the gain | 2026-11-27 | 0 | - | ✓ |
+| [#10591](https://github.com/DanielH2018/server/issues/10591) | low | improvement | cicd | A host-change batch run still lasts about 400 s: the host build and upgrade_path's serial chain | 2026-11-28 | 0 | - | ✓ |
+| [#10593](https://github.com/DanielH2018/server/issues/10593) | low | improvement | cicd | A stopped landing does not record who sent the signal | 2026-11-28 | 0 | - | - |
+| [#10603](https://github.com/DanielH2018/server/issues/10603) | low | improvement | cicd | Decide whether one 15-minute Alertmanager rule should hold every observability deploy's soak at 1020 s | 2026-11-28 | 0 | - | ✓ |
+| [#10609](https://github.com/DanielH2018/server/issues/10609) | low | improvement | cicd | repo_guards.py misses the renderer size ceiling and the mkdocs nav tests that failed five pr-ci-red landings | 2026-11-28 | 1 | - | ✓ |
+| [#10616](https://github.com/DanielH2018/server/issues/10616) | low | gap | cicd | test_promote_workflow_retry's unsigned-digest case flakes on SIGPIPE (exit 141) | 2026-11-28 | 0 | - | - |
+| [#10626](https://github.com/DanielH2018/server/issues/10626) | low | improvement | cicd | Record the seconds a serial PR yields the landing turn in the ledger | 2026-11-28 | 0 | - | - |
 
 ## Deferred, by date
 
@@ -90,13 +115,14 @@ Open findings carrying a Not Before date, soonest first. `findings.py next` with
 
 | Not before | State | # | Finding |
 |---|---|---|---|
-| 2026-11-28 | withheld | [#8567](https://github.com/DanielH2018/server/issues/8567) | The restore drill's 300-second probe bound may not fit a large SQLite integrity check |
-| 2026-11-28 | withheld | [#8931](https://github.com/DanielH2018/server/issues/8931) | Read the dotfiles mirror's first week of status lines after 2026-11-21 |
-| 2026-11-28 | withheld | [#10171](https://github.com/DanielH2018/server/issues/10171) | Retire the pre-move cluster/services.yml fallbacks in the render-diff gate and k8s_tags_in |
+| 2026-11-28 | date passed | [#8567](https://github.com/DanielH2018/server/issues/8567) | The restore drill's 300-second probe bound may not fit a large SQLite integrity check |
+| 2026-11-28 | date passed | [#8931](https://github.com/DanielH2018/server/issues/8931) | Read the dotfiles mirror's first week of status lines after 2026-11-21 |
+| 2026-11-28 | date passed | [#10171](https://github.com/DanielH2018/server/issues/10171) | Retire the pre-move cluster/services.yml fallbacks in the render-diff gate and k8s_tags_in |
 | 2026-11-30 | withheld | [#9667](https://github.com/DanielH2018/server/issues/9667) | The landing turn takes 80% of a landing's time from arm to merge under load |
 | 2026-11-30 | withheld | [#9725](https://github.com/DanielH2018/server/issues/9725) | Roll out the kubelet's default seccomp profile to daniel-box, then census explicit Unconfined |
 | 2026-12-03 | withheld | [#9120](https://github.com/DanielH2018/server/issues/9120) | Delete the not-before and severity label fallback once pre-merge findings.py sessions retire |
 | 2026-12-04 | withheld | [#8193](https://github.com/DanielH2018/server/issues/8193) | Turn on navidrome scrobbling and Lidarr import lists for music discovery |
+| 2026-12-04 | withheld | [#10539](https://github.com/DanielH2018/server/issues/10539) | Confirm alert_tools.sh removed the six superseded tool versions after 2026-12-03 |
 | 2026-12-06 | withheld | [#10000](https://github.com/DanielH2018/server/issues/10000) | Decide on 2026-12-06 whether user.slice gets a systemd-oomd pressure kill |
 | 2026-12-15 | withheld | [#8924](https://github.com/DanielH2018/server/issues/8924) | Grade the root CLAUDE.md pilot's notice rows from the 30 days after #8707 against G9's baseline |
 | 2026-12-15 | withheld | [#8925](https://github.com/DanielH2018/server/issues/8925) | G7 step 5: grade 50 comment-class replay rows from 2026-11-15 to 2026-12-14, and promote the class only under 20% false alarms |
@@ -112,6 +138,19 @@ Open findings with an open "blocked by" issue. `findings.py next` withholds each
 | # | Blocked by | Finding |
 |---|---|---|
 | [#8539](https://github.com/DanielH2018/server/issues/8539) | #8193 | Add Explo: ListenBrainz discovery playlists in Navidrome |
+| [#10534](https://github.com/DanielH2018/server/issues/10534) | #10533 | Put the vault MCP server behind Authelia OAuth on a public route for claude.ai (vault connector slice 3) |
+| [#10535](https://github.com/DanielH2018/server/issues/10535) | #10534 | Let Claude edit vault notes through the connector, with no delete (vault connector slice 4) |
+| [#10537](https://github.com/DanielH2018/server/issues/10537) | #10534 | Record the vault connector's design in an ADR and archive its plan (vault connector slice 5) |
+| [#10555](https://github.com/DanielH2018/server/issues/10555) | #10553 | Gate pyright 1.1.414 standard mode in prek and CI once the count reaches zero |
+| [#10556](https://github.com/DanielH2018/server/issues/10556) | #10555 | Remove the type and lint exclusions a fix at the cause makes unnecessary |
+| [#10564](https://github.com/DanielH2018/server/issues/10564) | #10562 | Landing slice 3: serve the landing turn first come, first served, by ticket |
+| [#10570](https://github.com/DanielH2018/server/issues/10570) | #10564 | Landing slice 4: replace the merge wait's loop with a state machine, by direct cutover |
+| [#10571](https://github.com/DanielH2018/server/issues/10571) | #10570 | Landing slice 5: one schedule function owns batch formation, the serial rule and slot grants |
+| [#10572](https://github.com/DanielH2018/server/issues/10572) | #10570 | Landing slice 8: the post-merge phases as states, with the verdicts each may end in |
+| [#10573](https://github.com/DanielH2018/server/issues/10573) | #10561 | The deploy UI shows each landing's state, queue position and progress from its state record |
+| [#10576](https://github.com/DanielH2018/server/issues/10576) | #10561, #10571 | Landing slice 6: replay a recorded day through schedule to compare policies |
+| [#10577](https://github.com/DanielH2018/server/issues/10577) | #10573 | The deploy UI follows a change through the stages before and after its landing |
+| [#10578](https://github.com/DanielH2018/server/issues/10578) | #10576 | Landing slice 7: start the next batch's CI run before the turn frees, if the simulator shows the gain |
 
 ## Settled findings — do not re-flag
 
@@ -326,3 +365,5 @@ Findings closed as not planned that carry neither the `accepted` nor the `refute
 | [#10101](https://github.com/DanielH2018/server/issues/10101) | low | cicd | Trial GitHub's merge queue on a throwaway organization repository | 2026-11-25 |
 | [#10115](https://github.com/DanielH2018/server/issues/10115) | low | backup-observability | Compare VictoriaMetrics with Prometheus plus Airflow rollups for long-term metrics | 2026-11-25 |
 | [#10116](https://github.com/DanielH2018/server/issues/10116) | low | backup-observability | Retire Airflow for CronJobs once VictoriaMetrics covers the metric rollups | 2026-11-25 |
+| [#10540](https://github.com/DanielH2018/server/issues/10540) | medium | cicd | Pipeline the next landing batch's CI behind the holder's | 2026-11-27 |
+| [#10542](https://github.com/DanielH2018/server/issues/10542) | medium | cicd | The landing turn serves whoever polls first, not who arrived first | 2026-11-27 |

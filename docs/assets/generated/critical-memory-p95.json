@@ -35,7 +35,7 @@
     "homelab/zigbee2mqtt/mqtt-broker-wait": 16,
     "homelab/zigbee2mqtt/zigbee2mqtt": 144,
     "observability/alertmanager/alertmanager": 64,
-    "observability/prometheus/prometheus": 2480,
+    "observability/prometheus/prometheus": 2384,
     "system-upgrade/system-upgrade-controller/system-upgrade-controller": 64
   }
 }
