@@ -12,7 +12,10 @@ preinst requires, and:
     by-hand case does, so `homelab-secrets` decrypts and reconcile can run;
   * seeds the host state a container lacks (`seed_node_host`);
   * installs homelab-tools, homelab-updater and the sealed package with apt, which pulls the
-    package's `Depends` from the release's archive, and joins the reconcile the postinst queued;
+    package's `Depends` from the release's archive, and joins the reconcile the postinst queued.
+    Every apt call skips Recommends, as the updater does (`hosts/lib/homelab-updater:INSTALL`):
+    each Depends a host gains after its bootstrap arrives that way, so a unit that needs a
+    Recommends fails here as it would on that host;
   * waits SETTLE_SECONDS, then asserts no unit is failed and no service has restarted itself.
     A long-running service's start returns once it forks, so one that crashes a second later,
     or loops through `Restart=` without reaching its start limit, shows only after the wait.
@@ -44,8 +47,10 @@ from validate.validate_lib.secrets_case import seal_host
 
 NODES = ("daniel-server", "daniel-box")
 NAME = "install {host}'s real package, and no unit fails"
-# claude-agent-home runs openssh-client's ssh-keygen.
-SERVER_PACKAGES = ("netplan.io", "nftables", "openssh-client")
+# claude-agent-home runs openssh-client's ssh-keygen, and claude-agent-setup's `loginctl` needs
+# logind, which needs dbus.
+SERVER_PACKAGES = ("netplan.io", "nftables", "openssh-client", "dbus", "libpam-systemd")
+APT_INSTALL = "apt-get install -y --no-install-recommends"
 # The operator's per-user tools, which the dotfiles repo installs and the package does not.
 DOTFILES_TOOLS = ("/home/ubuntu/.local/bin/uv", "/home/ubuntu/.local/bin/claude")
 EXIT_0 = "#!/bin/sh\nexit 0\n"
@@ -161,7 +166,7 @@ def seed_node_host(c: Container, dropins: dict[str, str]) -> None:
     the agent's clones in AGENT_CLONES, and `dropins`, from `case_dropins`.
     """
     c.ok(
-        "DEBIAN_FRONTEND=noninteractive apt-get install -y"
+        f"DEBIAN_FRONTEND=noninteractive {APT_INSTALL}"
         f" {' '.join(SERVER_PACKAGES)} < /dev/null"
     )
     seed_pi_host(c)
@@ -218,13 +223,14 @@ def _install(cases, c, host: str, seal_and_build=_seal_and_build) -> None:
         package, debs = seal_and_build(cases, c, host)
     # The Depends are fetched while names still resolve; the seed takes resolv.conf away.
     with _timed(cases, "download"):
-        c.ok(f"apt-get install -y --download-only {debs} < /dev/null")
+        c.ok(f"{APT_INSTALL} --download-only {debs} < /dev/null")
     with _timed(cases, "seed"):
         seed_node_host(c, case_dropins(package))
     # A shell timeout under the exec's own, so a hung step still returns what it printed.
     with _timed(cases, "apt install"):
         c.ok(
-            f"DEBIAN_FRONTEND=noninteractive timeout {STEP_SECONDS} apt-get install -y {debs} < /dev/null"
+            f"DEBIAN_FRONTEND=noninteractive timeout {STEP_SECONDS} {APT_INSTALL} {debs}"
+            " < /dev/null"
         )
     # Joins the reconcile the postinst queued, and returns once it ends.
     with _timed(cases, "reconcile"):

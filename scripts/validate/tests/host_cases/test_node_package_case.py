@@ -135,3 +135,21 @@ def test_run_times_the_boot_and_the_removal_the_install_does_not():
     run_node_case(cases, "daniel-box")
 
     assert set(cases.case_seconds) == {"boot", "mask gettys", "remove"}
+
+
+def test_every_apt_install_skips_recommends_as_the_updater_does():
+    commands = []
+
+    def ok(command):
+        commands.append(command)
+        return ""
+
+    c = SimpleNamespace(name="node-daniel-box", ok=ok, sh=lambda command: None)
+    cases = SimpleNamespace(case_seconds={})
+    package = SimpleNamespace(units=lambda: [], enable_links=lambda: [])
+
+    _install(cases, c, "daniel-box", lambda *_: (package, "/srv/debs/a.deb"))
+
+    installs = [command for command in commands if "apt-get install" in command]
+    assert len(installs) == 3, installs
+    assert [i for i in installs if "--no-install-recommends" not in i] == []

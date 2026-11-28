@@ -354,8 +354,18 @@ plus about 10 s.
 10 to 13 s. The 330 s target needs the node case shortened, or the cases legs started before
 `host_packages_build` ends ([#10644](https://github.com/DanielH2018/server/issues/10644)).
 `node_package_case` times each install step into `case_seconds`, so its `[DONE]` line names
-the three slowest steps with their seconds; the next host-change run's log says which step to
-shorten.
+the three slowest steps with their seconds.
+
+**The node case's `apt install` installed Recommends the hosts' updater skips.** On run
+46148951366, `apt install` took 140 s of `node_package_case-daniel-server`'s 208 s. The case
+installed each Depends with its Recommends, while `hosts/lib/homelab-updater` installs with
+`--no-install-recommends`. On 26.04, Recommends double daniel-server's install, from about
+580 MiB to 1,210 MiB, mostly the GTK, Mesa and `gstreamer1.0` stack under `virtinst` and
+`qemu-system-x86`. They add about 300 MiB to daniel-box's 870 MiB. Every apt call in the case
+skips Recommends, and the test image pre-downloads the nodes' Depends the same way. The
+case seeds `dbus` and `libpam-systemd`, which every Ubuntu server has and the minimal image
+lacks, because `claude-agent-setup` runs `loginctl`. The saving is a projection from the
+installed sizes; the next host-change run's `[DONE]` lines measure it.
 
 The split adds one runner's setup to each job. A run with no host change gains one job and
 about 35 runner-seconds. A run with a host change gains two jobs and about 120
