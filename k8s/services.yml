@@ -270,6 +270,7 @@ containers_list:
     metrics:
       - job: navidrome
   - name: livesync
+    weekly_backup_claims: {livesync-data: 0}  # Sun
     hostname: "livesync"
     probe: false  # blackbox-extra's http_401 target covers it
     port: 5984

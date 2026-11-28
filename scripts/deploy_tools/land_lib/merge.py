@@ -270,7 +270,9 @@ def _start_run(
     A head with no CI run that ran jobs, or whose only such runs were cancelled beside a
     draft run (`stall.ready_run_on`), takes the landing turn first (`turn.py`), so that the
     run it is about to get tests the master its merge lands on. A draft stands in the line
-    for the turn while it waits (`line.py`). With the turn, the PR's branch is updated from
+    for the turn while it waits (`line.py`), and again through a step out of the turn, so the
+    PR is read again after either: a PR the holder merged from the line is left as it is.
+    With the turn, the PR's branch is updated from
     master when master is ahead of it, and only then is a draft marked ready, because a
     draft's run runs no job and a draft cannot merge. GitHub builds the tree a pull-request
     run tests when the PR's branch is pushed. A ready flip does not build it again, so a run
@@ -292,18 +294,20 @@ def _start_run(
         landing holds the turn; and the seconds it waited for it.
     """
 
-    in_turn, queued = False, 0
-    # Read again after a wait in line, because the PR may have moved during it.
+    in_turn, queued, asked = False, 0, False
+    # Read again after a wait in line, because the PR may have moved during it. A step out of
+    # the turn waits in line too, and the holder may merge the PR then.
     while True:
         view = ln.view("isDraft,state,mergeable,headRefOid")
         head = view.get("headRefOid") or ""
         if view.get("state") != "OPEN" or not head:
             return "", in_turn, queued
         untested = rejoined or not stall.ready_run_on(ln, head)
-        if not untested or in_turn or queued:
+        if not untested or asked:
             break
         in_turn, queued = ask(head, view.get("isDraft") is True)
-        if not queued:
+        asked = True
+        if not (queued or ln.turn_interrupted):
             break
     draft = view.get("isDraft") is True
     if (
