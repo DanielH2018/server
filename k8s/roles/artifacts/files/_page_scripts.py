@@ -77,10 +77,10 @@ small{font-size:13px;margin-left:6px;vertical-align:3px;color:#f9e2af}small.soon
 })();
 """
 
-# Lists the page's h2/h3 headings in a panel on the left, with each slice's status and a mark on
-# each section changed since the reader last scrolled to it, and puts a copy-link button beside a
-# hovered heading. A page with fewer than three headings, or with data-outline="off" on <html>
-# or <body>, gets none of it.
+# Lists the page's h2/h3 headings in a panel on the left, each h2 folding the h3s under it, with
+# each slice's status and a mark on each section changed since the reader last scrolled to it,
+# and puts a copy-link button beside a hovered heading. A page with fewer than three headings,
+# or with data-outline="off" on <html> or <body>, gets none of it.
 OUTLINE_JS = r"""(() => {
   const MIN_HEADINGS = 3, PANEL_ROOM = 268, KEY = "artifact-outline";
   const SEEN_KEY = "artifact-seen:" + location.pathname;
@@ -140,10 +140,25 @@ OUTLINE_JS = r"""(() => {
   const root = box.attachShadow({mode: "closed"});
   root.innerHTML = `<style>
 :host{position:fixed;top:12px;left:12px;z-index:2147483646;font:13px/1.4 system-ui,sans-serif}
-button{font:inherit;padding:6px 12px;border-radius:999px;border:1px solid #45475a;
-  background:#1e1e2ee6;color:#a6adc8;box-shadow:0 1px 4px #0004;cursor:pointer}
-button:hover{color:#cdd6f4}
+button{font:inherit;cursor:pointer}
+#toggle{padding:6px 12px;border-radius:999px;border:1px solid #45475a;
+  background:#1e1e2ee6;color:#a6adc8;box-shadow:0 1px 4px #0004}
+#toggle:hover{color:#cdd6f4}
 button:focus-visible,a:focus-visible{outline:2px solid #cba6f7;outline-offset:2px}
+.all{display:block;margin:0 14px 6px auto;padding:2px 0;border:0;background:none;color:#6c7086;
+  font-size:12px}
+.all:hover{color:#cdd6f4}
+.row{display:flex;align-items:baseline}
+.row>a{flex:1;min-width:0}
+.fold,.gap{flex:none;width:18px;margin-left:6px}
+.fold{padding:0;border:0;background:none;color:#6c7086;line-height:1}
+.fold:hover{color:#cdd6f4}
+.fold::before{content:"▾";display:inline-block;transition:transform .12s}
+li.shut>.row>.fold::before{transform:rotate(-90deg)}
+li.shut>ol{display:none}
+.row>a{padding-left:0}
+.kids-new{display:none}
+li.shut .kids-new{display:block}
 .count{color:#89b4fa}
 nav{position:fixed;top:52px;left:12px;bottom:12px;width:232px;overflow-y:auto;padding:8px 0;
   border:1px solid #45475a;border-radius:8px;background:#181825f2;box-shadow:0 2px 8px #0006}
@@ -151,43 +166,105 @@ nav[hidden]{display:none}
 ol{list-style:none;margin:0;padding:0}
 a{display:flex;align-items:baseline;gap:6px;padding:4px 14px;color:#a6adc8;text-decoration:none}
 a:hover{color:#cdd6f4;background:#313244}
-a.h3{padding-left:28px;font-size:12px;color:#6c7086}
+a.h3{padding-left:38px;font-size:12px;color:#6c7086}
 a.on{color:#cba6f7;font-weight:600}
 .text{flex:1}
 .slice,.new{flex:none;width:7px;height:7px;border-radius:50%;align-self:center}
 .slice.planned{background:#6c7086}.slice.active{background:#f9e2af}.slice.done{background:#a6e3a1}
 .new{background:#89b4fa}
 @media print{:host{display:none}}
-</style><button type="button" aria-controls="panel"></button>
-<nav id="panel" aria-label="Contents"><ol></ol></nav>`;
-  const toggle = root.querySelector("button"), panel = root.querySelector("nav");
-  const list = root.querySelector("ol");
+</style><button id="toggle" type="button" aria-controls="panel"></button>
+<nav id="panel" aria-label="Contents"><button class="all" type="button" hidden></button><ol></ol></nav>`;
+  const toggle = root.querySelector("#toggle"), panel = root.querySelector("nav");
+  const list = root.querySelector("ol"), all = root.querySelector(".all");
+  const dot = (cls, title) => {
+    const span = document.createElement("span");
+    span.className = cls;
+    span.title = title;
+    return span;
+  };
+  // Each h2 owns the h3s up to the next h2; an h3 before the first h2 stands alone.
+  let lastH2 = -1;
+  const owner = heads.map((h, i) => (h.tagName === "H2" ? (lastH2 = i, -1) : lastH2));
+  const groups = new Map();  // h2 index -> {li, sub, fold, kidsNew}
   const links = heads.map((h, i) => {
     const a = document.createElement("a");
     a.href = "#" + h.id;
-    if (h.tagName === "H3") a.className = "h3";
     const status = sliceStatus(h);
-    if (status) {
-      const dot = document.createElement("span");
-      dot.className = "slice " + status;
-      dot.title = SLICE_LABELS[status];
-      a.append(dot);
-    }
+    if (status) a.append(dot("slice " + status, SLICE_LABELS[status]));
     const text = document.createElement("span");
     text.className = "text";
     text.textContent = label(h);
     a.append(text);
-    if (changed[i]) {
-      const dot = document.createElement("span");
-      dot.className = "new";
-      dot.title = "Changed since you last read it";
-      a.append(dot);
-    }
+    if (changed[i]) a.append(dot("new", "Changed since you last read it"));
     const li = document.createElement("li");
-    li.append(a);
+    if (owner[i] >= 0) {
+      a.className = "h3";
+      li.append(a);
+      const group = groups.get(owner[i]);
+      if (!group.sub) {
+        group.sub = document.createElement("ol");
+        group.li.append(group.sub);
+        group.fold = document.createElement("button");
+        group.fold.type = "button";
+        group.fold.className = "fold";
+        group.li.querySelector(".gap").replaceWith(group.fold);
+      }
+      group.sub.append(li);
+      if (changed[i] && !group.kidsNew) {
+        group.kidsNew = dot("new kids-new", "A subsection changed since you last read it");
+        group.li.querySelector(".row > a").append(group.kidsNew);
+      }
+      return a;
+    }
+    const row = document.createElement("div");
+    row.className = "row";
+    const gap = document.createElement("span");
+    gap.className = "gap";
+    row.append(gap, a);
+    li.append(row);
     list.append(li);
+    if (h.tagName === "H2") groups.set(i, {li, sub: null, fold: null, kidsNew: null});
     return a;
   });
+  const folds = [...groups].filter(([, g]) => g.fold);
+
+  const FOLD_KEY = "artifact-outline-shut:" + location.pathname;
+  const shut = new Set(read(FOLD_KEY, []));
+  const isShut = i => groups.get(i)?.li.classList.contains("shut") ?? false;
+  const setShut = (i, closed) => {
+    const g = groups.get(i);
+    g.li.classList.toggle("shut", closed);
+    g.fold.setAttribute("aria-expanded", String(!closed));
+    g.fold.setAttribute("aria-label", (closed ? "Expand " : "Collapse ") + label(heads[i]));
+    g.fold.title = closed ? "Show its subsections" : "Hide its subsections";
+    if (closed) shut.add(heads[i].id); else shut.delete(heads[i].id);
+  };
+  const drawAll = () => {
+    const anyOpen = folds.some(([i]) => !isShut(i));
+    all.textContent = anyOpen ? "Collapse all" : "Expand all";
+  };
+  const saveFolds = () => { write(FOLD_KEY, [...shut]); drawAll(); };
+  folds.forEach(([i, g]) => {
+    setShut(i, shut.has(heads[i].id));
+    g.fold.addEventListener("click", () => {
+      setShut(i, !isShut(i));
+      saveFolds();
+      current = -1;
+      mark();
+    });
+  });
+  if (folds.length) {
+    all.hidden = false;
+    all.addEventListener("click", () => {
+      const close = folds.some(([i]) => !isShut(i));
+      folds.forEach(([i]) => setShut(i, close));
+      saveFolds();
+      current = -1;
+      mark();
+    });
+    drawAll();
+  }
   const changes = changed.filter(Boolean).length;
   toggle.textContent = "Contents";
   if (changes) {
@@ -224,24 +301,25 @@ a.on{color:#cba6f7;font-weight:600}
     if (e.key === "Escape" && !panel.hidden && !roomy()) show(false);
   });
 
-  let current = -1, queued = false;
-  const mark = () => {
+  let current = -1, lit = null, queued = false;
+  function mark() {
     queued = false;
     let i = 0;
     heads.forEach((h, k) => { if (h.getBoundingClientRect().top <= 96) i = k; });
     if (innerHeight + scrollY >= document.documentElement.scrollHeight - 2) i = heads.length - 1;
     if (i === current) return;
-    if (current >= 0) links[current].classList.remove("on");
-    links[i].classList.add("on");
     current = i;
+    const a = links[owner[i] >= 0 && isShut(owner[i]) ? owner[i] : i];
+    if (lit) lit.classList.remove("on");
+    a.classList.add("on");
+    lit = a;
     if (record[heads[i].id] !== hashes[i]) {
       record[heads[i].id] = hashes[i];
       write(SEEN_KEY, record);
     }
-    const a = links[i];
     if (a.offsetTop < panel.scrollTop || a.offsetTop + a.offsetHeight > panel.scrollTop + panel.clientHeight)
       panel.scrollTop = a.offsetTop - panel.clientHeight / 2;
-  };
+  }
 
   const pin = document.createElement("div");
   const pinRoot = pin.attachShadow({mode: "closed"});
