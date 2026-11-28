@@ -76,7 +76,10 @@ LOCK = LOCK_DIR / "homelab-land-turn.lock"
 
 # How long a landing on another host waits for `TURN_HOST` to give up the lock it released.
 _SSH_EXIT_S = 10
-# Seconds between the heartbeats of a lock held over ssh; three missed ones free the lock.
+# DECIDED: 5.0 s, three missed heartbeats free an ssh-held lock (operator, 2026-11-28). A landing
+# on another host that stays alive but silent that long (a stopped process, or a network stall
+# between the hosts) loses its lock unaware, so a second landing can take the turn. The turn is
+# not a safety gate: the merge keeps its head-SHA pin and its stale_base check.
 HEARTBEAT_S = 5.0
 
 
