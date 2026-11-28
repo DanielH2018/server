@@ -134,11 +134,6 @@ OVER_DERIVED_TRAEFIK_EDGE = {
         "at 0, so the entry's hostname derives an edge no rendered manifest needs until the "
         "route comes back"
     ),
-    "vault-mcp": (
-        "its entry declares the traefik edge ahead of the public route PR #10685 adds, because "
-        "render-diff arm 2 refuses an edge that lands beside a change to the same tag. "
-        "PR #10685 removes this entry once vault-mcp renders its route"
-    ),
 }
 
 

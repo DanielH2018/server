@@ -562,7 +562,7 @@ containers_list:
   - name: vault-mcp
     # The vault claim holds the decrypted vault; both rebuild from livesync's CouchDB.
     no_backup_claims: [vault-mcp-vault, vault-mcp-db]
-    depends_on: [livesync, traefik]  # the pod reads livesync's Secret; traefik routes it
+    depends_on: [livesync]  # the pod reads livesync's Secret
     port: 8000
     hostname: "vault-mcp"
     probe: false  # blackbox-extra's http_401 target covers it
