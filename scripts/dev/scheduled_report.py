@@ -113,7 +113,7 @@ def report(
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = ArgumentParser(description=__doc__.splitlines()[0])
+    parser = ArgumentParser(description=(__doc__ or "").partition("\n")[0])
     parser.add_argument("--workflow", required=True, choices=sorted(REPORTS))
     parser.add_argument("--repo", required=True)
     parser.add_argument("--result", required=True)

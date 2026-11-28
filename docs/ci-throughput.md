@@ -380,7 +380,10 @@ measurements stand behind the ruling:
   for a PR opened ready.
 
 The cost is the one this phase accepted when it gave each PR one run: the author of a draft
-gets no hosted verdict until the landing. With `LAND_BATCH=0` a landing forms no batch.
+gets no hosted verdict until the landing. A `prek`-only check on drafts would have caught
+none of the red landings of 2026-11-27
+([Landing speed](landing-speed.md#a-check-on-drafts-before-the-landing)).
+With `LAND_BATCH=0` a landing forms no batch.
 Its draft still stands in the line, so another landing can stack it.
 
 Who opens a draft, and what lands it:

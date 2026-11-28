@@ -80,7 +80,7 @@ def test_a_server_lander_batch_shows_the_landers_verdict(lander, state, shown):
     assert run.host_calls[1][0] == LANDS
 
 
-def _pass(tmp_path, ran_as="newest", unit="inactive", record=None, **pr) -> str:
+def _pass(tmp_path, ran_as="newest", unit="inactive", record=None, pr=None) -> str:
     """The lander's reply for PR 1500 with no landing log: what a real pass printed about it.
 
     Args:
@@ -88,11 +88,11 @@ def _pass(tmp_path, ran_as="newest", unit="inactive", record=None, **pr) -> str:
         ran_as: the invocation id the pass's lines carry; the unit's own is `newest`.
         unit: the lander unit's ActiveState.
         record: what the batch's review record differs in from one the lander accepts.
-        **pr: what the PR differs in from one the lander would land.
+        pr: what the PR differs in from one the lander would land.
     """
     landings = _Landings(
         [_record(1500, batch="b", **(record or {}))],
-        [_pr(1500, headRefName=B.branch, **pr)],
+        [_pr(1500, headRefName=B.branch, **(pr or {}))],
     )
     landings.run(tmp_path, dry_run=True)
     entries = "\n".join(
@@ -134,7 +134,7 @@ def _collect(
 
 
 def test_a_pr_the_lander_holds_for_a_person_reads_as_the_coordinators(tmp_path):
-    row, tier = _collect(_pass(tmp_path, **SURFACE))
+    row, tier = _collect(_pass(tmp_path, pr=SURFACE))
     assert (row["state"], tier) == (NEEDS_INPUT, FANOUT_PLACE_FAILED)
     assert (
         f"needs input: {HELD}. Its ruling: it changes the lander's own" in row["line"]
@@ -142,25 +142,25 @@ def test_a_pr_the_lander_holds_for_a_person_reads_as_the_coordinators(tmp_path):
 
 
 def test_a_ruling_the_lander_clears_itself_still_reads_as_awaiting(tmp_path):
-    row, tier = _collect(_pass(tmp_path, isDraft=True))
+    row, tier = _collect(_pass(tmp_path, pr={"isDraft": True}))
     assert (row["state"], tier) == ("done", FANOUT_PLACE_OK)
     assert f"done ({AWAITING_LANDER}: the PR is a draft)" in row["line"]
     assert row["awaiting_lander"] is True
 
 
 @pytest.mark.parametrize(
-    ("ruled", "step"),
+    ("pr", "record", "step"),
     [
-        ({"headRefOid": "b" * 40}, "read the commits pushed since the review"),
-        ({"record": {"ci_gate": "failed: pytest"}}, "read its PR's checks"),
-        ({"record": {"review_error": "timed out"}}, "review its diff"),
+        ({"headRefOid": "b" * 40}, None, "read the commits pushed since the review"),
+        (None, {"ci_gate": "failed: pytest"}, "read its PR's checks"),
+        (None, {"review_error": "timed out"}, "review its diff"),
     ],
     ids=["the-head-moved", "the-ci-gate-did-not-pass", "the-review-did-not-complete"],
 )
 def test_a_ruling_the_lander_repeats_every_pass_reads_as_the_coordinators(
-    tmp_path, ruled, step
+    tmp_path, pr, record, step
 ):
-    row, tier = _collect(_pass(tmp_path, **ruled))
+    row, tier = _collect(_pass(tmp_path, record=record, pr=pr))
     assert (row["state"], tier) == (NEEDS_INPUT, FANOUT_PLACE_FAILED)
     assert f"the server lander will not land #1500; {step}" in row["line"]
     assert row["awaiting_lander"] is False
@@ -201,7 +201,7 @@ def test_a_wait_past_the_bound_stays_open_while_github_cannot_be_asked():
 
 
 def test_a_landing_log_outranks_the_ruling(tmp_path):
-    ruling = _pass(tmp_path, **SURFACE).removeprefix("=== 1500\n")
+    ruling = _pass(tmp_path, pr=SURFACE).removeprefix("=== 1500\n")
     row, _tier = _collect(_log("settled", 0), ruling)
     assert row["state"] == "landed"
 
@@ -215,14 +215,14 @@ def test_a_ruling_from_an_earlier_pass_holds_only_while_the_newest_runs(
     tmp_path, unit, state
 ):
     """A PR the newest pass did not name has merged or closed, unless that pass is not done."""
-    row, _tier = _collect(_pass(tmp_path, ran_as="earlier", unit=unit, **SURFACE))
+    row, _tier = _collect(_pass(tmp_path, ran_as="earlier", unit=unit, pr=SURFACE))
     assert row["state"] == state
 
 
 def test_the_wait_probe_wakes_on_a_pr_the_lander_holds(tmp_path):
     save(Manifest("20260101T000010Z", "o", [B]), root=tmp_path / "runs")
     tools, run = fake_tools(branch_prs={B.branch: [PR]})
-    run.answers_by_call = [ok(STOPPED_AT_ITS_PR), ok(_pass(tmp_path, **SURFACE))]
+    run.answers_by_call = [ok(STOPPED_AT_ITS_PR), ok(_pass(tmp_path, pr=SURFACE))]
 
     def status(run_id):
         root = ["--manifest-root", str(tmp_path / "runs")]
@@ -253,7 +253,7 @@ def test_the_wait_probe_stays_open_while_the_runs_last_batch_awaits_the_lander(
 def test_runs_shows_a_pr_the_lander_holds_in_place_of_standing(tmp_path, capsys):
     save(Manifest("20260101T000010Z", "o", [B]), root=tmp_path / "runs")
     tools, run = fake_tools()
-    run.answers_by_call = [ok(STOPPED_AT_ITS_PR), ok(_pass(tmp_path, **SURFACE))]
+    run.answers_by_call = [ok(STOPPED_AT_ITS_PR), ok(_pass(tmp_path, pr=SURFACE))]
     assert main(["runs", "--manifest-root", str(tmp_path / "runs")], tools) == 0
     count, _run, batch = capsys.readouterr().out.splitlines()
     assert count == "1 needs-input"

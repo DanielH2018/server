@@ -151,7 +151,7 @@ def fake_tools(
             )
         return subprocess.CompletedProcess(argv, findings_exit, stdout="", stderr="")
 
-    def open_pr_files(repo: str, complete=()):
+    def open_pr_files(repo: str, complete=()) -> dict[str, frozenset[str]] | None:
         if open_prs is None:
             return None
         edited = open_prs if isinstance(open_prs, dict) else dict.fromkeys(open_prs, ())

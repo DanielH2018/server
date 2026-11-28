@@ -48,7 +48,7 @@ _HELP = {
 def _parser() -> argparse.ArgumentParser:
     p = ArgumentParser(
         prog="fanout.py",
-        description=__doc__.splitlines()[0],
+        description=(__doc__ or "").partition("\n")[0],
         allow_abbrev=False,
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="\n".join(f"  {name:<13}{text}" for name, text in _HELP.items()),

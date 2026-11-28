@@ -58,7 +58,7 @@ def _unescape(text: str) -> str:
     if "\\" not in text:
         return text
 
-    def one(match: re.Match) -> bytes:
+    def one(match: re.Match[str]) -> bytes:
         body = match.group(1)
         if body[0] in "01234567":
             return bytes([int(body, 8) & 0xFF])

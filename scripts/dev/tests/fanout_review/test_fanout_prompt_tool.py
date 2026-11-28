@@ -39,8 +39,11 @@ def test_every_review_pipeline_phase_names_the_prompt_tool(tmp_path):
 def test_a_plain_batch_names_the_shim_under_its_own_users_home():
     dotfiles = Target("DanielH2018/dotfiles", "/c", "origin/main")
     for target in (None, dotfiles):
-        args = ("b",) if target is None else ("b", target)
-        cmd = systemd_run_command(*args, home="/var/lib/claude")
+        cmd = (
+            systemd_run_command("b", home="/var/lib/claude")
+            if target is None
+            else systemd_run_command("b", target, home="/var/lib/claude")
+        )
         argv = shlex.split(cmd.split("; then ", 1)[1].split(" ; else ", 1)[0])
         assert argv[argv.index("--permission-prompt-tool") + 1] == PROMPT_TOOL
         server = _mcp_config(argv)["mcpServers"]["claude-guard"]

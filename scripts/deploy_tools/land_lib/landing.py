@@ -115,6 +115,9 @@ class Landing:
         # Set once a wait stepped out of the turn, because master may have moved; the merge wait
         # clears it.
         self.turn_interrupted = False
+        # The head its landing stands in the line with while it waits for the turn; "" once the
+        # PR is marked ready, or for a head that is no draft.
+        self.line_head = ""
         self.hand_over_turn: Callable[[str], None] | None = None
         # The head `changed_paths` last read the PR's file list at, and that list.
         self._changed: tuple[str, tuple[str, ...]] | None = None

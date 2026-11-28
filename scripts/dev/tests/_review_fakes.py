@@ -83,7 +83,9 @@ class FakeRunner:
         self.land_out = ""
         self.waits = [0]
         self.ci_calls = []
-        self.ci = [(0, "WAIT: passed abcd1234: 20 check runs passed\n")]
+        self.ci: list[tuple[int, str]] = [
+            (0, "WAIT: passed abcd1234: 20 check runs passed\n")
+        ]
         self.rollup = []
         self.job_logs = {}
         self.draft = False
@@ -96,7 +98,7 @@ class FakeRunner:
         # Every `gh pr ready`, run-id read and `cc-wait gh-ci` call, in the order they ran.
         self.log = []
         self.pr_fields = {}
-        self.pr_fields_fixed = None
+        self.pr_fields_fixed: dict | None = None
         # The files `git merge-tree` names as conflicting with the base; none merges clean.
         self.conflicts = []
         # Whether the `conflict` resume pushed the head it left in the worktree.

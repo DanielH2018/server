@@ -54,11 +54,11 @@ import subprocess
 import sys
 import urllib.request
 from collections.abc import Callable
-from typing import Any
 from pathlib import Path
 
 from lib.cli_help import ArgumentParser
 from lib.git import git
+from lib.json_types import JsonValue, as_list, as_object, as_object_list
 from lib.tree_stack import Conflict, stack
 
 from lib import host_modules  # noqa: F401
@@ -86,9 +86,18 @@ _OBJECT_ID = re.compile(r"[0-9a-f]{40}([0-9a-f]{24})?")
 _TIMEOUT_S = 20
 _FETCH_TIMEOUT_S = 120
 
-Rows = list[dict[str, Any]]
-Get = Callable[[str], Rows]
+Get = Callable[[str], JsonValue]
 Post = Callable[[str, dict[str, str]], None]
+
+
+def _sha(entry: JsonValue, what: str) -> str:
+    """The `sha` field of the JSON object `entry`, or ValueError naming `what`."""
+    sha = as_object(entry, what)["sha"]
+    if not isinstance(sha, str):
+        raise ValueError(
+            f"{what}.sha: expected a JSON string, got {type(sha).__name__}"
+        )
+    return sha
 
 
 def _is_recorded_run(status: CommitStatus, repo: str, tree: str | None) -> bool:
@@ -120,15 +129,19 @@ def tested_run(get: Get, repo: str, sha: str, tree: str) -> tuple[str, str]:
     if not (_OBJECT_ID.fullmatch(sha) and _OBJECT_ID.fullmatch(tree)):
         return "", "the commit or its tree id is unreadable"
     try:
-        pulls = get(f"repos/{repo}/commits/{sha}/pulls")
+        pulls = as_object_list(get(f"repos/{repo}/commits/{sha}/pulls"), "pulls")
         # Only a PR this commit IS the merge of counts; a PR that merely contains it tested another
         # tree.
-        heads = [p["head"]["sha"] for p in pulls if p.get("merge_commit_sha") == sha]
+        heads = [
+            _sha(p["head"], "pull.head")
+            for p in pulls
+            if p.get("merge_commit_sha") == sha
+        ]
         if not heads:
             return "", "no pull request merged as this commit"
         for head in heads:
             statuses = get(f"repos/{repo}/commits/{head}/statuses?per_page=100")
-            for status in parse_commit_statuses(statuses):
+            for status in parse_commit_statuses(as_object_list(statuses, "statuses")):
                 if _is_recorded_run(status, repo, tree):
                     return (
                         status.target_url,
@@ -162,9 +175,9 @@ def green_base(get: Get, repo: str, sha: str) -> tuple[str, str]:
     try:
         listed = get(f"repos/{repo}/commits?sha={sha}&per_page={MAX_BASE_WALK + 1}")
         first_parent = {
-            commit["sha"]: commit["parents"][0]["sha"]
-            for commit in listed
-            if commit.get("parents")
+            _sha(commit, "commit"): _sha(as_list(parents, "parents")[0], "parent")
+            for commit in as_object_list(listed, "commits")
+            if (parents := commit.get("parents"))
         }
         ancestor = first_parent.get(sha)
         for behind in range(1, MAX_BASE_WALK + 1):
@@ -173,8 +186,9 @@ def green_base(get: Get, repo: str, sha: str) -> tuple[str, str]:
                     "",
                     f"the commit listing ends {behind - 1} commit(s) behind {sha[:8]}",
                 )
-            page: Any = get(f"repos/{repo}/commits/{ancestor}/check-runs?per_page=100")
-            runs = parse_check_runs(page["check_runs"])
+            path = f"repos/{repo}/commits/{ancestor}/check-runs?per_page=100"
+            page = as_object(get(path), "check-runs")
+            runs = parse_check_runs(as_object_list(page["check_runs"], "check_runs"))
             if ci_verdict(runs, {CI_GATE_NAME}) is CIVerdict.PASS:
                 return ancestor, f"{ancestor[:8]} is green, {behind} commit(s) back"
             ancestor = first_parent.get(ancestor)
@@ -200,7 +214,7 @@ def head_is_proven(get: Get, repo: str, head: str) -> tuple[bool, str]:
         return False, "the PR head is unreadable"
     try:
         statuses = get(f"repos/{repo}/commits/{head}/statuses?per_page=100")
-        for status in parse_commit_statuses(statuses):
+        for status in parse_commit_statuses(as_object_list(statuses, "statuses")):
             if _is_recorded_run(status, repo, None):
                 tree = status.description
                 return (
@@ -258,13 +272,15 @@ def record_batch(
     try:
         heads = []
         for number in members:
-            pull: Any = get(f"repos/{repo}/pulls/{number}")
-            if pull["state"] != "open" or pull["head"]["repo"]["full_name"] != repo:
+            pull = as_object(get(f"repos/{repo}/pulls/{number}"), "pull")
+            head = as_object(pull["head"], "pull.head")
+            source = as_object(head["repo"], "pull.head.repo")
+            if pull["state"] != "open" or source["full_name"] != repo:
                 return (
                     f"nothing: #{number} is not an open pull request from a branch of "
                     "this repository"
                 )
-            heads.append(pull["head"]["sha"])
+            heads.append(_sha(head, "pull.head"))
         git("fetch", "--no-tags", "origin", *heads, cwd=cwd, timeout=_FETCH_TIMEOUT_S)
         stacked = stack(cwd, base, heads)
         last = stacked[-1][1]
@@ -318,7 +334,7 @@ def _api_post(token: str) -> Post:
 
 
 def _api_get(token: str) -> Get:
-    def get(path: str) -> Rows:
+    def get(path: str) -> JsonValue:
         request = _request(token, path, None)
         with urllib.request.urlopen(request, timeout=_TIMEOUT_S) as response:
             return json.load(response)

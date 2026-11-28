@@ -11,12 +11,18 @@ lock through an ssh session that lasts as long as the landing. Either way the lo
 the landing's process, so a landing that dies frees it, and a file left behind refuses
 nothing. Nothing removes the files: /run/lock is a tmpfs.
 
+sshd on `TURN_HOST` never probes a client, so a host that loses power or its network sends
+no close. A landing on another host therefore writes a blank heartbeat line into the session
+every `turn.HEARTBEAT_S`, as the turn does, and the script on `TURN_HOST` frees the lock once
+three intervals pass without a line.
+
 The holder writes one JSON line into the file: its host, pid, user and, when detached, its
 log. A refused landing prints it. The file is mode 0666 so that a landing run by one user can
 write its record into a file another user's landing created.
 
 `--detach` takes the lock in the caller's process and the detached landing inherits it
-(`Held.pass_on`), so the caller reads a refusal in the foreground. A landing that runs
+(`Held.pass_on`), so the caller reads a refusal in the foreground. A fork inherits no thread,
+so the detached landing starts its own heartbeat (`Held.for_fork`). A landing that runs
 another `land.sh` for its own PR, from a fresh checkout (`fresh.py`), names the PR in
 `HELD_ENV`, and that child takes no lock.
 
@@ -90,14 +96,21 @@ def _write(fd: int, record: str) -> None:
     os.pwrite(fd, record.strip().encode(), 0)
 
 
-_HOLD = f"""import fcntl, os, sys
+# argv: the heartbeat interval in seconds, then the lock file. A blank line is a heartbeat.
+_HOLD = f"""import fcntl, os, select, sys
 {inspect.getsource(_lock)}
 {inspect.getsource(_write)}
-fd, holder = _lock(sys.argv[1])
+fd, holder = _lock(sys.argv[2])
 print("held" if fd is not None else "busy " + holder, flush=True)
-if fd is not None:
-    for record in sys.stdin:
-        _write(fd, record)
+rest = b""
+while fd is not None and select.select([0], [], [], 3 * float(sys.argv[1]))[0]:
+    got = os.read(0, 4096)
+    if not got:
+        break
+    *records, rest = (rest + got).split(b"\\n")
+    for record in records:
+        if record.strip():
+            _write(fd, record.decode(errors="replace"))
 """
 
 
@@ -163,12 +176,14 @@ class Held:
         write: Callable[[str], None],
         end: Callable[[], None],
         drop: Callable[[], None],
+        beat: Callable[[], Callable[[], None]],
     ) -> None:
         self.keep = keep
         self._pr, self._hostname = pr, hostname
-        self._write, self._end, self._drop = write, end, drop
+        self._write, self._end, self._drop, self._beat = write, end, drop, beat
         os.environ[HELD_ENV] = pr
         self._record(os.getpid(), None)
+        self._stop_beat = beat()
 
     def _record(self, pid: int, log: Path | None) -> None:
         record = {
@@ -188,6 +203,7 @@ class Held:
     def release(self) -> None:
         """Give the lock up. A landing calls it once, in the process that holds the lock."""
         os.environ.pop(HELD_ENV, None)
+        self._stop_beat()
         self._end()
 
     def pass_on(self, pid: int, log: Path) -> None:
@@ -201,9 +217,30 @@ class Held:
         self._drop()
         self._end = lambda: None
 
+    def for_fork(self) -> Callable[[], None]:
+        """The call a process forked from this one makes first, to go on holding the lock.
 
+        Call it just before the fork. It stops this process's heartbeat, so the fork copies no
+        thread. The fork inherits `keep` but no thread, so the call this returns starts the
+        fork's own heartbeat.
+        """
+        self._stop_beat()
+
+        def start() -> None:
+            self._beat()
+
+        return start
+
+
+# The descriptors to keep, then the calls that write a record, end the lock, and drop this
+# process's copies of it, and the call that starts a heartbeat in the calling process and
+# returns the call that stops it.
 _Taken = tuple[
-    tuple[int, ...], Callable[[str], None], Callable[[], None], Callable[[], None]
+    tuple[int, ...],
+    Callable[[str], None],
+    Callable[[], None],
+    Callable[[], None],
+    Callable[[], Callable[[], None]],
 ]
 
 
@@ -215,11 +252,11 @@ def _take_here(path: Path) -> _Taken | str:
     def close() -> None:
         os.close(fd)
 
-    return (fd,), lambda record: _write(fd, record), close, close
+    return (fd,), lambda record: _write(fd, record), close, close, lambda: lambda: None
 
 
-def _take_over_ssh(path: Path) -> _Taken | str:
-    answer, session, end = turn.hold_over_ssh(TURN_HOST, _HOLD, [str(path)])
+def _take_over_ssh(path: Path, beat: float) -> _Taken | str:
+    answer, session, end = turn.hold_over_ssh(TURN_HOST, _HOLD, [str(beat), str(path)])
     if answer != "held":
         end()
         if answer.split(" ", 1)[0] == "busy":
@@ -229,21 +266,33 @@ def _take_over_ssh(path: Path) -> _Taken | str:
     stdin = pipes[0]
 
     def write(record: str) -> None:
-        stdin.write(record + "\n")
-        stdin.flush()
+        # One write on a pipe is atomic, so a heartbeat from another writer cannot split it.
+        os.write(stdin.fileno(), (record + "\n").encode())
 
     def drop() -> None:
         for pipe in pipes:
             pipe.close()
 
-    return (stdin.fileno(),), write, end, drop
+    return (
+        (stdin.fileno(),),
+        write,
+        end,
+        drop,
+        lambda: turn.start_heartbeat(stdin, beat),
+    )
 
 
-def take(pr: str, hostname: str, directory: Path = LOCK_DIR) -> Held | Holder | None:
+def take(
+    pr: str,
+    hostname: str,
+    directory: Path = LOCK_DIR,
+    beat: float = turn.HEARTBEAT_S,
+) -> Held | Holder | None:
     """Take the lock of `pr` without waiting, for a landing on the host named `hostname`.
 
     Args:
         directory: where the lock files are on `TURN_HOST`; a test passes its own.
+        beat: the seconds between heartbeats of a lock held over ssh; a test shortens it.
 
     Returns:
         The lock, or the landing that holds it. None when this landing goes on without the
@@ -258,7 +307,7 @@ def take(pr: str, hostname: str, directory: Path = LOCK_DIR) -> Held | Holder | 
         if moved or is_turn_host(hostname):
             got = _take_here(path)
         else:
-            got = _take_over_ssh(path)
+            got = _take_over_ssh(path, beat)
     except (OSError, subprocess.SubprocessError) as exc:
         print(
             f"land: could not take PR #{pr}'s landing lock ({exc}); going on without it",

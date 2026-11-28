@@ -286,6 +286,7 @@ FLOOR = [
     "scripts/lib/exit_codes.py",
     "scripts/lib/git.py",
     "scripts/lib/host_modules.py",
+    "scripts/lib/json_types.py",
     "scripts/lib/repo_paths.py",
     "scripts/lib/tree_stack.py",
     "hosts/lib/ci_verdict.py",

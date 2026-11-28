@@ -20,7 +20,8 @@ A landing asks for the turn when it is ready to use it (`merge.await_merge`): be
 run of a head that has had none, and otherwise once its head is green. It never holds the
 turn while a run that started before it finishes, nor through a rate-limit wait: it gives the
 turn back for the wait's length and asks for it again before it goes on
-(`Landing.without_turn`).
+(`Landing.without_turn`). A draft that has not been marked ready asks again with its head,
+so it keeps its place in the line and a holder can still stack it.
 
 A landing that waits with a draft stands in the line beside the lock (`line.py`), so the
 landing that holds the turn can test that draft's head with its own. A landing whose place
@@ -266,14 +267,38 @@ def hold_over_ssh(
     return answer, session, release
 
 
-def _heartbeat(stdin: IO[str], stop: threading.Event, beat: float) -> None:
-    """Write a byte into `stdin` every `beat` seconds until `stop` is set or the pipe breaks."""
-    while not stop.wait(beat):
-        try:
-            stdin.write("\n")
-            stdin.flush()
-        except OSError, ValueError:
-            return
+def start_heartbeat(stdin: IO[str], beat: float) -> Callable[[], None]:
+    """Write a blank line into `stdin` at once and every `beat` seconds after, from a thread.
+
+    The thread ends when the pipe breaks or the call this returns is made. A process forked
+    from this one inherits no thread, so it keeps a lock held over ssh only by starting its
+    own heartbeat on the descriptor it inherits.
+
+    Returns:
+        The call that stops the heartbeat. It returns once the thread has ended, so `stdin`
+        can be closed after it, and a fork made after it copies no thread.
+    """
+    stop = threading.Event()
+
+    def beats() -> None:
+        while True:
+            try:
+                # Unbuffered: a line left in the buffer by a broken pipe would raise again
+                # from `stdin.close()`.
+                os.write(stdin.fileno(), b"\n")
+            except OSError, ValueError:
+                return
+            if stop.wait(beat):
+                return
+
+    thread = threading.Thread(target=beats, daemon=True)
+    thread.start()
+
+    def end() -> None:
+        stop.set()
+        thread.join()
+
+    return end
 
 
 def try_take_over_ssh(
@@ -303,13 +328,10 @@ def try_take_over_ssh(
     )
     if answer == "held":
         assert session.stdin
-        stop = threading.Event()
-        threading.Thread(
-            target=_heartbeat, args=(session.stdin, stop, beat), daemon=True
-        ).start()
+        stop = start_heartbeat(session.stdin, beat)
 
         def release() -> None:
-            stop.set()
+            stop()
             end()
 
         return release
@@ -441,7 +463,8 @@ def held(ln: Landing) -> Generator[Callable[[str], tuple[bool, int]]]:
         that call waited. It asks once: a later call answers at once with what the first one
         got, until `ln.give_back_turn` gives the turn up and the next call asks again.
         `ln.give_back_turn` and `ln.step_out_of_turn` are set only while this landing holds
-        the turn.
+        the turn. A step out of the turn asks again with `ln.line_head`, so a draft keeps its
+        place in the line through the wait, unless the landing lands alone.
 
     Raises:
         HandOver: from `ln.hand_over_turn`, which leaves the turn locked for the caller.
@@ -456,6 +479,7 @@ def held(ln: Landing) -> Generator[Callable[[str], tuple[bool, int]]]:
 
     def take(draft: str) -> tuple[bool, int]:
         nonlocal release, asked
+        ln.line_head = draft
         if asked:
             return release is not None, 0
         asked = True
@@ -474,7 +498,7 @@ def held(ln: Landing) -> Generator[Callable[[str], tuple[bool, int]]]:
         give_back()
         say(f"gave the landing turn back {reason}")
         got = wait()
-        take("")
+        take("" if ln.lands_alone else ln.line_head)
         ln.turn_interrupted = True
         return got
 

@@ -279,6 +279,7 @@ def test_resume_restarts_a_finished_batch_on_the_verdict_of_a_landing_run_outsid
     assert code == 0
     ((host, command, request),) = _started(run)
     assert host == "daniel-box" and "--resume-conflict" in command
+    assert request is not None
     assert json.loads(request) == {"pr": PR, "line": CONFLICT}
     (batch,) = load(RUN_ID, tmp_path / "runs").batches
     assert batch.conflict_resumes == 1
@@ -368,6 +369,7 @@ def test_resume_takes_a_pr_that_conflicts_with_master_before_any_landing(tmp_pat
     assert code == 0
     ((_, command, request),) = _started(run)
     assert "--resume-conflict" in command
+    assert request is not None
     assert json.loads(request) == {
         "pr": PR,
         "line": "VERDICT: merge-conflict (PR #4000 conflicts with origin/master in "

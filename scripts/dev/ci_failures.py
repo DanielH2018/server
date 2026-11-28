@@ -370,7 +370,7 @@ def failing_test_modules(
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = ArgumentParser(description=__doc__.partition("\n")[0])
+    parser = ArgumentParser(description=(__doc__ or "").partition("\n")[0])
     parser.add_argument("--since", type=date.fromisoformat, required=True)
     parser.add_argument(
         "--until", type=date.fromisoformat, default=datetime.now(UTC).date()

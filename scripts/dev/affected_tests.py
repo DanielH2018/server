@@ -113,7 +113,7 @@ def _select(args) -> int:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = ArgumentParser(description=__doc__.splitlines()[0])
+    parser = ArgumentParser(description=(__doc__ or "").partition("\n")[0])
     sub = parser.add_subparsers(dest="command", required=True)
     rec = sub.add_parser("record", help="trace test modules and rewrite their rows")
     rec.add_argument(

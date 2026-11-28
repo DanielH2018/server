@@ -9,10 +9,11 @@ import pytest
 from _findings_fakes import FOREIGNER, make_issue
 from dev.findings_lib.boundaries import FindingsTools
 from dev.findings_lib.gh_calls import _load_issue, load_issues
+from lib.json_types import JsonValue
 
 
 def _answering(answer):
-    def gh_json(*argv, **kwargs):
+    def gh_json(*argv, **kwargs) -> JsonValue:
         if argv[:2] == ("api", "graphql"):
             return {"data": {"repository": {}}}
         return answer

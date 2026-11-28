@@ -175,6 +175,7 @@ def fork(
     scope_prefix: str = "land",
     spawn: Callable[[Callable[[], None]], int] = fork_detached,
     keep: Iterable[int] = (),
+    start: Callable[[], None] = lambda: None,
 ) -> int:
     """Run `landing` in a detached, logged grandchild; its pid, in the parent.
 
@@ -192,6 +193,9 @@ def fork(
       scope_prefix: the name of the transient scope the landing moves into, before its pid.
       spawn: starts the detached body and returns its pid; a test passes one that delays it.
       keep: descriptors the landing inherits, such as the PR lock's (`pr_lock.Held.keep`).
+      start: what the grandchild runs once only `keep` is left, before it leaves the unit,
+        such as the PR lock's heartbeat (`pr_lock.Held.for_fork`). Leaving can take
+        `lib/detach_fork.py`'s `BUSCTL_TIMEOUT_S` plus `MOVE_WAIT_S`.
 
     Returns:
       The landing's pid. Only the parent ever returns from this function.
@@ -199,13 +203,17 @@ def fork(
     log.touch()
     sys.stdout.flush()
     sys.stderr.flush()
-    pid = spawn(lambda: _run_landing(log, landing, scope_prefix, keep))
+    pid = spawn(lambda: _run_landing(log, landing, scope_prefix, keep, start))
     pid_path(log).write_text(f"{pid}\n")
     return pid
 
 
 def _run_landing(
-    log: Path, landing: Callable[[], int], scope_prefix: str, keep: Iterable[int]
+    log: Path,
+    landing: Callable[[], int],
+    scope_prefix: str,
+    keep: Iterable[int],
+    start: Callable[[], None],
 ) -> None:
     """The grandchild's body: rebind stdio, drop inherited fds, leave the unit, run, record."""
     code = 1
@@ -216,6 +224,7 @@ def _run_landing(
         os.dup2(out, 1)
         os.dup2(out, 2)
         close_inherited(keep)
+        start()
         # Before `landing` starts anything: a child started while the move is pending stays in the
         # unit's cgroup.
         moved = leave_unit_cgroup(scope_prefix)
