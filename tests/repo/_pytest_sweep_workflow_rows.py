@@ -389,8 +389,8 @@ PYTEST_SWEEP_ROWS = (
                 "CI's tests import the dotfiles `claude_worktree` at `DOTFILES_SHA`, and ty and "
                 "pyright read its signatures from the `lint` group's copy at the "
                 "`[tool.uv.sources]` rev. Two different commits would type-check against an "
-                "interface the tests do not run. Renovate bumps only `DOTFILES_SHA`, so its PR "
-                "fails here until the rev and `uv.lock` follow."
+                "interface the tests do not run. Renovate's dotfiles manager moves both literals "
+                "in one PR; `uv.lock` still needs a `uv lock` on that branch."
             ),
             offence=judge(_dotfiles_pin_problems),
             red=mutants(
