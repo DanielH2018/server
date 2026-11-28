@@ -54,10 +54,21 @@ See repo-root `CLAUDE.md` for shared conventions.
   Authelia's `vault-mcp` OIDC client (`k8s/roles/authelia/templates/config-secret.yaml.j2`)
   with 2FA, and sends the RS256 access token Authelia issues.
   `k8s/roles/vault-mcp/files/oauth_resource.py:ResourceServer` checks each token's signature
-  against Authelia's JWKS, its `typ`, issuer, audience and expiry. A request without a valid
-  token gets 401 with the `WWW-Authenticate` challenge that names the protected-resource
-  metadata, which the app serves at `/.well-known/oauth-protected-resource/mcp` and
-  `/.well-known/oauth-protected-resource`.
+  against Authelia's JWKS, its `typ`, issuer, audience, its `client_id` (`vault-mcp`) and its
+  `exp`, `nbf` and `iat`, allowing 60 seconds of clock skew. Any error during the check refuses
+  the token. A request without a valid token gets 401 with the `WWW-Authenticate` challenge
+  that names the protected-resource metadata, which the app serves at
+  `/.well-known/oauth-protected-resource/mcp` and `/.well-known/oauth-protected-resource`.
+  The challenge carries `error="invalid_token"` only when the request sent a bearer token.
+- **Only a GET of `/health` or of either metadata path passes without a token.** The match is
+  exact, so `/health/`, `/HEALTH` and `/health/../mcp` get the 401 too.
+  `k8s/roles/vault-mcp/tests/test_vault_server.py` drives the real ASGI app over these paths.
+- **To cut claude.ai off, set `authelia_k8s_vault_mcp_client: false` in
+  `k8s/roles/authelia/defaults/main.yml`, or rotate `vault_mcp_oidc_client_secret` and its
+  hash (`docs/secret-rotation.md`).** Either one stops new sign-ins and refreshes once it
+  lands. An access token already issued stays valid for up to its 1h lifespan, because this
+  server checks tokens offline against the JWKS and does not introspect. Without one of these,
+  a connector that keeps refreshing never signs in again (`k8s/roles/authelia/CLAUDE.md`).
 - **`k8s/vars.yml:vault_mcp_connector_url` is the one copy of the connector URL.** It is the
   metadata's `resource`, the `aud` every token must hold, and the Authelia client's only
   `audience`. claude.ai sends it as the RFC 8707 `resource`, and Authelia grants only an

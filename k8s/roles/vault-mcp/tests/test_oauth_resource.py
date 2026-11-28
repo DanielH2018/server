@@ -1,7 +1,10 @@
 import base64
 import hashlib
 import hmac
+import io
 import json
+import time
+import urllib.request
 from dataclasses import replace
 
 import jwt
@@ -10,8 +13,9 @@ import yaml
 from _k8s_render import render_role_template
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
+from jwt.algorithms import RSAAlgorithm
 
-from oauth_resource import ResourceServer
+from oauth_resource import CLIENT_ID, ResourceServer
 
 RESOURCE = "https://vault-mcp.example.com/mcp"
 ISSUER = "https://auth.example.com"
@@ -27,7 +31,7 @@ def _claims(**changes):
         "iss": ISSUER,
         "aud": [RESOURCE],
         "sub": "operator",
-        "client_id": "vault-mcp",
+        "client_id": CLIENT_ID,
         "iat": ISSUED,
         "exp": STILL_VALID,
     }
@@ -74,7 +78,15 @@ def test_an_access_token_authelia_issued_for_the_connector_is_valid(oauth):
 
 
 @pytest.mark.parametrize(
-    "header", [None, "", "Bearer", "Bearer ", "Basic dXNlcjpwYXNz"]
+    "header",
+    [
+        None,
+        "",
+        "Bearer",
+        "Bearer ",
+        "Basic dXNlcjpwYXNz",
+        pytest.param(f"Basic {_token()}", id="a-valid-token-under-basic"),
+    ],
 )
 def test_a_request_without_a_bearer_token_is_refused(oauth, header):
     assert not oauth.token_valid(header)
@@ -97,12 +109,29 @@ def test_a_request_without_a_bearer_token_is_refused(oauth, header):
         pytest.param(_token(iss="https://auth.local.example.com"), id="another-issuer"),
         pytest.param(_token(exp=ISSUED + 3600), id="expired"),
         pytest.param(_token(exp=None), id="no-expiry"),
+        pytest.param(_token(nbf=STILL_VALID - 1), id="not-yet-valid"),
         pytest.param(_token(typ="JWT"), id="an-id-token-type"),
+        pytest.param(_token(typ=["at+jwt"]), id="a-list-type"),
+        pytest.param(_token(client_id="grafana"), id="another-client"),
+        pytest.param(_token(client_id=None), id="no-client"),
         pytest.param("not.a.jwt", id="garbage"),
     ],
 )
 def test_a_forged_or_misissued_token_is_refused(oauth, token):
     assert not oauth.token_valid(f"Bearer {token}")
+
+
+def test_a_clock_up_to_a_minute_apart_from_authelias_is_tolerated(oauth):
+    now = int(time.time())
+    assert oauth.token_valid(f"Bearer {_token(iat=now + 10, nbf=now + 10)}")
+    assert not oauth.token_valid(f"Bearer {_token(iat=now - 3600, exp=now - 120)}")
+
+
+def test_an_unexpected_error_in_the_key_lookup_refuses_the_token(oauth):
+    def broken(token):
+        raise ValueError("malformed JWKS")
+
+    assert not replace(oauth, signing_key=broken).token_valid(f"Bearer {_token()}")
 
 
 def test_a_token_is_refused_when_authelias_keys_cannot_be_fetched(oauth):
@@ -123,10 +152,19 @@ def test_the_metadata_names_the_connector_and_authelia_at_both_paths(oauth):
         "/.well-known/oauth-protected-resource/mcp",
         "/.well-known/oauth-protected-resource",
     )
-    assert oauth.challenge() == (
-        'Bearer error="invalid_token", resource_metadata='
-        '"https://vault-mcp.example.com/.well-known/oauth-protected-resource/mcp"'
+
+
+def test_the_challenge_names_an_error_only_when_a_bearer_token_was_refused(oauth):
+    metadata = (
+        'resource_metadata="https://vault-mcp.example.com'
+        '/.well-known/oauth-protected-resource/mcp"'
     )
+    assert oauth.challenge(f"Bearer {_token()}") is None
+    assert oauth.challenge(f"Bearer {_token(key=OTHER_KEY)}") == (
+        f'Bearer error="invalid_token", {metadata}'
+    )
+    assert oauth.challenge(None) == f"Bearer {metadata}"
+    assert oauth.challenge("Basic dXNlcjpwYXNz") == f"Bearer {metadata}"
 
 
 @pytest.mark.parametrize(
@@ -140,6 +178,38 @@ def test_the_server_refuses_to_start_without_its_oauth_settings(unset):
     }
     with pytest.raises(SystemExit, match=unset):
         ResourceServer.from_env({**env, unset: ""})
+
+
+def test_the_server_fetches_authelias_keys_from_the_jwks_url_within_five_seconds(
+    monkeypatch,
+):
+    jwks = {
+        "keys": [
+            {
+                **RSAAlgorithm.to_jwk(AUTHELIA_KEY.public_key(), as_dict=True),
+                "kid": KID,
+                "use": "sig",
+                "alg": "RS256",
+            }
+        ]
+    }
+    fetches = []
+
+    class _Opener:
+        def open(self, request, timeout):
+            fetches.append((request.full_url, timeout))
+            return io.BytesIO(json.dumps(jwks).encode())
+
+    monkeypatch.setattr(urllib.request, "build_opener", lambda *handlers: _Opener())
+    oauth = ResourceServer.from_env(
+        {
+            "VAULT_MCP_RESOURCE_URL": RESOURCE,
+            "VAULT_MCP_ISSUER": ISSUER,
+            "VAULT_MCP_JWKS_URL": "https://auth.local.example.com/jwks.json",
+        }
+    )
+    assert oauth.token_valid(f"Bearer {_token()}")
+    assert fetches == [("https://auth.local.example.com/jwks.json", 5)]
 
 
 def test_authelia_grants_the_audience_and_issuer_the_rendered_server_requires():
@@ -157,7 +227,7 @@ def test_authelia_grants_the_audience_and_issuer_the_rendered_server_requires():
     (client,) = [
         c
         for c in config["identity_providers"]["oidc"]["clients"]
-        if c["client_id"] == "vault-mcp"
+        if c["client_id"] == CLIENT_ID
     ]
     assert client["audience"] == [oauth.resource]
     assert client["scopes"] == oauth.metadata()["scopes_supported"]

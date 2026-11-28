@@ -9,8 +9,8 @@ It imports PyJWT only, so the tests run without the MCP SDK.
 Typical usage example:
 
     oauth = ResourceServer.from_env()
-    if not oauth.token_valid(request.headers.get("authorization")):
-        ...  # 401 with WWW-Authenticate: oauth.challenge()
+    if challenge := oauth.challenge(request.headers.get("authorization")):
+        ...  # 401 with WWW-Authenticate: challenge
 """
 
 from __future__ import annotations
@@ -28,7 +28,13 @@ log = logging.getLogger(__name__)
 
 # RFC 9068 section 4: a resource server refuses any other `typ`, which keeps an ID token out.
 ACCESS_TOKEN_TYPES = frozenset({"at+jwt", "application/at+jwt"})
+# Authelia's `vault-mcp` OIDC client. Authelia writes the RFC 9068 `client_id` claim from the
+# client that requested the token (authelia.com/provider/oauth2 v0.3.2,
+# handler/oauth2/strategy_jwt_profile.go), so another client's token for this audience fails.
+CLIENT_ID = "vault-mcp"
 SCOPES = ("openid", "offline_access")
+CLOCK_SKEW_S = 60
+JWKS_TIMEOUT_S = 5
 _ENV = ("VAULT_MCP_RESOURCE_URL", "VAULT_MCP_ISSUER", "VAULT_MCP_JWKS_URL")
 
 
@@ -62,7 +68,7 @@ class ResourceServer:
         missing = [name for name in _ENV if not environ.get(name)]
         if missing:
             raise SystemExit(f"{', '.join(missing)} required")
-        keys = jwt.PyJWKClient(environ["VAULT_MCP_JWKS_URL"], timeout=5)
+        keys = jwt.PyJWKClient(environ["VAULT_MCP_JWKS_URL"], timeout=JWKS_TIMEOUT_S)
         return cls(
             resource=environ["VAULT_MCP_RESOURCE_URL"],
             issuer=environ["VAULT_MCP_ISSUER"],
@@ -72,21 +78,24 @@ class ResourceServer:
     def token_valid(self, authorization: str | None) -> bool:
         """Whether an `Authorization` header carries a token Authelia issued for this resource.
 
-        The token must be an RS256 access token signed by a key in Authelia's JWKS, with this
-        resource as an `aud` entry, this issuer as `iss`, and an `exp` still in the future.
+        The token must be an RS256 access token signed by a key in Authelia's JWKS, issued to
+        the `vault-mcp` client, with this resource as an `aud` entry, this issuer as `iss`, and
+        `exp`, `nbf` and `iat` within `CLOCK_SKEW_S` of this pod's clock. Any error while
+        checking refuses the token.
         """
-        scheme, _, token = (authorization or "").partition(" ")
-        if scheme.lower() != "bearer" or not token:
+        token = _bearer_token(authorization)
+        if not token:
             return False
         try:
             if jwt.get_unverified_header(token).get("typ") not in ACCESS_TOKEN_TYPES:
                 return False
-            jwt.decode(
+            claims = jwt.decode(
                 token,
                 self.signing_key(token),
                 algorithms=["RS256"],
                 audience=self.resource,
                 issuer=self.issuer,
+                leeway=CLOCK_SKEW_S,
                 options={"require": ["exp", "iss", "aud"]},
             )
         except jwt.PyJWKClientError as err:
@@ -94,7 +103,26 @@ class ResourceServer:
             return False
         except jwt.PyJWTError:
             return False
-        return True
+        # DECIDED: an error nothing above names refuses the token as a 401, never a 500. The
+        # check sits in front of the public route, so a malformed token must not reach a crash.
+        except Exception:
+            log.exception("token check failed")
+            return False
+        return claims.get("client_id") == CLIENT_ID
+
+    def challenge(self, authorization: str | None) -> str | None:
+        """The `WWW-Authenticate` value of the 401 this request gets, or None when its token is valid.
+
+        The value names where the metadata is served. Per RFC 6750 section 3.1 it carries
+        `error="invalid_token"` only when the request sent a bearer token, so a request with
+        no credentials, or another scheme, gets the bare challenge.
+        """
+        if self.token_valid(authorization):
+            return None
+        parts = urlsplit(self.resource)
+        url = f"{parts.scheme}://{parts.netloc}{self.metadata_paths()[0]}"
+        error = 'error="invalid_token", ' if _bearer_token(authorization) else ""
+        return f'Bearer {error}resource_metadata="{url}"'
 
     def metadata(self) -> dict[str, object]:
         """The RFC 9728 protected-resource metadata document."""
@@ -114,8 +142,8 @@ class ResourceServer:
         suffix = urlsplit(self.resource).path.rstrip("/")
         return (root + suffix, root) if suffix else (root,)
 
-    def challenge(self) -> str:
-        """The `WWW-Authenticate` value of a 401, naming where the metadata is served."""
-        parts = urlsplit(self.resource)
-        url = f"{parts.scheme}://{parts.netloc}{self.metadata_paths()[0]}"
-        return f'Bearer error="invalid_token", resource_metadata="{url}"'
+
+def _bearer_token(authorization: str | None) -> str:
+    """The token of a `Bearer` `Authorization` header, or "" for no header or another scheme."""
+    scheme, _, token = (authorization or "").partition(" ")
+    return token.strip() if scheme.lower() == "bearer" else ""

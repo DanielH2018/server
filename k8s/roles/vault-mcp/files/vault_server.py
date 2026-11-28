@@ -1,9 +1,9 @@
 """vault-mcp: read-only MCP server over the Obsidian vault livesync-cli mirrors into /vault.
 
 Streamable-HTTP MCP server. Every tool is a read. The vault claim is mounted read-only, so no
-code path here can write a note. Every request except `/health` and the protected-resource
-metadata needs an Authelia access token, which oauth_resource.py checks; one without gets 401
-and the challenge claude.ai's connector follows to sign in. The hide rule and every read live
+code path here can write a note. Every request except a GET of `/health` or of the
+protected-resource metadata needs an Authelia access token, which oauth_resource.py checks;
+one without gets 401 and the challenge claude.ai's connector follows to sign in. The hide rule and every read live
 in vault_notes.py; this file is the wiring.
 
 Usage:
@@ -124,16 +124,17 @@ class _OAuth(BaseHTTPMiddleware):
     async def dispatch(
         self, request: Request, call_next: RequestResponseEndpoint
     ) -> Response:
-        if request.url.path in _OPEN_PATHS:
+        if request.method == "GET" and request.url.path in _OPEN_PATHS:
             return await call_next(request)
         # The first token fetches the JWKS over the network, so it runs off the event loop.
-        if not await run_in_threadpool(
-            OAUTH.token_valid, request.headers.get("authorization")
-        ):
-            return JSONResponse(
-                {"error": "invalid_token"},
+        challenge = await run_in_threadpool(
+            OAUTH.challenge, request.headers.get("authorization")
+        )
+        if challenge:
+            return PlainTextResponse(
+                "Unauthorized",
                 status_code=401,
-                headers={"WWW-Authenticate": OAUTH.challenge()},
+                headers={"WWW-Authenticate": challenge},
             )
         return await call_next(request)
 

@@ -383,6 +383,13 @@ before deciding what is due. Examples:
   `sops`, run `cluster_vars.py write`, and land the PR. Then paste the new secret into the
   connector's OAuth client settings on claude.ai. Until that paste, the connector's token
   refreshes fail with `invalid_client`.
+- To cut claude.ai off from the vault, rotate both keys as above and skip the paste. The
+  connector's refreshes then fail with `invalid_client`. An access token Authelia already
+  issued stays valid for up to its 1h lifespan, because the vault-mcp server checks tokens
+  offline against the JWKS and does not introspect. Setting
+  `k8s/roles/authelia/defaults/main.yml:authelia_k8s_vault_mcp_client` to `false` has the same
+  effect without `sops`, and setting it back to `true` restores the client under its existing
+  secret. Either change takes effect once its PR lands.
 
 ### Authelia user passwords — mint the digest, then store both
 

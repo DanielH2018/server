@@ -53,11 +53,21 @@ plaintext too takes two SOPS keys that rotate together.
 **`vault-mcp` is the claude.ai custom connector, and its relying party is the vault-mcp
 server.** The server accepts only an RS256 access token whose `aud` holds
 `k8s/vars.yml:vault_mcp_connector_url`, the client's only `audience`. Its `vault_mcp`
-authorization policy admits the operator alone, at `two_factor`, and its `vault_mcp` lifespan
-keeps a refresh token for 30 days. claude.ai sends the secret as `client_secret_post` and
-never falls back to Basic, so `token_endpoint_auth_method` must stay that value.
+authorization policy admits the operator alone, at `two_factor`, and every sign-in shows the
+consent page (`consent_mode: 'explicit'`).
+`tests/services/authelia/test_authelia_vault_mcp_client.py` holds the policy, PKCE, grant types
+and consent. claude.ai sends the secret as `client_secret_post` and never falls back to Basic,
+so `token_endpoint_auth_method` must stay that value.
 `k8s/roles/vault-mcp/tests/test_oauth_resource.py::test_authelia_grants_the_audience_and_issuer_the_rendered_server_requires`
 holds the client and the server to the same URL and issuer.
+
+**A refreshing connector never asks for 2FA again.** The `vault_mcp` lifespan gives a refresh
+token 30 days, and Authelia 4.39.28's provider (authelia.com/provider/oauth2 v0.3.2) gives each
+refreshed token a fresh 30 days from the refresh. The 30 days are therefore an idle limit, not a
+login limit, and the provider has no cap on a grant's total age. To cut the connector off, set
+`authelia_k8s_vault_mcp_client: false` or rotate its client secret (`docs/secret-rotation.md`).
+Either one stops new sign-ins and refreshes. An access token already issued stays valid for up
+to its 1h lifespan, because the vault-mcp server does not introspect.
 
 The signing key has a Secret of its own, `authelia-oidc-jwk` from
 `templates/oidc-jwk-secret.yaml.j2`, because Flux strips the newlines from a placeholder's value
