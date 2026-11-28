@@ -8,7 +8,6 @@ import subprocess
 import sys
 import time
 from pathlib import Path
-from types import SimpleNamespace
 
 from validate.host_package_cases import Cases
 from validate.validate_lib import case_groups
@@ -16,19 +15,20 @@ from validate.validate_lib.host_container import PORT, Container, expect
 from validate.validate_lib.host_fixtures import run_logged
 
 
-def _prepared(tmp_path: Path) -> SimpleNamespace:
+def _prepared(tmp_path: Path) -> Cases:
+    """A `Cases` holding one deb, made without `__init__`, which needs two built releases."""
     debs = tmp_path / "work" / "debs"
     debs.mkdir(parents=True)
     (debs / "real-pi.deb").write_bytes(b"real")
-    return SimpleNamespace(
-        work=tmp_path / "work",
-        debs={"pi-head": debs / "real-pi.deb"},
-        versions={"pi-head": "1.0"},
-        passed=[],
-        failed=[],
-        no_verdict=[],
-        image="homelab-host-test:24.04",
-    )
+    cases = object.__new__(Cases)
+    cases.work = tmp_path / "work"
+    cases.debs = {"pi-head": debs / "real-pi.deb"}
+    cases.versions = {"pi-head": "1.0"}
+    cases.passed = []
+    cases.failed = []
+    cases.no_verdict = []
+    cases.image = "homelab-host-test:24.04"
+    return cases
 
 
 def test_a_groups_seal_and_failure_stay_out_of_the_other_group(tmp_path):

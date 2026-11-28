@@ -19,7 +19,7 @@ from lib import yaml_fast
 
 PYPROJECT = REPO / "pyproject.toml"
 WORKFLOWS = REPO / ".github" / "workflows"
-LINT_TOOLS = {"actionlint-py", "zizmor", "ty", "mkdocs-material", "ruff"}
+LINT_TOOLS = {"actionlint-py", "zizmor", "ty", "pyright", "mkdocs-material", "ruff"}
 KNOWN_LINT_FREE = {
     ("ci.yml", "pytest"),
     ("ci.yml", "pr_gates"),
@@ -34,7 +34,7 @@ KNOWN_LINT_FREE = {
 }
 KNOWN_LINTING = {("ci.yml", "hooks")}
 RUNS_A_HOOK = re.compile(
-    r"\bprek run\b|\buv run (?:--\S+ )*(?:ruff|ty|zizmor|actionlint|mkdocs)\b"
+    r"\bprek run\b|\buv run (?:--\S+ )*(?:ruff|ty|pyright|zizmor|actionlint|mkdocs)\b"
 )
 
 

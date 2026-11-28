@@ -163,7 +163,8 @@ fail in the cron or hook that runs it. ty resolves the same directories through
 `[tool.ty.environment] extra-paths`, which its docs describe as the knob for "first-party or
 third-party modules that are not installed into your project's Python environment in a
 conventional way" ([ty configuration][ty-config]);
-Pylance in VS Code reads `[tool.pyright] extraPaths`, which holds the same list as ty.
+The `pyright` prek hook and Pylance in VS Code read `[tool.pyright] extraPaths`, which holds the
+same list as ty.
 `tests/repo/ci_workflows/test_ty_config_covers_the_repo.py` keeps the three lists aligned.
 
 ### Tests in a sibling `tests/`, never beside the code
