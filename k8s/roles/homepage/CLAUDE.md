@@ -52,7 +52,7 @@ reads as `/app/config` (`k8s/roles/homepage/templates/deployment.yaml.j2`):
   `lookup('template')` that names one outside `config/`
   (`scripts/validate/tests/renders/test_skip_roles_classes_hold.py::test_a_lookup_into_templates_top_level_is_flagged`).
   `services.yaml` is the tile list; edit it here and nowhere else.
-- `k8s/roles/homepage/templates/icons-configmap.yaml.j2` — base64s the PNGs in `files/` into a
+- `k8s/roles/homepage/templates/icons-configmap.yaml.j2` — base64s the icons it lists from `files/` into a
   ConfigMap.
 
 Edit the `.j2` files, never the live config: the emptyDir is reseeded from the Secret on every
