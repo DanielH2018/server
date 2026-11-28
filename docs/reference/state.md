@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/state.py
-generated_at: 2026-11-27 18:17 UTC
-generated_sha: 1e9fa52cb
+generated_at: 2026-11-28 06:17 UTC
+generated_sha: 696c721c2
 ---
 
 !!! warning "Generated file — do not edit"
@@ -19,8 +19,8 @@ generated_sha: 1e9fa52cb
 
 | Loop | Last run | Age | Cadence | Status | Last outcome |
 |---|---|---|---|---|---|
-| renovate-agent | 2026-11-27T12:08:58+0000 | 6h8m | 1d | ok | session completed |
-| renovate-notify | 2026-11-27T13:01:50+0000 | 5h15m | 1d | ok | notified |
-| docs-refresh | 2026-11-27T06:18:00+0000 | 11h59m | 12h | ok | generators: ok |
-| longhorn-restore-drill | 2026-11-27T04:11:30+0000 | 14h6m | 1d | ok | PVC restore proven |
-| etcd-restore-drill | 2026-11-23T10:20:04+0000 | 4d7h | 7d | ok | list-only restore proven (snapshot offbox-daniel-box-1795392005.zip) |
+| renovate-agent | 2026-11-27T12:08:58+0000 | 18h8m | 1d | ok | session completed |
+| renovate-notify | 2026-11-27T13:01:50+0000 | 17h15m | 1d | ok | notified |
+| docs-refresh | 2026-11-27T18:18:00+0000 | 11h59m | 12h | ok | generators: ok |
+| longhorn-restore-drill | 2026-11-28T04:11:50+0000 | 2h5m | 1d | ok | PVC restore proven |
+| etcd-restore-drill | 2026-11-23T10:20:04+0000 | 4d19h | 7d | ok | list-only restore proven (snapshot offbox-daniel-box-1795392005.zip) |
