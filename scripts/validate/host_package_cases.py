@@ -104,13 +104,12 @@ import shutil
 import subprocess
 import sys
 import time
-from argparse import ArgumentTypeError
 from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from lib.cli_help import ArgumentParser
-from validate.validate_lib.case_groups import groups, report, run_groups
+from validate.validate_lib.case_groups import groups, report, run_groups, shard_arg
 from validate.validate_lib.host_container import (
     LAST_SUCCESS,
     PORT,
@@ -169,6 +168,7 @@ class Cases:
         self.passed: list[str] = []
         self.failed: list[str] = []
         self.no_verdict: list[str] = []
+        self.case_seconds: dict[str, float] = {}
         self.debs: dict[str, Path] = {}
         self.versions: dict[str, str] = {}
         self.tools: tuple[str, ...] = ()
@@ -234,7 +234,7 @@ class Cases:
     def case(
         self, container: Container, name: str, body: Callable[[], None], fetch=True
     ) -> None:
-        """Run one case; record and print its verdict.
+        """Run one case; record and print its verdict, and record its seconds in `case_seconds`.
 
         Args:
             container: The container the case runs in.
@@ -243,6 +243,7 @@ class Cases:
             fetch: Whether the case reaches updater step 3, and so must leave a GET of the
                 suite's Release in the server log. False asserts the log holds none.
         """
+        start = time.monotonic()
         offset = container.log_size()
         try:
             body()
@@ -255,6 +256,7 @@ class Cases:
             problems = list_problems(lists, self.box)
             expect(not problems, "; ".join(problems))
         except (CaseFailed, subprocess.TimeoutExpired) as exc:
+            self.case_seconds[name] = time.monotonic() - start
             self.failed.append(name)
             print(f"[FAIL] {container.name}: {name}: {exc}", file=sys.stderr)
             journal = container.sh(
@@ -265,6 +267,7 @@ class Cases:
                 f"::group::journal after {name}\n{journal}::endgroup::", file=sys.stderr
             )
             return
+        self.case_seconds[name] = time.monotonic() - start
         self.passed.append(name)
 
     def boot(self, label: str, hostname: str = HOST) -> Container | None:
@@ -539,16 +542,6 @@ class Cases:
             )
         finally:
             c.remove()
-
-
-def shard_arg(text: str) -> tuple[int, int]:
-    """`--shard K/N` as (K, N), refusing anything but 1 <= K <= N."""
-    number, sep, count = text.partition("/")
-    if not (sep and number.isdigit() and count.isdigit()):
-        raise ArgumentTypeError(f"a shard is K/N, not {text!r}")
-    if not 1 <= int(number) <= int(count):
-        raise ArgumentTypeError(f"shard {text} is outside 1/{count}..{count}/{count}")
-    return int(number), int(count)
 
 
 def main(argv: list[str] | None = None) -> int:
