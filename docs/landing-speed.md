@@ -229,8 +229,9 @@ hold.
    2026-11-27. The serial lock is held from the serial draft's turn to the end of its
    deploy, about 23 minutes plus the drain. With 11 PRs in line, those 23 minutes cost 11
    waits of 23 minutes. The serial PR gives the turn back while the line holds a draft,
-   so the drafts in line merge first, and it takes the serial lock once the line is empty
-   (`slots._yields`). PRs that arrive during the serial window still wait behind it, so the
+   so the drafts in line take the turn first. It takes the serial lock once the line is empty
+   and it holds the turn again (`slots._yields`). PRs that arrive during the serial window
+   still wait behind it, so the
    saving depends on how quiet the line is when the serial PR goes. The 3.9 h of
    `serial_wait` measured on 2026-11-27 is the upper bound. The yield lasts at most until
    the serial PR's merge budgets leave one `merge_timeout`, so the cost is the serial PR's
